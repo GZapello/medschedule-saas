@@ -606,9 +606,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
       showToast(err.message || 'Erro ao carregar prontuário.', 'error');
     } finally {
       setLoading(false);
-      setTimeout(() => {
-        initialLoadedRef.current = true;
-      }, 600);
+      initialLoadedRef.current = true;
     }
   };
 
@@ -620,7 +618,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
 
   // Debounce do Autosave (1200ms após parar de digitar)
   useEffect(() => {
-    if (!initialLoadedRef.current || !selectedPatientId) return;
+    if (loading || !initialLoadedRef.current || !selectedPatientId) return;
 
     setIsDirty(true);
     setAutosaveStatus('saving');
@@ -645,6 +643,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
     riskAssessment,
     activeTab,
     selectedPatientId,
+    loading,
     performSaveDraft
   ]);
 
@@ -2466,7 +2465,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
       {/* ========================================================================= */}
       {/* MODAL OBRIGATÓRIO DE CONCLUSÃO DE ATENDIMENTO (CFP 06/2019) */}
       {/* ========================================================================= */}
-      {completionSuccessData && (
+      {completionSuccessData && completion.isCompleted && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4" role="dialog" aria-modal="true">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 text-center space-y-4">
             <div className="w-14 h-14 bg-teal-100 text-teal-800 rounded-full flex items-center justify-center mx-auto shadow-xs">

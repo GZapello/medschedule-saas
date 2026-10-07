@@ -864,7 +864,7 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
   };
 
   // Finalizar Consulta Médica (Registrando no Prontuário Geral Selado)
-  const completion = useConsultationCompletion(undefined, selectedPatientId + ':' + (initialAppointmentId || ''));
+  const completion = useConsultationCompletion(onFinishConsultation, selectedPatientId + ':' + (initialAppointmentId || ''));
   const handleFinishConsultation = async () => {
     if (!selectedPatientId) {
       showToast('Selecione um paciente para registrar o atendimento.', 'info');
@@ -932,9 +932,6 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
       setActiveTab('history');
       loadPatientConsultations(selectedPatientId);
 
-      if (onFinishConsultation) {
-        onFinishConsultation();
-      }
     } catch (err: any) {
       console.error('Erro ao finalizar consulta médica:', err);
       showToast(err.message || 'Erro ao registrar atendimento médico.', 'error');

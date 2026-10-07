@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { apiLogin, password } from '../../helpers/session';
-test('cadastro → verificação → plano → perfil → acesso operacional', async ({ request }) => {
+test('@critical cadastro → verificação → plano → perfil → acesso operacional', async ({ request }) => {
   const data = { email:'registration-e2e@test.invalid', responsibleName:'Pessoa sintética', clinicName:'Clínica E2E', managerProfession:'Fisioterapeuta', password, termsAccepted:true, privacyAccepted:true };
   const response = await request.post('/api/v1/public/tenants/register',{data});
   expect(response.status()).toBe(201);

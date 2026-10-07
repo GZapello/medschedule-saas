@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { DocumentsController } from './documents.controller';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
@@ -446,6 +447,17 @@ export class PsychopedagogyController {
    * Gera SHA-256, assina eletronicamente e sela a sessão tornando-a imutável.
    */
   static async finishSession(req: Request, res: Response): Promise<void> {
+    if (req.body.appointmentId && req.body.saveOnly === true) {
+      if (!hasPsychopedagogyAccess(req, req.body.patientId)) { res.status(403).json({ error: 'Acesso negado: sigilo psicopedagógico restrito.' }); return; }
+      const body = req.body;
+      if (body.sessionId && !db.prepare('SELECT id FROM psychopedagogy_sessions WHERE id=? AND patient_id=? AND tenant_id=?').get(body.sessionId, body.patientId, req.tenantId)) {
+        res.status(400).json({ error: 'Sessão incompatível com o paciente.' }); return;
+      }
+      req.params.id = body.appointmentId;
+      req.body = { ...body, evolution: { ...body, moduleType: 'ZemdaPP', moduleData: { ...body }, isSealed: true } };
+      DocumentsController.finishConsultation(req, res);
+      return;
+    }
     try {
       const tenantId = req.tenantId!;
       const patientId = String(req.body.patientId || req.body.patient_id || req.params.patientId || '');

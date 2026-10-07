@@ -127,6 +127,7 @@ export const OnboardingProvider: React.FC<{ children: ReactNode }> = ({ children
 
   // Modais
   const [isWelcomeModalOpen, setIsWelcomeModalOpen] = useState<boolean>(false);
+  const onboardingLoadVersion = React.useRef(0);
   const [isHelpOpen, setIsHelpOpen] = useState<boolean>(false);
   const [isWhatsNewOpen, setIsWhatsNewOpen] = useState<boolean>(false);
   const [isModuleSelectorOpen, setIsModuleSelectorOpen] = useState<boolean>(false);
@@ -208,11 +209,13 @@ export const OnboardingProvider: React.FC<{ children: ReactNode }> = ({ children
     }
 
     let isMounted = true;
+    const loadVersion = ++onboardingLoadVersion.current;
+    let welcomeTimeout: ReturnType<typeof setTimeout> | undefined;
 
     async function loadOnboarding() {
       try {
         const res = await ApiClient.get<any>('/v1/user-onboarding');
-        if (isMounted && res) {
+        if (isMounted && res && loadVersion === onboardingLoadVersion.current) {
           const freshData: UserOnboardingData = {
             onboardingStatus: res.onboardingStatus || 'pending',
             onboardingStartedAt: res.onboardingStartedAt || null,
@@ -236,8 +239,8 @@ export const OnboardingProvider: React.FC<{ children: ReactNode }> = ({ children
             !currentUser?.needsOnboarding
           ) {
             // Abre o modal discreto de primeiro acesso após pequeno delay de montagem
-            setTimeout(() => {
-              if (isMounted) setIsWelcomeModalOpen(true);
+            welcomeTimeout = setTimeout(() => {
+              if (isMounted && loadVersion === onboardingLoadVersion.current) setIsWelcomeModalOpen(true);
             }, 800);
           }
         }
@@ -252,11 +255,13 @@ export const OnboardingProvider: React.FC<{ children: ReactNode }> = ({ children
 
     return () => {
       isMounted = false;
+      clearTimeout(welcomeTimeout);
     };
   }, [currentUser]);
 
   // Persiste dados no backend e localStorage
   const persistState = useCallback(async (partial: Partial<UserOnboardingData>) => {
+    onboardingLoadVersion.current++;
     setOnboardingData(prev => {
       const updated = { ...prev, ...partial };
       try {

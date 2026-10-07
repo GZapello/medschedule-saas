@@ -51,6 +51,7 @@ let server;
     db.prepare("UPDATE tenants SET created_at=datetime('now',?), onboarding_completed=0, manager_confirmed=0 WHERE id=?").run(age,result.clinicId);
     db.prepare('DELETE FROM professional_services WHERE service_id IN (SELECT id FROM services WHERE tenant_id=?)').run(result.clinicId);
     db.prepare('DELETE FROM services WHERE tenant_id=?').run(result.clinicId);
+    db.prepare('DELETE FROM schedules WHERE tenant_id=?').run(result.clinicId);
     return result.clinicId;
   };
   const completedSignup=await register('completed-signup');

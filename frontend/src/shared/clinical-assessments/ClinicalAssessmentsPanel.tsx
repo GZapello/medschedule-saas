@@ -3,6 +3,7 @@ import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { ClinicalAssessmentEditor, ClinicalAssessmentComparison, ClinicalAssessmentReport, ReportTrend, evolutionMetrics, visceralEvolutionSeries } from './index';
 import { fieldCapability, assessmentCapabilities } from './policy';
+import { resolveConsultationAppointment } from '../../components/clinical/resolveConsultationAppointment';
 
 /** One patient history, editor, comparison, graphs and printable report for every workspace. */
 export function ClinicalAssessmentsPanel({patientId,patient,appointmentId,sourceModule}: {patientId:string,patient:any,appointmentId?:string,sourceModule:string}) {
@@ -28,6 +29,10 @@ export function ClinicalAssessmentsPanel({patientId,patient,appointmentId,source
     const request=++version.current;
     setError('');setBusy(true);
     try {
+      if (currentUser?.role === 'professional') {
+        await resolveConsultationAppointment({ patientId, appointmentId, moduleType: sourceModule });
+        if(request!==version.current)return;
+      }
       const data=await ApiClient.get<any>(`/v1/clinical-assessments/patients/${patientId}/evolution`);
       if(request===version.current)setHistory(data.history || []);
     } catch {if(request===version.current){setHistory([]);setError('Não foi possível acessar as avaliações deste paciente.');}}

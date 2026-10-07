@@ -22,12 +22,14 @@ export function useConsultationCompletion(onFinished?: () => void, contextKey?: 
     setIsCompleted(false);
     directAppointment.current = undefined;
     setReceipt(null);
+    setPaymentOpen(false);
     setLastPayload(null);
     setShowPostConsultationModal(false);
     setShowFollowUpDocModal(false);
     setShowRecordsModal(false);
   }, [contextKey]);
   const [receipt, setReceipt] = useState<any>(null);
+  const [paymentOpen, setPaymentOpen] = useState(false);
   const [lastPayload, setLastPayload] = useState<any>(null);
 
   // Post-consultation modal state
@@ -37,7 +39,11 @@ export function useConsultationCompletion(onFinished?: () => void, contextKey?: 
 
   const complete = async (endpoint: string, payload: any) => {
     if (!payload.patientId) throw new Error('Selecione um paciente para finalizar o atendimento.');
-    if (inFlight.current || completed.current) return null;
+    if (inFlight.current) return null;
+    if (completed.current) {
+      if (receipt?.awaitingPayment) setPaymentOpen(true);
+      return null;
+    }
     const context = contextKey;
     inFlight.current = true;
     try {
@@ -47,16 +53,17 @@ export function useConsultationCompletion(onFinished?: () => void, contextKey?: 
       directAppointment.current = appointmentId;
       setLastPayload({ ...payload, appointmentId });
 
-      const result = await ApiClient.post<any>(endpoint, { ...payload, appointmentId });
+      const result = await ApiClient.post<any>(endpoint, { ...payload, appointmentId, saveOnly: true });
       if (result.alreadyCompleted) {
         throw new Error('Este atendimento já foi finalizado. Abra o prontuário para consultar o histórico.');
       }
       if (currentContext.current !== context) return null;
       completed.current = true;
-      setIsCompleted(true);
+      setIsCompleted(!result.awaitingPayment);
       setReceipt({ ...result, appointmentId });
-      setShowPostConsultationModal(options?.showPostCompletion !== false);
-      window.dispatchEvent(new CustomEvent('appointment-updated', { detail: { appointmentId, status: 'completed' } }));
+      setPaymentOpen(!!result.awaitingPayment);
+      setShowPostConsultationModal(!result.awaitingPayment && options?.showPostCompletion !== false);
+      window.dispatchEvent(new CustomEvent('appointment-updated', { detail: { appointmentId, status: result.awaitingPayment ? 'in_progress' : 'completed' } }));
       window.dispatchEvent(new Event('refresh-appointments'));
       window.dispatchEvent(new CustomEvent('zemda-appointment-updated'));
       return result;
@@ -76,17 +83,19 @@ export function useConsultationCompletion(onFinished?: () => void, contextKey?: 
   const dialog = (
     <>
       {review.dialog}
-      {receipt?.awaitingPayment && (
+      {paymentOpen && receipt?.awaitingPayment && (
         <ConsultationPaymentModal
           appointmentId={receipt.appointmentId}
           initialPayment={receipt.payment}
           onClose={() => {
-            setReceipt(null);
-            setShowPostConsultationModal(true);
+            setPaymentOpen(false);
           }}
           onFinished={() => {
-            setReceipt(null);
-            setShowPostConsultationModal(true);
+            if (currentContext.current !== contextKey) return;
+            setReceipt((saved: any) => ({ ...saved, awaitingPayment: false }));
+            setPaymentOpen(false);
+            setIsCompleted(true);
+            setShowPostConsultationModal(options?.showPostCompletion !== false);
           }}
         />
       )}

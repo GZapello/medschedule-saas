@@ -1,5 +1,6 @@
 const assert = require('assert');
-const { db } = require('./dist/config/database');
+const { db, initializeDatabase } = require('./dist/config/database');
+initializeDatabase();
 const { getAvailableModulesForProfessional, resolveClinicalModule, isPrimaryClinicalModule } = require('./dist/utils/clinical-module');
 const { v4: uuidv4 } = require('uuid');
 

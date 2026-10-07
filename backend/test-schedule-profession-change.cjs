@@ -154,6 +154,11 @@ async function runTests() {
       assert(createRes.status === 403, 'Cadastro direto bloqueado: profissionais ingressam por convite');
       const newProfId = 'synthetic-schedule-professional';
       db.prepare("INSERT INTO professionals(id,tenant_id,name,profession_id) VALUES(?,?,?,'prof-fisioterapeuta')").run(newProfId,tenantId,'Profissional de teste');
+      const ownerId = 'synthetic-schedule-owner';
+      db.prepare("INSERT INTO users(id,tenant_id,name,email,password_hash,role,status) VALUES(?,?,'Profissional sintético','schedule-owner@test.invalid','hash','professional','active')").run(ownerId,tenantId);
+      db.prepare("INSERT INTO clinic_users(id,tenant_id,user_id,role,status) VALUES('schedule-owner-member',?,?,'professional','active')").run(tenantId,ownerId);
+      db.prepare('UPDATE professionals SET user_id=? WHERE id=?').run(ownerId,newProfId);
+      const ownerHeaders = { Authorization: `Bearer ${generateToken({userId:ownerId,tenantId,role:'professional',email:'schedule-owner@test.invalid',name:'Profissional sintético'})}` };
       const { createDefaultSchedules } = require('./dist/utils/schedule-defaults');
       createDefaultSchedules(db,tenantId,newProfId);
       createDefaultSchedules(db,tenantId,newProfId);
@@ -214,7 +219,9 @@ async function runTests() {
       // Cenário 4: Primeira alteração de profissão (Deve ter sucesso e marcar usado)
       // -------------------------------------------------------------
       console.log('\n--- Cenário 4: Primeira alteração de profissão (Sucesso e marcação de uso) ---');
-      const changeProfRes = await makeRequest('PUT', `/api/v1/professionals/${newProfId}`, authHeaders, {
+      const forbiddenManager = await makeRequest('PUT', `/api/v1/professionals/${newProfId}`, authHeaders, { professionId:'prof-fonoaudiologo' });
+      assert(forbiddenManager.status === 403, 'Gestor não altera profissão de outro profissional');
+      const changeProfRes = await makeRequest('PUT', `/api/v1/professionals/${newProfId}`, ownerHeaders, {
         professionId: 'prof-fonoaudiologo', // alterando para Fonoaudiologia
         practiceAreas: 'Fonoaudiologia Clínica e Voz'
       });
@@ -232,7 +239,7 @@ async function runTests() {
       // Cenário 5: Segunda tentativa de alteração de profissão (Deve ser bloqueada com 403)
       // -------------------------------------------------------------
       console.log('\n--- Cenário 5: Segunda tentativa de alteração de profissão (Bloqueio 403) ---');
-      const secondChangeRes = await makeRequest('PUT', `/api/v1/professionals/${newProfId}`, authHeaders, {
+      const secondChangeRes = await makeRequest('PUT', `/api/v1/professionals/${newProfId}`, ownerHeaders, {
         professionId: 'prof-nutricionista', // tentando mudar de novo para Nutrição
         practiceAreas: 'Nutrição Esportiva'
       });

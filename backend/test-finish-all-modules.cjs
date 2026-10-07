@@ -51,7 +51,32 @@ let server;
     assert.equal(reopened.data.alreadyCompleted,true,key+' reopen');
     console.log('PASS',moduleType,'record persistence, completed, direct-status guard, duplicate and reopen');
   }
+  for (const [key, route, profession] of [['Med','medical/finish-consultation','Medicina'],['Psico','psychology/consultations/finish','Psicologia'],['PP','psychopedagogy/consultations/finish','Psicopedagogia']]) {
+    db.prepare('UPDATE tenants SET manager_profession=? WHERE id=?').run(profession,'clinic');
+    db.prepare('UPDATE professionals SET practice_areas=? WHERE id=?').run(profession,'professional');
+    const id = 'payment-'+key;
+    db.prepare("INSERT INTO appointments(id,tenant_id,appointment_number,patient_id,professional_id,service_id,start_time,end_time,status,modality,clinical_module) VALUES(?,'clinic',?,'patient','professional','service',datetime('now'),datetime('now','+50 minutes'),'in_progress','presential',?)").run(id,id,'Zemda'+key);
+    const payload = {patientId:'patient',appointmentId:id,clinicalEvolution:'Auditoria saveOnly '+key,saveOnly:true};
+    const saved = await call(route,payload);
+    assert.equal(saved.status,200,JSON.stringify(saved));
+    assert.equal(saved.data.awaitingPayment,true);
+    assert.equal(db.prepare('SELECT status FROM appointments WHERE id=?').get(id).status,'in_progress');
+    assert.equal(db.prepare('SELECT COUNT(*) n FROM records WHERE appointment_id=?').get(id).n,1);
+    if(key==='Psico') {
+      assert.ok(saved.data.signatureHash);
+      assert.equal(db.prepare('SELECT COUNT(*) n FROM psychology_sessions WHERE appointment_id=? AND is_sealed=1').get(id).n,1);
+    }
+    assert.equal((await call(route,payload)).data.awaitingPayment,true);
+    const paid = await call(`appointments/${id}/finish`,{payment:{amount:180,paymentMethod:'pix',status:'paid'}});
+    assert.equal(paid.status,200,JSON.stringify(paid));
+    assert.equal((await call(`appointments/${id}/completion`,null,'GET')).data.alreadyCompleted,true);
+    assert.equal(db.prepare('SELECT COUNT(*) n FROM records WHERE appointment_id=?').get(id).n,1);
+    assert.equal(db.prepare('SELECT COUNT(*) n FROM payments WHERE appointment_id=?').get(id).n,1);
+    console.log('PASS',key,'saveOnly, signed persistence, payment and idempotence');
+  }
   const body={patientId:'patient',moduleType:'ZemdaEstetic',walkIn:true};
+  db.prepare("UPDATE tenants SET manager_profession='Estética' WHERE id='clinic'").run();
+  db.prepare("UPDATE professionals SET practice_areas='Estética' WHERE id='professional'").run();
   const started=await call('clinical/consultations/start',body);
   assert.equal(started.status,201,JSON.stringify(started));
   assert.equal(started.data.appointment.professional_id,'professional');
@@ -60,7 +85,7 @@ let server;
   assert.equal(resumed.data.created,false);
   const finished=await call(`appointments/${started.data.appointmentId}/finish`,{evolution:{moduleType:'ZemdaEstetic',clinicalEvolution:'Sem horário marcado',moduleData:{assessmentForm:{observations:'Dados preservados'}}}});
   assert.equal(finished.status,200,JSON.stringify(finished));
-  const saved=db.prepare('SELECT * FROM records WHERE appointment_id=?').get(started.data.appointmentId);
+  const saved=db.prepare('SELECT * FROM records WHERE appointment_id=? AND clinical_evolution=?').get(started.data.appointmentId,'Sem horário marcado');
   assert.equal(saved.clinical_evolution,'Sem horário marcado');
   assert.ok(saved.module_data_json.includes('Dados preservados'));
   console.log('PASS walk-in creation, authenticated professional, reuse and clinical persistence');

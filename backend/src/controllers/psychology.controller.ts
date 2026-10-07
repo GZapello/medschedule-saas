@@ -6,6 +6,7 @@ import { GeminiService } from '../services/gemini.service';
 import { generateQrCodeDataUrl } from '../utils/qr-generator';
 import { ServiceReminderService } from '../services/service-reminder.service';
 import { createDefaultSchedules } from '../utils/schedule-defaults';
+import { DocumentsController } from './documents.controller';
 
 function getParam(param: any): string {
   if (Array.isArray(param)) return param[0] || '';
@@ -1087,6 +1088,15 @@ export class PsychologyController {
   // 10. CONCLUIR ATENDIMENTO (Selamento Criptográfico & Sucesso)
   // ==========================================================================
   static finishConsultation(req: Request, res: Response): void {
+    if (req.body.appointmentId && req.body.saveOnly === true) {
+      if (!hasPsychologyAccess(req, req.body.patientId)) { res.status(403).json({ error: 'Sem permissão para concluir atendimento psicológico.' }); return; }
+      if (!String(req.body.clinicalEvolution || '').trim()) { res.status(400).json({ error: 'O relato da evolução clínica é indispensável.' }); return; }
+      const body = req.body;
+      req.params.id = body.appointmentId;
+      req.body = { ...body, evolution: { ...body, moduleType: 'ZemdaPsico', moduleData: { ...body }, conducts: body.conductPlan, isSealed: true } };
+      DocumentsController.finishConsultation(req, res);
+      return;
+    }
     try {
       const tenantId = req.tenantId!;
       const userId = req.user?.userId;

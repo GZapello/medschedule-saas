@@ -7,6 +7,7 @@ process.env.GEMINI_API_KEY = '';
 process.env.RESEND_API_KEY = '';
 process.env.JWT_SECRET = 'e2e-only-secret-never-production';
 process.env.R2_MOCK_STORAGE = 'true';
+process.env.ZEMDA_FILES_SIGNING_SECRET = 'e2e-only-file-signing-secret-never-production';
 process.env.CLINICAL_FRONTEND_DIST = path.resolve(__dirname, '../../frontend/dist');
 process.argv.push('--serve');
 const { app, db } = require('../../backend/test-consultations.cjs');
@@ -39,3 +40,19 @@ for (const suffix of ['A','B']) db.prepare("INSERT INTO patients(id,tenant_id,fu
 db.prepare("INSERT INTO inventory_items(id,tenant_id,name,category,quantity,unit,batch_number,expiration_date,active) VALUES('estetic-stock','test-clinic','Produto sintético','consumable',20,'ml','LOTE-E2E','2028-01-01',1)").run();
 
 require('../../backend/dist/services/capability.service').CapabilityService.setUserPracticeAreas('estetic','test-clinic',['pa-estet-facial','pa-estet-corporal','pa-estet-capilar']);
+
+// Additional clinical profiles for the full audit, confined to this temporary DB.
+for (const [key, name, professionId, flag] of [
+  ['med-audit','Médico sintético','prof-medico','med'],
+  ['psico-audit','Psicólogo sintético','prof-psicologo','psico'],
+  ['pp-audit','Psicopedagogo sintético','prof-psicopedagogo','pp'],
+  ['personal-audit','Personal sintético','prof-educacao-fisica','personal'],
+]) {
+  db.prepare('INSERT INTO users(id,tenant_id,name,email,password_hash,role,status,profession_id) VALUES(?,\'test-clinic\',?,?,?,\'professional\',\'active\',?)').run(key,name,`${key}@test.invalid`,bcrypt.hashSync('Local-Test-Only-2026',4),professionId);
+  db.prepare("INSERT INTO clinic_users(id,tenant_id,user_id,role,status,permissions_json) VALUES(?,'test-clinic',?,'professional','active','[\"access_zemda_body\"]')").run('e2e-member-'+key,key);
+  db.prepare(`INSERT INTO professionals(id,tenant_id,user_id,name,profession_id,practice_areas,zemda_${flag}_enabled) VALUES(?,'test-clinic',?,?,?,?,1)`).run('e2e-professional-'+key,key,name,professionId,name);
+}
+const { createDefaultSchedules } = require('../../backend/dist/utils/schedule-defaults');
+for (const professional of db.prepare("SELECT id FROM professionals WHERE tenant_id='test-clinic'").all()) {
+  createDefaultSchedules(db, 'test-clinic', professional.id);
+}

@@ -332,7 +332,7 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
         ]);
       if (!isCurrentClinicalContext()) return;
 
-        setPatientData(pat);
+        setPatientData(pat?.patient || pat);
         if (profRes) {
           setProfile((prev: any) => ({ ...prev, ...profRes }));
         }
@@ -767,7 +767,6 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
       await autosave.clearDraft();
       showToast('Atendimento psicopedagógico finalizado e selado com sucesso!', 'success');
 
-      if (onFinishConsultation) onFinishConsultation();
     } catch (err: any) {
       showToast(err.message || 'Erro ao finalizar atendimento psicopedagógico.', 'error');
     } finally {
@@ -2576,7 +2575,7 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
       {/* ========================================================================= */}
       {/* 9. MODAL PÓS-ATENDIMENTO COM OPÇÕES DE DOCUMENTOS */}
       {/* ========================================================================= */}
-      {showPostConsultationModal && (
+      {showPostConsultationModal && completion.isCompleted && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl border border-slate-200 overflow-hidden p-6 text-center space-y-5 animate-in zoom-in-95">
             <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-inner">

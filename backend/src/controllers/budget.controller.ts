@@ -23,7 +23,7 @@ export class BudgetController {
           b.converted_to_inventory, b.created_at, b.updated_at,
           p.full_name as patient_name, p.phone as patient_phone, p.cpf as patient_cpf
         FROM budgets b
-        LEFT JOIN patients p ON p.id = b.patient_id
+        LEFT JOIN patients p ON p.id = b.patient_id AND p.tenant_id = b.tenant_id
         WHERE b.tenant_id = ?
       `;
       const params: any[] = [tenantId];
@@ -66,7 +66,7 @@ export class BudgetController {
           b.converted_to_inventory, b.created_at, b.updated_at,
           p.full_name as patient_name, p.phone as patient_phone, p.email as patient_email, p.cpf as patient_cpf
         FROM budgets b
-        LEFT JOIN patients p ON p.id = b.patient_id
+        LEFT JOIN patients p ON p.id = b.patient_id AND p.tenant_id = b.tenant_id
         WHERE b.id = ? AND b.tenant_id = ?
       `).get(id, tenantId) as any;
 
@@ -117,6 +117,11 @@ export class BudgetController {
 
       if (budgetType === 'patient' && !patientId) {
         res.status(400).json({ error: 'Paciente é obrigatório para orçamento de paciente' });
+        return;
+      }
+
+      if (patientId && !db.prepare('SELECT id FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId)) {
+        res.status(404).json({ error: 'Paciente não encontrado' });
         return;
       }
 
@@ -220,9 +225,14 @@ export class BudgetController {
         return;
       }
 
-      db.prepare(`
+      const result = db.prepare(`
         UPDATE budgets SET status = ?, updated_at = datetime('now') WHERE id = ? AND tenant_id = ?
       `).run(status, id, tenantId);
+
+      if (result.changes === 0) {
+        res.status(404).json({ error: 'Orçamento não encontrado' });
+        return;
+      }
 
       logAudit(req, 'UPDATE_BUDGET_STATUS', 'budgets', id, { status });
       res.json({ message: 'Status do orçamento atualizado com sucesso', status });
@@ -264,68 +274,79 @@ export class BudgetController {
         WHERE budget_id = ?
       `).all(id) as any[];
 
-      let convertedCount = 0;
-
-      for (const it of items) {
-        let targetItemId = it.reference_id;
-        // Se não tiver reference_id direto, tenta encontrar item por nome exato no estoque
-        if (!targetItemId) {
-          const match = db.prepare('SELECT id FROM inventory_items WHERE name = ? AND tenant_id = ? AND active = 1').get(it.description, tenantId) as { id: string } | undefined;
-          if (match) targetItemId = match.id;
+      for (const item of items) {
+        if (item.reference_id && !db.prepare('SELECT id FROM inventory_items WHERE id = ? AND tenant_id = ?').get(item.reference_id, tenantId)) {
+          res.status(404).json({ error: 'Item de estoque não encontrado' });
+          return;
         }
-
-        // Se ainda não existir no estoque, cria automaticamente
-        if (!targetItemId) {
-          targetItemId = 'inv-' + uuidv4().slice(0, 8);
-          db.prepare(`
-            INSERT INTO inventory_items (
-              id, tenant_id, name, quantity, unit_cost, supplier, active, created_at, updated_at
-            )
-            VALUES (?, ?, ?, 0, ?, ?, 1, datetime('now'), datetime('now'))
-          `).run(targetItemId, tenantId, it.description, it.unit_price || 0, budget.supplier_name || null);
-        }
-
-        // Atualiza saldo
-        const curItem = db.prepare('SELECT quantity FROM inventory_items WHERE id = ?').get(targetItemId) as { quantity: number };
-        const prevQty = curItem ? curItem.quantity : 0;
-        const addQty = Number(it.quantity) || 1;
-        const newQty = prevQty + addQty;
-
-        db.prepare('UPDATE inventory_items SET quantity = ?, unit_cost = COALESCE(?, unit_cost), updated_at = datetime(\'now\') WHERE id = ?').run(
-          newQty,
-          it.unit_price || null,
-          targetItemId
-        );
-
-        // Registra movimentação de entrada vinculada ao orçamento
-        db.prepare(`
-          INSERT INTO inventory_movements (
-            id, tenant_id, item_id, movement_type, quantity, previous_quantity, new_quantity,
-            reason, document_reference, user_id, created_at
-          )
-          VALUES (?, ?, ?, 'in', ?, ?, ?, ?, ?, ?, datetime('now'))
-        `).run(
-          'mov-' + uuidv4().slice(0, 8),
-          tenantId,
-          targetItemId,
-          addQty,
-          prevQty,
-          newQty,
-          `Entrada automática via ${budget.budget_number}`,
-          budget.budget_number,
-          req.user?.userId || null
-        );
-
-        convertedCount++;
       }
 
-      // Marca orçamento como convertido e aprovado
-      db.prepare(`
-        UPDATE budgets SET converted_to_inventory = 1, status = 'approved', updated_at = datetime('now')
-        WHERE id = ? AND tenant_id = ?
-      `).run(id, tenantId);
+      const convertedCount = db.transaction(() => {
+        let count = 0;
 
-      logAudit(req, 'CONVERT_BUDGET_TO_INVENTORY', 'budgets', id, { itemsCount: convertedCount });
+        for (const it of items) {
+          let targetItemId = it.reference_id;
+          // Se não tiver reference_id direto, tenta encontrar item por nome exato no estoque
+          if (!targetItemId) {
+            const match = db.prepare('SELECT id FROM inventory_items WHERE name = ? AND tenant_id = ? AND active = 1').get(it.description, tenantId) as { id: string } | undefined;
+            if (match) targetItemId = match.id;
+          }
+
+          // Se ainda não existir no estoque, cria automaticamente
+          if (!targetItemId) {
+            targetItemId = 'inv-' + uuidv4().slice(0, 8);
+            db.prepare(`
+              INSERT INTO inventory_items (
+                id, tenant_id, name, quantity, unit_cost, supplier, active, created_at, updated_at
+              )
+              VALUES (?, ?, ?, 0, ?, ?, 1, datetime('now'), datetime('now'))
+            `).run(targetItemId, tenantId, it.description, it.unit_price || 0, budget.supplier_name || null);
+          }
+
+          // Atualiza saldo
+          const curItem = db.prepare('SELECT quantity FROM inventory_items WHERE id = ? AND tenant_id = ?').get(targetItemId, tenantId) as { quantity: number };
+          const prevQty = curItem ? curItem.quantity : 0;
+          const addQty = Number(it.quantity) || 1;
+          const newQty = prevQty + addQty;
+
+          db.prepare('UPDATE inventory_items SET quantity = ?, unit_cost = COALESCE(?, unit_cost), updated_at = datetime(\'now\') WHERE id = ? AND tenant_id = ?').run(
+            newQty,
+            it.unit_price || null,
+            targetItemId,
+            tenantId
+          );
+
+          // Registra movimentação de entrada vinculada ao orçamento
+          db.prepare(`
+            INSERT INTO inventory_movements (
+              id, tenant_id, item_id, movement_type, quantity, previous_quantity, new_quantity,
+              reason, document_reference, user_id, created_at
+            )
+            VALUES (?, ?, ?, 'in', ?, ?, ?, ?, ?, ?, datetime('now'))
+          `).run(
+            'mov-' + uuidv4().slice(0, 8),
+            tenantId,
+            targetItemId,
+            addQty,
+            prevQty,
+            newQty,
+            `Entrada automática via ${budget.budget_number}`,
+            budget.budget_number,
+            req.user?.userId || null
+          );
+
+          count++;
+        }
+
+        // Marca orçamento como convertido e aprovado
+        db.prepare(`
+          UPDATE budgets SET converted_to_inventory = 1, status = 'approved', updated_at = datetime('now')
+          WHERE id = ? AND tenant_id = ?
+        `).run(id, tenantId);
+
+        logAudit(req, 'CONVERT_BUDGET_TO_INVENTORY', 'budgets', id, { itemsCount: count });
+        return count;
+      })();
 
       res.json({
         message: `Orçamento convertido com sucesso! ${convertedCount} item(ns) deram entrada no estoque.`,
@@ -405,4 +426,3 @@ export class BudgetController {
     }
   }
 }
-

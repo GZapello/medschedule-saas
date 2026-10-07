@@ -247,13 +247,21 @@ export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModal
 
     const title = `Acompanhamento_${(patientName || 'Paciente').replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}`;
     const contentHtml = printSheetRef.current.innerHTML;
+    const applicationCss = Array.from(document.styleSheets).map(sheet => {
+      try {
+        return Array.from(sheet.cssRules).map(rule => rule.cssText).join('\n');
+      } catch {
+        // Cross-origin styles are optional; application styles are served locally.
+        return '';
+      }
+    }).join('\n');
 
     const fullHtml = `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8">
   <title>${title}</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <style>${applicationCss}</style>
   <style>
     @page {
       size: A4 portrait;

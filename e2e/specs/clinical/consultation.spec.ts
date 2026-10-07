@@ -1,7 +1,7 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../../helpers/audit-test';
 import { login, apiLogin } from '../../helpers/session';
 
-test('@critical login → atendimento → autosave → revisão → prontuário', async ({ page, request }) => {
+test('@critical login → atendimento → autosave → revisão → prontuário', async ({ page, request }, info) => {
   await login(page);
   await page.getByTitle('Iniciar Atendimento Rápido').click();
   await expect(page.getByText('Paciente teste fisio', { exact: true }).first()).toBeVisible();
@@ -40,15 +40,38 @@ test('@critical login → atendimento → autosave → revisão → prontuário'
   await expect(evolution).toHaveValue(text);
   await page.getByRole('button', { name: '14. Finalização', exact: true }).click();
   await page.getByRole('button', { name: 'Finalizar Atendimento', exact: true }).last().click();
+  const clinicalSaved = page.waitForResponse(r => r.url().includes('/physiotherapy/consultations/finish') && r.request().method() === 'POST');
   await review.getByRole('button', { name: 'Finalizar atendimento', exact: true }).click();
+  const savedResponse = await clinicalSaved;
+  expect(savedResponse.request().postDataJSON().saveOnly).toBe(true);
+  expect((await savedResponse.json()).awaitingPayment).toBe(true);
+  const headers = await apiLogin(request, 'fisio');
+  const beforePayment = await request.get('/api/v1/appointments/apt-fisio/completion', { headers });
+  expect((await beforePayment.json()).alreadyCompleted).toBe(false);
+  await page.getByRole('button', { name: 'Continuar depois', exact: true }).click();
+  await expect(page.getByText('Atendimento Finalizado com Sucesso!', { exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Finalizar Atendimento', exact: true }).last().click();
+  await expect(review).toHaveCount(0);
   await page.getByRole('button', { name: 'Confirmar e finalizar', exact: true }).click();
   await expect(page.getByText('Atendimento Finalizado com Sucesso!', { exact: true })).toBeVisible();
-  const headers = await apiLogin(request, 'fisio');
   const response = await request.get('/api/v1/dashboard/metrics', { headers });
   expect(response.ok()).toBeTruthy();
   const row = (await response.json()).today.appointments.find((a: any) => a.id === 'apt-fisio');
   expect(row.status).toBe('completed');
   expect(row.record_id).toBeTruthy();
+  await page.getByRole('button', { name: 'Gerar acompanhamento para o paciente', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Documento de Acompanhamento para o Paciente', exact: true })).toBeVisible();
+  await expect(page.getByPlaceholder('Digite as orientações fornecidas ao paciente...')).toHaveValue('');
+  const printable = page.waitForEvent('popup');
+  await page.getByRole('button', { name: 'Imprimir / PDF A4', exact: true }).click();
+  const document = await printable;
+  await expect(document.locator('.a4-page')).toContainText('Paciente teste fisio');
+  await expect(document.locator('.a4-page')).toContainText('Clínica de teste');
+  const pdf = await document.pdf({ format: 'A4', printBackground: true });
+  expect(pdf.subarray(0,5).toString()).toBe('%PDF-');
+  await info.attach('acompanhamento-fisio.pdf', { body: pdf, contentType: 'application/pdf' });
+  await document.close();
+  await page.getByRole('button', { name: 'Fechar', exact: true }).last().click();
   await page.getByRole('button', { name: 'Ver prontuário do paciente' }).click();
   await expect(page.getByText(text, { exact: false }).last()).toBeVisible();
 });

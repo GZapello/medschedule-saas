@@ -298,6 +298,14 @@ async function runTests() {
     assert(checkRemoved.data.photos.length === 3, '9.2. Remover foto: avaliação agora possui exatamente 3 fotos');
     const remainingTypes = checkRemoved.data.photos.map(p => p.photo_type);
     assert(!remainingTypes.includes('left'), '9.3. Foto lateral esquerda não consta mais na avaliação');
+    const noPhotoEdit = await makeRequest('PUT', `/api/v1/personal/assessments/${assessmentId}`, authHeaders, { notes: 'Edição sem alterar fotografias' });
+    assert(noPhotoEdit.status === 200, '9.4. Edição sem campo photos é aceita');
+    assert((await makeRequest('GET', `/api/v1/personal/assessments/${assessmentId}`, authHeaders)).data.photos.length === 3, '9.5. Omissão de photos preserva as fotografias');
+    for (let attempt=0;attempt<2;attempt++) {
+      const cleared=await makeRequest('PUT', `/api/v1/personal/assessments/${assessmentId}`, authHeaders, { photos: [] });
+      assert(cleared.status === 200, '9.6. Remover todas as fotografias é idempotente');
+      assert((await makeRequest('GET', `/api/v1/personal/assessments/${assessmentId}`, authHeaders)).data.photos.length === 0, '9.7. Fotografias removidas permanecem ausentes após recarregar');
+    }
 
     // -------------------------------------------------------------
     // BLOCO 2: GESTÃO DE EXERCÍCIOS E IMAGENS (TESTES 10 A 14)

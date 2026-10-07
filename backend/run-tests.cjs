@@ -42,7 +42,10 @@ for (const file of testFiles) {
   const run = spawnSync(process.execPath, [file], { cwd: __dirname, env, stdio: 'inherit', timeout: 180000 });
   const durationMs = Date.now() - start;
 
-  fs.rmSync(tmpDir, { recursive: true, force: true });
+  if (path.dirname(path.resolve(tmpDir)) !== path.resolve(os.tmpdir()) || !path.basename(tmpDir).startsWith('zemda-test-')) {
+    throw new Error('Diretório temporário de teste fora do local esperado');
+  }
+  fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   results.push({ file, passed: run.status === 0, durationMs });
 }
 

@@ -23,8 +23,10 @@ const SERVICE = 'srv-guardian-test';
 db.prepare(`INSERT INTO tenants (id, slug, name, email, status) VALUES (?, 'clinica-guardian-test', 'Clínica Teste Responsáveis', 'contato@guardian.test', 'active')`).run(TENANT);
 db.prepare(`INSERT INTO users (id, tenant_id, name, email, password_hash, role, status) VALUES (?, ?, 'Gestora', 'gestora@guardian.test', 'x', 'clinic_admin', 'active')`).run(ADMIN, TENANT);
 db.prepare(`INSERT INTO clinic_users (id, tenant_id, user_id, role, status, is_manager) VALUES ('cu-guardian-admin', ?, ?, 'clinic_admin', 'active', 1)`).run(TENANT, ADMIN);
-db.prepare(`INSERT INTO professionals (id, tenant_id, name, active) VALUES (?, ?, 'Dra. Teste', 1)`).run(PROFESSIONAL, TENANT);
+db.prepare(`INSERT INTO professionals (id, tenant_id, name, active,public_booking_enabled) VALUES (?, ?, 'Dra. Teste', 1,1)`).run(PROFESSIONAL, TENANT);
+db.prepare('UPDATE tenants SET public_booking_enabled=1 WHERE id=?').run(TENANT);
 db.prepare(`INSERT INTO services (id, tenant_id, name, duration_minutes, price, active) VALUES (?, ?, 'Avaliação Infantil', 50, 150, 1)`).run(SERVICE, TENANT);
+db.prepare('UPDATE services SET professional_id=? WHERE id=?').run(PROFESSIONAL,SERVICE);
 for (let day = 0; day <= 6; day++) {
   db.prepare(`INSERT INTO schedules (id, tenant_id, professional_id, day_of_week, start_time, end_time, is_active) VALUES (?, ?, ?, ?, '08:00', '18:00', 1)`)
     .run(`sch-guardian-${day}`, TENANT, PROFESSIONAL, day);
@@ -156,6 +158,7 @@ const check = async (label, fn) => { await fn(); passed++; console.log(`  ✅ ${
         tenantSlug: 'clinica-guardian-test',
         professionalId: PROFESSIONAL,
         serviceId: SERVICE,
+        modality: 'presential',
         startTime: `${day}T10:00:00`,
         endTime: `${day}T10:50:00`,
         newPatientData: { fullName: 'Criança do Site', phone: '(11) 94444-0000', isChild: true, guardianName: 'Responsável do Site', guardianPhone: '(11) 94444-0001' }

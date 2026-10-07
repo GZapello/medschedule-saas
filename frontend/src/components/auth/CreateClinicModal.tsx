@@ -253,13 +253,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
       try {
         const queryParam = formData.profession;
 
-        let resData: any = null;
-        try {
-          resData = await ApiClient.get<any>(`/v1/capabilities/practice-areas?professionId=${encodeURIComponent(queryParam)}`);
-        } catch {
-          // Fallback para rota de taxonomia pública
-          resData = await ApiClient.get<any>(`/v1/taxonomy/practice-areas?professionId=${encodeURIComponent(queryParam)}`);
-        }
+        const resData = await ApiClient.get<any>(`/v1/taxonomy/practice-areas?professionId=${encodeURIComponent(queryParam)}`);
 
         const items: PracticeArea[] = Array.isArray(resData)
           ? resData

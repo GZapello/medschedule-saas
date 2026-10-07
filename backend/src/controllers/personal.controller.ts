@@ -1400,17 +1400,28 @@ export class PersonalController {
         Object.assign(edits,Object.fromEntries(Object.entries(calculated.values).filter(([k])=>columns.has(k) && (!fieldCapability(k) || ((req as any).clinicalAssessmentCapabilities || []).includes(fieldCapability(k))))));
       }
       if(!existing.calculation_version) for(const k of ['body_fat_percentage','fat_mass_kg','lean_mass_kg','muscle_mass_kg','bmr_kcal','bmi','whr','whtr']) if(edits[k]===null) delete edits[k];
-      if(Object.keys(edits).length) db.prepare(`UPDATE personal_assessments SET ${Object.keys(edits).map(k=>k+'=?').join(',')},updated_at=datetime('now') WHERE id=? AND tenant_id=?`).run(...Object.values(edits),id,tenantId);
-
-      if (Array.isArray(b.photos)) {
-        
-        const assessmentDate: string = typeof b.assessment_date === 'string'
-          ? b.assessment_date
-          : (new Date().toISOString().split('T')[0] || '');
-        saveAssessmentPhotos(String(id), String(existing.patient_id), tenantId, assessmentDate, b.photos);
+      db.exec('SAVEPOINT personal_assessment_update');
+      try {
+        if(Object.keys(edits).length) db.prepare(`UPDATE personal_assessments SET ${Object.keys(edits).map(k=>k+'=?').join(',')},updated_at=datetime('now') WHERE id=? AND tenant_id=?`).run(...Object.values(edits),id,tenantId);
+        if (Array.isArray(b.photos)) {
+          // The editor submits its full photo selection, including an empty selection.
+          // Omitted photos leave the saved selection unchanged.
+          const types = b.photos.map((photo: any) => photo.photo_type);
+          if (types.length) {
+            db.prepare(`DELETE FROM personal_assessment_photos WHERE assessment_id=? AND tenant_id=? AND photo_type NOT IN (${types.map(() => '?').join(',')})`).run(id,tenantId,...types);
+          } else {
+            db.prepare('DELETE FROM personal_assessment_photos WHERE assessment_id=? AND tenant_id=?').run(id,tenantId);
+          }
+          const assessmentDate = typeof b.assessment_date === 'string' ? b.assessment_date : existing.assessment_date;
+          saveAssessmentPhotos(String(id), String(existing.patient_id), tenantId, assessmentDate, b.photos);
+        }
+        if (postureJson !== undefined) db.prepare(`UPDATE personal_assessments SET posture_json = ?, assessment_date = COALESCE(?, assessment_date), updated_at = datetime('now') WHERE id = ? AND tenant_id = ?`).run(postureJson, typeof b.assessment_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(b.assessment_date) ? b.assessment_date : null, id, tenantId);
+        db.exec('RELEASE personal_assessment_update');
+      } catch (error) {
+        db.exec('ROLLBACK TO personal_assessment_update');
+        db.exec('RELEASE personal_assessment_update');
+        throw error;
       }
-
-      if (postureJson !== undefined) db.prepare(`UPDATE personal_assessments SET posture_json = ?, assessment_date = COALESCE(?, assessment_date), updated_at = datetime('now') WHERE id = ? AND tenant_id = ?`).run(postureJson, typeof b.assessment_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(b.assessment_date) ? b.assessment_date : null, id, tenantId);
 
       logAudit(req, 'UPDATE_ASSESSMENT', 'personal_assessments', id, { photosCount: Array.isArray(b.photos) ? b.photos.length : undefined });
       

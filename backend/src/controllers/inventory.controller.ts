@@ -16,7 +16,7 @@ export class InventoryController {
       const { category, search, filterAlert } = req.query;
 
       let query = `
-        SELECT 
+        SELECT
           id, tenant_id, name, category, product_type, brand, presentation, volume_ml,
           quantity, unit, batch_number, expiration_date, unit_cost, supplier, min_stock,
           notes, active, created_at, updated_at
@@ -166,6 +166,9 @@ export class InventoryController {
     try {
       const { id } = req.params;
       const tenantId = req.tenantId;
+      if (!db.prepare('SELECT id FROM inventory_items WHERE id=? AND tenant_id=?').get(id, tenantId)) {
+        res.status(404).json({ error: 'Item de estoque não encontrado' }); return;
+      }
       const {
         name, category, productType, brand, presentation, volumeMl,
         unit, batchNumber, expirationDate, unitCost, supplier, minStock, notes
@@ -225,63 +228,68 @@ export class InventoryController {
         return;
       }
 
-      const item = db.prepare('SELECT id, quantity, name FROM inventory_items WHERE id = ? AND tenant_id = ?').get(itemId, tenantId) as any;
-      if (!item) {
-        res.status(404).json({ error: 'Item de estoque não encontrado' });
-        return;
+      const qty = Number(quantity);
+      if (!Number.isFinite(qty) || qty <= 0) {
+        res.status(400).json({ error: 'Informe uma quantidade válida maior que zero' }); return;
       }
+      const result = db.transaction(() => {
+        const item = db.prepare('SELECT id, quantity, name FROM inventory_items WHERE id = ? AND tenant_id = ?').get(itemId, tenantId) as any;
+        if (!item) {
+          return { status: 404, data: { error: 'Item de estoque não encontrado' } };
+        }
 
-      const qty = Math.abs(Number(quantity));
-      const prevQty = Number(item.quantity) || 0;
-      let newQty = prevQty;
+        const prevQty = Number(item.quantity) || 0;
+        let newQty = prevQty;
 
-      if (movementType === 'in') {
-        newQty = prevQty + qty;
-      } else if (movementType === 'out') {
-        newQty = Math.max(0, prevQty - qty);
-      } else if (movementType === 'adjustment') {
-        newQty = qty; // No ajuste, define o novo saldo real apurado
-      } else {
-        res.status(400).json({ error: 'Tipo de movimentação inválido (deve ser: in, out ou adjustment)' });
-        return;
-      }
+        if (movementType === 'in') {
+          newQty = prevQty + qty;
+        } else if (movementType === 'out') {
+          if (qty > prevQty) return { status: 409, data: { error: 'Estoque insuficiente para esta saída' } };
+          newQty = prevQty - qty;
+        } else if (movementType === 'adjustment') {
+          newQty = qty; // No ajuste, define o novo saldo real apurado
+        } else {
+          return { status: 400, data: { error: 'Tipo de movimentação inválido (deve ser: in, out ou adjustment)' } };
+        }
 
-      // Atualiza saldo do item
-      db.prepare('UPDATE inventory_items SET quantity = ?, updated_at = datetime(\'now\') WHERE id = ?').run(newQty, itemId);
+        // Atualiza saldo do item
+        db.prepare('UPDATE inventory_items SET quantity = ?, updated_at = datetime(\'now\') WHERE id = ? AND tenant_id = ?').run(newQty, itemId, tenantId);
 
-      // Registra no histórico de movimentações
-      const movementId = 'mov-' + uuidv4().slice(0, 8);
-      db.prepare(`
-        INSERT INTO inventory_movements (
-          id, tenant_id, item_id, movement_type, quantity, previous_quantity, new_quantity,
-          reason, document_reference, user_id, created_at
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-      `).run(
-        movementId,
-        tenantId,
-        itemId,
-        movementType,
-        qty,
-        prevQty,
-        newQty,
-        reason || null,
-        documentReference || null,
-        req.user?.userId || null
-      );
+        // Registra no histórico de movimentações
+        const movementId = 'mov-' + uuidv4().slice(0, 8);
+        db.prepare(`
+          INSERT INTO inventory_movements (
+            id, tenant_id, item_id, movement_type, quantity, previous_quantity, new_quantity,
+            reason, document_reference, user_id, created_at
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        `).run(
+          movementId,
+          tenantId,
+          itemId,
+          movementType,
+          qty,
+          prevQty,
+          newQty,
+          reason || null,
+          documentReference || null,
+          req.user?.userId || null
+        );
 
-      logAudit(req, 'INVENTORY_MOVEMENT', 'inventory_movements', movementId, {
-        itemName: item.name,
-        movementType,
-        qty,
-        newQty
-      });
+        logAudit(req, 'INVENTORY_MOVEMENT', 'inventory_movements', movementId, {
+          itemName: item.name,
+          movementType,
+          qty,
+          newQty
+        });
 
-      res.status(201).json({
-        id: movementId,
-        message: 'Movimentação registrada com sucesso',
-        newQuantity: newQty
-      });
+        return { status: 201, data: {
+          id: movementId,
+          message: 'Movimentação registrada com sucesso',
+          newQuantity: newQty
+        } };
+      })();
+      res.status(result.status).json(result.data);
     } catch (err: any) {
       console.error('[InventoryController.recordMovement] Erro:', err);
       res.status(500).json({ error: 'Erro ao registrar movimentação de estoque' });
@@ -295,7 +303,7 @@ export class InventoryController {
       const { itemId } = req.query;
 
       let query = `
-        SELECT 
+        SELECT
           m.id, m.tenant_id, m.item_id, m.movement_type, m.quantity, m.previous_quantity,
           m.new_quantity, m.reason, m.document_reference, m.created_at,
           m.module_type, m.batch, m.professional_id, m.patient_id, m.appointment_id,

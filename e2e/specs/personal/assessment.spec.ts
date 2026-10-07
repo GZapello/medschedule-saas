@@ -1,0 +1,33 @@
+import { test, expect } from '../../helpers/audit-test';
+import { login, apiLogin } from '../../helpers/session';
+
+test('@critical Personal: aluno e avaliação física persistem após F5', async ({ page, request }) => {
+  await login(page, 'personal-audit');
+  const headers = await apiLogin(request, 'personal-audit');
+  await page.goto('/zemda-personal');
+  await page.locator('[data-tour=personal-students-tab]').click();
+  await page.getByRole('button', { name: 'Novo Aluno', exact: true }).click();
+  await page.getByPlaceholder('Ex: Lucas Gabriel Silveira').fill('e2e-patient-personal-audit');
+  await page.getByPlaceholder('aluno@email.com').fill('e2e-patient-personal@test.invalid');
+  const created = page.waitForResponse(r => r.url().endsWith('/v1/personal/students') && r.request().method() === 'POST');
+  await page.getByRole('button', { name: 'Cadastrar Aluno', exact: true }).click();
+  const response = await created;
+  expect(response.ok(), await response.text()).toBe(true);
+  const student = (await response.json()).student;
+  await page.getByRole('button', { name: 'Nova Avaliação', exact: true }).first().click();
+  await page.getByPlaceholder('Ex: 75.5').fill('75');
+  await page.getByPlaceholder('Ex: 178').fill('178');
+  const saved = page.waitForResponse(r => r.url().endsWith('/v1/personal/assessments') && r.request().method() === 'POST');
+  await page.getByRole('button', { name: 'Salvar Avaliação Física Completa', exact: true }).click();
+  const assessmentResponse = await saved;
+  expect(assessmentResponse.ok(), await assessmentResponse.text()).toBe(true);
+  await page.reload();
+  await page.locator('[data-tour=personal-students-tab]').click();
+  await page.getByText('e2e-patient-personal-audit', { exact: true }).click();
+  await page.getByRole('button', { name: /Avaliação Física & Dobras/ }).click();
+  await expect(page.locator('main')).toContainText('75');
+  const assessments = await request.get(`/api/v1/personal/students/${student.id}/assessments`, { headers });
+  expect(assessments.ok()).toBe(true);
+  const data = await assessments.json();
+  expect(data.assessments.some((item: any) => Number(item.weight) === 75 && Number(item.height) === 178)).toBe(true);
+});

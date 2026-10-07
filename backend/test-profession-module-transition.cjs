@@ -239,7 +239,9 @@ async function runSuite() {
         db.prepare('UPDATE professionals SET profession_change_used = 0 WHERE id = ?').run(profId);
 
         // Executa PUT /v1/professionals/:id alterando para a nova profissão
-        const updateRes = await makeRequest('PUT', `/v1/professionals/${profId}`, adminHeaders, {
+        const forbiddenManager = await makeRequest('PUT', `/v1/professionals/${profId}`, adminHeaders, { professionId: t.professionId });
+        if (forbiddenManager.status !== 403) throw new Error('Gestor não pode alterar profissão alheia');
+        const updateRes = await makeRequest('PUT', `/v1/professionals/${profId}`, userHeaders, {
           name: 'Dr. Auditor Multi-Módulos',
           professionId: t.professionId,
           registrationType: t.registrationType,

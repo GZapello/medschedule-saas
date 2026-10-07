@@ -1,8 +1,9 @@
 import { test, expect } from '@playwright/test';
+import { mockExternalIdentity } from '../helpers/external-services';
 
-test.beforeEach(async({page})=>{await page.goto('/agendar/clinica/clinica-psicom');await page.getByRole('button',{name:'Rejeitar não necessários',exact:true}).click();});
+test.beforeEach(async({page})=>{await mockExternalIdentity(page);await page.goto('/agendar/clinica/clinica-psicom');await page.getByRole('button',{name:'Rejeitar não necessários',exact:true}).click();});
 
-test('clinic specialty/professional/date/time/patient/confirmation and refresh',async({page,request},info)=>{
+test('@critical clinic specialty/professional/date/time/patient/confirmation and refresh',async({page,request},info)=>{
  const fixture=await(await request.get('/api/__test/fixture')).json();
  await page.goto('/agendar/clinica/clinica-psicom');
  await expect(page.getByRole('heading',{name:'Clínica Psicom',exact:true})).toBeVisible();

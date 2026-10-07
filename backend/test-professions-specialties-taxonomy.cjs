@@ -170,6 +170,9 @@ db.prepare(`
 
 CapabilityService.setUserPracticeAreas(userBiomedId, tenantId, ['pa-biomed-estetica']);
 
+assert.equal(getEsteticAccess({ user: { userId: userBiomedId, role: 'professional' }, tenantId }, 'FACIAL').allowed, false, 'Sem profissional ativo não há acesso clínico');
+db.prepare("INSERT INTO professionals (id,tenant_id,user_id,name,profession_id,profession_name,active,zemda_estetic_enabled) VALUES (?,?,?,'Biomédica sintética','prof-biomedicina','Biomédico',1,1)").run('pro-'+userBiomedId,tenantId,userBiomedId);
+
 const accessBiomedFacial = getEsteticAccess({ user: { userId: userBiomedId, role: 'professional' }, tenantId }, 'FACIAL');
 assert(accessBiomedFacial.allowed, 'Biomédica esteta deve ter acesso Facial');
 

@@ -826,6 +826,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
     }
     try {
       setSaving(true);
+      if (!await autosave.forceSaveDraft()) throw new Error('Não foi possível salvar o rascunho do plano alimentar. Tente novamente.');
       await ApiClient.post('/v1/nutrition/meal-plans', {
         patientId: selectedPatientId,
         title: planForm.title,

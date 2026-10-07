@@ -103,7 +103,7 @@ async function callController(method, body = {}, tenant = 'posture-clinic', user
 
   function setupTenantFixtures(tId) {
     db.prepare("INSERT OR IGNORE INTO tenants(id, name, slug, email, status) VALUES(?, 'Clínica', ?, 'c@c.local', 'active')").run(tId, tId);
-    db.prepare("INSERT OR IGNORE INTO users(id, tenant_id, email, password_hash, role, status, name) VALUES(?, ?, 'u@c.local', 'h', 'clinic_admin', 'active', 'User')").run(`user-${tId}`, tId);
+    db.prepare("INSERT INTO users(id, tenant_id, email, password_hash, role, status, name) VALUES(?, ?, ?, 'h', 'clinic_admin', 'active', 'User')").run(`user-${tId}`, tId, `${tId}@test.invalid`);
     db.prepare("INSERT OR IGNORE INTO patients(id, tenant_id, full_name, phone, email, active) VALUES(?, ?, 'Aluno', '11999990000', 'a@c.local', 1)").run(`pat-${tId}`, tId);
 
     insertAttachment(`att-front-${tId}`, tId, `pat-${tId}`, `clinics/${tId}/front.jpg`, 'image/jpeg', smallJpegBuffer.length, 'personal_assessment_front');

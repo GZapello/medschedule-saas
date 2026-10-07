@@ -135,8 +135,12 @@ export const VIEW_TO_PATH: Record<string, string> = {
   'nutrition-workspace': '/zemda-nutri',
   'occupational-therapy-workspace': '/zemda-to',
   'speech-therapy-workspace': '/zemda-fono',
+  'zemda-nutri': '/zemda-nutri',
+  'zemda-to': '/zemda-to',
+  'zemda-fono': '/zemda-fono',
   'zemda-psico': '/zemda-psico',
   'psychopedagogy-workspace': '/zemda-pp',
+  'zemda-pp': '/zemda-pp',
   professionals: '/profissionais',
   services: '/servicos',
   financial: '/financeiro',
@@ -166,11 +170,11 @@ export const PATH_TO_VIEW: Record<string, string> = {
   '/zemda-fisio': 'zemda-fisio',
   '/zemda-odonto': 'zemda-odonto',
   '/zemda-estetic': 'zemda-estetic',
-  '/zemda-nutri': 'nutrition-workspace',
-  '/zemda-to': 'occupational-therapy-workspace',
-  '/zemda-fono': 'speech-therapy-workspace',
+  '/zemda-nutri': 'zemda-nutri',
+  '/zemda-to': 'zemda-to',
+  '/zemda-fono': 'zemda-fono',
   '/zemda-psico': 'zemda-psico',
-  '/zemda-pp': 'psychopedagogy-workspace',
+  '/zemda-pp': 'zemda-pp',
   '/profissionais': 'professionals',
   '/servicos': 'services',
   '/financeiro': 'financial',
@@ -1445,7 +1449,7 @@ const AppContent: React.FC = () => {
             )
           )}
 
-          {currentView === 'zemda-nutri' && (
+          {(currentView === 'zemda-nutri' || currentView === 'nutrition-workspace') && (
             (isNutritionist || isZemdaNutri || currentUser?.commercialModule === 'ZemdaNutri' || hasCapability('DIET_PRESCRIBE') || isSuperAdmin) ? (
               <NutritionWorkspace />
             ) : (
@@ -1461,7 +1465,7 @@ const AppContent: React.FC = () => {
             )
           )}
 
-          {currentView === 'zemda-to' && (
+          {(currentView === 'zemda-to' || currentView === 'occupational-therapy-workspace') && (
             (isOccupationalTherapist || isZemdaTO || currentUser?.commercialModule === 'ZemdaTO' || hasCapability('SENSORY_INTEGRATION') || isSuperAdmin) ? (
               <OccupationalTherapyWorkspace />
             ) : (
@@ -1477,7 +1481,7 @@ const AppContent: React.FC = () => {
             )
           )}
 
-          {currentView === 'zemda-fono' && (
+          {(currentView === 'zemda-fono' || currentView === 'speech-therapy-workspace') && (
             (isSpeechTherapist || isZemdaFono || currentUser?.commercialModule === 'ZemdaFono' || hasCapability('AUDIOMETRY') || isSuperAdmin) ? (
               <SpeechTherapyWorkspace />
             ) : (
@@ -1509,7 +1513,7 @@ const AppContent: React.FC = () => {
             )
           )}
 
-          {currentView === 'zemda-pp' && (
+          {(currentView === 'zemda-pp' || currentView === 'psychopedagogy-workspace') && (
             (isPsychopedagogue || isZemdaPP || currentUser?.commercialModule === 'ZemdaPP' || hasCapability('LEARNING_ASSESSMENT') || isSuperAdmin) ? (
               <PsychopedagogyWorkspace />
             ) : (

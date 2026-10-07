@@ -7,6 +7,7 @@ import { ServiceReminderService } from '../services/service-reminder.service';
 import { hasClinicalAccess } from './clinical.controller';
 import { CapabilityService } from '../services/capability.service';
 import { resolveCanonicalProfession } from '../utils/profession-module';
+import { DocumentsController } from './documents.controller';
 
 export function isMedicalProfessionalOrClinicManager(req: Request): boolean {
   if (!req.user || !req.tenantId) return false;
@@ -232,6 +233,14 @@ export class MedicalController {
    * 4. Finalizar Consulta Médica (Registrando no Prontuário Geral do Paciente)
    */
   public static finishConsultation(req: Request, res: Response): void {
+    if (req.body.appointmentId && req.body.saveOnly === true) {
+      if (!isMedicalProfessionalOrClinicManager(req)) { res.status(403).json({ error: 'Acesso restrito ao ZemdaMed' }); return; }
+      const body = req.body;
+      req.params.id = body.appointmentId;
+      req.body = { ...body, evolution: { ...body, moduleType: 'ZemdaMed', moduleData: { ...body }, clinicalEvolution: body.clinicalEvolution || body.conducts || body.clinicalConduct || body.soapNotes?.plan } };
+      DocumentsController.finishConsultation(req, res);
+      return;
+    }
     try {
       const tenantId = req.tenantId;
       if (!req.user || !tenantId) {

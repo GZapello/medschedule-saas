@@ -23,7 +23,8 @@ test('Sidebar: pacientes A e B, áreas, CRUD, estoque, mapas, F5 e finalização
   const tab = async (name: string) => page.getByTestId('zemda-estetic-workspace').locator(`[data-tour=tab-${({ 'Planejamento': 'planning', 'Procedimentos': 'procedures', 'Fotografias': 'photos', 'Evoluções': 'evolutions', 'Retornos': 'returns', 'Avaliação Estética': 'assessment', 'Zemda360': 'zemda360', 'Antes × Depois': 'before_after', 'Histórico Completo': 'history' } as Record<string,string>)[name]}]`).click();
   const remove = async (kind: string, id: string) => {
     await page.getByTestId(`record-actions-${id}`).getByRole('button', {name:'Excluir',exact:true}).click();
-    await saved(kind, () => page.getByRole('dialog', {name:'Excluir registro',exact:true}).getByRole('button', {name:'Confirmar exclusão'}).click(), 'DELETE');
+    const labels: Record<string, string> = { assessments: 'avaliação', plans: 'plano de tratamento', procedures: 'procedimento', photos: 'fotografia', evolutions: 'evolução', returns: 'retorno' };
+    await saved(kind, () => page.getByRole('dialog', {name:`Excluir ${labels[kind]}?`,exact:true}).getByRole('button', {name:`Excluir ${labels[kind]}`,exact:true}).click(), 'DELETE');
     await expect(page.getByTestId(`record-actions-${id}`)).toHaveCount(0);
   };
   for (const suffix of ['A', 'B']) {
@@ -76,16 +77,18 @@ test('Sidebar: pacientes A e B, áreas, CRUD, estoque, mapas, F5 e finalização
     let dialog = page.getByRole('dialog', { name: 'Procedimento estético', exact: true });
     await dialog.getByLabel('Procedimento', { exact: true }).fill(`Procedimento ${suffix}`);
     await dialog.getByLabel('Região anatômica').fill('Fronte');
-    await dialog.getByRole('checkbox').check();
-    await dialog.getByLabel('Insumo do estoque').selectOption('estetic-stock');
-    await dialog.getByLabel('Quantidade aplicada').fill('2');
+    await dialog.getByRole('checkbox').uncheck();
+    await dialog.getByRole('button', { name: 'Pesquisar no estoque central da clínica...', exact: true }).click();
+    await dialog.getByPlaceholder('Buscar por nome, marca ou lote...').fill('Produto sintético');
+    await dialog.getByRole('button', { name: /Produto sintético/ }).click();
+    await dialog.getByPlaceholder('0', { exact: true }).fill('2');
     await dialog.getByLabel('Data de realização').fill('2026-10-01');
     await dialog.getByLabel('Orientações pós-procedimento').fill(`Orientações ${suffix}`);
     const procedure = await saved('procedures', () => dialog.getByRole('button', { name: 'Registrar Procedimento', exact: true }).click());
     let row = (await records('procedures', patient))[0];
     expect(row).toMatchObject({ patient_id: patient, region: 'Fronte', batch_lot: 'LOTE-E2E', expiry_date: '2028-01-01', quantity: 2, date_performed: '2026-10-01', post_instructions: `Orientações ${suffix}` });
     await page.getByTestId(`record-actions-${procedure.id}`).getByRole('button', { name: 'Editar', exact: true }).click();
-    await dialog.getByLabel('Quantidade aplicada').fill('3');
+    await dialog.getByPlaceholder('0', { exact: true }).fill('3');
     await saved('procedures', () => dialog.getByRole('button', { name: 'Registrar Procedimento', exact: true }).click(), 'PUT');
     row = (await records('procedures', patient))[0]; expect(row.quantity).toBe(3);
     await page.getByRole('button',{name:'Registrar Novo Procedimento',exact:true}).click();

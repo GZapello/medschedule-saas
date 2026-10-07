@@ -843,6 +843,31 @@ export class DocumentsController {
         );
         generatedDocs.recordId = recId;
         if (signatureHash) generatedDocs.signatureHash = signatureHash;
+        Object.assign(generatedDocs, { sealedAt, signedAt, signerName, signerRegistration });
+        if (evolution.moduleType === 'ZemdaPP' && evolution.sessionId) {
+          db.prepare(`UPDATE psychopedagogy_sessions SET is_sealed=1, signature_hash=?, signed_at=?, signed_by_user_id=?, signer_name=?, signer_registration=?, sealed_at=?, updated_at=datetime('now') WHERE id=? AND tenant_id=? AND patient_id=?`)
+            .run(signatureHash, signedAt, req.user?.userId, signerName, signerRegistration, sealedAt, evolution.sessionId, tenantId, appt.patient_id);
+        }
+        if (evolution.moduleType === 'ZemdaPsico') {
+          const sessionId = 'sess-' + uuidv4();
+          db.prepare(`INSERT INTO psychology_sessions (
+            id, tenant_id, patient_id, professional_id, appointment_id, session_number,
+            session_date, modality, tdic_info_json, current_demand, relevant_themes,
+            interventions_used, patient_response, clinical_evolution, conduct_plan,
+            referrals, next_session_plan, session_risk_notes, is_sealed, signature_hash,
+            signed_at, signed_by_name, signed_by_registration, sealed_at, created_by
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)`).run(
+            sessionId, tenantId, appt.patient_id, resolvedProfId, appointmentId, evolution.sessionNumber || 1,
+            sessionDate, evolution.modality || 'presencial', evolution.tdicInfo ? JSON.stringify(evolution.tdicInfo) : null,
+            evolution.currentDemand || null, evolution.relevantThemes || null, evolution.interventionsUsed || null,
+            evolution.patientResponse || null, evolution.clinicalEvolution, evolution.conductPlan || null,
+            evolution.referrals || null, evolution.nextSessionPlan || null, evolution.sessionRiskNotes || null,
+            signatureHash, signedAt, signerName, signerRegistration, sealedAt, req.user?.userId || null
+          );
+          Object.assign(generatedDocs, { sessionId, sealedAt, signerName, signerRegistration });
+          db.prepare("DELETE FROM psychology_drafts WHERE tenant_id=? AND patient_id=? AND professional_id=? AND COALESCE(NULLIF(appointment_id,''),'none') IN (?, 'none')")
+            .run(tenantId, appt.patient_id, resolvedProfId, appointmentId);
+        }
 
         for (const attachmentId of (Array.isArray(evolution.attachmentIds) ? evolution.attachmentIds : [])) {
           const attachment = db.prepare('SELECT id, record_id FROM documents WHERE id=? AND patient_id=? AND tenant_id=?').get(attachmentId, appt.patient_id, tenantId) as any;
@@ -1155,7 +1180,7 @@ export class DocumentsController {
         const existingPayment = db.prepare("SELECT id, amount, payment_method, status, notes FROM payments WHERE appointment_id=? AND tenant_id=? AND status NOT IN ('cancelled','refunded') ORDER BY created_at LIMIT 1").get(appointmentId, tenantId) as any;
         const price = db.prepare('SELECT price FROM services WHERE id=? AND tenant_id=?').get(appt.service_id, tenantId) as any;
         logAudit(req, 'SAVE_CONSULTATION', 'appointments', appointmentId, { generatedDocs });
-        res.json({ generatedDocs, awaitingPayment: true, payment: existingPayment || { amount: price?.price || 0, payment_method: 'pix', status: 'pending' } });
+        res.json({ ...generatedDocs, generatedDocs, awaitingPayment: true, payment: existingPayment || { amount: price?.price || 0, payment_method: 'pix', status: 'pending' } });
         return;
       }
 

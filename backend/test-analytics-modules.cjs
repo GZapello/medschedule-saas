@@ -219,7 +219,8 @@ async function runTests() {
         moduleType: 'ZemdaTO'
       }
     });
-    assert(conflictFinishRes.status === 409, 'Finalizar atendimento com módulo diferente (ZemdaTO) retorna HTTP 409 Conflict');
+    assert([403,409].includes(conflictFinishRes.status), 'Finalização em módulo diferente é bloqueada por autorização ou conflito');
+    assert(db.prepare('SELECT clinical_module FROM appointments WHERE id=?').get(apptId).clinical_module === 'ZemdaFono', 'Módulo original preservado após tentativa indevida');
 
     // -------------------------------------------------------------
     // 4. SALVAR PRONTUÁRIO E FINALIZAR COM O MÓDULO CORRETO
