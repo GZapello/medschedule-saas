@@ -1,0 +1,9 @@
+@echo off
+cd /d "c:\Users\gabri\OneDrive\Documents\antigravity-projects"
+echo [1/3] Adding modified backend files...
+git add backend/src/config/exercise-library.seed.ts backend/dist/config/exercise-library.seed.js backend/src/config/database.ts backend/dist/config/database.js backend/src/services/exercise-media.ts backend/dist/services/exercise-media.js backend/src/services/personal-exercise-utils.ts backend/dist/services/personal-exercise-utils.js
+echo [2/3] Committing changes...
+git commit -m "fix(personal): fix TS2322 in exercise-library seed and ensure non-destructive startup"
+echo [3/3] Pushing to origin main...
+git push origin main
+echo [DONE] Commit and push completed.

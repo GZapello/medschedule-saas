@@ -16,7 +16,7 @@ export interface SeedExercise {
   instructions: string;
   technical_notes?: string;
   suggested_duration?: string;
-  photo_url?: string;
+  photo_url?: string | null;
   exercise_file_id?: string;
 }
 
@@ -1384,7 +1384,7 @@ for (const ex of PRIORITY_EXPANSION_EXERCISES) {
 for (const ex of DEFAULT_EXERCISE_LIBRARY) {
   const photo = licensedPhotos.find(p => p.exercise_id === ex.id);
   const media = reviewedMedia.find(m => m.exercise_id === ex.id);
-  ex.photo_url = photo?.photo_url || media?.photo_url || ex.photo_url || null;
+  ex.photo_url = photo?.photo_url || media?.photo_url || ex.photo_url || undefined;
 }
 
 export function seedExerciseLibrary(rawDb: any): void {
