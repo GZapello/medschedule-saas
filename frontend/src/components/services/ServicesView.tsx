@@ -35,16 +35,21 @@ export const CLINICAL_MODULE_LABELS: Record<string, string> = {
 
 export const getModulesForProfessional = (prof: Professional | undefined | null): Array<{ code: string; label: string }> => {
   if (!prof) return [];
-  if (prof.available_modules && prof.available_modules.length > 0) {
-    return prof.available_modules;
+
+  // Se já possui available_modules do backend, verifica se possui módulos clínicos específicos
+  const backendMods = (prof.available_modules || []).filter(m => m.code !== 'general');
+  if (backendMods.length > 0) {
+    return backendMods;
   }
+
   const modules: Array<{ code: string; label: string }> = [];
   const pName = (prof.profession_name || '').toLowerCase();
   const pId = (prof.profession_id || '').toLowerCase();
   const spec = ((prof as any).specialty_custom || '').toLowerCase();
   const areas = (prof.practice_areas || '').toLowerCase();
 
-  let primary = 'ZemdaMed';
+  // 1. Identificar módulo clínico canônico da profissão
+  let primary: string | null = null;
   if (pId.includes('dent') || pName.includes('dent')) primary = 'ZemdaOdonto';
   else if (pId.includes('fisio') || pName.includes('fisio')) primary = 'ZemdaFisio';
   else if (pId.includes('nutri') || pName.includes('nutri')) primary = 'ZemdaNutri';
@@ -54,21 +59,56 @@ export const getModulesForProfessional = (prof: Professional | undefined | null)
   else if (pId.includes('psicopedag') || pName.includes('psicopedag')) primary = 'ZemdaPP';
   else if (pId.includes('personal') || pName.includes('personal') || pName.includes('educação física')) primary = 'ZemdaPersonal';
   else if (pId.includes('estet') || pName.includes('estet')) primary = 'ZemdaEstetic';
+  else if (pId.includes('med') || pName.includes('médic') || pName.includes('medicina') || pName.includes('psiquiat')) primary = 'ZemdaMed';
 
-  modules.push({ code: primary, label: CLINICAL_MODULE_LABELS[primary] || primary });
+  if (primary) {
+    modules.push({ code: primary, label: CLINICAL_MODULE_LABELS[primary] || primary });
+  }
 
-  // Checar se possui capacitação estética (HOF, especialização estética, permissão)
-  const hasEstetic =
+  // 2. Flags explícitas do cadastro se presentes no objeto
+  const addIf = (flag: any, code: string) => {
+    if (Boolean(flag) && !modules.some(m => m.code === code)) {
+      modules.push({ code, label: CLINICAL_MODULE_LABELS[code] || code });
+    }
+  };
+  addIf((prof as any).zemda_odonto_enabled, 'ZemdaOdonto');
+  addIf((prof as any).zemda_fisio_enabled, 'ZemdaFisio');
+  addIf((prof as any).zemda_nutri_enabled, 'ZemdaNutri');
+  addIf((prof as any).zemda_to_enabled, 'ZemdaTO');
+  addIf((prof as any).zemda_fono_enabled, 'ZemdaFono');
+  addIf((prof as any).zemda_pp_enabled, 'ZemdaPP');
+  addIf((prof as any).zemda_psico_enabled, 'ZemdaPsico');
+  addIf((prof as any).zemda_personal_enabled, 'ZemdaPersonal');
+  addIf((prof as any).zemda_med_enabled, 'ZemdaMed');
+  addIf((prof as any).zemda_estetic_enabled, 'ZemdaEstetic');
+
+  // 3. Capacitação estética (HOF, especialização estética, permissão)
+  const isDentist = primary === 'ZemdaOdonto' || pId.includes('dent') || pName.includes('dent');
+  const isFisio = primary === 'ZemdaFisio' || pId.includes('fisio') || pName.includes('fisio');
+  const isBiomed = pId.includes('biomed') || pName.includes('bioméd');
+  const isFarm = pId.includes('farm') || pName.includes('farmác');
+  const isMed = primary === 'ZemdaMed' || pId.includes('med') || pName.includes('méd');
+
+  const hasAestheticSignal =
     (prof as any).zemda_estetic_enabled === 1 ||
     spec.includes('estet') ||
     spec.includes('harmoniz') ||
     spec.includes('hof') ||
+    spec.includes('facial') ||
     areas.includes('estet') ||
     areas.includes('harmoniz') ||
-    areas.includes('hof');
+    areas.includes('hof') ||
+    areas.includes('facial') ||
+    pName.includes('hof') ||
+    pName.includes('harmoniz');
 
-  if (hasEstetic && primary !== 'ZemdaEstetic') {
-    modules.push({ code: 'ZemdaEstetic', label: CLINICAL_MODULE_LABELS['ZemdaEstetic'] });
+  if (hasAestheticSignal && (isDentist || isFisio || isBiomed || isFarm || isMed)) {
+    addIf(true, 'ZemdaEstetic');
+  }
+
+  // 4. Somente se não houver NENHUM módulo clínico específico, e a profissão for geral/apoio, retorna 'general'
+  if (modules.length === 0) {
+    return [{ code: 'general', label: 'Geral' }];
   }
 
   return modules;
@@ -80,35 +120,81 @@ export const getCompatibleSpecialties = (
   moduleCode: string | null | undefined
 ): Specialty[] => {
   if (!allSpecialties || allSpecialties.length === 0) return [];
-  if (!prof && !moduleCode) return allSpecialties;
 
   const targetModule = moduleCode || (prof ? getModulesForProfessional(prof)[0]?.code : null);
 
   let filtered: Specialty[] = [];
 
+  const isDentist = prof && (
+    (prof.profession_id || '').toLowerCase().includes('dent') ||
+    (prof.profession_name || '').toLowerCase().includes('dent')
+  );
+  const isFisio = prof && (
+    (prof.profession_id || '').toLowerCase().includes('fisio') ||
+    (prof.profession_name || '').toLowerCase().includes('fisio')
+  );
+
   if (targetModule === 'ZemdaEstetic') {
+    // Especialidades e áreas estéticas permitidas para o contexto
     filtered = allSpecialties.filter(s => {
       const pid = (s.profession_id || '').toLowerCase();
       const sid = (s.id || '').toLowerCase();
       const sname = (s.name || '').toLowerCase();
-      return (
+
+      // Bloquear profissões de saúde não compatíveis com este profissional
+      if ([
+        'prof-biomedicina', 'prof-farmacia', 'prof-enfermeiro', 'prof-doula',
+        'prof-fonoaudiologo', 'prof-nutricionista', 'prof-psicologo',
+        'prof-arteterapia', 'prof-musicoterapia', 'prof-psicopedagogo',
+        'prof-terapeuta-ocupacional', 'prof-personal-trainer'
+      ].includes(pid)) {
+        if (prof?.profession_id?.toLowerCase() !== pid) {
+          return false;
+        }
+      }
+
+      // Fisioterapia Dermatofuncional só para fisioterapeuta
+      if (pid === 'prof-fisioterapeuta' && !isFisio) {
+        return false;
+      }
+
+      const isAesthetic =
         pid === 'prof-esteticista' ||
+        sid.includes('pa-odonto-estetica') ||
+        sid.includes('spec-odonto-hof') ||
         sid.includes('estet') ||
         sid.includes('hof') ||
         sname.includes('estética') ||
         sname.includes('estetica') ||
         sname.includes('harmonização') ||
-        sname.includes('harmonizacao')
-      );
+        sname.includes('harmonizacao') ||
+        sname.includes('dermatofuncional');
+
+      if (!isAesthetic) return false;
+
+      // Se for Cirurgião-Dentista atendendo em ZemdaEstetic:
+      // Focar em Harmonização Orofacial / Harmonização Facial / Estética Facial
+      if (isDentist) {
+        if (
+          sname.includes('corporal') ||
+          sname.includes('pós-operatório') ||
+          sname.includes('pos-operatorio') ||
+          sname.includes('spaterapia')
+        ) {
+          return false;
+        }
+      }
+
+      return true;
     });
   } else if (targetModule === 'ZemdaOdonto') {
+    // Especialidades odontológicas
     filtered = allSpecialties.filter(s => {
       const pid = (s.profession_id || '').toLowerCase();
-      const sid = (s.id || '').toLowerCase();
-      const isEsteticOnly = sid.includes('pa-odonto-estetica');
-      return pid === 'prof-dentista' && !isEsteticOnly;
+      return pid === 'prof-dentista';
     });
   } else if (targetModule === 'ZemdaFisio') {
+    // Especialidades de Fisioterapia e Pilates
     filtered = allSpecialties.filter(s => {
       const pid = (s.profession_id || '').toLowerCase();
       return pid === 'prof-fisioterapeuta' || pid === 'prof-instrutor-pilates';
@@ -148,12 +234,15 @@ export const getCompatibleSpecialties = (
       const pid = (s.profession_id || '').toLowerCase();
       return pid === 'prof-medico' || pid === 'prof-psiquiatra';
     });
-  } else if (prof?.profession_id) {
-    const rawPid = prof.profession_id.toLowerCase();
-    filtered = allSpecialties.filter(s => (s.profession_id || '').toLowerCase() === rawPid);
+  } else if (targetModule === 'general') {
+    // Somente especialidades compatíveis com a profissão do profissional
+    if (prof?.profession_id) {
+      const rawPid = prof.profession_id.toLowerCase();
+      filtered = allSpecialties.filter(s => (s.profession_id || '').toLowerCase() === rawPid);
+    }
   }
 
-  // Deduplicar especialidades por nome
+  // Deduplicar especialidades por nome normalizado
   const seenNames = new Set<string>();
   const uniqueList: Specialty[] = [];
   for (const s of filtered) {
@@ -758,23 +847,31 @@ export const ServicesView: React.FC = () => {
       </div>
 
       {/* Modal Novo Serviço */}
+      {/* Modal Novo Serviço */}
       {showServiceModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-hidden">
+          <div className="bg-white rounded-3xl max-w-lg w-full max-h-[90vh] shadow-2xl border border-slate-200 flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            {/* Header Fixo / Sticky */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 flex-shrink-0 bg-white">
               <h3 className="text-lg font-bold text-slate-900">Novo Serviço</h3>
-              <button onClick={() => setShowServiceModal(false)} className="p-1 text-slate-400 hover:text-slate-700 rounded-lg">
+              <button
+                type="button"
+                onClick={() => setShowServiceModal(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                title="Fechar"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="space-y-3 text-xs">
+            {/* Conteúdo com Scroll */}
+            <div className="p-6 overflow-y-auto flex-1 space-y-3.5 text-xs">
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Profissional Responsável *</label>
                 <select
                   value={professionalId}
                   onChange={e => handleSelectProfessional(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium cursor-pointer"
                   required
                 >
                   <option value="">Selecione o profissional...</option>
@@ -790,14 +887,21 @@ export const ServicesView: React.FC = () => {
                 <label className="block font-semibold text-slate-700 mb-1 flex items-center justify-between">
                   <span>Módulo do atendimento *</span>
                   {createAvailableModules.length === 1 && (
-                    <span className="text-[10px] text-slate-400 font-normal">Módulo único do profissional</span>
+                    <span className="text-[10px] text-slate-400 font-normal">
+                      {createAvailableModules[0].code === 'general' ? 'Workspace Geral da Clínica' : 'Módulo único do profissional'}
+                    </span>
+                  )}
+                  {createAvailableModules.length > 1 && (
+                    <span className="text-[10px] text-indigo-600 font-semibold">
+                      {createAvailableModules.length} módulos disponíveis
+                    </span>
                   )}
                 </label>
                 <select
                   value={clinicalModule}
                   onChange={e => handleSelectModule(e.target.value)}
                   disabled={createAvailableModules.length <= 1}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium disabled:opacity-80 disabled:cursor-not-allowed"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium disabled:opacity-80 disabled:cursor-not-allowed cursor-pointer"
                   required
                 >
                   {createAvailableModules.length === 0 && (
@@ -830,7 +934,7 @@ export const ServicesView: React.FC = () => {
                 <select
                   value={specialtyId}
                   onChange={e => setSpecialtyId(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 cursor-pointer"
                 >
                   <option value="">Geral / Sem Especialidade Específica</option>
                   {createCompatibleSpecialties.map(s => (
@@ -876,7 +980,7 @@ export const ServicesView: React.FC = () => {
                 <select
                   value={modality}
                   onChange={e => setModality(e.target.value as any)}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 cursor-pointer"
                 >
                   <option value="both">Presencial ou Online</option>
                   <option value="presential">Apenas Presencial</option>
@@ -935,21 +1039,24 @@ export const ServicesView: React.FC = () => {
                   </div>
                 )}
               </div>
+            </div>
 
-              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
-                <button
-                  onClick={() => setShowServiceModal(false)}
-                  className="px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleCreateService}
-                  className="px-6 py-2 font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs"
-                >
-                  Salvar Serviço
-                </button>
-              </div>
+            {/* Footer Fixo */}
+            <div className="flex items-center justify-end gap-2 px-6 py-3.5 border-t border-slate-100 flex-shrink-0 bg-slate-50/80">
+              <button
+                type="button"
+                onClick={() => setShowServiceModal(false)}
+                className="px-4 py-2 font-semibold text-slate-600 hover:bg-slate-200/60 rounded-xl cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleCreateService}
+                className="px-6 py-2 font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs cursor-pointer"
+              >
+                Salvar Serviço
+              </button>
             </div>
           </div>
         </div>
@@ -1009,19 +1116,24 @@ export const ServicesView: React.FC = () => {
 
       {/* Modal Editar Serviço */}
       {editingService && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
-              <h3 className="text-lg font-bold text-slate-900">Editar Serviço</h3>
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-hidden">
+          <div className="bg-white rounded-3xl max-w-lg w-full max-h-[90vh] shadow-2xl border border-slate-200 flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            {/* Header Fixo */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 flex-shrink-0 bg-white">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Editar Serviço</h3>
+                <p className="text-xs text-slate-500">Altere os dados do atendimento ou regras de retorno</p>
+              </div>
               <button
                 onClick={() => setEditingService(null)}
-                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="space-y-3 text-xs">
+            {/* Conteúdo com Scroll */}
+            <div className="p-6 overflow-y-auto flex-1 space-y-3.5 text-xs">
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Profissional Responsável *</label>
                 <select
@@ -1206,24 +1318,25 @@ export const ServicesView: React.FC = () => {
                   </div>
                 )}
               </div>
+            </div>
 
-              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setEditingService(null)}
-                  className="px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={handleUpdateService}
-                  disabled={updating}
-                  className="px-6 py-2 font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs disabled:opacity-50 cursor-pointer"
-                >
-                  {updating ? 'Salvando...' : 'Salvar Alterações'}
-                </button>
-              </div>
+            {/* Footer Fixo */}
+            <div className="flex items-center justify-end gap-2 px-6 py-3.5 border-t border-slate-100 flex-shrink-0 bg-slate-50/80">
+              <button
+                type="button"
+                onClick={() => setEditingService(null)}
+                className="px-4 py-2 font-semibold text-slate-600 hover:bg-slate-200/60 rounded-xl cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleUpdateService}
+                disabled={updating}
+                className="px-6 py-2 font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs disabled:opacity-50 cursor-pointer"
+              >
+                {updating ? 'Salvando...' : 'Salvar Alterações'}
+              </button>
             </div>
           </div>
         </div>

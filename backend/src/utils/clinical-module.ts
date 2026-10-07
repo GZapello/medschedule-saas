@@ -133,11 +133,17 @@ export function getAvailableModulesForProfessional(
   professionalId: string | null | undefined,
   tenantId: string | null | undefined
 ): AvailableClinicalModule[] {
-  if (!professionalId || !tenantId) return [];
+  if (!professionalId) return [];
 
   try {
+    let effectiveTenantId = tenantId;
+    if (!effectiveTenantId) {
+      const row = db.prepare('SELECT tenant_id FROM professionals WHERE id = ? OR user_id = ? LIMIT 1').get(professionalId, professionalId) as any;
+      if (row?.tenant_id) effectiveTenantId = row.tenant_id;
+    }
+
     const prof = db.prepare(`
-      SELECT p.id, p.user_id, p.profession_id, p.profession_name, p.practice_areas, p.registration_type,
+      SELECT p.id, p.tenant_id, p.user_id, p.profession_id, p.profession_name, p.practice_areas, p.registration_type,
              p.specialty_custom,
              p.zemda_odonto_enabled, p.zemda_fisio_enabled, p.zemda_nutri_enabled, p.zemda_to_enabled,
              p.zemda_fono_enabled, p.zemda_pp_enabled, p.zemda_psico_enabled, p.zemda_personal_enabled,
@@ -145,11 +151,12 @@ export function getAvailableModulesForProfessional(
              pr.name as pr_name, pr.slug as pr_slug
       FROM professionals p
       LEFT JOIN professions pr ON pr.id = p.profession_id
-      WHERE (p.id = ? OR p.user_id = ?) AND p.tenant_id = ?
+      WHERE p.id = ? OR (p.user_id = ? AND (p.tenant_id = ? OR ? IS NULL))
       LIMIT 1
-    `).get(professionalId, professionalId, tenantId) as any;
+    `).get(professionalId, professionalId, effectiveTenantId, effectiveTenantId) as any;
 
     if (!prof) return [];
+    if (!effectiveTenantId) effectiveTenantId = prof.tenant_id;
 
     const moduleSet = new Set<string>();
 
@@ -185,9 +192,9 @@ export function getAvailableModulesForProfessional(
                zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled,
                zemda_med_enabled, zemda_estetic_enabled
         FROM clinic_users
-        WHERE user_id = ? AND tenant_id = ?
+        WHERE user_id = ? AND (tenant_id = ? OR ? IS NULL)
         LIMIT 1
-      `).get(prof.user_id, tenantId) as any;
+      `).get(prof.user_id, effectiveTenantId, effectiveTenantId) as any;
 
       if (cu) {
         if (cu.zemda_odonto_enabled) moduleSet.add('ZemdaOdonto');
@@ -204,48 +211,94 @@ export function getAvailableModulesForProfessional(
         if (cu.permissions_json) {
           try {
             const perms = JSON.parse(cu.permissions_json);
-            if (Array.isArray(perms) && perms.includes('access_zemda_estetic')) {
-              moduleSet.add('ZemdaEstetic');
+            if (Array.isArray(perms)) {
+              if (perms.includes('access_zemda_estetic') || perms.includes('zemda_estetic')) moduleSet.add('ZemdaEstetic');
+              if (perms.includes('access_zemda_odonto') || perms.includes('zemda_odonto')) moduleSet.add('ZemdaOdonto');
+              if (perms.includes('access_zemda_fisio') || perms.includes('zemda_fisio')) moduleSet.add('ZemdaFisio');
+              if (perms.includes('access_zemda_nutri') || perms.includes('zemda_nutri')) moduleSet.add('ZemdaNutri');
+              if (perms.includes('access_zemda_psico') || perms.includes('zemda_psico')) moduleSet.add('ZemdaPsico');
+              if (perms.includes('access_zemda_fono') || perms.includes('zemda_fono')) moduleSet.add('ZemdaFono');
+              if (perms.includes('access_zemda_to') || perms.includes('zemda_to')) moduleSet.add('ZemdaTO');
+              if (perms.includes('access_zemda_pp') || perms.includes('zemda_pp')) moduleSet.add('ZemdaPP');
+              if (perms.includes('access_zemda_personal') || perms.includes('zemda_personal')) moduleSet.add('ZemdaPersonal');
+              if (perms.includes('access_zemda_med') || perms.includes('zemda_med')) moduleSet.add('ZemdaMed');
             }
           } catch (_) {}
         }
       }
 
       const u = db.prepare(`
-        SELECT zemda_estetic_enabled, zemda_odonto_enabled, zemda_fisio_enabled
+        SELECT zemda_estetic_enabled, zemda_odonto_enabled, zemda_fisio_enabled,
+               zemda_nutri_enabled, zemda_to_enabled, zemda_fono_enabled, zemda_pp_enabled,
+               zemda_psico_enabled, zemda_personal_enabled, zemda_med_enabled
         FROM users WHERE id = ?
       `).get(prof.user_id) as any;
       if (u?.zemda_estetic_enabled) moduleSet.add('ZemdaEstetic');
       if (u?.zemda_odonto_enabled) moduleSet.add('ZemdaOdonto');
       if (u?.zemda_fisio_enabled) moduleSet.add('ZemdaFisio');
+      if (u?.zemda_nutri_enabled) moduleSet.add('ZemdaNutri');
+      if (u?.zemda_to_enabled) moduleSet.add('ZemdaTO');
+      if (u?.zemda_fono_enabled) moduleSet.add('ZemdaFono');
+      if (u?.zemda_pp_enabled) moduleSet.add('ZemdaPP');
+      if (u?.zemda_psico_enabled) moduleSet.add('ZemdaPsico');
+      if (u?.zemda_personal_enabled) moduleSet.add('ZemdaPersonal');
+      if (u?.zemda_med_enabled) moduleSet.add('ZemdaMed');
     }
 
     // 4. Verificação de permissão/habilitação para ZemdaEstetic (ex.: HOF / Harmonização / Estética)
-    const isDentist = canonical.canonicalId === 'prof-dentista' || prof.profession_id === 'prof-dentista';
-    const isFisio = canonical.canonicalId === 'prof-fisioterapeuta' || prof.profession_id === 'prof-fisioterapeuta';
-    const isBiomed = prof.profession_id === 'prof-biomedicina' || (prof.profession_name || '').toLowerCase().includes('bioméd');
-    const isFarm = prof.profession_id === 'prof-farmacia' || (prof.profession_name || '').toLowerCase().includes('farmac');
-    const isEstet = canonical.canonicalId === 'prof-esteticista' || prof.profession_id === 'prof-esteticista';
+    const isDentist =
+      canonical.canonicalId === 'prof-dentista' ||
+      prof.profession_id === 'prof-dentista' ||
+      (prof.profession_name || '').toLowerCase().includes('dent') ||
+      Boolean(prof.zemda_odonto_enabled);
 
-    const practiceAreasStr = (prof.practice_areas || '').toLowerCase();
-    const specialtyCustomStr = (prof.specialty_custom || '').toLowerCase();
+    const isFisio =
+      canonical.canonicalId === 'prof-fisioterapeuta' ||
+      prof.profession_id === 'prof-fisioterapeuta' ||
+      (prof.profession_name || '').toLowerCase().includes('fisio') ||
+      Boolean(prof.zemda_fisio_enabled);
+
+    const isBiomed =
+      prof.profession_id === 'prof-biomedicina' ||
+      (prof.profession_name || '').toLowerCase().includes('bioméd') ||
+      (prof.profession_name || '').toLowerCase().includes('biomed');
+
+    const isFarm =
+      prof.profession_id === 'prof-farmacia' ||
+      (prof.profession_name || '').toLowerCase().includes('farmac');
+
+    const isEstet =
+      canonical.canonicalId === 'prof-esteticista' ||
+      prof.profession_id === 'prof-esteticista' ||
+      (prof.profession_name || '').toLowerCase().includes('estet') ||
+      Boolean(prof.zemda_estetic_enabled);
+
+    const isMed =
+      canonical.canonicalId === 'prof-medico' ||
+      prof.profession_id === 'prof-medico' ||
+      (prof.profession_name || '').toLowerCase().includes('méd') ||
+      (prof.profession_name || '').toLowerCase().includes('med') ||
+      Boolean(prof.zemda_med_enabled);
+
+    const practiceAreasStr = `${prof.practice_areas || ''} ${prof.specialty_custom || ''} ${prof.profession_name || ''} ${canonical.canonicalName || ''}`.toLowerCase();
     const hasAestheticSignal =
       practiceAreasStr.includes('estet') ||
       practiceAreasStr.includes('harmoniz') ||
       practiceAreasStr.includes('hof') ||
-      specialtyCustomStr.includes('estet') ||
-      specialtyCustomStr.includes('harmoniz') ||
-      specialtyCustomStr.includes('hof');
+      practiceAreasStr.includes('facial') ||
+      practiceAreasStr.includes('botox') ||
+      practiceAreasStr.includes('toxina');
 
-    if (hasAestheticSignal && (isDentist || isFisio || isBiomed || isFarm || isEstet)) {
+    if (hasAestheticSignal && (isDentist || isFisio || isBiomed || isFarm || isEstet || isMed)) {
       moduleSet.add('ZemdaEstetic');
     }
 
-    // Se profissional não tiver nenhum módulo primário reconhecido, adiciona 'general'
-    if (moduleSet.size === 0) {
-      if (canonical.clinicalWorkspace === 'general' || !canonical.commercialModule) {
-        moduleSet.add('general');
-      }
+    // 5. REGRA REFORÇADA: Se houver qualquer módulo clínico específico, NUNCA incluir 'general'
+    if (moduleSet.size > 0) {
+      moduleSet.delete('general');
+    } else {
+      // Somente profissionais sem nenhum módulo clínico dedicado recebem 'general'
+      moduleSet.add('general');
     }
 
     // Monta lista de resultados colocando o módulo canônico principal no topo
