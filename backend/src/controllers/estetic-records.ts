@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { db } from '../config/database';
 import { ClinicalRecordService } from '../services/clinical-record.service';
+import { ClinicalInventoryService } from '../services/clinical-inventory.service';
 
 type Access = (req: Request, area?: string) => { allowed: boolean; reason?: string; allowedAreas: string[] };
 type Kind = 'assessments' | 'plans' | 'procedures' | 'evolutions' | 'returns' | 'photos';
@@ -84,21 +85,44 @@ function validate(kind: Kind, row: any) {
 function movement(req: Request, row: any, delta: number) {
   if (!delta) return;
   const isRefund = delta > 0;
-  const item = isRefund
-    ? (db.prepare('SELECT * FROM inventory_items WHERE id = ? AND tenant_id = ?').get(row.product_id, req.tenantId) as any)
-    : (db.prepare('SELECT * FROM inventory_items WHERE id = ? AND tenant_id = ? AND active = 1').get(row.product_id, req.tenantId) as any);
-  if (!item) {
-    if (isRefund) {
-      fail('Item de estoque não encontrado nesta clínica para estorno.', 'productId');
-    } else {
-      fail('Selecione um produto ativo desta clínica.', 'productId');
+  if (isRefund) {
+    try {
+      ClinicalInventoryService.refundStock(req.tenantId!, {
+        itemId: row.product_id,
+        quantity: delta,
+        professionalId: row.professional_id,
+        patientId: row.patient_id,
+        appointmentId: row.appointment_id || null,
+        moduleType: 'ZemdaEstetic',
+        sourceType: 'estetic_procedure',
+        sourceId: row.id,
+        reason: 'Procedimento estético (estorno): ' + (row.procedure_name || ''),
+        batch: row.batch_lot,
+        userId: req.user?.userId
+      });
+    } catch (err: any) {
+      fail(err.message, err.field || 'productId');
+    }
+  } else {
+    try {
+      ClinicalInventoryService.deductStock(req.tenantId!, {
+        itemId: row.product_id,
+        quantity: Math.abs(delta),
+        professionalId: row.professional_id,
+        patientId: row.patient_id,
+        appointmentId: row.appointment_id || null,
+        moduleType: 'ZemdaEstetic',
+        sourceType: 'estetic_procedure',
+        sourceId: row.id,
+        reason: 'Procedimento estético: ' + (row.procedure_name || ''),
+        unit: row.unit,
+        batch: row.batch_lot,
+        userId: req.user?.userId
+      });
+    } catch (err: any) {
+      fail(err.message, err.field || 'quantity');
     }
   }
-  if (delta < 0 && row.unit !== item.unit) fail(`Utilize a unidade do estoque: ${item.unit}.`, 'unit');
-  if (delta < 0 && Number(item.quantity) + delta < 0) fail('Estoque insuficiente para esta quantidade.', 'quantity');
-  const next = Number(item.quantity) + delta;
-  db.prepare("UPDATE inventory_items SET quantity = ?, updated_at = datetime('now') WHERE id = ? AND tenant_id = ?").run(next, item.id, req.tenantId);
-  db.prepare(`INSERT INTO inventory_movements (id, tenant_id, item_id, movement_type, quantity, previous_quantity, new_quantity, reason, document_reference, user_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`).run(uuid(), req.tenantId, item.id, delta < 0 ? 'out' : 'in', Math.abs(delta), item.quantity, next, 'Procedimento estético: ' + row.procedure_name, row.id, req.user!.userId);
 }
 function updatePlanProgress(req: Request, row: any) {
   if (!row?.plan_id || !row.plan_item_id) return;
@@ -189,20 +213,67 @@ export function esteticRecords(req: Request, res: Response, access: Access, kind
         if (duplicate) return { success: true, id: duplicate.id };
       }
       if (kind === 'procedures') {
-        const deduct = body.deductInventory === undefined ? Boolean(old?.inventory_deducted) : body.deductInventory === true;
-        if (deduct && (!row.product_id || !(Number(row.quantity) > 0))) fail('Informe produto e quantidade para baixar estoque.', 'quantity');
-        if (deduct) {
+        const withoutProduct = body.withoutProduct === true || body.noProduct === true || body.without_product === true || body.no_product === true;
+        let deduct = false;
+
+        if (withoutProduct || !row.product_id) {
+          row.product_id = null;
+          row.product_name = row.product_name || null;
+          row.batch_lot = row.batch_lot || null;
+          row.expiry_date = row.expiry_date || null;
+          row.quantity = row.quantity != null ? Number(row.quantity) : null;
+          row.unit = row.unit || null;
+          deduct = false;
+        } else {
+          // Produto informado: baixa automática no estoque
+          if (!(Number(row.quantity) > 0)) {
+            fail('Informe a quantidade utilizada do produto.', 'quantity');
+          }
+          deduct = true;
+
           const item = db.prepare('SELECT * FROM inventory_items WHERE id = ? AND tenant_id = ? AND active = 1').get(row.product_id, req.tenantId) as any;
-          if (!item) fail('Selecione um produto ativo desta clínica.', 'productId');
-          if (item.unit !== row.unit) fail(`Utilize a unidade do estoque: ${item.unit}.`, 'unit');
+          if (!item) fail('Selecione um produto ativo do estoque desta clínica.', 'productId');
+          if (item.unit && row.unit && item.unit !== row.unit) fail(`Utilize a unidade do estoque: ${item.unit}.`, 'unit');
+          row.unit = item.unit;
           if (item.batch_number && row.batch_lot && item.batch_number !== row.batch_lot) fail('O lote informado não corresponde ao produto selecionado.', 'batch_lot');
           if (item.expiration_date && row.expiry_date && item.expiration_date.slice(0, 10) !== row.expiry_date) fail('A validade não corresponde ao produto selecionado.', 'expiry_date');
-          row.product_name ||= item.name; row.batch_lot ||= item.batch_number; row.expiry_date ||= item.expiration_date?.slice(0, 10);
+          row.product_name ||= item.name;
+          row.batch_lot ||= item.batch_number;
+          row.expiry_date ||= item.expiration_date?.slice(0, 10);
         }
-        if (old?.inventory_deducted && (old.product_id !== row.product_id || Number(old.deducted_quantity) !== (deduct ? Number(row.quantity) : 0))) movement(req, old, Number(old.deducted_quantity));
-        const unchanged = old?.inventory_deducted && deduct && old.product_id === row.product_id && Number(old.deducted_quantity) === Number(row.quantity);
-        if (deduct && !unchanged) movement(req, row, -Number(row.quantity));
-        row.inventory_deducted = deduct ? 1 : 0; row.deducted_quantity = deduct ? Number(row.quantity) : 0;
+
+        if (old) {
+          const oldQty = old.inventory_deducted ? Number(old.deducted_quantity != null ? old.deducted_quantity : old.quantity || 0) : 0;
+          const newQty = deduct ? Number(row.quantity || 0) : 0;
+          try {
+            ClinicalInventoryService.adjustStock(req.tenantId!, {
+              oldItemId: old.inventory_deducted ? old.product_id : null,
+              newItemId: deduct ? row.product_id : null,
+              oldQuantity: oldQty,
+              newQuantity: newQty,
+              professionalId: row.professional_id,
+              patientId: row.patient_id,
+              appointmentId: row.appointment_id || null,
+              moduleType: 'ZemdaEstetic',
+              sourceType: 'estetic_procedure',
+              sourceId: row.id,
+              reason: 'Ajuste de procedimento estético: ' + (row.procedure_name || ''),
+              unit: row.unit,
+              batch: row.batch_lot,
+              userId: req.user?.userId
+            });
+          } catch (err: any) {
+            fail(err.message, err.field || 'quantity');
+          }
+          row.inventory_deducted = deduct ? 1 : 0;
+          row.deducted_quantity = deduct ? Number(row.quantity) : 0;
+        } else {
+          if (deduct) {
+            movement(req, row, -Number(row.quantity));
+          }
+          row.inventory_deducted = deduct ? 1 : 0;
+          row.deducted_quantity = deduct ? Number(row.quantity) : 0;
+        }
       }
       // Apenas colunas declaradas; nomes SQL nunca vêm do cliente.
       const keys = ['patient_id', 'professional_id', 'area', 'appointment_id', ...Object.values(columns[kind]), ...(kind === 'procedures' ? ['inventory_deducted', 'deducted_quantity'] : [])];
@@ -250,7 +321,7 @@ export function persistEsteticCompletion(req: Request, access: Access, snapshot:
     const meaningful = (value: any): boolean => value != null && value !== '' && (Array.isArray(value) ? value.some(meaningful) : typeof value === 'object' ? Object.values(value).some(meaningful) : true);
     const bodies: Partial<Record<Kind, any>> = {};
     if (meaningful(Object.fromEntries(Object.entries(a).filter(([key]) => key !== 'assessmentDate')))) bodies.assessments = { assessmentDate: a.assessmentDate, chiefComplaint: a.complaint, objectives: a.expectations, clinicalHistory: [a.previousTreatments, a.contraindications, a.allergies, a.currentMedications].filter(Boolean).join('\n'), specificData: a, observations: a.observations };
-    if (p.procedure_name || p.target_region || p.product_applied) bodies.procedures = { procedureName: p.procedure_name, region: p.target_region, datePerformed: p.date_performed, productName: p.product_applied, productId: p.inventory_item_id || null, batchLot: p.lot_number, expiryDate: p.expiry_date, quantity: p.quantity === '' ? null : Number(p.quantity), unit: p.unit, techniqueNotes: p.technique_notes, adverseEvents: p.adverse_reactions, postInstructions: p.post_instructions, deductInventory: p.deduct_inventory, planId: p.plan_id || null, planItemId: p.plan_item_id || null };
+    if (p.procedure_name || p.target_region || p.product_applied || p.inventory_item_id || p.product_id) bodies.procedures = { procedureName: p.procedure_name, region: p.target_region, datePerformed: p.date_performed, productName: p.product_applied || p.product_name, productId: p.inventory_item_id || p.product_id || null, batchLot: p.lot_number || p.batch_lot, expiryDate: p.expiry_date, quantity: p.quantity === '' ? null : Number(p.quantity), unit: p.unit, techniqueNotes: p.technique_notes, adverseEvents: p.adverse_reactions, postInstructions: p.post_instructions, withoutProduct: p.without_product || p.no_product || p.withoutProduct || p.noProduct, planId: p.plan_id || null, planItemId: p.plan_item_id || null };
     if (e.biological_response || e.patient_feedback || e.conduct) bodies.evolutions = { evolutionText: e.biological_response, observedResponse: e.patient_feedback, conduct: e.conduct, evolutionDate: e.evolution_date, procedureId: e.procedure_id || null };
     if (r.evaluation_notes || r.procedure_id || r.actual_date || r.touchup_description) bodies.returns = { scheduledDate: r.scheduled_date, actualDate: r.actual_date, status: r.status, returnAssessment: r.evaluation_notes, procedureRecordId: r.procedure_id || null, touchupRequired: r.touchup_required, touchupDescription: r.touchup_description };
     if (ph.photo_url) bodies.photos = { fileUrl: ph.photo_url, photoDate: ph.taken_at, photoType: ph.photo_type, viewType: ph.view_angle, observation: ph.notes };

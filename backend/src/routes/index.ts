@@ -30,6 +30,7 @@ import { ReferralController } from '../controllers/referral.controller';
 import { SupportController } from '../controllers/support.controller';
 import { PendingExamController } from '../controllers/pending-exam.controller';
 import { InventoryController } from '../controllers/inventory.controller';
+import { ClinicalInventoryController } from '../controllers/clinical-inventory.controller';
 import { BudgetController } from '../controllers/budget.controller';
 import { PayrollController } from '../controllers/payroll.controller';
 import { PhysiotherapyController } from '../controllers/physiotherapy.controller';
@@ -853,6 +854,12 @@ api.delete('/v1/inventory/:id', requireTenant, requireRole('clinic_admin', 'rece
 api.delete('/v1/inventory/items/:id', requireTenant, requireRole('clinic_admin', 'receptionist'), InventoryController.deleteItem);
 api.post('/v1/inventory/movements', requireTenant, requireRole('clinic_admin', 'receptionist'), InventoryController.recordMovement);
 api.get('/v1/inventory/movements', requireTenant, requireRole('clinic_admin', 'receptionist'), InventoryController.listMovements);
+
+// Estoque Clínico Central Compartilhado (Todos os Módulos Clínicos & Profissionais)
+api.get('/v1/clinical-inventory/items', requireTenant, ClinicalInventoryController.listItems);
+api.post('/v1/clinical-inventory/items/quick-add', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalInventoryController.quickAdd);
+api.post('/v1/clinical-inventory/usage', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalInventoryController.recordUsage);
+api.get('/v1/clinical-inventory/movements', requireTenant, ClinicalInventoryController.listMovements);
 
 // Orçamentos (Pacientes e Insumos/Fornecedores)
 api.get('/v1/budgets', requireTenant, BudgetController.list);

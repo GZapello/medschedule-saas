@@ -1499,6 +1499,13 @@ export function initializeDatabase(): void {
         reason TEXT,
         document_reference TEXT,
         user_id TEXT,
+        professional_id TEXT,
+        patient_id TEXT,
+        appointment_id TEXT,
+        module_type TEXT,
+        source_type TEXT,
+        source_id TEXT,
+        batch TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
         FOREIGN KEY (item_id) REFERENCES inventory_items(id) ON DELETE CASCADE
@@ -2760,6 +2767,23 @@ export function initializeDatabase(): void {
     addColIfMissing('personal_assessments', 'muscular_endurance_tests_json', 'TEXT');
     addColIfMissing('personal_assessments', 'flexibility_wells_cm', 'REAL');
     addColIfMissing('personal_assessments', 'flexibility_tests_json', 'TEXT');
+
+    // Migrações para rastreabilidade clínica central no estoque de insumos e movimentações
+    addColIfMissing('inventory_movements', 'professional_id', 'TEXT');
+    addColIfMissing('inventory_movements', 'patient_id', 'TEXT');
+    addColIfMissing('inventory_movements', 'appointment_id', 'TEXT');
+    addColIfMissing('inventory_movements', 'module_type', 'TEXT');
+    addColIfMissing('inventory_movements', 'source_type', 'TEXT');
+    addColIfMissing('inventory_movements', 'source_id', 'TEXT');
+    addColIfMissing('inventory_movements', 'batch', 'TEXT');
+
+    try {
+      rawDb.exec(`
+        CREATE INDEX IF NOT EXISTS idx_inventory_movements_source ON inventory_movements (tenant_id, source_type, source_id);
+        CREATE INDEX IF NOT EXISTS idx_inventory_movements_appt ON inventory_movements (tenant_id, appointment_id);
+        CREATE INDEX IF NOT EXISTS idx_inventory_movements_patient ON inventory_movements (tenant_id, patient_id);
+      `);
+    } catch (_) {}
   } catch (migErr) {
     console.warn('[Database] Aviso nas migrações dinâmicas:', migErr);
   }

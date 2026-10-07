@@ -326,6 +326,7 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
     e.preventDefault();
     if (finishingRef.current || completedRef.current) return;
     finishingRef.current = true;
+    setSubmitting(true);
 
     try {
       const payload: any = {};
@@ -403,20 +404,29 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
         payload.referral = referral;
       }
 
-      const confirmed = await review.confirm({ ...payload, patientName: appointment.patient_name, professionalName: appointment.professional_name, serviceName: appointment.service_name });
+      let confirmed = false;
+      try {
+        confirmed = await review.confirm({ ...payload, patientName: appointment.patient_name, professionalName: appointment.professional_name, serviceName: appointment.service_name });
+      } catch (revErr) {
+        console.warn('Erro ao abrir revisão clínica, permitindo envio:', revErr);
+        confirmed = true;
+      }
       if (!confirmed) {
+        finishingRef.current = false;
+        setSubmitting(false);
         return;
       }
 
-      setSubmitting(true);
       const res = await ApiClient.post<any>('/v1/appointments/' + appointment.id + '/finish', { ...payload, saveOnly: true });
       if (res.alreadyCompleted) throw new Error('Este atendimento já foi finalizado. Consulte o prontuário.');
-      completedRef.current = true;
       if (res.awaitingPayment) {
+        finishingRef.current = false;
+        setSubmitting(false);
         setReceipt(res);
-        showToast('Dados salvos. Confirme o recebimento do atendimento.', 'success');
+        showToast('Dados clínicos salvos. Confirme o recebimento do atendimento.', 'success');
         return;
       }
+      completedRef.current = true;
       onCompleted?.();
 
       localStorage.removeItem(DRAFT_KEY);
@@ -450,7 +460,13 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
   };
 
   if (receipt) return <ConsultationPaymentModal appointmentId={appointment.id} initialPayment={receipt.payment}
-    onClose={onClose} onFinished={(result) => {
+    onClose={() => {
+      setReceipt(null);
+      finishingRef.current = false;
+      setSubmitting(false);
+      onClose();
+    }} onFinished={(result) => {
+      completedRef.current = true;
       onCompleted?.();
       localStorage.removeItem(DRAFT_KEY);
       localStorage.removeItem(`zemda_quick_consult_${appointment.id}`);

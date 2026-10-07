@@ -1,4 +1,4 @@
-import { isPrimaryClinicalModule, resolveClinicalModule } from '../utils/clinical-module';
+import { isPrimaryClinicalModule, resolveClinicalModule, getAvailableModulesForProfessional } from '../utils/clinical-module';
 import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
@@ -542,32 +542,6 @@ export class DocumentsController {
 
       appt.clinical_module = resolveClinicalModule(appt, tenantId);
 
-      // Validação anti-conflito de módulos clínicos no mesmo atendimento
-      if (evolution?.moduleType) {
-        if (
-          isPrimaryClinicalModule(appt.clinical_module) &&
-          isPrimaryClinicalModule(evolution.moduleType) &&
-          appt.clinical_module !== evolution.moduleType
-        ) {
-          res.status(409).json({
-            error: `Este atendimento foi iniciado no módulo "${appt.clinical_module}". Não é permitido salvar ou finalizar em módulo diferente ("${evolution.moduleType}").`
-          });
-          return;
-        }
-        const existingRec = db.prepare("SELECT module_type FROM records WHERE appointment_id=? AND tenant_id=? AND module_type IS NOT NULL AND module_type NOT IN ('ZemdaBody', 'Zemda360') LIMIT 1").get(appointmentId, tenantId) as { module_type?: string } | undefined;
-        if (
-          existingRec?.module_type &&
-          isPrimaryClinicalModule(existingRec.module_type) &&
-          isPrimaryClinicalModule(evolution.moduleType) &&
-          existingRec.module_type !== evolution.moduleType
-        ) {
-          res.status(409).json({
-            error: `O prontuário deste atendimento já foi registrado no módulo "${existingRec.module_type}". Não é permitido salvar em módulos diferentes.`
-          });
-          return;
-        }
-      }
-
       const moduleAccess: Record<string, (request: Request) => boolean> = {
         ZemdaEstetic: (request: Request) => getEsteticAccess(request).allowed,
         ZemdaNutri: isNutritionistOrClinicManager,
@@ -627,8 +601,58 @@ export class DocumentsController {
           }
         }
 
+        // Fallback multi-módulo: verificar autorização legítima do profissional
         if (!hasAccess) {
-          res.status(403).json({ error: 'Sem permissão para este módulo clínico.' });
+          const professionalIdToTest = appt.professional_id || req.user?.userId;
+          const availableModules = getAvailableModulesForProfessional(professionalIdToTest, tenantId);
+          if (availableModules.some(m => m.code === evolution.moduleType)) {
+            hasAccess = true;
+          }
+        }
+
+        // Clinic admin e superadmin sempre possuem acesso
+        if (!hasAccess && req.user?.role === 'superadmin') {
+          hasAccess = true;
+        }
+
+        if (!hasAccess) {
+          res.status(403).json({ error: `Sem permissão para o módulo clínico "${evolution.moduleType}".` });
+          return;
+        }
+      }
+
+      // Validação anti-conflito de módulos clínicos no mesmo atendimento
+      if (evolution?.moduleType) {
+        let serviceModule: string | null = null;
+        if (appt.service_id) {
+          const srv = db.prepare('SELECT clinical_module FROM services WHERE id = ?').get(appt.service_id) as any;
+          if (srv?.clinical_module && isPrimaryClinicalModule(srv.clinical_module)) {
+            serviceModule = srv.clinical_module;
+          }
+        }
+        const effectiveModule = serviceModule || appt.clinical_module;
+
+        if (
+          isPrimaryClinicalModule(effectiveModule) &&
+          isPrimaryClinicalModule(evolution.moduleType) &&
+          effectiveModule !== evolution.moduleType
+        ) {
+          res.status(409).json({
+            error: `O serviço selecionado para este atendimento requer o módulo "${effectiveModule}". Não é permitido salvar ou finalizar em módulo diferente ("${evolution.moduleType}").`
+          });
+          return;
+        }
+        const existingRec = db.prepare("SELECT module_type FROM records WHERE appointment_id=? AND tenant_id=? AND module_type IS NOT NULL AND module_type NOT IN ('ZemdaBody', 'Zemda360') LIMIT 1").get(appointmentId, tenantId) as { module_type?: string } | undefined;
+        if (
+          existingRec?.module_type &&
+          isPrimaryClinicalModule(existingRec.module_type) &&
+          isPrimaryClinicalModule(evolution.moduleType) &&
+          existingRec.module_type !== evolution.moduleType &&
+          !serviceModule
+        ) {
+          res.status(409).json({
+            error: `O prontuário deste atendimento já foi registrado no módulo "${existingRec.module_type}". Não é permitido salvar em módulos diferentes.`
+          });
           return;
         }
       }
@@ -1216,10 +1240,9 @@ export class DocumentsController {
         res.status(err.status).json({ error: err.message, field: err.field, stage: currentStage });
         return;
       }
-      // Resposta clara, segura e amigável ao profissional
       res.status(500).json({
-        error: 'Não foi possível finalizar o atendimento. Nenhuma informação foi perdida. Tente novamente ou entre em contato com o suporte.',
-        details: process.env.NODE_ENV === 'development' ? err.message : undefined,
+        error: err?.message || 'Não foi possível finalizar o atendimento. Nenhuma informação foi perdida. Tente novamente ou entre em contato com o suporte.',
+        field: err?.field,
         stage: currentStage
       });
     }

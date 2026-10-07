@@ -1,4 +1,5 @@
 import { ClinicalFinishButton } from '../clinical/ClinicalFinishButton';
+import { ClinicalInventorySelector } from '../clinical/ClinicalInventorySelector';
 import { resolveConsultationAppointment } from '../clinical/resolveConsultationAppointment';
 import { ClinicalAssessmentsPanel } from '../../shared/clinical-assessments/ClinicalAssessmentsPanel';
 import { useClinicalFormReset } from '../../hooks/useClinicalFormReset';
@@ -221,7 +222,8 @@ interface EsteticPlanItemForm {
     deduct_inventory: false,
     inventory_item_id: '',
     plan_id: '',
-    plan_item_id: ''
+    plan_item_id: '',
+    without_product: false
   });
 
   // Formulário de Nova Foto
@@ -332,7 +334,16 @@ interface EsteticPlanItemForm {
     const merge = (base: any) => Object.fromEntries(Object.entries(base).map(([key, value]) => [key, row[key] == null ? value : key === 'quantity' ? String(row[key]) : row[key]]));
     if (kind === 'assessments') { setAssessmentForm({ ...defaults.current.assessmentForm, ...row.specificData, complaint: row.complaint || '', expectations: row.expectations || '', assessmentDate: row.assessment_date || new Date().toISOString().slice(0, 10) }); setActiveTab('assessment'); }
     if (kind === 'plans') { setPlanForm(merge(defaults.current.planForm) as any); setIsNewPlanModalOpen(true); }
-    if (kind === 'procedures') { setProcedureForm(merge(defaults.current.procedureForm) as any); setIsNewProcedureModalOpen(true); }
+    if (kind === 'procedures') {
+      const merged = merge(defaults.current.procedureForm);
+      merged.inventory_item_id = row.product_id || row.inventory_item_id || '';
+      merged.product_applied = row.product_name || row.product_applied || '';
+      merged.lot_number = row.batch_lot || row.lot_number || '';
+      merged.expiry_date = row.expiry_date ? row.expiry_date.slice(0, 10) : '';
+      merged.without_product = !merged.inventory_item_id && !merged.product_applied;
+      setProcedureForm(merged as any);
+      setIsNewProcedureModalOpen(true);
+    }
     if (kind === 'evolutions') { setEvolutionForm(merge(defaults.current.evolutionForm) as any); setIsNewEvolutionModalOpen(true); }
     if (kind === 'returns') { setReturnForm({ ...merge(defaults.current.returnForm), touchup_required: row.touchup_required == null ? undefined : Boolean(row.touchup_required) } as any); setIsNewReturnModalOpen(true); }
     if (kind === 'photos') { setPhotoForm(merge(defaults.current.photoForm) as any); setIsNewPhotoModalOpen(true); }
@@ -621,16 +632,25 @@ interface EsteticPlanItemForm {
         area: procedureForm.area,
         target_region: procedureForm.target_region,
         date_performed: procedureForm.date_performed,
-        product_applied: procedureForm.product_applied,
-        lot_number: procedureForm.lot_number,
-        expiry_date: procedureForm.expiry_date,
-        quantity: procedureForm.quantity === '' ? undefined : Number(procedureForm.quantity.replace(',', '.')),
-        unit: procedureForm.unit,
+        product_applied: procedureForm.without_product ? undefined : procedureForm.product_applied,
+        product_name: procedureForm.without_product ? undefined : procedureForm.product_applied,
+        productName: procedureForm.without_product ? undefined : procedureForm.product_applied,
+        lot_number: procedureForm.without_product ? undefined : procedureForm.lot_number,
+        batchLot: procedureForm.without_product ? undefined : procedureForm.lot_number,
+        expiry_date: procedureForm.without_product ? undefined : procedureForm.expiry_date,
+        expiryDate: procedureForm.without_product ? undefined : procedureForm.expiry_date,
+        quantity: procedureForm.without_product || procedureForm.quantity === '' ? undefined : Number(String(procedureForm.quantity).replace(',', '.')),
+        unit: procedureForm.without_product ? undefined : procedureForm.unit,
         technique_notes: procedureForm.technique_notes,
         adverse_reactions: procedureForm.adverse_reactions,
         post_instructions: procedureForm.post_instructions,
-        deduct_inventory: procedureForm.deduct_inventory,
-        inventory_item_id: procedureForm.inventory_item_id || undefined,
+        withoutProduct: procedureForm.without_product,
+        without_product: procedureForm.without_product,
+        deduct_inventory: !procedureForm.without_product && Boolean(procedureForm.inventory_item_id),
+        deductInventory: !procedureForm.without_product && Boolean(procedureForm.inventory_item_id),
+        inventory_item_id: procedureForm.without_product ? undefined : (procedureForm.inventory_item_id || undefined),
+        productId: procedureForm.without_product ? undefined : (procedureForm.inventory_item_id || undefined),
+        product_id: procedureForm.without_product ? undefined : (procedureForm.inventory_item_id || undefined),
         plan_id: procedureForm.plan_id || undefined,
         plan_item_id: procedureForm.plan_item_id || undefined
       });
@@ -654,7 +674,8 @@ interface EsteticPlanItemForm {
         deduct_inventory: false,
         inventory_item_id: '',
         plan_id: '',
-    plan_item_id: ''
+        plan_item_id: '',
+        without_product: false
       });
       loadPatientData(selectedPatientId, activeArea);
     } catch (err: any) {
@@ -2956,146 +2977,71 @@ interface EsteticPlanItemForm {
             </div>
 
             <form onSubmit={handleSaveProcedure} className="space-y-4 text-xs">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-1">
                   <label className="block font-bold text-slate-700 mb-1">Procedimento *</label>
                   <input
                     type="text"
                     value={procedureForm.procedure_name}
-                      aria-label="Procedimento" name="procedure_name" aria-invalid={invalidField === 'procedure_name'} style={{ borderColor: invalidField === 'procedure_name' ? '#dc2626' : undefined }}
+                    aria-label="Procedimento" name="procedure_name" aria-invalid={invalidField === 'procedure_name'} style={{ borderColor: invalidField === 'procedure_name' ? '#dc2626' : undefined }}
                     onChange={e => setProcedureForm({ ...procedureForm, procedure_name: e.target.value })}
                     placeholder="Ex: Toxina Botulínica, Preenchimento Malar..."
                     className="w-full p-2.5 rounded-xl border border-slate-200"
                     required
                   />
                 </div>
-                <div>
+                <div className="sm:col-span-1">
                   <label className="block font-bold text-slate-700 mb-1">Região Anatômica *</label>
                   <input
                     type="text"
                     value={procedureForm.target_region}
-                      aria-label="Região anatômica" name="target_region" aria-invalid={invalidField === 'region'} style={{ borderColor: invalidField === 'region' ? '#dc2626' : undefined }}
+                    aria-label="Região anatômica" name="target_region" aria-invalid={invalidField === 'region'} style={{ borderColor: invalidField === 'region' ? '#dc2626' : undefined }}
                     onChange={e => setProcedureForm({ ...procedureForm, target_region: e.target.value })}
                     placeholder="Ex: Fronte e Glabela, Malar D/E..."
                     className="w-full p-2.5 rounded-xl border border-slate-200"
                     required
                   />
                 </div>
+                <div className="sm:col-span-1">
+                  <label className="block font-bold text-slate-700 mb-1">Data Realização *</label>
+                  <input
+                    type="date"
+                    value={procedureForm.date_performed}
+                    aria-label="Data de realização" name="date_performed" aria-invalid={invalidField === 'date_performed'} style={{ borderColor: invalidField === 'date_performed' ? '#dc2626' : undefined }}
+                    onChange={e => setProcedureForm({ ...procedureForm, date_performed: e.target.value })}
+                    className="w-full p-2.5 rounded-xl border border-slate-200 bg-white font-mono"
+                    required
+                  />
+                </div>
               </div>
 
-              {/* Rastreabilidade de Produto e Lote */}
-              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
-                <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">
-                  Rastreabilidade &amp; Controle de Insumos
-                </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block font-medium text-slate-600 mb-1">Produto / Substância</label>
-                    <input
-                      type="text"
-                      value={procedureForm.product_applied}
-                      aria-label="Produto aplicado" name="product_applied" aria-invalid={invalidField === 'product_name'} style={{ borderColor: invalidField === 'product_name' ? '#dc2626' : undefined }}
-                      onChange={e => setProcedureForm({ ...procedureForm, product_applied: e.target.value })}
-                      placeholder="Ex: Botox 100U, Juvederm Voluma 1ml..."
-                      className="w-full p-2 rounded-lg border border-slate-200 bg-white"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block font-medium text-slate-600 mb-1">Lote</label>
-                      <input
-                        type="text"
-                        value={procedureForm.lot_number}
-                      aria-label="Lote" name="lot_number" aria-invalid={invalidField === 'batch_lot'} style={{ borderColor: invalidField === 'batch_lot' ? '#dc2626' : undefined }}
-                        onChange={e => setProcedureForm({ ...procedureForm, lot_number: e.target.value })}
-                        placeholder="Ex: L123456"
-                        className="w-full p-2 rounded-lg border border-slate-200 bg-white font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="block font-medium text-slate-600 mb-1">Validade</label>
-                      <input
-                        type="date"
-                        value={procedureForm.expiry_date}
-                      aria-label="Validade" name="expiry_date" aria-invalid={invalidField === 'expiry_date'} style={{ borderColor: invalidField === 'expiry_date' ? '#dc2626' : undefined }}
-                        onChange={e => setProcedureForm({ ...procedureForm, expiry_date: e.target.value })}
-                        className="w-full p-2 rounded-lg border border-slate-200 bg-white font-mono"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <label className="block font-medium text-slate-600 mb-1">Quantidade Aplicada</label>
-                    <input
-                      type="text"
-                      value={procedureForm.quantity}
-                      aria-label="Quantidade aplicada" name="quantity" aria-invalid={invalidField === 'quantity'} style={{ borderColor: invalidField === 'quantity' ? '#dc2626' : undefined }}
-                      onChange={e => setProcedureForm({ ...procedureForm, quantity: e.target.value })}
-                      className="w-full p-2 rounded-lg border border-slate-200 bg-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-medium text-slate-600 mb-1">Unidade</label>
-                    <select
-                      value={procedureForm.unit}
-                      aria-label="Unidade" name="unit" aria-invalid={invalidField === 'unit'} style={{ borderColor: invalidField === 'unit' ? '#dc2626' : undefined }}
-                      onChange={e => setProcedureForm({ ...procedureForm, unit: e.target.value })}
-                      className="w-full p-2 rounded-lg border border-slate-200 bg-white"
-                    ><option value="">Não avaliado</option>
-                      <option value="ml">ml</option>
-                      <option value="U">Unidades (U)</option>
-                      <option value="frasco">Frasco(s)</option>
-                      <option value="fios">Fio(s)</option>
-                      <option value="sessao">Sessão</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block font-medium text-slate-600 mb-1">Data Realização</label>
-                    <input
-                      type="date"
-                      value={procedureForm.date_performed}
-                      aria-label="Data de realização" name="date_performed" aria-invalid={invalidField === 'date_performed'} style={{ borderColor: invalidField === 'date_performed' ? '#dc2626' : undefined }}
-                      onChange={e => setProcedureForm({ ...procedureForm, date_performed: e.target.value })}
-                      className="w-full p-2 rounded-lg border border-slate-200 bg-white font-mono"
-                    />
-                  </div>
-                </div>
-
-                {/* Baixa no Estoque */}
-                {inventoryItems.length > 0 && (
-                  <div className="pt-2 border-t border-slate-200/60">
-                    <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-700">
-                      <input
-                        type="checkbox"
-                        checked={procedureForm.deduct_inventory}
-                        onChange={e => setProcedureForm({ ...procedureForm, deduct_inventory: e.target.checked })}
-                        className="rounded text-emerald-600"
-                      />
-                      <span>Baixar automaticamente do estoque da clínica</span>
-                    </label>
-
-                    {procedureForm.deduct_inventory && (
-                      <div className="mt-2">
-                        <select
-                          value={procedureForm.inventory_item_id}
-                      aria-label="Insumo do estoque" name="inventory_item_id" aria-invalid={invalidField === 'productId'} style={{ borderColor: invalidField === 'productId' ? '#dc2626' : undefined }}
-                          onChange={e => { const item = inventoryItems.find(entry => entry.id === e.target.value); setProcedureForm({ ...procedureForm, inventory_item_id: e.target.value, product_applied: item?.name || procedureForm.product_applied, lot_number: item?.batch_number || '', expiry_date: item?.expiration_date?.slice(0, 10) || '', unit: item?.unit || procedureForm.unit }); }}
-                          className="w-full p-2 rounded-lg border border-slate-200 bg-white text-xs"
-                        >
-                          <option value="">Selecione o insumo do estoque...</option>
-                          {inventoryItems.map(inv => (
-                            <option key={inv.id} value={inv.id}>
-                              {inv.name} (Saldo atual: {inv.quantity || 0} {inv.unit || 'un'})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
+              {/* Seletor Central de Estoque com Rastreabilidade e Opção Sem Produto */}
+              <ClinicalInventorySelector
+                value={{
+                  productId: procedureForm.inventory_item_id || null,
+                  productName: procedureForm.product_applied || '',
+                  brand: '',
+                  batchLot: procedureForm.lot_number || '',
+                  expiryDate: procedureForm.expiry_date || '',
+                  quantity: procedureForm.quantity === '' ? '' : Number(procedureForm.quantity),
+                  unit: procedureForm.unit || 'un',
+                  withoutProduct: Boolean(procedureForm.without_product)
+                }}
+                onChange={sel => {
+                  setProcedureForm(prev => ({
+                    ...prev,
+                    inventory_item_id: sel.productId || '',
+                    product_applied: sel.productName || '',
+                    lot_number: sel.batchLot || '',
+                    expiry_date: sel.expiryDate || '',
+                    quantity: sel.quantity === '' ? '' : String(sel.quantity),
+                    unit: sel.unit || 'un',
+                    deduct_inventory: !sel.withoutProduct && Boolean(sel.productId),
+                    without_product: sel.withoutProduct
+                  }));
+                }}
+                required={true}
+              />
 
               <div>
                 <label className="block font-bold text-slate-700 mb-1">Orientações Pós-Procedimento Fornecidas</label>

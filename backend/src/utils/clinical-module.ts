@@ -421,20 +421,7 @@ export function resolveClinicalModule(appointmentOrProf: any, tenantId: any, may
     effectiveTenantId = tenantId;
   }
 
-  // 1. Se já existe evolução/prontuário salva neste atendimento, verifica o módulo
-  if (appointment.id) {
-    const record = db.prepare("SELECT module_type, clinical_evolution, module_data_json FROM records WHERE appointment_id=? AND tenant_id=? AND module_type IS NOT NULL AND module_type NOT IN ('ZemdaBody', 'Zemda360') ORDER BY created_at LIMIT 1")
-      .get(appointment.id, effectiveTenantId) as any;
-    if (record?.module_type && isPrimaryClinicalModule(record.module_type)) {
-      return record.module_type;
-    }
-    // Se houver prontuário com evolução textual preenchida explicitamente em 'general', mantém 'general'
-    if (record?.module_type === 'general' && (record.clinical_evolution || (record.module_data_json && record.module_data_json !== '{}'))) {
-      return 'general';
-    }
-  }
-
-  // 2. Prioridade do SERVIÇO vinculado ao agendamento
+  // 1. Prioridade MÁXIMA: Módulo do SERVIÇO vinculado ao agendamento (Fonte de Verdade)
   let serviceId = appointment.service_id;
   if (!serviceId && appointment.id) {
     const apptRow = db.prepare('SELECT service_id, clinical_module FROM appointments WHERE id = ?').get(appointment.id) as any;
@@ -450,6 +437,19 @@ export function resolveClinicalModule(appointmentOrProf: any, tenantId: any, may
     const srv = db.prepare('SELECT clinical_module FROM services WHERE id = ?').get(serviceId) as any;
     if (srv?.clinical_module && isPrimaryClinicalModule(srv.clinical_module)) {
       return srv.clinical_module;
+    }
+  }
+
+  // 2. Se já existe evolução/prontuário salva neste atendimento, verifica o módulo
+  if (appointment.id) {
+    const record = db.prepare("SELECT module_type, clinical_evolution, module_data_json FROM records WHERE appointment_id=? AND tenant_id=? AND module_type IS NOT NULL AND module_type NOT IN ('ZemdaBody', 'Zemda360') ORDER BY created_at LIMIT 1")
+      .get(appointment.id, effectiveTenantId) as any;
+    if (record?.module_type && isPrimaryClinicalModule(record.module_type)) {
+      return record.module_type;
+    }
+    // Se houver prontuário com evolução textual preenchida explicitamente em 'general', mantém 'general'
+    if (record?.module_type === 'general' && (record.clinical_evolution || (record.module_data_json && record.module_data_json !== '{}'))) {
+      return 'general';
     }
   }
 

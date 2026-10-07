@@ -44,7 +44,22 @@ export function useClinicalReview(contextKey?: string) {
     pending.current?.(false);
     pending.current = resolve;
     const { evolution, ...root } = payload;
-    setData(structuredClone({ ...root, ...evolution, ...evolution?.moduleData }));
+    try {
+      const merged = { ...root, ...evolution, ...evolution?.moduleData };
+      const safeMerged = JSON.parse(JSON.stringify(merged, (key, value) => {
+        if (typeof value === 'function') return undefined;
+        if (typeof value === 'object' && value !== null) {
+          if (typeof window !== 'undefined' && (value instanceof Node || value instanceof Window || value instanceof Event)) {
+            return undefined;
+          }
+        }
+        return value;
+      }));
+      setData(safeMerged);
+    } catch (e) {
+      console.warn('[useClinicalReview] Erro ao preparar dados do resumo clínico:', e);
+      setData({ ...root, ...evolution });
+    }
   });
 
   const dialog = data && createPortal(
