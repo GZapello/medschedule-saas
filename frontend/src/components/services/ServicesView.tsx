@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
 import { Service, Room, Specialty, Professional } from '../../types';
 import {
   Scissors,
@@ -33,20 +34,30 @@ export const CLINICAL_MODULE_LABELS: Record<string, string> = {
   general: 'Geral'
 };
 
-export const getModulesForProfessional = (prof: Professional | undefined | null): Array<{ code: string; label: string }> => {
+export const getModulesForProfessional = (
+  prof: Professional | undefined | null,
+  authContext?: {
+    currentUser?: any;
+    isZemdaEstetic?: boolean;
+    userPermissions?: string[];
+  }
+): Array<{ code: string; label: string }> => {
   if (!prof) return [];
 
-  // Se já possui available_modules do backend, verifica se possui módulos clínicos específicos
-  const backendMods = (prof.available_modules || []).filter(m => m.code !== 'general');
-  if (backendMods.length > 0) {
-    return backendMods;
-  }
+  // Começa com os módulos retornados pelo backend (removendo 'general' se houver módulos clínicos)
+  const initialBackendMods = (prof.available_modules || []).filter(m => m.code !== 'general');
+  const modules: Array<{ code: string; label: string }> = [...initialBackendMods];
 
-  const modules: Array<{ code: string; label: string }> = [];
   const pName = (prof.profession_name || '').toLowerCase();
   const pId = (prof.profession_id || '').toLowerCase();
   const spec = ((prof as any).specialty_custom || '').toLowerCase();
   const areas = (prof.practice_areas || '').toLowerCase();
+
+  const addIf = (flag: any, code: string) => {
+    if (Boolean(flag) && !modules.some(m => m.code === code)) {
+      modules.push({ code, label: CLINICAL_MODULE_LABELS[code] || code });
+    }
+  };
 
   // 1. Identificar módulo clínico canônico da profissão
   let primary: string | null = null;
@@ -61,16 +72,9 @@ export const getModulesForProfessional = (prof: Professional | undefined | null)
   else if (pId.includes('estet') || pName.includes('estet')) primary = 'ZemdaEstetic';
   else if (pId.includes('med') || pName.includes('médic') || pName.includes('medicina') || pName.includes('psiquiat')) primary = 'ZemdaMed';
 
-  if (primary) {
-    modules.push({ code: primary, label: CLINICAL_MODULE_LABELS[primary] || primary });
-  }
+  if (primary) addIf(true, primary);
 
   // 2. Flags explícitas do cadastro se presentes no objeto
-  const addIf = (flag: any, code: string) => {
-    if (Boolean(flag) && !modules.some(m => m.code === code)) {
-      modules.push({ code, label: CLINICAL_MODULE_LABELS[code] || code });
-    }
-  };
   addIf((prof as any).zemda_odonto_enabled, 'ZemdaOdonto');
   addIf((prof as any).zemda_fisio_enabled, 'ZemdaFisio');
   addIf((prof as any).zemda_nutri_enabled, 'ZemdaNutri');
@@ -82,15 +86,49 @@ export const getModulesForProfessional = (prof: Professional | undefined | null)
   addIf((prof as any).zemda_med_enabled, 'ZemdaMed');
   addIf((prof as any).zemda_estetic_enabled, 'ZemdaEstetic');
 
-  // 3. Capacitação estética (HOF, especialização estética, permissão)
+  // 3. Capacitação estética (HOF, especialização estética, permissão, practiceAreaIds)
   const isDentist = primary === 'ZemdaOdonto' || pId.includes('dent') || pName.includes('dent');
   const isFisio = primary === 'ZemdaFisio' || pId.includes('fisio') || pName.includes('fisio');
   const isBiomed = pId.includes('biomed') || pName.includes('bioméd');
   const isFarm = pId.includes('farm') || pName.includes('farmác');
   const isMed = primary === 'ZemdaMed' || pId.includes('med') || pName.includes('méd');
+  const isEstet = primary === 'ZemdaEstetic' || pId.includes('estet') || pName.includes('estet');
+
+  const aestheticPracticeAreaIds = [
+    'pa-odonto-estetica',
+    'pa-estet-facial',
+    'pa-estet-corporal',
+    'pa-estet-capilar',
+    'pa-biomed-estetica',
+    'pa-farm-estetica'
+  ];
+
+  const isMatchingAuthUser = Boolean(
+    authContext?.currentUser && (
+      authContext.currentUser.professionalId === prof.id ||
+      authContext.currentUser.id === prof.user_id ||
+      (authContext.currentUser.name && prof.name && authContext.currentUser.name.trim().toLowerCase() === prof.name.trim().toLowerCase())
+    )
+  );
+
+  const authHasEstetic = isMatchingAuthUser && Boolean(
+    authContext?.isZemdaEstetic ||
+    authContext?.currentUser?.zemdaEsteticEnabled ||
+    authContext?.currentUser?.practiceAreaIds?.some((pa: string) => aestheticPracticeAreaIds.includes(pa)) ||
+    authContext?.currentUser?.capabilities?.some((c: string) => c.startsWith('ESTETIC_')) ||
+    authContext?.userPermissions?.includes('access_zemda_estetic')
+  );
+
+  const profAreaIds = Array.isArray((prof as any).practiceAreaIds) ? (prof as any).practiceAreaIds : [];
+  const hasAestheticAreaId = aestheticPracticeAreaIds.some(id =>
+    profAreaIds.includes(id) || areas.includes(id) || spec.includes(id)
+  );
 
   const hasAestheticSignal =
+    authHasEstetic ||
+    hasAestheticAreaId ||
     (prof as any).zemda_estetic_enabled === 1 ||
+    (prof as any).zemdaEsteticEnabled === true ||
     spec.includes('estet') ||
     spec.includes('harmoniz') ||
     spec.includes('hof') ||
@@ -102,7 +140,7 @@ export const getModulesForProfessional = (prof: Professional | undefined | null)
     pName.includes('hof') ||
     pName.includes('harmoniz');
 
-  if (hasAestheticSignal && (isDentist || isFisio || isBiomed || isFarm || isMed)) {
+  if (hasAestheticSignal && (isDentist || isFisio || isBiomed || isFarm || isEstet || isMed)) {
     addIf(true, 'ZemdaEstetic');
   }
 
@@ -258,12 +296,19 @@ export const getCompatibleSpecialties = (
 
 export const ServicesView: React.FC = () => {
   const { showToast } = useToast();
+  const { currentUser, isZemdaEstetic, userPermissions } = useAuth();
   const [services, setServices] = useState<Service[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [selectedProfFilter, setSelectedProfFilter] = useState<string>('all');
   const [loading, setLoading] = useState<boolean>(true);
+
+  const authContext = useMemo(() => ({
+    currentUser,
+    isZemdaEstetic,
+    userPermissions
+  }), [currentUser, isZemdaEstetic, userPermissions]);
 
   // Modal Novo Serviço
   const [showServiceModal, setShowServiceModal] = useState<boolean>(false);
@@ -311,8 +356,8 @@ export const ServicesView: React.FC = () => {
   }, [professionals, professionalId]);
 
   const createAvailableModules = useMemo(() => {
-    return getModulesForProfessional(selectedProfForCreate);
-  }, [selectedProfForCreate]);
+    return getModulesForProfessional(selectedProfForCreate, authContext);
+  }, [selectedProfForCreate, authContext]);
 
   const createCompatibleSpecialties = useMemo(() => {
     return getCompatibleSpecialties(specialties, selectedProfForCreate, clinicalModule);
@@ -323,8 +368,8 @@ export const ServicesView: React.FC = () => {
   }, [professionals, editProfessionalId]);
 
   const editAvailableModules = useMemo(() => {
-    return getModulesForProfessional(selectedProfForEdit);
-  }, [selectedProfForEdit]);
+    return getModulesForProfessional(selectedProfForEdit, authContext);
+  }, [selectedProfForEdit, authContext]);
 
   const editCompatibleSpecialties = useMemo(() => {
     return getCompatibleSpecialties(specialties, selectedProfForEdit, editClinicalModule);
@@ -346,7 +391,7 @@ export const ServicesView: React.FC = () => {
       setProfessionals(profList);
       if (profList.length > 0 && !professionalId) {
         setProfessionalId(profList[0].id);
-        const mods = getModulesForProfessional(profList[0]);
+        const mods = getModulesForProfessional(profList[0], authContext);
         if (mods.length > 0) {
           setClinicalModule(mods[0].code);
         }
@@ -365,7 +410,7 @@ export const ServicesView: React.FC = () => {
   const handleSelectProfessional = (newProfId: string) => {
     setProfessionalId(newProfId);
     const prof = professionals.find(p => p.id === newProfId);
-    const mods = getModulesForProfessional(prof);
+    const mods = getModulesForProfessional(prof, authContext);
     
     let newMod = '';
     if (mods.length === 1) {
@@ -395,7 +440,7 @@ export const ServicesView: React.FC = () => {
   const handleSelectEditProfessional = (newProfId: string) => {
     setEditProfessionalId(newProfId);
     const prof = professionals.find(p => p.id === newProfId);
-    const mods = getModulesForProfessional(prof);
+    const mods = getModulesForProfessional(prof, authContext);
     
     let newMod = '';
     if (mods.length === 1) {
@@ -490,7 +535,7 @@ export const ServicesView: React.FC = () => {
     setEditProfessionalId(profId);
     
     const prof = professionals.find(p => p.id === profId);
-    const mods = getModulesForProfessional(prof);
+    const mods = getModulesForProfessional(prof, authContext);
     
     let targetMod = s.clinical_module || '';
     if (!targetMod) {
@@ -1155,7 +1200,14 @@ export const ServicesView: React.FC = () => {
                 <label className="block font-semibold text-slate-700 mb-1 flex items-center justify-between">
                   <span>Módulo do atendimento *</span>
                   {editAvailableModules.length === 1 && (
-                    <span className="text-[10px] text-slate-400 font-normal">Módulo único do profissional</span>
+                    <span className="text-[10px] text-slate-400 font-normal">
+                      {editAvailableModules[0].code === 'general' ? 'Workspace Geral da Clínica' : 'Módulo único do profissional'}
+                    </span>
+                  )}
+                  {editAvailableModules.length > 1 && (
+                    <span className="text-[10px] text-indigo-600 font-semibold">
+                      {editAvailableModules.length} módulos disponíveis
+                    </span>
                   )}
                 </label>
                 <select
