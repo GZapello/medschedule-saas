@@ -14,7 +14,8 @@ import {
   Trash2,
   AlertTriangle,
   User,
-  Users
+  Users,
+  Bell
 } from 'lucide-react';
 
 export const ServicesView: React.FC = () => {
@@ -36,6 +37,9 @@ export const ServicesView: React.FC = () => {
   const [price, setPrice] = useState<string>('180.00');
   const [modality, setModality] = useState<'both' | 'presential' | 'online' | 'home'>('both');
   const [description, setDescription] = useState<string>('');
+  const [reminderEnabled, setReminderEnabled] = useState<boolean>(false);
+  const [reminderValue, setReminderValue] = useState<number>(30);
+  const [reminderUnit, setReminderUnit] = useState<'DAYS' | 'MONTHS' | 'YEARS'>('DAYS');
 
   // Modal Editar Serviço
   const [editingService, setEditingService] = useState<Service | null>(null);
@@ -47,6 +51,9 @@ export const ServicesView: React.FC = () => {
   const [editPrice, setEditPrice] = useState<string>('180.00');
   const [editModality, setEditModality] = useState<'both' | 'presential' | 'online' | 'home'>('both');
   const [editDescription, setEditDescription] = useState<string>('');
+  const [editReminderEnabled, setEditReminderEnabled] = useState<boolean>(false);
+  const [editReminderValue, setEditReminderValue] = useState<number>(30);
+  const [editReminderUnit, setEditReminderUnit] = useState<'DAYS' | 'MONTHS' | 'YEARS'>('DAYS');
   const [editActive, setEditActive] = useState<boolean>(true);
   const [updating, setUpdating] = useState<boolean>(false);
 
@@ -107,13 +114,19 @@ export const ServicesView: React.FC = () => {
         bufferMinutes: Number(bufferMinutes),
         price: Number(price),
         modality,
-        description: description || null
+        description: description || null,
+        reminderEnabled,
+        reminderValue: reminderEnabled ? Number(reminderValue) : null,
+        reminderUnit: reminderEnabled ? reminderUnit : 'DAYS'
       });
 
       showToast('Serviço cadastrado com sucesso!', 'success');
       setShowServiceModal(false);
       setName('');
       setDescription('');
+      setReminderEnabled(false);
+      setReminderValue(30);
+      setReminderUnit('DAYS');
       fetchData();
     } catch (err: any) {
       showToast(err.message || 'Erro ao cadastrar serviço', 'error');
@@ -153,6 +166,9 @@ export const ServicesView: React.FC = () => {
     setEditModality(s.modality || 'both');
     setEditDescription(s.description || '');
     setEditActive(s.active === 1);
+    setEditReminderEnabled(Boolean(s.reminder_enabled));
+    setEditReminderValue(s.reminder_value || 30);
+    setEditReminderUnit((s.reminder_unit as any) || 'DAYS');
   };
 
   const handleUpdateService = async () => {
@@ -178,7 +194,10 @@ export const ServicesView: React.FC = () => {
         price: Number(editPrice),
         modality: editModality,
         description: editDescription || null,
-        active: editActive ? 1 : 0
+        active: editActive ? 1 : 0,
+        reminderEnabled: editReminderEnabled,
+        reminderValue: editReminderEnabled ? Number(editReminderValue) : null,
+        reminderUnit: editReminderEnabled ? editReminderUnit : 'DAYS'
       });
 
       showToast('Serviço atualizado com sucesso!', 'success');
@@ -391,6 +410,15 @@ export const ServicesView: React.FC = () => {
                                     {s.specialty_name}
                                   </span>
                                 )}
+                                {Boolean(s.reminder_enabled) && (
+                                  <span
+                                    className="text-[10px] font-semibold px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-full inline-flex items-center gap-1"
+                                    title={`Lembrar após ${s.reminder_value} ${s.reminder_unit === 'YEARS' ? 'ano(s)' : s.reminder_unit === 'MONTHS' ? 'mês(es)' : 'dia(s)'}`}
+                                  >
+                                    <Bell className="w-3 h-3 text-indigo-600" />
+                                    Lembrar após {s.reminder_value} {s.reminder_unit === 'YEARS' ? (s.reminder_value === 1 ? 'ano' : 'anos') : s.reminder_unit === 'MONTHS' ? (s.reminder_value === 1 ? 'mês' : 'meses') : (s.reminder_value === 1 ? 'dia' : 'dias')}
+                                  </span>
+                                )}
                               </div>
                             </div>
                             <span className="text-sm font-extrabold text-indigo-600 whitespace-nowrap">
@@ -577,6 +605,46 @@ export const ServicesView: React.FC = () => {
                   placeholder="Descrição exibida ao cliente na página pública..."
                   className="w-full border border-slate-200 rounded-xl p-3 text-xs"
                 />
+              </div>
+
+              <div className="pt-2 border-t border-slate-100">
+                <label className="flex items-center gap-2 cursor-pointer font-semibold text-slate-700 select-none">
+                  <input
+                    type="checkbox"
+                    checked={reminderEnabled}
+                    onChange={e => setReminderEnabled(e.target.checked)}
+                    className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
+                  />
+                  <span>Criar lembrete de retorno/contato</span>
+                </label>
+
+                {reminderEnabled && (
+                  <div className="mt-2.5 p-3 bg-indigo-50/60 border border-indigo-100 rounded-xl space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-slate-700 whitespace-nowrap">Lembrar após</span>
+                      <input
+                        type="number"
+                        min="1"
+                        max="365"
+                        value={reminderValue}
+                        onChange={e => setReminderValue(Math.max(1, parseInt(e.target.value) || 1))}
+                        className="w-20 border border-slate-200 bg-white rounded-lg px-2.5 py-1.5 text-xs text-center font-bold"
+                      />
+                      <select
+                        value={reminderUnit}
+                        onChange={e => setReminderUnit(e.target.value as any)}
+                        className="border border-slate-200 bg-white rounded-lg px-2.5 py-1.5 text-xs font-semibold cursor-pointer"
+                      >
+                        <option value="DAYS">Dias</option>
+                        <option value="MONTHS">Meses</option>
+                        <option value="YEARS">Anos</option>
+                      </select>
+                    </div>
+                    <p className="text-[11px] text-slate-500 leading-tight">
+                      Após a realização deste serviço, o Zemda avisará você na Dashboard para entrar em contato com o paciente.
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
@@ -776,6 +844,46 @@ export const ServicesView: React.FC = () => {
                   placeholder="Descrição exibida ao cliente na página pública..."
                   className="w-full border border-slate-200 rounded-xl p-3 text-xs"
                 />
+              </div>
+
+              <div className="pt-2 border-t border-slate-100">
+                <label className="flex items-center gap-2 cursor-pointer font-semibold text-slate-700 select-none">
+                  <input
+                    type="checkbox"
+                    checked={editReminderEnabled}
+                    onChange={e => setEditReminderEnabled(e.target.checked)}
+                    className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
+                  />
+                  <span>Criar lembrete de retorno/contato</span>
+                </label>
+
+                {editReminderEnabled && (
+                  <div className="mt-2.5 p-3 bg-indigo-50/60 border border-indigo-100 rounded-xl space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-slate-700 whitespace-nowrap">Lembrar após</span>
+                      <input
+                        type="number"
+                        min="1"
+                        max="365"
+                        value={editReminderValue}
+                        onChange={e => setEditReminderValue(Math.max(1, parseInt(e.target.value) || 1))}
+                        className="w-20 border border-slate-200 bg-white rounded-lg px-2.5 py-1.5 text-xs text-center font-bold"
+                      />
+                      <select
+                        value={editReminderUnit}
+                        onChange={e => setEditReminderUnit(e.target.value as any)}
+                        className="border border-slate-200 bg-white rounded-lg px-2.5 py-1.5 text-xs font-semibold cursor-pointer"
+                      >
+                        <option value="DAYS">Dias</option>
+                        <option value="MONTHS">Meses</option>
+                        <option value="YEARS">Anos</option>
+                      </select>
+                    </div>
+                    <p className="text-[11px] text-slate-500 leading-tight">
+                      Após a realização deste serviço, o Zemda avisará você na Dashboard para entrar em contato com o paciente.
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">

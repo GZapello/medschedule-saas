@@ -19,6 +19,7 @@ export class ServiceController {
           s.id, s.tenant_id, s.professional_id, s.specialty_id, s.name, s.description,
           s.duration_minutes, s.buffer_minutes, s.price, s.modality, s.active,
           s.min_lead_time_hours, s.max_advance_days, s.cancellation_policy,
+          s.reminder_enabled, s.reminder_value, s.reminder_unit,
           p.name as professional_name,
           COALESCE(prof.name, p.profession_name) as profession_name,
           spec.name as specialty_name, spec.color as specialty_color
@@ -55,7 +56,8 @@ export class ServiceController {
 
       const {
         professionalId, specialtyId, name, description, durationMinutes, bufferMinutes,
-        price, modality, minLeadTimeHours, maxAdvanceDays, cancellationPolicy
+        price, modality, minLeadTimeHours, maxAdvanceDays, cancellationPolicy,
+        reminderEnabled, reminderValue, reminderUnit
       } = req.body;
 
       if (!name || !name.trim()) {
@@ -78,9 +80,10 @@ export class ServiceController {
       const insertStmt = db.prepare(`
         INSERT INTO services (
           id, tenant_id, professional_id, specialty_id, name, description, duration_minutes,
-          buffer_minutes, price, modality, active, min_lead_time_hours, max_advance_days, cancellation_policy
+          buffer_minutes, price, modality, active, min_lead_time_hours, max_advance_days, cancellation_policy,
+          reminder_enabled, reminder_value, reminder_unit
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
       `);
 
       insertStmt.run(
@@ -96,7 +99,10 @@ export class ServiceController {
         modality || 'both',
         minLeadTimeHours || 2,
         maxAdvanceDays || 60,
-        cancellationPolicy || null
+        cancellationPolicy || null,
+        reminderEnabled ? 1 : 0,
+        reminderEnabled && reminderValue ? Number(reminderValue) : null,
+        reminderEnabled && reminderUnit ? String(reminderUnit).toUpperCase() : 'DAYS'
       );
 
       try {
@@ -131,7 +137,8 @@ export class ServiceController {
 
       const {
         professionalId, specialtyId, name, description, durationMinutes, bufferMinutes,
-        price, modality, active, minLeadTimeHours, maxAdvanceDays, cancellationPolicy
+        price, modality, active, minLeadTimeHours, maxAdvanceDays, cancellationPolicy,
+        reminderEnabled, reminderValue, reminderUnit
       } = req.body;
 
       if (professionalId) {
@@ -156,6 +163,9 @@ export class ServiceController {
           min_lead_time_hours = CASE WHEN ? = 1 THEN ? ELSE min_lead_time_hours END,
           max_advance_days = CASE WHEN ? = 1 THEN ? ELSE max_advance_days END,
           cancellation_policy = CASE WHEN ? = 1 THEN ? ELSE cancellation_policy END,
+          reminder_enabled = CASE WHEN ? = 1 THEN ? ELSE reminder_enabled END,
+          reminder_value = CASE WHEN ? = 1 THEN ? ELSE reminder_value END,
+          reminder_unit = CASE WHEN ? = 1 THEN ? ELSE reminder_unit END,
           updated_at = datetime('now')
         WHERE id = ? AND tenant_id = ?
       `);
@@ -173,6 +183,9 @@ export class ServiceController {
         minLeadTimeHours !== undefined ? 1 : 0, minLeadTimeHours !== undefined ? Number(minLeadTimeHours) : 2,
         maxAdvanceDays !== undefined ? 1 : 0, maxAdvanceDays !== undefined ? Number(maxAdvanceDays) : 60,
         cancellationPolicy !== undefined ? 1 : 0, cancellationPolicy || null,
+        reminderEnabled !== undefined ? 1 : 0, reminderEnabled ? 1 : 0,
+        reminderValue !== undefined ? 1 : 0, reminderEnabled && reminderValue ? Number(reminderValue) : null,
+        reminderUnit !== undefined ? 1 : 0, reminderEnabled && reminderUnit ? String(reminderUnit).toUpperCase() : 'DAYS',
         id,
         tenantId
       );

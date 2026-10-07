@@ -56,5 +56,63 @@ export function dashboardWorklist(req: Request, today: string) {
     COALESCE(SUM(CASE WHEN pay.status IN ('pending','partial') THEN pay.amount ELSE 0 END), 0) AS pending
     FROM payments pay LEFT JOIN appointments a ON a.id = pay.appointment_id AND a.tenant_id = pay.tenant_id
     WHERE pay.tenant_id = ? AND (date(a.start_time) = ? OR date(pay.payment_date) = ?)`).get(tenant, today, today) : undefined;
-  return { unfinished, drafts, exams, examCount, returns, alerts, finance };
+
+  // Lembretes de contato/retorno por serviço (escopo restrito ao profissional logado)
+  let serviceReminders: any[] = [];
+  let serviceRemindersCount = 0;
+
+  let profIdForReminders: string | null = null;
+  const userProf = db.prepare(`
+    SELECT id FROM professionals
+    WHERE user_id = ? AND tenant_id = ? AND active = 1
+  `).get(req.user?.userId, tenant) as any;
+
+  if (userProf?.id) {
+    profIdForReminders = userProf.id;
+  } else if (role === 'clinic_admin') {
+    const clinicProfs = db.prepare(`
+      SELECT id FROM professionals
+      WHERE tenant_id = ? AND active = 1
+    `).all(tenant) as any[];
+    if (clinicProfs.length === 1) {
+      profIdForReminders = clinicProfs[0].id;
+    }
+  }
+
+  if (profIdForReminders) {
+    const sremWhere = `sr.clinic_id = ? AND sr.professional_id = ? AND sr.status IN ('PENDENTE', 'ADIADO')`;
+    serviceReminders = db.prepare(`
+      SELECT 
+        sr.id,
+        sr.clinic_id,
+        sr.professional_id,
+        sr.patient_id,
+        sr.service_id,
+        sr.appointment_id,
+        sr.due_at,
+        sr.status,
+        sr.completed_at,
+        sr.postponed_to,
+        sr.notes,
+        sr.created_at,
+        p.full_name AS patient_name,
+        p.phone AS patient_phone,
+        p.whatsapp AS patient_whatsapp,
+        s.name AS service_name
+      FROM service_reminders sr
+      JOIN patients p ON p.id = sr.patient_id AND p.tenant_id = sr.clinic_id
+      JOIN services s ON s.id = sr.service_id AND s.tenant_id = sr.clinic_id
+      WHERE ${sremWhere}
+      ORDER BY sr.due_at ASC, sr.created_at ASC
+      LIMIT 20
+    `).all(tenant, profIdForReminders) as any[];
+
+    serviceRemindersCount = (db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM service_reminders sr
+      WHERE ${sremWhere}
+    `).get(tenant, profIdForReminders) as any)?.count || serviceReminders.length;
+  }
+
+  return { unfinished, drafts, exams, examCount, returns, alerts, finance, serviceReminders, serviceRemindersCount };
 }

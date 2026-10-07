@@ -512,6 +512,41 @@ export function initializeDatabase(): void {
       console.warn('[Migration] Aviso ao vincular serviços aos profissionais existentes:', migErr);
     }
 
+    // Lembrete de retorno/contato por serviço
+    addColIfMissing('services', 'reminder_enabled', 'INTEGER NOT NULL DEFAULT 0');
+    addColIfMissing('services', 'reminder_value', 'INTEGER');
+    addColIfMissing('services', 'reminder_unit', "TEXT DEFAULT 'DAYS'");
+
+    try {
+      rawDb.exec(`
+        CREATE TABLE IF NOT EXISTS service_reminders (
+          id TEXT PRIMARY KEY,
+          clinic_id TEXT NOT NULL,
+          professional_id TEXT NOT NULL,
+          patient_id TEXT NOT NULL,
+          service_id TEXT NOT NULL,
+          appointment_id TEXT,
+          due_at TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'PENDENTE' CHECK(status IN ('PENDENTE', 'CONCLUÍDO', 'ADIADO')),
+          completed_at TEXT,
+          postponed_to TEXT,
+          notes TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+          FOREIGN KEY (clinic_id) REFERENCES tenants(id) ON DELETE CASCADE,
+          FOREIGN KEY (professional_id) REFERENCES professionals(id) ON DELETE CASCADE,
+          FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+          FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE,
+          FOREIGN KEY (appointment_id) REFERENCES appointments(id) ON DELETE SET NULL
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_service_reminders_appt_unique ON service_reminders(appointment_id, service_id) WHERE appointment_id IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS idx_service_reminders_clinic_prof ON service_reminders(clinic_id, professional_id, status);
+        CREATE INDEX IF NOT EXISTS idx_service_reminders_due_at ON service_reminders(clinic_id, due_at);
+      `);
+    } catch (sremErr) {
+      console.warn('[Migration] Aviso ao criar tabela service_reminders:', sremErr);
+    }
+
     // Consentimento de telessaúde por profissão e metadados
     addColIfMissing('patient_consents', 'modality', "TEXT DEFAULT 'telehealth'");
     addColIfMissing('patient_consents', 'profession_id', 'TEXT');

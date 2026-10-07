@@ -245,6 +245,9 @@ CREATE TABLE IF NOT EXISTS services (
   min_lead_time_hours INTEGER NOT NULL DEFAULT 2,
   max_advance_days INTEGER NOT NULL DEFAULT 60,
   cancellation_policy TEXT,
+  reminder_enabled INTEGER NOT NULL DEFAULT 0,
+  reminder_value INTEGER,
+  reminder_unit TEXT DEFAULT 'DAYS' CHECK(reminder_unit IN ('DAYS', 'MONTHS', 'YEARS')),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
@@ -254,6 +257,32 @@ CREATE TABLE IF NOT EXISTS services (
 
 CREATE INDEX IF NOT EXISTS idx_services_tenant ON services (tenant_id, active);
 CREATE INDEX IF NOT EXISTS idx_services_professional ON services (tenant_id, professional_id, active);
+
+-- Lembretes de Retorno / Contato por Serviço
+CREATE TABLE IF NOT EXISTS service_reminders (
+  id TEXT PRIMARY KEY,
+  clinic_id TEXT NOT NULL,
+  professional_id TEXT NOT NULL,
+  patient_id TEXT NOT NULL,
+  service_id TEXT NOT NULL,
+  appointment_id TEXT,
+  due_at TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'PENDENTE' CHECK(status IN ('PENDENTE', 'CONCLUÍDO', 'ADIADO')),
+  completed_at TEXT,
+  postponed_to TEXT,
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (clinic_id) REFERENCES tenants(id) ON DELETE CASCADE,
+  FOREIGN KEY (professional_id) REFERENCES professionals(id) ON DELETE CASCADE,
+  FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+  FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE,
+  FOREIGN KEY (appointment_id) REFERENCES appointments(id) ON DELETE SET NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_service_reminders_appt_unique ON service_reminders(appointment_id, service_id) WHERE appointment_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_service_reminders_clinic_prof ON service_reminders(clinic_id, professional_id, status);
+CREATE INDEX IF NOT EXISTS idx_service_reminders_due_at ON service_reminders(clinic_id, due_at);
 
 -- 11. Associação Profissional x Serviços
 CREATE TABLE IF NOT EXISTS professional_services (

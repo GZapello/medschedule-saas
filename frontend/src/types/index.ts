@@ -205,6 +205,30 @@ export interface Service {
   min_lead_time_hours?: number;
   max_advance_days?: number;
   cancellation_policy?: string;
+  reminder_enabled?: number;
+  reminder_value?: number | null;
+  reminder_unit?: 'DAYS' | 'MONTHS' | 'YEARS';
+}
+
+export interface ServiceReminder {
+  id: string;
+  clinic_id: string;
+  professional_id: string;
+  professional_name?: string;
+  patient_id: string;
+  patient_name?: string;
+  patient_phone?: string;
+  patient_whatsapp?: string;
+  service_id: string;
+  service_name?: string;
+  appointment_id?: string;
+  due_at: string;
+  status: 'PENDENTE' | 'CONCLUÍDO' | 'ADIADO';
+  completed_at?: string | null;
+  postponed_to?: string | null;
+  notes?: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Room {

@@ -3,6 +3,7 @@ import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '../middlewares/audit.middleware';
+import { ServiceReminderService } from '../services/service-reminder.service';
 import { hasClinicalAccess } from './clinical.controller';
 import { CapabilityService } from '../services/capability.service';
 import { resolveCanonicalProfession } from '../utils/profession-module';
@@ -341,6 +342,13 @@ export class MedicalController {
 
       })();
       logAudit(req, 'FINISH_MEDICAL_CONSULTATION', 'records', recordId, { patientId, recordId, specialtyPreset });
+      if (appointmentId) {
+        try {
+          ServiceReminderService.onAppointmentCompleted(appointmentId, tenantId);
+        } catch (reminderErr) {
+          console.warn('[finishConsultation] Aviso ao gerar lembrete de retorno médico:', reminderErr);
+        }
+      }
       res.status(201).json({
         recordId,
         message: 'Consulta médica finalizada com sucesso e gravada no prontuário do paciente'

@@ -3,6 +3,7 @@ import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
+import { ServiceReminderService } from '../services/service-reminder.service';
 import { logAudit } from '../middlewares/audit.middleware';
 import { hasClinicalAccess } from './clinical.controller';
 import { isNutritionistOrClinicManager } from './nutrition.controller';
@@ -1180,6 +1181,13 @@ export class DocumentsController {
 
       // Comita a transação com êxito total
       db.exec('COMMIT');
+
+      // Gera lembrete de contato/retorno se o serviço correspondente possuir lembrete configurado
+      try {
+        ServiceReminderService.onAppointmentCompleted(appointmentId, tenantId);
+      } catch (reminderErr) {
+        console.warn('[finishConsultation] Aviso ao gerar lembrete de retorno:', reminderErr);
+      }
 
       logAudit(req, 'FINISH_CONSULTATION', 'appointments', appointmentId, { generatedDocs });
       res.json({

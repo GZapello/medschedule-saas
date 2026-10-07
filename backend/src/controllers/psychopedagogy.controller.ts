@@ -3,6 +3,7 @@ import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 import { logAudit } from '../middlewares/audit.middleware';
+import { ServiceReminderService } from '../services/service-reminder.service';
 
 /**
  * Validação de acesso estrito ao prontuário psicopedagógico (ZemdaPP)
@@ -597,6 +598,14 @@ export class PsychopedagogyController {
             WHERE id = ? AND tenant_id = ?
           `).run(appointmentId, tenantId);
         } catch (_) {}
+      }
+
+      if (appointmentId) {
+        try {
+          ServiceReminderService.onAppointmentCompleted(appointmentId, tenantId);
+        } catch (reminderErr) {
+          console.warn('[finishConsultation] Aviso ao gerar lembrete de retorno PP:', reminderErr);
+        }
       }
 
       logAudit(

@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 import { GeminiService } from '../services/gemini.service';
 import { generateQrCodeDataUrl } from '../utils/qr-generator';
+import { ServiceReminderService } from '../services/service-reminder.service';
 
 function getParam(param: any): string {
   if (Array.isArray(param)) return param[0] || '';
@@ -1262,6 +1263,13 @@ export class PsychologyController {
         .run(tenantId, patientId, resolvedProfId, appointmentId || 'none');
 
       logPsychologyAudit(req, patientId, 'finish_consultation', 'psychology_sessions', sessionId, `Atendimento concluído e selado com hash ${signatureHash.slice(0, 10)}`);
+      if (appointmentId) {
+        try {
+          ServiceReminderService.onAppointmentCompleted(appointmentId, tenantId);
+        } catch (reminderErr) {
+          console.warn('[finishConsultation] Aviso ao gerar lembrete de retorno psicologia:', reminderErr);
+        }
+      }
 
       res.json({
         message: 'Atendimento de Psicologia finalizado e selado com sucesso!',

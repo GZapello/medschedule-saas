@@ -4,6 +4,7 @@ import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 import { logAudit } from '../middlewares/audit.middleware';
+import { ServiceReminderService } from '../services/service-reminder.service';
 import { hasClinicalAccess } from './clinical.controller';
 import { DocumentsController } from './documents.controller';
 
@@ -1272,6 +1273,13 @@ export class SpeechTherapyController {
 
         db.exec('COMMIT');
         committed = true;
+        if (appointmentId) {
+          try {
+            ServiceReminderService.onAppointmentCompleted(appointmentId, tenantId);
+          } catch (reminderErr) {
+            console.warn('[finishConsultation] Aviso ao gerar lembrete de retorno fono:', reminderErr);
+          }
+        }
       } catch (err) {
         if (!committed) {
           try { db.exec('ROLLBACK'); } catch (_) {}

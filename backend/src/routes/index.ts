@@ -57,6 +57,7 @@ import { CapabilityController } from '../controllers/capability.controller';
 import { MedicalController } from '../controllers/medical.controller';
 import { SandboxController } from '../controllers/sandbox.controller';
 import { EsteticController } from '../controllers/estetic.controller';
+import { ServiceReminderController } from '../controllers/service-reminder.controller';
 
 import { authMiddleware, onboardingGate } from '../middlewares/auth.middleware';
 import { tenantMiddleware, requireTenant } from '../middlewares/tenant.middleware';
@@ -279,6 +280,11 @@ api.put('/v1/services/:id', requireTenant, requireRole('clinic_admin'), ServiceC
 api.delete('/v1/services/:id', requireTenant, requireRole('clinic_admin'), ServiceController.delete);
 api.get('/v1/rooms', requireTenant, ServiceController.listRooms);
 api.post('/v1/rooms', requireTenant, requireRole('clinic_admin'), ServiceController.createRoom);
+
+// Lembretes de Contato / Retorno por Serviço
+api.get('/v1/service-reminders', requireTenant, ServiceReminderController.list);
+api.patch('/v1/service-reminders/:id/complete', requireTenant, ServiceReminderController.complete);
+api.patch('/v1/service-reminders/:id/postpone', requireTenant, ServiceReminderController.postpone);
 
 // Pacientes / Clientes
 api.get('/v1/patients', requireTenant, PatientController.list);

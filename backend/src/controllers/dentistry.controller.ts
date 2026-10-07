@@ -5,6 +5,7 @@ import { logAudit } from '../middlewares/audit.middleware';
 import { hasClinicalAccess } from './clinical.controller';
 import { DocumentsController } from './documents.controller';
 import { ClinicalRecordService } from '../services/clinical-record.service';
+import { ServiceReminderService } from '../services/service-reminder.service';
 
 /**
  * Validação de acesso exclusivo para Odontologia (ZemdaOdonto)
@@ -1365,6 +1366,13 @@ export class DentistryController {
 
         db.exec('COMMIT');
         transactionCommitted = true;
+        if (appointmentId) {
+          try {
+            ServiceReminderService.onAppointmentCompleted(appointmentId, tenantId);
+          } catch (reminderErr) {
+            console.warn('[finishConsultation] Aviso ao gerar lembrete de retorno odonto:', reminderErr);
+          }
+        }
       } catch (innerErr) {
         if (!transactionCommitted) {
           try { db.exec('ROLLBACK'); } catch (_) {}
