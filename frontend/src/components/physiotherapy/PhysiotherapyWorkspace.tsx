@@ -1828,6 +1828,9 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
           patientId={selectedPatientId}
           patientName={selectedPatient?.full_name || 'Paciente'}
           moduleType="ZemdaFisio"
+          professionalName={currentUser?.name}
+          professionalCouncil={currentUser?.registrationNumber ? (currentUser.registrationType ? `${currentUser.registrationType}: ${currentUser.registrationNumber}` : `CREFITO: ${currentUser.registrationNumber}`) : undefined}
+          moduleData={{ conducts, homeExercisesText }}
           initialGuidelines={conducts || 'Seguir a rotina de exercícios com os cuidados orientados em sessão.'}
           homeExercisesText={homeExercisesText}
         />

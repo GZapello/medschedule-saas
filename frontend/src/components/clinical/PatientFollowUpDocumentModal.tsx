@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
 import {
   X,
   Printer,
@@ -14,7 +15,8 @@ import {
   ShieldCheck,
   User,
   Heart,
-  AlertCircle
+  AlertCircle,
+  Sparkles
 } from 'lucide-react';
 import {
   ClinicDocumentHeader,
@@ -23,6 +25,7 @@ import {
   DigitalStampInfo
 } from '../common/ClinicDocumentHeader';
 import { SignatureChoiceModal } from '../common/SignatureChoiceModal';
+import { buildPatientFollowUpContent } from './follow-up-content.adapter';
 
 export interface PatientFollowUpDocumentModalProps {
   isOpen: boolean;
@@ -34,10 +37,17 @@ export interface PatientFollowUpDocumentModalProps {
   professionalCouncil?: string;
   serviceName?: string;
   moduleType?: string;
+  professionId?: string;
+  practiceAreaIds?: string[];
+  capabilities?: string[];
+  moduleData?: any;
+  clinicalEvolution?: string;
+  technicalNotes?: string;
   initialGuidelines?: string;
   mealPlanText?: string;
   homeExercisesText?: string;
   homeActivitiesText?: string;
+  nextAppointmentNote?: string;
 }
 
 export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModalProps> = ({
@@ -50,30 +60,132 @@ export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModal
   professionalCouncil,
   serviceName,
   moduleType,
+  professionId,
+  practiceAreaIds,
+  capabilities,
+  moduleData,
+  clinicalEvolution,
+  technicalNotes,
   initialGuidelines = '',
   mealPlanText = '',
   homeExercisesText = '',
-  homeActivitiesText = ''
+  homeActivitiesText = '',
+  nextAppointmentNote = ''
 }) => {
   const { showToast } = useToast();
+  const { currentUser } = useAuth();
   const printSheetRef = useRef<HTMLDivElement>(null);
 
   const { clinic: clinicData, loading: clinicLoading, error: clinicError, canIssue: canIssueClinic } = useClinicDocumentData();
   const [patientDetails, setPatientDetails] = useState<any>(null);
+  const [appointmentDetails, setAppointmentDetails] = useState<any>(null);
 
-  const hasProfessional = Boolean(professionalName && professionalName.trim().length > 0);
+  // Carrega agendamento ativo se profissional ou registro não vierem por props
+  useEffect(() => {
+    let isMounted = true;
+    async function loadAppointment() {
+      if (appointmentId && (!professionalName || !professionalCouncil)) {
+        try {
+          const appt = await ApiClient.get<any>(`/v1/appointments/${appointmentId}`);
+          if (isMounted && appt) {
+            setAppointmentDetails(appt);
+          }
+        } catch (e) {
+          console.warn('Erro ao carregar dados do agendamento para profissional:', e);
+        }
+      }
+    }
+    if (isOpen && appointmentId) {
+      loadAppointment();
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, appointmentId, professionalName, professionalCouncil]);
+
+  // Resolução em cascata do profissional responsável:
+  // 1. Props diretas
+  // 2. Agendamento ativo vinculado
+  // 3. Usuário logado na sessão com registro de conselho real
+  const effectiveProfessionalName = (
+    professionalName ||
+    appointmentDetails?.professional_name ||
+    currentUser?.name ||
+    ''
+  ).trim();
+
+  const formatCouncil = (type?: string, num?: string) => {
+    if (!num) return '';
+    const prefix = type ? `${type}: ` : 'Registro: ';
+    return `${prefix}${num}`;
+  };
+
+  const effectiveProfessionalCouncil = (
+    professionalCouncil ||
+    appointmentDetails?.professional_council ||
+    formatCouncil(currentUser?.registrationType, currentUser?.registrationNumber) ||
+    currentUser?.professionName ||
+    ''
+  ).trim();
+
+  const hasProfessional = Boolean(effectiveProfessionalName.length > 0);
   const canPrint = canIssueClinic && hasProfessional;
 
-  // Editable sections for the handout
-  const [generalGuidelines, setGeneralGuidelines] = useState<string>(
-    initialGuidelines || 'Seguir as orientações terapêuticas combinadas em consulta. Em caso de dúvidas ou sintomas atípicos, entre em contato com a equipe.'
-  );
-  const [mealPlan, setMealPlan] = useState<string>(mealPlanText);
-  const [homeExercises, setHomeExercises] = useState<string>(homeExercisesText);
-  const [homeActivities, setHomeActivities] = useState<string>(homeActivitiesText);
-  const [nextAppointmentNote, setNextAppointmentNote] = useState<string>('');
+  // Resolução de conteúdo adaptada à taxonomia clínica e módulo
+  const adaptedContent = useMemo(() => {
+    return buildPatientFollowUpContent({
+      moduleType,
+      professionId: professionId || currentUser?.canonicalProfessionId || currentUser?.professionId,
+      practiceAreaIds: practiceAreaIds || currentUser?.practiceAreaIds,
+      capabilities: capabilities || currentUser?.capabilities,
+      moduleData,
+      clinicalEvolution,
+      technicalNotes,
+      initialGuidelines,
+      mealPlanText,
+      homeExercisesText,
+      homeActivitiesText,
+      nextAppointmentNote,
+      serviceName,
+      currentUser
+    });
+  }, [
+    moduleType,
+    professionId,
+    practiceAreaIds,
+    capabilities,
+    moduleData,
+    clinicalEvolution,
+    technicalNotes,
+    initialGuidelines,
+    mealPlanText,
+    homeExercisesText,
+    homeActivitiesText,
+    nextAppointmentNote,
+    serviceName,
+    currentUser
+  ]);
+
+  // Seções editáveis no formulário do documento
+  const [generalGuidelines, setGeneralGuidelines] = useState<string>(adaptedContent.generalGuidelines);
+  const [mealPlan, setMealPlan] = useState<string>(adaptedContent.mealPlanText || '');
+  const [homeExercises, setHomeExercises] = useState<string>(adaptedContent.homeExercisesText || '');
+  const [homeActivities, setHomeActivities] = useState<string>(adaptedContent.homeActivitiesText || '');
+  const [nextAppointmentNoteState, setNextAppointmentNoteState] = useState<string>(adaptedContent.nextAppointmentNote || '');
   const [showSignatureChoice, setShowSignatureChoice] = useState<boolean>(false);
   const [digitalStamp, setDigitalStamp] = useState<DigitalStampInfo | null>(null);
+
+  // Sincroniza formulário sempre que o modal for aberto
+  useEffect(() => {
+    if (isOpen) {
+      setGeneralGuidelines(adaptedContent.generalGuidelines);
+      setMealPlan(adaptedContent.mealPlanText || '');
+      setHomeExercises(adaptedContent.homeExercisesText || '');
+      setHomeActivities(adaptedContent.homeActivitiesText || '');
+      setNextAppointmentNoteState(adaptedContent.nextAppointmentNote || '');
+      setDigitalStamp(null);
+    }
+  }, [isOpen, adaptedContent]);
 
   useEffect(() => {
     async function loadPatient() {
@@ -93,7 +205,36 @@ export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModal
 
   if (!isOpen) return null;
 
-  const handlePrint = () => {
+  // Emissão resiliente via iframe caso o navegador bloqueie popups de janela
+  const printViaIframe = (html: string) => {
+    let iframe = document.getElementById('patient-followup-print-frame') as HTMLIFrameElement;
+    if (!iframe) {
+      iframe = document.createElement('iframe');
+      iframe.id = 'patient-followup-print-frame';
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      document.body.appendChild(iframe);
+    }
+    const doc = iframe.contentWindow?.document || iframe.contentDocument;
+    if (doc) {
+      doc.open();
+      doc.write(html);
+      doc.close();
+      iframe.contentWindow?.focus();
+      setTimeout(() => {
+        iframe.contentWindow?.print();
+      }, 300);
+    } else {
+      showToast('Por favor, autorize pop-ups para imprimir o acompanhamento.', 'info');
+    }
+  };
+
+  // Função única e canônica de impressão/emissão A4
+  const handlePrint = (stampOverride?: DigitalStampInfo | null) => {
     if (!canIssueClinic) {
       showToast('Não foi possível carregar os dados da clínica emissora. Impressão bloqueada.', 'error');
       return;
@@ -103,76 +244,83 @@ export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModal
       return;
     }
     if (!printSheetRef.current) return;
-    const printWindow = window.open('', '_blank', 'width=900,height=1000');
-    if (!printWindow) {
-      showToast('Por favor, autorize pop-ups para imprimir o acompanhamento.', 'info');
-      return;
-    }
 
-    const title = `Acompanhamento_${patientName.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}`;
+    const title = `Acompanhamento_${(patientName || 'Paciente').replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}`;
     const contentHtml = printSheetRef.current.innerHTML;
 
-    printWindow.document.open();
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html lang="pt-BR">
-      <head>
-        <meta charset="utf-8">
-        <title>${title}</title>
-        <script src="https://cdn.tailwindcss.com"></script>
-        <style>
-          @page {
-            size: A4 portrait;
-            margin: 12mm 15mm 15mm 15mm;
-          }
-          body {
-            background-color: #ffffff;
-            color: #0f172a;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-            margin: 0;
-            padding: 0;
-          }
-          .a4-page {
-            width: 100%;
-            max-width: 210mm;
-            margin: 0 auto;
-            background: #ffffff;
-            box-sizing: border-box;
-          }
-          @media print {
-            .no-print { display: none !important; }
-          }
-        </style>
-      </head>
-      <body>
-        <div class="no-print p-4 bg-slate-100 border-b border-slate-200 text-center">
-          <button onclick="window.print()" class="px-6 py-2.5 bg-teal-600 text-white font-bold rounded-xl text-sm shadow hover:bg-teal-700 cursor-pointer">
-            Imprimir / Salvar como PDF
-          </button>
-        </div>
-        <div class="a4-page p-6">
-          ${contentHtml}
-        </div>
-        <script>
-          window.onload = function() {
-            setTimeout(function() {
-              window.print();
-            }, 300);
-          }
-        </script>
-      </body>
-      </html>
-    `);
-    printWindow.document.close();
+    const fullHtml = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>${title}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 12mm 15mm 15mm 15mm;
+    }
+    body {
+      background-color: #ffffff;
+      color: #0f172a;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      margin: 0;
+      padding: 0;
+    }
+    .a4-page {
+      width: 100%;
+      max-width: 210mm;
+      margin: 0 auto;
+      background: #ffffff;
+      box-sizing: border-box;
+    }
+    @media print {
+      .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print p-4 bg-slate-100 border-b border-slate-200 text-center">
+    <button onclick="window.print()" class="px-6 py-2.5 bg-teal-600 text-white font-bold rounded-xl text-sm shadow hover:bg-teal-700 cursor-pointer">
+      Imprimir / Salvar como PDF
+    </button>
+  </div>
+  <div class="a4-page p-6">
+    ${contentHtml}
+  </div>
+  <script>
+    window.onload = function() {
+      setTimeout(function() {
+        window.print();
+      }, 300);
+    }
+  </script>
+</body>
+</html>`;
+
+    // Tentativa síncrona de abrir janela no gesto do usuário
+    let printWindow: Window | null = null;
+    try {
+      printWindow = window.open('', '_blank', 'width=900,height=1000');
+    } catch (e) {
+      console.warn('window.open bloqueado ou restrito:', e);
+    }
+
+    if (printWindow) {
+      printWindow.document.open();
+      printWindow.document.write(fullHtml);
+      printWindow.document.close();
+    } else {
+      console.info('Utilizando emissão alternativa via iframe silencioso.');
+      printViaIframe(fullHtml);
+    }
   };
 
-  const todayStr = new Date().toLocaleDateString('pt-BR', {
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric'
-  });
+  const isAesthetic = adaptedContent.moduleBadge === 'ZemdaEstetic';
+  const showMealPlan = moduleType === 'ZemdaNutri' || Boolean(mealPlan.trim()) || Boolean(mealPlanText);
+  const showExercises = moduleType === 'ZemdaFisio' || moduleType === 'ZemdaPersonal' || Boolean(homeExercises.trim()) || Boolean(homeExercisesText);
+  const showActivities = moduleType === 'ZemdaFono' || moduleType === 'ZemdaTO' || moduleType === 'ZemdaPP' || Boolean(homeActivities.trim()) || Boolean(homeActivitiesText);
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
@@ -185,11 +333,18 @@ export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModal
               <Heart className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-white tracking-tight">
-                Documento de Acompanhamento para o Paciente
-              </h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-bold text-white tracking-tight">
+                  Documento de Acompanhamento para o Paciente
+                </h2>
+                {adaptedContent.moduleBadge && (
+                  <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-teal-500/20 text-teal-200 border border-teal-400/30">
+                    {adaptedContent.moduleBadge}
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-teal-200">
-                Orientações domiciliares, plano de cuidados e rotina prescrita (Formato A4 limpo)
+                {adaptedContent.documentSubtitle} (Formato A4 limpo)
               </p>
             </div>
           </div>
@@ -198,7 +353,7 @@ export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModal
             <button
               type="button"
               disabled={!canPrint}
-              onClick={handlePrint}
+              onClick={() => handlePrint()}
               className={`inline-flex items-center gap-1.5 px-4 py-2 font-bold text-xs rounded-xl shadow-xs transition-colors ${
                 canPrint
                   ? 'bg-white text-teal-900 hover:bg-teal-50 cursor-pointer'
@@ -229,7 +384,7 @@ export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModal
         <div className="bg-teal-50 px-6 py-2.5 border-b border-teal-100 flex items-center gap-2 text-xs text-teal-900">
           <ShieldCheck className="w-4 h-4 text-teal-700 shrink-0" />
           <span>
-            <strong>Privacidade Clínica Garantida:</strong> Este documento omite anotações sigilosas, diagnósticos internos e testes psicológicos confidenciais, contendo exclusivamente instruções práticas e educativas para o paciente.
+            <strong>Privacidade Clínica Garantida:</strong> Este documento omite anotações sigilosas, diagnósticos internos, custos e testes psicológicos confidenciais, contendo exclusivamente instruções práticas e educativas para o paciente.
           </span>
         </div>
 
@@ -250,24 +405,31 @@ export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModal
           
           {/* Edit Controls Column (col 5) */}
           <div className="lg:col-span-5 space-y-4">
-            <h3 className="font-bold text-xs uppercase tracking-wider text-slate-500">
-              Personalizar Conteúdo da Entrega
-            </h3>
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-xs uppercase tracking-wider text-slate-500">
+                Personalizar Conteúdo da Entrega
+              </h3>
+              {isAesthetic && (
+                <span className="text-[10px] font-semibold text-teal-700 bg-teal-100 px-2 py-0.5 rounded-md flex items-center gap-1">
+                  <Sparkles className="w-3 h-3" /> Pós-Procedimento
+                </span>
+              )}
+            </div>
 
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
-                Orientações Gerais & Recomendações
+                {isAesthetic ? 'Orientações Pós-Procedimento & Recomendações' : 'Orientações Gerais & Recomendações'}
               </label>
               <textarea
-                rows={3}
+                rows={4}
                 value={generalGuidelines}
                 onChange={e => setGeneralGuidelines(e.target.value)}
-                placeholder="Instruções sobre hidratação, sono, postura, etc..."
+                placeholder="Instruções sobre cuidados, repouso, hidratação, uso de filtro solar..."
                 className="w-full text-xs p-3 border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-teal-500 focus:outline-none"
               />
             </div>
 
-            {(moduleType === 'ZemdaNutri' || mealPlanText) && (
+            {showMealPlan && (
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
                   <Apple className="w-3.5 h-3.5 text-emerald-600" />
@@ -283,7 +445,7 @@ export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModal
               </div>
             )}
 
-            {(moduleType === 'ZemdaFisio' || moduleType === 'ZemdaPersonal' || homeExercisesText) && (
+            {showExercises && (
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
                   <Activity className="w-3.5 h-3.5 text-teal-600" />
@@ -299,7 +461,7 @@ export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModal
               </div>
             )}
 
-            {(moduleType === 'ZemdaFono' || moduleType === 'ZemdaTO' || homeActivitiesText) && (
+            {showActivities && (
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
                   <FileText className="w-3.5 h-3.5 text-indigo-600" />
@@ -322,8 +484,8 @@ export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModal
               </label>
               <input
                 type="text"
-                value={nextAppointmentNote}
-                onChange={e => setNextAppointmentNote(e.target.value)}
+                value={nextAppointmentNoteState}
+                onChange={e => setNextAppointmentNoteState(e.target.value)}
                 placeholder="Ex: Retorno em 15 dias ou conforme agendamento"
                 className="w-full text-xs p-2.5 border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-teal-500 focus:outline-none"
               />
@@ -341,8 +503,8 @@ export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModal
                 clinic={clinicData}
                 loading={clinicLoading}
                 error={clinicError}
-                documentTitle="GUIA DO PACIENTE"
-                documentSubtitle="Acompanhamento Terapêutico"
+                documentTitle={adaptedContent.documentTitle || 'GUIA DO PACIENTE'}
+                documentSubtitle={adaptedContent.documentSubtitle || 'Acompanhamento Terapêutico'}
               />
 
               {/* Patient and Professional Banner */}
@@ -359,10 +521,10 @@ export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModal
                 <div>
                   <span className="text-[10px] uppercase font-bold text-slate-400 block">Profissional Responsável</span>
                   <strong className={`text-sm block ${hasProfessional ? 'text-slate-900' : 'text-rose-600 italic font-semibold'}`}>
-                    {hasProfessional ? professionalName : 'Profissional responsável não identificado'}
+                    {hasProfessional ? effectiveProfessionalName : 'Profissional responsável não identificado'}
                   </strong>
                   <span className="text-slate-500 text-[11px]">
-                    {professionalCouncil ? `Registro: ${professionalCouncil}` : (serviceName || 'Atendimento Clínico')}
+                    {effectiveProfessionalCouncil ? `Registro: ${effectiveProfessionalCouncil}` : (serviceName || 'Atendimento Clínico')}
                   </span>
                 </div>
               </div>
@@ -370,10 +532,10 @@ export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModal
               {/* Title of the handout */}
               <div className="text-center py-2 border-b border-slate-100">
                 <h2 className="text-base font-extrabold text-teal-900 uppercase tracking-wide">
-                  Plano de Orientações e Cuidados Domiciliares
+                  {adaptedContent.documentSubtitle || 'Plano de Orientações e Cuidados Domiciliares'}
                 </h2>
                 <p className="text-xs text-slate-500">
-                  Recomendações terapêuticas personalizadas para continuidade do tratamento
+                  Recomendações terapêuticas personalizadas para continuidade do cuidado
                 </p>
               </div>
 
@@ -382,7 +544,7 @@ export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModal
                 <div className="space-y-1.5">
                   <h3 className="text-xs font-bold uppercase tracking-wider text-teal-800 flex items-center gap-1.5">
                     <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />
-                    Orientações Gerais
+                    {isAesthetic ? 'Orientações Pós-Procedimento' : 'Orientações Gerais'}
                   </h3>
                   <div className="p-3 bg-slate-50 rounded-xl text-xs text-slate-700 leading-relaxed whitespace-pre-wrap">
                     {generalGuidelines}
@@ -430,10 +592,10 @@ export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModal
               )}
 
               {/* Next Appointment Note */}
-              {nextAppointmentNote.trim() && (
+              {nextAppointmentNoteState.trim() && (
                 <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl flex items-center gap-2 text-xs text-amber-900">
                   <Calendar className="w-4 h-4 text-amber-700 shrink-0" />
-                  <span><strong>Próximo Retorno:</strong> {nextAppointmentNote}</span>
+                  <span><strong>Próximo Retorno:</strong> {nextAppointmentNoteState}</span>
                 </div>
               )}
 
@@ -442,9 +604,9 @@ export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModal
                 {!digitalStamp && (
                   <div className="inline-block border-t border-slate-400 w-64 pt-2">
                     <p className={`font-bold text-xs ${hasProfessional ? 'text-slate-900' : 'text-rose-600 italic'}`}>
-                      {hasProfessional ? professionalName : 'Profissional responsável não identificado'}
+                      {hasProfessional ? effectiveProfessionalName : 'Profissional responsável não identificado'}
                     </p>
-                    {professionalCouncil && <p className="text-[11px] text-slate-500">{professionalCouncil}</p>}
+                    {effectiveProfessionalCouncil && <p className="text-[11px] text-slate-500">{effectiveProfessionalCouncil}</p>}
                   </div>
                 )}
                 <ClinicDocumentFooter digitalStamp={digitalStamp} />
@@ -493,24 +655,22 @@ export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModal
       <SignatureChoiceModal
         isOpen={showSignatureChoice}
         onClose={() => setShowSignatureChoice(false)}
-        documentTitle="Plano de Orientações e Cuidados Domiciliares"
+        documentTitle={adaptedContent.documentTitle || 'Plano de Orientações e Cuidados Domiciliares'}
         documentType="clinical_record"
         patientName={patientName}
-        professionalName={professionalName}
-        professionalCouncil={professionalCouncil}
+        professionalName={effectiveProfessionalName}
+        professionalCouncil={effectiveProfessionalCouncil}
         rawContent={`${generalGuidelines}\n${mealPlan}\n${homeExercises}\n${homeActivities}`}
         onSelectManualPrint={() => {
           setDigitalStamp(null);
-          setTimeout(() => {
-            handlePrint();
-          }, 150);
+          handlePrint(null);
         }}
         onSignSuccess={(sigResult) => {
-          setDigitalStamp({
+          const newStamp: DigitalStampInfo = {
             format: 'PAdES',
             isIcpBrasil: true,
-            signerName: professionalName,
-            signerRegistration: professionalCouncil,
+            signerName: effectiveProfessionalName,
+            signerRegistration: effectiveProfessionalCouncil,
             issuer: sigResult.validationResult?.issuer || 'AC SOLUTI Multipla v5 (ICP-Brasil)',
             serialNumber: sigResult.validationResult?.serialNumber,
             signedAt: sigResult.signedAt,
@@ -518,10 +678,9 @@ export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModal
             verificationUrl: sigResult.verificationUrl,
             qrCodeSvg: sigResult.qrCodeSvg,
             qrCodeDataUrl: sigResult.qrCodeDataUrl
-          });
-          setTimeout(() => {
-            handlePrint();
-          }, 300);
+          };
+          setDigitalStamp(newStamp);
+          handlePrint(newStamp);
         }}
       />
     </div>

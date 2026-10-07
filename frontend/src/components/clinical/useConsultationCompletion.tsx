@@ -1,6 +1,7 @@
 import { resolveConsultationAppointment } from './resolveConsultationAppointment';
 import { useClinicalReview } from './useClinicalReview';
 import React, { useState, useRef, useEffect } from 'react';
+import { useAuth } from '../../context/AuthContext';
 import { ApiClient } from '../../api/client';
 import { ConsultationPaymentModal } from './ConsultationPaymentModal';
 import { PatientFollowUpDocumentModal } from './PatientFollowUpDocumentModal';
@@ -9,6 +10,7 @@ import { CheckCircle2, Printer, Eye } from 'lucide-react';
 
 export function useConsultationCompletion(onFinished?: () => void, contextKey?: string, options?: { showPostCompletion?: boolean }) {
   const review = useClinicalReview(contextKey);
+  const { currentUser } = useAuth();
   const inFlight = useRef(false);
   const completed = useRef(false);
   const [isCompleted, setIsCompleted] = useState(false);
@@ -141,10 +143,19 @@ export function useConsultationCompletion(onFinished?: () => void, contextKey?: 
           patientId={lastPayload.patientId}
           patientName={lastPayload.patientName || 'Paciente'}
           appointmentId={receipt?.appointmentId || lastPayload.appointmentId}
-          professionalName={lastPayload.professionalName}
+          professionalName={lastPayload.professionalName || currentUser?.name}
+          professionalCouncil={currentUser?.registrationNumber ? (currentUser.registrationType ? `${currentUser.registrationType}: ${currentUser.registrationNumber}` : `Registro: ${currentUser.registrationNumber}`) : undefined}
           moduleType={lastPayload.moduleType}
+          moduleData={lastPayload}
+          clinicalEvolution={lastPayload.clinicalEvolution}
+          technicalNotes={lastPayload.technicalNotes}
+          professionId={currentUser?.canonicalProfessionId || currentUser?.professionId}
+          practiceAreaIds={currentUser?.practiceAreaIds}
+          capabilities={currentUser?.capabilities}
           initialGuidelines={lastPayload.guidelines || lastPayload.generalGuidelines}
           mealPlanText={lastPayload.mealPlanText}
+          homeExercisesText={lastPayload.homeExercisesText}
+          homeActivitiesText={lastPayload.homeActivitiesText}
         />
       )}
 

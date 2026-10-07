@@ -1348,8 +1348,10 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
               patientName={selectedPatient?.full_name || 'Paciente'}
               moduleType="ZemdaTO"
               professionalName={currentUser?.name}
-              initialGuidelines="Seguir os treinos de autonomia, adaptação e estímulo sensorial em rotina domiciliar conforme planejado em sessão."
-              homeActivitiesText="1. Utilizar os recursos de tecnologia assistiva indicados.\n2. Estimular a autonomia nas atividades diárias respeitando o tempo do paciente.\n3. Registrar em diário de bordo os momentos de maior facilidade ou desafio."
+              professionalCouncil={currentUser?.registrationNumber ? (currentUser.registrationType ? `${currentUser.registrationType}: ${currentUser.registrationNumber}` : `CREFITO: ${currentUser.registrationNumber}`) : undefined}
+              moduleData={{ treatmentPlanData: planForm }}
+              initialGuidelines={planForm?.familyGuidelines || undefined}
+              homeActivitiesText={planForm?.interventions || undefined}
             />
           )}
           <ClinicalDraftRecoveryModal

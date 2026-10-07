@@ -1865,8 +1865,10 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
               patientName={selectedPatient?.full_name || 'Paciente'}
               moduleType="ZemdaFono"
               professionalName={currentUser?.name}
-              initialGuidelines="Realizar os exercícios miofuncionais, de estimulação auditiva ou de linguagem conforme orientado na consulta fonoaudiológica."
-              homeActivitiesText="1. Manter boa hidratação ao longo do dia.\n2. Realizar os treinos vocais ou miofuncionais em ambiente tranquilo e em frente ao espelho.\n3. Anotar dúvidas e percepções do paciente para alinhamento no próximo atendimento."
+              professionalCouncil={currentUser?.registrationNumber ? (currentUser.registrationType ? `${currentUser.registrationType}: ${currentUser.registrationNumber}` : `CRFa: ${currentUser.registrationNumber}`) : undefined}
+              moduleData={{ conducts: consultationConducts, treatmentPlanData: planForm }}
+              initialGuidelines={consultationConducts || undefined}
+              homeActivitiesText={planForm?.homeSchoolGuidance || undefined}
             />
           )}
           <ClinicalDraftRecoveryModal

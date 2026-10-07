@@ -2418,7 +2418,9 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
           patientName={selectedPatient?.full_name || 'Paciente'}
           moduleType="ZemdaNutri"
           professionalName={currentUser?.name}
+          professionalCouncil={currentUser?.registrationNumber ? (currentUser.registrationType ? `${currentUser.registrationType}: ${currentUser.registrationNumber}` : `CRN: ${currentUser.registrationNumber}`) : undefined}
           appointmentId={initialAppointmentId}
+          moduleData={planForm}
           initialGuidelines={planForm.generalGuidelines}
           mealPlanText={generatedMealPlanText}
         />

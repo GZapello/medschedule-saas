@@ -600,10 +600,16 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
             patientId={appointment.patient_id}
             patientName={appointment.patient_name || 'Paciente'}
             appointmentId={appointment.id}
-            professionalName={appointment.professional_name}
+            professionalName={appointment.professional_name || currentUser?.name}
             serviceName={appointment.service_name}
             moduleType={clinicalData?.moduleType}
-            initialGuidelines={clinicalData?.technicalNotes}
+            professionalCouncil={currentUser?.registrationNumber ? (currentUser.registrationType ? `${currentUser.registrationType}: ${currentUser.registrationNumber}` : `Registro: ${currentUser.registrationNumber}`) : undefined}
+            moduleData={clinicalData?.moduleData}
+            clinicalEvolution={clinicalData?.clinicalEvolution}
+            technicalNotes={clinicalData?.technicalNotes}
+            professionId={currentUser?.canonicalProfessionId || currentUser?.professionId}
+            practiceAreaIds={currentUser?.practiceAreaIds}
+            capabilities={currentUser?.capabilities}
           />
         )}
 
