@@ -83,8 +83,17 @@ function validate(kind: Kind, row: any) {
 }
 function movement(req: Request, row: any, delta: number) {
   if (!delta) return;
-  const item = db.prepare('SELECT * FROM inventory_items WHERE id = ? AND tenant_id = ? AND active = 1').get(row.product_id, req.tenantId) as any;
-  if (!item) fail('Selecione um produto ativo desta clínica.', 'productId');
+  const isRefund = delta > 0;
+  const item = isRefund
+    ? (db.prepare('SELECT * FROM inventory_items WHERE id = ? AND tenant_id = ?').get(row.product_id, req.tenantId) as any)
+    : (db.prepare('SELECT * FROM inventory_items WHERE id = ? AND tenant_id = ? AND active = 1').get(row.product_id, req.tenantId) as any);
+  if (!item) {
+    if (isRefund) {
+      fail('Item de estoque não encontrado nesta clínica para estorno.', 'productId');
+    } else {
+      fail('Selecione um produto ativo desta clínica.', 'productId');
+    }
+  }
   if (delta < 0 && row.unit !== item.unit) fail(`Utilize a unidade do estoque: ${item.unit}.`, 'unit');
   if (delta < 0 && Number(item.quantity) + delta < 0) fail('Estoque insuficiente para esta quantidade.', 'quantity');
   const next = Number(item.quantity) + delta;

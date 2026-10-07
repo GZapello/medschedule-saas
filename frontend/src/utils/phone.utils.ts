@@ -136,3 +136,58 @@ export function generateWhatsAppUrl(phone: string, message: string): string {
   const normalizedPhone = normalizePhoneWithDDI(phone);
   return `https://wa.me/${normalizedPhone}?text=${encodeURIComponent(message)}`;
 }
+
+/**
+ * Gera mensagem padronizada para solicitação manual de assinatura de termo/consentimento.
+ */
+export function buildConsentWhatsAppMessage(params: {
+  patientName: string;
+  clinicName: string;
+  linkUrl: string;
+  isGuardian?: boolean;
+  guardianName?: string;
+}): string {
+  const cleanPatient = (params.patientName || 'Paciente').trim();
+  const cleanClinic = (params.clinicName || 'Clínica').trim();
+  const cleanGuardian = (params.guardianName || 'Responsável').trim();
+  const link = (params.linkUrl || '').trim();
+
+  if (params.isGuardian) {
+    return (
+      `Olá, ${cleanGuardian}! 😊\n\n` +
+      `A ${cleanClinic} disponibilizou um termo/consentimento referente a ${cleanPatient} para sua leitura e assinatura.\n\n` +
+      `Acesse o link seguro:\n` +
+      `${link}\n\n` +
+      `— ${cleanClinic}`
+    );
+  }
+
+  return (
+    `Olá, ${cleanPatient}! 😊\n\n` +
+    `A ${cleanClinic} disponibilizou um termo/consentimento para sua leitura e assinatura.\n\n` +
+    `Acesse o link seguro abaixo:\n` +
+    `${link}\n\n` +
+    `O link é individual e deve ser utilizado somente pelo destinatário.\n\n` +
+    `— ${cleanClinic}`
+  );
+}
+
+/**
+ * Gera mensagem padronizada para contato manual de lembrete de retorno/serviço.
+ */
+export function buildServiceReminderWhatsAppMessage(params: {
+  patientName: string;
+  serviceName: string;
+  clinicName: string;
+}): string {
+  const cleanPatient = (params.patientName || 'Cliente').trim();
+  const cleanService = (params.serviceName || 'serviço').trim();
+  const cleanClinic = (params.clinicName || 'Clínica').trim();
+
+  return (
+    `Olá, ${cleanPatient}! 😊\n\n` +
+    `Estamos entrando em contato porque chegou o período recomendado para acompanhamento/retorno referente ao serviço ${cleanService}.\n\n` +
+    `Se desejar, podemos organizar seu próximo atendimento.\n\n` +
+    `— ${cleanClinic}`
+  );
+}

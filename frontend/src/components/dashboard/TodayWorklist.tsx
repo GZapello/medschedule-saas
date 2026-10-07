@@ -4,17 +4,21 @@ import { useToast } from '../../context/ToastContext';
 import { ApiClient } from '../../api/client';
 import { Clock, FileText, Stethoscope, AlertTriangle, PhoneCall, Check, X, Search, MessageCircle, Calendar } from 'lucide-react';
 import { ServiceReminder } from '../../types';
+import { UniversalWhatsAppModal } from '../common/UniversalWhatsAppModal';
+import { WhatsAppIcon } from '../common/WhatsAppReminderModal';
+import { buildServiceReminderWhatsAppMessage, isValidPhoneNumber } from '../../utils/phone.utils';
 
 export function TodayWorklist({ data, onNavigate, onPatient }: {
   data: any; onNavigate: (view: string) => void; onPatient: (id: string) => void;
 }) {
-  const { isClinicAdmin, hasCapability, hasPermission } = useAuth();
+  const { currentTenant, isClinicAdmin, hasCapability, hasPermission } = useAuth();
   const { showToast } = useToast();
   const canViewExams = isClinicAdmin || hasCapability('CORE_EXAMS_RECEIVED') || hasCapability('CORE_EXAM_REQUEST') || hasPermission('view_exams');
 
   const [localReminders, setLocalReminders] = useState<ServiceReminder[]>([]);
   const [postponingId, setPostponingId] = useState<string | null>(null);
   const [postponeDate, setPostponeDate] = useState<string>('');
+  const [whatsappReminder, setWhatsappReminder] = useState<ServiceReminder | null>(null);
 
   // Modal Ver Todos
   const [showAllModal, setShowAllModal] = useState<boolean>(false);
@@ -376,6 +380,22 @@ export function TodayWorklist({ data, onNavigate, onPatient }: {
                             Ver paciente
                           </button>
                           <div className="flex items-center gap-1">
+                            {(() => {
+                              const phone = row.patient_whatsapp || row.patient_phone;
+                              const hasPhone = isValidPhoneNumber(phone);
+                              return (
+                                <button
+                                  type="button"
+                                  disabled={!hasPhone}
+                                  onClick={() => setWhatsappReminder(row)}
+                                  className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-40 disabled:cursor-not-allowed px-2 py-0.5 rounded transition-colors cursor-pointer flex items-center gap-1"
+                                  title={!hasPhone ? "Paciente sem telefone/WhatsApp cadastrado" : "Contato por WhatsApp"}
+                                >
+                                  <WhatsAppIcon className="w-3 h-3 fill-emerald-600" />
+                                  <span>WhatsApp</span>
+                                </button>
+                              );
+                            })()}
                             <button
                               type="button"
                               onClick={() => {
@@ -461,6 +481,31 @@ export function TodayWorklist({ data, onNavigate, onPatient }: {
           </article>
         )}
       </section>
+
+      {/* Modal WhatsApp para Lembretes */}
+      {whatsappReminder && (
+        <UniversalWhatsAppModal
+          isOpen={Boolean(whatsappReminder)}
+          onClose={() => setWhatsappReminder(null)}
+          title="Contato por WhatsApp - Lembrete de Retorno"
+          subtitle="Contato com o paciente referente ao período recomendado de acompanhamento/retorno."
+          recipientName={whatsappReminder.patient_name || 'Paciente'}
+          phone={whatsappReminder.patient_whatsapp || whatsappReminder.patient_phone}
+          phoneErrorMessage="Paciente sem telefone/WhatsApp cadastrado."
+          contextItems={[
+            { label: 'Paciente', value: whatsappReminder.patient_name || 'Paciente' },
+            { label: 'Serviço', value: whatsappReminder.service_name || 'Consulta/Serviço' },
+            { label: 'Data Prevista', value: getReminderTiming(whatsappReminder.due_at).label || whatsappReminder.due_at }
+          ]}
+          defaultMessage={buildServiceReminderWhatsAppMessage({
+            patientName: whatsappReminder.patient_name || 'Cliente',
+            serviceName: whatsappReminder.service_name || 'serviço',
+            clinicName: currentTenant?.trade_name || currentTenant?.name || 'Clínica'
+          })}
+          confirmButtonText="Abrir no WhatsApp Web/App"
+          noticeText="O contato é manual. A abertura do WhatsApp NÃO marca este lembrete como concluído."
+        />
+      )}
 
       {/* Modal Completo: Todos os Lembretes de Contato */}
       {showAllModal && (
@@ -618,6 +663,22 @@ export function TodayWorklist({ data, onNavigate, onPatient }: {
                             </div>
                           ) : (
                             <>
+                              {(() => {
+                                const phone = row.patient_whatsapp || row.patient_phone;
+                                const hasPhone = isValidPhoneNumber(phone);
+                                return (
+                                  <button
+                                    type="button"
+                                    disabled={!hasPhone}
+                                    onClick={() => setWhatsappReminder(row)}
+                                    className="px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+                                    title={!hasPhone ? "Paciente sem telefone/WhatsApp cadastrado" : "Contato por WhatsApp"}
+                                  >
+                                    <WhatsAppIcon className="w-3.5 h-3.5 fill-emerald-600" />
+                                    <span>WhatsApp</span>
+                                  </button>
+                                );
+                              })()}
                               <button
                                 type="button"
                                 onClick={() => {

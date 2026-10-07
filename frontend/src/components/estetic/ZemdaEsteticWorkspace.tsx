@@ -44,7 +44,8 @@ import {
   ExternalLink,
   Lock,
   ChevronUp,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Loader2
 } from 'lucide-react';
 import { ApiClient } from '../../api/client';
 import { esteticPayload, loadEsteticPatient } from './estetic-api';
@@ -168,8 +169,25 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
   const [showComparison, setShowComparison] = useState(false);
   const [selectedAssessmentDetail, setSelectedAssessmentDetail] = useState<any | null>(null);
 
+interface EsteticPlanItemForm {
+  id?: string;
+  procedure_name: string;
+  target_region: string;
+  sessions_planned: number | '';
+  sessions_completed?: number;
+  recommended_interval_days: number | '';
+  priority: string;
+  status?: string;
+}
+
   // Formulário de Novo Plano
-  const [planForm, setPlanForm] = useState({
+  const [planForm, setPlanForm] = useState<{
+    title: string;
+    area: EsteticArea;
+    objectives: string;
+    notes: string;
+    items: EsteticPlanItemForm[];
+  }>({
     title: '',
     area: 'FACIAL' as EsteticArea,
     objectives: '',
@@ -178,9 +196,10 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
       {
         procedure_name: '',
         target_region: '',
-        sessions_planned: '' as number | '',
-        recommended_interval_days: '' as number | '',
-        priority: ''
+        sessions_planned: '',
+        recommended_interval_days: '',
+        priority: '',
+        status: 'PLANEJADO'
       }
     ]
   });
@@ -262,7 +281,8 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
     setEvolutionForm({ ...value.evolutionForm, area }); setReturnForm({ ...value.returnForm, area }); setPhotoForm({ ...value.photoForm, area });
   };
   const [editing, setEditing] = useState<{ kind: string; id: string } | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<{ kind: string; id: string } | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ kind: string; id: string; row?: any } | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [invalidField, setInvalidField] = useState('');
   const [savingRecord, setSavingRecord] = useState(false);
   const saveBusy = useRef(false);
@@ -328,7 +348,8 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
     if (editing.kind === 'photos') setPhotoForm({ ...initial.photoForm, area: activeArea });
     setEditing(null); setInvalidField('');
   };
-  const recordActions = (kind: string, row: any) => <div className="flex gap-2 text-xs" data-testid={`record-actions-${row.id}`}><button type="button" className="px-2 py-1 rounded-lg border bg-white" onClick={() => editRecord(kind, row)}>Editar</button><button type="button" className="px-2 py-1 rounded-lg border bg-white text-red-700" onClick={() => setPendingDelete({ kind, id: row.id })}>Excluir</button>{kind === 'returns' && row.status === 'AGENDADO' && <button type="button" className="px-2 py-1 rounded-lg border bg-white" onClick={async () => { try { await ApiClient.patch(`/v1/estetic/returns/${row.id}`, { status: 'CANCELADO' }); if (isCurrentClinicalContext()) await loadPatientData(selectedPatientId, activeArea); } catch (error: any) { showToast(error.message, 'error'); } }}>Cancelar retorno</button>}</div>;
+  const recordActions = (kind: string, row: any) => <div className="flex gap-2 text-xs" data-testid={`record-actions-${row.id}`}><button type="button" className="px-2 py-1 rounded-lg border bg-white" onClick={() => editRecord(kind, row)}>Editar</button><button type="button" className="px-2 py-1 rounded-lg border bg-white text-red-700" onClick={() => { setDeleteError(null); setPendingDelete({ kind, id: row.id, row }); }}>Excluir</button>{kind === 'returns' && row.status === 'AGENDADO' && <button type="button" className="px-2 py-1 rounded-lg border bg-white" onClick={async () => { try { await ApiClient.patch(`/v1/estetic/returns/${row.id}`, { status: 'CANCELADO' }); if (isCurrentClinicalContext()) await await refreshInventory();
+      loadPatientData(selectedPatientId, activeArea); } catch (error: any) { showToast(error.message, 'error'); } }}>Cancelar retorno</button>}</div>;
   useEffect(() => { setFinishAppointment(null); }, [selectedPatientId, initialAppointmentId]);
   const [appointmentCompleted, setAppointmentCompleted] = useState(false);
   const openingFinish = useRef(false);
@@ -385,6 +406,51 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
     }
     loadConfig();
   }, []);
+
+  // Atualiza saldo de estoque imediatamente
+  const refreshInventory = async () => {
+    try {
+      const res = await ApiClient.get<any>('/v1/estetic/config');
+      if (res?.inventory) {
+        setInventoryItems(res.inventory);
+      }
+    } catch (err) {
+      console.warn('[ZemdaEstetic] Falha ao atualizar estoque:', err);
+    }
+  };
+
+  // Remove procedimento recomendado do planejamento com validação de rastreabilidade
+  const handleRemovePlanItem = (idx: number) => {
+    const item = planForm.items[idx];
+    const hasExecution = Boolean(
+      item?.id && (
+        procedures.some(p => p.plan_item_id === item.id) ||
+        (item.sessions_completed !== undefined && Number(item.sessions_completed) > 0) ||
+        item.status === 'REALIZADO'
+      )
+    );
+
+    if (hasExecution) {
+      showToast(
+        'Este procedimento já possui execução registrada e não pode ser removido do histórico. Você pode cancelá-lo no planejamento.',
+        'info'
+      );
+      return;
+    }
+
+    const nextItems = planForm.items.filter((_, i) => i !== idx);
+    if (nextItems.length === 0) {
+      nextItems.push({
+        procedure_name: '',
+        target_region: '',
+        sessions_planned: '' as number | '',
+        recommended_interval_days: '' as number | '',
+        priority: '',
+        status: 'PLANEJADO'
+      });
+    }
+    setPlanForm({ ...planForm, items: nextItems });
+  };
 
   // Sincroniza área nos formulários quando a área ativa mudar
   useEffect(() => {
@@ -778,7 +844,156 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
         onCompleted={() => { setAppointmentCompleted(true); void autosave.clearDraft(); }}
         onFinished={() => { setFinishAppointment(null); onFinishConsultation?.(); }} />}
       {showComparison && <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"><div role="dialog" aria-label="Comparação de avaliações" className="bg-white rounded-2xl p-5 max-h-[85vh] overflow-auto w-full max-w-3xl"><button type="button" className="mb-3 border rounded-lg p-2" onClick={() => setShowComparison(false)}>Fechar comparação</button><table className="w-full text-xs"><thead><tr><th>Campo</th>{comparisonIds.map(id => <th key={id}>{assessments.find(row => row.id === id)?.assessment_date}</th>)}</tr></thead><tbody>{Object.keys(defaults.current.assessmentForm).filter(key => key !== 'assessmentDate').map(key => <tr key={key}><th className="text-left border p-2">{assessmentLabels[key] || ({ complaint: 'Queixa principal', expectations: 'Expectativas' } as Record<string,string>)[key] || key}</th>{comparisonIds.map(id => <td key={id} className="border p-2">{formatAssessmentValue(assessments.find(row => row.id === id)?.specificData?.[key] ?? '') || 'Não informado'}</td>)}</tr>)}</tbody></table></div></div>}
-      {pendingDelete && <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center"><div role="dialog" aria-label="Excluir registro" className="bg-white p-6 rounded-2xl space-y-4"><p>Excluir este registro? {pendingDelete.kind === 'procedures' && 'A baixa de estoque será estornada.'}</p><div className="flex gap-3"><button type="button" onClick={() => setPendingDelete(null)}>Voltar</button><button type="button" disabled={savingRecord} onClick={async () => { setSavingRecord(true); try { await ApiClient.delete(`/v1/estetic/${pendingDelete.kind}/${pendingDelete.id}`); if (isCurrentClinicalContext()) { if (pendingDelete.kind === 'assessments' && recordIds[activeArea]?.assessments === pendingDelete.id) { setAssessmentForm(structuredClone(defaults.current.assessmentForm)); setEditing(null); } setRecordIds(previous => ({ ...previous, [activeArea]: Object.fromEntries(Object.entries(previous[activeArea] || {}).filter(([, id]) => id !== pendingDelete.id)) })); setPendingDelete(null); await loadPatientData(selectedPatientId, activeArea); showToast('Registro excluído.', 'success'); } } catch (error: any) { showToast(error.message, 'error'); } finally { setSavingRecord(false); } }}>Confirmar exclusão</button></div></div></div>}
+      {pendingDelete && (() => {
+        const { kind, id } = pendingDelete;
+        const targetRow = pendingDelete.row || (() => {
+          if (kind === 'assessments') return assessments.find(r => r.id === id);
+          if (kind === 'plans') return plans.find(r => r.id === id);
+          if (kind === 'procedures') return procedures.find(r => r.id === id);
+          if (kind === 'evolutions') return evolutions.find(r => r.id === id);
+          if (kind === 'returns') return returnsList.find(r => r.id === id);
+          if (kind === 'photos') return photos.find(r => r.id === id);
+          return null;
+        })();
+
+        const titles: Record<string, string> = {
+          assessments: 'Excluir avaliação?',
+          plans: 'Excluir plano de tratamento?',
+          procedures: 'Excluir procedimento?',
+          evolutions: 'Excluir evolução?',
+          returns: 'Excluir retorno?',
+          photos: 'Excluir fotografia?'
+        };
+
+        const subtitles: Record<string, string> = {
+          assessments: 'Tem certeza que deseja excluir esta avaliação clínica?',
+          plans: 'Tem certeza que deseja excluir este plano de tratamento?',
+          procedures: 'Tem certeza que deseja excluir este procedimento realizado?',
+          evolutions: 'Tem certeza que deseja excluir esta evolução clínica?',
+          returns: 'Tem certeza que deseja excluir este retorno?',
+          photos: 'Tem certeza que deseja excluir esta fotografia clínica?'
+        };
+
+        const buttonLabels: Record<string, string> = {
+          assessments: 'Excluir avaliação',
+          plans: 'Excluir plano de tratamento',
+          procedures: 'Excluir procedimento',
+          evolutions: 'Excluir evolução',
+          returns: 'Excluir retorno',
+          photos: 'Excluir fotografia'
+        };
+
+        const title = titles[kind] || 'Excluir registro?';
+        const subtitle = subtitles[kind] || 'Tem certeza que deseja excluir este registro?';
+        const buttonLabel = buttonLabels[kind] || 'Excluir registro';
+        const hasInventoryDeduction = kind === 'procedures' && Boolean(targetRow?.inventory_deducted);
+        const deductedQty = targetRow?.deducted_quantity || targetRow?.quantity || 1;
+        const deductedUnit = targetRow?.unit || 'un';
+
+        return (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={title}
+            className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150"
+          >
+            <div className="bg-white rounded-2xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-slate-200 space-y-4">
+              <div className="flex items-start gap-3.5">
+                <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-base font-bold text-slate-900 leading-snug">
+                    {title}
+                  </h3>
+                  <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                    {subtitle}
+                  </p>
+                </div>
+              </div>
+
+              {hasInventoryDeduction && (
+                <div className="bg-amber-50 border border-amber-200 text-amber-900 p-3 rounded-xl text-xs space-y-1">
+                  <div className="flex items-center gap-1.5 font-bold text-amber-800">
+                    <Package className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>Devolução de estoque automática</span>
+                  </div>
+                  <p className="leading-relaxed">
+                    Este procedimento realizou baixa de estoque. Ao confirmar, <strong>{deductedQty} {deductedUnit}</strong> do produto serão devolvidos automaticamente ao estoque.
+                  </p>
+                </div>
+              )}
+
+              <div className="text-[11px] text-slate-500 bg-slate-50 border border-slate-200/70 p-2.5 rounded-xl leading-relaxed">
+                ℹ️ O registro será removido desta área, mas a trilha clínica será preservada quando aplicável.
+              </div>
+
+              {deleteError && (
+                <div className="bg-rose-50 border border-rose-200 text-rose-800 p-3 rounded-xl text-xs flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <strong className="block font-bold">Não foi possível excluir:</strong>
+                    <p className="mt-0.5">{deleteError}</p>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  disabled={savingRecord}
+                  onClick={() => { setPendingDelete(null); setDeleteError(null); }}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={savingRecord}
+                  onClick={async () => {
+                    setSavingRecord(true);
+                    setDeleteError(null);
+                    try {
+                      await ApiClient.delete(`/v1/estetic/${kind}/${id}`);
+                      if (isCurrentClinicalContext()) {
+                        if (kind === 'assessments' && recordIds[activeArea]?.assessments === id) {
+                          setAssessmentForm(structuredClone(defaults.current.assessmentForm));
+                          setEditing(null);
+                        }
+                        setRecordIds(previous => ({
+                          ...previous,
+                          [activeArea]: Object.fromEntries(
+                            Object.entries(previous[activeArea] || {}).filter(([, rowId]) => rowId !== id)
+                          )
+                        }));
+                        setPendingDelete(null);
+                        await Promise.all([refreshInventory(), loadPatientData(selectedPatientId, activeArea)]);
+                        showToast('Registro excluído com sucesso.', 'success');
+                      }
+                    } catch (error: any) {
+                      const msg = error.message || 'Erro ao excluir registro.';
+                      setDeleteError(msg);
+                      showToast(msg, 'error');
+                    } finally {
+                      setSavingRecord(false);
+                    }
+                  }}
+                  className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-50 rounded-xl shadow-xs transition-colors cursor-pointer"
+                >
+                  {savingRecord ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Excluindo...</span>
+                    </>
+                  ) : (
+                    <span>{buttonLabel}</span>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
       {dataError && <div role="alert" className="m-4 p-3 rounded-xl bg-red-50 text-red-800">{dataError} <button type="button" onClick={() => loadPatientData(selectedPatientId, activeArea)}>Tentar novamente</button></div>}
       {/* 1. CABEÇALHO PROFISSIONAL COM SELETOR DE ÁREA E AÇÕES RÁPIDAS */}
       <ProfessionalModuleHeader
@@ -2571,7 +2786,63 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                 </div>
 
                 {planForm.items.map((it, idx) => (
-                  <div key={idx} className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                  <div key={idx} className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2 relative">
+                    <div className="flex items-center justify-between pb-1 border-b border-slate-200/60">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">
+                          Procedimento {idx + 1}
+                        </span>
+                        {it.status === 'CANCELADO' && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">
+                            CANCELADO
+                          </span>
+                        )}
+                        {it.status === 'REALIZADO' && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                            REALIZADO
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        {it.id && it.status !== 'CANCELADO' && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const next = [...planForm.items];
+                              next[idx] = { ...next[idx], status: 'CANCELADO' };
+                              setPlanForm({ ...planForm, items: next });
+                            }}
+                            className="text-[11px] text-slate-500 hover:text-amber-700 font-medium px-1.5 py-0.5 rounded hover:bg-amber-50 cursor-pointer"
+                            title="Cancelar este procedimento no planejamento"
+                          >
+                            Cancelar no plano
+                          </button>
+                        )}
+                        {it.id && it.status === 'CANCELADO' && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const next = [...planForm.items];
+                              next[idx] = { ...next[idx], status: 'PLANEJADO' };
+                              setPlanForm({ ...planForm, items: next });
+                            }}
+                            className="text-[11px] text-teal-700 hover:text-teal-900 font-semibold px-1.5 py-0.5 rounded hover:bg-teal-50 cursor-pointer"
+                            title="Reativar procedimento no planejamento"
+                          >
+                            Reativar
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleRemovePlanItem(idx)}
+                          className="text-slate-400 hover:text-rose-600 p-1 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer flex items-center gap-1 text-[11px] font-medium"
+                          title="Remover procedimento"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">Remover</span>
+                        </button>
+                      </div>
+                    </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
                         <span className="font-semibold text-slate-600 block mb-1">Procedimento</span>

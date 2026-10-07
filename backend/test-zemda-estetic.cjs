@@ -463,6 +463,66 @@ assert.equal(callEstetic('createProcedure', {...input, clientRequestId:'audit-ro
 db.exec('DROP TRIGGER fail_estetic_test');
 assert.equal(callEstetic('deleteProcedure', {}, {id:created.body.id}).statusCode,200); assert.equal(quantityBefore(),stockBefore);
 assert.equal(callEstetic('deleteProcedure', {}, {id:created.body.id}).statusCode,404); assert.equal(quantityBefore(),stockBefore);
+// --- Teste específico: Produto desativado pós-baixa e proteção de remoção de itens ---
+const procForDeactivated = callEstetic('createProcedure', { ...input, clientRequestId: 'deactivated-prod-test', quantity: 4 });
+assert.equal(procForDeactivated.statusCode, 201);
+assert.equal(quantityBefore(), stockBefore - 4);
+
+// Desativa o produto no estoque
+db.prepare('UPDATE inventory_items SET active = 0 WHERE id = ?').run(itemId);
+
+// Nova baixa com produto desativado DEVE falhar (400)
+const blockedNewDeduction = callEstetic('createProcedure', { ...input, clientRequestId: 'blocked-new-inactive', quantity: 1 });
+assert.equal(blockedNewDeduction.statusCode, 400);
+
+// Estorno ao excluir procedimento realizado cujo produto foi desativado DEVE funcionar perfeitamente
+const refundDeactivated = callEstetic('deleteProcedure', {}, { id: procForDeactivated.body.id });
+assert.equal(refundDeactivated.statusCode, 200);
+assert.equal(quantityBefore(), stockBefore);
+
+// Excluir novamente deve retornar 404 sem duplicar estorno
+assert.equal(callEstetic('deleteProcedure', {}, { id: procForDeactivated.body.id }).statusCode, 404);
+assert.equal(quantityBefore(), stockBefore);
+
+// Reativa o produto para os testes seguintes
+db.prepare('UPDATE inventory_items SET active = 1 WHERE id = ?').run(itemId);
+
+// Teste de integridade de itens do planejamento:
+const testPlan = callEstetic('createPlan', {
+  patientId: patientId1,
+  area: 'FACIAL',
+  title: 'Plano com Procedimento Vinculado',
+  items: [
+    { id: 'item-exec-1', procedure_name: 'Proc 1' },
+    { id: 'item-free-2', procedure_name: 'Proc 2' }
+  ]
+});
+assert.equal(testPlan.statusCode, 201);
+const testPlanId = testPlan.body.id;
+
+// Vincula um procedimento realizado ao item-exec-1
+const procLinkedTest = callEstetic('createProcedure', {
+  patientId: patientId1,
+  area: 'FACIAL',
+  procedureName: 'Proc 1',
+  region: 'Fronte',
+  planId: testPlanId,
+  planItemId: 'item-exec-1',
+  datePerformed: '2026-10-01'
+});
+assert.equal(procLinkedTest.statusCode, 201);
+
+// Tentar remover item-exec-1 do plano DEVE falhar (400)
+const failRemoveExec = callEstetic('updatePlan', {
+  items: [{ id: 'item-free-2', procedure_name: 'Proc 2' }]
+}, { id: testPlanId });
+assert.equal(failRemoveExec.statusCode, 400);
+
+// Remover item-free-2 (que não tem procedimento executado) DEVE suceder (200)
+const okRemoveFree = callEstetic('updatePlan', {
+  items: [{ id: 'item-exec-1', procedure_name: 'Proc 1' }]
+}, { id: testPlanId });
+assert.equal(okRemoveFree.statusCode, 200);
 const scheduled = callEstetic('createReturn',{patientId:patientId1,area:'FACIAL',scheduledDate:'2026-11-01',status:'AGENDADO'}); assert.equal(scheduled.statusCode,201);
 assert.equal(callEstetic('updateReturn',{status:'COMPARECEU',actualDate:'2026-11-01',returnAssessment:'Reavaliação'}, {id:scheduled.body.id}).statusCode,200);
 assert.equal(db.prepare('SELECT actual_date FROM estetic_returns WHERE id=?').get(scheduled.body.id).actual_date,'2026-11-01');
@@ -481,6 +541,6 @@ assert.equal(callEstetic('deleteAssessment',{}, {id:corporal.body.id},{},userDen
 const photoBody = {patientId:patientId1,area:'FACIAL',fileUrl:'https://example.test/synthetic.png',photoType:'ANTES',photoDate:'2026-10-01'};
 const duplicatePhotoA=callEstetic('createPhoto',photoBody),duplicatePhotoB=callEstetic('createPhoto',photoBody); assert.equal(duplicatePhotoA.body.id,duplicatePhotoB.body.id);
 assert.equal(callEstetic('createEvolution',{patientId:patientId2,area:'FACIAL',evolutionText:'Sem mistura',procedureId:procId}).statusCode,404);
-const sameClinicPatient = 'audit-second-patient'; db.prepare("INSERT INTO patients(id,tenant_id,full_name,phone) VALUES(?,?,?,?)").run(sameClinicPatient,t1,'Segundo paciente da auditoria','11999990002');
+const sameClinicPatient = 'audit-second-patient-' + Date.now(); db.prepare("INSERT OR REPLACE INTO patients(id,tenant_id,full_name,phone) VALUES(?,?,?,?)").run(sameClinicPatient,t1,'Segundo paciente da auditoria','11999990002');
 assert.equal(callEstetic('createEvolution',{patientId:sameClinicPatient,area:'FACIAL',evolutionText:'Sem mistura',procedureId:procId}).statusCode,400);
 console.log('PASS: recepção, SuperAdmin real, leituras sem filtro de área, exclusão não autorizada, fotos duplicadas e vínculos entre pacientes.');

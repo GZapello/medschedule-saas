@@ -7,11 +7,14 @@ import { FileText,Plus,Copy,ShieldCheck,ExternalLink,Download } from 'lucide-rea
 import { consentDate,downloadConsentPdf } from './consent-api';
 import './consents.css';
 import { PublicConsentPage } from './PublicConsentPage';
+import { UniversalWhatsAppModal } from '../common/UniversalWhatsAppModal';
+import { WhatsAppIcon } from '../common/WhatsAppReminderModal';
+import { buildConsentWhatsAppMessage, isValidPhoneNumber } from '../../utils/phone.utils';
 
 const emptyTemplate={title:'',content:'',module:'general',professionId:'',serviceId:'',procedureName:'',required:false};
 const emptyGuardian={name:'',cpf:'',relationship:'',phone:'',email:''};
 export function PatientConsentsPanel({patientId,patient,guardians=[]}:{patientId:string;patient?:any;guardians?:any[]}) {
-  const {currentUser}=useAuth(),{showToast}=useToast();
+  const {currentUser, currentTenant}=useAuth(),{showToast}=useToast();
   const [view,setView]=useState<'documents'|'library'>('documents');
   const [rows,setRows]=useState<any[]>([]),[templates,setTemplates]=useState<any[]>([]),[services,setServices]=useState<any[]>([]);
   const [settings,setSettings]=useState({auth_level:'recommended',link_hours:168,photo_requested:0,profession_id:'',profession_name:''}),[loading,setLoading]=useState(true),[error,setError]=useState(''),[busy,setBusy]=useState(false);
@@ -22,7 +25,36 @@ export function PatientConsentsPanel({patientId,patient,guardians=[]}:{patientId
   const [photoRequested,setPhotoRequested]=useState(false),[evidence,setEvidence]=useState<any>(null);
   const [signerEmail,setSignerEmail]=useState(''),[addingEmail,setAddingEmail]=useState(false);
   const [cancelId,setCancelId]=useState<string|null>(null),[reason,setReason]=useState(''),[legacy,setLegacy]=useState<any>(null);
+  const [whatsappData, setWhatsappData] = useState<{ isOpen: boolean; recipientName: string; phone?: string; templateTitle: string; expiresAt?: string; defaultMessage: string } | null>(null);
   const notify=()=>window.dispatchEvent(new CustomEvent('zemda-consents-changed',{detail:{patientId}}));
+  const openWhatsAppModal = (linkData: any, templateId?: string, row?: any) => {
+    const tmpl = templates.find(t => t.id === templateId) || preview || (row ? { title: row.title } : null);
+    const isGuard = useGuardian || Boolean(row?.signer?.kind === 'guardian');
+    const recipient = isGuard
+      ? (guardian.name || row?.signer?.name || 'Responsável legal')
+      : (patient?.full_name || patient?.name || 'Paciente');
+    const targetPhone = isGuard
+      ? (guardian.phone || row?.signer?.phone)
+      : (patient?.whatsapp || patient?.phone);
+    const clinic = currentTenant?.trade_name || currentTenant?.name || 'Clínica';
+
+    const msg = buildConsentWhatsAppMessage({
+      patientName: patient?.full_name || patient?.name || 'Paciente',
+      clinicName: clinic,
+      linkUrl: linkData.url,
+      isGuardian: isGuard,
+      guardianName: recipient
+    });
+
+    setWhatsappData({
+      isOpen: true,
+      recipientName: recipient,
+      phone: targetPhone,
+      templateTitle: tmpl?.title || 'Termo de Consentimento',
+      expiresAt: linkData.expiresAt,
+      defaultMessage: msg
+    });
+  };
   const load=async()=>{
     const [r,t,s]=await Promise.all([ApiClient.get<any[]>(`/v1/consents/patients/${patientId}`),ApiClient.get<any[]>('/v1/consents/templates'),ApiClient.get<any>('/v1/consents/settings')]);
     setRows(r);setTemplates(t);setSettings(s);
@@ -56,8 +88,9 @@ export function PatientConsentsPanel({patientId,patient,guardians=[]}:{patientId
     if(action==='device') setActiveToken(r.url.split('/').pop());
     if(action==='copy') {await navigator.clipboard.writeText(r.url);showToast('Link copiado.','success');}
     if(action==='send') {r=await ApiClient.post<any>(`/v1/consents/${r.id}/send`,{channel});setLink(r);await load();showToast('Link enviado ao contato do assinante.','success');}
+    if(action==='whatsapp') { openWhatsAppModal(r, selectedTemplate); }
   });
-  const renew=(row:any,action='qr')=>run(async()=>{const next=await ApiClient.post<any>(`/v1/consents/${row.id}/link`);setLink(next);setMode(action);if(action==='copy')await navigator.clipboard.writeText(next.url);if(action==='device')setActiveToken(next.url.split('/').pop());notify();});
+  const renew=(row:any,action='qr')=>run(async()=>{const next=await ApiClient.post<any>(`/v1/consents/${row.id}/link`);setLink(next);setMode(action);if(action==='copy')await navigator.clipboard.writeText(next.url);if(action==='device')setActiveToken(next.url.split('/').pop());if(action==='whatsapp')openWhatsAppModal(next, row.template_id || row.templateId, row);notify();});
   const resend=(row:any)=>run(async()=>{setLink(await ApiClient.post(`/v1/consents/${row.id}/send`,{channel}));await load();notify();showToast('Link reenviado.','success');});
   const cancel=()=>run(async()=>{
     const row=rows.find(r=>r.id===cancelId);
@@ -80,6 +113,25 @@ export function PatientConsentsPanel({patientId,patient,guardians=[]}:{patientId
   const statuses:Record<string,{label:string;style:string}>={signed:{label:'✓ Assinado',style:'text-teal-800 bg-teal-50'},pending:{label:'⏳ Aguardando assinatura',style:'text-amber-800 bg-amber-50'},needs_signature:{label:'⚠ Nova assinatura necessária',style:'text-orange-800 bg-orange-50'},cancelled:{label:'✕ Cancelado/invalidado',style:'text-slate-600 bg-slate-100'}};
   if(loading)return <p role="status" className="p-4 text-sm text-slate-500">Carregando termos...</p>;
   return <section className="space-y-5">
+    {whatsappData?.isOpen && (
+      <UniversalWhatsAppModal
+        isOpen={whatsappData.isOpen}
+        onClose={() => setWhatsappData(null)}
+        title="Solicitar Assinatura por WhatsApp"
+        subtitle="Confirmação e abertura manual via WhatsApp Web/App."
+        recipientName={whatsappData.recipientName}
+        phone={whatsappData.phone}
+        phoneErrorMessage="Paciente sem telefone/WhatsApp cadastrado."
+        contextItems={[
+          { label: 'Documento', value: whatsappData.templateTitle },
+          { label: 'Destinatário', value: whatsappData.recipientName },
+          { label: 'Validade', value: whatsappData.expiresAt ? consentDate(whatsappData.expiresAt) : '7 dias' }
+        ]}
+        defaultMessage={whatsappData.defaultMessage}
+        confirmButtonText="Abrir no WhatsApp Web/App"
+        noticeText="O link é seguro e de uso individual. O documento permanecerá aguardando assinatura até que o destinatário conclua."
+      />
+    )}
     {activeToken&&<div role="dialog" aria-modal="true" aria-label="Assinar termo" className="fixed inset-0 z-[10001] overflow-y-auto bg-slate-50"><div className="sticky top-0 z-10 bg-white border-b p-3"><button type="button" className="consent-secondary" onClick={()=>{setActiveToken(null);void run(load);notify();}}>Voltar aos termos</button></div><PublicConsentPage token={activeToken}/></div>}
     {evidence&&<aside className="border rounded-xl p-4 space-y-3"><h3 className="font-bold">Evidências da assinatura</h3><p>Assinante: {evidence.evidence.signer.name} · {consentDate(evidence.evidence.signedAt)}</p><img src={evidence.signature} alt="Assinatura registrada" className="max-w-xs"/>{evidence.photo&&<><p>Registro fotográfico realizado no momento da assinatura</p><img src={evidence.photo} alt="Foto da assinatura" className="max-w-xs rounded-lg"/></>}<button className="consent-secondary" onClick={()=>setEvidence(null)}>Fechar evidências</button></aside>}<header className="flex flex-wrap justify-between gap-3"><div><h2 className="text-xl font-bold text-slate-900 flex gap-2 items-center"><ShieldCheck className="w-5 h-5 text-teal-700"/>Termos &amp; Consentimentos</h2><p className="text-sm text-slate-500 mt-1">Biblioteca compartilhada por todas as áreas da clínica.</p></div><button className="consent-primary" disabled={busy} onClick={()=>startRequest()}><Plus className="w-4 h-4"/>Solicitar assinatura</button></header>
     <nav aria-label="Termos e modelos" className="flex flex-wrap gap-2"><button className={`consent-secondary ${view==='documents'?'!border-teal-600 !text-teal-800':''}`} onClick={()=>setView('documents')}>Termos do paciente</button><button className={`consent-secondary ${view==='library'?'!border-teal-600 !text-teal-800':''}`} onClick={()=>setView('library')}>Biblioteca de termos</button><button className="consent-secondary" disabled={busy} onClick={()=>run(load)}>Atualizar</button></nav>
@@ -87,7 +139,7 @@ export function PatientConsentsPanel({patientId,patient,guardians=[]}:{patientId
     {link&&<aside className="bg-teal-50 border border-teal-200 p-4 rounded-xl space-y-3">
       <div className="flex justify-between gap-3"><h3 className="font-semibold text-teal-900">Link seguro de assinatura</h3><button onClick={()=>setLink(null)} className="consent-secondary">Fechar</button></div>
       <p className="text-xs text-slate-600">Válido até {consentDate(link.expiresAt)}. O link encerra após a assinatura. Um reenvio substitui o link anterior.</p>
-      <div className="flex flex-wrap gap-2"><a href={link.url} target="_blank" rel="noreferrer" className="consent-primary"><ExternalLink className="w-4 h-4"/>Assinar neste dispositivo</a><button className="consent-secondary" onClick={()=>run(async()=>{await navigator.clipboard.writeText(link.url);showToast('Link copiado.','success');})}><Copy className="w-4 h-4"/>Copiar link</button></div>
+      <div className="flex flex-wrap gap-2"><a href={link.url} target="_blank" rel="noreferrer" className="consent-primary"><ExternalLink className="w-4 h-4"/>Assinar neste dispositivo</a><button className="consent-secondary" onClick={()=>run(async()=>{await navigator.clipboard.writeText(link.url);showToast('Link copiado.','success');})}><Copy className="w-4 h-4"/>Copiar link</button><button type="button" className="consent-secondary flex items-center gap-1.5" onClick={()=>openWhatsAppModal(link, selectedTemplate)}><WhatsAppIcon className="w-3.5 h-3.5 fill-emerald-600" />WhatsApp</button></div>
       <details open={mode==='qr'}><summary className="cursor-pointer text-sm font-semibold text-teal-800">Mostrar QR Code</summary><img src={link.qrCode} alt="QR Code para assinar este termo" className="w-48 mt-3"/></details>
       <div className="flex flex-wrap gap-2"><button disabled={busy} className="consent-secondary" onClick={()=>resend({id:link.id})}>Enviar por e-mail</button></div>
     </aside>}
@@ -100,7 +152,18 @@ export function PatientConsentsPanel({patientId,patient,guardians=[]}:{patientId
       {useGuardian&&!guardian.email&&<p className="text-sm text-amber-800">Responsável legal sem e-mail cadastrado. Adicione o e-mail no campo abaixo para continuar. <button type="button" className="consent-secondary" onClick={()=>document.getElementById('consent-guardian-email')?.focus()}>Adicionar e-mail</button></p>}
       {useGuardian&&<fieldset className="grid sm:grid-cols-2 gap-3"><legend className="text-sm font-semibold mb-2">Responsável legal</legend>{([{key:'name',label:'Nome do responsável',type:'text'},{key:'cpf',label:'CPF',type:'text'},{key:'relationship',label:'Parentesco',type:'text'},{key:'phone',label:'Telefone',type:'tel'},{key:'email',label:'E-mail',type:'email'}] as const).map(f=><label key={f.key} className="text-sm">{f.label}<input required id={f.key==='email'?'consent-guardian-email':undefined} className="consent-field mt-1" type={f.type} maxLength={f.key==='email'?254:180} value={guardian[f.key]} onChange={e=>setGuardian(g=>({...g,[f.key]:e.target.value}))}/></label>)}</fieldset>}
       <label className="flex gap-2 text-sm"><input type="checkbox" checked={photoRequested} onChange={e=>setPhotoRequested(e.target.checked)}/>Solicitar foto no momento da assinatura</label><p className="text-xs text-slate-500">Opcional para o assinante. Esta escolha vale para esta nova solicitação.</p>
-      <div className="flex flex-wrap gap-2">{[['device','Assinar agora'],['copy','Copiar link'],['send','Enviar por e-mail'],['qr','QR Code']].map(([value,label])=><button key={value} value={value} type="submit" className={value==='device'?'consent-primary':'consent-secondary'} disabled={busy||!selectedTemplate}>{label}</button>)}<button type="button" className="consent-secondary" disabled={busy} onClick={()=>setRequesting(false)}>Voltar</button></div>{busy&&<p role="status">Preparando solicitação...</p>}
+      <div className="flex flex-wrap gap-2">{(()=>{
+        const targetPhone = useGuardian ? (guardian.phone) : (patient?.whatsapp || patient?.phone);
+        const hasPhone = isValidPhoneNumber(targetPhone);
+        return (<>
+          {[['device','Assinar agora'],['copy','Copiar link'],['send','Enviar por e-mail'],['qr','QR Code']].map(([value,label])=><button key={value} value={value} type="submit" className={value==='device'?'consent-primary':'consent-secondary'} disabled={busy||!selectedTemplate}>{label}</button>)}
+          <button key="whatsapp" value="whatsapp" type="submit" className="consent-secondary flex items-center gap-1.5" disabled={busy||!selectedTemplate||!hasPhone} title={!hasPhone ? 'Paciente sem telefone/WhatsApp cadastrado.' : 'Enviar pelo WhatsApp'}>
+            <WhatsAppIcon className="w-3.5 h-3.5 fill-emerald-600" />
+            <span>WhatsApp</span>
+          </button>
+          {!hasPhone && <span className="text-[11px] text-amber-700 self-center">Paciente sem telefone/WhatsApp cadastrado.</span>}
+        </>);
+      })()}<button type="button" className="consent-secondary" disabled={busy} onClick={()=>setRequesting(false)}>Voltar</button></div>{busy&&<p role="status">Preparando solicitação...</p>}
     </form>}
     {view==='library'?<div className="space-y-4">
       <div className="flex flex-wrap gap-3"><select className="consent-field !w-auto" aria-label="Filtrar módulo" value={moduleFilter} onChange={e=>setModuleFilter(e.target.value)}><option value="">Todas as áreas</option>{Array.from(new Set(templates.map(t=>t.module))).map(m=><option key={m} value={m}>{m==='general'?'Multidisciplinar':m}</option>)}</select>{currentUser?.role!=='receptionist'&&<button className="consent-secondary" disabled={busy} onClick={()=>{setEditingId(null);setEditor({...emptyTemplate});}}>Criar termo próprio</button>}</div>
@@ -112,7 +175,7 @@ export function PatientConsentsPanel({patientId,patient,guardians=[]}:{patientId
       {rows.map(row=><article key={row.id} className="bg-white border border-slate-200 rounded-xl p-4 space-y-3"><div className="flex flex-wrap items-start justify-between gap-2"><h3 className="font-semibold text-sm flex gap-2"><FileText className="w-4 h-4 text-teal-700 shrink-0"/>{row.title}</h3><span className={`text-xs px-2 py-1 rounded-lg font-semibold ${statuses[row.status].style}`}>{row.status==='cancelled'?(row.signedAt?'✕ Invalidado':'✕ Cancelado'):statuses[row.status].label}</span></div><dl className="grid sm:grid-cols-2 gap-2 text-xs text-slate-600"><div><dt className="font-medium">Paciente</dt><dd>{row.patient||patient?.full_name||'—'}</dd></div><div><dt className="font-medium">Área / profissão</dt><dd>{row.module||'Multidisciplinar'} · {row.profession||'—'}</dd></div><div><dt className="font-medium">Solicitação</dt><dd>{consentDate(row.createdAt)}</dd></div><div><dt className="font-medium">Versão</dt><dd>{row.version}{row.legacy?' · Registro anterior':''}</dd></div><div><dt className="font-medium">Envio</dt><dd>{consentDate(row.sentAt)}</dd></div><div><dt className="font-medium">Assinatura</dt><dd>{consentDate(row.signedAt)}</dd></div><div><dt className="font-medium">Assinante</dt><dd>{row.signer?.name||'—'}{row.signer?.kind==='guardian'?' (responsável legal)':''}</dd></div><div><dt className="font-medium">Profissional solicitante</dt><dd>{row.professional||'—'}</dd></div><div><dt className="font-medium">Autenticação</dt><dd>{row.authLabel||'—'}</dd></div></dl>
       {!row.signedAt&&row.expiresAt&&Date.parse(row.expiresAt)<Date.now()&&<p className="text-xs text-amber-800">Link expirado. Gere outro link para este documento.</p>}
       {row.reason&&<p className="text-xs text-slate-500">Motivo do cancelamento: {row.reason}</p>}
-      <div className="flex flex-wrap gap-2">{row.signatureId&&<button className="consent-secondary" disabled={busy} onClick={()=>run(async()=>{setEvidence(await ApiClient.get(`/v1/consents/${row.id}/document`));})}>Ver evidências</button>}{row.signatureId&&<button className="consent-secondary" disabled={busy} onClick={()=>run(()=>downloadConsentPdf(row.id,true))}>Visualizar / imprimir</button>}{row.signatureId&&<button className="consent-secondary" disabled={busy} onClick={()=>run(()=>downloadConsentPdf(row.id))}><Download className="w-4 h-4"/>PDF / imprimir</button>}{row.legacy&&<button className="consent-secondary" disabled={busy} onClick={()=>openLegacy(row.id)}>Visualizar registro anterior</button>}{!row.legacy&&row.status!=='cancelled'&&<>{!row.signedAt&&row.status==='pending'&&<><button className="consent-secondary" disabled={busy} onClick={()=>renew(row,'device')}>Abrir</button><button className="consent-secondary" disabled={busy} onClick={()=>renew(row,'copy')}>Copiar link</button><button className="consent-secondary" disabled={busy} onClick={()=>renew(row,'qr')}>QR Code</button><button className="consent-secondary" disabled={busy} onClick={()=>resend(row)}>Reenviar e-mail</button></>}{row.status==='needs_signature'&&<button className="consent-secondary" disabled={busy} onClick={()=>startRequest(row.templateId)}>Solicitar versão atual</button>}</>}{row.status!=='cancelled'&&(row.signedAt?currentUser?.role!=='receptionist':true)&&<button className="consent-secondary" disabled={busy} onClick={()=>{setCancelId(row.id);setReason('');}}>{row.signedAt?'Invalidar termo':'Cancelar solicitação'}</button>}</div>
+      <div className="flex flex-wrap gap-2">{row.signatureId&&<button className="consent-secondary" disabled={busy} onClick={()=>run(async()=>{setEvidence(await ApiClient.get(`/v1/consents/${row.id}/document`));})}>Ver evidências</button>}{row.signatureId&&<button className="consent-secondary" disabled={busy} onClick={()=>run(()=>downloadConsentPdf(row.id,true))}>Visualizar / imprimir</button>}{row.signatureId&&<button className="consent-secondary" disabled={busy} onClick={()=>run(()=>downloadConsentPdf(row.id))}><Download className="w-4 h-4"/>PDF / imprimir</button>}{row.legacy&&<button className="consent-secondary" disabled={busy} onClick={()=>openLegacy(row.id)}>Visualizar registro anterior</button>}{!row.legacy&&row.status!=='cancelled'&&<>{!row.signedAt&&row.status==='pending'&&<><button className="consent-secondary" disabled={busy} onClick={()=>renew(row,'device')}>Abrir</button><button className="consent-secondary" disabled={busy} onClick={()=>renew(row,'copy')}>Copiar link</button><button className="consent-secondary" disabled={busy} onClick={()=>renew(row,'qr')}>QR Code</button><button className="consent-secondary flex items-center gap-1" disabled={busy} onClick={()=>renew(row,'whatsapp')}><WhatsAppIcon className="w-3 h-3 fill-emerald-600" />WhatsApp</button><button className="consent-secondary" disabled={busy} onClick={()=>resend(row)}>Reenviar e-mail</button></>}{row.status==='needs_signature'&&<button className="consent-secondary" disabled={busy} onClick={()=>startRequest(row.templateId)}>Solicitar versão atual</button>}</>}{row.status!=='cancelled'&&(row.signedAt?currentUser?.role!=='receptionist':true)&&<button className="consent-secondary" disabled={busy} onClick={()=>{setCancelId(row.id);setReason('');}}>{row.signedAt?'Invalidar termo':'Cancelar solicitação'}</button>}</div>
       {cancelId===row.id&&<div className="space-y-2"><label className="block text-sm">Motivo *<input className="consent-field mt-1" maxLength={1000} value={reason} onChange={e=>setReason(e.target.value)}/></label><p className="text-xs text-slate-500">O documento e suas evidências permanecem no histórico.</p><div className="flex gap-2"><button className="consent-secondary" disabled={busy||reason.trim().length<5} onClick={cancel}>{row.signedAt?'Confirmar invalidação':'Confirmar cancelamento'}</button><button className="consent-secondary" onClick={()=>setCancelId(null)}>Voltar</button></div></div>}
       </article>)}
       {legacy&&<aside className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3"><h3 className="font-bold">{legacy.title}</h3><p className="text-sm whitespace-pre-wrap leading-6">{legacy.content}</p>{legacy.signature_data_url&&<img src={legacy.signature_data_url} alt="Assinatura do registro anterior" className="max-w-xs"/>}<button className="consent-secondary" onClick={()=>setLegacy(null)}>Fechar registro</button></aside>}
