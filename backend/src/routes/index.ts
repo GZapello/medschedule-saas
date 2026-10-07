@@ -208,6 +208,7 @@ api.put('/v1/admin/tenants/:id/ban', requireRole('superadmin'), TenantController
 api.put('/v1/admin/tenants/:id/unban', requireRole('superadmin'), TenantController.adminUnban);
 api.put('/v1/admin/tenants/:id/toggle-registrations', requireRole('superadmin'), TenantController.adminToggleRegistrations);
 api.post('/v1/admin/tenants/:id/delete-permanently', requireRole('superadmin'), TenantController.adminDeletePermanently);
+api.get(['/v1/admin/tenants/:tenantId/summary', '/admin/tenants/:tenantId/summary'], requireRole('superadmin'), TenantController.adminTenantSummary);
 
 // Gestão de Testes Grátis (Exclusivo SuperAdmin SaaS)
 api.post('/v1/admin/free-trials', requireRole('superadmin'), FreeTrialController.create);

@@ -916,6 +916,182 @@ export class TenantController {
     }
   }
 
+  // 6.1 Resumo Estatístico Agregado de Clínica (Exclusivo SuperAdmin SaaS)
+  static adminTenantSummary(req: Request, res: Response): void {
+    try {
+      const tenantId = req.params.tenantId || req.params.id;
+      if (!tenantId) {
+        res.status(400).json({ error: 'tenantId é obrigatório' });
+        return;
+      }
+
+      const tenant = db.prepare('SELECT id, name, trade_name, status FROM tenants WHERE id = ?').get(tenantId) as any;
+      if (!tenant) {
+        res.status(404).json({ error: 'Clínica não encontrada' });
+        return;
+      }
+
+      const now = new Date();
+      const currentMonthPrefix = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit' }).format(now);
+      const todayDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(now);
+
+      // 1. Usuários e Equipe
+      const userStats = db.prepare(`
+        SELECT 
+          COUNT(*) as total,
+          SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active,
+          SUM(CASE WHEN status != 'active' THEN 1 ELSE 0 END) as inactive,
+          SUM(CASE WHEN role = 'professional' THEN 1 ELSE 0 END) as professionals,
+          SUM(CASE WHEN role IN ('receptionist', 'secretary') THEN 1 ELSE 0 END) as receptionists,
+          SUM(CASE WHEN role IN ('clinic_admin', 'admin') THEN 1 ELSE 0 END) as admins
+        FROM users
+        WHERE tenant_id = ? AND role != 'superadmin' AND role != 'patient'
+      `).get(tenantId) as any;
+
+      const profTableCount = (db.prepare('SELECT COUNT(*) as c FROM professionals WHERE tenant_id = ?').get(tenantId) as any)?.c || 0;
+      const professionalsCount = Math.max(Number(userStats?.professionals || 0), profTableCount);
+
+      // 2. Pacientes
+      const totalPatients = (db.prepare('SELECT COUNT(*) as c FROM patients WHERE tenant_id = ?').get(tenantId) as any)?.c || 0;
+      const attendedUnique = (db.prepare("SELECT COUNT(DISTINCT patient_id) as c FROM appointments WHERE tenant_id = ? AND status = 'completed'").get(tenantId) as any)?.c || 0;
+      const newThisMonth = (db.prepare('SELECT COUNT(*) as c FROM patients WHERE tenant_id = ? AND substr(created_at, 1, 7) = ?').get(tenantId, currentMonthPrefix) as any)?.c || 0;
+
+      // 3. Atendimentos
+      const apptStats = db.prepare(`
+        SELECT
+          COUNT(*) as total,
+          SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
+          SUM(CASE WHEN status IN ('scheduled', 'confirmed') THEN 1 ELSE 0 END) as scheduled,
+          SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as canceled,
+          SUM(CASE WHEN status = 'no_show' THEN 1 ELSE 0 END) as no_show,
+          SUM(CASE WHEN substr(start_time, 1, 7) = ? OR substr(created_at, 1, 7) = ? THEN 1 ELSE 0 END) as this_month,
+          SUM(CASE WHEN substr(start_time, 1, 10) = ? THEN 1 ELSE 0 END) as today
+        FROM appointments
+        WHERE tenant_id = ?
+      `).get(currentMonthPrefix, currentMonthPrefix, todayDateStr, tenantId) as any;
+
+      // 4. Serviços & Operação
+      const servicesCount = (db.prepare('SELECT COUNT(*) as c FROM services WHERE tenant_id = ?').get(tenantId) as any)?.c || 0;
+      const activeSchedulesCount = (db.prepare('SELECT COUNT(DISTINCT professional_id) as c FROM schedules WHERE tenant_id = ? AND is_active = 1').get(tenantId) as any)?.c || 0;
+      let roomsCount = 0;
+      try {
+        roomsCount = (db.prepare('SELECT COUNT(*) as c FROM rooms WHERE tenant_id = ?').get(tenantId) as any)?.c || 0;
+      } catch (_) {}
+
+      // 5. Estoque
+      let totalItems = 0;
+      let lowStock = 0;
+      try {
+        const invStats = db.prepare(`
+          SELECT
+            COUNT(*) as total,
+            SUM(CASE WHEN quantity <= min_stock THEN 1 ELSE 0 END) as low
+          FROM inventory_items
+          WHERE tenant_id = ?
+        `).get(tenantId) as any;
+        totalItems = Number(invStats?.total || 0);
+        lowStock = Number(invStats?.low || 0);
+      } catch (_) {}
+
+      // 6. Documentos e Consentimentos
+      let totalDocs = 0;
+      try {
+        totalDocs = (db.prepare('SELECT COUNT(*) as c FROM documents WHERE tenant_id = ?').get(tenantId) as any)?.c || 0;
+      } catch (_) {}
+
+      let signedConsents = 0;
+      let pendingConsents = 0;
+      try {
+        const consentStats = db.prepare(`
+          SELECT
+            SUM(CASE WHEN status IN ('signed', 'accepted') THEN 1 ELSE 0 END) as signed,
+            SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending
+          FROM patient_consents
+          WHERE tenant_id = ?
+        `).get(tenantId) as any;
+        signedConsents = Number(consentStats?.signed || 0);
+        pendingConsents = Number(consentStats?.pending || 0);
+      } catch (_) {}
+
+      // 7. Financeiro (Valores exclusivamente agregados)
+      let totalRevenue = 0;
+      let currentMonthRevenue = 0;
+      let pendingAmount = 0;
+      try {
+        const finStats = db.prepare(`
+          SELECT
+            COALESCE(SUM(CASE WHEN status = 'paid' THEN amount ELSE 0 END), 0) as total,
+            COALESCE(SUM(CASE WHEN status = 'paid' AND (substr(payment_date, 1, 7) = ? OR substr(created_at, 1, 7) = ?) THEN amount ELSE 0 END), 0) as this_month,
+            COALESCE(SUM(CASE WHEN status IN ('pending', 'partial') THEN amount ELSE 0 END), 0) as pending
+          FROM payments
+          WHERE tenant_id = ?
+        `).get(currentMonthPrefix, currentMonthPrefix, tenantId) as any;
+        totalRevenue = Number(finStats?.total || 0);
+        currentMonthRevenue = Number(finStats?.this_month || 0);
+        pendingAmount = Number(finStats?.pending || 0);
+      } catch (_) {}
+
+      res.json({
+        clinic: {
+          id: tenant.id,
+          name: tenant.name,
+          tradeName: tenant.trade_name || tenant.name,
+          status: tenant.status
+        },
+        users: {
+          total: Number(userStats?.total || 0),
+          active: Number(userStats?.active || 0),
+          inactive: Number(userStats?.inactive || 0),
+          professionals: professionalsCount,
+          receptionists: Number(userStats?.receptionists || 0),
+          admins: Number(userStats?.admins || 0)
+        },
+        patients: {
+          total: totalPatients,
+          attendedUnique: attendedUnique,
+          newThisMonth: newThisMonth
+        },
+        appointments: {
+          total: Number(apptStats?.total || 0),
+          completed: Number(apptStats?.completed || 0),
+          scheduled: Number(apptStats?.scheduled || 0),
+          canceled: Number(apptStats?.canceled || 0),
+          noShow: Number(apptStats?.no_show || 0),
+          thisMonth: Number(apptStats?.this_month || 0),
+          today: Number(apptStats?.today || 0)
+        },
+        services: {
+          total: servicesCount
+        },
+        schedules: {
+          activeProfessionals: activeSchedulesCount
+        },
+        rooms: {
+          total: roomsCount
+        },
+        inventory: {
+          totalItems,
+          lowStock
+        },
+        documents: {
+          total: totalDocs
+        },
+        consents: {
+          signed: signedConsents,
+          pending: pendingConsents
+        },
+        financial: {
+          totalRevenue,
+          currentMonthRevenue,
+          pendingAmount
+        }
+      });
+    } catch (err: any) {
+      console.error('[TenantController.adminTenantSummary] Erro:', err);
+      res.status(500).json({ error: 'Erro ao obter resumo estatístico da clínica' });
+    }
+  }
+
   // 7. Lista todas as clínicas (com filtros para o SuperAdmin)
   static listAll(req: Request, res: Response): void {
     try {

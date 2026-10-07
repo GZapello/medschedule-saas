@@ -27,7 +27,14 @@ import {
   Gift,
   MessageSquare,
   FlaskConical,
-  Trash2
+  Trash2,
+  BarChart3,
+  Calendar,
+  Package,
+  FileText,
+  DollarSign,
+  UserCheck,
+  Loader2
 } from 'lucide-react';
 import { FreeTrialsAdminView } from './FreeTrialsAdminView';
 import { InfobipWhatsAppAdmin } from './InfobipWhatsAppAdmin';
@@ -37,12 +44,12 @@ export const SuperAdminView: React.FC = () => {
   const { switchTenant, currentUser: user } = useAuth();
   const { showToast } = useToast();
 
-  // Navegação Principal do SuperAdmin
-  const [mainSection, setMainSection] = useState<'tenants' | 'professions' | 'categories' | 'subscriptions' | 'integrations' | 'free_trials' | 'whatsapp' | 'laboratory' | 'integrity'>(() => {
+  // Navegação Principal do SuperAdmin (Aba "categories" removida conforme governança)
+  const [mainSection, setMainSection] = useState<'tenants' | 'professions' | 'subscriptions' | 'integrations' | 'free_trials' | 'whatsapp' | 'laboratory' | 'integrity'>(() => {
     try {
       const params = new URLSearchParams(window.location.search);
       const s = params.get('section');
-      if (s && ['tenants', 'professions', 'categories', 'subscriptions', 'integrations', 'free_trials', 'whatsapp', 'laboratory', 'integrity'].includes(s)) {
+      if (s && ['tenants', 'professions', 'subscriptions', 'integrations', 'free_trials', 'whatsapp', 'laboratory', 'integrity'].includes(s)) {
         return s as any;
       }
     } catch {}
@@ -53,8 +60,11 @@ export const SuperAdminView: React.FC = () => {
     const handleUrlChange = () => {
       const params = new URLSearchParams(window.location.search);
       const s = params.get('section');
-      if (s && ['tenants', 'professions', 'categories', 'subscriptions', 'integrations', 'free_trials', 'whatsapp', 'laboratory', 'integrity'].includes(s)) {
+      if (s && ['tenants', 'professions', 'subscriptions', 'integrations', 'free_trials', 'whatsapp', 'laboratory', 'integrity'].includes(s)) {
         setMainSection(s as any);
+      } else if (s === 'categories') {
+        // Redireciona ?section=categories de volta para a visão padrão
+        setMainSection('tenants');
       }
     };
     window.addEventListener('popstate', handleUrlChange);
@@ -68,10 +78,28 @@ export const SuperAdminView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'all' | 'pending' | 'active' | 'blocked'>('all');
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Modais de Clínicas
+  // Modais de Clínicas & Resumo Estatístico Agregado (Governância Global)
   const [selectedClinic, setSelectedClinic] = useState<any>(null);
+  const [clinicSummary, setClinicSummary] = useState<any>(null);
+  const [loadingSummary, setLoadingSummary] = useState(false);
+  const [summaryError, setSummaryError] = useState('');
   const [rejectingClinic, setRejectingClinic] = useState<any>(null);
   const [rejectionReason, setRejectionReason] = useState('');
+
+  const handleOpenClinicSummary = async (clinic: any) => {
+    setSelectedClinic(clinic);
+    setClinicSummary(null);
+    setLoadingSummary(true);
+    setSummaryError('');
+    try {
+      const data = await ApiClient.get<any>(`/v1/admin/tenants/${clinic.id}/summary`);
+      setClinicSummary(data);
+    } catch (err: any) {
+      setSummaryError(err.message || 'Erro ao carregar resumo estatístico da clínica');
+    } finally {
+      setLoadingSummary(false);
+    }
+  };
 
   const [control, setControl] = useState<{ clinic: any; action: 'ban' | 'delete' } | null>(null);
   const [controlReason, setControlReason] = useState('');
@@ -168,17 +196,8 @@ export const SuperAdminView: React.FC = () => {
     registrationRequired: false
   });
 
-  // Tipos de Serviço / Categorias
+  // Tipos de Serviço / Categorias (Preservado para resolução interna em Profissões Globais)
   const [categories, setCategories] = useState<any[]>([]);
-  const [searchCat, setSearchCat] = useState('');
-  const [isCatModalOpen, setIsCatModalOpen] = useState(false);
-  const [editingCat, setEditingCat] = useState<any>(null);
-  const [catForm, setCatForm] = useState({
-    name: '',
-    description: '',
-    defaultTerminology: 'client',
-    isClinical: false
-  });
 
   const loadAll = async () => {
     try {
@@ -322,60 +341,6 @@ export const SuperAdminView: React.FC = () => {
     }
   };
 
-  // Handlers de Tipos de Serviço / Categorias
-  const handleOpenCatModal = (cat?: any) => {
-    if (cat) {
-      setEditingCat(cat);
-      setCatForm({
-        name: cat.name,
-        description: cat.description || '',
-        defaultTerminology: cat.default_terminology || 'client',
-        isClinical: cat.is_clinical === 1
-      });
-    } else {
-      setEditingCat(null);
-      setCatForm({
-        name: '',
-        description: '',
-        defaultTerminology: 'client',
-        isClinical: false
-      });
-    }
-    setIsCatModalOpen(true);
-  };
-
-  const handleSaveCategory = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!catForm.name.trim()) {
-      showToast('Nome do tipo de serviço é obrigatório', 'error');
-      return;
-    }
-
-    try {
-      if (editingCat) {
-        await ApiClient.put(`/v1/taxonomy/categories/${editingCat.id}`, catForm);
-        showToast(`Tipo de serviço "${catForm.name}" atualizado com sucesso!`, 'success');
-      } else {
-        await ApiClient.post('/v1/taxonomy/categories', catForm);
-        showToast(`Novo tipo de serviço "${catForm.name}" cadastrado!`, 'success');
-      }
-      setIsCatModalOpen(false);
-      loadAll();
-    } catch (err: any) {
-      showToast(err.message || 'Erro ao salvar tipo de serviço', 'error');
-    }
-  };
-
-  const handleToggleCatStatus = async (cat: any) => {
-    try {
-      const res = await ApiClient.put<{ message: string; active: number }>(`/v1/taxonomy/categories/${cat.id}/toggle-status`, {});
-      showToast(res.message || 'Status alterado com sucesso', 'success');
-      loadAll();
-    } catch (err: any) {
-      showToast(err.message || 'Erro ao alterar status do tipo de serviço', 'error');
-    }
-  };
-
   // Filtros
   const filteredTenants = tenants.filter(t => {
     if (activeTab === 'pending') return t.status === 'pending';
@@ -401,16 +366,6 @@ export const SuperAdminView: React.FC = () => {
       p.label?.toLowerCase().includes(term) ||
       p.category_name?.toLowerCase().includes(term) ||
       p.registration_board_label?.toLowerCase().includes(term)
-    );
-  });
-
-  const filteredCategories = categories.filter(c => {
-    if (!searchCat) return true;
-    const term = searchCat.toLowerCase();
-    return (
-      c.name?.toLowerCase().includes(term) ||
-      c.description?.toLowerCase().includes(term) ||
-      c.default_terminology?.toLowerCase().includes(term)
     );
   });
 
@@ -454,7 +409,7 @@ export const SuperAdminView: React.FC = () => {
             </div>
             <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight">Administrador da Plataforma</h2>
             <p className="text-xs text-slate-400 mt-0.5 max-w-xl">
-              Gestão multi-clínicas, moderação de estabelecimentos e controle global de profissões e tipos de serviço.
+              Gestão multi-clínicas, moderação de estabelecimentos e controle global de profissões da plataforma.
             </p>
           </div>
         </div>
@@ -486,18 +441,6 @@ export const SuperAdminView: React.FC = () => {
           >
             <Briefcase className="w-3.5 h-3.5" />
             Profissões Globais {loading ? '(…)' : `(${professions.length})`}
-          </button>
-
-          <button
-            onClick={() => setMainSection('categories')}
-            className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
-              mainSection === 'categories'
-                ? 'bg-white text-slate-900 shadow-md'
-                : 'text-slate-300 hover:text-white'
-            }`}
-          >
-            <Layers className="w-3.5 h-3.5" />
-            Tipos de Serviço {loading ? '(…)' : `(${categories.length})`}
           </button>
 
           <button
@@ -776,9 +719,9 @@ export const SuperAdminView: React.FC = () => {
                           <button disabled={controlBusy} onClick={() => updateControl(t, 'toggle-registrations')} className="p-2 text-amber-800">{t.registrations_blocked ? 'Liberar novos cadastros' : 'Bloquear novos cadastros'}</button>
                           <button disabled={controlBusy} onClick={() => { closeControl(); setControl({ clinic: t, action: 'delete' }); }} className="p-2 text-red-700 font-bold">Excluir clínica definitivamente</button>
                           <button
-                            onClick={() => setSelectedClinic(t)}
-                            className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 cursor-pointer"
-                            title="Ver Dados Administrativos"
+                            onClick={() => handleOpenClinicSummary(t)}
+                            className="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 cursor-pointer transition-colors"
+                            title="Resumo da Clínica (Métricas Agregadas)"
                           >
                             <Eye className="w-3.5 h-3.5" />
                           </button>
@@ -937,124 +880,7 @@ export const SuperAdminView: React.FC = () => {
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* SEÇÃO 3: TIPOS DE SERVIÇO / CATEGORIAS (Exclusivo SuperAdmin SaaS) */}
-      {/* ========================================================================= */}
-      {mainSection === 'categories' && (
-        <div className="bg-white rounded-3xl p-4 sm:p-6 border border-slate-100 shadow-xs space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <h3 className="text-lg font-bold text-slate-900 tracking-tight flex items-center gap-2">
-                <Layers className="w-5 h-5 text-indigo-600" />
-                Tipos de Serviço & Categorias Macro
-              </h3>
-              <p className="text-xs text-slate-500">
-                Segmentos e ramos de atuação suportados pelo sistema para agendamento, atendimento e prontuário.
-              </p>
-            </div>
 
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
-              <div className="relative w-full sm:w-64">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Buscar tipo de serviço..."
-                  value={searchCat}
-                  onChange={e => setSearchCat(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500"
-                />
-              </div>
-
-              <button
-                type="button"
-                onClick={() => handleOpenCatModal()}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 cursor-pointer shrink-0 min-h-[40px]"
-              >
-                <Plus className="w-4 h-4" />
-                Adicionar Tipo de Serviço
-              </button>
-            </div>
-          </div>
-
-          {loading ? (
-            <div className="py-12 flex flex-col items-center justify-center gap-2 text-slate-400">
-              <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-              <span className="text-xs font-medium">Carregando tipos de serviço...</span>
-            </div>
-          ) : filteredCategories.length === 0 ? (
-            <div className="py-10 text-center text-slate-400 text-xs font-medium">
-              Nenhum tipo de serviço encontrado.
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredCategories.map(c => (
-                <div
-                  key={c.id}
-                  className={`p-5 rounded-3xl border flex flex-col justify-between space-y-3 transition-shadow hover:shadow-md ${
-                    c.active === 1 ? 'bg-white border-slate-100' : 'bg-slate-50/80 border-slate-200 opacity-80'
-                  }`}
-                >
-                  <div className="space-y-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <h4 className="font-bold text-slate-900 text-sm">{c.name}</h4>
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
-                          c.active === 1
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : 'bg-slate-200 text-slate-600'
-                        }`}
-                      >
-                        {c.active === 1 ? 'Ativo' : 'Desativado'}
-                      </span>
-                    </div>
-
-                    <p className="text-xs text-slate-500 line-clamp-2">
-                      {c.description || 'Sem descrição cadastrada.'}
-                    </p>
-
-                    <div className="pt-2 border-t border-slate-100 space-y-1 text-[11px] text-slate-600">
-                      <p>
-                        <strong>Área:</strong>{' '}
-                        {c.is_clinical === 1 ? (
-                          <span className="text-purple-700 font-bold">Saúde / Clínica (com prontuário)</span>
-                        ) : (
-                          <span className="text-slate-600 font-medium">Serviços Gerais</span>
-                        )}
-                      </p>
-                      <p>
-                        <strong>Terminologia padrão:</strong>{' '}
-                        <span className="capitalize font-semibold text-slate-800">{c.default_terminology}</span>
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleOpenCatModal(c)}
-                      className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] rounded-lg flex items-center gap-1 cursor-pointer"
-                    >
-                      <Edit3 className="w-3 h-3" />
-                      Editar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleToggleCatStatus(c)}
-                      className={`px-3 py-1.5 font-bold text-xs rounded-xl cursor-pointer ${
-                        c.active === 1
-                          ? 'bg-rose-50 hover:bg-rose-100 text-rose-700'
-                          : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700'
-                      }`}
-                    >
-                      {c.active === 1 ? 'Desativar' : 'Ativar'}
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
 
       {/* ========================================================================= */}
       {/* MODAL: Nova / Editar Profissão Global */}
@@ -1141,90 +967,7 @@ export const SuperAdminView: React.FC = () => {
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* MODAL: Novo / Editar Tipo de Serviço */}
-      {/* ========================================================================= */}
-      {isCatModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
-          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl p-4 sm:p-6 space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="text-base font-bold text-slate-900">
-                {editingCat ? `Editar Tipo de Serviço: ${editingCat.name}` : 'Cadastrar Novo Tipo de Serviço'}
-              </h3>
-              <button onClick={() => setIsCatModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
 
-            <form onSubmit={handleSaveCategory} className="space-y-4 text-xs">
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Nome do Tipo de Serviço *</label>
-                <input
-                  type="text"
-                  required
-                  value={catForm.name}
-                  onChange={e => setCatForm({ ...catForm, name: e.target.value })}
-                  placeholder="Ex: Terapias Integrativas, Odontologia Estética..."
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 font-medium"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Descrição</label>
-                <textarea
-                  rows={2}
-                  value={catForm.description}
-                  onChange={e => setCatForm({ ...catForm, description: e.target.value })}
-                  placeholder="Breve resumo sobre o segmento de atendimento..."
-                  className="w-full p-2.5 border border-slate-200 rounded-xl bg-slate-50 font-medium resize-none"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Terminologia Padrão</label>
-                <select
-                  value={catForm.defaultTerminology}
-                  onChange={e => setCatForm({ ...catForm, defaultTerminology: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 font-medium"
-                >
-                  <option value="client">Cliente</option>
-                  <option value="patient">Paciente</option>
-                  <option value="student">Aluno / Aluna</option>
-                </select>
-              </div>
-
-              <div className="flex items-center gap-2 pt-1">
-                <input
-                  type="checkbox"
-                  id="catIsClin"
-                  checked={catForm.isClinical}
-                  onChange={e => setCatForm({ ...catForm, isClinical: e.target.checked })}
-                  className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500"
-                />
-                <label htmlFor="catIsClin" className="font-semibold text-slate-700 cursor-pointer">
-                  Área da Saúde (Habilita prontuário clínico sigiloso com LGPD)
-                </label>
-              </div>
-
-              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setIsCatModalOpen(false)}
-                  className="w-full sm:w-auto px-4 py-2 font-bold text-slate-600 hover:bg-slate-100 rounded-xl min-h-[40px]"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="w-full sm:w-auto px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-xs cursor-pointer min-h-[40px]"
-                >
-                  Salvar Tipo de Serviço
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* Modal: Recusar Cadastro */}
       {rejectingClinic && (
@@ -1265,37 +1008,269 @@ export const SuperAdminView: React.FC = () => {
         </div>
       )}
 
-      {/* Modal: Detalhes Administrativos da Clínica */}
+      {/* Modal: Resumo Estatístico da Clínica (Operacional Agregado — Zero PII) */}
       {selectedClinic && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
-          <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl p-4 sm:p-6 space-y-4 text-xs max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="text-base font-extrabold text-slate-900">
-                Ficha da Clínica — {selectedClinic.name}
-              </h3>
-              <button onClick={() => setSelectedClinic(null)} className="text-slate-400 hover:text-slate-700">
+          <div className="bg-white rounded-3xl w-full max-w-4xl overflow-hidden shadow-2xl p-4 sm:p-6 space-y-6 max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-start justify-between pb-4 border-b border-slate-100">
+              <div className="space-y-1">
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-black uppercase tracking-wider">
+                  <BarChart3 className="w-3 h-3" />
+                  Métricas Agregadas da Clínica
+                </div>
+                <h3 className="text-xl font-extrabold text-slate-900 tracking-tight">
+                  Resumo da Clínica — {selectedClinic.name}
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Visão operacional e quantitativa exclusiva para governança do SuperAdmin (sem exibição de dados pessoais ou clínicos individuais).
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setSelectedClinic(null); setClinicSummary(null); }}
+                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+                title="Fechar resumo"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="space-y-2 text-slate-700">
-              <p><strong>Razão Social:</strong> {selectedClinic.corporate_name || selectedClinic.name}</p>
-              <p><strong>Nome Fantasia:</strong> {selectedClinic.trade_name || selectedClinic.name}</p>
-              <p><strong>CNPJ/CPF:</strong> {selectedClinic.cnpj_cpf || 'Não informado'}</p>
-              <p><strong>Responsável:</strong> {selectedClinic.responsible_name || 'Gestor'}</p>
-              <p><strong>E-mail:</strong> {selectedClinic.responsible_email || selectedClinic.email}</p>
-              <p><strong>Telefone:</strong> {selectedClinic.phone || 'Não informado'}</p>
-              <p><strong>Cidade/UF:</strong> {selectedClinic.city || 'São Paulo'}/{selectedClinic.state || 'SP'}</p>
-              <p><strong>Status:</strong> <span className="uppercase font-bold text-indigo-600">{selectedClinic.status}</span></p>
-              <p><strong>Data de Cadastro:</strong> {new Date(selectedClinic.created_at).toLocaleDateString('pt-BR')}</p>
-            </div>
+            {/* Conteúdo: Loading / Error / Dados Estatísticos */}
+            {loadingSummary ? (
+              <div className="py-20 flex flex-col items-center justify-center gap-3 text-slate-500">
+                <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+                <p className="text-sm font-semibold">Calculando dados operacionais e agregados da clínica...</p>
+                <span className="text-xs text-slate-400">Consultando contagens de usuários, atendimentos, estoque e finanças</span>
+              </div>
+            ) : summaryError ? (
+              <div className="p-6 bg-rose-50 border border-rose-200 rounded-2xl text-rose-800 space-y-3">
+                <div className="flex items-center gap-2 font-bold text-sm">
+                  <AlertTriangle className="w-4 h-4 text-rose-600" />
+                  Não foi possível obter o resumo estatístico
+                </div>
+                <p className="text-xs">{summaryError}</p>
+                <button
+                  type="button"
+                  onClick={() => handleOpenClinicSummary(selectedClinic)}
+                  className="px-4 py-2 bg-rose-600 text-white font-bold text-xs rounded-xl hover:bg-rose-700 transition-colors cursor-pointer"
+                >
+                  Tentar Novamente
+                </button>
+              </div>
+            ) : clinicSummary ? (
+              <div className="space-y-6">
+                {/* 1. VISÃO GERAL */}
+                <div className="space-y-2.5">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5 text-blue-600" />
+                    Visão Geral — Usuários
+                  </h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+                    <div className="bg-slate-50 border border-slate-100 p-3.5 rounded-2xl">
+                      <span className="text-[11px] font-medium text-slate-500">Usuários</span>
+                      <p className="text-xl font-black text-slate-900 mt-1">{clinicSummary.users.total.toLocaleString('pt-BR')}</p>
+                    </div>
+                    <div className="bg-emerald-50/60 border border-emerald-100 p-3.5 rounded-2xl">
+                      <span className="text-[11px] font-medium text-emerald-700">Ativos</span>
+                      <p className="text-xl font-black text-emerald-800 mt-1">{clinicSummary.users.active.toLocaleString('pt-BR')}</p>
+                    </div>
+                    <div className="bg-slate-100/60 border border-slate-200 p-3.5 rounded-2xl">
+                      <span className="text-[11px] font-medium text-slate-600">Inativos</span>
+                      <p className="text-xl font-black text-slate-700 mt-1">{clinicSummary.users.inactive.toLocaleString('pt-BR')}</p>
+                    </div>
+                    <div className="bg-blue-50/60 border border-blue-100 p-3.5 rounded-2xl">
+                      <span className="text-[11px] font-medium text-blue-700">Profissionais</span>
+                      <p className="text-xl font-black text-blue-900 mt-1">{clinicSummary.users.professionals.toLocaleString('pt-BR')}</p>
+                    </div>
+                    <div className="bg-indigo-50/60 border border-indigo-100 p-3.5 rounded-2xl">
+                      <span className="text-[11px] font-medium text-indigo-700">Recepcionistas</span>
+                      <p className="text-xl font-black text-indigo-900 mt-1">{clinicSummary.users.receptionists.toLocaleString('pt-BR')}</p>
+                    </div>
+                    <div className="bg-purple-50/60 border border-purple-100 p-3.5 rounded-2xl">
+                      <span className="text-[11px] font-medium text-purple-700">Administradores</span>
+                      <p className="text-xl font-black text-purple-900 mt-1">{clinicSummary.users.admins.toLocaleString('pt-BR')}</p>
+                    </div>
+                  </div>
+                </div>
 
-            <div className="pt-3 border-t border-slate-100 flex justify-end">
+                {/* 2. PACIENTES */}
+                <div className="space-y-2.5">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                    <UserCheck className="w-3.5 h-3.5 text-teal-600" />
+                    Pacientes
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="bg-slate-50 border border-slate-100 p-3.5 rounded-2xl">
+                      <span className="text-[11px] font-medium text-slate-500">Pacientes cadastrados</span>
+                      <p className="text-2xl font-black text-slate-900 mt-1">{clinicSummary.patients.total.toLocaleString('pt-BR')}</p>
+                      <span className="text-[10px] text-slate-400">Total cadastrado no tenant</span>
+                    </div>
+                    <div className="bg-teal-50/70 border border-teal-100 p-3.5 rounded-2xl">
+                      <span className="text-[11px] font-medium text-teal-700">Pacientes atendidos</span>
+                      <p className="text-2xl font-black text-teal-900 mt-1">{clinicSummary.patients.attendedUnique.toLocaleString('pt-BR')}</p>
+                      <span className="text-[10px] text-teal-600 font-semibold">Pessoas únicas com atendimento realizado</span>
+                    </div>
+                    <div className="bg-cyan-50/70 border border-cyan-100 p-3.5 rounded-2xl">
+                      <span className="text-[11px] font-medium text-cyan-700">Novos pacientes no mês</span>
+                      <p className="text-2xl font-black text-cyan-900 mt-1">{clinicSummary.patients.newThisMonth.toLocaleString('pt-BR')}</p>
+                      <span className="text-[10px] text-cyan-600">Cadastrados no mês atual</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. ATENDIMENTOS */}
+                <div className="space-y-2.5">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+                    Atendimentos
+                  </h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-3">
+                    <div className="bg-slate-50 border border-slate-100 p-3 rounded-2xl">
+                      <span className="text-[11px] font-medium text-slate-500">Totais</span>
+                      <p className="text-xl font-black text-slate-900 mt-1">{clinicSummary.appointments.total.toLocaleString('pt-BR')}</p>
+                    </div>
+                    <div className="bg-emerald-50/70 border border-emerald-100 p-3 rounded-2xl">
+                      <span className="text-[11px] font-medium text-emerald-700">Realizados</span>
+                      <p className="text-xl font-black text-emerald-800 mt-1">{clinicSummary.appointments.completed.toLocaleString('pt-BR')}</p>
+                    </div>
+                    <div className="bg-blue-50/70 border border-blue-100 p-3 rounded-2xl">
+                      <span className="text-[11px] font-medium text-blue-700">Agendados</span>
+                      <p className="text-xl font-black text-blue-900 mt-1">{clinicSummary.appointments.scheduled.toLocaleString('pt-BR')}</p>
+                    </div>
+                    <div className="bg-amber-50/70 border border-amber-100 p-3 rounded-2xl">
+                      <span className="text-[11px] font-medium text-amber-700">Cancelados</span>
+                      <p className="text-xl font-black text-amber-900 mt-1">{clinicSummary.appointments.canceled.toLocaleString('pt-BR')}</p>
+                    </div>
+                    <div className="bg-rose-50/70 border border-rose-100 p-3 rounded-2xl">
+                      <span className="text-[11px] font-medium text-rose-700">Faltas</span>
+                      <p className="text-xl font-black text-rose-900 mt-1">{clinicSummary.appointments.noShow.toLocaleString('pt-BR')}</p>
+                    </div>
+                    <div className="bg-purple-50/70 border border-purple-100 p-3 rounded-2xl">
+                      <span className="text-[11px] font-medium text-purple-700">No mês</span>
+                      <p className="text-xl font-black text-purple-900 mt-1">{clinicSummary.appointments.thisMonth.toLocaleString('pt-BR')}</p>
+                    </div>
+                    <div className="bg-indigo-50/70 border border-indigo-100 p-3 rounded-2xl">
+                      <span className="text-[11px] font-medium text-indigo-700">Hoje</span>
+                      <p className="text-xl font-black text-indigo-900 mt-1">{clinicSummary.appointments.today.toLocaleString('pt-BR')}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4. SERVIÇOS / OPERAÇÃO */}
+                <div className="space-y-2.5">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                    <Briefcase className="w-3.5 h-3.5 text-violet-600" />
+                    Serviços / Operação
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="bg-slate-50 border border-slate-100 p-3.5 rounded-2xl">
+                      <span className="text-[11px] font-medium text-slate-500">Serviços cadastrados</span>
+                      <p className="text-2xl font-black text-slate-900 mt-1">{clinicSummary.services.total.toLocaleString('pt-BR')}</p>
+                    </div>
+                    <div className="bg-violet-50/70 border border-violet-100 p-3.5 rounded-2xl">
+                      <span className="text-[11px] font-medium text-violet-700">Profissionais com agenda ativa</span>
+                      <p className="text-2xl font-black text-violet-900 mt-1">{clinicSummary.schedules.activeProfessionals.toLocaleString('pt-BR')}</p>
+                    </div>
+                    <div className="bg-slate-50 border border-slate-100 p-3.5 rounded-2xl">
+                      <span className="text-[11px] font-medium text-slate-500">Salas cadastradas</span>
+                      <p className="text-2xl font-black text-slate-900 mt-1">{clinicSummary.rooms.total.toLocaleString('pt-BR')}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 5. ESTOQUE & 6. DOCUMENTOS */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Estoque */}
+                  <div className="space-y-2.5">
+                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                      <Package className="w-3.5 h-3.5 text-amber-600" />
+                      Estoque
+                    </h4>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="bg-slate-50 border border-slate-100 p-3.5 rounded-2xl">
+                        <span className="text-[11px] font-medium text-slate-500">Produtos cadastrados</span>
+                        <p className="text-xl font-black text-slate-900 mt-1">{clinicSummary.inventory.totalItems.toLocaleString('pt-BR')}</p>
+                      </div>
+                      <div className="bg-amber-50/70 border border-amber-200 p-3.5 rounded-2xl">
+                        <span className="text-[11px] font-medium text-amber-800">Abaixo do estoque mínimo</span>
+                        <p className="text-xl font-black text-amber-900 mt-1">{clinicSummary.inventory.lowStock.toLocaleString('pt-BR')}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Documentos */}
+                  <div className="space-y-2.5">
+                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                      <FileText className="w-3.5 h-3.5 text-blue-600" />
+                      Documentos
+                    </h4>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="bg-slate-50 border border-slate-100 p-3.5 rounded-2xl">
+                        <span className="text-[11px] font-medium text-slate-500">Emitidos</span>
+                        <p className="text-xl font-black text-slate-900 mt-1">{clinicSummary.documents.total.toLocaleString('pt-BR')}</p>
+                      </div>
+                      <div className="bg-emerald-50/70 border border-emerald-100 p-3.5 rounded-2xl">
+                        <span className="text-[11px] font-medium text-emerald-700">Assinados</span>
+                        <p className="text-xl font-black text-emerald-800 mt-1">{clinicSummary.consents.signed.toLocaleString('pt-BR')}</p>
+                      </div>
+                      <div className="bg-amber-50/70 border border-amber-100 p-3.5 rounded-2xl">
+                        <span className="text-[11px] font-medium text-amber-700">Aguardando</span>
+                        <p className="text-xl font-black text-amber-900 mt-1">{clinicSummary.consents.pending.toLocaleString('pt-BR')}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 7. FINANCEIRO */}
+                <div className="space-y-2.5">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                    <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
+                    Financeiro (Valores Agregados Globais)
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl">
+                      <span className="text-[11px] font-medium text-slate-500">Receita total processada</span>
+                      <p className="text-2xl font-black text-slate-900 mt-1">
+                        {clinicSummary.financial.totalRevenue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      </p>
+                      <span className="text-[10px] text-slate-400">Total histórico registrado</span>
+                    </div>
+                    <div className="bg-emerald-50/70 border border-emerald-200 p-4 rounded-2xl">
+                      <span className="text-[11px] font-medium text-emerald-800">Receita no mês</span>
+                      <p className="text-2xl font-black text-emerald-900 mt-1">
+                        {clinicSummary.financial.currentMonthRevenue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      </p>
+                      <span className="text-[10px] text-emerald-700">Mês corrente</span>
+                    </div>
+                    <div className="bg-amber-50/70 border border-amber-200 p-4 rounded-2xl">
+                      <span className="text-[11px] font-medium text-amber-800">Valores pendentes</span>
+                      <p className="text-2xl font-black text-amber-900 mt-1">
+                        {clinicSummary.financial.pendingAmount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      </p>
+                      <span className="text-[10px] text-amber-700">Transações em aberto</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* LGPD / Privacy notice */}
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl text-[11px] text-slate-500 flex items-center gap-2">
+                  <Shield className="w-4 h-4 text-slate-400 shrink-0" />
+                  <span>
+                    <strong>Conformidade e Sigilo:</strong> Os dados apresentados neste resumo são exclusivamente agregados e quantitativos. Nenhum prontuário, evolução, diagnóstico ou dado identificador de paciente/profissional é acessado ou exposto nesta visualização.
+                  </span>
+                </div>
+              </div>
+            ) : null}
+
+            {/* Footer */}
+            <div className="pt-4 border-t border-slate-100 flex justify-end">
               <button
-                onClick={() => setSelectedClinic(null)}
-                className="w-full sm:w-auto px-4 py-2 bg-slate-900 text-white font-bold rounded-xl min-h-[40px]"
+                type="button"
+                onClick={() => { setSelectedClinic(null); setClinicSummary(null); }}
+                className="w-full sm:w-auto px-5 py-2.5 bg-slate-900 text-white font-bold text-xs rounded-xl hover:bg-slate-800 transition-colors cursor-pointer min-h-[40px]"
               >
-                Fechar
+                Fechar Resumo
               </button>
             </div>
           </div>
