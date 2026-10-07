@@ -1367,12 +1367,24 @@ export const DEFAULT_EXERCISE_LIBRARY: SeedExercise[] = [
   },
 ];
 
-DEFAULT_EXERCISE_LIBRARY.push(...EXPANDED_EXERCISES);
-DEFAULT_EXERCISE_LIBRARY.push(...PRIORITY_EXPANSION_EXERCISES);
+// Deduplicated catalog initialization
+const seenCatalogIds = new Set(DEFAULT_EXERCISE_LIBRARY.map(e => e.id));
+for (const ex of EXPANDED_EXERCISES) {
+  if (!seenCatalogIds.has(ex.id)) {
+    seenCatalogIds.add(ex.id);
+    DEFAULT_EXERCISE_LIBRARY.push(ex);
+  }
+}
+for (const ex of PRIORITY_EXPANSION_EXERCISES) {
+  if (!seenCatalogIds.has(ex.id)) {
+    seenCatalogIds.add(ex.id);
+    DEFAULT_EXERCISE_LIBRARY.push(ex);
+  }
+}
 for (const ex of DEFAULT_EXERCISE_LIBRARY) {
   const photo = licensedPhotos.find(p => p.exercise_id === ex.id);
   const media = reviewedMedia.find(m => m.exercise_id === ex.id);
-  ex.photo_url = photo?.photo_url || media?.photo_url;
+  ex.photo_url = photo?.photo_url || media?.photo_url || ex.photo_url || null;
 }
 
 export function seedExerciseLibrary(rawDb: any): void {
@@ -1437,7 +1449,7 @@ export function seedExerciseLibrary(rawDb: any): void {
       ) VALUES (
         ?, 'global', ?, ?, ?,
         ?, ?, ?, ?, ?, ?,
-        ?, ?, null, ?, 0, 1,
+        ?, ?, ?, ?, 0, 1,
         datetime('now'), datetime('now')
       )
       ON CONFLICT(id) DO UPDATE SET
@@ -1451,7 +1463,8 @@ export function seedExerciseLibrary(rawDb: any): void {
         mechanics = COALESCE(NULLIF(personal_exercises.mechanics, ''), excluded.mechanics),
         level = COALESCE(NULLIF(personal_exercises.level, ''), excluded.level),
         instructions = COALESCE(NULLIF(personal_exercises.instructions, ''), excluded.instructions),
-        technical_notes = COALESCE(NULLIF(personal_exercises.technical_notes, ''), excluded.technical_notes)
+        technical_notes = COALESCE(NULLIF(personal_exercises.technical_notes, ''), excluded.technical_notes),
+        photo_url = COALESCE(personal_exercises.photo_url, excluded.photo_url)
       WHERE personal_exercises.is_custom = 0 AND personal_exercises.tenant_id = 'global'
     `);
 
@@ -1481,6 +1494,7 @@ export function seedExerciseLibrary(rawDb: any): void {
           ex.level,
           ex.instructions,
           ex.technical_notes || null,
+          ex.photo_url || null,
           validFileId
         );
       }
@@ -1492,19 +1506,11 @@ export function seedExerciseLibrary(rawDb: any): void {
           syncPhoto.run(ex.photo_url, ex.id);
         }
       }
-      // Remove exercícios globais antigos que não pertencem ao catálogo com mídia verificada
-      const validIdSet = new Set(DEFAULT_EXERCISE_LIBRARY.map(e => e.id));
-      const allGlobalExercises = rawDb.prepare("SELECT id FROM personal_exercises WHERE tenant_id = 'global' AND is_custom = 0").all() as { id: string }[];
-      const obsoleteExercises = allGlobalExercises.filter(e => !validIdSet.has(e.id));
-      if (obsoleteExercises.length > 0) {
-        const deleteStmt = rawDb.prepare("DELETE FROM personal_exercises WHERE tenant_id = 'global' AND is_custom = 0 AND id = ?");
-        for (const obs of obsoleteExercises) {
-          deleteStmt.run(obs.id);
-        }
-      }
-      // Purga qualquer registro global que ainda aponte para fallbacks ou sem foto
-      rawDb.exec("DELETE FROM personal_exercises WHERE tenant_id = 'global' AND is_custom = 0 AND (photo_url LIKE '/exercise-fallbacks/%' OR photo_url IS NULL OR photo_url = '')");
-      // Fallback loop removed - all standard exercises have genuine media
+      // O seed é estritamente não-destrutivo: catálogo nunca exclui exercícios no startup.
+
+
+      // Mídia e exercícios são independentes: nunca exclui exercícios globais por falta de foto ou GIF
+
       // Keep classifications up to date for standard global exercises
       const syncClassification = rawDb.prepare(`
         UPDATE personal_exercises SET

@@ -2791,8 +2791,7 @@ export function initializeDatabase(): void {
 
   migratePersonalAssessment(rawDb);
 
-  // Pre-seed biblioteca expandida de exercícios padrão (80+ exercícios categorizados)
-  seedExerciseLibrary(rawDb);
+
 
   // Garante tenant global para integridade referencial de anexos de biblioteca
   try {

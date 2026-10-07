@@ -4,9 +4,11 @@ const byId = new Map(media.map(item => [item.exercise_id, item]));
 
 // Only reviewed global IDs may receive dataset demonstrations. Tenant copies
 // can describe a different movement even when they retain a source ID.
-export function exerciseAnimation(ex: { id: string; tenant_id?: string; is_custom?: number }) {
-  if (ex.tenant_id !== 'global' || ex.is_custom) return {};
-  const item = byId.get(ex.id);
+export function exerciseAnimation(ex: { id: string; tenant_id?: string; is_custom?: number; source_exercise_id?: string | null }) {
+  if (ex.tenant_id !== 'global' && !ex.source_exercise_id) return {};
+  if (ex.is_custom && !ex.source_exercise_id) return {};
+  const targetId = (ex.tenant_id !== 'global' && ex.source_exercise_id) ? ex.source_exercise_id : ex.id;
+  const item = byId.get(targetId);
   return item ? { gif_url: item.gif_url, gif_attribution: item.attribution } : {};
 }
 

@@ -9,7 +9,8 @@ const aliases: Record<string, string> = {
   cabos: 'cabo polia', cabo: 'cabo polia', polia: 'cabo polia', maquinas: 'maquina', 'smith machine': 'smith', hipertrofia: 'musculacao',
   'fita de suspensao': 'fita de suspensao', trx: 'fita de suspensao', suspensao: 'fita de suspensao',
   'medicine ball': 'medicine ball', medicine_ball: 'medicine ball',
-  'caixa step': 'caixa step', caixa: 'caixa step', step: 'caixa step'
+  'caixa step': 'caixa step', caixa: 'caixa step', step: 'caixa step',
+  adutor: 'adutores', abdutor: 'abdutores', gluteo: 'gluteos', ombro: 'ombros', costa: 'costas'
 };
 export function exerciseFilterKey(value: unknown): string {
   const normalized = normalizeExerciseText(value);
