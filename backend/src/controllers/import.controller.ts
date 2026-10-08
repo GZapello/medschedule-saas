@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import AdmZip from 'adm-zip';
 import * as XLSX from 'xlsx';
 import { logAudit } from '../middlewares/audit.middleware';
+import { GeminiService } from '../services/gemini.service';
 
 // Definição dos campos alvo para mapeamento inteligente
 export const TARGET_FIELDS = [
@@ -1281,4 +1282,466 @@ export class ImportController {
       res.status(500).json({ error: 'Erro ao gerar exportação para Word (.docx)' });
     }
   }
+
+  /**
+   * 6. ANÁLISE EFÊMERA DE PRONTUÁRIO POR FOTO / DOCUMENTO (SEM ARMAZENAR AS FOTOS)
+   * REGRA CRÍTICA — PRIVACIDADE E LGPD:
+   * Processamento efêmero em memória. Nenhuma foto ou arquivo é salvo em disco,
+   * no banco de dados, no Cloudflare/R2, em anexos ou em logs.
+   */
+  static async analyzeMedicalRecord(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.tenantId;
+      if (!tenantId) {
+        res.status(400).json({ error: 'Tenant não informado' });
+        return;
+      }
+
+      const files = req.body.files;
+      if (!Array.isArray(files) || files.length === 0) {
+        res.status(400).json({ error: 'Nenhum arquivo ou foto fornecido para análise.' });
+        return;
+      }
+
+      if (files.length > 20) {
+        res.status(400).json({ error: 'Limite máximo de 20 páginas por leitura excedido.' });
+        return;
+      }
+
+      const validMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg', 'application/pdf'];
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        if (!f.base64 || typeof f.base64 !== 'string') {
+          res.status(400).json({ error: `Arquivo da página ${i + 1} não possui conteúdo válido.` });
+          return;
+        }
+        const mime = (f.mimeType || '').toLowerCase().trim();
+        if (!validMimes.includes(mime)) {
+          res.status(400).json({ error: `Formato da página ${i + 1} não suportado (${mime}). Aceitos: JPG, PNG, WebP e PDF.` });
+          return;
+        }
+      }
+
+      // Chama extração multimodal do Gemini (ou mock determinístico em ambiente de testes)
+      const extracted = await GeminiService.extractMedicalRecordFromDocuments({ files });
+
+      if (!extracted) {
+        res.status(502).json({
+          error: 'Não foi possível extrair dados clínicos dos arquivos enviados. Verifique a nitidez da foto ou documento e tente novamente.'
+        });
+        return;
+      }
+
+      // Busca possíveis duplicatas de paciente existente na clínica
+      let matchedPatient: any = null;
+      let matchReason = '';
+
+      const existingPatients = db.prepare(`
+        SELECT id, full_name, cpf, phone, whatsapp, email, birth_date
+        FROM patients
+        WHERE tenant_id = ? AND active = 1
+      `).all(tenantId) as any[];
+
+      const rawCpf = cleanDigits(extracted.patient.cpf);
+      const rawPhone = cleanDigits(extracted.patient.phone || extracted.patient.whatsapp);
+      const rawEmail = (extracted.patient.email || '').toLowerCase().trim();
+      const rawName = normalizeHeader(extracted.patient.full_name);
+
+      for (const p of existingPatients) {
+        const pCpf = cleanDigits(p.cpf);
+        const pPhone = cleanDigits(p.phone || p.whatsapp);
+        const pEmail = (p.email || '').toLowerCase().trim();
+        const pName = normalizeHeader(p.full_name);
+
+        if (rawCpf && rawCpf.length >= 11 && pCpf === rawCpf) {
+          matchedPatient = p;
+          matchReason = 'CPF idêntico já cadastrado na clínica';
+          break;
+        } else if (rawPhone && rawPhone.length >= 8 && pPhone.endsWith(rawPhone.slice(-9))) {
+          matchedPatient = p;
+          matchReason = 'Telefone idêntico já cadastrado na clínica';
+          break;
+        } else if (rawEmail && rawEmail.includes('@') && pEmail === rawEmail) {
+          matchedPatient = p;
+          matchReason = 'E-mail idêntico já cadastrado na clínica';
+          break;
+        } else if (rawName && rawName.length > 5 && pName === rawName) {
+          matchedPatient = p;
+          matchReason = 'Nome idêntico já cadastrado na clínica';
+          break;
+        }
+      }
+
+      res.status(200).json({
+        success: true,
+        extractedData: extracted,
+        matchedPatient: matchedPatient ? {
+          id: matchedPatient.id,
+          full_name: matchedPatient.full_name,
+          cpf: matchedPatient.cpf,
+          phone: matchedPatient.phone,
+          email: matchedPatient.email,
+          birth_date: matchedPatient.birth_date
+        } : null,
+        isDuplicate: Boolean(matchedPatient),
+        matchReason: matchReason || null,
+        totalPages: files.length
+      });
+    } catch (err: any) {
+      console.error('[ImportController.analyzeMedicalRecord] Erro ao analisar prontuário');
+      res.status(500).json({ error: 'Erro interno ao processar prontuário por foto/documento.' });
+    }
+  }
+
+  /**
+   * 7. BUSCA DIRETA DE PACIENTE DUPLICADO
+   */
+  static searchPatientDuplicate(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      if (!tenantId) {
+        res.status(400).json({ error: 'Tenant não informado' });
+        return;
+      }
+
+      const { cpf, phone, email, name } = req.query as Record<string, string>;
+      const rawCpf = cleanDigits(cpf);
+      const rawPhone = cleanDigits(phone);
+      const rawEmail = (email || '').toLowerCase().trim();
+      const rawName = normalizeHeader(name || '');
+
+      const existingPatients = db.prepare(`
+        SELECT id, full_name, cpf, phone, whatsapp, email, birth_date
+        FROM patients
+        WHERE tenant_id = ? AND active = 1
+      `).all(tenantId) as any[];
+
+      let matched: any = null;
+      let reason = '';
+
+      for (const p of existingPatients) {
+        const pCpf = cleanDigits(p.cpf);
+        const pPhone = cleanDigits(p.phone || p.whatsapp);
+        const pEmail = (p.email || '').toLowerCase().trim();
+        const pName = normalizeHeader(p.full_name);
+
+        if (rawCpf && rawCpf.length >= 11 && pCpf === rawCpf) {
+          matched = p;
+          reason = 'CPF já cadastrado na clínica';
+          break;
+        } else if (rawPhone && rawPhone.length >= 8 && pPhone.endsWith(rawPhone.slice(-9))) {
+          matched = p;
+          reason = 'Telefone já cadastrado na clínica';
+          break;
+        } else if (rawEmail && rawEmail.includes('@') && pEmail === rawEmail) {
+          matched = p;
+          reason = 'E-mail já cadastrado na clínica';
+          break;
+        } else if (rawName && rawName.length > 5 && pName === rawName) {
+          matched = p;
+          reason = 'Nome já cadastrado na clínica';
+          break;
+        }
+      }
+
+      res.status(200).json({
+        isDuplicate: Boolean(matched),
+        matchedPatient: matched ? {
+          id: matched.id,
+          full_name: matched.full_name,
+          cpf: matched.cpf,
+          phone: matched.phone,
+          email: matched.email,
+          birth_date: matched.birth_date
+        } : null,
+        matchReason: reason || null
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao verificar duplicidade de paciente.' });
+    }
+  }
+
+  /**
+   * 8. EXECUÇÃO DA IMPORTAÇÃO DE PRONTUÁRIO REVISADO
+   * Salva SOMENTE os dados estruturados e confirmados pelo profissional.
+   * Nenhuma imagem é transmitida ou salva.
+   */
+  static executeMedicalRecord(req: Request, res: Response): void {
+    const tenantId = req.tenantId;
+    const userId = req.user?.userId || 'usr-system';
+
+    if (!tenantId) {
+      res.status(400).json({ error: 'Tenant não informado' });
+      return;
+    }
+
+    const {
+      action = 'create_new',
+      existingPatientId,
+      patient,
+      clinical = {},
+      evolutions = [],
+      ignoredFields = []
+    } = req.body;
+
+    if (!patient || !patient.full_name || !String(patient.full_name).trim()) {
+      res.status(400).json({ error: 'Nome completo do paciente é obrigatório.' });
+      return;
+    }
+
+    const isIgnored = (f: string) => Array.isArray(ignoredFields) && ignoredFields.includes(f);
+
+    try {
+      db.exec('BEGIN TRANSACTION');
+
+      let patientIdToUse: string;
+
+      // Profissional padrão para registros clínicos
+      let firstProf = db.prepare('SELECT id, name FROM professionals WHERE tenant_id = ? AND active = 1 LIMIT 1').get(tenantId) as any;
+      if (!firstProf) {
+        const autoProfId = 'pro-auto-' + uuidv4().slice(0, 8);
+        db.prepare(`
+          INSERT INTO professionals (id, tenant_id, name, active)
+          VALUES (?, ?, 'Profissional da Clínica', 1)
+        `).run(autoProfId, tenantId);
+        firstProf = { id: autoProfId, name: 'Profissional da Clínica' };
+      }
+
+      if (action === 'link_existing' && existingPatientId) {
+        const found = db.prepare('SELECT id FROM patients WHERE id = ? AND tenant_id = ?').get(existingPatientId, tenantId) as any;
+        if (!found) {
+          db.exec('ROLLBACK');
+          res.status(404).json({ error: 'Paciente selecionado não encontrado nesta clínica.' });
+          return;
+        }
+
+        patientIdToUse = existingPatientId;
+
+        // Atualiza campos cadastrais que foram preenchidos e não ignorados
+        const updatePhone = !isIgnored('phone') && patient.phone ? patient.phone : null;
+        const updateWhatsapp = !isIgnored('whatsapp') && patient.whatsapp ? patient.whatsapp : null;
+        const updateEmail = !isIgnored('email') && patient.email ? patient.email : null;
+        const updateCpf = !isIgnored('cpf') && patient.cpf ? patient.cpf : null;
+        const updateBirth = !isIgnored('birth_date') && patient.birth_date ? patient.birth_date : null;
+        const updateAddress = !isIgnored('address') && patient.address ? patient.address : null;
+        const updateCity = !isIgnored('city') && patient.city ? patient.city : null;
+        const updateState = !isIgnored('state') && patient.state ? patient.state : null;
+        const updateZip = !isIgnored('zip_code') && patient.zip_code ? patient.zip_code : null;
+        const updateResp = !isIgnored('responsible') && patient.responsible ? patient.responsible : null;
+        const updateInsName = !isIgnored('insurance_name') && patient.insurance_name ? patient.insurance_name : null;
+        const updateInsCard = !isIgnored('insurance_card') && patient.insurance_card ? patient.insurance_card : null;
+        const updateInsPlan = !isIgnored('insurance_plan') && patient.insurance_plan ? patient.insurance_plan : null;
+
+        db.prepare(`
+          UPDATE patients SET
+            phone = COALESCE(?, phone),
+            whatsapp = COALESCE(?, whatsapp),
+            email = COALESCE(?, email),
+            cpf = COALESCE(?, cpf),
+            birth_date = COALESCE(?, birth_date),
+            address = COALESCE(?, address),
+            city = COALESCE(?, city),
+            state = COALESCE(?, state),
+            zip_code = COALESCE(?, zip_code),
+            emergency_contact = COALESCE(?, emergency_contact),
+            health_insurance_provider = COALESCE(?, health_insurance_provider),
+            health_insurance_card = COALESCE(?, health_insurance_card),
+            health_insurance_plan = COALESCE(?, health_insurance_plan),
+            updated_at = datetime('now')
+          WHERE id = ? AND tenant_id = ?
+        `).run(
+          updatePhone, updateWhatsapp, updateEmail, updateCpf, updateBirth,
+          updateAddress, updateCity, updateState, updateZip, updateResp,
+          updateInsName, updateInsCard, updateInsPlan,
+          patientIdToUse, tenantId
+        );
+      } else {
+        patientIdToUse = 'pat-imp-' + uuidv4().slice(0, 10);
+        const finalPhone = (!isIgnored('phone') && patient.phone) || (!isIgnored('whatsapp') && patient.whatsapp) || '(00) 00000-0000';
+
+        db.prepare(`
+          INSERT INTO patients (
+            id, tenant_id, full_name, cpf, phone, whatsapp, email,
+            birth_date, address, city, state, zip_code, emergency_contact,
+            health_insurance_provider, health_insurance_card, health_insurance_plan,
+            allergies_status, active
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        `).run(
+          patientIdToUse,
+          tenantId,
+          patient.full_name.trim(),
+          !isIgnored('cpf') && patient.cpf ? patient.cpf.trim() : null,
+          finalPhone,
+          !isIgnored('whatsapp') && patient.whatsapp ? patient.whatsapp.trim() : null,
+          !isIgnored('email') && patient.email ? patient.email.trim() : null,
+          !isIgnored('birth_date') && patient.birth_date ? patient.birth_date.trim() : null,
+          !isIgnored('address') && patient.address ? patient.address.trim() : null,
+          !isIgnored('city') && patient.city ? patient.city.trim() : null,
+          !isIgnored('state') && patient.state ? patient.state.trim() : null,
+          !isIgnored('zip_code') && patient.zip_code ? patient.zip_code.trim() : null,
+          !isIgnored('responsible') && patient.responsible ? patient.responsible.trim() : null,
+          !isIgnored('insurance_name') && patient.insurance_name ? patient.insurance_name.trim() : null,
+          !isIgnored('insurance_card') && patient.insurance_card ? patient.insurance_card.trim() : null,
+          !isIgnored('insurance_plan') && patient.insurance_plan ? patient.insurance_plan.trim() : null,
+          !isIgnored('allergies') && clinical.allergies ? 'has_allergies' : null
+        );
+      }
+
+      // 1. Alergias
+      if (!isIgnored('allergies') && clinical.allergies && clinical.allergies.trim()) {
+        try {
+          const algId = 'alg-imp-' + uuidv4().slice(0, 10);
+          db.prepare(`
+            INSERT INTO patient_allergies (id, tenant_id, patient_id, agent, reaction, status, created_by)
+            VALUES (?, ?, ?, ?, 'Importado de prontuário', 'active', ?)
+          `).run(algId, tenantId, patientIdToUse, clinical.allergies.trim(), userId);
+
+          db.prepare(`
+            UPDATE patients SET allergies_status = 'has_allergies' WHERE id = ? AND tenant_id = ?
+          `).run(patientIdToUse, tenantId);
+        } catch (_) {}
+      }
+
+      // 2. Medicamentos
+      if (!isIgnored('medications') && clinical.medications && clinical.medications.trim()) {
+        try {
+          const medId = 'med-imp-' + uuidv4().slice(0, 10);
+          db.prepare(`
+            INSERT INTO patient_medications (id, tenant_id, patient_id, name, status, created_by)
+            VALUES (?, ?, ?, ?, 'active', ?)
+          `).run(medId, tenantId, patientIdToUse, clinical.medications.trim(), userId);
+        } catch (_) {}
+      }
+
+      // 3. Anamnese & Queixa Principal
+      const hasAnamnesis = !isIgnored('anamnesis') && clinical.anamnesis && clinical.anamnesis.trim();
+      const hasChiefComplaint = !isIgnored('chief_complaint') && clinical.chief_complaint && clinical.chief_complaint.trim();
+      if (hasAnamnesis || hasChiefComplaint) {
+        try {
+          const anmId = 'anm-imp-' + uuidv4().slice(0, 10);
+          const contentJson = JSON.stringify({
+            chief_complaint: hasChiefComplaint ? clinical.chief_complaint.trim() : '',
+            history: hasAnamnesis ? clinical.anamnesis.trim() : '',
+            vital_signs: !isIgnored('vital_signs') && clinical.vital_signs ? clinical.vital_signs.trim() : '',
+            triage: !isIgnored('triage') && clinical.triage ? clinical.triage.trim() : '',
+            assessments: !isIgnored('assessments') && clinical.assessments ? clinical.assessments.trim() : '',
+            exams: !isIgnored('exams') && clinical.exams ? clinical.exams.trim() : '',
+            diagnoses: !isIgnored('diagnoses') && clinical.diagnoses ? clinical.diagnoses.trim() : '',
+            conduct: !isIgnored('conduct') && clinical.conduct ? clinical.conduct.trim() : '',
+            notes: !isIgnored('notes') && clinical.notes ? clinical.notes.trim() : '',
+            imported_at: new Date().toISOString()
+          });
+
+          db.prepare(`
+            INSERT INTO patient_anamnesis (id, tenant_id, patient_id, professional_id, title, template_type, content_json)
+            VALUES (?, ?, ?, ?, 'Anamnese de Prontuário Digitalizado', 'imported_record', ?)
+          `).run(anmId, tenantId, patientIdToUse, firstProf.id, contentJson);
+        } catch (_) {}
+      }
+
+      // 4. Múltiplos Atendimentos / Evoluções Separadas por Data
+      let recordsCreated = 0;
+      if (Array.isArray(evolutions) && evolutions.length > 0) {
+        for (let i = 0; i < evolutions.length; i++) {
+          const ev = evolutions[i];
+          if (!ev || (!ev.evolution && !ev.conduct)) continue;
+
+          const evolDate = ev.date && String(ev.date).trim() ? String(ev.date).trim() : new Date().toISOString().slice(0, 10);
+          const evolText = String(ev.evolution || '').trim();
+          const evolConduct = String(ev.conduct || '').trim();
+
+          let fullClinicalEvolution = evolText;
+          if (evolConduct) {
+            fullClinicalEvolution = fullClinicalEvolution
+              ? `${fullClinicalEvolution}\n\nConduta / Prescrição: ${evolConduct}`
+              : `Conduta / Prescrição: ${evolConduct}`;
+          }
+
+          if (!fullClinicalEvolution) continue;
+
+          let evolProfId = firstProf.id;
+          if (ev.professional && String(ev.professional).trim()) {
+            const foundProf = db.prepare('SELECT id FROM professionals WHERE tenant_id = ? AND LOWER(name) LIKE ? LIMIT 1')
+              .get(tenantId, `%${String(ev.professional).trim().toLowerCase()}%`) as any;
+            if (foundProf) evolProfId = foundProf.id;
+          }
+
+          const recId = 'rec-imp-' + uuidv4().slice(0, 10);
+          const recTitle = `Atendimento / Evolução (${evolDate})`;
+
+          db.prepare(`
+            INSERT INTO records (
+              id, tenant_id, patient_id, professional_id, session_date, title, clinical_evolution, created_by
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `).run(recId, tenantId, patientIdToUse, evolProfId, evolDate, recTitle, fullClinicalEvolution, userId);
+
+          recordsCreated++;
+        }
+      }
+
+      // Se não havia evoluções, mas havia queixa ou conduta isolada, cria um registro inicial
+      if (recordsCreated === 0 && (hasChiefComplaint || hasAnamnesis || clinical.conduct)) {
+        const singleText = [
+          hasChiefComplaint ? `Queixa Principal: ${clinical.chief_complaint.trim()}` : '',
+          hasAnamnesis ? `Anamnese: ${clinical.anamnesis.trim()}` : '',
+          clinical.conduct ? `Conduta: ${clinical.conduct.trim()}` : ''
+        ].filter(Boolean).join('\n\n');
+
+        if (singleText) {
+          const recId = 'rec-imp-' + uuidv4().slice(0, 10);
+          db.prepare(`
+            INSERT INTO records (
+              id, tenant_id, patient_id, professional_id, session_date, title, clinical_evolution, created_by
+            )
+            VALUES (?, ?, ?, ?, date('now'), 'Prontuário Inicial Importado', ?, ?)
+          `).run(recId, tenantId, patientIdToUse, firstProf.id, singleText, userId);
+          recordsCreated++;
+        }
+      }
+
+      // Atualiza anotações clínicas gerais no paciente se houver sinais vitais / exames / diagnósticos
+      const extraNotesParts: string[] = [];
+      if (!isIgnored('vital_signs') && clinical.vital_signs) extraNotesParts.push(`Sinais Vitais: ${clinical.vital_signs.trim()}`);
+      if (!isIgnored('exams') && clinical.exams) extraNotesParts.push(`Exames: ${clinical.exams.trim()}`);
+      if (!isIgnored('diagnoses') && clinical.diagnoses) extraNotesParts.push(`Diagnósticos: ${clinical.diagnoses.trim()}`);
+      if (!isIgnored('notes') && clinical.notes) extraNotesParts.push(`Observações: ${clinical.notes.trim()}`);
+
+      if (extraNotesParts.length > 0) {
+        const extraNotesText = extraNotesParts.join('\n');
+        db.prepare(`
+          UPDATE patients SET
+            clinical_notes = CASE
+              WHEN clinical_notes IS NOT NULL AND clinical_notes != '' THEN clinical_notes || '\n\n' || ?
+              ELSE ?
+            END
+          WHERE id = ? AND tenant_id = ?
+        `).run(extraNotesText, extraNotesText, patientIdToUse, tenantId);
+      }
+
+      db.exec('COMMIT');
+
+      // Auditoria segura: registra a importação sem incluir texto clínico sensível no log
+      try {
+        logAudit(req, 'IMPORT_MEDICAL_RECORD', 'patient', patientIdToUse, {
+          action,
+          isNewPatient: action !== 'link_existing',
+          recordsCreated
+        });
+      } catch (_) {}
+
+      res.status(200).json({
+        success: true,
+        patientId: patientIdToUse,
+        recordsCreated,
+        isNewPatient: action !== 'link_existing'
+      });
+    } catch (err: any) {
+      try { db.exec('ROLLBACK'); } catch (_) {}
+      console.error('[ImportController.executeMedicalRecord] Erro ao salvar dados:', err?.message || err);
+      res.status(500).json({ error: 'Erro ao salvar prontuário revisado no banco de dados.' });
+    }
+  }
 }
+

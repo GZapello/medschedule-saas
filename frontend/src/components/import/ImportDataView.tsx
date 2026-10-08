@@ -24,8 +24,12 @@ import {
   X,
   FileCheck,
   Plus,
-  Files
+  Files,
+  Camera,
+  Image as ImageIcon,
+  ShieldCheck
 } from 'lucide-react';
+import { MedicalRecordScanner } from './MedicalRecordScanner';
 
 interface UploadedFileItem {
   id: string;
@@ -81,6 +85,7 @@ export const ImportDataView: React.FC<ImportDataViewProps> = ({ onNavigate }) =>
 
   const [activeTab, setActiveTab] = useState<'import' | 'history'>('import');
   const [currentStep, setCurrentStep] = useState<number>(1);
+  const [scannerMode, setScannerMode] = useState<'camera' | 'photos' | 'document' | null>(null);
 
   // Arquivos
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFileItem[]>([]);
@@ -504,8 +509,19 @@ export const ImportDataView: React.FC<ImportDataViewProps> = ({ onNavigate }) =>
         </div>
       )}
 
-      {/* ABA 1: FLUXO DE IMPORTAÇÃO PASSO A PASSO */}
-      {activeTab === 'import' && (
+      {/* ABA 1: FLUXO DE IMPORTAÇÃO PASSO A PASSO OU SCANNER DE PRONTUÁRIO */}
+      {activeTab === 'import' && scannerMode !== null && (
+        <MedicalRecordScanner
+          initialMode={scannerMode}
+          onCancel={() => setScannerMode(null)}
+          onSuccess={() => {
+            fetchBatches();
+          }}
+          onNavigate={onNavigate}
+        />
+      )}
+
+      {activeTab === 'import' && scannerMode === null && (
         <div className="space-y-6">
           {/* Barra de Progresso das Etapas */}
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between text-xs font-medium">
@@ -533,11 +549,87 @@ export const ImportDataView: React.FC<ImportDataViewProps> = ({ onNavigate }) =>
             </div>
           </div>
 
-          {/* PASSO 1: UPLOAD DE MÚLTIPLOS ARQUIVOS (.docx, .xlsx, .csv, .txt) */}
+          {/* PASSO 1: UPLOAD DE MÚLTIPLOS ARQUIVOS (.docx, .xlsx, .csv, .txt) OU ESCANEAMENTO */}
           {currentStep === 1 && (
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-8 space-y-6">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-6 sm:p-8 space-y-6">
+              {/* Três Opções Oficiais: Fotografar Prontuário, Enviar Fotos, Enviar Documento */}
+              <div className="bg-gradient-to-r from-teal-50/70 via-sky-50/40 to-indigo-50/70 border border-teal-200/80 rounded-2xl p-5 space-y-3.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="p-2 rounded-xl bg-teal-600 text-white shadow-xs">
+                      <Camera className="w-5 h-5" />
+                    </span>
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-900">
+                        Importação de Prontuário por Foto ou Documento Digitalizado
+                      </h4>
+                      <p className="text-[11px] text-slate-500">
+                        Extraia queixa, anamnese, exames e múltiplos atendimentos com IA multimodal.
+                      </p>
+                    </div>
+                  </div>
+                  <span className="self-start sm:self-center text-[10px] font-bold text-teal-800 bg-teal-100/80 px-2.5 py-1 rounded-full flex items-center gap-1 border border-teal-200">
+                    <ShieldCheck className="w-3.5 h-3.5 text-teal-700" />
+                    Sem Armazenar as Fotos (LGPD)
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setScannerMode('camera')}
+                    className="flex items-center gap-3 p-3.5 rounded-xl border border-teal-200 bg-white hover:border-teal-400 hover:bg-teal-50/50 text-left shadow-xs transition-all group cursor-pointer"
+                  >
+                    <div className="p-2.5 rounded-lg bg-teal-500 text-white group-hover:scale-105 transition-transform shrink-0 shadow-xs">
+                      <Camera className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-slate-900">Fotografar prontuário</div>
+                      <div className="text-[10px] text-slate-500">Câmera traseira celular/tablet</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setScannerMode('photos')}
+                    className="flex items-center gap-3 p-3.5 rounded-xl border border-sky-200 bg-white hover:border-sky-400 hover:bg-sky-50/50 text-left shadow-xs transition-all group cursor-pointer"
+                  >
+                    <div className="p-2.5 rounded-lg bg-sky-500 text-white group-hover:scale-105 transition-transform shrink-0 shadow-xs">
+                      <ImageIcon className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-slate-900">Enviar fotos</div>
+                      <div className="text-[10px] text-slate-500">Múltiplas fotos JPG, PNG, WebP</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setScannerMode('document')}
+                    className="flex items-center gap-3 p-3.5 rounded-xl border border-indigo-200 bg-white hover:border-indigo-400 hover:bg-indigo-50/50 text-left shadow-xs transition-all group cursor-pointer"
+                  >
+                    <div className="p-2.5 rounded-lg bg-indigo-500 text-white group-hover:scale-105 transition-transform shrink-0 shadow-xs">
+                      <FileText className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-slate-900">Enviar documento</div>
+                      <div className="text-[10px] text-slate-500">Prontuário em PDF ou digitalizado</div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Divisor Visual */}
+              <div className="relative flex py-1 items-center">
+                <div className="flex-grow border-t border-slate-200"></div>
+                <span className="flex-shrink mx-4 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                  Ou importe arquivos de tabelas e planilhas (.xlsx, .docx, .csv)
+                </span>
+                <div className="flex-grow border-t border-slate-200"></div>
+              </div>
+
               <div className="text-center max-w-lg mx-auto space-y-2">
-                <h3 className="text-base font-bold text-slate-900">Selecione os arquivos de prontuários ou pacientes</h3>
+                <h3 className="text-base font-bold text-slate-900">Selecione os arquivos de planilhas ou documentos Word</h3>
                 <p className="text-xs text-slate-500">
                   Suportamos múltiplos documentos Word com tabelas (<span className="font-mono text-slate-700">.docx</span>), planilhas Excel (<span className="font-mono text-slate-700">.xlsx</span>), tabelas separadas por vírgula (<span className="font-mono text-slate-700">.csv</span>) ou texto (<span className="font-mono text-slate-700">.txt</span>).
                 </p>

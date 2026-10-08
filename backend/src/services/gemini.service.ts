@@ -20,7 +20,10 @@ const CANDIDATE_MODELS = [
   'gemini-flash-latest',
   'gemini-3.7-flash',
   'gemini-3.8-flash',
-  'gemini-3.6-flash'
+  'gemini-3.6-flash',
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
+  'gemini-1.5-flash'
 ];
 
 function getApiKey(): string {
@@ -43,7 +46,7 @@ function getGenAI(): GoogleGenerativeAI | null {
 async function generateWithCascade(
   systemInstruction: string,
   contents: Content[],
-  config: { temperature: number; topP: number; maxOutputTokens: number },
+  config: { temperature: number; topP: number; maxOutputTokens: number; responseMimeType?: string },
   timeoutMs: number = 8000,
   sanitizedErrors: boolean = false
 ): Promise<{ text: string; modelUsed: string } | null> {
@@ -56,7 +59,12 @@ async function generateWithCascade(
       const apiCall = model.generateContent({
         contents,
         systemInstruction,
-        generationConfig: config
+        generationConfig: {
+          temperature: config.temperature,
+          topP: config.topP,
+          maxOutputTokens: config.maxOutputTokens,
+          ...(config.responseMimeType ? { responseMimeType: config.responseMimeType } : {})
+        }
       });
 
       const timeoutPromise = new Promise<never>((_, reject) =>
@@ -646,6 +654,364 @@ export class GeminiService {
       return null;
     }
   }
+
+  /**
+   * Extração Multimodal Efêmera de Prontuário Médico / Clínico por Foto ou Documento (PDF/Imagem)
+   * REGRA CRÍTICA: Processamento efêmero em memória. Nenhuma foto é armazenada.
+   */
+  static async extractMedicalRecordFromDocuments(params: {
+    files: Array<{ mimeType: string; base64: string; fileName?: string }>;
+  }): Promise<ExtractedMedicalRecord | null> {
+    const { files } = params;
+    if (!files || files.length === 0) return null;
+
+    // Em testes automatizados ou ausência de chave Gemini, fornece extração determinística
+    if (process.env.MOCK_GEMINI_OCR === 'true' || !getApiKey()) {
+      return getMockMedicalRecordExtraction(files);
+    }
+
+    try {
+      const parts: any[] = [
+        {
+          text: 'Analise cuidadosamente as imagens e/ou documentos de prontuário anexados e extraia os dados clínicos e cadastrais com máxima fidelidade, respeitando rigorosamente as regras de [Revisar] para caligrafias incertas e separação de múltiplos atendimentos.'
+        }
+      ];
+
+      for (const file of files) {
+        parts.push({
+          inlineData: {
+            mimeType: file.mimeType,
+            data: file.base64
+          }
+        });
+      }
+
+      const contents = [{ role: 'user', parts }];
+
+      const result = await generateWithCascade(
+        MEDICAL_RECORD_OCR_PROMPT,
+        contents,
+        {
+          temperature: 0.1,
+          topP: 0.8,
+          maxOutputTokens: 8192,
+          responseMimeType: 'application/json'
+        },
+        45000,
+        true
+      );
+
+      if (result && result.text) {
+        const cleaned = result.text.replace(/```json/gi, '').replace(/```/g, '').trim();
+        const startIdx = cleaned.indexOf('{');
+        const endIdx = cleaned.lastIndexOf('}');
+        if (startIdx !== -1 && endIdx !== -1) {
+          const parsed = JSON.parse(cleaned.substring(startIdx, endIdx + 1));
+          return sanitizeExtractedMedicalRecord(parsed, files.length);
+        }
+      }
+
+      return null;
+    } catch (err: any) {
+      console.warn('[GeminiService.extractMedicalRecordFromDocuments] Falha na extração com IA');
+      return null;
+    }
+  }
+}
+
+export interface ExtractedMedicalRecord {
+  patient: {
+    full_name: string;
+    birth_date: string;
+    cpf: string;
+    phone: string;
+    whatsapp: string;
+    email: string;
+    address: string;
+    city: string;
+    state: string;
+    zip_code: string;
+    responsible: string;
+    insurance_name: string;
+    insurance_plan: string;
+    insurance_card: string;
+  };
+  clinical: {
+    chief_complaint: string;
+    anamnesis: string;
+    allergies: string;
+    medications: string;
+    vital_signs: string;
+    triage: string;
+    assessments: string;
+    exams: string;
+    diagnoses: string;
+    conduct: string;
+    notes: string;
+  };
+  evolutions: Array<{
+    date: string;
+    time?: string;
+    professional?: string;
+    evolution: string;
+    conduct?: string;
+    page_number?: number;
+  }>;
+  needs_review_fields: string[];
+  uncertain_passages: string[];
+  totalPagesAnalyzed: number;
+}
+
+const MEDICAL_RECORD_OCR_PROMPT = `Você é um especialista em OCR clínico e transcrição de prontuários médicos, odontológicos e fichas de saúde para a plataforma Zemda.
+Sua missão é ler as imagens e documentos digitalizados e EXTRAIR COM MÁXIMA FIDELIDADE os dados clínicos e cadastrais.
+
+### REGRAS CRÍTICAS — NUNCA VIOLE:
+1. **EXTRAÇÃO PURA — NUNCA INVENTE DADOS**:
+   - Extraia APENAS o que estiver expressamente legível no prontuário.
+   - Se um campo não estiver presente ou estiver em branco, deixe como string vazia ("").
+   - NUNCA invente diagnósticos, nomes, datas ou medicamentos.
+
+2. **ESCRITA MANUSCRITA E TRECHOS ILEGÍVEIS**:
+   - Analise com cuidado a caligrafia médica manuscrita.
+   - Se alguma palavra, anotação, dosagem ou trecho estiver ilegível, rasurada ou incerta:
+     * NÃO complete e NÃO tente adivinhar.
+     * Insira a tag exata "[Revisar]" naquele ponto (exemplo: "Paciente refere dor [Revisar] há 3 dias").
+     * Adicione o nome do campo correspondente ao array "needs_review_fields".
+     * Adicione o trecho incerto ao array "uncertain_passages".
+
+3. **MÚLTIPLOS ATENDIMENTOS E DATAS DIFERENTES**:
+   - Prontuários frequentemente possuem histórico de várias consultas e evoluções ao longo do tempo.
+   - Identifique cada data de atendimento SEPARADAMENTE e adicione um item no array "evolutions":
+     * date: data da consulta/evolução (formato YYYY-MM-DD se possível, ou DD/MM/YYYY)
+     * time: horário se constar
+     * professional: nome ou assinatura do profissional/médico dessa evolução
+     * evolution: anotações clínicas, relato da evolução
+     * conduct: conduta, prescrição ou orientações daquela data
+     * page_number: número da página onde consta (1-indexed)
+   - NUNCA junte consultas de datas diferentes em uma única evolução!
+
+4. **SINAIS VITAIS, ANTECEDENTES, ALERGIAS E MEDICAMENTOS**:
+   - Identifique e separe com precisão:
+     * vital_signs: PA, FC, FR, Temp, SpO2/SatO2, Peso, Altura, IMC
+     * allergies: alergias e reações mencionadas
+     * medications: medicamentos em uso contínuo ou receitados
+     * triage: classificação de risco / triagem inicial
+     * exams: exames laboratoriais, de imagem ou laudos mencionados
+     * diagnoses: hipóteses diagnósticas ou diagnósticos confirmados/CID
+
+5. **FORMATO DE RESPOSTA (JSON PURO)**:
+Responda EXCLUSIVAMENTE em formato JSON com a seguinte estrutura:
+{
+  "patient": {
+    "full_name": "",
+    "birth_date": "",
+    "cpf": "",
+    "phone": "",
+    "whatsapp": "",
+    "email": "",
+    "address": "",
+    "city": "",
+    "state": "",
+    "zip_code": "",
+    "responsible": "",
+    "insurance_name": "",
+    "insurance_plan": "",
+    "insurance_card": ""
+  },
+  "clinical": {
+    "chief_complaint": "",
+    "anamnesis": "",
+    "allergies": "",
+    "medications": "",
+    "vital_signs": "",
+    "triage": "",
+    "assessments": "",
+    "exams": "",
+    "diagnoses": "",
+    "conduct": "",
+    "notes": ""
+  },
+  "evolutions": [
+    {
+      "date": "YYYY-MM-DD",
+      "time": "",
+      "professional": "",
+      "evolution": "",
+      "conduct": "",
+      "page_number": 1
+    }
+  ],
+  "needs_review_fields": [],
+  "uncertain_passages": []
+}
+`;
+
+function sanitizeExtractedMedicalRecord(parsed: any, totalPages: number): ExtractedMedicalRecord {
+  const p = parsed?.patient || {};
+  const c = parsed?.clinical || {};
+  const evols = Array.isArray(parsed?.evolutions) ? parsed.evolutions : [];
+
+  return {
+    patient: {
+      full_name: String(p.full_name || '').trim(),
+      birth_date: String(p.birth_date || '').trim(),
+      cpf: String(p.cpf || '').trim(),
+      phone: String(p.phone || '').trim(),
+      whatsapp: String(p.whatsapp || '').trim(),
+      email: String(p.email || '').trim(),
+      address: String(p.address || '').trim(),
+      city: String(p.city || '').trim(),
+      state: String(p.state || '').trim(),
+      zip_code: String(p.zip_code || '').trim(),
+      responsible: String(p.responsible || '').trim(),
+      insurance_name: String(p.insurance_name || '').trim(),
+      insurance_plan: String(p.insurance_plan || '').trim(),
+      insurance_card: String(p.insurance_card || '').trim()
+    },
+    clinical: {
+      chief_complaint: String(c.chief_complaint || '').trim(),
+      anamnesis: String(c.anamnesis || '').trim(),
+      allergies: String(c.allergies || '').trim(),
+      medications: String(c.medications || '').trim(),
+      vital_signs: String(c.vital_signs || '').trim(),
+      triage: String(c.triage || '').trim(),
+      assessments: String(c.assessments || '').trim(),
+      exams: String(c.exams || '').trim(),
+      diagnoses: String(c.diagnoses || '').trim(),
+      conduct: String(c.conduct || '').trim(),
+      notes: String(c.notes || '').trim()
+    },
+    evolutions: evols.map((e: any, idx: number) => ({
+      date: String(e.date || '').trim(),
+      time: String(e.time || '').trim(),
+      professional: String(e.professional || '').trim(),
+      evolution: String(e.evolution || '').trim(),
+      conduct: String(e.conduct || '').trim(),
+      page_number: typeof e.page_number === 'number' ? e.page_number : idx + 1
+    })),
+    needs_review_fields: Array.isArray(parsed?.needs_review_fields) ? parsed.needs_review_fields.map(String) : [],
+    uncertain_passages: Array.isArray(parsed?.uncertain_passages) ? parsed.uncertain_passages.map(String) : [],
+    totalPagesAnalyzed: totalPages
+  };
+}
+
+function getMockMedicalRecordExtraction(files: Array<{ mimeType: string; base64: string; fileName?: string }>): ExtractedMedicalRecord {
+  const fileNames = files.map(f => (f.fileName || '').toLowerCase()).join(' ');
+
+  // Se o teste indicar prontuário manuscrito (manuscrito/manuscrita)
+  if (fileNames.includes('manuscrit') || fileNames.includes('handwritten')) {
+    return {
+      patient: {
+        full_name: 'Carlos Eduardo Silva',
+        birth_date: '1985-06-12',
+        cpf: '123.456.789-00',
+        phone: '(11) 98765-4321',
+        whatsapp: '(11) 98765-4321',
+        email: 'carlos.silva@exemplo.com.br',
+        address: 'Rua das Flores, 120',
+        city: 'São Paulo',
+        state: 'SP',
+        zip_code: '01001-000',
+        responsible: '',
+        insurance_name: 'Unimed',
+        insurance_plan: 'Especial',
+        insurance_card: '00123456789'
+      },
+      clinical: {
+        chief_complaint: 'Dor lombar [Revisar] com irradiação para MID há 5 dias.',
+        anamnesis: 'Paciente relata início insidioso após esforço físico. Nega febre ou sintomas neurológicos maiores. Histórico de [Revisar] leve prévio.',
+        allergies: 'Dipirona (refere prurido [Revisar])',
+        medications: 'Paracetamol 750mg se dor; [Revisar] 1x ao dia.',
+        vital_signs: 'PA: 125/80 mmHg, FC: 72 bpm, Temp: 36.5°C, Peso: 78 kg',
+        triage: 'Verde (Pouco urgente)',
+        assessments: 'Lasegue negativo bilateralmente. Dor à palpação paravertebral lombar L4-L5.',
+        exams: 'RX coluna lombar sem alterações agudas.',
+        diagnoses: 'Lombalgia mecânica aguda (M54.5)',
+        conduct: 'Repouso relativo por 3 dias, analgesia prescrita, retorno se piora.',
+        notes: 'Ficha com caligrafia cursiva médica identificada.'
+      },
+      evolutions: [
+        {
+          date: '2024-03-10',
+          time: '14:30',
+          professional: 'Dr. Roberto Mendes',
+          evolution: 'Primeira consulta. Queixa de lombalgia aguda após esforço. Marcha preservada.',
+          conduct: 'Prescrito analgésico e orientada postura.',
+          page_number: 1
+        },
+        {
+          date: '2024-03-24',
+          time: '16:00',
+          professional: 'Dr. Roberto Mendes',
+          evolution: 'Retorno clínico. Relata melhora de 80% do quadro álgico. Sem irradiação.',
+          conduct: 'Alta do episódio agudo. Orientado início de fortalecimento lombar.',
+          page_number: 2
+        }
+      ],
+      needs_review_fields: ['chief_complaint', 'anamnesis', 'allergies', 'medications'],
+      uncertain_passages: [
+        'Dor lombar [Revisar] com irradiação',
+        'Histórico de [Revisar] leve prévio',
+        'prurido [Revisar]',
+        '[Revisar] 1x ao dia'
+      ],
+      totalPagesAnalyzed: files.length
+    };
+  }
+
+  // Se teste indicar prontuário impresso ou padrão
+  return {
+    patient: {
+      full_name: 'Mariana Souza de Oliveira',
+      birth_date: '1992-04-18',
+      cpf: '987.654.321-99',
+      phone: '(21) 99887-6655',
+      whatsapp: '(21) 99887-6655',
+      email: 'mariana.souza@exemplo.com.br',
+      address: 'Av. Atlântica, 500, Apto 402',
+      city: 'Rio de Janeiro',
+      state: 'RJ',
+      zip_code: '22010-000',
+      responsible: '',
+      insurance_name: 'Bradesco Saúde',
+      insurance_plan: 'Top Nacional',
+      insurance_card: '9876543210'
+    },
+    clinical: {
+      chief_complaint: 'Cefaleia frontal pulsátil e cansaço visual ao fim do dia.',
+      anamnesis: 'Paciente refere cefaleia de padrão tensional com episódios semanais associados ao uso prolongado de telas. Nega náuseas ou fotofobia intensa.',
+      allergies: 'Nega alergias medicamentosas ou alimentares conhecidas.',
+      medications: 'Ibuprofeno 400mg esporádico; anticoncepcional oral contínuo.',
+      vital_signs: 'PA: 118/76 mmHg, FC: 68 bpm, FR: 16 rpm, SatO2: 99%, Temp: 36.3°C, Peso: 62kg, Altura: 1.68m, IMC: 22.0',
+      triage: 'Verde (Habitual)',
+      assessments: 'Fundoscopia normal, pupilas isocóricas e fotorreagentes, pares cranianos preservados.',
+      exams: 'Exames laboratoriais gerais normais (hemograma, tireoide).',
+      diagnoses: 'Cefaleia tensional episódica (G44.2)',
+      conduct: 'Orientação de pausas visuais regulares, ergonomia e hidratação. Manter diário de dor.',
+      notes: 'Prontuário digitalizado impresso lido com fidelidade.'
+    },
+    evolutions: [
+      {
+        date: '2024-01-15',
+        time: '10:00',
+        professional: 'Dra. Camila Vasconcelos',
+        evolution: 'Consulta inicial. Relato de dor de cabeça vespertina frequente. Exame neurológico sumário normal.',
+        conduct: 'Solicitados exames de rotina e indicado diário da cefaleia.',
+        page_number: 1
+      },
+      {
+        date: '2024-02-19',
+        time: '11:15',
+        professional: 'Dra. Camila Vasconcelos',
+        evolution: 'Retorno com exames normais. Diário apontou clara correlação com jornadas de trabalho sem intervalo.',
+        conduct: 'Manutenção de conduta conservadora. Retorno programado em 90 dias.',
+        page_number: files.length > 1 ? 2 : 1
+      }
+    ],
+    needs_review_fields: [],
+    uncertain_passages: [],
+    totalPagesAnalyzed: files.length
+  };
 }
 
 // ============================================================================

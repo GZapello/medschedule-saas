@@ -830,6 +830,11 @@ api.get('/v1/import/batches', requireTenant, requireRole('clinic_admin'), Import
 api.post('/v1/import/batches/:id/rollback', requireTenant, requireRole('clinic_admin'), ImportController.rollbackBatch);
 api.post('/v1/import/export-custom-docx', requireTenant, ImportController.exportCustomDocx);
 
+// Importação de Prontuário por Foto / Documento Efêmero (Sem Armazenar as Fotos)
+api.post('/v1/import/medical-record/analyze', requireTenant, requireRole('clinic_admin', 'professional'), ImportController.analyzeMedicalRecord);
+api.post('/v1/import/medical-record/execute', requireTenant, requireRole('clinic_admin', 'professional'), ImportController.executeMedicalRecord);
+api.get('/v1/import/medical-record/search-patient', requireTenant, requireRole('clinic_admin', 'professional'), ImportController.searchPatientDuplicate);
+
 // Central de Chamados & Suporte
 api.get('/v1/support/tickets', SupportController.list);
 api.get('/v1/support/tickets/:id', SupportController.getById);
