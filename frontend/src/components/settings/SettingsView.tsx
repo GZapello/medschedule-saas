@@ -857,6 +857,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
               .map(card => (
                 <div
                   key={card.id}
+                  data-tour={`settings-${card.id}`}
                   onClick={() => {
                     setActiveSection(card.id as any);
                     if (card.defaultTab) setActiveTab(card.defaultTab as any);

@@ -194,7 +194,7 @@ export const FinancialView: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div data-tour-loading={loading} className="space-y-6">
       {/* Top Header & Actions */}
       <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>

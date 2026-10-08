@@ -729,7 +729,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
   }, [viewMode, currentDate, weekDays, selectedProf, professionals, selectedProfSchedule, filteredAppointments]);
 
   return (
-    <div className="space-y-4">
+    <div data-tour-loading={loading} className="space-y-4">
       {/* Top Controls Bar */}
       <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
         {/* Navigation buttons */}

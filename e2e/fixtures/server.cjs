@@ -8,7 +8,7 @@ process.env.RESEND_API_KEY = '';
 process.env.JWT_SECRET = 'e2e-only-secret-never-production';
 process.env.R2_MOCK_STORAGE = 'true';
 process.env.ZEMDA_FILES_SIGNING_SECRET = 'e2e-only-file-signing-secret-never-production';
-process.env.CLINICAL_FRONTEND_DIST = path.resolve(__dirname, '../../frontend/dist');
+process.env.CLINICAL_FRONTEND_DIST ||= path.resolve(__dirname, '../../frontend/dist');
 process.argv.push('--serve');
 const { app, db } = require('../../backend/test-consultations.cjs');
 const bcrypt = require('../../backend/node_modules/bcryptjs');

@@ -41,6 +41,7 @@ export function getStoredCookieConsent(): CookieConsentState | null {
  * Atualiza o Google Consent Mode v2 via gtag('consent', 'update', ...)
  */
 export function applyGtagConsent(analyticsGranted: boolean, marketingGranted: boolean = false): void {
+  try {
   if (typeof window === 'undefined') return;
 
   const analyticsVal = analyticsGranted ? 'granted' : 'denied';
@@ -65,6 +66,8 @@ export function applyGtagConsent(analyticsGranted: boolean, marketingGranted: bo
       }
     ]);
   }
+
+  } catch { /* Tracking and consent SDK failures must never interrupt authentication. */ }
 }
 
 /**

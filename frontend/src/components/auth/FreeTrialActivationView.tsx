@@ -1,3 +1,5 @@
+import { parseJwtPayload } from './GoogleAuthButton';
+import { googleAuthError, GOOGLE_LOGIN_ERROR } from './googleAuthErrors';
 import './CreateClinicModal.css';
 import './FreeTrialActivationView.css';
 import { trackCompletedRegistration } from '../../utils/registrationAnalytics';
@@ -267,7 +269,7 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
         onSuccess();
       }, 1500);
     } catch (err: any) {
-      showToast(err.message || 'Erro ao ativar teste grátis.', 'error');
+      showToast(googleAuthData ? googleAuthError(err, 'signup') : err.message || 'Erro ao ativar teste grátis.', 'error');
     } finally {
       setSubmitting(false);
     }
@@ -407,7 +409,8 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
                 <GoogleAuthButton
                   text="continue_with"
                   customLabel="Continuar com Google"
-                  onSuccess={(idToken, payload) => {
+                  onSuccess={(idToken) => {
+                    const payload = parseJwtPayload(idToken);
                     const email = (payload?.email || '').trim().toLowerCase();
                     const name = (payload?.name || '').trim();
                     if (trialData?.targetEmail && trialData.targetEmail.toLowerCase() !== email) {
@@ -419,7 +422,7 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
                     if (name && !managerName) setManagerName(name);
                     showToast('Conta Google conectada! Verifique os dados abaixo para ativar o teste.', 'info');
                   }}
-                  onError={(err) => showToast(err, 'error')}
+                  onError={() => showToast(GOOGLE_LOGIN_ERROR, 'error')}
                   disabled={submitting}
                 />
                 <div className="flex items-center gap-3">

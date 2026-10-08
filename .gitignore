@@ -43,3 +43,7 @@ ExerciseGymGifsDB/
 /tmp/personal-audit/
 /tmp/personal-report-tests/
 /tmp/shared-clinical-browser/
+
+# Isolated demonstration-tour builds and visual review sheets
+/tmp/onboarding-dist/
+/tmp/onboarding-review-*.jpg

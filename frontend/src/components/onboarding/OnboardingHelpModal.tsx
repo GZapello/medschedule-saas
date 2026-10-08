@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useOnboarding } from './OnboardingContext';
 import { useToast } from '../../context/ToastContext';
 import {
@@ -18,8 +18,11 @@ import {
 export const OnboardingHelpModal: React.FC = () => {
   const {
     isHelpOpen,
+    loading,
     closeHelp,
     startTour,
+    resumeTour,
+    resetTour,
     startModuleTour,
     openWhatsNew,
     availableModules,
@@ -30,6 +33,8 @@ export const OnboardingHelpModal: React.FC = () => {
 
   const { showToast } = useToast();
   const [selectingModule, setSelectingModule] = useState<boolean>(false);
+
+  useEffect(() => { if (!isHelpOpen) setSelectingModule(false); }, [isHelpOpen]);
 
   if (!isHelpOpen) return null;
 
@@ -74,7 +79,7 @@ export const OnboardingHelpModal: React.FC = () => {
       aria-modal="true"
       aria-labelledby="help-modal-title"
     >
-      <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 max-w-md w-full p-6 flex flex-col gap-4 animate-in zoom-in-95 duration-200 relative">
+      <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 max-w-md w-full max-h-[calc(100dvh-32px)] overflow-y-auto p-6 flex flex-col gap-4 animate-in zoom-in-95 duration-200 relative">
         {/* Header do Menu de Ajuda */}
         <div className="flex items-center justify-between pb-2 border-b border-slate-100">
           <div className="flex items-center gap-2.5">
@@ -154,12 +159,14 @@ export const OnboardingHelpModal: React.FC = () => {
         ) : (
           /* Lista Principal de Opções da Central de Ajuda: exatamente 5 opções */
           <div className="flex flex-col gap-2">
-            {/* 1. Fazer tour do Zemda */}
+            {onboardingData.onboardingStatus === 'in_progress' && <button type="button" disabled={loading} onClick={resumeTour} className="p-3 rounded-2xl bg-teal-600 text-white text-sm font-bold text-left">Continuar tour</button>}
+            {/* 1. Reiniciar tour */}
             <button
               type="button"
+              disabled={loading}
               onClick={() => {
                 closeHelp();
-                startTour();
+                void resetTour();
               }}
               className="w-full flex items-center justify-between p-3 rounded-2xl border border-slate-100 bg-slate-50/70 hover:bg-teal-50 hover:border-teal-200 transition-all text-left cursor-pointer group"
             >
@@ -169,7 +176,7 @@ export const OnboardingHelpModal: React.FC = () => {
                 </div>
                 <div>
                   <span className="text-xs font-bold text-slate-800 group-hover:text-teal-900 block">
-                    Fazer tour do Zemda
+                    Reiniciar tour
                   </span>
                   <span className="text-[11px] text-slate-500">
                     Revisar as principais funções da sua rotina
@@ -182,6 +189,7 @@ export const OnboardingHelpModal: React.FC = () => {
             {/* 2. Conhecer meu módulo OU Conhecer recursos de gestão */}
             <button
               type="button"
+              disabled={loading}
               onClick={handleModuleClick}
               className="w-full flex items-center justify-between p-3 rounded-2xl border border-slate-100 bg-slate-50/70 hover:bg-teal-50 hover:border-teal-200 transition-all text-left cursor-pointer group"
             >

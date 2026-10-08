@@ -1,3 +1,4 @@
+import { googleAuthError } from './googleAuthErrors';
 import { GoogleAccountLinkDialog } from './GoogleAccountLinkDialog';
 import React, { useState, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
@@ -7,7 +8,7 @@ import { trackLoginStarted } from '../../utils/registrationAnalytics';
 import { CreateClinicModal } from './CreateClinicModal';
 import { RegisterUserModal } from './RegisterUserModal';
 import { ForgotPasswordModal } from './ForgotPasswordModal';
-import { GoogleAuthButton, GoogleIcon, GoogleJwtPayload } from './GoogleAuthButton';
+import { GoogleAuthButton, GoogleIcon, GOOGLE_LOGIN_ERROR } from './GoogleAuthButton';
 import {
   Lock,
   Mail,
@@ -104,7 +105,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     }
   };
 
-  const handleGoogleSuccess = async (idToken: string, payload?: GoogleJwtPayload) => {
+  const handleGoogleSuccess = async (idToken: string) => {
     try {
       setLoading(true);
       setLoginError(null);
@@ -125,8 +126,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         setIsCreateClinicOpen(false);
         setGoogleLinkingState({
           idToken,
-          email: res.email || payload?.email || '',
-          name: res.name || payload?.name || ''
+          email: res.email || '',
+          name: res.name || ''
         });
         showToast('Conta existente encontrada. Confirme sua senha para vincular sua conta Google.', 'info');
         return;
@@ -136,16 +137,17 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         showToast('Nenhuma conta encontrada com este Google. Preencha seus dados para criar sua conta.', 'info');
         setGoogleSignupData({
           idToken,
-          name: res.googleUser?.name || payload?.name || '',
-          email: res.googleUser?.email || payload?.email || ''
+          name: res.googleUser?.name || '',
+          email: res.googleUser?.email || ''
         });
         setIsCreateClinicOpen(true);
         return;
       }
       throw new Error('Resposta inesperada ao entrar com Google. Tente novamente.');
     } catch (err: any) {
-      setLoginError({ message: err.message || 'Falha na autenticação com Google', code: err.code });
-      showToast(err.message || 'Falha na autenticação com Google', 'error');
+      googleAuthError(err);
+      setLoginError({ message: GOOGLE_LOGIN_ERROR });
+      showToast(GOOGLE_LOGIN_ERROR, 'error');
     } finally {
       setLoading(false);
     }
@@ -200,7 +202,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
               text="continue_with"
               customLabel="Continuar com Google"
               onSuccess={handleGoogleSuccess}
-              onError={(err) => showToast(err, 'error')}
+              onError={() => showToast(GOOGLE_LOGIN_ERROR, 'error')}
               disabled={loading || isCreateClinicOpen || !!googleLinkingState}
             />
 

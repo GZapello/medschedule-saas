@@ -264,6 +264,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
   }, [currentView, isSuperAdmin]);
 
+  useEffect(() => {
+    const prepare = (event: Event) => {
+      const route = (event as CustomEvent).detail?.route;
+      const category = effectiveCategories.find(cat => cat.items.some(item => item.id === route && item.visible));
+      if (category) setOpenCategories(prev => ({ ...prev, [category.id]: true }));
+    };
+    window.addEventListener('zemda-tour-prepare', prepare);
+    return () => window.removeEventListener('zemda-tour-prepare', prepare);
+  });
+
   const toggleCategory = (categoryId: string) => {
     setOpenCategories(prev => ({
       ...prev,
@@ -282,6 +292,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       )}
 
       <aside
+        data-tour-routes={effectiveCategories.flatMap(category => category.items.filter(item => item.visible).map(item => item.id)).join(" ")}
         className={`fixed top-0 bottom-0 left-0 z-50 w-64 max-w-[85vw] bg-white text-slate-700 flex flex-col transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:z-auto border-r border-slate-200/80 ${
           isOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'
         }`}
@@ -317,6 +328,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <div key={category.id} className="rounded-xl overflow-hidden">
                 {/* Category Header Accordion Button */}
                 <button
+                  data-tour-group={category.id}
+                  aria-expanded={isExpanded}
                   onClick={() => toggleCategory(category.id)}
                   className={`w-full flex items-center justify-between px-3 py-2 text-xs font-bold tracking-wider uppercase transition-colors rounded-xl cursor-pointer ${
                     hasActiveChild
@@ -355,7 +368,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       return (
                         <button
                           key={item.id}
-                          data-tour={isUserModule ? "nav-clinical-module" : `nav-${item.id}`}
+                          data-tour={`nav-${item.id}`}
                           data-nav-id={item.id}
                           data-clinical-module={isUserModule ? "true" : undefined}
                           onClick={() => {

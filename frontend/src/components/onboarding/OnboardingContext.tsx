@@ -1,24 +1,17 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { ApiClient } from '../../api/client';
-import {
-  TourDefinition,
-  TourStep,
-  TOURS_BY_PROFILE,
-  MODULE_TOURS,
-  filterTourByPermissions,
-  ClinicalModuleInfo,
-  getUserAuthorizedClinicalModules,
-  getClinicalModuleForUser
-} from './tourRegistry';
+import { TourDefinition, TourStep, TOURS_BY_PROFILE, MODULE_TOURS, ClinicalModuleInfo, ALL_CLINICAL_MODULES, filterTourByPermissions } from './tourRegistry';
 
-export const CURRENT_ONBOARDING_VERSION = 'v1.1';
+export const CURRENT_ONBOARDING_VERSION = 'v1.2';
 
 export interface UserOnboardingData {
   onboardingStatus: 'pending' | 'in_progress' | 'completed' | 'skipped' | 'dismissed';
   onboardingStartedAt: string | null;
   onboardingCompletedAt: string | null;
   onboardingLastStep: number;
+  onboardingTourId?: string;
+  onboardingStepId?: string;
   onboardingVersion: string;
   onboardingDismissed: boolean;
   moduleToursCompleted: string[];
@@ -44,6 +37,8 @@ interface OnboardingContextType {
 
   // Ações do Tour
   startTour: (tourId?: string) => void;
+  resumeTour: () => void;
+  closeTour: () => void;
   nextStep: () => void;
   prevStep: () => void;
   skipTour: () => void;
@@ -70,453 +65,220 @@ interface OnboardingContextType {
   isZemdaBody: boolean;
 }
 
-const OnboardingContext = createContext<OnboardingContextType | undefined>(undefined);
 
-const LOCAL_STORAGE_KEY = 'zemda_user_onboarding_cache';
+const OnboardingContext = createContext<OnboardingContextType | undefined>(undefined);
+const initialData = (): UserOnboardingData => ({
+  onboardingStatus: 'pending', onboardingStartedAt: null, onboardingCompletedAt: null,
+  onboardingLastStep: 1, onboardingVersion: CURRENT_ONBOARDING_VERSION, onboardingDismissed: false,
+  moduleToursCompleted: [], whatsNewDismissed: []
+});
+const writeCache = (key: string, data: UserOnboardingData) => {
+  try { localStorage.setItem(key, JSON.stringify(data)); } catch { /* Storage may be disabled. */ }
+};
 
 export const OnboardingProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const {
-    currentUser,
-    userPermissions,
-    isSuperAdmin,
-    isClinicAdmin,
-    isProfessional,
-    isReceptionist,
-    isDoctor,
-    isZemdaMed,
-    isEsthetician,
-    isZemdaEstetic,
-    isPhysiotherapist,
-    isDentist,
-    isNutritionist,
-    isOccupationalTherapist,
-    isSpeechTherapist,
-    isPsychologist,
-    isPsychopedagogue,
-    isPersonalTrainer,
-    isZemda360,
-    isZemdaBody
-  } = useAuth();
-
-  const [loading, setLoading] = useState<boolean>(true);
-
-  // Estado persistido
-  const [onboardingData, setOnboardingData] = useState<UserOnboardingData>(() => {
-    try {
-      const cached = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (cached) {
-        return JSON.parse(cached);
-      }
-    } catch (_) {}
-    return {
-      onboardingStatus: 'pending',
-      onboardingStartedAt: null,
-      onboardingCompletedAt: null,
-      onboardingLastStep: 1,
-      onboardingVersion: CURRENT_ONBOARDING_VERSION,
-      onboardingDismissed: false,
-      moduleToursCompleted: [],
-      whatsNewDismissed: []
-    };
-  });
-
-  // Tour ativo
-  const [isTourActive, setIsTourActive] = useState<boolean>(false);
+  const auth = useAuth();
+  const { currentUser, currentTenant, userPermissions, isClinicAdmin, isProfessional, isReceptionist, isSuperAdmin, isZemda360, isZemdaBody } = auth;
+  const identity = currentUser ? `zemda_onboarding_${currentTenant?.id || currentUser.tenantId || 'global'}_${currentUser.id}` : '';
+  const identityRef = useRef(identity);
+  identityRef.current = identity;
+  const [loadedIdentity, setLoadedIdentity] = useState('');
+  const loading = !identity || loadedIdentity !== identity;
+  const [onboardingData, setOnboardingData] = useState(initialData);
+  const dataRef = useRef(onboardingData);
+  const revision = useRef(0);
+  const temporarilyClosed = useRef(false);
+  const saveQueue = useRef(Promise.resolve());
+  const [isTourActive, setIsTourActive] = useState(false);
   const [currentTour, setCurrentTour] = useState<TourDefinition | null>(null);
-  const [currentStepIndex, setCurrentStepIndex] = useState<number>(0);
+  const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [tourAccess, setTourAccess] = useState('');
+  const [isWelcomeModalOpen, setIsWelcomeModalOpen] = useState(false);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const [isWhatsNewOpen, setIsWhatsNewOpen] = useState(false);
+  const [isModuleSelectorOpen, setIsModuleSelectorOpen] = useState(false);
 
-  // Modais
-  const [isWelcomeModalOpen, setIsWelcomeModalOpen] = useState<boolean>(false);
-  const onboardingLoadVersion = React.useRef(0);
-  const [isHelpOpen, setIsHelpOpen] = useState<boolean>(false);
-  const [isWhatsNewOpen, setIsWhatsNewOpen] = useState<boolean>(false);
-  const [isModuleSelectorOpen, setIsModuleSelectorOpen] = useState<boolean>(false);
+  // Match the actual route guards, not profession-name guesses or tenant-wide enablement.
+  const moduleAccess: Record<string, boolean> = {
+    zemda_med: auth.isDoctor || auth.isZemdaMed || auth.hasCapability('MEDICAL_BASE') || auth.hasCapability('medical_consultations'),
+    zemda_fono: auth.isSpeechTherapist || auth.isZemdaFono || auth.hasCapability('AUDIOMETRY'),
+    zemda_psico: auth.isPsychologist || auth.isZemdaPsico || auth.hasCapability('BEHAVIORAL_TRACKING'),
+    zemda_odonto: auth.isDentist || auth.isZemdaOdonto || auth.hasCapability('ODONTOGRAM'),
+    zemda_nutri: auth.isNutritionist || auth.isZemdaNutri || auth.hasCapability('DIET_PRESCRIBE'),
+    zemda_fisio: auth.isPhysiotherapist || auth.isZemdaFisio || auth.hasCapability('MOBILITY_ASSESSMENT'),
+    zemda_to: auth.isOccupationalTherapist || auth.isZemdaTO || auth.hasCapability('SENSORY_INTEGRATION'),
+    zemda_personal: auth.isPersonalTrainer || auth.isZemdaPersonal || auth.hasCapability('TRAINING_PRESCRIBE') || auth.hasCapability('PHYSICAL_ASSESSMENT'),
+    zemda_pp: auth.isPsychopedagogue || auth.isZemdaPP || auth.hasCapability('LEARNING_ASSESSMENT'),
+    zemda_estetic: auth.isEsthetician || auth.isZemdaEstetic || auth.hasCapability('ESTETIC_FACIAL')
+  };
+  const professionModules: Record<string, boolean> = {
+    zemda_med: auth.isDoctor || auth.isZemdaMed,
+    zemda_fono: auth.isSpeechTherapist || auth.isZemdaFono,
+    zemda_psico: auth.isPsychologist || auth.isZemdaPsico,
+    zemda_odonto: auth.isDentist || auth.isZemdaOdonto,
+    zemda_nutri: auth.isNutritionist || auth.isZemdaNutri,
+    zemda_fisio: auth.isPhysiotherapist || auth.isZemdaFisio,
+    zemda_to: auth.isOccupationalTherapist || auth.isZemdaTO,
+    zemda_personal: auth.isPersonalTrainer || auth.isZemdaPersonal,
+    zemda_pp: auth.isPsychopedagogue || auth.isZemdaPP,
+    zemda_estetic: auth.isEsthetician || auth.isZemdaEstetic
+  };
+  // Shared capabilities (e.g. mobility in Personal) do not imply another profession.
+  const availableModules = ALL_CLINICAL_MODULES.filter(m => !isSuperAdmin && (isProfessional || isClinicAdmin) &&
+    (professionModules[m.id] || auth.commercialModule?.toLowerCase() === m.id.replace('_', '')) && moduleAccess[m.id]);
+  const clinicalModule = availableModules[0] || null;
+  const isPureAdmin = isClinicAdmin && availableModules.length === 0;
+  const accessSignature = JSON.stringify([identity, currentUser?.role, userPermissions, availableModules.map(m => m.id), isZemdaBody]);
 
-  // Lista canônica de módulos clínicos aos quais o usuário tem permissão
-  const availableModules = React.useMemo(() => {
-    return getUserAuthorizedClinicalModules(currentUser, userPermissions, {
-      isDoctor,
-      isZemdaMed,
-      isEsthetician,
-      isZemdaEstetic,
-      isSpeechTherapist,
-      isPsychologist,
-      isDentist,
-      isNutritionist,
-      isPhysiotherapist,
-      isOccupationalTherapist,
-      isPersonalTrainer,
-      isPsychopedagogue
-    });
-  }, [
-    currentUser,
-    userPermissions,
-    isDoctor,
-    isZemdaMed,
-    isEsthetician,
-    isZemdaEstetic,
-    isSpeechTherapist,
-    isPsychologist,
-    isDentist,
-    isNutritionist,
-    isPhysiotherapist,
-    isOccupationalTherapist,
-    isPersonalTrainer,
-    isPsychopedagogue
-  ]);
-
-  const clinicalModule = React.useMemo(() => {
-    return getClinicalModuleForUser(currentUser, userPermissions, {
-      isDoctor,
-      isZemdaMed,
-      isEsthetician,
-      isZemdaEstetic,
-      isSpeechTherapist,
-      isPsychologist,
-      isDentist,
-      isNutritionist,
-      isPhysiotherapist,
-      isOccupationalTherapist,
-      isPersonalTrainer,
-      isPsychopedagogue
-    });
-  }, [
-    currentUser,
-    userPermissions,
-    isDoctor,
-    isZemdaMed,
-    isEsthetician,
-    isZemdaEstetic,
-    isSpeechTherapist,
-    isPsychologist,
-    isDentist,
-    isNutritionist,
-    isPhysiotherapist,
-    isOccupationalTherapist,
-    isPersonalTrainer,
-    isPsychopedagogue
-  ]);
-
-  const isPureAdmin = React.useMemo(() => {
-    return (isClinicAdmin || isSuperAdmin) && availableModules.length === 0;
-  }, [isClinicAdmin, isSuperAdmin, availableModules.length]);
-
-  // Carrega preferências do backend
   useEffect(() => {
-    if (!currentUser) {
-      setLoading(false);
-      return;
-    }
-
-    let isMounted = true;
-    const loadVersion = ++onboardingLoadVersion.current;
-    let welcomeTimeout: ReturnType<typeof setTimeout> | undefined;
-
-    async function loadOnboarding() {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const loadRevision = ++revision.current;
+    temporarilyClosed.current = false;
+    setIsTourActive(false); setCurrentTour(null); setCurrentStepIndex(0);
+    setIsWelcomeModalOpen(false); setIsHelpOpen(false); setIsWhatsNewOpen(false); setIsModuleSelectorOpen(false);
+    dataRef.current = initialData(); setOnboardingData(dataRef.current); setLoadedIdentity('');
+    if (!identity) return;
+    const load = async () => {
+      let cached = initialData();
+      try { cached = { ...cached, ...JSON.parse(localStorage.getItem(identity) || '{}') }; } catch { /* Invalid cache is ignored. */ }
       try {
-        const res = await ApiClient.get<any>('/v1/user-onboarding');
-        if (isMounted && res && loadVersion === onboardingLoadVersion.current) {
-          const freshData: UserOnboardingData = {
-            onboardingStatus: res.onboardingStatus || 'pending',
-            onboardingStartedAt: res.onboardingStartedAt || null,
-            onboardingCompletedAt: res.onboardingCompletedAt || null,
-            onboardingLastStep: res.onboardingLastStep || 1,
-            onboardingVersion: res.onboardingVersion || CURRENT_ONBOARDING_VERSION,
-            onboardingDismissed: !!res.onboardingDismissed,
-            moduleToursCompleted: Array.isArray(res.moduleToursCompleted) ? res.moduleToursCompleted : [],
-            whatsNewDismissed: Array.isArray(res.whatsNewDismissed) ? res.whatsNewDismissed : []
-          };
-
-          setOnboardingData(freshData);
-          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(freshData));
-
-          // Se for o primeiro acesso real (pendente, nunca dispensado, e não pulado nesta sessão)
-          const sessionSkipped = sessionStorage.getItem('zemda_onboarding_session_skipped') === '1';
-          if (
-            freshData.onboardingStatus === 'pending' &&
-            !freshData.onboardingDismissed &&
-            !sessionSkipped &&
-            !currentUser?.needsOnboarding
-          ) {
-            // Abre o modal discreto de primeiro acesso após pequeno delay de montagem
-            welcomeTimeout = setTimeout(() => {
-              if (isMounted && loadVersion === onboardingLoadVersion.current) setIsWelcomeModalOpen(true);
-            }, 800);
-          }
-        }
-      } catch (err) {
-        console.warn('Fallback para cache local de onboarding:', err);
-      } finally {
-        if (isMounted) setLoading(false);
-      }
-    }
-
-    loadOnboarding();
-
-    return () => {
-      isMounted = false;
-      clearTimeout(welcomeTimeout);
-    };
-  }, [currentUser]);
-
-  // Persiste dados no backend e localStorage
-  const persistState = useCallback(async (partial: Partial<UserOnboardingData>) => {
-    onboardingLoadVersion.current++;
-    setOnboardingData(prev => {
-      const updated = { ...prev, ...partial };
-      try {
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
-      } catch (_) {}
-
-      // Sincroniza em background com o backend
-      ApiClient.post('/v1/user-onboarding', updated).catch(e => {
-        console.warn('Erro ao sincronizar onboarding com o backend:', e);
-      });
-
-      return updated;
-    });
-  }, []);
-
-  // Determina o tour geral padrão com base no perfil do usuário
-  const getDefaultTourId = useCallback((): string => {
-    if (isSuperAdmin || isClinicAdmin) return 'clinic_admin';
-    if (isReceptionist) return 'receptionist';
-    if (userPermissions?.includes('manage_financial') || (currentUser as any)?.role === 'financial') return 'financial';
-    if (isProfessional) return 'solo_professional';
-    return 'solo_professional';
-  }, [currentUser, isSuperAdmin, isClinicAdmin, isReceptionist, isProfessional]);
-
-  // Inicia um tour (geral ou pelo ID fornecido)
-  const startTour = useCallback((tourId?: string) => {
-    const targetTourId = tourId || getDefaultTourId();
-    let rawTour = TOURS_BY_PROFILE[targetTourId] || MODULE_TOURS[targetTourId];
-
-    if (!rawTour) {
-      console.warn(`Tour não encontrado: ${targetTourId}`);
-      return;
-    }
-
-    const filtered = filterTourByPermissions(rawTour, currentUser?.role, userPermissions);
-    if (filtered.steps.length === 0) {
-      console.warn('Tour sem etapas visíveis para as permissões atuais.');
-      return;
-    }
-
-    setCurrentTour(filtered);
-    setCurrentStepIndex(0);
-    setIsTourActive(true);
-    setIsWelcomeModalOpen(false);
-    setIsHelpOpen(false);
-
-    // Se o primeiro passo requerer navegação para uma rota específica
-    const firstStep = filtered.steps[0];
-    if (firstStep?.route) {
-      window.dispatchEvent(new CustomEvent('zemda-navigate', { detail: { view: firstStep.route } }));
-    }
-
-    persistState({
-      onboardingStatus: 'in_progress',
-      onboardingStartedAt: new Date().toISOString(),
-      onboardingLastStep: 1
-    });
-  }, [getDefaultTourId, currentUser?.role, userPermissions, persistState]);
-
-  // Inicia tour de módulo especializado
-  const startModuleTour = useCallback((moduleId: string) => {
-    const rawTour = MODULE_TOURS[moduleId];
-    if (!rawTour) return;
-
-    const filtered = filterTourByPermissions(rawTour, currentUser?.role, userPermissions);
-    setCurrentTour(filtered);
-    setCurrentStepIndex(0);
-    setIsTourActive(true);
-    setIsHelpOpen(false);
-    setIsModuleSelectorOpen(false);
-
-    // Navega para a tela do módulo caso o primeiro passo exija
-    const firstStep = filtered.steps[0];
-    if (firstStep?.route) {
-      window.dispatchEvent(new CustomEvent('zemda-navigate', { detail: { view: firstStep.route } }));
-    }
-  }, [currentUser?.role, userPermissions]);
-
-  // Avança para o próximo passo
-  const nextStep = useCallback(() => {
-    if (!currentTour) return;
-    const nextIdx = currentStepIndex + 1;
-
-    if (nextIdx < currentTour.steps.length) {
-      setCurrentStepIndex(nextIdx);
-      const step = currentTour.steps[nextIdx];
-      if (step?.route) {
-        window.dispatchEvent(new CustomEvent('zemda-navigate', { detail: { view: step.route } }));
-      }
-      persistState({ onboardingLastStep: nextIdx + 1 });
-    } else {
-      // Concluiu todas as etapas
-      finishTour();
-    }
-  }, [currentTour, currentStepIndex, persistState]);
-
-  // Retorna para o passo anterior
-  const prevStep = useCallback(() => {
-    if (!currentTour) return;
-    const prevIdx = currentStepIndex - 1;
-
-    if (prevIdx >= 0) {
-      setCurrentStepIndex(prevIdx);
-      const step = currentTour.steps[prevIdx];
-      if (step?.route) {
-        window.dispatchEvent(new CustomEvent('zemda-navigate', { detail: { view: step.route } }));
-      }
-      persistState({ onboardingLastStep: prevIdx + 1 });
-    }
-  }, [currentTour, currentStepIndex, persistState]);
-
-  // Pula o tour por agora (salva 'skipped' na sessão e no backend)
-  const skipTour = useCallback(() => {
-    sessionStorage.setItem('zemda_onboarding_session_skipped', '1');
-    setIsTourActive(false);
-    setIsWelcomeModalOpen(false);
-
-    persistState({
-      onboardingStatus: 'skipped'
-    });
-  }, [persistState]);
-
-  // Conclui formalmente o tour ativo
-  const finishTour = useCallback(() => {
-    setIsTourActive(false);
-
-    const isModuleTour = currentTour?.id && MODULE_TOURS[currentTour.id];
-    if (isModuleTour && currentTour) {
-      const updatedModules = Array.from(new Set([...onboardingData.moduleToursCompleted, currentTour.id]));
-      persistState({
-        moduleToursCompleted: updatedModules
-      });
-    } else {
-      persistState({
-        onboardingStatus: 'completed',
-        onboardingCompletedAt: new Date().toISOString()
-      });
-    }
-  }, [currentTour, onboardingData.moduleToursCompleted, persistState]);
-
-  // Escolha "Não mostrar novamente"
-  const dismissPermanently = useCallback(() => {
-    setIsWelcomeModalOpen(false);
-    setIsTourActive(false);
-
-    persistState({
-      onboardingStatus: 'dismissed',
-      onboardingDismissed: true
-    });
-  }, [persistState]);
-
-  // Reinicia o tour através da Central de Ajuda
-  const resetTour = useCallback(async (resetModules = false) => {
-    try {
-      await ApiClient.post('/v1/user-onboarding/reset', { resetModuleTours: resetModules });
-      sessionStorage.removeItem('zemda_onboarding_session_skipped');
-
-      setOnboardingData(prev => ({
-        ...prev,
-        onboardingStatus: 'pending',
-        onboardingStartedAt: null,
-        onboardingCompletedAt: null,
-        onboardingLastStep: 1,
-        onboardingDismissed: false,
-        moduleToursCompleted: resetModules ? [] : prev.moduleToursCompleted
-      }));
-
-      // Inicia imediatamente o tour padrão
-      startTour();
-    } catch (e) {
-      console.warn('Erro ao reiniciar onboarding:', e);
-      startTour();
-    }
-  }, [startTour]);
-
-  // Fechamento via tecla Escape
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // ESC fecha o tour ou modais de onboarding
-      if (e.key === 'Escape') {
-        if (isTourActive) {
-          setIsTourActive(false);
-          return;
-        }
-        if (isHelpOpen) {
-          setIsHelpOpen(false);
-          return;
-        }
-        if (isWhatsNewOpen) {
-          setIsWhatsNewOpen(false);
-          return;
-        }
-        if (isModuleSelectorOpen) {
-          setIsModuleSelectorOpen(false);
-          return;
-        }
-        if (isWelcomeModalOpen) {
-          setIsWelcomeModalOpen(false);
-          sessionStorage.setItem('zemda_onboarding_session_skipped', '1');
-          return;
-        }
+        const fresh = await ApiClient.get<UserOnboardingData>('/v1/user-onboarding');
+        if (cancelled || identityRef.current !== identity || revision.current !== loadRevision) return;
+        cached = { ...initialData(), ...fresh };
+        writeCache(identity, cached);
+      } catch { /* Backend remains primary; scoped cache is an offline fallback only. */ }
+      if (cancelled || identityRef.current !== identity || revision.current !== loadRevision) return;
+      cached.moduleToursCompleted = Array.isArray(cached.moduleToursCompleted) ? cached.moduleToursCompleted : [];
+      cached.whatsNewDismissed = Array.isArray(cached.whatsNewDismissed) ? cached.whatsNewDismissed : [];
+      dataRef.current = cached; setOnboardingData(cached); setLoadedIdentity(identity);
+      let closed = false;
+      try { closed = sessionStorage.getItem(`${identity}_closed`) === '1'; } catch { /* optional */ }
+      if (cached.onboardingStatus === 'pending' && !cached.onboardingDismissed && !closed && !temporarilyClosed.current && !currentUser?.needsOnboarding && !isSuperAdmin) {
+        timer = setTimeout(() => { if (!cancelled && !temporarilyClosed.current && revision.current === loadRevision) setIsWelcomeModalOpen(true); }, 800);
       }
     };
+    void load();
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [identity, currentUser?.needsOnboarding, isSuperAdmin]);
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isTourActive, isHelpOpen, isWhatsNewOpen, isModuleSelectorOpen, isWelcomeModalOpen]);
+  const persistState = useCallback((partial: Partial<UserOnboardingData>) => {
+    if (!identity || identityRef.current !== identity) return;
+    revision.current++;
+    const updated = { ...dataRef.current, ...partial };
+    dataRef.current = updated; setOnboardingData(updated); writeCache(identity, updated);
+    // Serialize writes; an older Next request must never overwrite a newer close/finish.
+    saveQueue.current = saveQueue.current.catch(() => {}).then(async () => {
+      if (identityRef.current !== identity) return;
+      try { await ApiClient.post('/v1/user-onboarding', updated); }
+      catch (error) { console.warn('Não foi possível sincronizar o guia; progresso salvo nesta conta.', error); }
+    });
+  }, [identity]);
 
-  const currentStep = currentTour?.steps[currentStepIndex] || null;
+  const closeTour = useCallback(() => {
+    temporarilyClosed.current = true;
+    setIsTourActive(false); setIsWelcomeModalOpen(false);
+    try { sessionStorage.setItem(`${identity}_closed`, '1'); } catch { /* optional */ }
+    window.dispatchEvent(new CustomEvent('zemda-tour-prepare', { detail: { sidebar: false } }));
+  }, [identity]);
 
-  return (
-    <OnboardingContext.Provider
-      value={{
-        onboardingData,
-        loading,
-        isTourActive,
-        currentTour,
-        currentStepIndex,
-        currentStep,
-        isWelcomeModalOpen,
-        isHelpOpen,
-        isWhatsNewOpen,
-        isModuleSelectorOpen,
-        startTour,
-        nextStep,
-        prevStep,
-        skipTour,
-        finishTour,
-        dismissPermanently,
-        startModuleTour,
-        resetTour,
-        openWelcomeModal: () => setIsWelcomeModalOpen(true),
-        closeWelcomeModal: () => setIsWelcomeModalOpen(false),
-        openHelp: () => setIsHelpOpen(true),
-        closeHelp: () => setIsHelpOpen(false),
-        openWhatsNew: () => setIsWhatsNewOpen(true),
-        closeWhatsNew: () => setIsWhatsNewOpen(false),
-        openModuleSelector: () => setIsModuleSelectorOpen(true),
-        closeModuleSelector: () => setIsModuleSelectorOpen(false),
-        availableModules,
-        clinicalModule,
-        isPureAdmin,
-        isZemda360,
-        isZemdaBody
-      }}
-    >
-      {children}
-    </OnboardingContext.Provider>
-  );
+  useEffect(() => {
+    if (isTourActive && tourAccess !== accessSignature) closeTour();
+  }, [isTourActive, tourAccess, accessSignature, closeTour]);
+
+  const defaultTourId = isClinicAdmin ? 'clinic_admin' : isReceptionist ? 'receptionist' : isProfessional ? 'solo_professional' : 'financial';
+  const buildTour = (id: string): TourDefinition | null => {
+    const raw = TOURS_BY_PROFILE[id] || MODULE_TOURS[id];
+    if (!raw || isSuperAdmin) return null;
+    const routes = new Set((document.querySelector('[data-tour-routes]')?.getAttribute('data-tour-routes') || '').split(' '));
+    routes.add('settings');
+    if (MODULE_TOURS[id] && !(id === 'zemda_body' ? isZemdaBody : availableModules.some(m => m.id === id))) return null;
+    const steps = filterTourByPermissions(raw, currentUser?.role, userPermissions).steps.map(step => {
+      if (step.target === '[data-tour="nav-clinical-module"]') {
+        return { ...step, route: clinicalModule?.route, target: `[data-tour="nav-${clinicalModule?.route}"]` };
+      }
+      return step;
+    }).filter(step => {
+      if (!step.route) return false;
+      if (MODULE_TOURS[id]) return true;
+      if (step.target.startsWith('[data-tour="settings-')) return isClinicAdmin;
+      // Match the current API role gates as well as the menu's granular permissions.
+      // See GET /v1/payments, /v1/inventory and /v1/reports/* in backend routes.
+      if (step.route === 'reports' && !isClinicAdmin) return false;
+      if (['financial', 'inventory'].includes(step.route) && !isClinicAdmin && !isReceptionist) return false;
+      return routes.has(step.route);
+    });
+    return steps.length ? { ...raw, steps } : null;
+  };
+  const begin = (tourId?: string, resume = false) => {
+    if (loading) return;
+    const tour = buildTour(tourId || defaultTourId);
+    if (!tour) return;
+    const saved = dataRef.current;
+    const sameTour = !saved.onboardingTourId || saved.onboardingTourId === tour.id;
+    const savedIdIndex = tour.steps.findIndex(s => s.id === saved.onboardingStepId);
+    const index = resume && sameTour ? (savedIdIndex >= 0 ? savedIdIndex : Math.max(0, Math.min(tour.steps.length - 1, (Number(saved.onboardingLastStep) || 1) - 1))) : 0;
+    setCurrentTour(tour); setCurrentStepIndex(index); setTourAccess(accessSignature); setIsTourActive(true);
+    setIsWelcomeModalOpen(false); setIsHelpOpen(false); setIsModuleSelectorOpen(false); setIsWhatsNewOpen(false);
+    persistState({ onboardingStatus: 'in_progress', onboardingStartedAt: resume ? saved.onboardingStartedAt || new Date().toISOString() : new Date().toISOString(),
+      onboardingLastStep: index + 1, onboardingTourId: tour.id, onboardingStepId: tour.steps[index].id, onboardingVersion: CURRENT_ONBOARDING_VERSION });
+  };
+  const startTour = (id?: string) => begin(id);
+  const resumeTour = () => {
+    const id = dataRef.current.onboardingTourId || defaultTourId;
+    begin(buildTour(id) ? id : defaultTourId, true);
+  };
+  const finishTour = () => {
+    closeTour();
+    persistState({ onboardingStatus: 'completed', onboardingCompletedAt: new Date().toISOString(),
+      ...(currentTour && MODULE_TOURS[currentTour.id] ? { moduleToursCompleted: Array.from(new Set([...dataRef.current.moduleToursCompleted, currentTour.id])) } : {}) });
+  };
+  const moveStep = (index: number) => {
+    if (!currentTour || index < 0) return;
+    if (index >= currentTour.steps.length) { finishTour(); return; }
+    setCurrentStepIndex(index);
+    persistState({ onboardingLastStep: index + 1, onboardingStepId: currentTour.steps[index].id });
+  };
+  const skipTour = () => { closeTour(); persistState({ onboardingStatus: 'skipped' }); };
+  const dismissPermanently = () => { closeTour(); persistState({ onboardingStatus: 'dismissed', onboardingDismissed: true }); };
+  const resetTour = async (resetModules = false) => {
+    if (resetModules) {
+      await saveQueue.current;
+      await ApiClient.post('/v1/user-onboarding/reset', { resetModuleTours: true });
+      if (identityRef.current !== identity) return;
+      persistState({ moduleToursCompleted: [] });
+    }
+    startTour();
+  };
+
+  useEffect(() => {
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (isHelpOpen) setIsHelpOpen(false);
+      else if (isWhatsNewOpen) setIsWhatsNewOpen(false);
+      else if (isModuleSelectorOpen) setIsModuleSelectorOpen(false);
+      else if (isTourActive || isWelcomeModalOpen) closeTour();
+    };
+    window.addEventListener('keydown', escape);
+    return () => window.removeEventListener('keydown', escape);
+  }, [isTourActive, isWelcomeModalOpen, isHelpOpen, isWhatsNewOpen, isModuleSelectorOpen, closeTour]);
+
+  return <OnboardingContext.Provider value={{
+    onboardingData, loading, isTourActive: isTourActive && !loading && tourAccess === accessSignature, currentTour, currentStepIndex,
+    currentStep: currentTour?.steps[currentStepIndex] || null,
+    isWelcomeModalOpen: isWelcomeModalOpen && !loading, isHelpOpen, isWhatsNewOpen, isModuleSelectorOpen,
+    startTour, resumeTour, closeTour, nextStep: () => moveStep(currentStepIndex + 1), prevStep: () => moveStep(currentStepIndex - 1),
+    skipTour, finishTour, dismissPermanently, startModuleTour: startTour, resetTour,
+    openWelcomeModal: () => setIsWelcomeModalOpen(true), closeWelcomeModal: closeTour,
+    openHelp: () => { closeTour(); setIsHelpOpen(true); }, closeHelp: () => setIsHelpOpen(false),
+    openWhatsNew: () => setIsWhatsNewOpen(true), closeWhatsNew: () => setIsWhatsNewOpen(false),
+    openModuleSelector: () => setIsModuleSelectorOpen(true), closeModuleSelector: () => setIsModuleSelectorOpen(false),
+    availableModules, clinicalModule, isPureAdmin, isZemda360, isZemdaBody
+  }}>{children}</OnboardingContext.Provider>;
 };
 
 export function useOnboarding() {
   const context = useContext(OnboardingContext);
-  if (!context) {
-    throw new Error('useOnboarding deve ser utilizado dentro de um OnboardingProvider');
-  }
+  if (!context) throw new Error('useOnboarding deve ser utilizado dentro de um OnboardingProvider');
   return context;
 }

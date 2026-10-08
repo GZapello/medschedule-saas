@@ -31,6 +31,7 @@ let lastTrackedPath: string | null = null;
  * @param pageTitle Título amigável da tela (ex: 'Zemda • Agenda')
  */
 export function trackPageView(pagePath: string, pageTitle?: string): void {
+  try {
   if (typeof window === 'undefined') return;
 
   // Sanitização estrita: remove parâmetros de URL ou hashes que possam conter IDs ou tokens
@@ -60,6 +61,8 @@ export function trackPageView(pagePath: string, pageTitle?: string): void {
       page_path: cleanPath
     });
   }
+
+  } catch { /* Tracking and consent SDK failures must never interrupt authentication. */ }
 }
 
 /**
@@ -68,6 +71,7 @@ export function trackPageView(pagePath: string, pageTitle?: string): void {
  * @param category Categoria funcional (ex: 'navigation', 'consultation')
  */
 export function trackSafeEvent(action: string, category: string = 'general'): void {
+  try {
   if (typeof window === 'undefined') return;
 
   const safeAction = String(action).slice(0, 50);
@@ -79,6 +83,8 @@ export function trackSafeEvent(action: string, category: string = 'general'): vo
       non_interaction: true
     });
   }
+
+  } catch { /* Tracking and consent SDK failures must never interrupt authentication. */ }
 }
 
 // Google Ads / Google Tag Conversion tracking

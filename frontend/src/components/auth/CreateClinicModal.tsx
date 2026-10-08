@@ -1,3 +1,4 @@
+import { googleAuthError } from './googleAuthErrors';
 import { GoogleAccountLinkDialog } from './GoogleAccountLinkDialog';
 import './CreateClinicModal.css';
 import React, { useState, useRef, useEffect, useMemo } from 'react';
@@ -50,7 +51,7 @@ import {
 } from 'lucide-react';
 import { RegistrationProfessionOption, REGISTRATION_PROFESSIONS } from '../../types/professions';
 import { PracticeArea, MedicalSpecialtyItem } from '../../types/capabilities';
-import { GoogleAuthButton, GoogleIcon, GoogleJwtPayload } from './GoogleAuthButton';
+import { GoogleAuthButton, GoogleIcon, GOOGLE_LOGIN_ERROR } from './GoogleAuthButton';
 
 interface CreateClinicModalProps {
   isOpen: boolean;
@@ -59,7 +60,7 @@ interface CreateClinicModalProps {
   initialPlan?: string;
   isTrial?: boolean;
   presentation?: 'modal' | 'page';
-  onGoogleSuccess?: (idToken: string, payload?: GoogleJwtPayload) => void;
+  onGoogleSuccess?: (idToken: string) => void;
   initialGoogleData?: {
     idToken: string;
     name: string;
@@ -598,6 +599,10 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
         throw new Error(data.message || 'Não foi possível criar a conta.');
       }
     } catch (err: any) {
+      if (googleAuthData) {
+        showToast(googleAuthError(err, 'signup'), 'error');
+        return;
+      }
       trackSignupError({
         step: 'signup',
         errorCode: err.code || 'REGISTRATION_FAILED',
@@ -1065,8 +1070,8 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
                   <GoogleAuthButton
                     text="continue_with"
                     customLabel="Continuar com Google"
-                    onSuccess={async (idToken, payload) => {
-                      if(onGoogleSuccess) { onGoogleSuccess(idToken,payload); return; }
+                    onSuccess={async (idToken) => {
+                      if(onGoogleSuccess) { await onGoogleSuccess(idToken); return; }
                       setLoading(true);
                       try {
                         const result=await ApiClient.post<any>('/v1/auth/google',{idToken,context:'login'});
@@ -1077,10 +1082,10 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
                         setGoogleAuthData({idToken,name,email});
                         setFormData(prev=>({...prev,responsibleName:name||prev.responsibleName,email:email||prev.email}));
                         showToast('Google conectado! Complete o WhatsApp e profissão.','info');
-                      } catch(err:any) { showToast(err.message || 'Não foi possível entrar com Google.','error'); }
+                      } catch(err:any) { showToast(googleAuthError(err, 'signup'),'error'); }
                       finally { setLoading(false); }
                     }}
-                    onError={(err) => showToast(err, 'error')}
+                    onError={() => showToast(GOOGLE_LOGIN_ERROR, 'error')}
                     disabled={loading}
                   />
                   <div className="flex items-center gap-3">

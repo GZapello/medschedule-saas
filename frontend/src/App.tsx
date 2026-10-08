@@ -500,6 +500,9 @@ const AppContent: React.FC = () => {
       setIsAIOpen(true);
     };
 
+    const prepareTour = (e: Event) => {
+      setSidebarOpen(!!(e as CustomEvent).detail?.sidebar);
+    };
     const handleNavigate = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (detail?.view) {
@@ -532,6 +535,7 @@ const AppContent: React.FC = () => {
     window.addEventListener('zemda-ai-patient-context', handlePatientContext);
     window.addEventListener('zemda-ai-appointment-context', handleAppointmentContext);
     window.addEventListener('open-zemda-ai', handleOpenAI);
+    window.addEventListener('zemda-tour-prepare', prepareTour);
     window.addEventListener('zemda-navigate', handleNavigate);
     window.addEventListener('zemda-auth-state', handleAuthState);
     window.addEventListener('zemda-exit-sandbox', handleExitSandbox);
@@ -539,6 +543,7 @@ const AppContent: React.FC = () => {
       window.removeEventListener('zemda-ai-patient-context', handlePatientContext);
       window.removeEventListener('zemda-ai-appointment-context', handleAppointmentContext);
       window.removeEventListener('open-zemda-ai', handleOpenAI);
+      window.removeEventListener('zemda-tour-prepare', prepareTour);
       window.removeEventListener('zemda-navigate', handleNavigate);
       window.removeEventListener('zemda-auth-state', handleAuthState);
       window.removeEventListener('zemda-exit-sandbox', handleExitSandbox);
@@ -1306,7 +1311,7 @@ const AppContent: React.FC = () => {
         />
 
         {/* Main View Container */}
-        <main className="flex-1 overflow-y-auto p-3 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full min-w-0">
+        <main data-tour-page={currentView} className="flex-1 overflow-y-auto p-3 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full min-w-0">
           <SectionErrorBoundary key={currentView} sectionName={`Tela: ${currentView}`}>
           {currentView === 'dashboard' && (
             <DashboardView

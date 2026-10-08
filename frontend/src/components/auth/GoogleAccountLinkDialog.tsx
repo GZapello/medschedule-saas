@@ -1,3 +1,4 @@
+import { googleAuthError } from './googleAuthErrors';
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ApiClient } from '../../api/client';
@@ -24,7 +25,9 @@ export function GoogleAccountLinkDialog({ idToken, email, onClose, onLinked }: {
           if(!result.token || !result.user)throw new Error('Não foi possível confirmar o vínculo. Tente novamente.');
           loginWithToken(result.token,result.user,result.tenant); onClose(); onLinked?.();
           showToast('Conta Google vinculada com sucesso!','success');
-        } catch(err:any) { setError(err.message || 'Falha ao confirmar o vínculo.'); }
+        } catch(err:any) {
+          setError(googleAuthError(err, 'link'));
+        }
         finally { setBusy(false); }
       }}>
         <label className="block text-sm">Sua senha do Zemda<input autoFocus required type="password" autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} className="block w-full border rounded-xl px-3 py-2 mt-1" /></label>

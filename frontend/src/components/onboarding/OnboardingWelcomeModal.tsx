@@ -7,6 +7,7 @@ export const OnboardingWelcomeModal: React.FC = () => {
     isWelcomeModalOpen,
     startTour,
     skipTour,
+    closeTour,
     dismissPermanently
   } = useOnboarding();
 
@@ -19,7 +20,7 @@ export const OnboardingWelcomeModal: React.FC = () => {
       aria-modal="true"
       aria-labelledby="welcome-modal-title"
     >
-      <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 max-w-md w-full p-6 sm:p-7 flex flex-col gap-5 animate-in zoom-in-95 duration-200 relative overflow-hidden">
+      <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 max-w-md w-full p-6 sm:p-7 flex flex-col gap-5 animate-in zoom-in-95 duration-200 relative max-h-[calc(100dvh-32px)] overflow-y-auto">
         {/* Glow decorativo de fundo */}
         <div className="absolute top-0 right-0 w-32 h-32 bg-teal-500/10 rounded-full blur-2xl pointer-events-none" />
 
@@ -30,7 +31,7 @@ export const OnboardingWelcomeModal: React.FC = () => {
           </div>
 
           <button
-            onClick={skipTour}
+            onClick={closeTour}
             className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
             aria-label="Fechar modal de boas-vindas"
           >
@@ -68,7 +69,7 @@ export const OnboardingWelcomeModal: React.FC = () => {
             onClick={skipTour}
             className="w-full py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors cursor-pointer"
           >
-            Pular por agora
+            Pular tour
           </button>
 
           <button

@@ -175,7 +175,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   if (loading && !metrics) {
     return (
-      <div className="flex items-center justify-center min-h-[500px]">
+      <div data-tour-loading={loading} className="flex items-center justify-center min-h-[500px]">
         <div className="flex flex-col items-center gap-3">
           <RefreshCw className="w-8 h-8 animate-spin text-indigo-600" />
           <p className="text-slate-500 font-medium text-sm">Carregando métricas e atendimentos...</p>
@@ -240,7 +240,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   })();
 
   return (
-    <div className="space-y-2 min-w-0">
+    <div data-tour-loading={loading} className="space-y-2 min-w-0">
       {/* Header & Quick Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-white px-3 py-2.5 rounded-xl border border-slate-200 shadow-xs">
         <div>

@@ -307,7 +307,7 @@ export class OnboardingController {
           id, user_id, tenant_id, onboarding_status,
           onboarding_started_at, onboarding_completed_at,
           onboarding_last_step, onboarding_version, onboarding_dismissed,
-          module_tours_completed, whats_new_dismissed,
+          module_tours_completed, whats_new_dismissed, onboarding_tour_id, onboarding_step_id,
           updated_at
         FROM user_onboarding
         WHERE user_id = ?
@@ -341,6 +341,8 @@ export class OnboardingController {
         onboardingStartedAt: row.onboarding_started_at || null,
         onboardingCompletedAt: row.onboarding_completed_at || null,
         onboardingLastStep: row.onboarding_last_step || 1,
+        onboardingTourId: row.onboarding_tour_id || undefined,
+        onboardingStepId: row.onboarding_step_id || undefined,
         onboardingVersion: row.onboarding_version || 'v1.1',
         onboardingDismissed: row.onboarding_dismissed === 1,
         moduleToursCompleted: moduleTours,
@@ -369,13 +371,15 @@ export class OnboardingController {
         onboardingStartedAt,
         onboardingCompletedAt,
         onboardingLastStep,
+        onboardingTourId,
+        onboardingStepId,
         onboardingVersion,
         onboardingDismissed,
         moduleToursCompleted,
         whatsNewDismissed
       } = req.body;
 
-      const existing = db.prepare('SELECT id, module_tours_completed, whats_new_dismissed FROM user_onboarding WHERE user_id = ?').get(userId) as any;
+      const existing = db.prepare('SELECT id, onboarding_status, module_tours_completed, whats_new_dismissed FROM user_onboarding WHERE user_id = ?').get(userId) as any;
 
       let mergedModuleTours = existing?.module_tours_completed ? JSON.parse(existing.module_tours_completed) : [];
       if (Array.isArray(moduleToursCompleted)) {
@@ -398,9 +402,9 @@ export class OnboardingController {
           id, user_id, tenant_id, onboarding_status,
           onboarding_started_at, onboarding_completed_at,
           onboarding_last_step, onboarding_version, onboarding_dismissed,
-          module_tours_completed, whats_new_dismissed,
+          module_tours_completed, whats_new_dismissed, onboarding_tour_id, onboarding_step_id,
           updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
         ON CONFLICT(user_id) DO UPDATE SET
           tenant_id = COALESCE(excluded.tenant_id, tenant_id),
           onboarding_status = COALESCE(excluded.onboarding_status, onboarding_status),
@@ -411,6 +415,8 @@ export class OnboardingController {
           onboarding_dismissed = COALESCE(excluded.onboarding_dismissed, onboarding_dismissed),
           module_tours_completed = excluded.module_tours_completed,
           whats_new_dismissed = excluded.whats_new_dismissed,
+          onboarding_tour_id = excluded.onboarding_tour_id,
+          onboarding_step_id = excluded.onboarding_step_id,
           updated_at = datetime('now')
       `).run(
         recordId,
@@ -423,7 +429,9 @@ export class OnboardingController {
         versionStr,
         dismissedInt,
         JSON.stringify(mergedModuleTours),
-        JSON.stringify(mergedWhatsNew)
+        JSON.stringify(mergedWhatsNew),
+        typeof onboardingTourId === 'string' ? onboardingTourId.slice(0, 100) : null,
+        typeof onboardingStepId === 'string' ? onboardingStepId.slice(0, 100) : null
       );
 
       res.json({
@@ -459,6 +467,8 @@ export class OnboardingController {
               onboarding_started_at = null,
               onboarding_completed_at = null,
               onboarding_last_step = 1,
+              onboarding_tour_id = NULL,
+              onboarding_step_id = NULL,
               onboarding_dismissed = 0,
               module_tours_completed = '[]',
               updated_at = datetime('now')
@@ -471,6 +481,8 @@ export class OnboardingController {
               onboarding_started_at = null,
               onboarding_completed_at = null,
               onboarding_last_step = 1,
+              onboarding_tour_id = NULL,
+              onboarding_step_id = NULL,
               onboarding_dismissed = 0,
               updated_at = datetime('now')
           WHERE user_id = ?

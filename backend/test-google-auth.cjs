@@ -13,7 +13,9 @@ const call=async body=>{let status=200,data;await AuthController.googleAuth({bod
  assert.match(fs.readFileSync(path.join(__dirname,'src/server.ts'),'utf8'),/crossOriginOpenerPolicy: \{ policy: 'same-origin-allow-popups' \}/);
  const original=GoogleAuthService.verifyIdToken;
  const previous=process.env.GOOGLE_CLIENT_ID;delete process.env.GOOGLE_CLIENT_ID;
- assert.equal((await call({idToken:'synthetic'})).status,503);
+ const configFailure=await call({idToken:'synthetic'});
+ assert.equal(configFailure.status,503);
+ assert.equal(configFailure.data.error,'Não foi possível entrar com o Google. Tente novamente ou use seu e-mail e senha.');
  if(previous)process.env.GOOGLE_CLIENT_ID=previous;
  GoogleAuthService.verifyIdToken=async()=>({sub:'google-qa',email:'google-qa@example.invalid',name:'Pessoa Google',emailVerified:true});
  let r=await call({idToken:'synthetic',context:'login'});assert.equal(r.data.isNewUser,true);assert.equal(r.data.googleUser.name,'Pessoa Google');
@@ -23,7 +25,13 @@ const call=async body=>{let status=200,data;await AuthController.googleAuth({bod
  r=await call({idToken:'synthetic',context:'login',additionalData:{password:'wrong'}});assert.equal(r.status,401);assert.ok(!db.prepare("SELECT google_sub FROM users WHERE id='google-user'").get().google_sub);
  r=await call({credential:'synthetic',context:'login',additionalData:{password:'correct'}});assert.equal(r.status,200,JSON.stringify(r));assert.ok(r.data.token);assert.equal(db.prepare("SELECT google_sub FROM users WHERE id='google-user'").get().google_sub,'google-qa');
  r=await call({idToken:'synthetic',context:'login'});assert.ok(r.data.token);assert.equal(r.data.user.id,'google-user');
+ GoogleAuthService.verifyIdToken=async()=>({sub:'google-signup-qa',email:'google-signup@example.invalid',name:'Cadastro Google',emailVerified:true});
+ r=await call({idToken:'synthetic',context:'signup',additionalData:{responsibleName:'Cadastro Google',phone:'11999999999',professionId:'prof-medico',profession:'Médico',termsAccepted:true,privacyAccepted:true}});
+ assert.equal(r.status,201,JSON.stringify(r));assert.ok(r.data.token);assert.ok(r.data.user.id);
+ const created=db.prepare('SELECT google_sub,email_verified,onboarding_status FROM users WHERE id=?').get(r.data.user.id);
+ assert.equal(created.google_sub,'google-signup-qa');assert.equal(created.email_verified,1);assert.equal(created.onboarding_status,'pending_plan');
+ r=await call({idToken:'synthetic',context:'login'});assert.ok(r.data.token);
  GoogleAuthService.verifyIdToken=async()=>{throw new Error('Credencial inválida')};assert.equal((await call({idToken:'bad'})).status,401);
  GoogleAuthService.verifyIdToken=original;
- console.log('PASS Google credential required, server config, new-user data, password-only linking, wrong password, linked login and invalid credentials (Google verification mocked).');
+ console.log('PASS Google credential required, server config, new-user data, password-only linking, wrong password, linked login, passwordless account creation, onboarding state and invalid credentials (Google verification mocked).');
 })().catch(e=>{console.error(e);process.exitCode=1});

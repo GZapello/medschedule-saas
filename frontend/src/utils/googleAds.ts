@@ -27,6 +27,7 @@ let isTagConfigured = false;
  * Garante que a Google Tag esteja configurada com o ID de conversão se fornecido via variável de ambiente.
  */
 function ensureGoogleTagConfig(): void {
+  try {
   if (typeof window === 'undefined' || typeof window.gtag !== 'function') return;
   if (!GOOGLE_TAG_ID || isTagConfigured) return;
 
@@ -39,6 +40,8 @@ function ensureGoogleTagConfig(): void {
   } catch {
     // Falha silenciosa para garantir que nenhum bloqueador cause crash
   }
+
+  } catch { /* Tracking and consent SDK failures must never interrupt authentication. */ }
 }
 
 /**
@@ -51,6 +54,7 @@ export function trackGoogleEvent(
   eventName: string,
   params?: Record<string, any>
 ): void {
+  try {
   if (typeof window === 'undefined') return;
   if (typeof window.gtag !== 'function') return;
 
@@ -76,6 +80,8 @@ export function trackGoogleEvent(
   } catch {
     // Bloqueadores de anúncios ou ausência de SDK nunca quebram a aplicação
   }
+
+  } catch { /* Tracking and consent SDK failures must never interrupt authentication. */ }
 }
 
 // Conjunto em memória para deduplicação instantânea
@@ -134,6 +140,7 @@ export interface GoogleConversionSignupParams {
  * - Login em contas pré-existentes.
  */
 export function trackGoogleConversionSignup(params: GoogleConversionSignupParams): void {
+  try {
   if (typeof window === 'undefined') return;
 
   const accountId = String(params.accountId || '').trim();
@@ -169,4 +176,6 @@ export function trackGoogleConversionSignup(params: GoogleConversionSignupParams
   }
 
   trackGoogleEvent('conversion_event_signup', payload);
+
+  } catch { /* Tracking and consent SDK failures must never interrupt authentication. */ }
 }

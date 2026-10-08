@@ -1173,6 +1173,11 @@ export function initializeDatabase(): void {
       CREATE INDEX IF NOT EXISTS idx_user_onboarding_tenant ON user_onboarding (tenant_id);
     `);
 
+    // Stable resume identifiers belong only to the demonstration tour.
+    const tourColumns = (rawDb.prepare('PRAGMA table_info(user_onboarding)').all() as { name: string }[]).map(column => column.name);
+    if (!tourColumns.includes('onboarding_tour_id')) rawDb.exec('ALTER TABLE user_onboarding ADD COLUMN onboarding_tour_id TEXT');
+    if (!tourColumns.includes('onboarding_step_id')) rawDb.exec('ALTER TABLE user_onboarding ADD COLUMN onboarding_step_id TEXT');
+
     // Tabela de Notificações Administrativas do Sistema ao SuperAdmin
     rawDb.exec(`
       CREATE TABLE IF NOT EXISTS admin_notification_logs (

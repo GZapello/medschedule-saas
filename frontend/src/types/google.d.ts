@@ -6,7 +6,7 @@ declare global {
           initialize: (config: {
             client_id: string;
             ux_mode?: 'popup' | 'redirect';
-            callback: (response: { credential: string; select_by?: string }) => void;
+            callback: (response: { credential: string; select_by?: string; state?: string }) => void;
             auto_select?: boolean;
             cancel_on_tap_outside?: boolean;
             use_fedcm_for_button?: boolean;
@@ -23,6 +23,7 @@ declare global {
               logo_alignment?: 'left' | 'center';
               width?: number | string;
               locale?: string;
+              state?: string;
               click_listener?: () => void;
             }
           ) => void;
