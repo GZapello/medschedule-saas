@@ -14,7 +14,7 @@ const DESKTOP_WIDTH = 1600;
 const DESKTOP_HEIGHT = 900;
 
 const views = [
-  ['dashboard', 'Dashboard', LayoutDashboard], ['agenda', 'Agenda Interativa', CalendarDays],
+  ['dashboard', 'Painel', LayoutDashboard], ['agenda', 'Agenda Interativa', CalendarDays],
   ['patients', 'Pacientes', Users], ['records', 'Prontuários & Evolução', FileText],
   ['360', 'Zemda360', Activity], ['professional', 'Módulo Profissional', Layers3],
   ['exams', 'Exames a Receber', ClipboardList], ['quotes', 'Orçamentos', Wallet]

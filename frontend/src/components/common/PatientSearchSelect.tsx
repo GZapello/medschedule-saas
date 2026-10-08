@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Search, User, X, Loader2, Baby, AlertCircle, Phone, FileText } from 'lucide-react';
+import { Search, User, X, Loader2, Baby, AlertCircle, Phone, FileText, Plus } from 'lucide-react';
 import { ApiClient } from '../../api/client';
 
 export interface PatientSearchResult {
@@ -38,6 +38,7 @@ export interface PatientSearchSelectProps {
   selectedPatient?: PatientSearchResult | null;
   onClear?: () => void;
   id?: string;
+  onCreateNew?: (searchedQuery?: string) => void;
 }
 
 export const PatientSearchSelect: React.FC<PatientSearchSelectProps> = ({
@@ -57,7 +58,8 @@ export const PatientSearchSelect: React.FC<PatientSearchSelectProps> = ({
   searchEndpoint,
   selectedPatient: externalSelectedPatient,
   onClear,
-  id
+  id,
+  onCreateNew
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [results, setResults] = useState<PatientSearchResult[]>([]);
@@ -295,15 +297,51 @@ export const PatientSearchSelect: React.FC<PatientSearchSelectProps> = ({
 
             {isOpen && (
               <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 max-h-64 overflow-y-auto divide-y divide-slate-100 animate-fadeIn">
+                {onCreateNew && (
+                  <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-xs border-b border-slate-100 p-1.5">
+                    <button
+                      type="button"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onCreateNew(searchTerm.trim());
+                        setIsOpen(false);
+                      }}
+                      className="w-full text-left px-2.5 py-1.5 flex items-center gap-1.5 rounded-xl text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100/90 transition-colors cursor-pointer border border-teal-200/60 shadow-2xs"
+                    >
+                      <Plus className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                      <span className="truncate">
+                        + Cadastrar novo {clientTermLabel.toLowerCase()}{searchTerm.trim() ? ` "${searchTerm.trim()}"` : ''}
+                      </span>
+                    </button>
+                  </div>
+                )}
                 {results.length === 0 ? (
-                  <div className="p-3.5 text-center text-xs text-slate-500 font-medium">
+                  <div className="p-3.5 text-center text-xs text-slate-500 font-medium space-y-1.5">
                     {loading ? (
                       <span className="flex items-center justify-center gap-2">
                         <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" />
                         Buscando {clientTermLabel.toLowerCase()}s...
                       </span>
                     ) : (
-                      `Nenhum ${clientTermLabel.toLowerCase()} encontrado.`
+                      <>
+                        <p>Nenhum {clientTermLabel.toLowerCase()} encontrado.</p>
+                        {onCreateNew && (
+                          <button
+                            type="button"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              onCreateNew(searchTerm.trim());
+                              setIsOpen(false);
+                            }}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer"
+                          >
+                            <Plus className="w-3 h-3" />
+                            + Cadastrar novo
+                          </button>
+                        )}
+                      </>
                     )}
                   </div>
                 ) : (
@@ -354,9 +392,25 @@ export const PatientSearchSelect: React.FC<PatientSearchSelectProps> = ({
   return (
     <div ref={containerRef} className={`space-y-1 ${className}`}>
       {label && (
-        <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
-          {label} {required && <span className="text-rose-500">*</span>}
-        </label>
+        <div className="flex items-center justify-between mb-1">
+          <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
+            {label} {required && <span className="text-rose-500">*</span>}
+          </label>
+          {onCreateNew && !value && (
+            <button
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onCreateNew(searchTerm.trim());
+              }}
+              className="text-[11px] font-bold text-teal-600 hover:text-teal-700 hover:underline flex items-center gap-1 cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              + Cadastrar novo {clientTermLabel.toLowerCase()}
+            </button>
+          )}
+        </div>
       )}
 
       {value && loadedPatient ? (
@@ -423,16 +477,57 @@ export const PatientSearchSelect: React.FC<PatientSearchSelectProps> = ({
           )}
 
           {isOpen && (
-            <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 max-h-60 overflow-y-auto divide-y divide-slate-100 animate-fadeIn">
+            <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 max-h-72 overflow-y-auto divide-y divide-slate-100 animate-fadeIn">
+              {onCreateNew && (
+                <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-xs border-b border-slate-100 p-2 shadow-2xs">
+                  <button
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onCreateNew(searchTerm.trim());
+                      setIsOpen(false);
+                    }}
+                    className="w-full text-left px-3 py-2.5 flex items-center gap-2.5 rounded-xl text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100/90 transition-colors cursor-pointer border border-teal-200/70 shadow-2xs"
+                  >
+                    <div className="w-5 h-5 rounded-lg bg-teal-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <Plus className="w-3.5 h-3.5" />
+                    </div>
+                    <span className="truncate">
+                      + Cadastrar novo {clientTermLabel.toLowerCase()}{searchTerm.trim() ? ` "${searchTerm.trim()}"` : ''}
+                    </span>
+                  </button>
+                </div>
+              )}
+
               {results.length === 0 ? (
-                <div className="p-4 text-center text-xs text-slate-500 font-medium">
+                <div className="p-4 text-center text-xs text-slate-500 font-medium space-y-2.5">
                   {loading ? (
                     <span className="flex items-center justify-center gap-2">
-                      <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" />
                       Buscando {clientTermLabel.toLowerCase()}s...
                     </span>
                   ) : (
-                    `Nenhum ${clientTermLabel.toLowerCase()} encontrado.`
+                    <>
+                      <p className="text-slate-500">
+                        Nenhum {clientTermLabel.toLowerCase()} encontrado{searchTerm.trim() ? ` para "${searchTerm.trim()}"` : ''}.
+                      </p>
+                      {onCreateNew && (
+                        <button
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onCreateNew(searchTerm.trim());
+                            setIsOpen(false);
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          + Cadastrar {searchTerm.trim() ? `"${searchTerm.trim()}" como novo ` : 'novo '}{clientTermLabel.toLowerCase()}
+                        </button>
+                      )}
+                    </>
                   )}
                 </div>
               ) : (

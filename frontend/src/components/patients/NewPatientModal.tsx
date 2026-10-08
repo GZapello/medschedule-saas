@@ -1,5 +1,5 @@
 import { AnthropometricSexField } from '../personal/PersonalTechnicalFields';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
@@ -9,13 +9,19 @@ import { maskBrazilianPhone, validateBrazilianPhone } from '../../utils/phone-ma
 interface NewPatientModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (created?: { id: string; fullName: string; [key: string]: any }) => void;
+  initialName?: string;
+  initialPhone?: string;
+  zIndex?: string;
 }
 
 export const NewPatientModal: React.FC<NewPatientModalProps> = ({
   isOpen,
   onClose,
-  onSuccess
+  onSuccess,
+  initialName = '',
+  initialPhone = '',
+  zIndex
 }) => {
   const { showToast } = useToast();
   const { clientTermLabel } = useAuth();
@@ -44,6 +50,34 @@ export const NewPatientModal: React.FC<NewPatientModalProps> = ({
   const [guardianAuthorized, setGuardianAuthorized] = useState<boolean>(false);
 
   const [loading, setLoading] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      if (initialName) setFullName(initialName);
+      if (initialPhone) setPhone(maskBrazilianPhone(initialPhone));
+    } else {
+      setFullName('');
+      setSocialName('');
+      setAnthropometricSex('');
+      setBirthDate('');
+      setCpf('');
+      setPhone('');
+      setWhatsapp('');
+      setEmail('');
+      setAddress('');
+      setCity('São Paulo');
+      setState('SP');
+      setEmergencyContact('');
+      setEmergencyPhone('');
+      setNotesAdmin('');
+      setIsChild(false);
+      setGuardianName('');
+      setGuardianRelationship('mother');
+      setGuardianPhone('');
+      setGuardianCpf('');
+      setGuardianAuthorized(false);
+    }
+  }, [isOpen, initialName, initialPhone]);
 
   if (!isOpen) return null;
 
@@ -96,7 +130,7 @@ export const NewPatientModal: React.FC<NewPatientModalProps> = ({
           ]
         : [];
 
-      await ApiClient.post('/v1/patients', {
+      const createdPatient = await ApiClient.post<any>('/v1/patients', {
         fullName,
         socialName: socialName || null,
         anthropometric_sex:anthropometricSex || null,
@@ -117,7 +151,7 @@ export const NewPatientModal: React.FC<NewPatientModalProps> = ({
 
       showToast(`${clientTermLabel} cadastrado com sucesso!`, 'success');
       window.dispatchEvent(new CustomEvent('zemda-patient-updated'));
-      onSuccess();
+      onSuccess(createdPatient);
       onClose();
     } catch (err: any) {
       showToast(err.message || 'Erro ao cadastrar', 'error');
@@ -127,7 +161,7 @@ export const NewPatientModal: React.FC<NewPatientModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+    <div className={`fixed inset-0 ${zIndex || 'z-50'} bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto`}>
       <div className="bg-white rounded-3xl max-w-xl w-full p-4 sm:p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto my-auto">
         <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
           <h3 className="text-lg font-bold text-slate-900">Novo {clientTermLabel}</h3>

@@ -1079,7 +1079,7 @@ export const ServicesView: React.FC = () => {
                       </select>
                     </div>
                     <p className="text-[11px] text-slate-500 leading-tight">
-                      Após a realização deste serviço, o Zemda avisará você na Dashboard para entrar em contato com o paciente.
+                      Após a realização deste serviço, o Zemda avisará você no Painel para entrar em contato com o paciente.
                     </p>
                   </div>
                 )}
@@ -1365,7 +1365,7 @@ export const ServicesView: React.FC = () => {
                       </select>
                     </div>
                     <p className="text-[11px] text-slate-500 leading-tight">
-                      Após a realização deste serviço, o Zemda avisará você na Dashboard para entrar em contato com o paciente.
+                      Após a realização deste serviço, o Zemda avisará você no Painel para entrar em contato com o paciente.
                     </p>
                   </div>
                 )}

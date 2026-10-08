@@ -32,7 +32,7 @@ export const TOURS_BY_PROFILE: Record<string, TourDefinition> = {
         id: 'solo_dashboard',
         target: '[data-tour="nav-dashboard"]',
         route: 'dashboard',
-        title: 'Painel Geral (Dashboard)',
+        title: 'Painel Geral',
         description: 'Acompanhe seus atendimentos do dia, faltas, resumo de agenda e alertas importantes em tempo real.',
         position: 'right'
       },
@@ -665,7 +665,7 @@ export const MODULE_TOURS: Record<string, TourDefinition> = {
         id: 'personal_dashboard',
         target: '[data-tour="personal-dashboard-tab"]',
         route: 'zemda-personal',
-        title: 'Dashboard do Treinador',
+        title: 'Painel do Treinador',
         description: 'Consulte o painel de treinamento e o resumo dos alunos.',
         position: 'bottom'
       },

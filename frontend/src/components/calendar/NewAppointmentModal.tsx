@@ -6,6 +6,7 @@ import { Professional, Service, Patient, AvailableSlot } from '../../types';
 import { X, Calendar, Clock, User, Plus, CheckCircle2 } from 'lucide-react';
 import { isMeetingUrl } from '../../utils/teleconsultation';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
+import { NewPatientModal } from '../patients/NewPatientModal';
 
 interface NewAppointmentModalProps {
   isOpen: boolean;
@@ -29,6 +30,9 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
   const [rooms, setRooms] = useState<any[]>([]);
 
   const [patientId, setPatientId] = useState<string>('');
+  const [selectedPatientObj, setSelectedPatientObj] = useState<any>(null);
+  const [isNewPatientModalOpen, setIsNewPatientModalOpen] = useState(false);
+  const [newPatientSearchQuery, setNewPatientSearchQuery] = useState('');
   const [professionalId, setProfessionalId] = useState<string>('');
   const [serviceId, setServiceId] = useState<string>('');
   const [insuranceId, setInsuranceId] = useState<string>('');
@@ -48,7 +52,29 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
   const [loading, setLoading] = useState<boolean>(false);
   const [loadingSlots, setLoadingSlots] = useState<boolean>(false);
 
-  useEffect(() => { if (isOpen) setMeetingUrl(''); }, [isOpen]);
+  useEffect(() => {
+    if (isOpen) {
+      setMeetingUrl('');
+    } else {
+      setPatientId('');
+      setSelectedPatientObj(null);
+      setIsNewPatientModalOpen(false);
+      setNewPatientSearchQuery('');
+    }
+  }, [isOpen]);
+
+  const isQueryPhone = useMemo(() => {
+    const clean = newPatientSearchQuery.replace(/\D/g, '');
+    return clean.length >= 8 && /^[\d\s\(\)\-\.]+$/.test(newPatientSearchQuery);
+  }, [newPatientSearchQuery]);
+
+  const prefillName = isQueryPhone ? '' : newPatientSearchQuery;
+  const prefillPhone = isQueryPhone ? newPatientSearchQuery : '';
+
+  const handleOpenCreatePatient = (query?: string) => {
+    setNewPatientSearchQuery(query || '');
+    setIsNewPatientModalOpen(true);
+  };
 
   // Filtra serviços pelo profissional selecionado
   const filteredServices = useMemo(() => {
@@ -205,8 +231,13 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
             label={clientTermLabel}
             required
             value={patientId}
+            selectedPatient={selectedPatientObj}
             clientTermLabel={clientTermLabel}
-            onChange={(id) => setPatientId(id)}
+            onChange={(id, patient) => {
+              setPatientId(id);
+              setSelectedPatientObj(patient || null);
+            }}
+            onCreateNew={handleOpenCreatePatient}
           />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -373,6 +404,29 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Modal de Cadastro Rápido de Paciente Sobreposto ao Novo Agendamento */}
+      <NewPatientModal
+        isOpen={isNewPatientModalOpen}
+        initialName={prefillName}
+        initialPhone={prefillPhone}
+        zIndex="z-[60]"
+        onClose={() => setIsNewPatientModalOpen(false)}
+        onSuccess={(created) => {
+          setIsNewPatientModalOpen(false);
+          if (created?.id) {
+            setPatientId(created.id);
+            setSelectedPatientObj({
+              id: created.id,
+              full_name: created.fullName || prefillName,
+              name: created.fullName || prefillName,
+              phone: created.phone || prefillPhone,
+              cpf: created.cpf
+            });
+            showToast(`${clientTermLabel} cadastrado e selecionado!`, 'success');
+          }
+        }}
+      />
     </div>
   );
 };

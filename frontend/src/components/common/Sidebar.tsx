@@ -94,7 +94,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'attendance',
       label: 'Atendimento & Agenda',
       items: [
-        { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, visible: true },
+        { id: 'dashboard', label: 'Painel', icon: LayoutDashboard, visible: true },
         {
           id: 'calendar',
           label: 'Agenda Interativa',

@@ -609,7 +609,7 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
               </p>
             </div>
             <div className="w-8 h-8 border-3 border-teal-600 border-t-transparent rounded-full animate-spin mx-auto" />
-            <p className="text-xs text-teal-600 font-semibold">Redirecionando para o seu Dashboard...</p>
+            <p className="text-xs text-teal-600 font-semibold">Redirecionando para o seu Painel...</p>
           </div>
         </div>
       </div>
