@@ -348,6 +348,7 @@ api.get('/v1/physiotherapy/regional-evaluations/patient/:patientId', requireTena
 api.get('/v1/physiotherapy/regional-evaluations/summary/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PhysiotherapyController.getRegionalSummary);
 api.get('/v1/physiotherapy/regional-evaluations/compare/:patientId/:regionId', requireTenant, requireRole('clinic_admin', 'professional'), PhysiotherapyController.getRegionalComparison);
 api.post('/v1/physiotherapy/regional-evaluations', requireTenant, requireRole('clinic_admin', 'professional'), PhysiotherapyController.createRegionalEvaluation);
+api.put('/v1/physiotherapy/regional-evaluations/:id', requireTenant, requireRole('clinic_admin', 'professional'), PhysiotherapyController.createRegionalEvaluation);
 api.delete('/v1/physiotherapy/regional-evaluations/:id', requireTenant, requireRole('clinic_admin', 'professional'), PhysiotherapyController.deleteRegionalEvaluation);
 
 // ==========================================

@@ -962,23 +962,21 @@ export class PhysiotherapyController {
         return;
       }
 
-      const {
-        patientId,
-        appointmentId,
-        regionId,
-        regionLabel,
-        side,
-        evaluationDate,
-        pain,
-        adm,
-        strength,
-        tests,
-        palpation,
-        edema,
-        functionalScales,
-        planLink,
-        notes
-      } = req.body;
+      const patientId = req.body.patientId || req.body.patient_id;
+      const appointmentId = req.body.appointmentId || req.body.appointment_id;
+      const regionId = req.body.regionId || req.body.region_id;
+      const regionLabel = req.body.regionLabel || req.body.region_label;
+      const side = req.body.side;
+      const evaluationDate = req.body.evaluationDate || req.body.evaluation_date;
+      const pain = req.body.pain !== undefined ? req.body.pain : req.body.pain_json;
+      const adm = req.body.adm !== undefined ? req.body.adm : req.body.adm_json;
+      const strength = req.body.strength !== undefined ? req.body.strength : req.body.strength_json;
+      const tests = req.body.tests !== undefined ? req.body.tests : req.body.tests_json;
+      const palpation = req.body.palpation !== undefined ? req.body.palpation : req.body.palpation_json;
+      const edema = req.body.edema !== undefined ? req.body.edema : req.body.edema_json;
+      const functionalScales = req.body.functionalScales !== undefined ? req.body.functionalScales : req.body.functional_scales_json;
+      const planLink = req.body.planLink !== undefined ? req.body.planLink : req.body.plan_link_json;
+      const notes = req.body.notes;
 
       if (!patientId || !regionId || !regionLabel) {
         res.status(400).json({ error: 'patientId, regionId e regionLabel são obrigatórios' });
@@ -1006,13 +1004,61 @@ export class PhysiotherapyController {
         return;
       }
 
-      const id = 'pfre-' + uuidv4().slice(0, 8);
       const evalDate = evaluationDate || new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
 
       const stringifyOrNull = (val: any) => {
         if (val === undefined || val === null) return null;
         return typeof val === 'string' ? val : JSON.stringify(val);
       };
+
+      const targetId = req.params?.id || req.body?.id;
+      if (targetId) {
+        const existing = db.prepare(`
+          SELECT id, patient_id FROM physiotherapy_regional_evaluations
+          WHERE id = ? AND tenant_id = ?
+        `).get(targetId, tenantId) as any;
+
+        if (existing) {
+          db.prepare(`
+            UPDATE physiotherapy_regional_evaluations SET
+              region_id = ?, region_label = ?, side = ?, evaluation_date = ?,
+              pain_json = ?, adm_json = ?, strength_json = ?, tests_json = ?,
+              palpation_json = ?, edema_json = ?, functional_scales_json = ?, plan_link_json = ?,
+              notes = ?, updated_at = datetime('now')
+            WHERE id = ? AND tenant_id = ?
+          `).run(
+            regionId, regionLabel, side || 'midline', evalDate,
+            stringifyOrNull(pain),
+            stringifyOrNull(adm),
+            stringifyOrNull(strength),
+            stringifyOrNull(tests),
+            stringifyOrNull(palpation),
+            stringifyOrNull(edema),
+            stringifyOrNull(functionalScales),
+            stringifyOrNull(planLink),
+            notes || null,
+            targetId, tenantId
+          );
+
+          logAudit(req, 'UPDATE_PHYSIO_REGIONAL_EVALUATION', 'physiotherapy_regional_evaluations', targetId, { patientId, regionId });
+
+          res.json({
+            id: targetId,
+            message: 'Avaliação funcional regional atualizada com sucesso!',
+            evaluation: {
+              id: targetId,
+              patientId,
+              regionId,
+              regionLabel,
+              side: side || 'midline',
+              evaluationDate: evalDate
+            }
+          });
+          return;
+        }
+      }
+
+      const id = 'pfre-' + uuidv4().slice(0, 8);
 
       db.prepare(`
         INSERT INTO physiotherapy_regional_evaluations (

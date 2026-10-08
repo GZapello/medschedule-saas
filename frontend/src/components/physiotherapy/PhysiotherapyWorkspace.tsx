@@ -166,17 +166,14 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
   const [showPreviousRecordsModal, setShowPreviousRecordsModal] = useState<boolean>(false);
   const [showFollowUpModal, setShowFollowUpModal] = useState<boolean>(false);
 
-  // 15 Abas Ordenadas
+  // 12 Abas Ordenadas (Centralizadas em Avaliações Regionais)
   const [activeTab, setActiveTab] = useState<
     | 'evolution'
     | 'anamnesis'
     | 'kinetic_functional'
     | 'pain_zemdabody'
     | 'evaluations'
-    | 'adm_goniometry'
-    | 'muscle_strength'
     | 'posture_gait'
-    | 'functional_tests'
     | 'cbdf'
     | 'treatment_plan'
     | 'goals'
@@ -703,7 +700,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
         )}
       </ProfessionalModuleHeader>
 
-      {/* 15 ABAS DE NAVEGAÇÃO ESTRUTURADAS (Trilha Limpa com Rolagem Livre) */}
+      {/* 12 ABAS DE NAVEGAÇÃO ESTRUTURADAS (Trilha Limpa com Rolagem Livre) */}
       <div className="bg-white border-b border-slate-200 shrink-0">
         <HorizontalTabNav scroll={tabScroll}>
           <div {...tabScrollProps} className={`${tabScrollProps.className} flex items-center gap-1 py-1`}>
@@ -713,16 +710,13 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
               { id: 'kinetic_functional', label: '3. Cinético-Funcional', icon: Sliders },
               { id: 'pain_zemdabody', label: '4. Dor & Zemda360', icon: AlertCircle },
               { id: 'evaluations', label: '5. Avaliações', icon: Target },
-              { id: 'adm_goniometry', label: '6. ADM / Goniometria', icon: Activity },
-              { id: 'muscle_strength', label: '7. Força Oxford', icon: Dumbbell },
-              { id: 'posture_gait', label: '8. Postura & Marcha', icon: User },
-              { id: 'functional_tests', label: '9. Testes Funcionais', icon: Award },
-              { id: 'cbdf', label: '10. CBDF COFFITO', icon: ShieldCheck },
-              { id: 'treatment_plan', label: '11. Plano RBPF', icon: Calendar },
-              { id: 'goals', label: '12. Metas', icon: Target },
-              { id: 'external_tests', label: '13. Testes Externos', icon: FileText },
-              { id: 'home_exercises', label: '14. Exercícios em Casa', icon: Dumbbell },
-              { id: 'finish', label: '15. Finalização', icon: CheckCircle2 }
+              { id: 'posture_gait', label: '6. Postura & Marcha', icon: User },
+              { id: 'cbdf', label: '7. CBDF COFFITO', icon: ShieldCheck },
+              { id: 'treatment_plan', label: '8. Plano RBPF', icon: Calendar },
+              { id: 'goals', label: '9. Metas', icon: Target },
+              { id: 'external_tests', label: '10. Testes Externos', icon: FileText },
+              { id: 'home_exercises', label: '11. Exercícios em Casa', icon: Dumbbell },
+              { id: 'finish', label: '12. Finalização', icon: CheckCircle2 }
             ].map(tab => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -1412,7 +1406,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
                                 </span>
                                 {painScore !== undefined && painScore !== null && (
                                   <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${painColor}`}>
-                                    EVA: {painScore}/10
+                                    Dor (EVA): {painScore}/10
                                   </span>
                                 )}
                               </div>
@@ -1433,11 +1427,11 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
                                 {testsCount > 0 && (
                                   <span className="inline-flex items-center gap-1 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100">
                                     <Award className="w-3 h-3 text-purple-600" />
-                                    {testsCount} testes esp.
+                                    {testsCount} testes clínicos
                                   </span>
                                 )}
                                 <span className="text-slate-400">·</span>
-                                <span>Avaliador: <strong className="text-slate-700">{evalItem.professional_name || 'Fisioterapeuta'}</strong></span>
+                                <span>Profissional: <strong className="text-slate-700">{evalItem.professional_name || 'Fisioterapeuta'}</strong></span>
                               </div>
 
                               {evalItem.notes && (
@@ -1497,142 +1491,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
               </div>
             )}
 
-            {/* ABA 6: ADM / GONIOMETRIA ESTRUTURADA */}
-            {activeTab === 'adm_goniometry' && (
-              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
-                <div className="flex items-center justify-between border-b pb-3">
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                      <Activity className="w-4 h-4 text-teal-600" /> ADM / Goniometria Estruturada
-                    </h3>
-                    <p className="text-xs text-slate-500">
-                      Tabela padronizada com amplitude normal de referência e valores aferidos bilateralmente.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs text-left">
-                    <thead className="bg-slate-50 text-slate-600 border-b border-slate-200 font-bold">
-                      <tr>
-                        <th className="py-2.5 px-3">Articulação</th>
-                        <th className="py-2.5 px-3">Movimento</th>
-                        <th className="py-2.5 px-3">ADM Normal</th>
-                        <th className="py-2.5 px-3">Direito (°)</th>
-                        <th className="py-2.5 px-3">Esquerdo (°)</th>
-                        <th className="py-2.5 px-3">Déficit / Notas</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {goniometryList.map((row, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50/50">
-                          <td className="py-2 px-3 font-bold text-slate-800">{row.joint}</td>
-                          <td className="py-2 px-3 text-slate-700">{row.movement}</td>
-                          <td className="py-2 px-3 text-slate-400 font-mono">{row.normalRange}</td>
-                          <td className="py-2 px-3">
-                            <input
-                              type="text"
-                              value={row.right}
-                              placeholder="Ex: 160°"
-                              onChange={e => {
-                                const updated = [...goniometryList];
-                                updated[idx].right = e.target.value;
-                                setGoniometryList(updated);
-                              }}
-                              className="w-20 px-2 py-1 border rounded-lg text-xs font-semibold"
-                            />
-                          </td>
-                          <td className="py-2 px-3">
-                            <input
-                              type="text"
-                              value={row.left}
-                              placeholder="Ex: 175°"
-                              onChange={e => {
-                                const updated = [...goniometryList];
-                                updated[idx].left = e.target.value;
-                                setGoniometryList(updated);
-                              }}
-                              className="w-20 px-2 py-1 border rounded-lg text-xs font-semibold"
-                            />
-                          </td>
-                          <td className="py-2 px-3">
-                            <input
-                              type="text"
-                              value={row.notes || ''}
-                              placeholder="Ex: Dor no fim do arco"
-                              onChange={e => {
-                                const updated = [...goniometryList];
-                                updated[idx].notes = e.target.value;
-                                setGoniometryList(updated);
-                              }}
-                              className="w-full px-2 py-1 border rounded-lg text-xs"
-                            />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {/* ABA 7: FORÇA MUSCULAR (OXFORD 0-5) */}
-            {activeTab === 'muscle_strength' && (
-              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
-                <div className="border-b pb-3">
-                  <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                    <Dumbbell className="w-4 h-4 text-teal-600" /> Força Muscular — Escala Medical Research Council (Oxford 0 a 5)
-                  </h3>
-                  <p className="text-xs text-slate-500">
-                    0: Ausência de contração | 1: Esboço de contração | 2: Movimento sem gravidade | 3: Vence gravidade | 4: Vence resistência moderada | 5: Normal
-                  </p>
-                </div>
-
-                <div className="space-y-3">
-                  {muscleStrengthList.map((item, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs">
-                      <span className="font-bold text-slate-800 w-1/2">{item.group}</span>
-                      <div className="flex items-center gap-6">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-slate-600">Direito:</span>
-                          <select
-                            value={item.rightGrade}
-                            onChange={e => {
-                              const updated = [...muscleStrengthList];
-                              updated[idx].rightGrade = e.target.value === '' ? '' : Number(e.target.value);
-                              setMuscleStrengthList(updated);
-                            }}
-                            className="px-2.5 py-1 border rounded-lg font-bold text-teal-800 bg-white"
-                          ><option value="">Não avaliado</option>
-                            {[0, 1, 2, 3, 4, 5].map(v => (
-                              <option key={v} value={v}>{v}/5</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-slate-600">Esquerdo:</span>
-                          <select
-                            value={item.leftGrade}
-                            onChange={e => {
-                              const updated = [...muscleStrengthList];
-                              updated[idx].leftGrade = e.target.value === '' ? '' : Number(e.target.value);
-                              setMuscleStrengthList(updated);
-                            }}
-                            className="px-2.5 py-1 border rounded-lg font-bold text-teal-800 bg-white"
-                          ><option value="">Não avaliado</option>
-                            {[0, 1, 2, 3, 4, 5].map(v => (
-                              <option key={v} value={v}>{v}/5</option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* ABA 8: POSTURA & MARCHA */}
+            {/* ABA 6: POSTURA & MARCHA */}
             {activeTab === 'posture_gait' && (
               <div className="space-y-6">
                 {/* 1. SEÇÃO DE AVALIAÇÃO POSTURAL (FOTOGRAMETRIA E IA COMPARTILHADA) */}
@@ -1808,56 +1667,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
               </div>
             )}
 
-            {/* ABA 9: TESTES FUNCIONAIS ESPECÍFICOS */}
-            {activeTab === 'functional_tests' && (
-              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
-                <div className="border-b pb-3">
-                  <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                    <Award className="w-4 h-4 text-teal-600" /> Biblioteca Estruturada de Testes Especiais
-                  </h3>
-                  <p className="text-xs text-slate-500">
-                    Registro de sensibilidade e acurácia clínica dos principais testes ortopédicos e neurológicos.
-                  </p>
-                </div>
-
-                <div className="space-y-3">
-                  {functionalTests.map((test, idx) => (
-                    <div key={test.id} className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <span className="font-bold text-slate-900 block">{test.name}</span>
-                        <span className="text-[11px] text-slate-500">
-                          Região: <strong>{test.region}</strong> | Alvo: {test.targetStructure}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <select
-                          value={test.result}
-                          onChange={e => {
-                            const updated = [...functionalTests];
-                            updated[idx].result = e.target.value as any;
-                            setFunctionalTests(updated);
-                          }}
-                          className={`px-3 py-1.5 rounded-lg border font-bold text-xs ${
-                            test.result === 'positive'
-                              ? 'bg-rose-100 text-rose-800 border-rose-300'
-                              : test.result === 'negative'
-                              ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
-                              : 'bg-white text-slate-700 border-slate-200'
-                          }`}
-                        ><option value="">Selecione / não avaliado</option>
-                          <option value="not_tested">Não Testado</option>
-                          <option value="negative">Negativo (-)</option>
-                          <option value="positive">Positivo (+)</option>
-                          <option value="doubtful">Duvidoso (±)</option>
-                        </select>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* ABA 10: CBDF (COFFITO 610/2025) */}
+            {/* ABA 7: CBDF (COFFITO 610/2025) */}
             {activeTab === 'cbdf' && (
               <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-5">
                 <div className="border-b pb-3">
@@ -1923,7 +1733,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
               </div>
             )}
 
-            {/* ABA 11: PLANO TERAPÊUTICO (RBPF 618/2025) */}
+            {/* ABA 8: PLANO TERAPÊUTICO (RBPF 618/2025) */}
             {activeTab === 'treatment_plan' && (
               <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-5">
                 <div className="border-b pb-3">
@@ -1981,7 +1791,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
               </div>
             )}
 
-            {/* ABA 12: METAS & REAVALIAÇÃO */}
+            {/* ABA 9: METAS & REAVALIAÇÃO */}
             {activeTab === 'goals' && (
               <MeasurableGoalsManager
                 patientId={selectedPatientId}
@@ -1990,7 +1800,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
               />
             )}
 
-            {/* ABA 13: TESTES EXTERNOS */}
+            {/* ABA 10: TESTES EXTERNOS */}
             {activeTab === 'external_tests' && (
               <ExternalTestsManager
                 patientId={selectedPatientId}
@@ -1998,7 +1808,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
               />
             )}
 
-            {/* ABA 14: EXERCÍCIOS DOMICILIARES */}
+            {/* ABA 11: EXERCÍCIOS DOMICILIARES */}
             {activeTab === 'home_exercises' && (
               <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-5">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-2">
@@ -2103,7 +1913,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
               </div>
             )}
 
-            {/* ABA 15: FINALIZAÇÃO CANÔNICA */}
+            {/* ABA 12: FINALIZAÇÃO CANÔNICA */}
             {activeTab === 'finish' && (
               <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
                 <div className="border-b pb-3">
@@ -2375,14 +2185,16 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
           patientId={selectedPatientId}
           patientName={selectedPatient?.full_name || 'Paciente'}
           appointmentId={initialAppointmentId}
-          regionId={selectedRegionId}
+          regionId={editingRegionalEval?.region_id || selectedRegionId}
           regionLabel={
+            editingRegionalEval?.region_label ||
             (Array.isArray(regionalSummary) && regionalSummary.find(r => r.region_id === selectedRegionId)?.region_label) ||
             REGIONAL_OPTIONS.find(o => o.id === selectedRegionId)?.label ||
             customRegionName ||
             getRegionLabel(selectedRegionId, bodyModel)
           }
           side={
+            editingRegionalEval?.side ||
             (Array.isArray(regionalSummary) && (regionalSummary.find(r => r.region_id === selectedRegionId)?.side as any)) ||
             (REGIONAL_OPTIONS.find(o => o.id === selectedRegionId)?.side as any) ||
             customRegionSide ||

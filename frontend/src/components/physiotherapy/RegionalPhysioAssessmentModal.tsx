@@ -177,6 +177,55 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
   const [stability, setStability] = useState<string>((initialData as any)?.stability || '');
   const [generalNotes, setGeneralNotes] = useState<string>(initialData?.notes || '');
 
+  // Sincroniza e isola o estado quando a região ou a avaliação inicial muda (evita contaminação entre regiões)
+  useEffect(() => {
+    if (!isOpen) return;
+    const config = getJointConfigForRegion(regionId);
+    const effSide = initialData?.side || initialSide || detectSideFromRegionId(regionId);
+    setSide(effSide);
+    setEvaluationDate(initialData?.evaluation_date || new Date().toISOString().split('T')[0]);
+    setPain(parseJsonObjSafe<PhysioPainAssessment>(initialData?.pain_json, {}));
+
+    const defAdm: PhysioAdmItem[] = config.defaultMovements.map(m => ({
+      movement: m.movement,
+      normalRange: m.normalRange,
+      activeRom: '',
+      passiveRom: '',
+      painPresent: undefined,
+      notes: ''
+    }));
+    setAdmList(parseJsonArrSafe<PhysioAdmItem>(initialData?.adm_json, defAdm));
+
+    const defStr: PhysioStrengthItem[] = config.defaultMovements.map(m => ({
+      movementOrMuscle: m.movement,
+      grade: '',
+      notes: ''
+    }));
+    setStrengthList(parseJsonArrSafe<PhysioStrengthItem>(initialData?.strength_json, defStr));
+
+    const defTests: PhysioSpecialTestItem[] = config.specialTests.map(t => ({
+      testName: t.name,
+      targetStructure: t.target,
+      result: 'not_tested',
+      notes: ''
+    }));
+    setSpecialTests(parseJsonArrSafe<PhysioSpecialTestItem>(initialData?.tests_json, defTests));
+
+    setPalpation(parseJsonObjSafe<PhysioPalpationAssessment>(initialData?.palpation_json, {}));
+    setEdema(parseJsonObjSafe<PhysioEdemaAssessment>(initialData?.edema_json, {}));
+    setScales(parseJsonArrSafe<PhysioFunctionalScaleItem>(
+      initialData?.functional_scales_json,
+      [{ scaleName: config.suggestedScales[0] || 'Escala EVA', score: '', interpretation: '' }]
+    ));
+    setPlan(parseJsonObjSafe<PhysioPlanLink>(
+      initialData?.plan_link_json,
+      { goal: '', homeExercises: '', reassessmentDate: '' }
+    ));
+    setInspection((initialData as any)?.inspection || '');
+    setStability((initialData as any)?.stability || '');
+    setGeneralNotes(initialData?.notes || '');
+  }, [isOpen, regionId, initialData?.id, initialSide]);
+
   const draftChangeRef = React.useRef(onDraftChange);
   draftChangeRef.current = onDraftChange;
   useEffect(() => {
@@ -189,26 +238,47 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
       setSaving(true);
 
       const payload = {
+        id: initialData?.id,
         patient_id: patientId,
+        patientId: patientId,
         appointment_id: appointmentId || null,
+        appointmentId: appointmentId || null,
         region_id: regionId,
+        regionId: regionId,
         region_label: regionLabel,
+        regionLabel: regionLabel,
         side,
         evaluation_date: evaluationDate,
+        evaluationDate: evaluationDate,
         pain_json: pain,
+        pain: pain,
         adm_json: admList,
+        adm: admList,
         strength_json: strengthList,
+        strength: strengthList,
         tests_json: specialTests,
+        tests: specialTests,
         palpation_json: palpation,
+        palpation: palpation,
         edema_json: edema,
+        edema: edema,
         functional_scales_json: scales,
+        functionalScales: scales,
         plan_link_json: plan,
+        planLink: plan,
         notes: generalNotes,
         ...(clinicalDetails ? { inspection, stability } : {})
       };
 
-      const res = onSavePayload ? await onSavePayload(payload) : await ApiClient.post<any>('/v1/physiotherapy/regional-evaluations', payload);
-      const saved = res.data || res;
+      let res: any;
+      if (onSavePayload) {
+        res = await onSavePayload(payload);
+      } else if (initialData?.id) {
+        res = await ApiClient.put<any>(`/v1/physiotherapy/regional-evaluations/${initialData.id}`, payload);
+      } else {
+        res = await ApiClient.post<any>('/v1/physiotherapy/regional-evaluations', payload);
+      }
+      const saved = res?.data?.evaluation || res?.data || res;
       showToast(`Avaliação regional de "${regionLabel}" salva com sucesso!`, 'success');
       onSaved(saved);
       onClose();
