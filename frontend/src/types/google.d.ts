@@ -11,6 +11,7 @@ declare global {
             cancel_on_tap_outside?: boolean;
             use_fedcm_for_button?: boolean;
             button_auto_select?: boolean;
+            itp_support?: boolean;
           }) => void;
           renderButton: (
             parent: HTMLElement,

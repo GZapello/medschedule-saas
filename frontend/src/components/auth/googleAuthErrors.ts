@@ -1,10 +1,13 @@
-export const GOOGLE_LOGIN_ERROR = 'Não foi possível entrar com o Google. Tente novamente ou utilize seu e-mail e senha.';
-export const GOOGLE_SIGNUP_ERROR = 'Não foi possível concluir o cadastro com o Google. Tente novamente.';
+export const GOOGLE_LOGIN_ERROR = 'Este navegador não conseguiu concluir o acesso com Google. Tente novamente ou utilize seu e-mail e senha.';
+export const GOOGLE_SIGNUP_ERROR = 'Este navegador não conseguiu concluir o acesso com Google. Tente novamente ou utilize seu e-mail e senha.';
 
 // Never stringify or inspect an external object: it can contain a cross-origin Window.
 export function googleAuthError(error: unknown, context: 'login' | 'signup' | 'link' = 'login'): string {
   if (import.meta.env.DEV) {
-    try { console.error('[GoogleAuth]', error); } catch { /* Diagnostics cannot interrupt auth. */ }
+    try {
+      const msg = typeof error === 'string' ? error : (error instanceof Error ? error.message : '');
+      console.warn('[GoogleAuth]', msg || 'Authentication error');
+    } catch { /* Diagnostics cannot interrupt auth. */ }
   }
   if (context === 'link') {
     try {
@@ -13,5 +16,6 @@ export function googleAuthError(error: unknown, context: 'login' | 'signup' | 'l
       }
     } catch { /* Unknown objects may have throwing getters. */ }
   }
-  return context === 'signup' ? GOOGLE_SIGNUP_ERROR : GOOGLE_LOGIN_ERROR;
+  return GOOGLE_LOGIN_ERROR;
 }
+

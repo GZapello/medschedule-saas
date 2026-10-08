@@ -81,7 +81,7 @@ function loadGsi(): Promise<void> {
       script?.removeEventListener('error', failed);
       if (error) { script?.remove(); gsiLoad = null; reject(error); } else resolve();
     };
-    const failed = () => finish(new Error('Script do Google indisponível. Verifique a conexão e os bloqueadores de conteúdo e tente novamente.'));
+    const failed = () => finish(new Error('Serviço de autenticação temporariamente indisponível.'));
     const timeout = window.setTimeout(failed, 12000);
     const poll = window.setInterval(() => { if (window.google?.accounts?.id) finish(); }, 100);
     if (!script) {
@@ -109,10 +109,10 @@ export const GoogleAuthButton: React.FC<GoogleAuthButtonProps> = ({
     let responseTimer: number | undefined;
     const buttonState = `zemda-google-${++nextButton}`;
     let pending = false;
-    const fail = (message: string) => {
+    const fail = (message?: string) => {
       if (!live) return;
       setError(GOOGLE_LOGIN_ERROR);
-      googleAuthError(message);
+      if (message) googleAuthError(message);
       callbacks.current.onError?.(GOOGLE_LOGIN_ERROR);
     };
     const receive = (credential: unknown) => {
@@ -120,34 +120,42 @@ export const GoogleAuthButton: React.FC<GoogleAuthButtonProps> = ({
       pending = false;
       clearTimeout(responseTimer);
       if (typeof credential !== 'string' || !credential.trim()) {
-        fail('O Google não retornou a credencial. Tente novamente ou entre com e-mail e senha.'); return;
+        fail('Credencial vazia ou inválida'); return;
       }
       setError('');
       // Only the primitive token crosses the GIS/application boundary.
       Promise.resolve().then(() => { if (live && !callbacks.current.disabled) return callbacks.current.onSuccess(credential); }).catch(error => {
         googleAuthError(error);
-        if (live) fail('Google authentication callback failed');
+        if (live) fail('Processamento da credencial falhou');
       });
     };
     setError(''); setReady(false);
     if (!/^[\w-]+\.apps\.googleusercontent\.com$/.test(clientId)) {
-      fail('Login Google indisponível: VITE_GOOGLE_CLIENT_ID ausente ou inválido na configuração do site.');
+      fail('Configuração de autenticação indisponível');
       return () => { live=false; };
     }
     if (!window.isSecureContext) {
-      fail('O login Google exige HTTPS (ou localhost durante desenvolvimento).');
+      fail('Ambiente seguro obrigatório');
       return () => { live=false; };
     }
     loadGsi().then(() => {
       if (!live || !containerRef.current) return;
       const api = window.google!.accounts!.id!;
       if (initializedClient !== clientId) {
-        api.initialize({client_id:clientId, ux_mode:'popup',
-          callback:response => {
-            if (typeof response.state === 'string') receivers.get(response.state)?.(response.credential);
+        api.initialize({
+          client_id: clientId,
+          ux_mode: 'popup',
+          callback: response => {
+            if (typeof response?.state === 'string') receivers.get(response.state)?.(response.credential);
           },
-          // Use the documented popup flow across Chrome/Edge/Opera, without requiring FedCM.
-          use_fedcm_for_button:false, button_auto_select:false, auto_select:false});
+          // Compatible popup flow across Chrome, Edge, Opera, Firefox, Safari.
+          // Never force FedCM where unsupported or restricted.
+          use_fedcm_for_button: false,
+          // Intelligent Tracking Prevention (ITP) for Safari, WebKit and Firefox.
+          itp_support: true,
+          button_auto_select: false,
+          auto_select: false
+        });
         initializedClient = clientId;
       }
       receivers.set(buttonState, receive);
@@ -158,10 +166,10 @@ export const GoogleAuthButton: React.FC<GoogleAuthButtonProps> = ({
           if (callbacks.current.disabled) return;
           pending = true;
           setError(''); clearTimeout(responseTimer);
-          responseTimer = window.setTimeout(() => { pending = false; fail('O Google não concluiu o acesso. Se a janela estiver vazia ou bloqueada, feche-a, permita popups para este site e tente novamente. Se o Google indicar origin_mismatch ou invalid_client, a configuração do domínio/Client ID precisa ser corrigida.'); }, 45000);
+          responseTimer = window.setTimeout(() => { pending = false; fail('Tempo limite esgotado.'); }, 45000);
         }});
       setReady(true);
-    }).catch(e => { googleAuthError(e); fail('GIS initialization failed'); });
+    }).catch(e => { googleAuthError(e); fail('Falha ao inicializar autenticação Google'); });
     return () => {
       live=false; clearTimeout(responseTimer);
       receivers.delete(buttonState);
