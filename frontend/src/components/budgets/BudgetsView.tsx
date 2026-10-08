@@ -681,7 +681,20 @@ export const BudgetsView: React.FC = () => {
                   <tbody className="divide-y divide-slate-200">
                     {printBudgetData.items.map((it, idx) => (
                       <tr key={idx}>
-                        <td className="p-3 font-medium text-slate-800">{it.description}</td>
+                        <td className="p-3 font-medium text-slate-800">
+                          <div className="flex items-center gap-2">
+                            {it.item_type === 'product' ? (
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-sky-100 text-sky-800 border border-sky-200 print:border print:text-black shrink-0">
+                                Insumo / Produto
+                              </span>
+                            ) : (
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-cyan-50 text-cyan-800 border border-cyan-200 print:border print:text-black shrink-0">
+                                Procedimento
+                              </span>
+                            )}
+                            <span>{it.description}</span>
+                          </div>
+                        </td>
                         <td className="p-3 text-center">{it.quantity}</td>
                         <td className="p-3 text-right text-slate-600">
                           {Number(it.unit_price).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}

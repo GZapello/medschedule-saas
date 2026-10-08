@@ -72,6 +72,31 @@ export interface DentistryInventoryUsageItem {
   currentStock?: number;
 }
 
+export interface PlanProcedureItem {
+  itemType?: 'service';
+  tooth?: string;
+  face?: string;
+  procedure?: string;
+  value?: number;
+  unitPrice?: number;
+  totalPrice?: number;
+}
+
+export interface PlanProductItem {
+  itemType: 'product';
+  productId: string;
+  productName: string;
+  brand?: string;
+  batchLot?: string;
+  expiryDate?: string;
+  quantity: number;
+  unit: string;
+  unitPrice: number;
+  totalPrice: number;
+}
+
+export type DentalPlanItem = PlanProcedureItem | PlanProductItem;
+
 interface DentistryWorkspaceProps {
   initialPatientId?: string;
   initialAppointmentId?: string;
@@ -170,7 +195,7 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
   const [treatmentPlans, setTreatmentPlans] = useState<any[]>([]);
   const [planForm, setPlanForm] = useState({
     title: '',
-    items: [] as Array<{ tooth: string; face: string; procedure: string; value: number }>,
+    items: [] as DentalPlanItem[],
     totalValue: 0,
     discountValue: 0,
     finalValue: 0,
@@ -183,6 +208,18 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
     procedure: '',
     value: ''
   });
+
+  // Produtos / Insumos previstos no orçamento
+  const [isAddingPlanProduct, setIsAddingPlanProduct] = useState<boolean>(false);
+  const [planProductSelection, setPlanProductSelection] = useState<ClinicalInventorySelection>({
+    productId: null,
+    productName: '',
+    quantity: 1,
+    unit: 'un',
+    withoutProduct: false
+  });
+  const [planProductUnitPrice, setPlanProductUnitPrice] = useState<number | ''>(0);
+  const [planProductError, setPlanProductError] = useState<string | null>(null);
 
   // Prótese / Laboratório
   const [prosthetics, setProsthetics] = useState<any[]>([]);
@@ -719,7 +756,19 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
     }
   };
 
-  // Adicionar Item/Procedimento ao Orçamento em Elaboração
+  // Helper para recalcular totais do orçamento
+  const calculatePlanTotals = (items: DentalPlanItem[], discount: number) => {
+    const total = items.reduce((acc, curr) => {
+      if ((curr as PlanProductItem).itemType === 'product') {
+        return acc + Number((curr as PlanProductItem).totalPrice || 0);
+      }
+      return acc + Number((curr as PlanProcedureItem).value || 0);
+    }, 0);
+    const finalVal = Math.max(0, total - discount);
+    return { total, finalVal };
+  };
+
+  // Adicionar Procedimento ao Orçamento em Elaboração
   const handleAddPlanItem = () => {
     const procedure = newPlanItem.procedure.trim();
     if (!procedure) {
@@ -731,7 +780,8 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
     const rawVal = parseFloat(newPlanItem.value.toString().replace(',', '.'));
     const val = isNaN(rawVal) || rawVal < 0 ? 0 : rawVal;
 
-    const itemToAdd = {
+    const itemToAdd: PlanProcedureItem = {
+      itemType: 'service',
       tooth: newPlanItem.tooth.trim() || 'Geral',
       face: newPlanItem.face.trim() || 'Geral',
       procedure,
@@ -739,14 +789,13 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
     };
 
     const updatedItems = [...planForm.items, itemToAdd];
-    const newTotal = updatedItems.reduce((acc, curr) => acc + curr.value, 0);
-    const newFinal = Math.max(0, newTotal - planForm.discountValue);
+    const { total, finalVal } = calculatePlanTotals(updatedItems, planForm.discountValue);
 
     setPlanForm({
       ...planForm,
       items: updatedItems,
-      totalValue: newTotal,
-      finalValue: newFinal
+      totalValue: total,
+      finalValue: finalVal
     });
 
     setNewPlanItem({
@@ -754,6 +803,73 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
       face: '',
       procedure: '',
       value: ''
+    });
+  };
+
+  // Adicionar Produto/Insumo do Estoque ao Orçamento em Elaboração
+  const handleAddPlanProduct = () => {
+    setPlanProductError(null);
+    if (!planProductSelection.productId || !planProductSelection.productName) {
+      setPlanProductError('Selecione um produto/insumo do estoque.');
+      return;
+    }
+
+    const qty = typeof planProductSelection.quantity === 'number'
+      ? planProductSelection.quantity
+      : (Number(planProductSelection.quantity) || 1);
+
+    if (qty <= 0) {
+      setPlanProductError('Informe uma quantidade prevista válida maior que zero.');
+      return;
+    }
+
+    const rawPrice = parseFloat(planProductUnitPrice.toString().replace(',', '.'));
+    const unitPrice = isNaN(rawPrice) || rawPrice < 0 ? 0 : rawPrice;
+    const totalPrice = Math.round(qty * unitPrice * 100) / 100;
+
+    const itemToAdd: PlanProductItem = {
+      itemType: 'product',
+      productId: planProductSelection.productId,
+      productName: planProductSelection.productName,
+      brand: planProductSelection.brand,
+      batchLot: planProductSelection.batchLot,
+      expiryDate: planProductSelection.expiryDate,
+      quantity: qty,
+      unit: planProductSelection.unit || 'un',
+      unitPrice,
+      totalPrice
+    };
+
+    const updatedItems = [...planForm.items, itemToAdd];
+    const { total, finalVal } = calculatePlanTotals(updatedItems, planForm.discountValue);
+
+    setPlanForm({
+      ...planForm,
+      items: updatedItems,
+      totalValue: total,
+      finalValue: finalVal
+    });
+
+    setPlanProductSelection({
+      productId: null,
+      productName: '',
+      quantity: 1,
+      unit: 'un',
+      withoutProduct: false
+    });
+    setPlanProductUnitPrice(0);
+    setIsAddingPlanProduct(false);
+  };
+
+  // Remover Item (Procedimento ou Insumo) do Orçamento
+  const handleRemovePlanItem = (index: number) => {
+    const updatedItems = planForm.items.filter((_, i) => i !== index);
+    const { total, finalVal } = calculatePlanTotals(updatedItems, planForm.discountValue);
+    setPlanForm({
+      ...planForm,
+      items: updatedItems,
+      totalValue: total,
+      finalValue: finalVal
     });
   };
 
@@ -770,7 +886,7 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
       return;
     }
     if (planForm.items.length === 0) {
-      setErrorMsg('Adicione pelo menos um procedimento ao orçamento.');
+      setErrorMsg('Adicione pelo menos um procedimento ou produto/insumo ao orçamento.');
       setTimeout(() => setErrorMsg(null), 3000);
       return;
     }
@@ -1476,60 +1592,256 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
                   </div>
                 </div>
 
-                {/* Itens do Plano */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="block text-xs font-bold text-slate-700">
-                      Procedimentos Inclusos no Plano ({planForm.items.length}):
-                    </label>
-                    {planForm.items.length > 0 && (
-                      <span className="text-[11px] text-slate-500">
-                        {planForm.items.length} item(ns) inserido(s)
-                      </span>
-                    )}
+                {/* Botão e Formulário de Adicionar Produto/Insumo do Estoque */}
+                <div className="space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAddingPlanProduct(!isAddingPlanProduct);
+                        setPlanProductError(null);
+                      }}
+                      className="inline-flex items-center gap-2 px-3.5 py-2 bg-sky-50 hover:bg-sky-100/80 border border-sky-200 text-sky-900 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer w-fit"
+                    >
+                      <Package className="w-4 h-4 text-sky-600" />
+                      <span>{isAddingPlanProduct ? 'Fechar Insumos do Estoque' : '+ Adicionar Produto / Insumo do Estoque'}</span>
+                    </button>
+                    <span className="text-[11px] text-slate-500">
+                      Inclua produtos e insumos previstos sem debitar estoque imediatamente
+                    </span>
                   </div>
 
-                  {planForm.items.length === 0 ? (
-                    <div className="p-6 bg-slate-50/70 border border-dashed border-slate-200 rounded-2xl text-center text-xs text-slate-400 italic">
-                      Nenhum procedimento adicionado ao orçamento ainda. Preencha os campos acima e clique no botão &ldquo;Adicionar&rdquo;.
-                    </div>
-                  ) : (
-                    <div className="border border-slate-200 rounded-2xl divide-y divide-slate-100 overflow-hidden bg-white shadow-xs">
-                      {planForm.items.map((it, idx) => (
-                        <div key={idx} className="p-3.5 flex items-center justify-between text-xs hover:bg-slate-50/60 transition-colors">
-                          <div className="font-bold text-slate-800 flex items-center gap-2 flex-wrap">
-                            <span className="px-2 py-0.5 rounded bg-cyan-50 text-cyan-800 border border-cyan-200/80 font-bold text-[11px]">
-                              Dente {it.tooth || 'Geral'} {it.face && it.face !== 'Geral' ? `(${it.face})` : ''}
-                            </span>
-                            <span>{it.procedure}</span>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className="font-extrabold text-cyan-900 text-sm">
-                              R$ {Number(it.value || 0).toFixed(2)}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const updated = planForm.items.filter((_, i) => i !== idx);
-                                const total = updated.reduce((acc, curr) => acc + curr.value, 0);
-                                setPlanForm({
-                                  ...planForm,
-                                  items: updated,
-                                  totalValue: total,
-                                  finalValue: Math.max(0, total - planForm.discountValue)
-                                });
-                              }}
-                              className="text-rose-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
-                              title="Remover procedimento"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                  {isAddingPlanProduct && (
+                    <div className="p-4 bg-sky-50/50 border border-sky-200 rounded-2xl space-y-3 animate-in fade-in-50 duration-200">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-sky-950 flex items-center gap-1.5">
+                          <Package className="w-4 h-4 text-sky-600" />
+                          Previsão de Produto / Insumo do Estoque da Clínica
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsAddingPlanProduct(false);
+                            setPlanProductError(null);
+                          }}
+                          className="text-slate-400 hover:text-slate-600 text-xs font-semibold cursor-pointer"
+                        >
+                          ✕ Fechar
+                        </button>
+                      </div>
+
+                      <ClinicalInventorySelector
+                        value={planProductSelection}
+                        onChange={setPlanProductSelection}
+                        mode="budget"
+                        defaultCategory="Odontologia"
+                        allowWithoutProduct={false}
+                      />
+
+                      {planProductSelection.productId && (
+                        <div className="bg-white border border-sky-200 rounded-xl p-3 shadow-xs space-y-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+                            <div className="sm:col-span-3">
+                              <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                                Quantidade Prevista
+                              </label>
+                              <div className="relative">
+                                <input
+                                  type="number"
+                                  step="any"
+                                  min="0.001"
+                                  value={planProductSelection.quantity}
+                                  onChange={e =>
+                                    setPlanProductSelection({
+                                      ...planProductSelection,
+                                      quantity: e.target.value === '' ? '' : Number(e.target.value)
+                                    })
+                                  }
+                                  className="w-full p-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-sky-500"
+                                />
+                                <span className="absolute right-3 top-2 text-xs font-bold text-slate-400">
+                                  {planProductSelection.unit || 'un'}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="sm:col-span-5">
+                              <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                                Valor Unitário para o Orçamento (R$)
+                              </label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                placeholder="0,00"
+                                value={planProductUnitPrice}
+                                onChange={e => setPlanProductUnitPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                                className="w-full p-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-sky-500"
+                              />
+                              <span className="block text-[10px] text-slate-400 mt-0.5">
+                                Preço ao paciente (custo interno não é repassado)
+                              </span>
+                            </div>
+
+                            <div className="sm:col-span-4 flex flex-col justify-end">
+                              <div className="text-[11px] text-slate-500 mb-1">
+                                Subtotal previsto:{' '}
+                                <strong className="text-sky-900 text-xs">
+                                  R${' '}
+                                  {(
+                                    (Number(planProductSelection.quantity) || 0) *
+                                    (typeof planProductUnitPrice === 'number'
+                                      ? planProductUnitPrice
+                                      : Number(planProductUnitPrice) || 0)
+                                  ).toFixed(2)}
+                                </strong>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={handleAddPlanProduct}
+                                className="w-full py-2 px-3 bg-sky-600 hover:bg-sky-700 active:scale-95 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                              >
+                                <Plus className="w-4 h-4" />
+                                <span>Adicionar ao Orçamento</span>
+                              </button>
+                            </div>
                           </div>
                         </div>
-                      ))}
+                      )}
+
+                      {planProductError && (
+                        <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs font-medium flex items-center gap-1.5">
+                          <AlertTriangle className="w-4 h-4 shrink-0" />
+                          {planProductError}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
+
+                {/* Composição do Orçamento (Procedimentos + Produtos) */}
+                {(() => {
+                  const procedureItems = planForm.items
+                    .map((it, idx) => ({ it, idx }))
+                    .filter(({ it }) => (it as any).itemType !== 'product');
+
+                  const productItems = planForm.items
+                    .map((it, idx) => ({ it, idx }))
+                    .filter(({ it }) => (it as any).itemType === 'product');
+
+                  return (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-xs font-bold text-slate-700">
+                          Composição do Orçamento ({planForm.items.length} itens)
+                        </label>
+                        {planForm.items.length > 0 && (
+                          <span className="text-[11px] text-slate-500">
+                            {procedureItems.length} procedimento(s) • {productItems.length} insumo(s)
+                          </span>
+                        )}
+                      </div>
+
+                      {planForm.items.length === 0 ? (
+                        <div className="p-6 bg-slate-50/70 border border-dashed border-slate-200 rounded-2xl text-center text-xs text-slate-400 italic">
+                          Nenhum procedimento ou produto/insumo adicionado ao orçamento ainda. Utilize os formulários acima para compor a proposta.
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {/* Bloco 1: PROCEDIMENTOS */}
+                          <div className="space-y-1.5">
+                            <span className="text-[11px] font-extrabold uppercase text-slate-600 tracking-wider flex items-center gap-1.5">
+                              <Smile className="w-3.5 h-3.5 text-cyan-600" />
+                              Procedimentos ({procedureItems.length})
+                            </span>
+                            {procedureItems.length === 0 ? (
+                              <p className="text-xs text-slate-400 italic pl-2">Nenhum procedimento odontológico adicionado.</p>
+                            ) : (
+                              <div className="border border-slate-200 rounded-2xl divide-y divide-slate-100 overflow-hidden bg-white shadow-xs">
+                                {procedureItems.map(({ it, idx }) => {
+                                  const proc = it as PlanProcedureItem;
+                                  return (
+                                    <div key={idx} className="p-3.5 flex items-center justify-between text-xs hover:bg-slate-50/60 transition-colors">
+                                      <div className="font-bold text-slate-800 flex items-center gap-2 flex-wrap">
+                                        <span className="px-2 py-0.5 rounded bg-cyan-50 text-cyan-800 border border-cyan-200/80 font-bold text-[11px]">
+                                          Dente {proc.tooth || 'Geral'} {proc.face && proc.face !== 'Geral' ? `(${proc.face})` : ''}
+                                        </span>
+                                        <span>{proc.procedure}</span>
+                                      </div>
+                                      <div className="flex items-center gap-3">
+                                        <span className="font-extrabold text-cyan-900 text-sm">
+                                          R$ {Number(proc.value || proc.unitPrice || 0).toFixed(2)}
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRemovePlanItem(idx)}
+                                          className="text-rose-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
+                                          title="Remover procedimento"
+                                        >
+                                          <Trash2 className="w-4 h-4" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Bloco 2: PRODUTOS / INSUMOS */}
+                          <div className="space-y-1.5 pt-1">
+                            <span className="text-[11px] font-extrabold uppercase text-slate-600 tracking-wider flex items-center gap-1.5">
+                              <Package className="w-3.5 h-3.5 text-sky-600" />
+                              Produtos / Insumos Previstos ({productItems.length})
+                            </span>
+                            {productItems.length === 0 ? (
+                              <p className="text-xs text-slate-400 italic pl-2">Nenhum produto ou insumo de estoque previsto neste orçamento.</p>
+                            ) : (
+                              <div className="border border-slate-200 rounded-2xl divide-y divide-slate-100 overflow-hidden bg-white shadow-xs">
+                                {productItems.map(({ it, idx }) => {
+                                  const prod = it as PlanProductItem;
+                                  return (
+                                    <div key={idx} className="p-3.5 flex items-center justify-between text-xs hover:bg-slate-50/60 transition-colors">
+                                      <div className="space-y-0.5">
+                                        <div className="font-bold text-slate-800 flex items-center gap-2 flex-wrap">
+                                          <span className="px-2 py-0.5 rounded bg-sky-50 text-sky-800 border border-sky-200/80 font-bold text-[11px]">
+                                            Estoque
+                                          </span>
+                                          <span>{prod.productName}</span>
+                                          {prod.brand && (
+                                            <span className="text-[11px] text-slate-400 font-normal">({prod.brand})</span>
+                                          )}
+                                        </div>
+                                        <div className="text-[11px] text-slate-500 flex items-center gap-2">
+                                          <span>Quantidade: <strong>{prod.quantity} {prod.unit}</strong></span>
+                                          <span>•</span>
+                                          <span>Unitário: <strong>R$ {Number(prod.unitPrice).toFixed(2)}</strong></span>
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-3">
+                                        <span className="font-extrabold text-sky-900 text-sm">
+                                          R$ {Number(prod.totalPrice).toFixed(2)}
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRemovePlanItem(idx)}
+                                          className="text-rose-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
+                                          title="Remover produto do orçamento"
+                                        >
+                                          <Trash2 className="w-4 h-4" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {/* Observações / Notas do Orçamento */}
                 <div>
@@ -1627,6 +1939,30 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
                         <div className="text-xs text-slate-600 space-y-1">
                           <p><strong>Total:</strong> R$ {Number(plan.final_value).toFixed(2)}</p>
                           <p><strong>Condições:</strong> {plan.payment_terms || '-'}</p>
+                          {Array.isArray(plan.items) && plan.items.length > 0 && (
+                            <div className="pt-2 text-[11px] text-slate-500 border-t border-slate-100 space-y-1">
+                              <span className="font-bold text-slate-700 block">Itens do Orçamento:</span>
+                              <div className="space-y-0.5 max-h-28 overflow-y-auto pr-1">
+                                {plan.items.map((pi: any, pIdx: number) => {
+                                  const isProd = (pi.itemType || pi.item_type) === 'product' || Boolean(pi.productId);
+                                  const itemPrice = Number(isProd ? (pi.totalPrice ?? (Number(pi.quantity || 1) * Number(pi.unitPrice || 0))) : (pi.value || pi.unitPrice || 0));
+                                  return (
+                                    <div key={pIdx} className="flex items-center justify-between text-[11px]">
+                                      <span className="truncate max-w-[210px] flex items-center gap-1">
+                                        <span className={`px-1 py-0.2 rounded text-[9px] font-bold ${isProd ? 'bg-sky-100 text-sky-800' : 'bg-cyan-100 text-cyan-800'}`}>
+                                          {isProd ? 'Insumo' : 'Proc.'}
+                                        </span>
+                                        <span>{isProd ? (pi.productName || pi.description) : (pi.procedure || pi.description)}</span>
+                                      </span>
+                                      <span className="font-semibold text-slate-700 shrink-0">
+                                        R$ {itemPrice.toFixed(2)}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
                         </div>
 
                         {plan.status !== 'approved' && (

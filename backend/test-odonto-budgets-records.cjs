@@ -324,6 +324,190 @@ app.use('/api', require('./dist/routes').default);
 
     console.log('✓ Exclusão de orçamento executada com sucesso, desvinculando plano odontológico e preservando prontuário');
 
+    console.log('\n--- Teste 6: Produtos/Insumos do Estoque no Orçamento do ZemdaOdonto ---');
+
+    // 1. Cadastra itens de estoque para o tenant e para outro tenant
+    const itemResinaId = 'inv-resina-350';
+    const itemLidoId = 'inv-lido-tubetes';
+    const itemOtherTenantId = 'inv-other-item';
+
+    db.prepare(`
+      INSERT INTO inventory_items (id, tenant_id, name, brand, category, quantity, unit, unit_cost, active, created_at, updated_at)
+      VALUES (?, ?, 'Resina Filtek Z350 XT', '3M', 'Odontologia', 25, 'un', 45.00, 1, datetime('now'), datetime('now'))
+    `).run(itemResinaId, tenantId);
+
+    db.prepare(`
+      INSERT INTO inventory_items (id, tenant_id, name, brand, category, quantity, unit, unit_cost, active, created_at, updated_at)
+      VALUES (?, ?, 'Anestésico Lidocaína 2%', 'DFL', 'Odontologia', 50, 'tubetes', 5.00, 1, datetime('now'), datetime('now'))
+    `).run(itemLidoId, tenantId);
+
+    db.prepare(`
+      INSERT INTO tenants (id, slug, name, trade_name, cnpj_cpf, status, email)
+      VALUES ('ten-other-tenant-999', 'other-clinic', 'Outra Clínica', 'Outra Clínica', '99999999000199', 'active', 'other@test.com')
+    `).run();
+
+    db.prepare(`
+      INSERT INTO inventory_items (id, tenant_id, name, brand, category, quantity, unit, unit_cost, active, created_at, updated_at)
+      VALUES (?, 'ten-other-tenant-999', 'Item de Outra Clínica', 'Marca X', 'Geral', 10, 'un', 10.00, 1, datetime('now'), datetime('now'))
+    `).run(itemOtherTenantId);
+
+    const initialResinaStock = db.prepare('SELECT quantity FROM inventory_items WHERE id = ?').get(itemResinaId).quantity;
+    const initialLidoStock = db.prepare('SELECT quantity FROM inventory_items WHERE id = ?').get(itemLidoId).quantity;
+    const initialMovementsCount = db.prepare('SELECT count(*) as count FROM inventory_movements WHERE tenant_id = ?').get(tenantId).count;
+
+    // 2. Tentar criar orçamento com produto de outro tenant -> deve rejeitar com 400
+    const resInvalidTenantProd = await fetch(`${base}/v1/dentistry/treatment-plans`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        patientId,
+        title: 'Orçamento com Insumo de Outro Tenant',
+        items: [
+          { procedure: 'Consulta Avaliativa', value: 100 },
+          { itemType: 'product', productId: itemOtherTenantId, productName: 'Item Outro Tenant', quantity: 1, unitPrice: 50 }
+        ]
+      })
+    });
+    assert.equal(resInvalidTenantProd.status, 400, 'Deve rejeitar produto pertencente a outro tenant');
+    const errJsonOther = await resInvalidTenantProd.json();
+    assert.ok(errJsonOther.error.includes('não encontrado no estoque'), 'Erro deve informar que o produto não foi encontrado');
+    console.log('✓ Validação de segurança multi-tenant: rejeitou produto de outro tenant');
+
+    // 3. Tentar criar orçamento com productId inexistente -> deve rejeitar com 400
+    const resNonExistentProd = await fetch(`${base}/v1/dentistry/treatment-plans`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        patientId,
+        title: 'Orçamento com Insumo Inexistente',
+        items: [
+          { itemType: 'product', productId: 'inv-fake-id-999', productName: 'Inexistente', quantity: 1, unitPrice: 50 }
+        ]
+      })
+    });
+    assert.equal(resNonExistentProd.status, 400, 'Deve rejeitar produto inexistente');
+    console.log('✓ Validação de produto inexistente rejeitada com status 400');
+
+    // 4. Salvar plano de tratamento misto válido (procedimentos + insumos de estoque)
+    const mixedPlanPayload = {
+      patientId,
+      title: 'Plano Reabilitador com Insumos Previstos',
+      items: [
+        { tooth: '11', face: 'V', procedure: 'Clareamento Dental em Consultório', value: 800 },
+        {
+          itemType: 'product',
+          productId: itemResinaId,
+          productName: 'Resina Filtek Z350 XT',
+          brand: '3M',
+          quantity: 2,
+          unit: 'un',
+          unitPrice: 80,
+          totalPrice: 160
+        },
+        {
+          itemType: 'product',
+          productId: itemLidoId,
+          productName: 'Anestésico Lidocaína 2%',
+          brand: 'DFL',
+          quantity: 4,
+          unit: 'tubetes',
+          unitPrice: 15,
+          totalPrice: 60
+        }
+      ],
+      totalValue: 1020, // 800 + 160 + 60
+      discountValue: 20,
+      finalValue: 1000,
+      paymentTerms: 'Entrada de R$ 500 + 1x R$ 500',
+      notes: 'Valores comerciais de insumos calculados com margem'
+    };
+
+    const resMixedPlan = await fetch(`${base}/v1/dentistry/treatment-plans`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(mixedPlanPayload)
+    });
+
+    assert.equal(resMixedPlan.status, 201, 'Deve criar orçamento misto com sucesso');
+    const mixedCreated = await resMixedPlan.json();
+    assert.ok(mixedCreated.id);
+    assert.ok(mixedCreated.budgetId);
+    console.log('✓ Orçamento misto criado com sucesso:', mixedCreated.id, 'Orçamento:', mixedCreated.budgetNumber);
+
+    // 5. REGRA CRÍTICA: Validar que NÃO HOUVE BAIXA NO ESTOQUE
+    const resinaStockAfter = db.prepare('SELECT quantity FROM inventory_items WHERE id = ?').get(itemResinaId).quantity;
+    const lidoStockAfter = db.prepare('SELECT quantity FROM inventory_items WHERE id = ?').get(itemLidoId).quantity;
+    const movementsCountAfter = db.prepare('SELECT count(*) as count FROM inventory_movements WHERE tenant_id = ?').get(tenantId).count;
+
+    assert.equal(resinaStockAfter, initialResinaStock, 'Saldo de Resina deve permanecer IDÊNTICO (25)');
+    assert.equal(lidoStockAfter, initialLidoStock, 'Saldo de Lidocaína deve permanecer IDÊNTICO (50)');
+    assert.equal(movementsCountAfter, initialMovementsCount, 'Nenhuma movimentação de estoque deve ter sido gerada');
+    console.log('✓ REGRA CRÍTICA VALIDADA: Saldo de estoque 100% inalterado (25 un e 50 tubetes). Zero movimentações criadas.');
+
+    // 6. Verificar mapeamento em budget_items com item_type correto
+    const mixedBudgetItems = db.prepare('SELECT * FROM budget_items WHERE budget_id = ? ORDER BY id ASC').all(mixedCreated.budgetId);
+    assert.equal(mixedBudgetItems.length, 3, 'Deve ter criado 3 itens em budget_items');
+
+    const serviceItem = mixedBudgetItems.find(i => i.item_type === 'service');
+    assert.ok(serviceItem, 'Item de serviço deve existir');
+    assert.ok(serviceItem.description.includes('Clareamento Dental'));
+    assert.equal(serviceItem.unit_price, 800);
+    assert.equal(serviceItem.total_price, 800);
+
+    const productResina = mixedBudgetItems.find(i => i.item_type === 'product' && i.reference_id === itemResinaId);
+    assert.ok(productResina, 'Item de produto Resina deve existir com item_type = product');
+    assert.equal(productResina.quantity, 2);
+    assert.equal(productResina.unit_price, 80);
+    assert.equal(productResina.total_price, 160);
+
+    const productLido = mixedBudgetItems.find(i => i.item_type === 'product' && i.reference_id === itemLidoId);
+    assert.ok(productLido, 'Item de produto Lidocaína deve existir com item_type = product');
+    assert.equal(productLido.quantity, 4);
+    assert.equal(productLido.unit_price, 15);
+    assert.equal(productLido.total_price, 60);
+    console.log('✓ Itens de produtos e procedimentos persistidos com item_type e valores corretos em budget_items');
+
+    // 7. Verificar detalhes do orçamento via GET /v1/budgets/:id
+    const resGetBudget = await fetch(`${base}/v1/budgets/${mixedCreated.budgetId}`, { headers });
+    assert.equal(resGetBudget.status, 200);
+    const budgetData = await resGetBudget.json();
+    assert.equal(budgetData.items.length, 3);
+    assert.equal(budgetData.budget.total_amount, 1000);
+    console.log('✓ GET /v1/budgets/:id retorna todos os itens mistos com quantidades e valores para visualização/impressão');
+
+    // 8. Verificar prontuário universal em records: seções separadas
+    const resRecords = await fetch(`${base}/v1/clinical-records/patient/${patientId}`, { headers });
+    assert.equal(resRecords.status, 200);
+    const recordsList = await resRecords.json();
+    const mixedPlanRecord = recordsList.find(r => r.source_id === mixedCreated.id);
+    assert.ok(mixedPlanRecord, 'Registro universal do plano misto deve existir');
+    assert.ok(mixedPlanRecord.clinical_evolution.includes('Procedimentos Propostos:'), 'Deve conter seção Procedimentos Propostos');
+    assert.ok(mixedPlanRecord.clinical_evolution.includes('Produtos / Insumos Previstos:'), 'Deve conter seção Produtos / Insumos Previstos');
+    assert.ok(mixedPlanRecord.clinical_evolution.includes('Clareamento Dental'), 'Deve listar o procedimento na seção adequada');
+    assert.ok(mixedPlanRecord.clinical_evolution.includes('Resina Filtek Z350 XT'), 'Deve listar a resina na seção adequada');
+    assert.ok(mixedPlanRecord.clinical_evolution.includes('Anestésico Lidocaína 2%'), 'Deve listar o anestésico na seção adequada');
+    assert.ok(mixedPlanRecord.clinical_evolution.includes('Valor Bruto: R$ 1020.00'));
+    assert.ok(mixedPlanRecord.clinical_evolution.includes('Desconto Concedido: R$ 20.00'));
+    assert.ok(mixedPlanRecord.clinical_evolution.includes('Valor Final Líquido: R$ 1000.00'));
+    console.log('✓ Prontuário universal estruturado com seções separadas de Procedimentos e Produtos/Insumos Previstos');
+
+    // 9. Aprovar o orçamento e garantir que aprovação também NÃO BAIXA estoque
+    const resApproveMixed = await fetch(`${base}/v1/dentistry/treatment-plans/${mixedCreated.id}/status`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({ status: 'approved' })
+    });
+    assert.equal(resApproveMixed.status, 200);
+
+    const resinaStockAfterApproval = db.prepare('SELECT quantity FROM inventory_items WHERE id = ?').get(itemResinaId).quantity;
+    const lidoStockAfterApproval = db.prepare('SELECT quantity FROM inventory_items WHERE id = ?').get(itemLidoId).quantity;
+    const movementsAfterApproval = db.prepare('SELECT count(*) as count FROM inventory_movements WHERE tenant_id = ?').get(tenantId).count;
+
+    assert.equal(resinaStockAfterApproval, 25, 'Aprovação NÃO deve baixar estoque da Resina');
+    assert.equal(lidoStockAfterApproval, 50, 'Aprovação NÃO deve baixar estoque da Lidocaína');
+    assert.equal(movementsAfterApproval, initialMovementsCount, 'Aprovação NÃO deve gerar inventory_movements');
+    console.log('✓ Aprovação do orçamento concluída com sucesso sem nenhuma baixa ou movimentação de estoque');
+
     console.log('\n✅ TODOS OS TESTES DE INTEGRAÇÃO PASSARAM COM SUCESSO!\n');
   } catch (err) {
     console.error('❌ Erro no teste de integração:', err);

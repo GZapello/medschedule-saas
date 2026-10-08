@@ -175,19 +175,47 @@ export class ClinicalRecordService {
    */
   static formatDentalTreatmentPlanEvolution(
     title: string,
-    items: Array<{ tooth?: string; face?: string; procedure: string; value?: number }>,
+    items: any[],
     totalValue: number,
     discountValue: number,
     finalValue: number,
     paymentTerms?: string
   ): string {
-    const formattedItems = items.map((i, idx) => {
-      const toothStr = i.tooth ? ` [Dente ${i.tooth}${i.face ? ` - Face ${i.face}` : ''}]` : '';
-      const valStr = i.value !== undefined ? ` - R$ ${Number(i.value).toFixed(2)}` : '';
-      return `${idx + 1}. ${i.procedure}${toothStr}${valStr}`;
-    }).join('\n');
+    const procedureItems = items.filter(
+      i => (i.itemType || i.item_type || 'service') !== 'product' && !i.productId
+    );
+    const productItems = items.filter(
+      i => (i.itemType || i.item_type) === 'product' || Boolean(i.productId)
+    );
 
-    let text = `Plano de Tratamento Odontológico: ${title}\n\nProcedimentos Propostos:\n${formattedItems}\n\n`;
+    let text = `Plano de Tratamento Odontológico: ${title}\n\n`;
+
+    if (procedureItems.length > 0) {
+      const formattedProcedures = procedureItems.map((i, idx) => {
+        const toothStr = i.tooth && i.tooth !== 'Geral' ? ` [Dente ${i.tooth}${i.face && i.face !== 'Geral' ? ` - Face ${i.face}` : ''}]` : '';
+        const val = i.value !== undefined ? i.value : (i.unitPrice !== undefined ? i.unitPrice : i.unit_price);
+        const valStr = val !== undefined ? ` - R$ ${Number(val).toFixed(2)}` : '';
+        return `${idx + 1}. ${i.procedure || i.description || 'Procedimento'}${toothStr}${valStr}`;
+      }).join('\n');
+      text += `Procedimentos Propostos:\n${formattedProcedures}\n\n`;
+    }
+
+    if (productItems.length > 0) {
+      const formattedProducts = productItems.map((i, idx) => {
+        const qty = Number(i.quantity) || 1;
+        const unit = i.unit ? ` ${i.unit}` : ' un';
+        const unitPrice = Number(i.unitPrice !== undefined ? i.unitPrice : (i.unit_price !== undefined ? i.unit_price : (i.value || 0)));
+        const lineTotal = Number(i.totalPrice !== undefined ? i.totalPrice : (i.total_price !== undefined ? i.total_price : (qty * unitPrice)));
+        return `${idx + 1}. ${i.productName || i.description || 'Produto'} — ${qty}${unit} — R$ ${lineTotal.toFixed(2)}`;
+      }).join('\n');
+      text += `Produtos / Insumos Previstos:\n${formattedProducts}\n\n`;
+    }
+
+    if (procedureItems.length === 0 && productItems.length === 0 && items.length > 0) {
+      const formattedItems = items.map((i, idx) => `${idx + 1}. ${i.procedure || i.description || 'Item'}`).join('\n');
+      text += `Itens Propostos:\n${formattedItems}\n\n`;
+    }
+
     text += `Valor Bruto: R$ ${Number(totalValue || 0).toFixed(2)}\n`;
     if (Number(discountValue || 0) > 0) {
       text += `Desconto Concedido: R$ ${Number(discountValue).toFixed(2)}\n`;

@@ -599,8 +599,39 @@ export class DentistryController {
         return;
       }
       if (!Array.isArray(items) || items.length === 0) {
-        res.status(400).json({ error: 'O plano deve conter pelo menos um procedimento' });
+        res.status(400).json({ error: 'O plano deve conter pelo menos um item (procedimento ou produto/insumo)' });
         return;
+      }
+
+      // Validação dos produtos/insumos de estoque recebidos
+      for (const item of items) {
+        const isProduct = (item.itemType || item.item_type) === 'product' || Boolean(item.productId);
+        if (isProduct) {
+          if (!item.productId) {
+            res.status(400).json({ error: 'Identificador do produto/insumo é obrigatório' });
+            return;
+          }
+
+          const productRow = db.prepare(`
+            SELECT id, name, unit, active, tenant_id
+            FROM inventory_items
+            WHERE id = ? AND tenant_id = ?
+          `).get(item.productId, tenantId) as any;
+
+          if (!productRow) {
+            res.status(400).json({
+              error: `Produto/insumo "${item.productName || item.productId}" não encontrado no estoque da clínica`
+            });
+            return;
+          }
+
+          if (!productRow.active || productRow.active === 0) {
+            res.status(400).json({
+              error: `Produto/insumo "${productRow.name}" está inativo no estoque da clínica`
+            });
+            return;
+          }
+        }
       }
 
       // Validação de existência do paciente no tenant
@@ -659,34 +690,63 @@ export class DentistryController {
           req.user?.name || 'Cirurgião-Dentista'
         );
 
-        // 3. Mapeia cada procedimento para budget_items com detalhes clínicos
+        // 3. Mapeia cada item (serviço ou produto) para budget_items com detalhes clínicos
         const insertItemStmt = db.prepare(`
           INSERT INTO budget_items (
             id, tenant_id, budget_id, item_type, reference_id, description, quantity, unit_price, total_price
-          ) VALUES (?, ?, ?, 'service', ?, ?, 1, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
 
         for (const item of items) {
-          const toothPart = item.tooth ? ` - Dente ${item.tooth}` : '';
-          const facePart = item.face ? ` (${item.face})` : '';
-          const description = `${item.procedure || 'Procedimento'}${toothPart}${facePart}`;
-          const itemVal = Math.max(0, Number(item.value || item.unitPrice || 0));
-          insertItemStmt.run(
-            'bdi-' + uuidv4().slice(0, 8),
-            tenantId,
-            budId,
-            id,
-            description,
-            itemVal,
-            itemVal
-          );
+          const isProduct = (item.itemType || item.item_type) === 'product' || Boolean(item.productId);
+          if (isProduct) {
+            const qty = Math.max(0.001, Number(item.quantity) || 1);
+            const unitPrice = Math.max(0, Number(item.unitPrice !== undefined ? item.unitPrice : (item.value || 0)));
+            const totalPrice = item.totalPrice !== undefined ? Number(item.totalPrice) : Math.round(qty * unitPrice * 100) / 100;
+            const description = item.productName || item.description || 'Produto de Estoque';
+
+            insertItemStmt.run(
+              'bdi-' + uuidv4().slice(0, 8),
+              tenantId,
+              budId,
+              'product',
+              item.productId,
+              description,
+              qty,
+              unitPrice,
+              totalPrice
+            );
+          } else {
+            const toothPart = item.tooth && item.tooth !== 'Geral' ? ` - Dente ${item.tooth}` : '';
+            const facePart = item.face && item.face !== 'Geral' ? ` (${item.face})` : '';
+            const description = `${item.procedure || item.description || 'Procedimento'}${toothPart}${facePart}`;
+            const qty = Math.max(1, Number(item.quantity) || 1);
+            const itemVal = Math.max(0, Number(item.value !== undefined ? item.value : (item.unitPrice || 0)));
+            const totalPrice = item.totalPrice !== undefined ? Number(item.totalPrice) : (qty * itemVal);
+
+            insertItemStmt.run(
+              'bdi-' + uuidv4().slice(0, 8),
+              tenantId,
+              budId,
+              'service',
+              id,
+              description,
+              qty,
+              itemVal,
+              totalPrice
+            );
+          }
         }
 
         // 4. Gera prontuário universal em records de forma estruturada e idempotente
         const evolutionText = ClinicalRecordService.formatDentalTreatmentPlanEvolution(
           title.trim(), items, numTotal, numDiscount, numFinal, paymentTerms
         );
-        const procedureNames = items.map((i: any) => i.procedure).filter(Boolean).join(', ');
+        const procedureNames = items
+          .filter((i: any) => (i.itemType || i.item_type || 'service') !== 'product' && !i.productId)
+          .map((i: any) => i.procedure || i.description)
+          .filter(Boolean)
+          .join(', ');
 
         ClinicalRecordService.recordClinicalEvent({
           tenantId,

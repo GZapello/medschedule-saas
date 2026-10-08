@@ -51,6 +51,7 @@ interface ClinicalInventorySelectorProps {
   required?: boolean;
   allowWithoutProduct?: boolean;
   defaultCategory?: string;
+  mode?: 'usage' | 'budget';
 }
 
 export function ClinicalInventorySelector({
@@ -59,7 +60,8 @@ export function ClinicalInventorySelector({
   disabled = false,
   required = true,
   allowWithoutProduct = true,
-  defaultCategory = 'Geral'
+  defaultCategory = 'Geral',
+  mode = 'usage'
 }: ClinicalInventorySelectorProps) {
   const [items, setItems] = useState<ClinicalInventoryItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -247,10 +249,11 @@ export function ClinicalInventorySelector({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
           <Package className="w-4 h-4 text-teal-600" />
-          Produto / Insumo utilizado {required && !value.withoutProduct && <span className="text-red-500">*</span>}
+          {mode === 'budget' ? 'Produto / Insumo do Estoque' : 'Produto / Insumo utilizado'}{' '}
+          {required && !value.withoutProduct && <span className="text-red-500">*</span>}
         </label>
 
-        {allowWithoutProduct && (
+        {allowWithoutProduct && mode !== 'budget' && (
           <label className="inline-flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-700 bg-white px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors select-none">
             <input
               type="checkbox"
@@ -264,7 +267,7 @@ export function ClinicalInventorySelector({
         )}
       </div>
 
-      {allowWithoutProduct && value.withoutProduct ? (
+      {allowWithoutProduct && mode !== 'budget' && value.withoutProduct ? (
         <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 flex items-center gap-2">
           <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
           <span>Este procedimento não registrará baixa no estoque central da clínica.</span>
@@ -362,7 +365,7 @@ export function ClinicalInventorySelector({
             </button>
           </div>
 
-          {/* Dados do produto selecionado + Quantidade Utilizada */}
+          {/* Dados do produto selecionado + Quantidade */}
           {selectedItem && (
             <div className="bg-white border border-teal-200/80 rounded-xl p-3 shadow-xs space-y-3">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
@@ -392,7 +395,7 @@ export function ClinicalInventorySelector({
               <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
                   <label className="text-xs font-bold text-slate-700 shrink-0">
-                    Quantidade utilizada:
+                    {mode === 'budget' ? 'Quantidade prevista:' : 'Quantidade utilizada:'}
                   </label>
                   <div className="relative w-28">
                     <input
@@ -417,35 +420,51 @@ export function ClinicalInventorySelector({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 text-xs">
-                  {usedQty > 0 && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-slate-500">Saldo após procedimento:</span>
-                      <span
-                        className={`font-bold px-2 py-0.5 rounded-md ${
-                          isInsufficient ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-800'
-                        }`}
-                      >
-                        {remainingStock} {selectedItem.unit}
-                      </span>
-                    </div>
-                  )}
+                {mode === 'budget' ? (
+                  <div className="text-xs text-slate-500 flex items-center gap-1.5">
+                    <span>Saldo em estoque (referência):</span>
+                    <span className="font-semibold text-slate-700">
+                      {currentStock} {selectedItem.unit}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3 text-xs">
+                    {usedQty > 0 && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-slate-500">Saldo após procedimento:</span>
+                        <span
+                          className={`font-bold px-2 py-0.5 rounded-md ${
+                            isInsufficient ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-800'
+                          }`}
+                        >
+                          {remainingStock} {selectedItem.unit}
+                        </span>
+                      </div>
+                    )}
 
-                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-700 bg-teal-50 px-2 py-1 rounded-md border border-teal-200/60">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />
-                    Baixa automática no estoque
-                  </span>
-                </div>
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-700 bg-teal-50 px-2 py-1 rounded-md border border-teal-200/60">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />
+                      Baixa automática no estoque
+                    </span>
+                  </div>
+                )}
               </div>
 
-              {isInsufficient && (
-                <div className="p-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
-                  <span>
-                    Estoque insuficiente! A quantidade solicitada ({usedQty} {selectedItem.unit}) excede o saldo
-                    disponível ({currentStock} {selectedItem.unit}).
-                  </span>
+              {mode === 'budget' ? (
+                <div className="p-2.5 bg-sky-50 border border-sky-200/80 rounded-lg text-xs text-sky-800 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-sky-600 shrink-0" />
+                  <span>Este item está apenas previsto no orçamento e não movimentará o estoque.</span>
                 </div>
+              ) : (
+                isInsufficient && (
+                  <div className="p-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                    <span>
+                      Estoque insuficiente! A quantidade solicitada ({usedQty} {selectedItem.unit}) excede o saldo
+                      disponível ({currentStock} {selectedItem.unit}).
+                    </span>
+                  </div>
+                )
               )}
             </div>
           )}
