@@ -310,6 +310,7 @@ export interface Appointment {
   end_time: string;
   status: AppointmentStatus;
   modality: 'presential' | 'online' | 'home';
+  meeting_url?: string | null;
   patient_notes?: string;
   internal_notes?: string;
   cancellation_reason?: string;

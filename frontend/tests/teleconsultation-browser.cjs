@@ -1,0 +1,206 @@
+const assert = require('node:assert/strict'), fs = require('node:fs'), path = require('node:path'), os = require('node:os'), http = require('node:http');
+const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const out = fs.mkdtempSync(path.join(os.tmpdir(), 'zemda-teleconsulta-'));
+require('esbuild').buildSync({ entryPoints: [path.join(__dirname, 'consultation-completion.tsx')], bundle: true, format: 'iife', platform: 'browser', outfile: path.join(out, 'test.js'), define: { 'import.meta.env': '{}' }, jsx: 'automatic' });
+const assets = path.resolve(__dirname, '../dist/assets');
+const css = fs.readdirSync(assets).find(f => /^index-.*\.css$/.test(f));
+const html = `<!doctype html><html><head><meta charset="utf-8"><style>${fs.readFileSync(path.join(assets, css), 'utf8')}</style></head><body><div id="root"></div><script>${fs.readFileSync(path.join(out, 'test.js'), 'utf8')}</script></body></html>`;
+const server = http.createServer((req, res) => { res.setHeader('Content-Type', 'text/html'); res.end(html); });
+let browser;
+(async () => {
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  browser = await chromium.launch({ headless: true, ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {}) });
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } }), errors = [];
+  page.on('pageerror', e => errors.push(e.message));
+  await page.addInitScript(() => {
+    window.__opened = [];
+    window.open = (...args) => { window.__opened.push(args); return null; };
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText: async text => { window.__copied = text; } } });
+    window.SpeechRecognition = class {
+      constructor() { window.__recognition = this; }
+      start() { window.__starts = (window.__starts || 0) + 1; this.onstart?.(); }
+      stop() { this.onend?.(); }
+      abort() {}
+    };
+  });
+  const open = async query => { errors.length = 0; await page.goto(`http://127.0.0.1:${server.address().port}/?module=general&${query}`); await page.getByText('Paciente teste', { exact: true }).first().waitFor(); };
+  const openings = () => page.evaluate(() => window.__opened);
+  const detail = async () => { await page.getByText('Consulta', { exact: true }).first().click(); };
+
+  await page.goto(`http://127.0.0.1:${server.address().port}/?source=new`);
+  await page.getByLabel('Link da teleconsulta').count().then(count => assert.equal(count, 0));
+  const modality = page.locator('select').filter({ has: page.locator('option[value="online"]') });
+  await modality.selectOption('online');
+  await page.getByPlaceholder('https://meet.google.com/xxx-xxxx-xxx').waitFor();
+  await modality.selectOption('presential');
+  assert.equal(await page.getByPlaceholder('https://meet.google.com/xxx-xxxx-xxx').count(), 0);
+  console.log('PASS new appointment shows teleconsultation field only online');
+
+  await open('source=agenda&online&missing');
+  await detail();
+  await page.getByRole('button',{name:'Configurar Teleconsulta',exact:true}).click();
+  await page.getByRole('dialog',{name:'Teleconsulta',exact:true}).waitFor();
+  assert.equal((await openings()).length,0);
+  await page.getByRole('button',{name:'Adicionar link',exact:true}).waitFor();
+  await open('source=agenda&online');
+  await detail();
+  await page.getByRole('button',{name:'Teleconsulta',exact:true}).click();
+  await page.getByRole('dialog',{name:'Teleconsulta',exact:true}).waitFor();
+  await page.getByRole('button',{name:'Transcrição & IA',exact:true}).waitFor();
+  assert.equal((await openings()).length,0);
+  await open('source=agenda');
+  await detail();
+  assert.equal(await page.getByRole('button',{name:/^(Configurar Teleconsulta|Teleconsulta)$/}).count(),0);
+  console.log('PASS visible teleconsultation shortcut with/without link; absent for presential');
+
+  await open('source=agenda&online');
+  await page.getByRole('button', { name: 'Paciente teste', exact: true }).first().click();
+  await page.getByRole('dialog', { name: 'Teleconsulta', exact: true }).waitFor();
+  await page.screenshot({ path: path.join(out, 'teleconsultation-modal.png') });
+  assert.equal((await openings()).length, 0, 'patient name does not open Meet');
+  await page.getByRole('button', { name: /Copiar link/ }).click();
+  assert.equal(await page.evaluate(() => window.__copied), 'https://meet.google.com/abc-defg-hij');
+  await page.getByRole('button', { name: /Compartilhar pelo WhatsApp/ }).click();
+  await page.getByRole('dialog', { name: 'Compartilhar teleconsulta' }).waitFor();
+  const message = page.getByPlaceholder('Digite a mensagem a ser enviada...');
+  assert.match(await message.inputValue(), /Olá, Paciente teste/);
+  await message.fill('Mensagem revisada com link https://meet.google.com/abc-defg-hij');
+  assert.equal((await openings()).length, 0, 'WhatsApp requires message review and explicit open');
+  await page.getByRole('button', { name: 'Abrir no WhatsApp Web/App', exact: true }).click();
+  assert.match((await openings())[0][0], /wa.me/);
+  assert.match(decodeURIComponent((await openings())[0][0]), /Mensagem revisada/);
+  assert.equal(await page.evaluate(() => window.__completion.calls.filter(c => c.url.includes('whatsapp-reminder')).length), 0);
+  console.log('PASS contextual name, clipboard and reviewed manual WhatsApp');
+
+  await open('source=agenda&online');
+  await detail();
+  await page.getByRole('button', { name: 'INICIAR ATENDIMENTO', exact: true }).click();
+  await page.getByText('📹 Teleconsulta', { exact: true }).waitFor();
+  assert.equal((await openings()).length, 1);
+  assert.equal((await openings())[0][1], '_blank');
+  assert.equal(await page.evaluate(() => window.__completion.appointment.status), 'in_progress');
+  await page.getByRole('button', { name: 'Transcrição & IA', exact: true }).click();
+  const start = page.getByRole('button', { name: 'Iniciar transcrição', exact: true });
+  assert.ok(await start.isDisabled());
+  assert.equal(await page.evaluate(() => window.__starts || 0), 0);
+  await page.getByText('Confirmo que o paciente foi informado e autorizou a transcrição deste atendimento.', { exact: true }).click();
+  await start.click();
+  await page.evaluate(() => {
+    const result = [{ transcript: 'Paciente relata melhora.' }]; result.isFinal = true;
+    window.__recognition.onresult({ resultIndex: 0, results: [result] });
+  });
+  await page.getByRole('button', { name: 'Pausar', exact: true }).click();
+  await page.getByRole('button', { name: 'Continuar', exact: true }).click();
+  await page.getByRole('button', { name: 'Finalizar', exact: true }).click();
+  assert.equal(await page.evaluate(() => window.__completion.calls.filter(c => c.url.includes('organize-evolution')).length), 0);
+  await page.getByRole('button', { name: '✨ Organizar com IA', exact: true }).click();
+  await page.getByRole('button', { name: 'Editar', exact: true }).click();
+  await page.getByLabel('Rascunho da transcrição').waitFor();
+  await page.getByLabel('Rascunho da transcrição').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: path.join(out, 'transcription-review.png') });
+  const insert = page.getByRole('button', { name: 'Aplicar à evolução', exact: true });
+  assert.ok(await insert.isDisabled());
+  await page.getByLabel('Rascunho da transcrição').fill('Texto revisado pelo profissional.');
+  await page.getByText('Revisei o conteúdo.', { exact: true }).click();
+  await insert.click();
+  assert.ok(await page.locator('textarea').evaluateAll(nodes => nodes.some(n => n.value.includes('Texto revisado pelo profissional.'))));
+  await page.waitForFunction(() => (localStorage.getItem('zemda_quick_consult_appointment') || '').includes('Texto revisado pelo profissional.'));
+  assert.equal((await openings()).length, 1, 'transcription and rerenders never open Meet');
+  await page.getByRole('button', { name: 'Abrir Google Meet', exact: true }).click();
+  assert.equal((await openings()).length, 2);
+  console.log('PASS clinical flow, single Meet opening, consent, pause/resume/finalize, AI and reviewed insertion');
+
+  await open('source=agenda&online&missing');
+  await detail();
+  await page.getByRole('button', { name: 'INICIAR ATENDIMENTO', exact: true }).click();
+  await page.getByText('Este atendimento online ainda não possui link de teleconsulta.', { exact: true }).waitFor();
+  assert.equal((await openings()).length, 0);
+  await page.getByRole('button', { name: 'Adicionar link', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Link da teleconsulta', exact: true }).fill('https://meet.google.com/new-link');
+  await page.getByRole('button', { name: 'Salvar agendamento', exact: true }).click();
+  assert.equal(await page.evaluate(() => window.__completion.appointment.meeting_url), 'https://meet.google.com/new-link');
+  assert.equal((await openings()).length, 0, 'saving never opens Meet');
+  await page.getByRole('button', { name: 'Iniciar atendimento', exact: true }).last().click();
+  await page.getByText('📹 Teleconsulta', { exact: true }).waitFor();
+  assert.equal((await openings()).length, 1);
+  console.log('PASS missing link, save and explicit clinical start');
+
+  await open('source=orchestrator&online&missing');
+  await page.getByRole('button', { name: 'Abrir Google Meet', exact: true }).click();
+  await page.getByRole('button', { name: 'Adicionar link', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Link da teleconsulta', exact: true }).fill('https://meet.google.com/clinical-link');
+  await page.getByRole('button', { name: 'Salvar agendamento', exact: true }).click();
+  await page.getByRole('button', { name: 'Fechar teleconsulta', exact: true }).click();
+  await page.getByRole('button', { name: /^Abrir Atendimento Clínico/ }).first().click();
+  await page.getByRole('button', { name: 'Abrir Google Meet', exact: true }).click();
+  assert.equal((await openings()).length, 1);
+  assert.equal((await openings())[0][0], 'https://meet.google.com/clinical-link');
+  console.log('PASS link added inside consultation remains available after module switch');
+
+  await open('source=agenda');
+  assert.equal(await page.getByRole('button', { name: 'Paciente teste', exact: true }).count(), 0);
+  await detail();
+  await page.getByRole('button', { name: 'Editar modalidade', exact: true }).click();
+  assert.equal(await page.getByRole('textbox', { name: 'Link da teleconsulta', exact: true }).count(), 0);
+  await page.getByLabel('Modalidade', { exact: true }).selectOption('online');
+  await page.getByRole('textbox', { name: 'Link da teleconsulta', exact: true }).fill('https://meet.google.com/edited-link');
+  await page.getByRole('button', { name: 'Salvar agendamento', exact: true }).click();
+  await page.getByRole('button', { name: 'Editar link / modalidade', exact: true }).click();
+  await page.getByLabel('Modalidade', { exact: true }).selectOption('presential');
+  assert.equal(await page.getByRole('textbox', { name: 'Link da teleconsulta', exact: true }).count(), 0);
+  await page.getByRole('button', { name: 'Salvar agendamento', exact: true }).click();
+  await page.getByRole('button', { name: 'INICIAR ATENDIMENTO', exact: true }).click();
+  await page.getByPlaceholder('Ex: Consulta Inicial, Sessão 3 de Fisioterapia, Retorno Clínico...').waitFor();
+  assert.equal(await page.getByText('📹 Teleconsulta', { exact: true }).count(), 0);
+  assert.equal(await page.getByRole('button', { name: '🎙 Transcrição Zemda', exact: true }).count(), 0);
+  assert.equal((await openings()).length, 0);
+  assert.deepEqual(errors, []);
+  console.log('PASS modality changes and presential flow with inactive stored link');
+  for (const module of ['ZemdaMed','ZemdaPsico','ZemdaFono','ZemdaNutri','ZemdaTO','ZemdaFisio','ZemdaOdonto','ZemdaPP','ZemdaPersonal','ZemdaEstetic','general']) {
+    await page.goto(`http://127.0.0.1:${server.address().port}/?source=orchestrator&online&module=${module}`);
+    await page.getByRole('button', {name:'Transcrição & IA',exact:true}).click();
+    await page.getByRole('button', {name:'📋 Importar transcrição do Google Meet',exact:true}).click();
+    await page.getByLabel('Transcrição do Google Meet', {exact:true}).fill('Paciente relata melhora. Retorno em dez dias.');
+    const organize = page.getByRole('button', {name:'✨ Organizar com IA',exact:true});
+    assert.ok(await organize.isDisabled());
+    await page.getByText('Confirme que o paciente foi informado sobre a utilização da transcrição para apoio ao registro profissional.',{exact:true}).click();
+    if(module==='ZemdaMed') {
+      await page.evaluate(()=>window.__completion.aiFail=true);
+      await organize.click();
+      await page.getByText('IA indisponível. Tente novamente.',{exact:true}).waitFor();
+      assert.equal(await page.getByLabel('Transcrição do Google Meet',{exact:true}).inputValue(),'Paciente relata melhora. Retorno em dez dias.');
+      await page.evaluate(()=>window.__completion.aiFail=false);
+    }
+    await organize.click();
+    await page.getByRole('button', {name:'Editar',exact:true}).click();
+    const call = await page.evaluate(() => window.__completion.calls.find(c => c.url.includes('organize-evolution')));
+    assert.equal(call.body.clinical_module,module);
+    assert.equal(call.body.appointmentId,'appointment');
+    assert.equal(call.body.patientId,'patient');
+    assert.equal(call.body.professionalId,'professional');
+    assert.ok('profession' in call.body);
+    assert.equal(await page.evaluate(() => JSON.stringify(localStorage).includes('Paciente relata melhora. Retorno')), false);
+    await page.getByLabel('Rascunho da transcrição').fill('Revisado para ' + module);
+    await page.getByText('Revisei o conteúdo.',{exact:true}).click();
+    await page.getByRole('button', {name:'Aplicar à evolução',exact:true}).click();
+    assert.ok(await page.locator('textarea').evaluateAll((nodes) => nodes.some(n=>n.value.includes('Revisado para '))));
+  }
+  console.log('PASS Meet import, consent, context for all professions and approved application');
+  await page.setViewportSize({width:390,height:844});
+  await open('source=agenda&online');
+  await page.getByRole('button', {name:'Paciente teste',exact:true}).first().click();
+  await page.getByRole('button', {name:'Transcrição & IA',exact:true}).click();
+  await page.getByRole('button', {name:'📋 Importar transcrição do Google Meet',exact:true}).click();
+  await page.getByLabel('Transcrição do Google Meet',{exact:true}).fill('Texto importado na agenda.');
+  await page.getByText('Confirme que o paciente foi informado sobre a utilização da transcrição para apoio ao registro profissional.',{exact:true}).click();
+  await page.getByRole('button',{name:'✨ Organizar com IA',exact:true}).click();
+  await page.screenshot({path:path.join(out,'teleconsultation-mobile.png')});
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth > innerWidth),false);
+  await page.getByText('Revisei o conteúdo.',{exact:true}).click();
+  await page.getByRole('button',{name:'Aplicar à evolução',exact:true}).click();
+  await page.waitForFunction(()=>Array.from(document.querySelectorAll('textarea')).some(n=>n.value.includes('Evolução organizada para revisão.')));
+  await page.waitForFunction(()=>(localStorage.getItem('zemda_quick_consult_appointment')||'').includes('Evolução organizada para revisão.'));
+  assert.equal((await openings()).length,1);
+  console.log('PASS mobile agenda import and reviewed transfer to evolution');
+  console.log('Visual checks:', out);
+})().catch(e => { console.error(e); process.exitCode = 1; }).finally(async () => { await browser?.close(); server.close(); });

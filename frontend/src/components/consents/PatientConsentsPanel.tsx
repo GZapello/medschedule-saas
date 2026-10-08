@@ -3,7 +3,7 @@ import React,{useEffect,useState} from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
-import { FileText,Plus,Copy,ShieldCheck,ExternalLink,Download } from 'lucide-react';
+import { FileText,Plus,Copy,ShieldCheck,ExternalLink,Download,Pencil } from 'lucide-react';
 import { consentDate,downloadConsentPdf } from './consent-api';
 import './consents.css';
 import { PublicConsentPage } from './PublicConsentPage';
@@ -19,6 +19,9 @@ export function PatientConsentsPanel({patientId,patient,guardians=[]}:{patientId
   const [rows,setRows]=useState<any[]>([]),[templates,setTemplates]=useState<any[]>([]),[services,setServices]=useState<any[]>([]);
   const [settings,setSettings]=useState({auth_level:'recommended',link_hours:168,photo_requested:0,profession_id:'',profession_name:''}),[loading,setLoading]=useState(true),[error,setError]=useState(''),[busy,setBusy]=useState(false);
   const [moduleFilter,setModuleFilter]=useState(''),[editor,setEditor]=useState<typeof emptyTemplate|null>(null),[editingId,setEditingId]=useState<string|null>(null);
+  const canEditTemplates = currentUser?.role === 'clinic_admin' || currentUser?.role === 'professional';
+  const [useSavedTemplate,setUseSavedTemplate]=useState(false);
+  const [copySource,setCopySource]=useState<string|null>(null);
   const [requesting,setRequesting]=useState(false),[selectedTemplate,setSelectedTemplate]=useState(''),[guardian,setGuardian]=useState(emptyGuardian),[useGuardian,setUseGuardian]=useState(false);
   const [mode,setMode]=useState('device'),[channel]=useState('email'),[link,setLink]=useState<any>(null);
   const [activeToken,setActiveToken]=useState<string|null>(null);
@@ -62,7 +65,7 @@ export function PatientConsentsPanel({patientId,patient,guardians=[]}:{patientId
   useEffect(()=>{
     setLoading(true);setError('');setLink(null);setLegacy(null);
     load().catch(e=>setError(e.message)).finally(()=>setLoading(false));
-    ApiClient.get<any[]>('/v1/services').then(s=>setServices(Array.isArray(s)?s:[])).catch(()=>setServices([]));
+    ApiClient.get<any[]>('/v1/services?consentModule=general').then(s=>setServices(Array.isArray(s)?s:[])).catch(()=>setServices([]));
   },[patientId]);
   useEffect(()=>{
     let live=true;
@@ -71,16 +74,33 @@ export function PatientConsentsPanel({patientId,patient,guardians=[]}:{patientId
     return()=>{live=false;window.removeEventListener('focus',refresh);};
   },[patientId]);
   const run=async(fn:()=>Promise<void>)=>{setBusy(true);setError('');try{await fn();}catch(e:any){setError(e.message||'Não foi possível processar a solicitação.');}finally{setBusy(false);}};
-  const edit=(t:any,duplicate=false)=>{
+  const createTemplate=(useInRequest=false)=>{
+    if(!canEditTemplates)return;
+    setUseSavedTemplate(useInRequest);setCopySource(null);setEditingId(null);setEditor({...emptyTemplate});
+  };
+  const edit=(t:any,duplicate=false,useInRequest=false)=>{
+    if(!canEditTemplates)return;
+    setUseSavedTemplate(useInRequest);
+    setCopySource(duplicate||!t.tenant_id?t.title:null);
     setEditingId(!duplicate&&t.tenant_id?t.id:null);
-    setEditor({title:duplicate?`Cópia de ${t.title}`:t.title,content:t.content,module:t.module,professionId:t.profession_id||'',serviceId:t.service_id||'',procedureName:t.procedure_name||'',required:!!t.required});
+    setEditor({title:duplicate?`Cópia de ${t.title}`.slice(0,180):t.title,content:t.content,module:t.module,professionId:t.profession_id||'',serviceId:services.some(s=>s.id===t.service_id && (t.module==='general'||s.clinical_module===t.module) && (!t.profession_id||!s.profession_id||t.profession_id===s.profession_id))?t.service_id:'',procedureName:t.procedure_name||'',required:!!t.required});
   };
   const save=()=>run(async()=>{
-    if(editingId) await ApiClient.put(`/v1/consents/templates/${editingId}`,editor);
-    else await ApiClient.post('/v1/consents/templates',editor);
-    setEditor(null);await load();notify();showToast('Modelo salvo em uma nova versão.','success');
+    if(!canEditTemplates||!editor)return;
+    const saved = editingId
+      ? await ApiClient.put<{id:string;version:number}>(`/v1/consents/templates/${editingId}`,editor)
+      : await ApiClient.post<{id:string;version:number}>('/v1/consents/templates',editor);
+    // Keep the saved version usable even if the subsequent library refresh fails.
+    const updated = {id:saved.id,tenant_id:currentTenant?.id || 'clinic',title:editor.title.trim(),content:editor.content.trim(),module:editor.module,
+      profession_id:editor.professionId,service_id:editor.serviceId,procedure_name:editor.procedureName,required:editor.required,current_version:saved.version};
+    setTemplates(previous=>[updated,...previous.filter(t=>t.id!==saved.id)]);
+    if(useSavedTemplate)setSelectedTemplate(saved.id);
+    else if(moduleFilter)setModuleFilter(editor.module);
+    setEditor(null);notify();showToast(useSavedTemplate?'Termo salvo e selecionado para esta solicitação.':'Modelo salvo em uma nova versão.','success');
+    try { await load(); } catch { setError('Termo salvo. Não foi possível atualizar a biblioteca completa; use Atualizar.'); }
   });
   const request=(action='device')=>run(async()=>{
+    if(editor)return;
     setMode(action);
     if(!useGuardian&&!patient?.email&&!signerEmail&&(action==='send'||settings.auth_level!=='basic')){setAddingEmail(true);setError('Paciente sem e-mail cadastrado. Adicione o e-mail para continuar esta solicitação.');return;}
     let r=await ApiClient.post<any>(`/v1/consents/patients/${patientId}/request`,{templateId:selectedTemplate,photoRequested,guardian:useGuardian?guardian:undefined,signerEmail:!useGuardian&&signerEmail?signerEmail:undefined});
@@ -100,12 +120,22 @@ export function PatientConsentsPanel({patientId,patient,guardians=[]}:{patientId
   });
   const isMinor=!!patient?.is_child || (()=>{if(!patient?.birth_date)return false;const d=new Date(`${patient.birth_date.slice(0,10)}T12:00:00Z`);d.setFullYear(d.getFullYear()+18);return d.getTime()>Date.now();})();
   const startRequest=(templateId='')=>{
+    setEditor(null);setUseSavedTemplate(false);
     const g=guardians.find(g=>g.is_primary)||guardians[0];
     const relationships:Record<string,string>={mother:'Mãe',father:'Pai',legal_guardian:'Responsável legal',tutor:'Tutor',other:'Outro'};
     setSelectedTemplate(templateId);setUseGuardian(isMinor);
     setSignerEmail('');setAddingEmail(false);setPhotoRequested(!!settings.photo_requested);
     setGuardian(g?{name:g.full_name||'',cpf:g.cpf||'',relationship:relationships[g.relationship]||g.relationship||'',phone:g.phone||'',email:g.email||''}:emptyGuardian);
     setRequesting(true);setLink(null);setError('');setView('documents');
+  };
+  const compatibleServices = services.filter(s => editor && (editor.module === 'general' || s.clinical_module === editor.module)
+    && (!editor.professionId || !s.profession_id || s.profession_id === editor.professionId));
+  const changeTemplateScope = (patch: Partial<typeof emptyTemplate>) => {
+    if(!editor)return;
+    const next = {...editor,...patch};
+    const selected = services.find(s=>s.id===next.serviceId);
+    if(selected && ((next.module !== 'general' && selected.clinical_module !== next.module) || (next.professionId && selected.profession_id && next.professionId !== selected.profession_id))) next.serviceId='';
+    setEditor(next);
   };
   const visible=templates.filter(t=>!moduleFilter||t.module===moduleFilter);
   const preview=templates.find(t=>t.id===selectedTemplate);
@@ -143,9 +173,12 @@ export function PatientConsentsPanel({patientId,patient,guardians=[]}:{patientId
       <details open={mode==='qr'}><summary className="cursor-pointer text-sm font-semibold text-teal-800">Mostrar QR Code</summary><img src={link.qrCode} alt="QR Code para assinar este termo" className="w-48 mt-3"/></details>
       <div className="flex flex-wrap gap-2"><button disabled={busy} className="consent-secondary" onClick={()=>resend({id:link.id})}>Enviar por e-mail</button></div>
     </aside>}
+      {editor&&canEditTemplates&&<form aria-label="Editor de termo" className="space-y-3 p-4 border border-teal-200 rounded-xl" onSubmit={e=>{e.preventDefault();void save();}}><h3 className="font-bold">{editingId?'Editar modelo — criar nova versão':copySource?'Personalizar cópia da clínica':'Novo modelo da clínica'}</h3>{copySource&&<p className="text-sm text-slate-600">Cópia de “{copySource}”. Ao salvar, um novo modelo será criado para a clínica. O original será preservado.</p>}<label className="block text-sm">Título<input autoFocus required minLength={3} maxLength={180} className="consent-field mt-1" value={editor.title} onChange={e=>setEditor({...editor,title:e.target.value})}/></label><label className="block text-sm">Área / módulo<input list="consent-modules" required maxLength={100} className="consent-field mt-1" value={editor.module} onChange={e=>changeTemplateScope({module:e.target.value})}/><datalist id="consent-modules">{Array.from(new Set(templates.map(t=>t.module))).map(m=><option key={m} value={m}/>)}</datalist></label><label className="block text-sm">Profissão<select className="consent-field mt-1" value={editor.professionId} onChange={e=>changeTemplateScope({professionId:e.target.value})}><option value="">Multidisciplinar dentro da área selecionada</option><option value={settings.profession_id}>{settings.profession_name}</option></select></label><label className="block text-sm">Serviço relacionado<select aria-label="Serviço relacionado" className="consent-field mt-1" value={editor.serviceId} onChange={e=>setEditor({...editor,serviceId:e.target.value})}><option value="">Nenhum serviço específico</option>{compatibleServices.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label><label className="block text-sm">Procedimento relacionado<input maxLength={180} className="consent-field mt-1" value={editor.procedureName} onChange={e=>setEditor({...editor,procedureName:e.target.value})}/></label><label className="block text-sm">Conteúdo completo<textarea rows={12} required minLength={20} maxLength={60000} className="consent-field mt-1" value={editor.content} onChange={e=>setEditor({...editor,content:e.target.value})}/></label><label className="flex gap-2 text-sm"><input type="checkbox" className="accent-teal-700" checked={editor.required} onChange={e=>setEditor({...editor,required:e.target.checked})}/>Termo obrigatório nesta área/serviço</label><p className="text-xs text-slate-500">Alterações geram uma nova versão. Documentos emitidos e assinados preservam seu conteúdo original.</p><div className="flex gap-2"><button disabled={busy} className="consent-primary" type="submit">{useSavedTemplate?'Salvar e utilizar':'Salvar modelo'}</button><button className="consent-secondary" type="button" disabled={busy} onClick={()=>setEditor(null)}>Voltar</button></div></form>}
     {requesting&&<form onSubmit={e=>{e.preventDefault();void request(((e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement)?.value||'device');}} className="space-y-4 p-4 sm:p-5 border border-slate-200 rounded-2xl bg-white">
+      <fieldset disabled={busy||!!editor} className="space-y-4 min-w-0">
       <h3 className="font-bold">Solicitar assinatura</h3><label className="block text-sm font-medium">Modelo<select aria-label="Modelo" required className="consent-field mt-1" value={selectedTemplate} onChange={e=>setSelectedTemplate(e.target.value)}><option value="">Selecione um termo</option>{templates.map(t=><option key={t.id} value={t.id}>{t.title} · v{t.current_version}{t.required?' · obrigatório':''}</option>)}</select></label>
-      {preview&&<details><summary className="cursor-pointer text-sm text-teal-700">Ler conteúdo antes de enviar</summary><p className="whitespace-pre-wrap text-sm leading-6 mt-3">{preview.content}</p></details>}
+      {canEditTemplates&&<button type="button" className="consent-secondary" onClick={()=>createTemplate(true)}>+ Criar termo próprio</button>}
+      {preview&&<details><summary className="cursor-pointer text-sm text-teal-700">Ler conteúdo antes de enviar</summary><p className="whitespace-pre-wrap text-sm leading-6 mt-3">{preview.content}</p>{canEditTemplates&&<button type="button" className="consent-secondary mt-3" onClick={()=>edit(preview,!preview.tenant_id,true)}>✏️ Editar / Adaptar termo</button>}</details>}
       <p className="text-sm text-slate-600">Confirmação: {settings.auth_level==='basic'?'Básico — assinatura manuscrita':settings.auth_level==='recommended'?'Recomendado — assinatura e OTP':'Reforçado — assinatura, OTP e foto opcional'}</p>
       <label className="flex gap-2 text-sm"><input type="checkbox" className="accent-teal-700" checked={useGuardian} disabled={isMinor} onChange={e=>setUseGuardian(e.target.checked)}/>{isMinor?'Paciente menor: assinatura obrigatória pelo responsável legal':'Assinatura por responsável legal'}</label>
       {!useGuardian&&!patient?.email&&<div className="space-y-2"><p className="text-sm text-amber-800">Paciente sem e-mail cadastrado.</p>{addingEmail?<label className="block text-sm">E-mail do paciente<input type="email" required maxLength={254} className="consent-field" value={signerEmail} onChange={e=>setSignerEmail(e.target.value)}/><span className="text-xs text-slate-500">O e-mail será salvo ao continuar a solicitação.</span></label>:<button type="button" className="consent-secondary" onClick={()=>setAddingEmail(true)}>Adicionar e-mail</button>}</div>}
@@ -164,12 +197,16 @@ export function PatientConsentsPanel({patientId,patient,guardians=[]}:{patientId
           {!hasPhone && <span className="text-[11px] text-amber-700 self-center">Paciente sem telefone/WhatsApp cadastrado.</span>}
         </>);
       })()}<button type="button" className="consent-secondary" disabled={busy} onClick={()=>setRequesting(false)}>Voltar</button></div>{busy&&<p role="status">Preparando solicitação...</p>}
+      </fieldset>
     </form>}
     {view==='library'?<div className="space-y-4">
-      <div className="flex flex-wrap gap-3"><select className="consent-field !w-auto" aria-label="Filtrar módulo" value={moduleFilter} onChange={e=>setModuleFilter(e.target.value)}><option value="">Todas as áreas</option>{Array.from(new Set(templates.map(t=>t.module))).map(m=><option key={m} value={m}>{m==='general'?'Multidisciplinar':m}</option>)}</select>{currentUser?.role!=='receptionist'&&<button className="consent-secondary" disabled={busy} onClick={()=>{setEditingId(null);setEditor({...emptyTemplate});}}>Criar termo próprio</button>}</div>
+      <div className="flex flex-wrap gap-3"><select className="consent-field !w-auto" aria-label="Filtrar módulo" value={moduleFilter} onChange={e=>setModuleFilter(e.target.value)}><option value="">Todas as áreas</option>{Array.from(new Set(templates.map(t=>t.module))).map(m=><option key={m} value={m}>{m==='general'?'Multidisciplinar':m}</option>)}</select>{canEditTemplates&&<button className="consent-secondary" disabled={busy} onClick={()=>createTemplate()}>Criar termo próprio</button>}</div>
       {currentUser?.role==='clinic_admin'&&<details className="bg-slate-50 border border-slate-200 rounded-xl p-4"><summary className="font-semibold text-sm cursor-pointer">Configuração da clínica</summary><div className="mt-3 space-y-3"><label className="block text-sm">Nível de confirmação<select className="consent-field mt-1" value={settings.auth_level} onChange={e=>setSettings(s=>({...s,auth_level:e.target.value}))}><option value="basic">Básico — assinatura e registros técnicos</option><option value="recommended">Recomendado — assinatura e OTP</option><option value="reinforced">Reforçado — assinatura, OTP e foto opcional</option></select></label><label className="block text-sm">Validade do link (horas)<input className="consent-field mt-1" type="number" min={1} max={720} value={settings.link_hours} onChange={e=>setSettings(s=>({...s,link_hours:Number(e.target.value)}))}/></label><label className="flex gap-2 text-sm"><input type="checkbox" checked={!!settings.photo_requested} onChange={e=>setSettings(s=>({...s,photo_requested:e.target.checked?1:0}))}/>Solicitar foto no momento da assinatura</label><button className="consent-secondary" disabled={busy} onClick={()=>run(async()=>{await ApiClient.put('/v1/consents/settings',{authLevel:settings.auth_level,linkHours:settings.link_hours,photoRequested:!!settings.photo_requested});showToast('Configuração salva para novas solicitações.','success');})}>Salvar configuração</button></div></details>}
-      {editor&&<form className="space-y-3 p-4 border border-teal-200 rounded-xl" onSubmit={e=>{e.preventDefault();void save();}}><h3 className="font-bold">{editingId?'Editar modelo — criar nova versão':'Novo modelo da clínica'}</h3><label className="block text-sm">Título<input required minLength={3} maxLength={180} className="consent-field mt-1" value={editor.title} onChange={e=>setEditor({...editor,title:e.target.value})}/></label><label className="block text-sm">Área / módulo<input list="consent-modules" required maxLength={100} className="consent-field mt-1" value={editor.module} onChange={e=>setEditor({...editor,module:e.target.value})}/><datalist id="consent-modules">{Array.from(new Set(templates.map(t=>t.module))).map(m=><option key={m} value={m}/>)}</datalist></label><label className="block text-sm">Profissão<select className="consent-field mt-1" value={editor.professionId} onChange={e=>setEditor({...editor,professionId:e.target.value})}><option value="">Multidisciplinar dentro da área selecionada</option><option value={settings.profession_id}>{settings.profession_name}</option></select></label><label className="block text-sm">Serviço relacionado<select className="consent-field mt-1" value={editor.serviceId} onChange={e=>setEditor({...editor,serviceId:e.target.value})}><option value="">Nenhum serviço específico</option>{services.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label><label className="block text-sm">Procedimento relacionado<input maxLength={180} className="consent-field mt-1" value={editor.procedureName} onChange={e=>setEditor({...editor,procedureName:e.target.value})}/></label><label className="block text-sm">Conteúdo completo<textarea rows={12} required minLength={20} maxLength={60000} className="consent-field mt-1" value={editor.content} onChange={e=>setEditor({...editor,content:e.target.value})}/></label><label className="flex gap-2 text-sm"><input type="checkbox" className="accent-teal-700" checked={editor.required} onChange={e=>setEditor({...editor,required:e.target.checked})}/>Termo obrigatório nesta área/serviço</label><p className="text-xs text-slate-500">Alterações geram uma nova versão. Documentos emitidos e assinados preservam seu conteúdo original.</p><div className="flex gap-2"><button disabled={busy} className="consent-primary" type="submit">Salvar modelo</button><button className="consent-secondary" type="button" onClick={()=>setEditor(null)}>Voltar</button></div></form>}
-      <div className="grid sm:grid-cols-2 gap-3">{visible.map(t=><article key={t.id} className="bg-white border border-slate-200 rounded-xl p-4 space-y-3"><h3 className="font-semibold text-sm">{t.title}</h3><p className="text-xs text-slate-500">{t.module} · v{t.current_version} · {t.tenant_id?'Modelo da clínica':'Modelo padrão Zemda'}{t.required?' · obrigatório':''}{t.procedure_name?` · ${t.procedure_name}`:''}</p><details><summary className="text-sm text-teal-700 cursor-pointer">Visualizar conteúdo</summary><p className="whitespace-pre-wrap text-sm leading-6 mt-2">{t.content}</p></details><div className="flex flex-wrap gap-2"><button className="consent-secondary" disabled={busy} onClick={()=>startRequest(t.id)}>Usar modelo</button>{currentUser?.role!=='receptionist'&&<button className="consent-secondary" disabled={busy} onClick={()=>edit(t,true)}>Duplicar</button>}{currentUser?.role!=='receptionist'&&t.tenant_id&&<button className="consent-secondary" disabled={busy} onClick={()=>edit(t)}>Editar</button>}</div></article>)}</div>
+
+      <div className="grid sm:grid-cols-2 gap-3">{visible.map(t=><article key={t.id} className="bg-white border border-slate-200 rounded-xl p-4 space-y-3"><h3 className="font-semibold text-sm">{t.title}</h3><p className="text-xs text-slate-500">{t.module} · v{t.current_version} · {t.tenant_id?'Modelo da clínica':'Modelo padrão Zemda'}{t.required?' · obrigatório':''}{t.procedure_name?` · ${t.procedure_name}`:''}</p><details><summary className="text-sm text-teal-700 cursor-pointer">Visualizar conteúdo</summary><p className="whitespace-pre-wrap text-sm leading-6 mt-2">{t.content}</p></details><div className="flex flex-wrap gap-2"><button className="consent-secondary" disabled={busy} onClick={()=>startRequest(t.id)}>Usar modelo</button>{canEditTemplates&&<>
+        <button type="button" className="consent-secondary" disabled={busy} onClick={()=>edit(t,!t.tenant_id)} title={t.tenant_id?'Editar em uma nova versão':'Criar uma cópia da clínica para personalizar'}><Pencil aria-hidden="true" className="w-4 h-4"/>{t.tenant_id?'Editar':'Personalizar'}</button>
+        <button type="button" className="consent-secondary" disabled={busy} onClick={()=>edit(t,true)}><Copy aria-hidden="true" className="w-4 h-4"/>Duplicar</button>
+      </>}</div></article>)}</div>
     </div>:<div className="space-y-3">
       {!rows.length&&<p className="p-6 text-sm text-slate-500 bg-slate-50 rounded-xl">Nenhum termo registrado para este paciente.</p>}
       {rows.map(row=><article key={row.id} className="bg-white border border-slate-200 rounded-xl p-4 space-y-3"><div className="flex flex-wrap items-start justify-between gap-2"><h3 className="font-semibold text-sm flex gap-2"><FileText className="w-4 h-4 text-teal-700 shrink-0"/>{row.title}</h3><span className={`text-xs px-2 py-1 rounded-lg font-semibold ${statuses[row.status].style}`}>{row.status==='cancelled'?(row.signedAt?'✕ Invalidado':'✕ Cancelado'):statuses[row.status].label}</span></div><dl className="grid sm:grid-cols-2 gap-2 text-xs text-slate-600"><div><dt className="font-medium">Paciente</dt><dd>{row.patient||patient?.full_name||'—'}</dd></div><div><dt className="font-medium">Área / profissão</dt><dd>{row.module||'Multidisciplinar'} · {row.profession||'—'}</dd></div><div><dt className="font-medium">Solicitação</dt><dd>{consentDate(row.createdAt)}</dd></div><div><dt className="font-medium">Versão</dt><dd>{row.version}{row.legacy?' · Registro anterior':''}</dd></div><div><dt className="font-medium">Envio</dt><dd>{consentDate(row.sentAt)}</dd></div><div><dt className="font-medium">Assinatura</dt><dd>{consentDate(row.signedAt)}</dd></div><div><dt className="font-medium">Assinante</dt><dd>{row.signer?.name||'—'}{row.signer?.kind==='guardian'?' (responsável legal)':''}</dd></div><div><dt className="font-medium">Profissional solicitante</dt><dd>{row.professional||'—'}</dd></div><div><dt className="font-medium">Autenticação</dt><dd>{row.authLabel||'—'}</dd></div></dl>

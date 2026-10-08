@@ -1,3 +1,4 @@
+import { GoogleAccountLinkDialog } from './GoogleAccountLinkDialog';
 import './CreateClinicModal.css';
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { RegistrationPlans, RegistrationPlan } from './RegistrationPlans';
@@ -58,6 +59,7 @@ interface CreateClinicModalProps {
   initialPlan?: string;
   isTrial?: boolean;
   presentation?: 'modal' | 'page';
+  onGoogleSuccess?: (idToken: string, payload?: GoogleJwtPayload) => void;
   initialGoogleData?: {
     idToken: string;
     name: string;
@@ -74,11 +76,13 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
   initialPlan,
   isTrial,
   presentation = 'modal',
-  initialGoogleData
+  initialGoogleData,
+  onGoogleSuccess
 }) => {
   const { showToast } = useToast();
   const { currentUser, loginWithToken, reloadSession, logout } = useAuth();
 
+  const [linkGoogle,setLinkGoogle]=useState<{idToken:string;email:string}|null>(null);
   // Estado de dados autenticados via Google
   const [googleAuthData, setGoogleAuthData] = useState<{
     idToken: string;
@@ -918,6 +922,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
 
   return (
     <div ref={presentation === 'page' ? contentRef : undefined} className={presentation === 'page' ? 'signup-page' : 'fixed inset-0 z-50 flex items-center justify-center bg-black/70 sm:p-4 backdrop-blur-xs overflow-y-auto'}>
+      {linkGoogle&&<GoogleAccountLinkDialog {...linkGoogle} onClose={()=>setLinkGoogle(null)} onLinked={onClose} />}
       {presentation === 'page' && (
         <aside className="signup-intro">
           <img src="/brand/zemda-logo.png" alt="Zemda" className="signup-logo" />
@@ -1060,16 +1065,20 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
                   <GoogleAuthButton
                     text="continue_with"
                     customLabel="Continuar com Google"
-                    onSuccess={(idToken, payload) => {
-                      const name = payload?.name || '';
-                      const email = payload?.email || '';
-                      setGoogleAuthData({ idToken, name, email });
-                      setFormData(prev => ({
-                        ...prev,
-                        responsibleName: name || prev.responsibleName,
-                        email: email || prev.email
-                      }));
-                      showToast('Google conectado! Complete o WhatsApp e profissão.', 'info');
+                    onSuccess={async (idToken, payload) => {
+                      if(onGoogleSuccess) { onGoogleSuccess(idToken,payload); return; }
+                      setLoading(true);
+                      try {
+                        const result=await ApiClient.post<any>('/v1/auth/google',{idToken,context:'login'});
+                        if(result.token && result.user) { loginWithToken(result.token,result.user,result.tenant); onClose(); return; }
+                        if(result.requiresPasswordToLink) { setLinkGoogle({idToken,email:result.email}); return; }
+                        if(!result.isNewUser)throw new Error('Resposta inesperada ao autenticar com Google.');
+                        const name=result.googleUser?.name || '', email=result.googleUser?.email || '';
+                        setGoogleAuthData({idToken,name,email});
+                        setFormData(prev=>({...prev,responsibleName:name||prev.responsibleName,email:email||prev.email}));
+                        showToast('Google conectado! Complete o WhatsApp e profissão.','info');
+                      } catch(err:any) { showToast(err.message || 'Não foi possível entrar com Google.','error'); }
+                      finally { setLoading(false); }
                     }}
                     onError={(err) => showToast(err, 'error')}
                     disabled={loading}

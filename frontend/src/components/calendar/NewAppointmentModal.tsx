@@ -4,6 +4,7 @@ import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
 import { Professional, Service, Patient, AvailableSlot } from '../../types';
 import { X, Calendar, Clock, User, Plus, CheckCircle2 } from 'lucide-react';
+import { isMeetingUrl } from '../../utils/teleconsultation';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
 
 interface NewAppointmentModalProps {
@@ -42,9 +43,12 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
   const [availableSlots, setAvailableSlots] = useState<AvailableSlot[]>([]);
   const [selectedSlot, setSelectedSlot] = useState<AvailableSlot | null>(null);
   const [modality, setModality] = useState<'presential' | 'online'>('presential');
+  const [meetingUrl, setMeetingUrl] = useState('');
   const [notes, setNotes] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [loadingSlots, setLoadingSlots] = useState<boolean>(false);
+
+  useEffect(() => { if (isOpen) setMeetingUrl(''); }, [isOpen]);
 
   // Filtra serviços pelo profissional selecionado
   const filteredServices = useMemo(() => {
@@ -138,6 +142,9 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
       return;
     }
 
+    if (modality === 'online' && meetingUrl.trim() && !isMeetingUrl(meetingUrl)) {
+      showToast('Informe um link HTTPS válido para a teleconsulta.', 'error'); return;
+    }
     try {
       setLoading(true);
       setConflictError(null);
@@ -150,6 +157,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
         startTime: selectedSlot.startTime,
         endTime: selectedSlot.endTime,
         modality,
+        meeting_url: modality === 'online' ? meetingUrl.trim() || null : null,
         internalNotes: notes || null
       });
 
@@ -290,6 +298,13 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
               </select>
             </div>
           </div>
+
+          {modality === 'online' && <div className="p-3 bg-indigo-50 rounded-xl space-y-2">
+            <p className="font-bold text-indigo-800">Teleconsulta</p>
+            <label className="block text-xs font-semibold">Link da teleconsulta
+              <input type="url" value={meetingUrl} onChange={e => setMeetingUrl(e.target.value)} placeholder="https://meet.google.com/xxx-xxxx-xxx" className="w-full border rounded-xl px-3 py-2 mt-1" />
+            </label>
+          </div>}
 
           {/* Banner de conflito de agendamento */}
           {conflictError && (

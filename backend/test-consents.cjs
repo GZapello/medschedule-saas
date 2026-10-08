@@ -46,8 +46,21 @@ const server=app.listen(0,'127.0.0.1');
  }
  db.prepare('UPDATE users SET profession_id=NULL WHERE id=?').run('manager');
  check((await request('/v1/consents/templates','GET',undefined,null)).status===401,'Authenticated library rejects anonymous access');
+ const scopeReq={tenantId:'consent-clinic',user:{userId:'professional',role:'professional'}};
+ for(const [id,module,owner] of [['own-fisio','ZemdaFisio','p-professional'],['other-fisio','ZemdaFisio','p-unrelated'],['shared-fisio','ZemdaFisio',null],['shared-med','ZemdaMed',null]]) {
+   db.prepare('INSERT INTO services(id,tenant_id,name,clinical_module,professional_id) VALUES(?,?,?,?,?)').run(id,'consent-clinic',id,module,owner);
+ }
+ check(S.compatibleServices(scopeReq,'ZemdaFisio').map(s=>s.id).sort().join(',')==='own-fisio,shared-fisio','Consent catalog limits profession and logged professional');
+ check(S.compatibleServices(scopeReq,'general').map(s=>s.id).sort().join(',')==='own-fisio,shared-fisio','General terms remain scoped to logged profession');
+ check(S.compatibleServices(scopeReq,'ZemdaMed').length===0,'Changing area rejects incompatible services');
+ check(S.compatibleServices(scopeReq,'ZemdaFisio','prof-medico').length===0,'Changing profession rejects incompatible services');
  const spec={title:'Termo universal de teste',content:'Conteúdo completo do termo de teste com informações, alternativas, limitações e declarações.',module:'general',required:true};
+ check((await request('/v1/consents/templates','POST',{...spec,serviceId:'shared-med'},'professional')).status===400,'Forged cross-profession template service rejected');
+ check((await request('/v1/consents/templates','POST',{...spec,serviceId:'other-fisio'},'professional')).status===400,'Other professional service rejected');
  let template=(await request('/v1/consents/templates','POST',spec)).body;check(!!template.id&&template.version===1,'Clinic custom template created');
+ check((await request('/v1/consents/templates','POST',spec,'reception')).status===403,'Receptionist cannot create templates');
+ check((await request(`/v1/consents/templates/${template.id}`,'PUT',spec,'reception')).status===403,'Receptionist cannot version templates');
+ check(db.prepare('SELECT current_version FROM consent_templates WHERE id=?').get(template.id).current_version===1,'Denied template edit leaves version unchanged');
  check((await request('/v1/consents/templates','PUT',{...spec,serviceId:'other-service'})).status===404,'Unregistered endpoint cannot mutate templates');
  check((await request('/v1/consents/templates','POST',{...spec,serviceId:'other-service'})).status===400,'Cross-clinic service association rejected');
  check((await request('/v1/consents/templates/'+lib.body[0].id,'PUT',spec)).status===404,'Global standard cannot be overwritten');

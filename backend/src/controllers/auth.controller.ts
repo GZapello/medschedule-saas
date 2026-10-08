@@ -1804,7 +1804,7 @@ export class AuthController {
       try {
         googleUser = await GoogleAuthService.verifyIdToken(idToken);
       } catch (tokenErr: any) {
-        res.status(401).json({ error: tokenErr?.message || 'Credencial do Google inválida ou expirada.' });
+        res.status(tokenErr?.status || 401).json({ error: tokenErr?.message || 'Credencial do Google inválida ou expirada.' });
         return;
       }
 

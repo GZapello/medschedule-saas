@@ -1,3 +1,4 @@
+import { isPrimaryClinicalModule, resolveProfessionalCanonicalModule } from '../utils/clinical-module';
 import { validatePsychologyExtraction } from '../services/speech-diarization.service';
 import { Request, Response } from 'express';
 import { db } from '../config/database';
@@ -969,6 +970,34 @@ export class AIController {
 
       if (!rawInput || typeof rawInput !== 'string' || rawInput.trim().length === 0) {
         res.status(400).json({ error: 'Nenhum áudio transcrito foi fornecido para organização.' });
+        return;
+      }
+
+      if (req.body.teleconsultation === true) {
+        const { appointmentId, professionalId } = req.body;
+        const appointment = db.prepare(`SELECT a.*, s.clinical_module AS service_module
+          FROM appointments a LEFT JOIN services s ON s.id = a.service_id AND s.tenant_id = a.tenant_id
+          WHERE a.id = ? AND a.tenant_id = ?`).get(appointmentId || '', tenantId) as any;
+        if (!appointment || !hasClinicalAccess(req, appointment.patient_id)) {
+          res.status(403).json({ error: 'Sem acesso a este atendimento.' }); return;
+        }
+        if (appointment.modality !== 'online' || patientId !== appointment.patient_id || professionalId !== appointment.professional_id) {
+          res.status(400).json({ error: 'Contexto da teleconsulta inválido.' }); return;
+        }
+        if (rawInput.length > 100000) {
+          res.status(400).json({ error: 'A transcrição excede o limite de 100.000 caracteres.' }); return;
+        }
+        const module = [appointment.clinical_module, appointment.service_module].find(isPrimaryClinicalModule)
+          || resolveProfessionalCanonicalModule(appointment.professional_id, tenantId) || 'general';
+        // This branch never persists input, returns raw transcripts, or uses heuristic clinical defaults.
+        const result = GeminiService.isAvailable() ? await GeminiService.organizeClinicalEvolution({
+          transcript: rawInput.trim(), mode: 'organize', teleconsultationModule: module
+        }) : null;
+        if (!result?.organizedText) {
+          res.status(503).json({ error: 'A IA está indisponível no momento. Sua transcrição foi preservada nesta janela; tente novamente.' }); return;
+        }
+        res.json({ organizedText: result.organizedText, clinical_module: module,
+          disclaimer: 'Rascunho de apoio: revise antes de aplicar à evolução.' });
         return;
       }
 

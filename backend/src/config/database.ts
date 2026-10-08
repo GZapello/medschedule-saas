@@ -358,6 +358,7 @@ export function initializeDatabase(): void {
     }
 
     // Colunas em agendamentos para convênio, encaminhamento e cancelamento detalhado
+    addColIfMissing('appointments', 'meeting_url', 'TEXT');
     addColIfMissing('appointments', 'insurance_id', 'TEXT');
     addColIfMissing('appointments', 'referred_from_appointment_id', 'TEXT');
     addColIfMissing('appointments', 'referred_by_professional_id', 'TEXT');

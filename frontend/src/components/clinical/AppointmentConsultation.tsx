@@ -11,6 +11,7 @@ import { PsychopedagogyWorkspace } from '../psychopedagogy/PsychopedagogyWorkspa
 import { PhysiotherapyWorkspace } from '../physiotherapy/PhysiotherapyWorkspace';
 import { ZemdaMedWorkspace } from '../medical/ZemdaMedWorkspace';
 import { ZemdaPersonalView } from '../personal/ZemdaPersonalView';
+import { OnlineConsultationTools } from './OnlineConsultationTools';
 import { QuickConsultationModal } from './QuickConsultationModal';
 import { ZemdaBodyWorkspace } from '../zemda-body/ZemdaBodyWorkspace';
 import { GeneralClinicalWorkspace } from './GeneralClinicalWorkspace';
@@ -55,6 +56,9 @@ export function AppointmentConsultation({
   } = useAuth();
   const [status, setStatus] = useState<any>(null);
   const [error, setError] = useState('');
+  const [meetingLink, setMeetingLink] = useState<{ id: string; url: string | null } | null>(null);
+  const onlineAppointment = { ...appointment, meeting_url: meetingLink && meetingLink.id === appointment.id ? meetingLink.url : appointment.meeting_url };
+  const onMeetingUrlSaved = (url: string | null) => setMeetingLink({ id: appointment.id, url });
 
   const deducedModuleFromProfession =
     (isDoctor || isZemdaMed || (currentUser?.professionName || '').toLowerCase().includes('médic') || (currentUser?.professionName || '').toLowerCase().includes('medic') || (appointment.service_name || '').toLowerCase().includes('médic')) ? 'ZemdaMed' :
@@ -184,6 +188,7 @@ export function AppointmentConsultation({
           </div>
         </div>
 
+        <OnlineConsultationTools appointment={{ ...onlineAppointment, clinical_module: effectiveModuleType }} onRequestEvolution={() => setActiveTab('records')} onMeetingUrlSaved={onMeetingUrlSaved} />
         {/* Área do Workspace */}
         <div className="p-4 sm:p-6 max-w-6xl mx-auto w-full flex-1">
           <ZemdaBodyWorkspace
@@ -238,6 +243,7 @@ export function AppointmentConsultation({
               )}
             </div>
           </div>
+          <OnlineConsultationTools appointment={{ ...onlineAppointment, clinical_module: effectiveModuleType }} onRequestEvolution={() => setActiveTab('records')} onMeetingUrlSaved={onMeetingUrlSaved} />
           <div className="p-4 sm:p-6 max-w-7xl mx-auto">
             <ZemdaPersonalView
               key={appointment.id}
@@ -288,6 +294,7 @@ export function AppointmentConsultation({
             )}
           </div>
         </div>
+        <OnlineConsultationTools appointment={{ ...onlineAppointment, clinical_module: effectiveModuleType }} onRequestEvolution={() => setActiveTab('records')} onMeetingUrlSaved={onMeetingUrlSaved} />
         <Workspace
           key={appointment.id}
           initialPatientId={appointment.patient_id}
@@ -303,9 +310,10 @@ export function AppointmentConsultation({
     <>
       <QuickConsultationModal
         appointment={{
-          ...appointment,
+          ...onlineAppointment,
           clinical_module: effectiveModuleType
         }}
+        onMeetingUrlSaved={onMeetingUrlSaved}
         moduleType={effectiveModuleType || 'general'}
         onClose={onClose}
         onFinished={onFinished}

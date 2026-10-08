@@ -1,3 +1,4 @@
+import { ConsentService } from '../services/consent.service';
 import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
@@ -13,6 +14,10 @@ export class ServiceController {
         return;
       }
 
+      if (typeof req.query.consentModule === 'string') {
+        res.json(ConsentService.compatibleServices(req, req.query.consentModule, typeof req.query.consentProfessionId === 'string' ? req.query.consentProfessionId : ''));
+        return;
+      }
       const { professionalId } = req.query;
 
       let query = `
@@ -44,7 +49,7 @@ export class ServiceController {
       res.json(services);
     } catch (err: any) {
       console.error('[ServiceController.list] Erro:', err);
-      res.status(500).json({ error: 'Erro ao listar serviços' });
+      res.status(err.status || 500).json({ error: err.status ? err.message : 'Erro ao listar serviços' });
     }
   }
 

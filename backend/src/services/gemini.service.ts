@@ -1,3 +1,4 @@
+import { teleconsultationPrompt } from '../utils/teleconsultation-ai';
 import { PSYCHOLOGY_FIELDS } from './speech-diarization.service';
 import { GoogleGenerativeAI, GenerativeModel, Content } from '@google/generative-ai';
 import dotenv from 'dotenv';
@@ -559,12 +560,15 @@ export class GeminiService {
    * Organização de fala para Evolução Clínica & Conduta Terapêutica
    */
   static async organizeClinicalEvolution(params: {
+    teleconsultationModule?: string;
     transcript: string;
     mode?: string;
   }): Promise<{ organizedText: string; mode: string } | null> {
     try {
       const modeKey = params.mode || 'organize';
-      const systemPrompt = CLINICAL_EVOLUTION_PROMPTS[modeKey] || CLINICAL_EVOLUTION_PROMPTS['organize'];
+      const systemPrompt = params.teleconsultationModule
+        ? (params.teleconsultationModule === 'ZemdaPsico' ? CLINICAL_EVOLUTION_PROMPTS.psychology_progress_note + '\n' : '') + teleconsultationPrompt(params.teleconsultationModule)
+        : CLINICAL_EVOLUTION_PROMPTS[modeKey] || CLINICAL_EVOLUTION_PROMPTS['organize'];
 
       // Minimização LGPD: o nome do paciente não é enviado ao modelo.
       const userText = `Fala transcrita do profissional:\n"${params.transcript}"`;

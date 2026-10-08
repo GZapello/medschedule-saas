@@ -94,7 +94,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
       if (['clinic', 'clinica'].includes(initialSection)) return 'clinic';
       if (['account', 'profile', 'minha-conta'].includes(initialSection)) return 'account';
       if (['legal', 'privacidade'].includes(initialSection)) return 'legal';
-      if (['integrations', 'integracoes'].includes(initialSection)) return 'integrations';
+      if (['integrations', 'integracoes'].includes(initialSection)) return 'hub';
     }
     return 'hub';
   });
@@ -112,7 +112,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
       else if (['clinic', 'clinica'].includes(initialSection)) setActiveSection('clinic');
       else if (['account', 'profile', 'minha-conta'].includes(initialSection)) setActiveSection('account');
       else if (['legal', 'privacidade'].includes(initialSection)) setActiveSection('legal');
-      else if (['integrations', 'integracoes'].includes(initialSection)) setActiveSection('integrations');
+      else if (['integrations', 'integracoes'].includes(initialSection)) setActiveSection('hub');
       else if (initialSection === 'hub') setActiveSection('hub');
     }
   }, [initialSection]);
@@ -715,15 +715,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
       iconBg: 'bg-purple-50',
       iconColor: 'text-purple-600',
       tags: ['Zemda360', 'Módulos Clínicos']
-    },
-    {
-      id: 'integrations',
-      title: 'Integrações (WhatsApp/Infobip)',
-      desc: 'Conexão oficial com WhatsApp/Infobip para envio de confirmações e lembretes automáticos de consulta.',
-      icon: Share2,
-      iconBg: 'bg-blue-50',
-      iconColor: 'text-blue-600',
-      tags: ['WhatsApp', 'Infobip', 'Lembretes']
     },
     {
       id: 'import',

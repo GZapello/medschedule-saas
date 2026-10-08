@@ -35,7 +35,7 @@ export class DashboardController {
       // 1. Atendimentos de hoje (inclui completed, in_progress, scheduled, etc. - nunca exclui atendimentos finalizados)
       const todayApptsStmt = db.prepare(`
         SELECT 
-          a.id, a.patient_id, a.professional_id, a.service_id, a.appointment_number, a.start_time, a.end_time, a.status, a.modality, a.clinical_module,
+          a.id, a.patient_id, a.professional_id, a.service_id, a.appointment_number, a.start_time, a.end_time, a.status, a.modality, a.meeting_url, a.clinical_module,
           s.clinical_module as service_clinical_module,
           pat.full_name as patient_name, pat.phone as patient_phone,
           p.name as professional_name,

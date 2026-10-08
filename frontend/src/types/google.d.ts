@@ -5,6 +5,7 @@ declare global {
         id?: {
           initialize: (config: {
             client_id: string;
+            ux_mode?: 'popup' | 'redirect';
             callback: (response: { credential: string; select_by?: string }) => void;
             auto_select?: boolean;
             cancel_on_tap_outside?: boolean;
@@ -22,6 +23,7 @@ declare global {
               logo_alignment?: 'left' | 'center';
               width?: number | string;
               locale?: string;
+              click_listener?: () => void;
             }
           ) => void;
           prompt: (momentListener?: (notification: any) => void) => void;

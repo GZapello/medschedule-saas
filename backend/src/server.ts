@@ -31,7 +31,7 @@ app.set('trust proxy', 1);
 app.use(ErrorMonitor.requestMiddleware);
 
 // Cabeçalhos de segurança HTTP padrão (CSP desabilitado: a API serve JSON e o SPA já define o seu próprio)
-app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: false }));
+app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: false, crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' }, referrerPolicy: { policy: 'strict-origin-when-cross-origin' } }));
 
 // Lista de origens de navegador autorizadas a chamar a API (apps nativos/Electron não enviam Origin e não são afetados)
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'https://zemda.com.br,https://www.zemda.com.br,http://localhost:5173,http://localhost:4000')

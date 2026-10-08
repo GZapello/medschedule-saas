@@ -1,3 +1,4 @@
+import { GoogleAccountLinkDialog } from './GoogleAccountLinkDialog';
 import React, { useState, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { ApiClient } from '../../api/client';
@@ -55,9 +56,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     email: string;
     name: string;
   } | null>(null);
-  const [linkingPassword, setLinkingPassword] = useState<string>('');
-  const [linkingError, setLinkingError] = useState<string>('');
-  const [linkingLoading, setLinkingLoading] = useState<boolean>(false);
 
   const [googleSignupData, setGoogleSignupData] = useState<{
     idToken: string;
@@ -124,13 +122,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       }
 
       if (res.requiresPasswordToLink) {
+        setIsCreateClinicOpen(false);
         setGoogleLinkingState({
           idToken,
           email: res.email || payload?.email || '',
           name: res.name || payload?.name || ''
         });
-        setLinkingPassword('');
-        setLinkingError('');
         showToast('Conta existente encontrada. Confirme sua senha para vincular sua conta Google.', 'info');
         return;
       }
@@ -145,42 +142,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         setIsCreateClinicOpen(true);
         return;
       }
+      throw new Error('Resposta inesperada ao entrar com Google. Tente novamente.');
     } catch (err: any) {
       setLoginError({ message: err.message || 'Falha na autenticação com Google', code: err.code });
       showToast(err.message || 'Falha na autenticação com Google', 'error');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleConfirmGoogleLink = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!linkingPassword) {
-      setLinkingError('Digite a sua senha atual.');
-      return;
-    }
-    if (!googleLinkingState) return;
-
-    try {
-      setLinkingLoading(true);
-      setLinkingError('');
-      const res = await ApiClient.post<any>('/v1/auth/google', {
-        idToken: googleLinkingState.idToken,
-        context: 'login',
-        additionalData: {
-          password: linkingPassword
-        }
-      });
-
-      if (res.token && res.user) {
-        setGoogleLinkingState(null);
-        loginWithToken(res.token, res.user, res.tenant);
-        showToast('Conta Google vinculada com sucesso!', 'success');
-      }
-    } catch (err: any) {
-      setLinkingError(err.message || 'Senha incorreta para vincular conta.');
-    } finally {
-      setLinkingLoading(false);
     }
   };
 
@@ -234,7 +201,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
               customLabel="Continuar com Google"
               onSuccess={handleGoogleSuccess}
               onError={(err) => showToast(err, 'error')}
-              disabled={loading}
+              disabled={loading || isCreateClinicOpen || !!googleLinkingState}
             />
 
             <div className="flex items-center gap-3">
@@ -410,6 +377,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         initialPlan={initialPlan}
         isTrial={isTrial}
         initialGoogleData={googleSignupData}
+        onGoogleSuccess={handleGoogleSuccess}
       />
 
       <ForgotPasswordModal
@@ -421,67 +389,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         }}
       />
 
-      {/* Modal de Confirmação de Senha para Vinculação de Conta Google */}
-      {googleLinkingState && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <GoogleIcon className="w-5 h-5" />
-                <h3 className="font-extrabold text-slate-900 text-sm">Vincular Conta Google</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setGoogleLinkingState(null)}
-                className="text-slate-400 hover:text-slate-600 cursor-pointer p-1 rounded-lg"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+      {googleLinkingState && <GoogleAccountLinkDialog idToken={googleLinkingState.idToken} email={googleLinkingState.email} onClose={()=>setGoogleLinkingState(null)} />}
 
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Detectamos uma conta existente com o e-mail <strong className="text-slate-900">{googleLinkingState.email}</strong>. Para sua segurança e evitar acessos indevidos, digite a sua senha do Zemda para vincular seu Google.
-            </p>
-
-            <form onSubmit={handleConfirmGoogleLink} className="space-y-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Sua senha do Zemda</label>
-                <input
-                  type="password"
-                  autoFocus
-                  value={linkingPassword}
-                  onChange={(e) => {
-                    setLinkingPassword(e.target.value);
-                    if (linkingError) setLinkingError('');
-                  }}
-                  placeholder="••••••••"
-                  className="w-full px-3 py-2 text-xs font-medium border rounded-xl border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
-                />
-                {linkingError && (
-                  <p className="text-[11px] text-red-600 mt-1 font-semibold">{linkingError}</p>
-                )}
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setGoogleLinkingState(null)}
-                  className="px-3.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={linkingLoading}
-                  className="px-4 py-2 text-xs font-bold text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 rounded-xl cursor-pointer disabled:opacity-50 shadow-md shadow-teal-600/20"
-                >
-                  {linkingLoading ? 'Vinculando...' : 'Confirmar e Entrar'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

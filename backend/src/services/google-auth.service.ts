@@ -13,7 +13,7 @@ export class GoogleAuthService {
 
   private static getClient(): OAuth2Client {
     if (!this.client) {
-      const clientId = process.env.GOOGLE_CLIENT_ID;
+      const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
       this.client = new OAuth2Client(clientId);
     }
     return this.client;
@@ -24,9 +24,9 @@ export class GoogleAuthService {
    * Valida estritamente: assinatura, audience, issuer, expiração, email e email_verified.
    */
   static async verifyIdToken(idToken: string): Promise<VerifiedGoogleUser> {
-    const clientId = process.env.GOOGLE_CLIENT_ID;
-    if (!clientId) {
-      throw new Error('GOOGLE_CLIENT_ID não configurado no servidor.');
+    const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
+    if (!clientId || !/^[\w-]+\.apps\.googleusercontent\.com$/.test(clientId)) {
+      throw Object.assign(new Error('Login Google indisponível: GOOGLE_CLIENT_ID ausente ou inválido no servidor.'), {status:503});
     }
 
     if (!idToken || typeof idToken !== 'string') {
@@ -42,7 +42,11 @@ export class GoogleAuthService {
         audience: clientId
       });
     } catch (err: any) {
-      console.error('[GoogleAuthService] Falha na validação do idToken:', err?.message || err);
+      if (/audience|recipient/i.test(err?.message || '')) {
+        console.error('[GoogleAuthService] Audience incompatível: confira GOOGLE_CLIENT_ID e VITE_GOOGLE_CLIENT_ID.');
+        throw new Error('Configuração Google incompatível entre site e servidor. O administrador deve conferir os Client IDs.');
+      }
+      console.error('[GoogleAuthService] Credencial rejeitada na verificação de assinatura/validade.');
       throw new Error('Credencial do Google inválida ou expirada.');
     }
 

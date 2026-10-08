@@ -6,7 +6,7 @@ import { db } from '../config/database';
 import { hasConsentAccess, hasConsentDocumentAccess } from '../utils/consent-access';
 import { EmailService } from './email.service';
 
-import { resolveClinicalModule } from '../utils/clinical-module';
+import { resolveClinicalModule, resolveProfessionalCanonicalModule } from '../utils/clinical-module';
 import { buildZemdaEmailLayout, buildZemdaOtpBox } from './email-template.service';
 import { CapabilityService } from './capability.service';
 
@@ -57,6 +57,26 @@ export class ConsentService {
       .filter(t => isReceptionist || (this.allowedModule(req, t.module) && (!t.profession_id || t.profession_id === userCaps?.professionId)));
   }
 
+  // A scoped view of the existing catalog; never creates or changes services.
+  static compatibleServices(req: Request, module = 'general', professionId = ''): any[] {
+    this.access(req);
+    const caps = CapabilityService.computeUserCapabilities(req.user!.userId, req.tenantId!);
+    if (!this.allowedModule(req, module) || (professionId && professionId !== caps.professionId)) return [];
+    const services = db.prepare(`SELECT s.*, p.user_id AS owner_user_id, p.profession_id,
+        EXISTS(SELECT 1 FROM professional_services ps JOIN professionals assigned ON assigned.id=ps.professional_id
+          WHERE ps.service_id=s.id AND assigned.tenant_id=s.tenant_id AND assigned.user_id=?) AS assigned_to_user
+      FROM services s LEFT JOIN professionals p ON p.id=s.professional_id AND p.tenant_id=s.tenant_id
+      WHERE s.tenant_id=? AND s.active=1 ORDER BY s.name`).all(req.user!.userId, req.tenantId!);
+    return services.map(s => ({...s, clinical_module: s.clinical_module && s.clinical_module !== 'general'
+      ? s.clinical_module : resolveProfessionalCanonicalModule(s.professional_id, req.tenantId)}))
+      .filter(s => (!s.professional_id || s.owner_user_id === req.user!.userId || s.assigned_to_user)
+        && !!s.clinical_module && s.clinical_module === caps.commercialModule
+        && (module === 'general' || s.clinical_module === module)
+        && (!s.profession_id || s.profession_id === caps.professionId)
+        && (!professionId || !s.profession_id || s.profession_id === professionId))
+      .map(({owner_user_id, assigned_to_user, ...s}) => s);
+  }
+
   static saveTemplate(req: Request, templateId?: string): any {
     this.access(req);
     if (req.user?.role === 'receptionist') consentError('Recepcionistas não possuem permissão para criar ou editar modelos de termos.', 403);
@@ -65,7 +85,7 @@ export class ConsentService {
     const professionId = CapabilityService.computeUserCapabilities(req.user!.userId,req.tenantId!).professionId;
     if(b.professionId && b.professionId!==professionId && req.user?.role !== 'clinic_admin') consentError('Profissão não autorizada.',403);
     if (typeof b.title !== 'string' || b.title.trim().length < 3 || b.title.length > 180 || typeof b.content !== 'string' || b.content.trim().length < 20 || b.content.length > 60000) consentError('Informe título (3–180 caracteres) e conteúdo (20–60.000 caracteres).');
-    if (b.serviceId && !db.prepare('SELECT id FROM services WHERE id=? AND tenant_id=?').get(b.serviceId,req.tenantId)) consentError('Serviço inválido.');
+    if (b.serviceId && !this.compatibleServices(req,text(b.module,100)||'general',b.professionId||'').some(s=>s.id===b.serviceId)) consentError('Serviço incompatível com a área do termo ou com o profissional.');
     const existing = templateId ? db.prepare('SELECT * FROM consent_templates WHERE id=? AND tenant_id=?').get(templateId,req.tenantId) : null;
     if (templateId && !existing) consentError('Duplique o modelo padrão para editar na sua clínica.',404);
     if(existing && !this.allowedModule(req,existing.module)) consentError('Modelo de outra área profissional.',403);

@@ -62,142 +62,105 @@ interface GoogleAuthButtonProps {
   customLabel?: string;
 }
 
+// GIS maintains one global configuration: initialize once and route the response to
+// the button actually clicked, even when login and signup are both mounted.
+let gsiLoad: Promise<void> | null = null;
+let initializedClient = '';
+let receiveCredential: ((response: {credential?: string}) => void) | null = null;
+function loadGsi(): Promise<void> {
+  if (window.google?.accounts?.id) return Promise.resolve();
+  if (gsiLoad) return gsiLoad;
+  gsiLoad = new Promise<void>((resolve, reject) => {
+    let script = document.getElementById('google-gsi-client') as HTMLScriptElement | null;
+    const finish = (error?: Error) => {
+      clearTimeout(timeout); clearInterval(poll);
+      script?.removeEventListener('error', failed);
+      if (error) { script?.remove(); gsiLoad = null; reject(error); } else resolve();
+    };
+    const failed = () => finish(new Error('Script do Google indisponível. Verifique a conexão e os bloqueadores de conteúdo e tente novamente.'));
+    const timeout = window.setTimeout(failed, 12000);
+    const poll = window.setInterval(() => { if (window.google?.accounts?.id) finish(); }, 100);
+    if (!script) {
+      script = document.createElement('script'); script.id = 'google-gsi-client';
+      script.src = 'https://accounts.google.com/gsi/client?hl=pt-BR'; script.async = true; script.defer = true;
+      script.addEventListener('error', failed); document.head.appendChild(script);
+    } else script.addEventListener('error', failed);
+  });
+  return gsiLoad;
+}
+
 export const GoogleAuthButton: React.FC<GoogleAuthButtonProps> = ({
-  onSuccess,
-  onError,
-  text = 'continue_with',
-  theme = 'outline',
-  shape = 'rectangular',
-  size = 'large',
-  width,
-  disabled = false,
-  className = '',
-  customLabel
+  onSuccess, onError, text = 'continue_with', theme = 'outline', shape = 'rectangular',
+  size = 'large', width, disabled = false, className = '', customLabel
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [scriptLoaded, setScriptLoaded] = useState(false);
-  const [initFailed, setInitFailed] = useState(false);
-
+  const callbacks = useRef({onSuccess,onError,disabled});
+  callbacks.current = {onSuccess,onError,disabled};
+  const [error,setError] = useState('');
+  const [ready,setReady] = useState(false);
+  const [attempt,setAttempt] = useState(0);
   const clientId = (import.meta.env.VITE_GOOGLE_CLIENT_ID || '').trim();
-
-  // 1. Carrega o script Google Identity Services uma única vez
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    if (window.google?.accounts?.id) {
-      setScriptLoaded(true);
-      return;
-    }
-
-    const existingScript = document.getElementById('google-gsi-client');
-    if (existingScript) {
-      const checkInterval = setInterval(() => {
-        if (window.google?.accounts?.id) {
-          clearInterval(checkInterval);
-          setScriptLoaded(true);
-        }
-      }, 100);
-      return () => clearInterval(checkInterval);
-    }
-
-    const script = document.createElement('script');
-    script.id = 'google-gsi-client';
-    script.src = 'https://accounts.google.com/gsi/client?hl=pt-BR';
-    script.async = true;
-    script.defer = true;
-    script.onload = () => {
-      setScriptLoaded(true);
+    let live = true;
+    let responseTimer: number | undefined;
+    let renderTimer: number | undefined;
+    const fail = (message: string) => {
+      if (!live) return;
+      setError(message);
+      console.error('[GoogleAuth]', message, {origin:window.location.origin});
+      callbacks.current.onError?.(message);
     };
-    script.onerror = () => {
-      console.error('[GoogleAuth] Falha ao carregar script do Google Identity Services.');
-      setInitFailed(true);
-      onError?.('Não foi possível abrir o login do Google. Atualize a página e tente novamente.');
+    const receive = (response: {credential?: string}) => {
+      clearTimeout(responseTimer);
+      if (!live || callbacks.current.disabled) return;
+      if (typeof response?.credential !== 'string' || !response.credential.trim()) {
+        fail('O Google não retornou a credencial. Tente novamente ou entre com e-mail e senha.'); return;
+      }
+      setError('');
+      callbacks.current.onSuccess(response.credential, parseJwtPayload(response.credential) || undefined);
     };
-    document.head.appendChild(script);
-  }, [onError]);
-
-  // 2. Inicializa e renderiza o botão oficial do Google
-  useEffect(() => {
-    if (!scriptLoaded || !containerRef.current || !clientId || disabled) return;
-
-    try {
-      window.google?.accounts?.id?.initialize({
-        client_id: clientId,
-        callback: (response: { credential: string }) => {
-          if (!response.credential) {
-            onError?.('Credencial não retornada pelo Google.');
-            return;
-          }
-          const payload = parseJwtPayload(response.credential);
-          onSuccess(response.credential, payload || undefined);
-        },
-        use_fedcm_for_button: true,
-        button_auto_select: false,
-        auto_select: false
-      });
-
-      // Limpa renderizações anteriores
-      containerRef.current.innerHTML = '';
-
-      window.google?.accounts?.id?.renderButton(containerRef.current, {
-        type: 'standard',
-        theme,
-        size,
-        text,
-        shape,
-        logo_alignment: 'left',
-        width: typeof width === 'number' ? width : 320,
-        locale: 'pt-BR'
-      });
-    } catch (err: any) {
-      console.error('[GoogleAuth] Erro ao renderizar botão oficial:', err);
-      setInitFailed(true);
-      onError?.('Não foi possível abrir o login do Google. Atualize a página e tente novamente.');
+    setError(''); setReady(false);
+    if (!/^[\w-]+\.apps\.googleusercontent\.com$/.test(clientId)) {
+      fail('Login Google indisponível: VITE_GOOGLE_CLIENT_ID ausente ou inválido na configuração do site.');
+      return () => { live=false; };
     }
-  }, [scriptLoaded, clientId, text, theme, shape, size, width, disabled, onSuccess, onError]);
-
-  // Se o Client ID não estiver configurado no ambiente
-  if (!clientId) {
-    return (
-      <div className={`w-full flex justify-center ${className}`}>
-        <button
-          type="button"
-          disabled
-          title="VITE_GOOGLE_CLIENT_ID não configurado"
-          className="w-full max-w-[320px] py-2.5 px-4 rounded-xl border border-slate-200 bg-slate-50 text-slate-400 font-semibold text-xs flex items-center justify-center gap-2.5 opacity-60 cursor-not-allowed shadow-2xs"
-        >
-          <GoogleIcon className="w-4 h-4 grayscale opacity-60" />
-          <span>{customLabel || 'Continuar com Google'}</span>
-        </button>
-      </div>
-    );
-  }
-
-  // Fallback caso a renderização oficial do iframe do Google falhe (ex: adblock)
-  if (initFailed) {
-    return (
-      <div className={`w-full flex justify-center ${className}`}>
-        <button
-          type="button"
-          onClick={() => {
-            onError?.('Não foi possível abrir o login do Google. Atualize a página e tente novamente.');
-          }}
-          className="w-full max-w-[320px] py-2.5 px-4 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center justify-center gap-2.5 transition-all shadow-2xs cursor-pointer"
-        >
-          <GoogleIcon className="w-4 h-4" />
-          <span>{customLabel || 'Continuar com Google'}</span>
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div className={`w-full flex flex-col items-center justify-center ${className}`}>
-      {/* Container onde o Google Identity Services injeta o botão oficial */}
-      <div
-        ref={containerRef}
-        className="w-full flex items-center justify-center overflow-hidden min-h-[40px]"
-      />
-    </div>
-  );
+    if (!window.isSecureContext) {
+      fail('O login Google exige HTTPS (ou localhost durante desenvolvimento).');
+      return () => { live=false; };
+    }
+    loadGsi().then(() => {
+      if (!live || !containerRef.current) return;
+      const api = window.google!.accounts!.id!;
+      if (initializedClient !== clientId) {
+        api.initialize({client_id:clientId, ux_mode:'popup',
+          callback:response => receiveCredential?.(response),
+          // Use the documented popup flow across Chrome/Edge/Opera, without requiring FedCM.
+          use_fedcm_for_button:false, button_auto_select:false, auto_select:false});
+        initializedClient = clientId;
+      }
+      containerRef.current.replaceChildren();
+      api.renderButton(containerRef.current,{type:'standard',theme,size,text,shape,logo_alignment:'left',
+        width:Math.min(typeof width==='number'?width:320,Math.max(200,containerRef.current.clientWidth || 320)),locale:'pt-BR',
+        click_listener:() => {
+          if (callbacks.current.disabled) return;
+          receiveCredential = receive;
+          setError(''); clearTimeout(responseTimer);
+          responseTimer = window.setTimeout(() => fail('O Google não concluiu o acesso. Se a janela estiver vazia ou bloqueada, feche-a, permita popups para este site e tente novamente. Se o Google indicar origin_mismatch ou invalid_client, a configuração do domínio/Client ID precisa ser corrigida.'), 45000);
+        }});
+      setReady(true);
+      renderTimer = window.setTimeout(() => {
+        if (live && !containerRef.current?.querySelector('iframe, [role="button"]')) fail('O botão Google não carregou. Verifique bloqueadores e a configuração de origem autorizada no Google Cloud.');
+      },8000);
+    }).catch(e => fail(e.message || 'Não foi possível inicializar o login Google.'));
+    return () => {
+      live=false; clearTimeout(responseTimer); clearTimeout(renderTimer);
+      if (receiveCredential === receive) receiveCredential=null;
+    };
+  },[clientId,text,theme,shape,size,width,attempt]);
+  return <div className={`w-full flex flex-col items-center gap-2 ${className}`}>
+    <div ref={containerRef} {...(disabled ? {inert: ''} : {})} aria-disabled={disabled} className={`w-full flex items-center justify-center min-h-[40px] ${disabled?'pointer-events-none opacity-50':''}`} />
+    {!ready&&!error&&<p role="status" className="text-xs text-slate-500">Carregando {customLabel || 'login Google'}…</p>}
+    {error&&<div role="alert" className="text-xs text-red-700 bg-red-50 border border-red-100 rounded-xl p-3 max-w-sm"><p>{error}</p><button type="button" disabled={disabled} className="underline font-semibold mt-2" onClick={()=>setAttempt(v=>v+1)}>Tentar novamente</button></div>}
+    <details className="text-xs text-slate-500 max-w-sm"><summary className="cursor-pointer">Problemas para entrar com Google?</summary><p className="mt-2">Permita popups e verifique bloqueadores de privacidade. Este botão usa popup e não exige FedCM. Se o Google informar domínio não autorizado ou Client ID inválido, o administrador deve conferir VITE_GOOGLE_CLIENT_ID, GOOGLE_CLIENT_ID e autorizar a origem {window.location.origin} no Google Cloud. Você também pode usar e-mail e senha.</p></details>
+  </div>;
 };

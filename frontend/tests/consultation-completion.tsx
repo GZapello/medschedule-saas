@@ -5,6 +5,7 @@ import { ToastProvider } from '../src/context/ToastContext';
 import { ApiClient } from '../src/api/client';
 import { AppointmentConsultation } from '../src/components/clinical/AppointmentConsultation';
 import { DashboardView } from '../src/components/dashboard/DashboardView';
+import { NewAppointmentModal } from '../src/components/calendar/NewAppointmentModal';
 import { CalendarView } from '../src/components/calendar/CalendarView';
 import { ZemdaMedWorkspace } from '../src/components/medical/ZemdaMedWorkspace';
 import { DentistryWorkspace } from '../src/components/dentistry/DentistryWorkspace';
@@ -23,7 +24,7 @@ const patient:any={id:'patient',full_name:'Paciente teste',name:'Paciente teste'
 const professional:any={id:'professional',name:'Profissional teste',active:true};
 const date=new Date(); date.setHours(10,0,0,0);
 const localDate=[date.getFullYear(),String(date.getMonth()+1).padStart(2,'0'),String(date.getDate()).padStart(2,'0')].join('-');
-const appointment:any={id:'appointment',patient_id:patient.id,patient_name:patient.full_name,professional_id:professional.id,professional_name:professional.name,service_id:'service',service_name:'Consulta',status:params.has('completed')?'completed':'scheduled',clinical_module:moduleType,start_time:localDate+'T10:00:00',end_time:localDate+'T10:50:00',modality:'presential'};
+const appointment:any={id:'appointment',patient_id:patient.id,patient_name:patient.full_name,professional_id:professional.id,professional_name:professional.name,service_id:'service',service_name:'Consulta',status:params.has('completed')?'completed':'scheduled',clinical_module:moduleType,start_time:localDate+'T10:00:00',end_time:localDate+'T10:50:00',modality:params.has('online')?'online':'presential',meeting_url:params.has('missing')?null:'https://meet.google.com/abc-defg-hij',patient_phone:'11999999999'};
 state.appointment=appointment;
 const user:any={id:'user',name:professional.name,role:'clinic_admin',professionalId:professional.id,commercialModule:moduleType,clinicalWorkspace:moduleType,capabilities:[],permissions:['attend_appointment']};
 localStorage.setItem('auth_token','fixture-token');
@@ -36,6 +37,8 @@ ApiClient.get=async (url:string):Promise<any>=>{
   if(url==='/v1/appointments')return [{...appointment}];
   if(url.startsWith('/v1/dashboard/metrics'))return {today:{appointments:[{...appointment}],total:1},monthly:{completed:appointment.status==='completed'?1:0},totals:{}};
   if(url==='/v1/professionals')return [professional];
+  if(url==='/v1/services')return [{id:'service',name:'Consulta',duration_minutes:50}];
+  if(url.startsWith('/v1/slots/available'))return {slots:[{time:'10:00',startTime:localDate+'T10:00:00',endTime:localDate+'T10:50:00'}]};
   if(url==='/v1/professionals/professional')return professional;
   if(url==='/v1/patients/patient')return patient;
   if(url.startsWith('/v1/patients?')||url==='/v1/patients')return [patient];
@@ -51,6 +54,7 @@ ApiClient.get=async (url:string):Promise<any>=>{
 };
 ApiClient.post=async(url:string,body:any):Promise<any>=>{
   state.calls.push({method:'POST',url,body});
+  if(url==='/v1/ai/organize-evolution'){ if(state.aiFail)throw new Error('IA indisponível. Tente novamente.'); return {organizedText:'**Resumo**\nRelato do atendimento.\n\n**Evolução sugerida**\nEvolução organizada para revisão.\n\n**Conduta / próximos passos**\nNão informado.',clinical_module:body.clinical_module}; }
   if(url==='/v1/clinical/consultations/start') {
     appointment.status='in_progress';
     return {appointmentId:appointment.id,appointment:{...appointment},created:true};
@@ -62,10 +66,10 @@ ApiClient.post=async(url:string,body:any):Promise<any>=>{
   }
   return {id:'record',success:true};
 };
-ApiClient.put=async(url:string,body:any):Promise<any>=>{state.calls.push({method:'PUT',url,body});if(url.endsWith('/status'))appointment.status=body.status;return {success:true};};
+ApiClient.put=async(url:string,body:any):Promise<any>=>{state.calls.push({method:'PUT',url,body});if(url.endsWith('/status'))appointment.status=body.status;else if(url==='/v1/appointments/appointment')Object.assign(appointment,body);return {success:true};};
 ApiClient.delete=async(url:string):Promise<any>=>{state.calls.push({method:'DELETE',url});return {};};
 const modules:any={ZemdaMed:ZemdaMedWorkspace,ZemdaOdonto:DentistryWorkspace,ZemdaNutri:NutritionWorkspace,ZemdaTO:OccupationalTherapyWorkspace,ZemdaFono:SpeechTherapyWorkspace,ZemdaPsico:PsychologyWorkspace,ZemdaPP:PsychopedagogyWorkspace,ZemdaFisio:PhysiotherapyWorkspace,ZemdaEstetic:ZemdaEsteticWorkspace,ZemdaPersonal:ZemdaPersonalView,general:GeneralClinicalWorkspace};
 const Workspace=modules[moduleType];
 const finished=()=>{state.finished++};
 const props:any={initialPatientId:'patient',initialStudentId:'patient',initialAppointmentId:params.has('sidebar')?undefined:appointment.id,...(params.has('callback')?{onFinishConsultation:finished}:{})};
-createRoot(document.getElementById('root')!).render(<AuthProvider><ToastProvider>{source==='dashboard'?<DashboardView onNavigate={()=>{}} onOpenNewAppointment={()=>{}} onOpenNewPatient={()=>{}}/>:source==='agenda'?<CalendarView onOpenNewAppointment={()=>{}}/>:source==='orchestrator'?<AppointmentConsultation appointment={appointment} initialModuleType={moduleType} onClose={()=>{}} onFinished={finished}/>:<Workspace {...props}/>}</ToastProvider></AuthProvider>);
+createRoot(document.getElementById('root')!).render(<AuthProvider><ToastProvider>{source==='new'?<NewAppointmentModal isOpen onClose={()=>{}} onSuccess={()=>{}}/>:source==='dashboard'?<DashboardView onNavigate={()=>{}} onOpenNewAppointment={()=>{}} onOpenNewPatient={()=>{}}/>:source==='agenda'?<CalendarView onOpenNewAppointment={()=>{}}/>:source==='orchestrator'?<AppointmentConsultation appointment={appointment} initialModuleType={moduleType} onClose={()=>{}} onFinished={finished}/>:<Workspace {...props}/>}</ToastProvider></AuthProvider>);

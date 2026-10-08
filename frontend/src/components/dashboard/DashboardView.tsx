@@ -694,6 +694,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             start_time: quickConsultAppt.start_time,
             end_time: quickConsultAppt.end_time,
             modality: quickConsultAppt.modality,
+            meeting_url: quickConsultAppt.meeting_url,
             status: quickConsultAppt.status,
             clinical_module: quickConsultAppt.clinical_module || activeConsultationModule
           }}

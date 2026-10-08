@@ -1,3 +1,4 @@
+import { takeReviewedEvolution } from '../../utils/teleconsultation';
 import { ClinicalPainScale } from './ClinicalPainScale';
 import { useClinicalFormReset } from '../../hooks/useClinicalFormReset';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -53,6 +54,7 @@ import { PatientFollowUpDocumentModal } from './PatientFollowUpDocumentModal';
 import { FinishConsultationModal } from './FinishConsultationModal';
 import { BodyPainMapCanvas } from '../physiotherapy/BodyPainMapCanvas';
 import { OdontogramCanvas, OdontogramData } from '../dentistry/OdontogramCanvas';
+import { OnlineConsultationTools } from './OnlineConsultationTools';
 import { ZemdaBodyModal } from '../zemda-body/ZemdaBodyModal';
 
 interface QuickConsultationModalProps {
@@ -69,9 +71,11 @@ interface QuickConsultationModalProps {
     start_time: string;
     end_time?: string;
     modality?: string;
+    meeting_url?: string | null;
     status?: string;
     clinical_module?: string;
   };
+  onMeetingUrlSaved?: (url: string | null) => void;
   moduleType?: string;
   onClose: () => void;
   onFinished: () => void;
@@ -82,6 +86,7 @@ interface QuickConsultationModalProps {
 
 export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
   appointment,
+  onMeetingUrlSaved,
   moduleType,
   onClose,
   onFinished,
@@ -626,12 +631,13 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
     loadPhysioAssessments();
   }, [isAppointmentPhysio, appointment.patient_id, appointment.id]);
 
-  // 2. Restaura rascunho salvo anteriormente do LocalStorage
+  // Restore existing content before appending an explicitly reviewed teleconsultation draft.
   useEffect(() => {
+    let parsed: { title?: string; clinicalEvolution?: string; technicalNotes?: string; savedAt?: string } = {};
     try {
       const savedDraft = localStorage.getItem(DRAFT_KEY);
       if (savedDraft) {
-        const parsed = JSON.parse(savedDraft);
+        parsed = JSON.parse(savedDraft) || {};
         if (parsed.title) setTitle(parsed.title);
         if (parsed.clinicalEvolution) setClinicalEvolution(parsed.clinicalEvolution);
         if (parsed.technicalNotes) setTechnicalNotes(parsed.technicalNotes);
@@ -640,6 +646,14 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
       }
     } catch (e) {
       console.warn('Erro ao restaurar rascunho:', e);
+    }
+    if (appointment.modality === 'online') {
+      const reviewed = takeReviewedEvolution(appointment.id);
+      if (reviewed) {
+        const appended = [parsed.clinicalEvolution, reviewed].filter(Boolean).join('\n\n');
+        setClinicalEvolution(appended);
+        triggerAutosave(parsed.title || '', appended, parsed.technicalNotes || '');
+      }
     }
   }, [DRAFT_KEY]);
 
@@ -1060,6 +1074,8 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
             </div>
           </div>
 
+          <OnlineConsultationTools appointment={{ ...appointment, clinical_module: effectiveModule }} onMeetingUrlSaved={onMeetingUrlSaved} onInsert={text => handleEvolutionChange(clinicalEvolution ? `${clinicalEvolution}\n\n${text}` : text)} />
+
           {/* BANNER DE ACESSO AO MÓDULO ESPECIALIZADO DA PROFISSÃO */}
           {onOpenSpecializedModule && resolvedSpecializedName && (
             <div className="bg-gradient-to-r from-indigo-900 via-slate-900 to-indigo-950 text-white rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-md border border-indigo-700/50">
@@ -1217,6 +1233,7 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
               </div>
               
               <div className="flex items-center gap-2">
+                {appointment.modality !== 'online' && <>
                 {speech.status === 'idle' || speech.status === 'completed' ? (
                   <button
                     type="button"
@@ -1284,6 +1301,7 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
                   </button>
                 )}
 
+                </>}
                 <button
                   type="button"
                   onClick={() => setShowReferralModal(true)}
