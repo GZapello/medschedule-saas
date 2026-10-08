@@ -44,9 +44,10 @@ import { PsychologyAIOrganizerModal } from './PsychologyAIOrganizerModal';
 import { useHorizontalTabScroll, HorizontalTabNav } from '../../hooks/useHorizontalTabScroll';
 import { ExternalTestsManager } from '../common/ExternalTestsManager';
 import { MeasurableGoalsManager } from '../common/MeasurableGoalsManager';
-import { ClinicalAutosaveIndicator } from '../clinical/ClinicalAutosaveIndicator';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
 import { ProfessionalModuleHeader } from '../common/ProfessionalModuleHeader';
+import { ClinicalQuickHeaderActions, ClinicalQuickToolItem } from '../clinical/ClinicalQuickHeaderActions';
+import { ClinicalModuleEmptyState } from '../clinical/ClinicalModuleEmptyState';
 
 interface PsychologyWorkspaceProps {
   initialPatientId?: string;
@@ -963,6 +964,30 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
 
   const hasAssessmentBasis = assessmentsList.length > 0 || !!mentalState.criticalJudgment;
 
+  const psicoQuickTools: ClinicalQuickToolItem[] = [
+    {
+      id: 'voice_ai',
+      label: 'Ditado & Voz com IA',
+      icon: Mic,
+      onClick: () => {
+        openZemdaAI({
+          patientId: selectedPatientId,
+          appointmentId: initialAppointmentId,
+          tab: 'audio_draft',
+          clinicalModule: 'ZemdaPsico',
+          profession: 'Psicologia',
+          targetField: 'clinicalEvolution'
+        });
+      }
+    },
+    {
+      id: 'diarization_ai',
+      label: 'Diarização & Análise IA',
+      icon: Users,
+      onClick: () => setShowDiarizationModal(true)
+    }
+  ];
+
   return <>{completion.dialog}{(
     <div className="flex flex-col h-full bg-slate-50 text-slate-800">
       {/* CABEÇALHO DO MÓDULO ZEMDAPSICO */}
@@ -994,65 +1019,23 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
         />
 
         {selectedPatientId && (
-          <ClinicalAutosaveIndicator
-            status={autosaveStatus}
+          <ClinicalQuickHeaderActions
+            autosaveStatus={autosaveStatus}
             lastSavedTime={lastSavedTime}
-            className="px-2.5 py-1.5 rounded-xl bg-slate-50 border border-slate-200/80 shadow-2xs"
+            onLoadSavedClinicalData={() => void loadPatientProfile(selectedPatientId)}
+            onViewPreviousRecords={() => setShowHistoryModal(true)}
+            previousRecordsLabel={`Histórico (${sessionsList.length})`}
+            onViewReports={() => setShowDocumentModal(true)}
+            reportsLabel="Emitir Documento CFP"
+            onFinishConsultation={handleQuickFinishClick}
+            finishLabel="Finalizar Atendimento"
+            showFinish={!completion.isCompleted}
+            isSubmitting={saving}
+            tools={psicoQuickTools}
+            toolsVariant="purple"
+            toolsLabel="Ferramentas"
           />
         )}
-
-        <button
-          type="button"
-          data-tour="psico-ai-btn"
-          onClick={() => {
-            openZemdaAI({
-              patientId: selectedPatientId,
-              appointmentId: initialAppointmentId,
-              tab: 'audio_draft',
-              clinicalModule: 'ZemdaPsico',
-              profession: 'Psicologia',
-              targetField: 'clinicalEvolution'
-            });
-          }}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-900 font-bold rounded-xl text-xs border border-purple-200 transition-colors cursor-pointer shadow-2xs"
-        >
-          <Mic className="w-4 h-4 text-purple-600" />
-          Ditado & Voz com IA
-        </button>
-
-        <button
-          type="button"
-          data-tour="ai-diarization-organizer"
-          onClick={() => setShowDiarizationModal(true)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-900 font-bold rounded-xl text-xs border border-teal-200 transition-colors cursor-pointer shadow-2xs"
-          title="Diarização de Falantes e Organização Clínica Estruturada por IA (CFP)"
-        >
-          <Users className="w-4 h-4 text-teal-600" />
-          Diarização & Análise IA
-        </button>
-
-        <button
-          type="button"
-          data-tour="clinical-previous-records"
-          onClick={() => setShowHistoryModal(true)}
-          disabled={!selectedPatientId}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors cursor-pointer disabled:opacity-50"
-        >
-          <History className="w-4 h-4 text-slate-500" />
-          Histórico ({sessionsList.length})
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setShowDocumentModal(true)}
-          disabled={!selectedPatientId}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-900 font-bold rounded-xl text-xs border border-teal-200 transition-colors cursor-pointer disabled:opacity-50"
-        >
-          <FileText className="w-4 h-4 text-teal-600" />
-          Emitir Documento CFP
-        </button>
-
-        {selectedPatientId && !completion.isCompleted && (<ClinicalFinishButton onClick={handleQuickFinishClick} disabled={saving} />)}
       </ProfessionalModuleHeader>
 
       {/* NAVEGAÇÃO POR ABAS PADRONIZADA (Trilha Horizontal com Scroll Suave) */}
@@ -1100,15 +1083,12 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
             Carregando prontuário psicológico com integridade e sigilo...
           </div>
         ) : !selectedPatientId ? (
-          <div className="flex flex-col items-center justify-center h-64 text-center bg-white rounded-2xl border border-slate-200 p-8 max-w-6xl mx-auto">
-            <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center mb-3">
-              <Brain className="w-6 h-6" />
-            </div>
-            <h3 className="text-base font-bold text-slate-800">Selecione um(a) {clientTermLabel || 'Paciente'}</h3>
-            <p className="text-xs text-slate-500 max-w-sm mt-1">
-              Escolha um paciente no menu superior para visualizar o prontuário psicológico, evolução das sessões e avaliações.
-            </p>
-          </div>
+          <ClinicalModuleEmptyState
+            icon={Brain}
+            colorVariant="purple"
+            clientTermLabel={clientTermLabel || 'Paciente'}
+            description="Escolha um paciente no menu superior para visualizar o prontuário psicológico, evolução das sessões e avaliações."
+          />
         ) : (
           <div className="max-w-6xl mx-auto space-y-6">
             {/* Informações do Paciente Selecionado */}

@@ -939,7 +939,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
       {activeSection === 'import' && <ImportDataView onNavigate={onNavigateView} />}
 
       {/* SEÇÃO: ASSINATURA & PLANO */}
-      {activeSection === 'billing' && <BillingView />}
+      {activeSection === 'billing' && (
+        <BillingView
+          onBack={() => {
+            if (onNavigateView) {
+              onNavigateView('dashboard');
+            } else {
+              sessionStorage.setItem('activeView', 'dashboard');
+              window.history.pushState({ view: 'dashboard' }, '', '/dashboard');
+              window.dispatchEvent(new CustomEvent('zemda-navigate', { detail: { view: 'dashboard' } }));
+              window.dispatchEvent(new PopStateEvent('popstate'));
+            }
+          }}
+        />
+      )}
 
       {/* SEÇÃO: FINANCEIRO & REPASSES */}
       {activeSection === 'financial' && (

@@ -62,6 +62,8 @@ import { AbfwRecordsSection } from './AbfwRecordsSection';
 import { AuditoryProcessingScreening } from './AuditoryProcessingScreening';
 import { PhonologyComparisonView } from './PhonologyComparisonView';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
+import { ProfessionalModuleHeader } from '../common/ProfessionalModuleHeader';
+import { ClinicalModuleEmptyState } from '../clinical/ClinicalModuleEmptyState';
 
 export interface StructuredGoalItem {
   id: string;
@@ -729,74 +731,63 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
     <div className="flex flex-col h-full bg-slate-50 text-slate-800">
       {completion.dialog}
       {/* CABEÇALHO DO MÓDULO ZEMDAFONO */}
-      <div className="bg-white border-b border-slate-200 px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-500 to-blue-600 text-white flex items-center justify-center shadow-md shadow-sky-500/20">
-            <Mic className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold text-slate-800">ZemdaFono</h1>
-              <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 border border-sky-200">
-                Fonoaudiologia Especializada
-              </span>
-            </div>
-            <p className="text-xs text-slate-500">
-              Painel fonêmico interativo, avaliação vocal com áudio, motricidade orofacial, audiologia e prontuário integrado.
-            </p>
-          </div>
+      <ProfessionalModuleHeader
+        icon={Mic}
+        iconGradient="from-sky-500 to-blue-600"
+        iconShadow="shadow-sky-500/20"
+        title="ZemdaFono"
+        badgeLabel="Fonoaudiologia Especializada"
+        badgeVariant="bg-sky-100 text-sky-800 border-sky-200"
+        description="Painel fonêmico interativo, avaliação vocal com áudio, motricidade orofacial, audiologia e prontuário integrado."
+      >
+        {/* SWITCHER DE ÁREA DA FONOAUDIOLOGIA */}
+        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl">
+          <span className="text-[10px] font-extrabold uppercase text-slate-400">Área:</span>
+          <select
+            value={practiceArea}
+            onChange={e => setPracticeArea(e.target.value as any)}
+            className="text-xs font-bold text-sky-900 bg-transparent focus:outline-none cursor-pointer"
+          >
+            <option value="fala_fonologia">Fala e Fonologia Clínica</option>
+            <option value="linguagem">Linguagem Infantil / Adulto / TEA</option>
+            <option value="audiologia">Audiologia Clínica e PAC</option>
+            <option value="motricidade_orofacial">Motricidade Orofacial</option>
+            <option value="voz">Voz Clínica e Canto</option>
+            <option value="disfagia">Disfagia Orofaríngea e IDDSI</option>
+            <option value="fluencia">Fluência e Gagueira</option>
+            <option value="educacional">Fonoaudiologia Educacional / Escrita</option>
+          </select>
         </div>
 
-        {/* CONTROLES DO CABEÇALHO: ÁREA DE ATUAÇÃO E SELETOR DE PACIENTE */}
-        <div className="flex flex-wrap items-center gap-3">
-          {/* SWITCHER DE ÁREA DA FONOAUDIOLOGIA */}
-          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl">
-            <span className="text-[10px] font-extrabold uppercase text-slate-400">Área:</span>
-            <select
-              value={practiceArea}
-              onChange={e => setPracticeArea(e.target.value as any)}
-              className="text-xs font-bold text-sky-900 bg-transparent focus:outline-none cursor-pointer"
-            >
-              <option value="fala_fonologia">Fala e Fonologia Clínica</option>
-              <option value="linguagem">Linguagem Infantil / Adulto / TEA</option>
-              <option value="audiologia">Audiologia Clínica e PAC</option>
-              <option value="motricidade_orofacial">Motricidade Orofacial</option>
-              <option value="voz">Voz Clínica e Canto</option>
-              <option value="disfagia">Disfagia Orofaríngea e IDDSI</option>
-              <option value="fluencia">Fluência e Gagueira</option>
-              <option value="educacional">Fonoaudiologia Educacional / Escrita</option>
-            </select>
-          </div>
+        <PatientSearchSelect
+          compact
+          value={selectedPatientId}
+          selectedPatient={selectedPatient}
+          disabled={!!initialAppointmentId}
+          onChange={(id, pat) => {
+            setSelectedPatientId(id);
+            if (pat) setSelectedPatient(pat);
+            else if (!id) setSelectedPatient(null);
+          }}
+        />
 
-          <PatientSearchSelect
-            compact
-            value={selectedPatientId}
-            selectedPatient={selectedPatient}
-            disabled={!!initialAppointmentId}
-            onChange={(id, pat) => {
-              setSelectedPatientId(id);
-              if (pat) setSelectedPatient(pat);
-              else if (!id) setSelectedPatient(null);
-            }}
-          />
-
-          {selectedPatientId && (
-            <ClinicalQuickHeaderActions
+        {selectedPatientId && (
+          <ClinicalQuickHeaderActions
+            autosaveStatus={autosave.autosaveStatus}
+            lastSavedTime={autosave.lastSavedTime}
+            onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
             onLoadSavedClinicalData={() => void loadPatientData(selectedPatientId, true)}
-              autosaveStatus={autosave.autosaveStatus}
-              lastSavedTime={autosave.lastSavedTime}
-              onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
-              onFinishConsultation={() => selectedPatientId ? setActiveTab('finish') : showToast('Selecione um paciente para finalizar o atendimento.', 'info')}
-              finishLabel="Finalizar Atendimento"
+            onViewReports={() => setIsAIReportOpen(true)}
+            onFinishConsultation={() => selectedPatientId ? setActiveTab('finish') : showToast('Selecione um paciente para finalizar o atendimento.', 'info')}
+            finishLabel="Finalizar Atendimento"
             showFinish={!completion.isCompleted}
-              isSubmitting={saving}
-              tools={fonoQuickTools}
-              toolsVariant="sky"
-              toolsLabel="Ferramentas"
-            />
-          )}
-        </div>
-      </div>
+            isSubmitting={saving}
+            tools={fonoQuickTools}
+            toolsVariant="sky"
+            toolsLabel="Ferramentas"
+          />
+        )}
+      </ProfessionalModuleHeader>
 
       {/* BARRA HORIZONTAL DE ABAS EXCLUSIVA (SEM INTERFERÊNCIA DE ATALHOS) */}
       <div className="bg-white border-b border-slate-200 shrink-0">
@@ -843,15 +834,11 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
       {/* CONTEÚDO PRINCIPAL */}
       <div className="flex-1 p-6 overflow-y-auto">
         {!selectedPatientId ? (
-          <div className="flex flex-col items-center justify-center h-64 text-center bg-white rounded-2xl border border-slate-200 p-8">
-            <div className="w-12 h-12 rounded-2xl bg-sky-50 text-sky-600 flex items-center justify-center mb-3">
-              <Mic className="w-6 h-6" />
-            </div>
-            <h3 className="text-base font-bold text-slate-800">Selecione um Paciente</h3>
-            <p className="text-xs text-slate-500 max-w-sm mt-1">
-              Escolha um paciente no menu superior para visualizar o painel fonêmico, avaliações vocais e condutas fonoaudiológicas.
-            </p>
-          </div>
+          <ClinicalModuleEmptyState
+            icon={Mic}
+            colorVariant="sky"
+            description="Escolha um paciente no menu superior para visualizar o painel fonêmico, avaliações vocais e condutas fonoaudiológicas."
+          />
         ) : (
           <div className="max-w-6xl mx-auto space-y-6">
 

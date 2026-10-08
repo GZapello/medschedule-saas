@@ -1,5 +1,5 @@
 import { ManualMealFoodModal } from './ManualMealFoodModal';
-import { ClinicalAssessmentsPanel } from '../../shared/clinical-assessments/ClinicalAssessmentsPanel';
+import { ClinicalModuleEmptyState } from '../clinical/ClinicalModuleEmptyState';
 import { useClinicalFormReset } from '../../hooks/useClinicalFormReset';
 import React, { useState, useEffect, useMemo } from 'react';
 import {
@@ -951,7 +951,6 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
           }) }));
           setManualFoodTarget(null);
         }} />}
-      <ClinicalAssessmentsPanel patientId={selectedPatientId} patient={selectedPatient} appointmentId={initialAppointmentId} sourceModule="ZemdaNutri"/>
       {completion.dialog}
 
       {/* CABEÇALHO DO MÓDULO ZEMDANUTRI */}
@@ -982,6 +981,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
             autosaveStatus={autosave.autosaveStatus}
             lastSavedTime={autosave.lastSavedTime}
             onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
+            onViewReports={() => setShowFollowUpModal(true)}
             onFinishConsultation={() => selectedPatientId ? setActiveTab('finish') : showToast('Selecione um paciente para finalizar o atendimento.', 'info')}
             finishLabel="Finalizar Atendimento"
             showFinish={!completion.isCompleted}
@@ -1043,15 +1043,11 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
       {/* CONTEÚDO PRINCIPAL */}
       <div className="flex-1 p-6 overflow-y-auto">
         {!selectedPatientId ? (
-          <div className="flex flex-col items-center justify-center h-64 text-center bg-white rounded-2xl border border-slate-200 p-8">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-3">
-              <Apple className="w-6 h-6" />
-            </div>
-            <h3 className="text-base font-bold text-slate-800">Selecione um Paciente</h3>
-            <p className="text-xs text-slate-500 max-w-sm mt-1">
-              Escolha um paciente no seletor superior para iniciar a consulta nutricional, avaliar antropometria e construir o plano alimentar.
-            </p>
-          </div>
+          <ClinicalModuleEmptyState
+            icon={Apple}
+            colorVariant="emerald"
+            description="Escolha um paciente no seletor superior para iniciar a consulta nutricional, avaliar antropometria e construir o plano alimentar."
+          />
         ) : (
           <div className="max-w-6xl mx-auto space-y-6">
 

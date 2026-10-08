@@ -14,6 +14,7 @@ import { useToast } from '../../context/ToastContext';
 import { useClinicalAutosave } from '../../hooks/useClinicalAutosave';
 import { useHorizontalTabScroll, HorizontalTabNav } from '../../hooks/useHorizontalTabScroll';
 import { ClinicalQuickHeaderActions } from '../clinical/ClinicalQuickHeaderActions';
+import { ClinicalModuleEmptyState } from '../clinical/ClinicalModuleEmptyState';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
 import { ProfessionalModuleHeader } from '../common/ProfessionalModuleHeader';
 import {
@@ -1046,6 +1047,7 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
             autosaveStatus={autosave.autosaveStatus}
             lastSavedTime={autosave.lastSavedTime}
             onViewPreviousRecords={() => setActiveTab('history')}
+            onViewReports={() => setActiveTab('history')}
             onFinishConsultation={() => selectedPatientId ? setActiveTab('conduct') : showToast('Selecione um paciente para finalizar o atendimento.', 'info')}
             finishLabel="Finalizar Atendimento"
             showFinish={!completion.isCompleted}
@@ -1087,15 +1089,12 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
       {/* CONTEÚDO PRINCIPAL */}
       <div className="flex-1 p-6 overflow-y-auto">
         {!selectedPatientId ? (
-          <div className="flex flex-col items-center justify-center h-64 text-center bg-white rounded-2xl border border-slate-200 p-8 max-w-6xl mx-auto">
-            <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center mb-3">
-              <Stethoscope className="w-6 h-6" />
-            </div>
-            <h3 className="text-base font-bold text-slate-800">Selecione um(a) {clientTermLabel}</h3>
-            <p className="text-xs text-slate-500 max-w-sm mt-1">
-              Escolha um paciente no menu superior para iniciar o atendimento médico estruturado, sinais vitais e notas SOAP.
-            </p>
-          </div>
+          <ClinicalModuleEmptyState
+            icon={Stethoscope}
+            colorVariant="teal"
+            clientTermLabel={clientTermLabel}
+            description="Escolha um paciente no menu superior para iniciar o atendimento médico estruturado, sinais vitais e notas SOAP."
+          />
         ) : (
           <div className="max-w-6xl mx-auto space-y-6">
 

@@ -355,11 +355,6 @@ const AppContent: React.FC = () => {
     }
   };
 
-  const [billingReturnHome, setBillingReturnHome] = useState(() => window.location.pathname === '/' && sessionStorage.getItem('zemda-billing-return-home') === '1');
-  const leaveBillingHome = () => {
-    sessionStorage.removeItem('zemda-billing-return-home');
-    setBillingReturnHome(false);
-  };
   const isDirectAuthPath = window.location.pathname === '/login' || window.location.pathname === '/cadastro';
   const [publicView, setPublicView] = useState<'landing' | 'login'>(() =>
     window.location.pathname.startsWith('/assinatura') || isDirectAuthPath ? 'login' : 'landing'
@@ -983,23 +978,43 @@ const AppContent: React.FC = () => {
   const callback = window.location.pathname.match(/^\/assinatura\/(sucesso|cancelada|expirada)\/?$/)?.[1];
   if (callback || window.location.pathname === '/planos') {
     if (!currentUser && window.location.pathname === '/planos') {
-      return <main><BillingView publicPage /></main>;
+      return (
+        <main>
+          <BillingView
+            publicPage
+            onBack={() => {
+              setActiveSeoSlug(null);
+              setPublicView('landing');
+              window.history.pushState(null, '', '/');
+            }}
+          />
+        </main>
+      );
     }
     return (
       <BillingView
         publicPage={window.location.pathname === '/planos' || !currentUser}
         callback={callback}
+        onBack={() => {
+          if (currentUser) {
+            handleNavigateView('dashboard');
+          } else {
+            setActiveSeoSlug(null);
+            setPublicView('landing');
+            window.history.pushState(null, '', '/');
+          }
+        }}
       />
     );
   }
   // Se não estiver logado, exibe páginas de SEO de nicho, Landing Page ou Login
-  if (!currentUser || billingReturnHome) {
+  if (!currentUser) {
     const isLoginPath = window.location.pathname === '/login';
     const isRegisterPath = window.location.pathname === '/cadastro';
     const isExplicitAuth = isLoginPath || isRegisterPath || publicView === 'login';
 
     // 1. Se o usuário deslogado estiver em rota de autenticação (/login, /cadastro ou publicView === 'login')
-    if (isExplicitAuth && !billingReturnHome) {
+    if (isExplicitAuth) {
       return (
         <AuthPage
           onOpenPublicBooking={() => setCurrentView('public_preview')}
@@ -1110,13 +1125,11 @@ const AppContent: React.FC = () => {
       return (
         <ZemdaLandingPage
           onLogin={() => {
-            leaveBillingHome();
             setAuthInitialAction('login');
             setPublicView('login');
             window.history.pushState(null, '', '/login');
           }}
           onRegisterClinic={(plan, isTrial) => {
-            leaveBillingHome();
             setSelectedRegistrationPlan(plan);
             setIsRegistrationTrial(isTrial);
             setAuthInitialAction('create-clinic');
@@ -1124,7 +1137,6 @@ const AppContent: React.FC = () => {
             window.history.pushState(null, '', '/cadastro');
           }}
           onRegisterUser={() => {
-            leaveBillingHome();
             setAuthInitialAction('register-user');
             setPublicView('login');
             window.history.pushState(null, '', '/cadastro');
@@ -1243,9 +1255,11 @@ const AppContent: React.FC = () => {
     !isUserActive &&
     !isPendingOnboarding
   ) {
-    return <BillingView />;
+    return <BillingView onBack={() => handleNavigateView('dashboard')} />;
   }
-  if (currentView === 'subscription' || window.location.pathname === '/assinatura') return <BillingView />;
+  if (currentView === 'subscription' || window.location.pathname === '/assinatura') {
+    return <BillingView onBack={() => handleNavigateView('dashboard')} />;
+  }
 
   return (
     <div className="min-h-screen bg-[#fafbfc] flex flex-col">

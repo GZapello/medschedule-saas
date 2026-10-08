@@ -14,6 +14,7 @@ import { ClinicalQuickHeaderActions, ClinicalQuickToolItem } from '../clinical/C
 import { ClinicalDraftRecoveryModal } from '../clinical/ClinicalDraftRecoveryModal';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
 import { ProfessionalModuleHeader } from '../common/ProfessionalModuleHeader';
+import { ClinicalModuleEmptyState } from '../clinical/ClinicalModuleEmptyState';
 import {
   GraduationCap,
   BookOpen,
@@ -310,80 +311,84 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
   const [generatingAi, setGeneratingAi] = useState<boolean>(false);
 
   // Ao selecionar um aprendente, carrega dados completos do paciente
+  const loadPatientDetails = async (targetId?: string) => {
+    const pId = targetId || selectedPatientId;
+    if (!pId) {
+      setPatientData(null);
+      return;
+    }
+    try {
+      setLoading(true);
+      const [pat, profRes, assessRes, sessRes, domsRes, instsRes, plansRes, contactsRes, instCasesRes] = await Promise.all([
+        ApiClient.get<any>(`/v1/patients/${pId}`),
+        ApiClient.get<any>(`/v1/psychopedagogy/profile/${pId}`).catch(() => null),
+        ApiClient.get<any>(`/v1/psychopedagogy/assessments/${pId}`).catch(() => null),
+        ApiClient.get<any[]>(`/v1/psychopedagogy/sessions/${pId}`).catch(() => []),
+        ApiClient.get<any[]>(`/v1/psychopedagogy/domains/${pId}`).catch(() => []),
+        ApiClient.get<any[]>(`/v1/psychopedagogy/instruments/${pId}`).catch(() => []),
+        ApiClient.get<any[]>(`/v1/psychopedagogy/plans/${pId}`).catch(() => []),
+        ApiClient.get<any[]>(`/v1/psychopedagogy/school-contacts/${pId}`).catch(() => []),
+        ApiClient.get<any[]>(`/v1/psychopedagogy/institutional-cases`).catch(() => [])
+      ]);
+      if (!isCurrentClinicalContext()) return;
+
+      setPatientData(pat?.patient || pat);
+      if (profRes) {
+        setProfile((prev: any) => ({ ...prev, ...profRes }));
+      }
+      if (assessRes) {
+        const loadedAssess = Array.isArray(assessRes) ? (assessRes[0] || {}) : assessRes;
+        setAssessment((prev: any) => ({ ...prev, ...loadedAssess }));
+      }
+      setSessions(sessRes || []);
+      if (sessRes && sessRes.length > 0) {
+        setCurrentSession((prev: any) => ({
+          ...prev,
+          session_number: sessRes.length + 1
+        }));
+      }
+
+      setDomains(domsRes || []);
+      setInstruments(instsRes || []);
+      setPlans(plansRes || []);
+      if (plansRes && plansRes.length > 0) {
+        setCurrentPlan((prev: any) => ({ ...prev, ...plansRes[0] }));
+      }
+
+      setSchoolContacts(contactsRes || []);
+      setInstitutionalCases(instCasesRes || []);
+
+      // Mapeia domínios carregados para o formulário de aprendizagem
+      if (domsRes && Array.isArray(domsRes)) {
+        const newForm: any = { ...learningForm };
+        domsRes.forEach((d: any) => {
+          if (d.domain_type === 'reading') {
+            newForm.reading_notes = d.observations || '';
+          } else if (d.domain_type === 'writing') {
+            newForm.writing_notes = d.observations || '';
+          } else if (d.domain_type === 'math') {
+            newForm.math_notes = d.observations || '';
+          } else if (d.domain_type === 'cognition') {
+            newForm.exec_notes = d.observations || '';
+          } else if (d.domain_type === 'materials') {
+            newForm.notebooks_general_notes = d.observations || '';
+          }
+        });
+        setLearningForm(prev => ({ ...prev, ...newForm }));
+      }
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao carregar prontuário psicopedagógico.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (!selectedPatientId) {
       setPatientData(null);
       return;
     }
-
-    async function loadPatientDetails() {
-      try {
-        setLoading(true);
-        const [pat, profRes, assessRes, sessRes, domsRes, instsRes, plansRes, contactsRes, instCasesRes] = await Promise.all([
-          ApiClient.get<any>(`/v1/patients/${selectedPatientId}`),
-          ApiClient.get<any>(`/v1/psychopedagogy/profile/${selectedPatientId}`).catch(() => null),
-          ApiClient.get<any>(`/v1/psychopedagogy/assessments/${selectedPatientId}`).catch(() => null),
-          ApiClient.get<any[]>(`/v1/psychopedagogy/sessions/${selectedPatientId}`).catch(() => []),
-          ApiClient.get<any[]>(`/v1/psychopedagogy/domains/${selectedPatientId}`).catch(() => []),
-          ApiClient.get<any[]>(`/v1/psychopedagogy/instruments/${selectedPatientId}`).catch(() => []),
-          ApiClient.get<any[]>(`/v1/psychopedagogy/plans/${selectedPatientId}`).catch(() => []),
-          ApiClient.get<any[]>(`/v1/psychopedagogy/school-contacts/${selectedPatientId}`).catch(() => []),
-          ApiClient.get<any[]>(`/v1/psychopedagogy/institutional-cases`).catch(() => [])
-        ]);
-      if (!isCurrentClinicalContext()) return;
-
-        setPatientData(pat?.patient || pat);
-        if (profRes) {
-          setProfile((prev: any) => ({ ...prev, ...profRes }));
-        }
-        if (assessRes) {
-          const loadedAssess = Array.isArray(assessRes) ? (assessRes[0] || {}) : assessRes;
-          setAssessment((prev: any) => ({ ...prev, ...loadedAssess }));
-        }
-        setSessions(sessRes || []);
-        if (sessRes && sessRes.length > 0) {
-          setCurrentSession((prev: any) => ({
-            ...prev,
-            session_number: sessRes.length + 1
-          }));
-        }
-
-        setDomains(domsRes || []);
-        setInstruments(instsRes || []);
-        setPlans(plansRes || []);
-        if (plansRes && plansRes.length > 0) {
-          setCurrentPlan((prev: any) => ({ ...prev, ...plansRes[0] }));
-        }
-
-        setSchoolContacts(contactsRes || []);
-        setInstitutionalCases(instCasesRes || []);
-
-        // Mapeia domínios carregados para o formulário de aprendizagem
-        if (domsRes && Array.isArray(domsRes)) {
-          const newForm: any = { ...learningForm };
-          domsRes.forEach((d: any) => {
-            if (d.domain_type === 'reading') {
-              newForm.reading_notes = d.observations || '';
-            } else if (d.domain_type === 'writing') {
-              newForm.writing_notes = d.observations || '';
-            } else if (d.domain_type === 'math') {
-              newForm.math_notes = d.observations || '';
-            } else if (d.domain_type === 'cognition') {
-              newForm.exec_notes = d.observations || '';
-            } else if (d.domain_type === 'materials') {
-              newForm.notebooks_general_notes = d.observations || '';
-            }
-          });
-          setLearningForm(prev => ({ ...prev, ...newForm }));
-        }
-      } catch (err: any) {
-        showToast(err.message || 'Erro ao carregar prontuário psicopedagógico.', 'error');
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    loadPatientDetails();
+    loadPatientDetails(selectedPatientId);
   }, [selectedPatientId]);
 
   // Sincroniza a evolução da sessão atual com a aba de finalização
@@ -835,7 +840,13 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
           <ClinicalQuickHeaderActions
             autosaveStatus={autosave.autosaveStatus}
             lastSavedTime={autosave.lastSavedTime}
+            onLoadSavedClinicalData={() => void loadPatientDetails(selectedPatientId)}
             onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
+            onViewReports={() => {
+              setSelectedDocType('relatorio');
+              setShowDocumentModal(true);
+            }}
+            reportsLabel="Documentos & Pareceres"
             onFinishConsultation={() => selectedPatientId ? setActiveTab('finish') : showToast('Selecione um paciente para finalizar o atendimento.', 'info')}
             finishLabel="Finalizar Atendimento"
             showFinish={!completion.isCompleted}
@@ -905,15 +916,12 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
       {/* ÁREA DE CONTEÚDO PRINCIPAL DAS 8 ABAS */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-6">
         {!selectedPatientId ? (
-          <div className="bg-white rounded-3xl p-12 border border-slate-200 shadow-xs text-center max-w-xl mx-auto my-12 space-y-4">
-            <div className="w-16 h-16 rounded-3xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto">
-              <GraduationCap className="w-8 h-8" />
-            </div>
-            <h3 className="text-base font-bold text-slate-800">Selecione um Aprendente para Iniciar</h3>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              Escolha um aprendente no seletor acima para abrir a evolução clínica, anamnese pedagógica, testes e plano de intervenção.
-            </p>
-          </div>
+          <ClinicalModuleEmptyState
+            icon={GraduationCap}
+            colorVariant="indigo"
+            clientTermLabel="Aprendente"
+            description="Escolha um aprendente no seletor acima para abrir a evolução clínica, anamnese pedagógica, testes e plano de intervenção."
+          />
         ) : (
           <div className="max-w-6xl mx-auto space-y-6">
 

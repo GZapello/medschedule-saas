@@ -15,7 +15,7 @@ export interface ClinicalQuickToolsMenuProps {
   tools: ClinicalQuickToolItem[];
   label?: string;
   className?: string;
-  variant?: 'sky' | 'teal' | 'indigo' | 'emerald' | 'cyan' | 'purple' | 'slate';
+  variant?: 'sky' | 'teal' | 'indigo' | 'emerald' | 'cyan' | 'purple' | 'slate' | 'rose' | 'amber';
 }
 
 const variantStyles: Record<string, { button: string; icon: string; badge: string; hover: string }> = {
@@ -54,6 +54,18 @@ const variantStyles: Record<string, { button: string; icon: string; badge: strin
     icon: 'text-purple-600',
     badge: 'bg-purple-200/80 text-purple-900',
     hover: 'hover:bg-purple-50 hover:text-purple-900'
+  },
+  rose: {
+    button: 'border-rose-200 bg-rose-50/70 text-rose-800 hover:bg-rose-100',
+    icon: 'text-rose-600',
+    badge: 'bg-rose-200/80 text-rose-900',
+    hover: 'hover:bg-rose-50 hover:text-rose-900'
+  },
+  amber: {
+    button: 'border-amber-200 bg-amber-50/70 text-amber-800 hover:bg-amber-100',
+    icon: 'text-amber-600',
+    badge: 'bg-amber-200/80 text-amber-900',
+    hover: 'hover:bg-amber-50 hover:text-amber-900'
   },
   slate: {
     button: 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100',

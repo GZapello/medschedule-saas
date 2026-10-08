@@ -55,6 +55,7 @@ import { ClinicalDraftRecoveryModal } from '../clinical/ClinicalDraftRecoveryMod
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
 import { ProfessionalModuleHeader } from '../common/ProfessionalModuleHeader';
 import { ClinicalInventorySelector, ClinicalInventorySelection } from '../clinical/ClinicalInventorySelector';
+import { ClinicalModuleEmptyState } from '../clinical/ClinicalModuleEmptyState';
 
 export interface DentistryInventoryUsageItem {
   id: string;
@@ -1025,7 +1026,10 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
           <ClinicalQuickHeaderActions
             autosaveStatus={autosave.autosaveStatus}
             lastSavedTime={autosave.lastSavedTime}
+            onLoadSavedClinicalData={() => void loadPatientDentalData(selectedPatientId)}
             onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
+            onViewReports={() => setActiveTab('treatment_plans')}
+            reportsLabel="Planos & Orçamento"
             onFinishConsultation={handleFinishConsultation}
             finishLabel="Finalizar Atendimento"
             showFinish={!completion.isCompleted}
@@ -1102,15 +1106,11 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
         )}
 
         {!selectedPatientId ? (
-          <div className="flex flex-col items-center justify-center h-64 text-center bg-white rounded-2xl border border-slate-200 p-8 max-w-6xl mx-auto">
-            <div className="w-12 h-12 rounded-2xl bg-cyan-50 text-cyan-600 flex items-center justify-center mb-3">
-              <Smile className="w-6 h-6" />
-            </div>
-            <h3 className="text-base font-bold text-slate-800">Selecione um Paciente</h3>
-            <p className="text-xs text-slate-500 max-w-sm mt-1">
-              Escolha um paciente no menu superior para visualizar o odontograma anatômico, periodontia, endodontia e condutas odontológicas.
-            </p>
-          </div>
+          <ClinicalModuleEmptyState
+            icon={Smile}
+            colorVariant="cyan"
+            description="Escolha um paciente no menu superior para visualizar o odontograma anatômico, periodontia, endodontia e condutas odontológicas."
+          />
         ) : (
           <div className="max-w-6xl mx-auto space-y-6">
             {/* Informações do Paciente Selecionado */}

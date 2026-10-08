@@ -1,4 +1,3 @@
-import { ClinicalAssessmentsPanel } from '../../shared/clinical-assessments/ClinicalAssessmentsPanel';
 import { ClinicalPainScale } from '../clinical/ClinicalPainScale';
 import { useClinicalFormReset } from '../../hooks/useClinicalFormReset';
 import { PostureGait } from '../clinical/PostureGait';
@@ -28,7 +27,8 @@ import {
   Camera,
   GitCompare,
   Eye,
-  ArrowRight
+  ArrowRight,
+  X
 } from 'lucide-react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -45,6 +45,7 @@ import { ClinicalQuickHeaderActions, ClinicalQuickToolItem } from '../clinical/C
 import { ClinicalDraftRecoveryModal } from '../clinical/ClinicalDraftRecoveryModal';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
 import { ProfessionalModuleHeader } from '../common/ProfessionalModuleHeader';
+import { ClinicalModuleEmptyState } from '../clinical/ClinicalModuleEmptyState';
 import { ZemdaBodyCanvas } from '../zemda-body/ZemdaBodyCanvas';
 import { getRegionLabel } from '../zemda-body/bodyRegionsData';
 import { RegionalPhysioAssessmentModal } from './RegionalPhysioAssessmentModal';
@@ -133,6 +134,23 @@ const DEFAULT_FUNCTIONAL_TESTS: FunctionalTestItem[] = [
   { id: 'gaveta_tornozelo', name: 'Gaveta Anterior do Tornozelo', region: 'Tornozelo', targetStructure: 'Ligamento Talofibular Anterior', result: 'not_tested' }
 ];
 
+export const REGIONAL_OPTIONS = [
+  { id: 'ombro_direito', label: 'Ombro Direito', side: 'right' as const },
+  { id: 'ombro_esquerdo', label: 'Ombro Esquerdo', side: 'left' as const },
+  { id: 'cotovelo_direito', label: 'Cotovelo Direito', side: 'right' as const },
+  { id: 'cotovelo_esquerdo', label: 'Cotovelo Esquerdo', side: 'left' as const },
+  { id: 'punho_direito', label: 'Punho e Mão Direita', side: 'right' as const },
+  { id: 'punho_esquerdo', label: 'Punho e Mão Esquerda', side: 'left' as const },
+  { id: 'coluna_cervical', label: 'Coluna Cervical', side: 'midline' as const },
+  { id: 'coluna_lombar', label: 'Coluna Lombar', side: 'midline' as const },
+  { id: 'quadril_direito', label: 'Quadril Direito', side: 'right' as const },
+  { id: 'quadril_esquerdo', label: 'Quadril Esquerdo', side: 'left' as const },
+  { id: 'joelho_direito', label: 'Joelho Direito', side: 'right' as const },
+  { id: 'joelho_esquerdo', label: 'Joelho Esquerdo', side: 'left' as const },
+  { id: 'tornozelo_direito', label: 'Tornozelo e Pé Direito', side: 'right' as const },
+  { id: 'tornozelo_esquerdo', label: 'Tornozelo e Pé Esquerdo', side: 'left' as const }
+];
+
 export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
   initialPatientId,
   initialAppointmentId,
@@ -148,12 +166,13 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
   const [showPreviousRecordsModal, setShowPreviousRecordsModal] = useState<boolean>(false);
   const [showFollowUpModal, setShowFollowUpModal] = useState<boolean>(false);
 
-  // 14 Abas Ordenadas
+  // 15 Abas Ordenadas
   const [activeTab, setActiveTab] = useState<
     | 'evolution'
     | 'anamnesis'
     | 'kinetic_functional'
     | 'pain_zemdabody'
+    | 'evaluations'
     | 'adm_goniometry'
     | 'muscle_strength'
     | 'posture_gait'
@@ -204,6 +223,11 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
   const [showComparisonModal, setShowComparisonModal] = useState<boolean>(false);
   const [showRegionalListModal, setShowRegionalListModal] = useState<boolean>(false);
   const [editingRegionalEval, setEditingRegionalEval] = useState<PhysioRegionalEvaluation | null>(null);
+  const [regionalEvaluationsList, setRegionalEvaluationsList] = useState<PhysioRegionalEvaluation[]>([]);
+  const [loadingRegionalEvaluations, setLoadingRegionalEvaluations] = useState<boolean>(false);
+  const [showRegionPickerModal, setShowRegionPickerModal] = useState<boolean>(false);
+  const [customRegionName, setCustomRegionName] = useState<string>('');
+  const [customRegionSide, setCustomRegionSide] = useState<'right' | 'left' | 'midline'>('midline');
   const [bodyCanvasViewMode, setBodyCanvasViewMode] = useState<'all' | 'front' | 'back'>('all');
   const [bodyModel, setBodyModel] = useState<'male' | 'female'>('male');
 
@@ -417,6 +441,9 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
   useEffect(() => {
     if (!selectedPatientId) {
       setSelectedPatient(null);
+      setRegionalSummary([]);
+      setRegionalEvaluationsList([]);
+      setPosturalAssessments([]);
       return;
     }
     ApiClient.get<any>(`/v1/patients/${selectedPatientId}`).then(p => {
@@ -429,6 +456,13 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
       loadPatientData(selectedPatientId);
     });
   }, [selectedPatientId]);
+
+  useEffect(() => {
+    if (activeTab === 'evaluations' && selectedPatientId) {
+      loadRegionalEvaluations(selectedPatientId);
+      loadRegionalSummary(selectedPatientId);
+    }
+  }, [activeTab, selectedPatientId]);
 
   const loadPatientData = async (patId: string, restoreClinical = false) => {
     try {
@@ -454,6 +488,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
       }
       await Promise.allSettled([
         loadRegionalSummary(patId),
+        loadRegionalEvaluations(patId),
         loadPosturalAssessments(patId)
       ]);
     } catch (err) {
@@ -499,6 +534,42 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
     } catch (err) {
       console.warn('Erro ao carregar sumário regional:', err);
       setRegionalSummary([]);
+    }
+  };
+
+  const loadRegionalEvaluations = async (patId: string) => {
+    if (!patId) {
+      setRegionalEvaluationsList([]);
+      return;
+    }
+    try {
+      setLoadingRegionalEvaluations(true);
+      const res = await ApiClient.get<any>(`/v1/physiotherapy/regional-evaluations/patient/${patId}`);
+      if (!isCurrentClinicalContext()) return;
+      const items = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
+      setRegionalEvaluationsList(items);
+    } catch (err) {
+      console.warn('Erro ao carregar avaliações regionais do paciente:', err);
+      setRegionalEvaluationsList([]);
+    } finally {
+      setLoadingRegionalEvaluations(false);
+    }
+  };
+
+  const handleDeleteEvaluation = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!window.confirm('Deseja realmente excluir esta avaliação regional? Esta ação não pode ser desfeita.')) {
+      return;
+    }
+    try {
+      await ApiClient.delete(`/v1/physiotherapy/regional-evaluations/${id}`);
+      showToast('Avaliação regional excluída com sucesso', 'success');
+      if (selectedPatientId) {
+        loadRegionalEvaluations(selectedPatientId);
+        loadRegionalSummary(selectedPatientId);
+      }
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao excluir avaliação regional', 'error');
     }
   };
 
@@ -574,7 +645,6 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
 
   return (
     <div className="flex flex-col h-full bg-slate-50 text-slate-800">
-      <ClinicalAssessmentsPanel patientId={selectedPatientId} patient={selectedPatient} appointmentId={initialAppointmentId} sourceModule="ZemdaFisio"/>
       {completion.dialog}
 
       {/* CABEÇALHO DO MÓDULO ZEMDAFISIO */}
@@ -605,6 +675,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
             autosaveStatus={autosave.autosaveStatus}
             lastSavedTime={autosave.lastSavedTime}
             onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
+            onViewReports={() => setShowFollowUpModal(true)}
             onFinishConsultation={() => selectedPatientId ? setActiveTab('finish') : showToast('Selecione um paciente para finalizar o atendimento.', 'info')}
             finishLabel="Finalizar Atendimento"
             showFinish={!completion.isCompleted}
@@ -632,7 +703,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
         )}
       </ProfessionalModuleHeader>
 
-      {/* 14 ABAS DE NAVEGAÇÃO ESTRUTURADAS (Trilha Limpa com Rolagem Livre) */}
+      {/* 15 ABAS DE NAVEGAÇÃO ESTRUTURADAS (Trilha Limpa com Rolagem Livre) */}
       <div className="bg-white border-b border-slate-200 shrink-0">
         <HorizontalTabNav scroll={tabScroll}>
           <div {...tabScrollProps} className={`${tabScrollProps.className} flex items-center gap-1 py-1`}>
@@ -641,16 +712,17 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
               { id: 'anamnesis', label: '2. Anamnese', icon: FileText },
               { id: 'kinetic_functional', label: '3. Cinético-Funcional', icon: Sliders },
               { id: 'pain_zemdabody', label: '4. Dor & Zemda360', icon: AlertCircle },
-              { id: 'adm_goniometry', label: '5. ADM / Goniometria', icon: Activity },
-              { id: 'muscle_strength', label: '6. Força Oxford', icon: Dumbbell },
-              { id: 'posture_gait', label: '7. Postura & Marcha', icon: User },
-              { id: 'functional_tests', label: '8. Testes Funcionais', icon: Award },
-              { id: 'cbdf', label: '9. CBDF COFFITO', icon: ShieldCheck },
-              { id: 'treatment_plan', label: '10. Plano RBPF', icon: Calendar },
-              { id: 'goals', label: '11. Metas', icon: Target },
-              { id: 'external_tests', label: '12. Testes Externos', icon: FileText },
-              { id: 'home_exercises', label: '13. Exercícios em Casa', icon: Dumbbell },
-              { id: 'finish', label: '14. Finalização', icon: CheckCircle2 }
+              { id: 'evaluations', label: '5. Avaliações', icon: Target },
+              { id: 'adm_goniometry', label: '6. ADM / Goniometria', icon: Activity },
+              { id: 'muscle_strength', label: '7. Força Oxford', icon: Dumbbell },
+              { id: 'posture_gait', label: '8. Postura & Marcha', icon: User },
+              { id: 'functional_tests', label: '9. Testes Funcionais', icon: Award },
+              { id: 'cbdf', label: '10. CBDF COFFITO', icon: ShieldCheck },
+              { id: 'treatment_plan', label: '11. Plano RBPF', icon: Calendar },
+              { id: 'goals', label: '12. Metas', icon: Target },
+              { id: 'external_tests', label: '13. Testes Externos', icon: FileText },
+              { id: 'home_exercises', label: '14. Exercícios em Casa', icon: Dumbbell },
+              { id: 'finish', label: '15. Finalização', icon: CheckCircle2 }
             ].map(tab => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -679,15 +751,13 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
       {/* CONTEÚDO PRINCIPAL */}
       <div className="flex-1 p-6 overflow-y-auto">
         {!selectedPatientId ? (
-          <div className="flex flex-col items-center justify-center h-64 text-center bg-white rounded-2xl border border-slate-200 p-8">
-            <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center mb-3">
-              <Activity className="w-6 h-6" />
-            </div>
-            <h3 className="text-base font-bold text-slate-800">Selecione um Paciente</h3>
-            <p className="text-xs text-slate-500 max-w-sm mt-1">
-              Escolha um paciente no menu superior para iniciar a avaliação cinético-funcional, goniometria e plano terapêutico.
-            </p>
-          </div>
+          <ClinicalModuleEmptyState
+            icon={Activity}
+            colorVariant="teal"
+            description={activeTab === 'evaluations'
+              ? 'Selecione um paciente para visualizar ou registrar avaliações.'
+              : 'Escolha um paciente no menu superior para iniciar a avaliação cinético-funcional, goniometria e plano terapêutico.'}
+          />
         ) : (
           <div className="max-w-6xl mx-auto space-y-6">
 
@@ -1101,7 +1171,333 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
               </div>
             )}
 
-            {/* ABA 5: ADM / GONIOMETRIA ESTRUTURADA */}
+            {/* ABA 5: AVALIAÇÕES FISIOTERAPÊUTICAS */}
+            {activeTab === 'evaluations' && (
+              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
+                {/* Cabeçalho do Card da Aba */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                      <Target className="w-4 h-4 text-teal-600" />
+                      Avaliações Fisioterapêuticas
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Registre avaliações regionais, acompanhe evolução e compare resultados ao longo do tempo.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowRegionPickerModal(true)}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Nova Avaliação</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={regionalEvaluationsList.length === 0}
+                      onClick={() => {
+                        const targetRegion = selectedRegionId || regionalEvaluationsList[0]?.region_id || regionalSummary[0]?.region_id;
+                        if (targetRegion) {
+                          setSelectedRegionId(targetRegion);
+                          setShowRegionalListModal(true);
+                        } else {
+                          showToast('Nenhuma avaliação registrada para visualizar histórico.', 'info');
+                        }
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                    >
+                      <Clock className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Histórico</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={regionalEvaluationsList.length === 0}
+                      onClick={() => {
+                        const targetRegion = selectedRegionId || regionalEvaluationsList[0]?.region_id || regionalSummary[0]?.region_id;
+                        if (targetRegion) {
+                          setSelectedRegionId(targetRegion);
+                          setShowComparisonModal(true);
+                        } else {
+                          showToast('Nenhuma avaliação registrada para comparar.', 'info');
+                        }
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 bg-teal-50 hover:bg-teal-100 disabled:opacity-50 disabled:cursor-not-allowed text-teal-800 border border-teal-200 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                    >
+                      <GitCompare className="w-3.5 h-3.5 text-teal-600" />
+                      <span>Comparar</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Resumo por Região (Chips Rápidos de Regiões Avaliadas) */}
+                {regionalSummary.length > 0 && (
+                  <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200/80 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-teal-600" />
+                        Regiões com Histórico ({regionalSummary.length}):
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('pain_zemdabody')}
+                        className="text-[11px] font-bold text-teal-700 hover:text-teal-800 hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <span>Abrir no Mapa 360</span>
+                        <ArrowRight className="w-3 h-3" />
+                      </button>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      {regionalSummary.map(reg => (
+                        <div
+                          key={reg.region_id}
+                          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white border border-slate-200 shadow-2xs text-xs"
+                        >
+                          <span className="font-extrabold text-slate-800">{reg.region_label}</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600 font-semibold">
+                            {formatLaterality(reg.side)}
+                          </span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-teal-50 text-teal-700 font-bold border border-teal-100">
+                            {reg.evaluation_count} aval.
+                          </span>
+                          {reg.latest_pain_score !== null && (
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold ${
+                              reg.latest_pain_score <= 3
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : reg.latest_pain_score <= 6
+                                ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                : 'bg-rose-50 text-rose-700 border border-rose-200'
+                            }`}>
+                              EVA {reg.latest_pain_score}/10
+                            </span>
+                          )}
+                          <div className="flex items-center gap-1 ml-1 border-l border-slate-100 pl-1.5">
+                            <button
+                              type="button"
+                              title="Nova avaliação desta região"
+                              onClick={() => {
+                                setSelectedRegionId(reg.region_id);
+                                setEditingRegionalEval(null);
+                                setShowRegionalAssessmentModal(true);
+                              }}
+                              className="p-1 hover:bg-teal-50 text-teal-600 rounded-lg transition-colors cursor-pointer"
+                            >
+                              <Plus className="w-3 h-3" />
+                            </button>
+                            <button
+                              type="button"
+                              title="Comparar evolução longitudinal"
+                              onClick={() => {
+                                setSelectedRegionId(reg.region_id);
+                                setShowComparisonModal(true);
+                              }}
+                              className="p-1 hover:bg-teal-50 text-teal-600 rounded-lg transition-colors cursor-pointer"
+                            >
+                              <GitCompare className="w-3 h-3" />
+                            </button>
+                            <button
+                              type="button"
+                              title="Ver histórico desta região"
+                              onClick={() => {
+                                setSelectedRegionId(reg.region_id);
+                                setShowRegionalListModal(true);
+                              }}
+                              className="p-1 hover:bg-slate-100 text-slate-500 rounded-lg transition-colors cursor-pointer"
+                            >
+                              <Clock className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Lista de Avaliações Registradas */}
+                {loadingRegionalEvaluations ? (
+                  <div className="p-8 text-center bg-slate-50 rounded-2xl border border-slate-200 text-xs text-slate-500 font-medium">
+                    Carregando avaliações fisioterapêuticas...
+                  </div>
+                ) : regionalEvaluationsList.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center p-12 text-center bg-slate-50/60 rounded-2xl border border-dashed border-slate-200">
+                    <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center mb-3 shadow-2xs">
+                      <Target className="w-6 h-6" />
+                    </div>
+                    <h4 className="text-sm font-bold text-slate-800 mb-1">
+                      Nenhuma avaliação registrada
+                    </h4>
+                    <p className="text-xs text-slate-500 max-w-md mb-4">
+                      Registre avaliações regionais, goniometria, testes especiais e acompanhe a evolução clínica do paciente.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setShowRegionPickerModal(true)}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Nova Avaliação</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between text-xs text-slate-500 font-semibold px-1">
+                      <span>Avaliações Registradas ({regionalEvaluationsList.length})</span>
+                      <span>Ordenadas por data mais recente</span>
+                    </div>
+
+                    <div className="grid gap-3">
+                      {regionalEvaluationsList.map(evalItem => {
+                        let painData: any = null;
+                        if (evalItem.pain_json) {
+                          try {
+                            painData = typeof evalItem.pain_json === 'string' ? JSON.parse(evalItem.pain_json) : evalItem.pain_json;
+                          } catch {
+                            painData = null;
+                          }
+                        }
+                        const painScore = painData?.score;
+                        const painColor =
+                          painScore === undefined || painScore === null
+                            ? 'bg-slate-100 text-slate-600'
+                            : painScore <= 3
+                            ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                            : painScore <= 6
+                            ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                            : 'bg-rose-50 text-rose-800 border border-rose-200';
+
+                        let admList: any[] = [];
+                        if (evalItem.adm_json) {
+                          try {
+                            admList = typeof evalItem.adm_json === 'string' ? JSON.parse(evalItem.adm_json) : evalItem.adm_json;
+                          } catch {}
+                        }
+                        let strengthList: any[] = [];
+                        if (evalItem.strength_json) {
+                          try {
+                            strengthList = typeof evalItem.strength_json === 'string' ? JSON.parse(evalItem.strength_json) : evalItem.strength_json;
+                          } catch {}
+                        }
+                        let testsList: any[] = [];
+                        if (evalItem.tests_json) {
+                          try {
+                            testsList = typeof evalItem.tests_json === 'string' ? JSON.parse(evalItem.tests_json) : evalItem.tests_json;
+                          } catch {}
+                        }
+
+                        const admCount = Array.isArray(admList) ? admList.length : 0;
+                        const strengthCount = Array.isArray(strengthList) ? strengthList.length : 0;
+                        const testsCount = Array.isArray(testsList) ? testsList.length : 0;
+
+                        return (
+                          <div
+                            key={evalItem.id}
+                            className="p-4 bg-white rounded-2xl border border-slate-200/90 hover:border-slate-300 shadow-2xs hover:shadow-xs transition-all flex flex-col md:flex-row md:items-center justify-between gap-4"
+                          >
+                            <div className="space-y-2">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-extrabold text-sm text-slate-900">
+                                  {evalItem.region_label || getRegionLabel(evalItem.region_id, bodyModel)}
+                                </span>
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700">
+                                  {formatLaterality(evalItem.side)}
+                                </span>
+                                <span className="text-[11px] text-slate-500 flex items-center gap-1">
+                                  <Calendar className="w-3 h-3 text-slate-400" />
+                                  {new Date(evalItem.evaluation_date + 'T12:00:00').toLocaleDateString('pt-BR')}
+                                </span>
+                                {painScore !== undefined && painScore !== null && (
+                                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${painColor}`}>
+                                    EVA: {painScore}/10
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+                                {admCount > 0 && (
+                                  <span className="inline-flex items-center gap-1 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100">
+                                    <Activity className="w-3 h-3 text-teal-600" />
+                                    {admCount} mov. ADM
+                                  </span>
+                                )}
+                                {strengthCount > 0 && (
+                                  <span className="inline-flex items-center gap-1 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100">
+                                    <Dumbbell className="w-3 h-3 text-indigo-600" />
+                                    {strengthCount} testes força
+                                  </span>
+                                )}
+                                {testsCount > 0 && (
+                                  <span className="inline-flex items-center gap-1 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100">
+                                    <Award className="w-3 h-3 text-purple-600" />
+                                    {testsCount} testes esp.
+                                  </span>
+                                )}
+                                <span className="text-slate-400">·</span>
+                                <span>Avaliador: <strong className="text-slate-700">{evalItem.professional_name || 'Fisioterapeuta'}</strong></span>
+                              </div>
+
+                              {evalItem.notes && (
+                                <p className="text-xs text-slate-600 line-clamp-1 italic">
+                                  "{evalItem.notes}"
+                                </p>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedRegionId(evalItem.region_id);
+                                  setEditingRegionalEval(evalItem);
+                                  setShowRegionalAssessmentModal(true);
+                                }}
+                                className="px-3 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                              >
+                                Ver / Editar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedRegionId(evalItem.region_id);
+                                  setShowComparisonModal(true);
+                                }}
+                                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                              >
+                                Comparar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedRegionId(evalItem.region_id);
+                                  setShowRegionalListModal(true);
+                                }}
+                                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                              >
+                                Histórico
+                              </button>
+                              <button
+                                type="button"
+                                title="Excluir avaliação"
+                                onClick={e => handleDeleteEvaluation(evalItem.id, e)}
+                                className="p-1.5 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-xl transition-all cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ABA 6: ADM / GONIOMETRIA ESTRUTURADA */}
             {activeTab === 'adm_goniometry' && (
               <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
                 <div className="flex items-center justify-between border-b pb-3">
@@ -1180,7 +1576,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
               </div>
             )}
 
-            {/* ABA 6: FORÇA MUSCULAR (OXFORD 0-5) */}
+            {/* ABA 7: FORÇA MUSCULAR (OXFORD 0-5) */}
             {activeTab === 'muscle_strength' && (
               <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
                 <div className="border-b pb-3">
@@ -1236,7 +1632,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
               </div>
             )}
 
-            {/* ABA 7: POSTURA & MARCHA */}
+            {/* ABA 8: POSTURA & MARCHA */}
             {activeTab === 'posture_gait' && (
               <div className="space-y-6">
                 {/* 1. SEÇÃO DE AVALIAÇÃO POSTURAL (FOTOGRAMETRIA E IA COMPARTILHADA) */}
@@ -1291,7 +1687,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
                       <button
                         type="button"
                         onClick={() => setActiveTab('pain_zemdabody')}
-                        className="px-3 py-1.5 bg-slate-50 text-slate-600 hover:bg-slate-100 rounded-xl text-xs font-semibold flex items-center gap-1.5 border border-slate-200 transition cursor-pointer"
+                        className="px-3.5 py-1.5 bg-slate-50 text-slate-600 hover:bg-slate-100 rounded-xl text-xs font-semibold flex items-center gap-1.5 border border-slate-200 transition cursor-pointer"
                         title="Correlacionar postura com dor e mapeamento 3D corporal"
                       >
                         <AlertCircle className="w-3.5 h-3.5 text-amber-500" />
@@ -1412,7 +1808,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
               </div>
             )}
 
-            {/* ABA 8: TESTES FUNCIONAIS ESPECÍFICOS */}
+            {/* ABA 9: TESTES FUNCIONAIS ESPECÍFICOS */}
             {activeTab === 'functional_tests' && (
               <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
                 <div className="border-b pb-3">
@@ -1461,7 +1857,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
               </div>
             )}
 
-            {/* ABA 9: CBDF (COFFITO 610/2025) */}
+            {/* ABA 10: CBDF (COFFITO 610/2025) */}
             {activeTab === 'cbdf' && (
               <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-5">
                 <div className="border-b pb-3">
@@ -1527,7 +1923,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
               </div>
             )}
 
-            {/* ABA 10: PLANO TERAPÊUTICO (RBPF 618/2025) */}
+            {/* ABA 11: PLANO TERAPÊUTICO (RBPF 618/2025) */}
             {activeTab === 'treatment_plan' && (
               <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-5">
                 <div className="border-b pb-3">
@@ -1585,7 +1981,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
               </div>
             )}
 
-            {/* ABA 11: METAS & REAVALIAÇÃO */}
+            {/* ABA 12: METAS & REAVALIAÇÃO */}
             {activeTab === 'goals' && (
               <MeasurableGoalsManager
                 patientId={selectedPatientId}
@@ -1594,7 +1990,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
               />
             )}
 
-            {/* ABA 12: TESTES EXTERNOS */}
+            {/* ABA 13: TESTES EXTERNOS */}
             {activeTab === 'external_tests' && (
               <ExternalTestsManager
                 patientId={selectedPatientId}
@@ -1602,7 +1998,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
               />
             )}
 
-            {/* ABA 13: EXERCÍCIOS DOMICILIARES */}
+            {/* ABA 14: EXERCÍCIOS DOMICILIARES */}
             {activeTab === 'home_exercises' && (
               <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-5">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-2">
@@ -1707,7 +2103,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
               </div>
             )}
 
-            {/* ABA 14: FINALIZAÇÃO CANÔNICA */}
+            {/* ABA 15: FINALIZAÇÃO CANÔNICA */}
             {activeTab === 'finish' && (
               <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
                 <div className="border-b pb-3">
@@ -1836,6 +2232,133 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
         />
       )}
 
+      {/* Modal Seletor de Região Anatômica para Nova Avaliação */}
+      {showRegionPickerModal && selectedPatientId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-xl overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-teal-50/60 to-white">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-teal-600 text-white flex items-center justify-center shadow-xs">
+                  <Target className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-800">
+                    Selecionar Região Anatômica
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Escolha a articulação ou segmento para a avaliação
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowRegionPickerModal(false)}
+                className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 overflow-y-auto space-y-5">
+              {/* Regiões Frequentes */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2.5">
+                  Regiões Frequentes
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {REGIONAL_OPTIONS.map(opt => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedRegionId(opt.id);
+                        setCustomRegionName(opt.label);
+                        setCustomRegionSide(opt.side);
+                        setEditingRegionalEval(null);
+                        setShowRegionPickerModal(false);
+                        setShowRegionalAssessmentModal(true);
+                      }}
+                      className="p-3 text-left rounded-xl border border-slate-200 hover:border-teal-400 hover:bg-teal-50/50 hover:shadow-xs transition-all flex items-center justify-between group cursor-pointer"
+                    >
+                      <div>
+                        <span className="block text-xs font-bold text-slate-800 group-hover:text-teal-900">
+                          {opt.label}
+                        </span>
+                        <span className="text-[10px] text-slate-500">
+                          {formatLaterality(opt.side)}
+                        </span>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-teal-600 group-hover:translate-x-0.5 transition-all" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Região Personalizada */}
+              <div className="pt-4 border-t border-slate-100">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                  Ou informe outra região
+                </label>
+                <form
+                  onSubmit={e => {
+                    e.preventDefault();
+                    if (!customRegionName.trim()) return;
+                    const regId = 'custom_' + customRegionName.trim().toLowerCase().replace(/\s+/g, '_');
+                    setSelectedRegionId(regId);
+                    setEditingRegionalEval(null);
+                    setShowRegionPickerModal(false);
+                    setShowRegionalAssessmentModal(true);
+                  }}
+                  className="space-y-3"
+                >
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div className="sm:col-span-2">
+                      <input
+                        type="text"
+                        value={customRegionName}
+                        onChange={e => setCustomRegionName(e.target.value)}
+                        placeholder="Ex: Articulação Temporomandibular (ATM)..."
+                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <select
+                        value={customRegionSide}
+                        onChange={e => setCustomRegionSide(e.target.value as any)}
+                        className="w-full px-2.5 py-2 text-xs rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-teal-500 focus:outline-none font-semibold text-slate-700"
+                      >
+                        <option value="right">Direito</option>
+                        <option value="left">Esquerdo</option>
+                        <option value="midline">Linha Média / Bilateral</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowRegionPickerModal(false)}
+                      className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={!customRegionName.trim()}
+                      className="px-4 py-2 rounded-xl text-xs font-bold bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white transition shadow-xs cursor-pointer"
+                    >
+                      Iniciar Avaliação
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modais de Avaliação Regional Zemda360 */}
       {showRegionalAssessmentModal && selectedPatientId && selectedRegionId && (
         <RegionalPhysioAssessmentModal
@@ -1843,6 +2366,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
           onClose={() => setShowRegionalAssessmentModal(false)}
           onSaved={(saved) => {
             loadRegionalSummary(selectedPatientId);
+            loadRegionalEvaluations(selectedPatientId);
             if (saved.pain_json) {
               const p = typeof saved.pain_json === 'string' ? JSON.parse(saved.pain_json) : saved.pain_json;
               if (p?.score !== undefined) setPainScore(p.score);
@@ -1854,10 +2378,14 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
           regionId={selectedRegionId}
           regionLabel={
             (Array.isArray(regionalSummary) && regionalSummary.find(r => r.region_id === selectedRegionId)?.region_label) ||
+            REGIONAL_OPTIONS.find(o => o.id === selectedRegionId)?.label ||
+            customRegionName ||
             getRegionLabel(selectedRegionId, bodyModel)
           }
           side={
             (Array.isArray(regionalSummary) && (regionalSummary.find(r => r.region_id === selectedRegionId)?.side as any)) ||
+            (REGIONAL_OPTIONS.find(o => o.id === selectedRegionId)?.side as any) ||
+            customRegionSide ||
             detectSideFromRegionId(selectedRegionId)
           }
           initialData={editingRegionalEval}
@@ -1873,10 +2401,14 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
           regionId={selectedRegionId}
           regionLabel={
             (Array.isArray(regionalSummary) && regionalSummary.find(r => r.region_id === selectedRegionId)?.region_label) ||
+            REGIONAL_OPTIONS.find(o => o.id === selectedRegionId)?.label ||
+            customRegionName ||
             getRegionLabel(selectedRegionId, bodyModel)
           }
           side={
             (Array.isArray(regionalSummary) && regionalSummary.find(r => r.region_id === selectedRegionId)?.side) ||
+            (REGIONAL_OPTIONS.find(o => o.id === selectedRegionId)?.side as any) ||
+            customRegionSide ||
             detectSideFromRegionId(selectedRegionId)
           }
           onNewAssessmentRequested={() => {
@@ -1895,10 +2427,14 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
           regionId={selectedRegionId}
           regionLabel={
             (Array.isArray(regionalSummary) && regionalSummary.find(r => r.region_id === selectedRegionId)?.region_label) ||
+            REGIONAL_OPTIONS.find(o => o.id === selectedRegionId)?.label ||
+            customRegionName ||
             getRegionLabel(selectedRegionId, bodyModel)
           }
           side={
             (Array.isArray(regionalSummary) && regionalSummary.find(r => r.region_id === selectedRegionId)?.side) ||
+            (REGIONAL_OPTIONS.find(o => o.id === selectedRegionId)?.side as any) ||
+            customRegionSide ||
             detectSideFromRegionId(selectedRegionId)
           }
           onSelectForEdit={(ev) => {
