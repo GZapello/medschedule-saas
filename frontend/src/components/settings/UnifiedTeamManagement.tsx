@@ -77,7 +77,8 @@ const AVAILABLE_PERMISSIONS = [
   { id: 'manage_staff', label: 'Gerenciar equipe e funcionários', group: 'admin' },
   { id: 'manage_services', label: 'Gerenciar catálogo de serviços e salas', group: 'admin' },
   { id: 'view_reports', label: 'Acessar relatórios e exportar planilhas', group: 'admin' },
-  { id: 'manage_settings', label: 'Alterar configurações da clínica', group: 'admin' }
+  { id: 'manage_settings', label: 'Alterar configurações da clínica', group: 'admin' },
+  { id: 'can_import_data', label: 'Importar dados (planilhas, DOCX e prontuários)', group: 'admin' }
 ];
 
 const PERMISSION_PRESETS = [

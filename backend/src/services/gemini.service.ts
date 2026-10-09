@@ -660,7 +660,7 @@ export class GeminiService {
    * REGRA CRÍTICA: Processamento efêmero em memória. Nenhuma foto é armazenada.
    */
   static async extractMedicalRecordFromDocuments(params: {
-    files: Array<{ mimeType: string; base64: string; fileName?: string }>;
+    files: Array<{ mimeType: string; base64?: string; text?: string; fileName?: string }>;
   }): Promise<ExtractedMedicalRecord | null> {
     const { files } = params;
     if (!files || files.length === 0) return null;
@@ -678,12 +678,18 @@ export class GeminiService {
       ];
 
       for (const file of files) {
-        parts.push({
-          inlineData: {
-            mimeType: file.mimeType,
-            data: file.base64
-          }
-        });
+        if (file.text) {
+          parts.push({
+            text: `[DOCUMENTO CLÍNICO WORD / DOCX ANEXADO (${file.fileName || 'arquivo.docx'})]:\n${file.text}`
+          });
+        } else if (file.base64) {
+          parts.push({
+            inlineData: {
+              mimeType: file.mimeType,
+              data: file.base64
+            }
+          });
+        }
       }
 
       const contents = [{ role: 'user', parts }];
@@ -895,8 +901,69 @@ function sanitizeExtractedMedicalRecord(parsed: any, totalPages: number): Extrac
   };
 }
 
-function getMockMedicalRecordExtraction(files: Array<{ mimeType: string; base64: string; fileName?: string }>): ExtractedMedicalRecord {
+function getMockMedicalRecordExtraction(files: Array<{ mimeType: string; base64?: string; text?: string; fileName?: string }>): ExtractedMedicalRecord {
   const fileNames = files.map(f => (f.fileName || '').toLowerCase()).join(' ');
+
+  // Se for documento DOCX ou contiver texto extraído do Word
+  const docxFile = files.find(f => (f.fileName || '').toLowerCase().endsWith('.docx') || f.text);
+  if (docxFile && docxFile.text) {
+    const nameMatch = docxFile.text.match(/(?:paciente|nome)\s*[:：]\s*([^\n\r|]+)/i);
+    const cpfMatch = docxFile.text.match(/(?:cpf)\s*[:：]\s*([\d.-]+)/i);
+    const queixaMatch = docxFile.text.match(/(?:queixa|motivo)\s*[:：]\s*([^\n\r|]+)/i);
+
+    return {
+      patient: {
+        full_name: nameMatch ? nameMatch[1].trim() : 'Marcos Vinícius Peixoto',
+        birth_date: '1988-09-22',
+        cpf: cpfMatch ? cpfMatch[1].trim() : '222.333.444-55',
+        phone: '(11) 97766-5544',
+        whatsapp: '(11) 97766-5544',
+        email: 'marcos.peixoto@exemplo.com.br',
+        address: 'Rua das Palmeiras, 340',
+        city: 'São Paulo',
+        state: 'SP',
+        zip_code: '04500-000',
+        responsible: '',
+        insurance_name: 'SulAmérica Saúde',
+        insurance_plan: 'Especial',
+        insurance_card: '7788990011'
+      },
+      clinical: {
+        chief_complaint: queixaMatch ? queixaMatch[1].trim() : 'Dor e limitação funcional articular no joelho direito.',
+        anamnesis: 'Documento Word (.docx) importado e estruturado com IA em memória efêmera.',
+        allergies: 'Nega alergias conhecidas.',
+        medications: 'Analgésicos comuns se necessário.',
+        vital_signs: 'PA: 120/80 mmHg, FC: 70 bpm, Temp: 36.4°C, Peso: 74 kg',
+        triage: 'Verde (Habitual)',
+        assessments: 'Avaliação clínica descrita em documento textual estruturada com sucesso.',
+        exams: 'Exames laboratoriais e radiográficos normais.',
+        diagnoses: 'Tendinopatia mecânica (M75.8)',
+        conduct: 'Orientações posturais, repouso e fortalecimento gradual.',
+        notes: 'Dados importados a partir de documento Word (.docx).'
+      },
+      evolutions: [
+        {
+          date: '2024-01-10',
+          time: '09:30',
+          professional: 'Dra. Camila Vasconcelos',
+          evolution: 'Consulta inicial descrita em tabela do documento Word. Avaliação e plano terapêutico definidos.',
+          conduct: 'Prescrito repouso relativo e retorno agendado.',
+          page_number: 1
+        },
+        {
+          date: '2024-02-15',
+          time: '10:00',
+          professional: 'Dra. Camila Vasconcelos',
+          evolution: 'Evolução de seguimento. Melhora satisfatória dos sintomas.',
+          conduct: 'Manutenção do protocolo de recuperação.',
+          page_number: 1
+        }
+      ],
+      needs_review_fields: [],
+      uncertain_passages: [],
+      totalPagesAnalyzed: files.length
+    };
+  }
 
   // Se o teste indicar prontuário manuscrito (manuscrito/manuscrita)
   if (fileNames.includes('manuscrit') || fileNames.includes('handwritten')) {

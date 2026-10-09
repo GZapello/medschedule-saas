@@ -55,6 +55,7 @@ import { ClinicalDraftRecoveryModal } from '../clinical/ClinicalDraftRecoveryMod
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
 import { ProfessionalModuleHeader } from '../common/ProfessionalModuleHeader';
 import { ClinicalModuleEmptyState } from '../clinical/ClinicalModuleEmptyState';
+import { ClinicalModuleShell } from '../clinical/ClinicalModuleShell';
 
 interface OccupationalTherapyWorkspaceProps {
   initialPatientId?: string;
@@ -584,20 +585,30 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
     }
   ];
 
+  const toTabs = [
+    { id: 'dashboard', label: 'Painel Funcional', icon: LayoutDashboard },
+    { id: 'profile', label: 'Perfil Ocupacional', icon: User },
+    { id: 'adl', label: 'AVDs & AIVDs (6 Níveis)', icon: Activity },
+    { id: 'sensory', label: 'Perfil Sensorial (8 Sistemas)', icon: Eye },
+    { id: 'motor_cognitive', label: 'Motor & Cognitivo', icon: Brain },
+    { id: 'tests', label: 'Testes & Protocolos Externos', icon: FileText },
+    { id: 'goals', label: 'Metas Mensuráveis', icon: Target },
+    { id: 'home_program', label: 'Casa & Escola', icon: BookOpen },
+    { id: 'treatment_plans', label: 'Plano Singular', icon: Layers },
+    { id: 'assistive_tech', label: 'Tecnologia Assistiva', icon: Wrench },
+    { id: 'finish', label: 'Finalizar Atendimento', icon: CheckCircle2 }
+  ];
+
   return (
-    <div className="flex flex-col h-full bg-slate-50 text-slate-800">
-      {completion.dialog}
-      {/* CABEÇALHO DO MÓDULO ZEMDATO */}
-      <ProfessionalModuleHeader
-        icon={Hand}
-        iconGradient="from-teal-500 to-emerald-600"
-        iconShadow="shadow-teal-500/20"
-        title="ZemdaTO"
-        badgeLabel="Terapia Ocupacional Especializada"
-        badgeVariant="bg-teal-100 text-teal-800 border-teal-200"
-        description="Perfil ocupacional, AVDs padronizadas em 6 níveis, perfil sensorial, tecnologia assistiva e prontuário integrado."
-      >
-        {/* SWITCHER DE ÁREA DE ATUAÇÃO */}
+    <ClinicalModuleShell
+      title="ZemdaTO"
+      icon={Hand}
+      iconGradient="from-teal-500 to-emerald-600"
+      iconShadow="shadow-teal-500/20"
+      badgeLabel="Terapia Ocupacional Especializada"
+      badgeVariant="bg-teal-100 text-teal-800 border-teal-200"
+      description="Perfil ocupacional, AVDs padronizadas em 6 níveis, perfil sensorial, tecnologia assistiva e prontuário integrado."
+      filterSlot={
         <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl">
           <span className="text-[10px] font-extrabold uppercase text-slate-400">Área:</span>
           <select
@@ -613,88 +624,113 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
             <option value="hospitalar">Contextos Hospitalares / Leito</option>
           </select>
         </div>
-
-        <PatientSearchSelect
-          compact
-          value={selectedPatientId}
-          selectedPatient={selectedPatient}
-          disabled={!!initialAppointmentId}
-          onChange={(id, pat) => {
-            setSelectedPatientId(id);
-            if (pat) setSelectedPatient(pat);
-            else if (!id) setSelectedPatient(null);
-          }}
-        />
-
-        {selectedPatientId && (
-          <ClinicalQuickHeaderActions
-            onLoadSavedClinicalData={() => void loadPatientData(selectedPatientId, true)}
-            autosaveStatus={autosave.autosaveStatus}
-            lastSavedTime={autosave.lastSavedTime}
-            onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
-            onViewReports={() => setIsAIReportOpen(true)}
-            onFinishConsultation={() => selectedPatientId ? setActiveTab('finish') : showToast('Selecione um paciente para finalizar o atendimento.', 'info')}
-            finishLabel="Finalizar Atendimento"
-            showFinish={!completion.isCompleted}
-            isSubmitting={saving}
-            tools={toQuickTools}
-            toolsVariant="teal"
-            toolsLabel="Ferramentas"
+      }
+      selectedPatientId={selectedPatientId}
+      onSelectPatient={(id: string, pat?: any) => {
+        setSelectedPatientId(id);
+        if (pat) setSelectedPatient(pat);
+        else if (!id) setSelectedPatient(null);
+      }}
+      onClearPatient={() => {
+        setSelectedPatientId('');
+        setSelectedPatient(null);
+      }}
+      selectedPatient={selectedPatient}
+      isLockedContext={!!initialAppointmentId}
+      autosaveStatus={autosave.autosaveStatus}
+      lastSavedTime={autosave.lastSavedTime}
+      onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
+      onLoadSavedClinicalData={() => void loadPatientData(selectedPatientId, true)}
+      onViewReports={() => setIsAIReportOpen(true)}
+      reportsLabel="Relatórios"
+      tools={toQuickTools}
+      toolsVariant="teal"
+      toolsLabel="Ferramentas"
+      onFinishConsultation={() => selectedPatientId ? setActiveTab('finish') : showToast('Selecione um paciente para finalizar o atendimento.', 'info')}
+      finishLabel="Finalizar Atendimento"
+      showFinish={!completion.isCompleted}
+      isSubmitting={saving}
+      tabs={toTabs}
+      activeTab={activeTab}
+      onTabChange={tabId => setActiveTab(tabId as any)}
+      tabActiveVariant="bg-teal-600 text-white shadow-xs"
+      emptyStateColorVariant="teal"
+      emptyStateDescription="Escolha um paciente no menu superior para acessar o perfil ocupacional, escala de AVDs e plano de terapia ocupacional."
+      modalsSlot={
+        <>
+          {completion.dialog}
+          {selectedPatientId && (
+            <>
+              <TaskAnalysisModal
+                isOpen={isTaskAnalysisOpen}
+                onClose={() => setIsTaskAnalysisOpen(false)}
+                patientId={selectedPatientId}
+                patientName={selectedPatient?.full_name}
+              />
+              <RoutineMapModal
+                isOpen={isRoutineMapOpen}
+                onClose={() => setIsRoutineMapOpen(false)}
+                patientId={selectedPatientId}
+                patientName={selectedPatient?.full_name}
+              />
+              <OccupationalParticipationModal
+                isOpen={isParticipationOpen}
+                onClose={() => setIsParticipationOpen(false)}
+                patientId={selectedPatientId}
+                patientName={selectedPatient?.full_name}
+              />
+              <TOEvolutionReportModal
+                isOpen={isAIReportOpen}
+                onClose={() => setIsAIReportOpen(false)}
+                patientId={selectedPatientId}
+                patientName={selectedPatient?.full_name}
+                onInsertIntoConsultation={reportText => {
+                  setConsultationEvolution(prev => (prev ? `${prev}\n\n${reportText}` : reportText));
+                  setActiveTab('finish');
+                }}
+              />
+              <EvolutionComparisonModal
+                isOpen={isComparisonModalOpen}
+                onClose={() => setIsComparisonModalOpen(false)}
+                title={comparisonTitle}
+                items={comparisonItems}
+              />
+              {showPreviousRecordsModal && (
+                <PatientPreviousRecordsModal
+                  isOpen={showPreviousRecordsModal}
+                  onClose={() => setShowPreviousRecordsModal(false)}
+                  patientId={selectedPatientId}
+                  patientName={selectedPatient?.full_name}
+                />
+              )}
+              {showFollowUpModal && (
+                <PatientFollowUpDocumentModal
+                  isOpen={showFollowUpModal}
+                  onClose={() => setShowFollowUpModal(false)}
+                  patientId={selectedPatientId}
+                  patientName={selectedPatient?.full_name || 'Paciente'}
+                  moduleType="ZemdaTO"
+                  professionalName={currentUser?.name}
+                  professionalCouncil={currentUser?.registrationNumber ? (currentUser.registrationType ? `${currentUser.registrationType}: ${currentUser.registrationNumber}` : `CREFITO: ${currentUser.registrationNumber}`) : undefined}
+                  moduleData={{ treatmentPlanData: planForm }}
+                  initialGuidelines={planForm?.familyGuidelines || undefined}
+                  homeActivitiesText={planForm?.interventions || undefined}
+                />
+              )}
+            </>
+          )}
+          <ClinicalDraftRecoveryModal
+            isOpen={autosave.conflictModalOpen}
+            onClose={() => autosave.resolveConflict('local')}
+            serverDraftTime={autosave.serverDraftData?.updated_at || autosave.serverDraftData?.client_updated_at}
+            localDraftTime={autosave.localDraftData?.clientUpdatedAt}
+            onRecoverServer={() => autosave.resolveConflict('server')}
+            onKeepCurrent={() => autosave.resolveConflict('local')}
           />
-        )}
-      </ProfessionalModuleHeader>
-
-      {/* BARRA HORIZONTAL DE ABAS EXCLUSIVA (SEM INTERFERÊNCIA DE ATALHOS) */}
-      <div className="bg-white border-b border-slate-200 shrink-0">
-        <HorizontalTabNav scroll={tabScroll}>
-          <div {...tabScrollProps} className={`${tabScrollProps.className} flex items-center gap-1 py-1`}>
-            {[
-              { id: 'dashboard', label: 'Painel Funcional', icon: LayoutDashboard },
-              { id: 'profile', label: 'Perfil Ocupacional', icon: User },
-              { id: 'adl', label: 'AVDs & AIVDs (6 Níveis)', icon: Activity },
-              { id: 'sensory', label: 'Perfil Sensorial (8 Sistemas)', icon: Eye },
-              { id: 'motor_cognitive', label: 'Motor & Cognitivo', icon: Brain },
-              { id: 'tests', label: 'Testes & Protocolos Externos', icon: FileText },
-              { id: 'goals', label: 'Metas Mensuráveis', icon: Target },
-              { id: 'home_program', label: 'Casa & Escola', icon: BookOpen },
-              { id: 'treatment_plans', label: 'Plano Singular', icon: Layers },
-              { id: 'assistive_tech', label: 'Tecnologia Assistiva', icon: Wrench },
-              { id: 'finish', label: 'Finalizar Atendimento', icon: CheckCircle2 }
-            ].map(tab => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  data-tour={`tab-${tab.id}`}
-                  data-active={isActive}
-                  type="button"
-                  onClick={() => setActiveTab(tab.id as any)}
-                  className={`flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap transition-colors cursor-pointer shrink-0 ${
-                    isActive
-                      ? 'border-teal-600 text-teal-700 bg-teal-50/50'
-                      : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'
-                  }`}
-                >
-                  <Icon className={`w-4 h-4 ${isActive ? 'text-teal-600' : 'text-slate-400'}`} />
-                  <span>{tab.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </HorizontalTabNav>
-      </div>
-
-      {/* CONTEÚDO PRINCIPAL */}
-      <div className="flex-1 p-6 overflow-y-auto">
-        {!selectedPatientId ? (
-          <ClinicalModuleEmptyState
-            icon={Hand}
-            colorVariant="teal"
-            description="Escolha um paciente no menu superior para acessar o perfil ocupacional, escala de AVDs e plano de terapia ocupacional."
-          />
-        ) : (
-          <div className="max-w-6xl mx-auto space-y-6">
+        </>
+      }
+    >
+      <div className="max-w-6xl mx-auto space-y-6">
 
 
             {/* ABA 0: PAINEL FUNCIONAL LONGITUDINAL */}
@@ -1287,80 +1323,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                 </div>
               </div>
             )}
-
           </div>
-        )}
-      </div>
-
-      {/* MODAIS AVANÇADOS DE TERAPIA OCUPACIONAL */}
-      {selectedPatientId && (
-        <>
-          <TaskAnalysisModal
-            isOpen={isTaskAnalysisOpen}
-            onClose={() => setIsTaskAnalysisOpen(false)}
-            patientId={selectedPatientId}
-            patientName={selectedPatient?.full_name}
-          />
-          <RoutineMapModal
-            isOpen={isRoutineMapOpen}
-            onClose={() => setIsRoutineMapOpen(false)}
-            patientId={selectedPatientId}
-            patientName={selectedPatient?.full_name}
-          />
-          <OccupationalParticipationModal
-            isOpen={isParticipationOpen}
-            onClose={() => setIsParticipationOpen(false)}
-            patientId={selectedPatientId}
-            patientName={selectedPatient?.full_name}
-          />
-          <TOEvolutionReportModal
-            isOpen={isAIReportOpen}
-            onClose={() => setIsAIReportOpen(false)}
-            patientId={selectedPatientId}
-            patientName={selectedPatient?.full_name}
-            onInsertIntoConsultation={reportText => {
-              setConsultationEvolution(prev => (prev ? `${prev}\n\n${reportText}` : reportText));
-              setActiveTab('finish');
-            }}
-          />
-          <EvolutionComparisonModal
-            isOpen={isComparisonModalOpen}
-            onClose={() => setIsComparisonModalOpen(false)}
-            title={comparisonTitle}
-            items={comparisonItems}
-          />
-          {showPreviousRecordsModal && selectedPatientId && (
-            <PatientPreviousRecordsModal
-              isOpen={showPreviousRecordsModal}
-              onClose={() => setShowPreviousRecordsModal(false)}
-              patientId={selectedPatientId}
-              patientName={selectedPatient?.full_name}
-            />
-          )}
-          {showFollowUpModal && selectedPatientId && (
-            <PatientFollowUpDocumentModal
-              isOpen={showFollowUpModal}
-              onClose={() => setShowFollowUpModal(false)}
-              patientId={selectedPatientId}
-              patientName={selectedPatient?.full_name || 'Paciente'}
-              moduleType="ZemdaTO"
-              professionalName={currentUser?.name}
-              professionalCouncil={currentUser?.registrationNumber ? (currentUser.registrationType ? `${currentUser.registrationType}: ${currentUser.registrationNumber}` : `CREFITO: ${currentUser.registrationNumber}`) : undefined}
-              moduleData={{ treatmentPlanData: planForm }}
-              initialGuidelines={planForm?.familyGuidelines || undefined}
-              homeActivitiesText={planForm?.interventions || undefined}
-            />
-          )}
-          <ClinicalDraftRecoveryModal
-            isOpen={autosave.conflictModalOpen}
-            onClose={() => autosave.resolveConflict('local')}
-            serverDraftTime={autosave.serverDraftData?.updated_at || autosave.serverDraftData?.client_updated_at}
-            localDraftTime={autosave.localDraftData?.clientUpdatedAt}
-            onRecoverServer={() => autosave.resolveConflict('server')}
-            onKeepCurrent={() => autosave.resolveConflict('local')}
-          />
-        </>
-      )}
-    </div>
+    </ClinicalModuleShell>
   );
 };

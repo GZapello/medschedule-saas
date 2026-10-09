@@ -43,9 +43,7 @@ import { useClinicalAutosave } from '../../hooks/useClinicalAutosave';
 import { useHorizontalTabScroll, HorizontalTabNav } from '../../hooks/useHorizontalTabScroll';
 import { ClinicalQuickHeaderActions, ClinicalQuickToolItem } from '../clinical/ClinicalQuickHeaderActions';
 import { ClinicalDraftRecoveryModal } from '../clinical/ClinicalDraftRecoveryModal';
-import { PatientSearchSelect } from '../common/PatientSearchSelect';
-import { ProfessionalModuleHeader } from '../common/ProfessionalModuleHeader';
-import { ClinicalModuleEmptyState } from '../clinical/ClinicalModuleEmptyState';
+import { ClinicalModuleShell, ClinicalModuleTabItem } from '../clinical/ClinicalModuleShell';
 import { ZemdaBodyCanvas } from '../zemda-body/ZemdaBodyCanvas';
 import { getRegionLabel } from '../zemda-body/bodyRegionsData';
 import { RegionalPhysioAssessmentModal } from './RegionalPhysioAssessmentModal';
@@ -66,6 +64,21 @@ const PersonalAssessmentModal = lazy(() =>
 const PersonalAssessmentComparisonModal = lazy(() =>
   import('../personal/PersonalAssessmentComparisonModal').then(m => ({ default: m.PersonalAssessmentComparisonModal }))
 );
+
+const FISIO_TABS: ClinicalModuleTabItem[] = [
+  { id: 'evolution', label: '1. Evolução', icon: Activity },
+  { id: 'anamnesis', label: '2. Anamnese', icon: FileText },
+  { id: 'kinetic_functional', label: '3. Cinético-Funcional', icon: Sliders },
+  { id: 'pain_zemdabody', label: '4. Dor & Zemda360', icon: AlertCircle },
+  { id: 'evaluations', label: '5. Avaliações', icon: Target },
+  { id: 'posture_gait', label: '6. Postura & Marcha', icon: User },
+  { id: 'cbdf', label: '7. CBDF COFFITO', icon: ShieldCheck },
+  { id: 'treatment_plan', label: '8. Plano RBPF', icon: Calendar },
+  { id: 'goals', label: '9. Metas', icon: Target },
+  { id: 'external_tests', label: '10. Testes Externos', icon: FileText },
+  { id: 'home_exercises', label: '11. Exercícios em Casa', icon: Dumbbell },
+  { id: 'finish', label: '12. Finalização', icon: CheckCircle2 }
+];
 
 interface PhysiotherapyWorkspaceProps {
   initialPatientId?: string;
@@ -641,122 +654,360 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
   }, [homeExercises]);
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 text-slate-800">
-      {completion.dialog}
+    <ClinicalModuleShell
+      title="ZemdaFisio"
+      icon={Activity}
+      iconGradient="from-teal-500 to-indigo-600"
+      iconShadow="shadow-teal-500/20"
+      badgeLabel="Fisioterapia Especializada"
+      badgeVariant="bg-teal-100 text-teal-800 border-teal-200"
+      description="Evolução, ADM/Goniometria, Escala Oxford, CBDF COFFITO 610/2025 e RBPF 618/2025."
+      selectedPatientId={selectedPatientId}
+      selectedPatient={selectedPatient}
+      onSelectPatient={(id, pat) => {
+        setSelectedPatientId(id);
+        if (pat) setSelectedPatient(pat);
+        else if (!id) setSelectedPatient(null);
+      }}
+      isLockedContext={!!initialAppointmentId}
+      autosaveStatus={autosave.autosaveStatus}
+      lastSavedTime={autosave.lastSavedTime}
+      onLoadSavedClinicalData={() => void loadPatientData(selectedPatientId, true)}
+      onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
+      onViewReports={() => setShowFollowUpModal(true)}
+      reportsLabel="Relatórios & Guias"
+      onFinishConsultation={() => selectedPatientId ? setActiveTab('finish') : showToast('Selecione um paciente para finalizar o atendimento.', 'info')}
+      finishLabel="Finalizar Atendimento"
+      showFinish={!completion.isCompleted}
+      isSubmitting={saving}
+      tools={[
+        {
+          id: 'postural_assessment',
+          label: 'Avaliação Postural',
+          icon: Camera,
+          onClick: () => {
+            setEditingPostureAssessment(null);
+            setIsPostureModalOpen(true);
+          }
+        },
+        {
+          id: 'exercise_guide',
+          label: 'Guia de Exercícios',
+          icon: Printer,
+          onClick: () => setShowFollowUpModal(true)
+        }
+      ]}
+      toolsVariant="teal"
+      toolsLabel="Ferramentas"
+      tabs={FISIO_TABS}
+      activeTab={activeTab}
+      onTabChange={tabId => setActiveTab(tabId as any)}
+      tabActiveVariant="bg-teal-600 text-white shadow-xs"
+      emptyStateColorVariant="teal"
+      emptyStateDescription={
+        activeTab === 'evaluations'
+          ? 'Selecione um paciente para visualizar ou registrar avaliações.'
+          : 'Escolha um paciente no menu superior para iniciar a avaliação cinético-funcional, goniometria e plano terapêutico.'
+      }
+      contentMaxWidth="max-w-6xl mx-auto"
+      modalsSlot={
+        <>
+          {completion.dialog}
+          {showPreviousRecordsModal && selectedPatientId && (
+            <PatientPreviousRecordsModal
+              patientId={selectedPatientId}
+              patientName={selectedPatient?.full_name}
+              onClose={() => setShowPreviousRecordsModal(false)}
+            />
+          )}
 
-      {/* CABEÇALHO DO MÓDULO ZEMDAFISIO */}
-      <ProfessionalModuleHeader
-        icon={Activity}
-        iconGradient="from-teal-500 to-indigo-600"
-        iconShadow="shadow-teal-500/20"
-        title="ZemdaFisio"
-        badgeLabel="Fisioterapia Especializada"
-        badgeVariant="bg-teal-100 text-teal-800 border-teal-200"
-        description="Evolução, ADM/Goniometria, Escala Oxford, CBDF COFFITO 610/2025 e RBPF 618/2025."
-      >
-        <PatientSearchSelect
-          compact
-          value={selectedPatientId}
-          selectedPatient={selectedPatient}
-          disabled={!!initialAppointmentId}
-          onChange={(id, pat) => {
-            setSelectedPatientId(id);
-            if (pat) setSelectedPatient(pat);
-            else if (!id) setSelectedPatient(null);
-          }}
-        />
+          {showFollowUpModal && selectedPatientId && (
+            <PatientFollowUpDocumentModal
+              isOpen={showFollowUpModal}
+              onClose={() => setShowFollowUpModal(false)}
+              patientId={selectedPatientId}
+              patientName={selectedPatient?.full_name || 'Paciente'}
+              moduleType="ZemdaFisio"
+              professionalName={currentUser?.name}
+              professionalCouncil={currentUser?.registrationNumber ? (currentUser.registrationType ? `${currentUser.registrationType}: ${currentUser.registrationNumber}` : `CREFITO: ${currentUser.registrationNumber}`) : undefined}
+              moduleData={{ conducts, homeExercisesText }}
+              initialGuidelines={conducts || 'Seguir a rotina de exercícios com os cuidados orientados em sessão.'}
+              homeExercisesText={homeExercisesText}
+            />
+          )}
 
-        {selectedPatientId && (
-          <ClinicalQuickHeaderActions
-            onLoadSavedClinicalData={() => void loadPatientData(selectedPatientId, true)}
-            autosaveStatus={autosave.autosaveStatus}
-            lastSavedTime={autosave.lastSavedTime}
-            onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
-            onViewReports={() => setShowFollowUpModal(true)}
-            onFinishConsultation={() => selectedPatientId ? setActiveTab('finish') : showToast('Selecione um paciente para finalizar o atendimento.', 'info')}
-            finishLabel="Finalizar Atendimento"
-            showFinish={!completion.isCompleted}
-            isSubmitting={saving}
-            tools={[
-              {
-                id: 'postural_assessment',
-                label: 'Avaliação Postural',
-                icon: Camera,
-                onClick: () => {
-                  setEditingPostureAssessment(null);
-                  setIsPostureModalOpen(true);
+          {showRegionPickerModal && selectedPatientId && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+              <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-xl overflow-hidden flex flex-col max-h-[90vh]">
+                <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-teal-50/60 to-white">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-teal-600 text-white flex items-center justify-center shadow-xs">
+                      <Target className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-800">
+                        Selecionar Região Anatômica
+                      </h3>
+                      <p className="text-xs text-slate-500">
+                        Escolha a articulação ou segmento para a avaliação
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowRegionPickerModal(false)}
+                    className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="p-6 overflow-y-auto space-y-5">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2.5">
+                      Regiões Frequentes
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {REGIONAL_OPTIONS.map(opt => (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedRegionId(opt.id);
+                            setCustomRegionName(opt.label);
+                            setCustomRegionSide(opt.side);
+                            setEditingRegionalEval(null);
+                            setShowRegionPickerModal(false);
+                            setShowRegionalAssessmentModal(true);
+                          }}
+                          className="p-3 text-left rounded-xl border border-slate-200 hover:border-teal-400 hover:bg-teal-50/50 hover:shadow-xs transition-all flex items-center justify-between group cursor-pointer"
+                        >
+                          <div>
+                            <span className="block text-xs font-bold text-slate-800 group-hover:text-teal-900">
+                              {opt.label}
+                            </span>
+                            <span className="text-[10px] text-slate-500">
+                              {formatLaterality(opt.side)}
+                            </span>
+                          </div>
+                          <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-teal-600 group-hover:translate-x-0.5 transition-all" />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="pt-4 border-t border-slate-100">
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                      Ou informe outra região
+                    </label>
+                    <form
+                      onSubmit={e => {
+                        e.preventDefault();
+                        if (!customRegionName.trim()) return;
+                        const regId = 'custom_' + customRegionName.trim().toLowerCase().replace(/\s+/g, '_');
+                        setSelectedRegionId(regId);
+                        setEditingRegionalEval(null);
+                        setShowRegionPickerModal(false);
+                        setShowRegionalAssessmentModal(true);
+                      }}
+                      className="space-y-3"
+                    >
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <div className="sm:col-span-2">
+                          <input
+                            type="text"
+                            value={customRegionName}
+                            onChange={e => setCustomRegionName(e.target.value)}
+                            placeholder="Ex: Articulação Temporomandibular (ATM)..."
+                            className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <select
+                            value={customRegionSide}
+                            onChange={e => setCustomRegionSide(e.target.value as any)}
+                            className="w-full px-2.5 py-2 text-xs rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-teal-500 focus:outline-none font-semibold text-slate-700"
+                          >
+                            <option value="right">Direito</option>
+                            <option value="left">Esquerdo</option>
+                            <option value="midline">Linha Média / Bilateral</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="flex justify-end gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setShowRegionPickerModal(false)}
+                          className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={!customRegionName.trim()}
+                          className="px-4 py-2 rounded-xl text-xs font-bold bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white transition shadow-xs cursor-pointer"
+                        >
+                          Iniciar Avaliação
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showRegionalAssessmentModal && selectedPatientId && selectedRegionId && (
+            <RegionalPhysioAssessmentModal
+              isOpen={showRegionalAssessmentModal}
+              onClose={() => setShowRegionalAssessmentModal(false)}
+              onSaved={(saved) => {
+                loadRegionalSummary(selectedPatientId);
+                loadRegionalEvaluations(selectedPatientId);
+                if (saved.pain_json) {
+                  const p = typeof saved.pain_json === 'string' ? JSON.parse(saved.pain_json) : saved.pain_json;
+                  if (p?.score !== undefined) setPainScore(p.score);
                 }
-              },
-              {
-                id: 'exercise_guide',
-                label: 'Guia de Exercícios',
-                icon: Printer,
-                onClick: () => setShowFollowUpModal(true)
+              }}
+              patientId={selectedPatientId}
+              patientName={selectedPatient?.full_name || 'Paciente'}
+              appointmentId={initialAppointmentId}
+              regionId={editingRegionalEval?.region_id || selectedRegionId}
+              regionLabel={
+                editingRegionalEval?.region_label ||
+                (Array.isArray(regionalSummary) && regionalSummary.find(r => r.region_id === selectedRegionId)?.region_label) ||
+                REGIONAL_OPTIONS.find(o => o.id === selectedRegionId)?.label ||
+                customRegionName ||
+                getRegionLabel(selectedRegionId, bodyModel)
               }
-            ]}
-            toolsVariant="teal"
-            toolsLabel="Ferramentas"
+              side={
+                editingRegionalEval?.side ||
+                (Array.isArray(regionalSummary) && (regionalSummary.find(r => r.region_id === selectedRegionId)?.side as any)) ||
+                (REGIONAL_OPTIONS.find(o => o.id === selectedRegionId)?.side as any) ||
+                customRegionSide ||
+                detectSideFromRegionId(selectedRegionId)
+              }
+              initialData={editingRegionalEval}
+            />
+          )}
+
+          {showComparisonModal && selectedPatientId && selectedRegionId && (
+            <RegionalLongitudinalComparisonModal
+              isOpen={showComparisonModal}
+              onClose={() => setShowComparisonModal(false)}
+              patientId={selectedPatientId}
+              patientName={selectedPatient?.full_name || 'Paciente'}
+              regionId={selectedRegionId}
+              regionLabel={
+                (Array.isArray(regionalSummary) && regionalSummary.find(r => r.region_id === selectedRegionId)?.region_label) ||
+                REGIONAL_OPTIONS.find(o => o.id === selectedRegionId)?.label ||
+                customRegionName ||
+                getRegionLabel(selectedRegionId, bodyModel)
+              }
+              side={
+                (Array.isArray(regionalSummary) && regionalSummary.find(r => r.region_id === selectedRegionId)?.side) ||
+                (REGIONAL_OPTIONS.find(o => o.id === selectedRegionId)?.side as any) ||
+                customRegionSide ||
+                detectSideFromRegionId(selectedRegionId)
+              }
+              onNewAssessmentRequested={() => {
+                setEditingRegionalEval(null);
+                setShowRegionalAssessmentModal(true);
+              }}
+            />
+          )}
+
+          {showRegionalListModal && selectedPatientId && selectedRegionId && (
+            <RegionalEvaluationsListModal
+              isOpen={showRegionalListModal}
+              onClose={() => setShowRegionalListModal(false)}
+              patientId={selectedPatientId}
+              patientName={selectedPatient?.full_name || 'Paciente'}
+              regionId={selectedRegionId}
+              regionLabel={
+                (Array.isArray(regionalSummary) && regionalSummary.find(r => r.region_id === selectedRegionId)?.region_label) ||
+                REGIONAL_OPTIONS.find(o => o.id === selectedRegionId)?.label ||
+                customRegionName ||
+                getRegionLabel(selectedRegionId, bodyModel)
+              }
+              side={
+                (Array.isArray(regionalSummary) && regionalSummary.find(r => r.region_id === selectedRegionId)?.side) ||
+                (REGIONAL_OPTIONS.find(o => o.id === selectedRegionId)?.side as any) ||
+                customRegionSide ||
+                detectSideFromRegionId(selectedRegionId)
+              }
+              onSelectForEdit={(ev) => {
+                setShowRegionalListModal(false);
+                setEditingRegionalEval(ev);
+                setShowRegionalAssessmentModal(true);
+              }}
+              onNewAssessmentRequested={() => {
+                setShowRegionalListModal(false);
+                setEditingRegionalEval(null);
+                setShowRegionalAssessmentModal(true);
+              }}
+              onCompareRequested={() => {
+                setShowRegionalListModal(false);
+                setShowComparisonModal(true);
+              }}
+            />
+          )}
+
+          <ClinicalDraftRecoveryModal
+            isOpen={autosave.conflictModalOpen}
+            onClose={() => autosave.resolveConflict('local')}
+            serverDraftTime={autosave.serverDraftData?.updated_at || autosave.serverDraftData?.client_updated_at}
+            localDraftTime={autosave.localDraftData?.clientUpdatedAt}
+            onRecoverServer={() => autosave.resolveConflict('server')}
+            onKeepCurrent={() => autosave.resolveConflict('local')}
           />
-        )}
-      </ProfessionalModuleHeader>
 
-      {/* 12 ABAS DE NAVEGAÇÃO ESTRUTURADAS (Trilha Limpa com Rolagem Livre) */}
-      <div className="bg-white border-b border-slate-200 shrink-0">
-        <HorizontalTabNav scroll={tabScroll}>
-          <div {...tabScrollProps} className={`${tabScrollProps.className} flex items-center gap-1 py-1`}>
-            {[
-              { id: 'evolution', label: '1. Evolução', icon: Activity },
-              { id: 'anamnesis', label: '2. Anamnese', icon: FileText },
-              { id: 'kinetic_functional', label: '3. Cinético-Funcional', icon: Sliders },
-              { id: 'pain_zemdabody', label: '4. Dor & Zemda360', icon: AlertCircle },
-              { id: 'evaluations', label: '5. Avaliações', icon: Target },
-              { id: 'posture_gait', label: '6. Postura & Marcha', icon: User },
-              { id: 'cbdf', label: '7. CBDF COFFITO', icon: ShieldCheck },
-              { id: 'treatment_plan', label: '8. Plano RBPF', icon: Calendar },
-              { id: 'goals', label: '9. Metas', icon: Target },
-              { id: 'external_tests', label: '10. Testes Externos', icon: FileText },
-              { id: 'home_exercises', label: '11. Exercícios em Casa', icon: Dumbbell },
-              { id: 'finish', label: '12. Finalização', icon: CheckCircle2 }
-            ].map(tab => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  data-tour={`tab-${tab.id}`}
-                  data-active={isActive}
-                  type="button"
-                  onClick={() => setActiveTab(tab.id as any)}
-                  className={`flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap transition-colors cursor-pointer shrink-0 ${
-                    isActive
-                      ? 'border-teal-600 text-teal-700 bg-teal-50/50'
-                      : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'
-                  }`}
-                >
-                  <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-teal-600' : 'text-slate-400'}`} />
-                  <span>{tab.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </HorizontalTabNav>
-      </div>
+          {isPostureModalOpen && selectedPatientId && (
+            <Suspense fallback={null}>
+              <PersonalAssessmentModal
+                isOpen={isPostureModalOpen}
+                onClose={() => {
+                  setIsPostureModalOpen(false);
+                  setEditingPostureAssessment(null);
+                }}
+                onSaved={() => {
+                  loadPosturalAssessments(selectedPatientId);
+                }}
+                student={{
+                  id: selectedPatientId,
+                  name: selectedPatient?.full_name || selectedPatient?.name || 'Paciente',
+                  birth_date: selectedPatient?.birth_date,
+                  gender: selectedPatient?.gender
+                } as any}
+                assessmentToEdit={editingPostureAssessment}
+                postureOnly={true}
+                sourceModule="ZemdaFisio"
+                clientTermLabel="Paciente"
+              />
+            </Suspense>
+          )}
 
-      {/* CONTEÚDO PRINCIPAL */}
-      <div className="flex-1 p-6 overflow-y-auto">
-        {!selectedPatientId ? (
-          <ClinicalModuleEmptyState
-            icon={Activity}
-            colorVariant="teal"
-            description={activeTab === 'evaluations'
-              ? 'Selecione um paciente para visualizar ou registrar avaliações.'
-              : 'Escolha um paciente no menu superior para iniciar a avaliação cinético-funcional, goniometria e plano terapêutico.'}
-          />
-        ) : (
-          <div className="max-w-6xl mx-auto space-y-6">
-
-            {/* ABA 1: EVOLUÇÃO CLÍNICA */}
-            {activeTab === 'evolution' && (
+          {isPostureComparisonOpen && selectedPatientId && (
+            <Suspense fallback={null}>
+              <PersonalAssessmentComparisonModal
+                isOpen={isPostureComparisonOpen}
+                onClose={() => setIsPostureComparisonOpen(false)}
+                student={{
+                  id: selectedPatientId,
+                  name: selectedPatient?.full_name || selectedPatient?.name || 'Paciente'
+                } as any}
+                assessmentsList={posturalAssessments.filter(a => a.has_posture)}
+                postureOnly={true}
+              />
+            </Suspense>
+          )}
+        </>
+      }
+    >
+      <div className="space-y-6">
+        {/* ABA 1: EVOLUÇÃO CLÍNICA */}
+        {activeTab === 'evolution' && (
               <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-5">
                 <div className="flex items-center justify-between pb-4 border-b border-slate-100">
                   <div>
@@ -2013,307 +2264,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
               </div>
             )}
 
-          </div>
-        )}
       </div>
-
-      {/* Modal de Prontuários Anteriores */}
-      {showPreviousRecordsModal && selectedPatientId && (
-        <PatientPreviousRecordsModal
-          patientId={selectedPatientId}
-          patientName={selectedPatient?.full_name}
-          onClose={() => setShowPreviousRecordsModal(false)}
-        />
-      )}
-
-      {/* Modal Guia de Exercícios para o Paciente (PDF) */}
-      {showFollowUpModal && selectedPatientId && (
-        <PatientFollowUpDocumentModal
-          isOpen={showFollowUpModal}
-          onClose={() => setShowFollowUpModal(false)}
-          patientId={selectedPatientId}
-          patientName={selectedPatient?.full_name || 'Paciente'}
-          moduleType="ZemdaFisio"
-          professionalName={currentUser?.name}
-          professionalCouncil={currentUser?.registrationNumber ? (currentUser.registrationType ? `${currentUser.registrationType}: ${currentUser.registrationNumber}` : `CREFITO: ${currentUser.registrationNumber}`) : undefined}
-          moduleData={{ conducts, homeExercisesText }}
-          initialGuidelines={conducts || 'Seguir a rotina de exercícios com os cuidados orientados em sessão.'}
-          homeExercisesText={homeExercisesText}
-        />
-      )}
-
-      {/* Modal Seletor de Região Anatômica para Nova Avaliação */}
-      {showRegionPickerModal && selectedPatientId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-xl overflow-hidden flex flex-col max-h-[90vh]">
-            {/* Header */}
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-teal-50/60 to-white">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-teal-600 text-white flex items-center justify-center shadow-xs">
-                  <Target className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-slate-800">
-                    Selecionar Região Anatômica
-                  </h3>
-                  <p className="text-xs text-slate-500">
-                    Escolha a articulação ou segmento para a avaliação
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowRegionPickerModal(false)}
-                className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Content */}
-            <div className="p-6 overflow-y-auto space-y-5">
-              {/* Regiões Frequentes */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2.5">
-                  Regiões Frequentes
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {REGIONAL_OPTIONS.map(opt => (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedRegionId(opt.id);
-                        setCustomRegionName(opt.label);
-                        setCustomRegionSide(opt.side);
-                        setEditingRegionalEval(null);
-                        setShowRegionPickerModal(false);
-                        setShowRegionalAssessmentModal(true);
-                      }}
-                      className="p-3 text-left rounded-xl border border-slate-200 hover:border-teal-400 hover:bg-teal-50/50 hover:shadow-xs transition-all flex items-center justify-between group cursor-pointer"
-                    >
-                      <div>
-                        <span className="block text-xs font-bold text-slate-800 group-hover:text-teal-900">
-                          {opt.label}
-                        </span>
-                        <span className="text-[10px] text-slate-500">
-                          {formatLaterality(opt.side)}
-                        </span>
-                      </div>
-                      <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-teal-600 group-hover:translate-x-0.5 transition-all" />
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Região Personalizada */}
-              <div className="pt-4 border-t border-slate-100">
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                  Ou informe outra região
-                </label>
-                <form
-                  onSubmit={e => {
-                    e.preventDefault();
-                    if (!customRegionName.trim()) return;
-                    const regId = 'custom_' + customRegionName.trim().toLowerCase().replace(/\s+/g, '_');
-                    setSelectedRegionId(regId);
-                    setEditingRegionalEval(null);
-                    setShowRegionPickerModal(false);
-                    setShowRegionalAssessmentModal(true);
-                  }}
-                  className="space-y-3"
-                >
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    <div className="sm:col-span-2">
-                      <input
-                        type="text"
-                        value={customRegionName}
-                        onChange={e => setCustomRegionName(e.target.value)}
-                        placeholder="Ex: Articulação Temporomandibular (ATM)..."
-                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <select
-                        value={customRegionSide}
-                        onChange={e => setCustomRegionSide(e.target.value as any)}
-                        className="w-full px-2.5 py-2 text-xs rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-teal-500 focus:outline-none font-semibold text-slate-700"
-                      >
-                        <option value="right">Direito</option>
-                        <option value="left">Esquerdo</option>
-                        <option value="midline">Linha Média / Bilateral</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="flex justify-end gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => setShowRegionPickerModal(false)}
-                      className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
-                    >
-                      Cancelar
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={!customRegionName.trim()}
-                      className="px-4 py-2 rounded-xl text-xs font-bold bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white transition shadow-xs cursor-pointer"
-                    >
-                      Iniciar Avaliação
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modais de Avaliação Regional Zemda360 */}
-      {showRegionalAssessmentModal && selectedPatientId && selectedRegionId && (
-        <RegionalPhysioAssessmentModal
-          isOpen={showRegionalAssessmentModal}
-          onClose={() => setShowRegionalAssessmentModal(false)}
-          onSaved={(saved) => {
-            loadRegionalSummary(selectedPatientId);
-            loadRegionalEvaluations(selectedPatientId);
-            if (saved.pain_json) {
-              const p = typeof saved.pain_json === 'string' ? JSON.parse(saved.pain_json) : saved.pain_json;
-              if (p?.score !== undefined) setPainScore(p.score);
-            }
-          }}
-          patientId={selectedPatientId}
-          patientName={selectedPatient?.full_name || 'Paciente'}
-          appointmentId={initialAppointmentId}
-          regionId={editingRegionalEval?.region_id || selectedRegionId}
-          regionLabel={
-            editingRegionalEval?.region_label ||
-            (Array.isArray(regionalSummary) && regionalSummary.find(r => r.region_id === selectedRegionId)?.region_label) ||
-            REGIONAL_OPTIONS.find(o => o.id === selectedRegionId)?.label ||
-            customRegionName ||
-            getRegionLabel(selectedRegionId, bodyModel)
-          }
-          side={
-            editingRegionalEval?.side ||
-            (Array.isArray(regionalSummary) && (regionalSummary.find(r => r.region_id === selectedRegionId)?.side as any)) ||
-            (REGIONAL_OPTIONS.find(o => o.id === selectedRegionId)?.side as any) ||
-            customRegionSide ||
-            detectSideFromRegionId(selectedRegionId)
-          }
-          initialData={editingRegionalEval}
-        />
-      )}
-
-      {showComparisonModal && selectedPatientId && selectedRegionId && (
-        <RegionalLongitudinalComparisonModal
-          isOpen={showComparisonModal}
-          onClose={() => setShowComparisonModal(false)}
-          patientId={selectedPatientId}
-          patientName={selectedPatient?.full_name || 'Paciente'}
-          regionId={selectedRegionId}
-          regionLabel={
-            (Array.isArray(regionalSummary) && regionalSummary.find(r => r.region_id === selectedRegionId)?.region_label) ||
-            REGIONAL_OPTIONS.find(o => o.id === selectedRegionId)?.label ||
-            customRegionName ||
-            getRegionLabel(selectedRegionId, bodyModel)
-          }
-          side={
-            (Array.isArray(regionalSummary) && regionalSummary.find(r => r.region_id === selectedRegionId)?.side) ||
-            (REGIONAL_OPTIONS.find(o => o.id === selectedRegionId)?.side as any) ||
-            customRegionSide ||
-            detectSideFromRegionId(selectedRegionId)
-          }
-          onNewAssessmentRequested={() => {
-            setEditingRegionalEval(null);
-            setShowRegionalAssessmentModal(true);
-          }}
-        />
-      )}
-
-      {showRegionalListModal && selectedPatientId && selectedRegionId && (
-        <RegionalEvaluationsListModal
-          isOpen={showRegionalListModal}
-          onClose={() => setShowRegionalListModal(false)}
-          patientId={selectedPatientId}
-          patientName={selectedPatient?.full_name || 'Paciente'}
-          regionId={selectedRegionId}
-          regionLabel={
-            (Array.isArray(regionalSummary) && regionalSummary.find(r => r.region_id === selectedRegionId)?.region_label) ||
-            REGIONAL_OPTIONS.find(o => o.id === selectedRegionId)?.label ||
-            customRegionName ||
-            getRegionLabel(selectedRegionId, bodyModel)
-          }
-          side={
-            (Array.isArray(regionalSummary) && regionalSummary.find(r => r.region_id === selectedRegionId)?.side) ||
-            (REGIONAL_OPTIONS.find(o => o.id === selectedRegionId)?.side as any) ||
-            customRegionSide ||
-            detectSideFromRegionId(selectedRegionId)
-          }
-          onSelectForEdit={(ev) => {
-            setShowRegionalListModal(false);
-            setEditingRegionalEval(ev);
-            setShowRegionalAssessmentModal(true);
-          }}
-          onNewAssessmentRequested={() => {
-            setShowRegionalListModal(false);
-            setEditingRegionalEval(null);
-            setShowRegionalAssessmentModal(true);
-          }}
-          onCompareRequested={() => {
-            setShowRegionalListModal(false);
-            setShowComparisonModal(true);
-          }}
-        />
-      )}
-
-      <ClinicalDraftRecoveryModal
-        isOpen={autosave.conflictModalOpen}
-        onClose={() => autosave.resolveConflict('local')}
-        serverDraftTime={autosave.serverDraftData?.updated_at || autosave.serverDraftData?.client_updated_at}
-        localDraftTime={autosave.localDraftData?.clientUpdatedAt}
-        onRecoverServer={() => autosave.resolveConflict('server')}
-        onKeepCurrent={() => autosave.resolveConflict('local')}
-      />
-
-      {isPostureModalOpen && selectedPatientId && (
-        <Suspense fallback={null}>
-          <PersonalAssessmentModal
-            isOpen={isPostureModalOpen}
-            onClose={() => {
-              setIsPostureModalOpen(false);
-              setEditingPostureAssessment(null);
-            }}
-            onSaved={() => {
-              loadPosturalAssessments(selectedPatientId);
-            }}
-            student={{
-              id: selectedPatientId,
-              name: selectedPatient?.full_name || selectedPatient?.name || 'Paciente',
-              birth_date: selectedPatient?.birth_date,
-              gender: selectedPatient?.gender
-            } as any}
-            assessmentToEdit={editingPostureAssessment}
-            postureOnly={true}
-            sourceModule="ZemdaFisio"
-            clientTermLabel="Paciente"
-          />
-        </Suspense>
-      )}
-
-      {isPostureComparisonOpen && selectedPatientId && (
-        <Suspense fallback={null}>
-          <PersonalAssessmentComparisonModal
-            isOpen={isPostureComparisonOpen}
-            onClose={() => setIsPostureComparisonOpen(false)}
-            student={{
-              id: selectedPatientId,
-              name: selectedPatient?.full_name || selectedPatient?.name || 'Paciente'
-            } as any}
-            assessmentsList={posturalAssessments.filter(a => a.has_posture)}
-            postureOnly={true}
-          />
-        </Suspense>
-      )}
-    </div>
+    </ClinicalModuleShell>
   );
 };

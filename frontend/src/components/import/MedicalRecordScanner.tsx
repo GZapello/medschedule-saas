@@ -219,24 +219,38 @@ export const MedicalRecordScanner: React.FC<MedicalRecordScannerProps> = ({
     const rawFiles = Array.from(fileList);
     if (rawFiles.length === 0) return;
 
-    const validMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg', 'application/pdf'];
+    const validMimes = [
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+      'image/jpg',
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/docx',
+      'application/msword'
+    ];
     const newPages: ScannedPageItem[] = [];
 
     for (let i = 0; i < rawFiles.length; i++) {
       let f = rawFiles[i];
       let mime = f.type.toLowerCase();
+      const ext = f.name.split('.').pop()?.toLowerCase();
 
       // Fallback para extensão se mimeType vier vazio
       if (!mime) {
-        const ext = f.name.split('.').pop()?.toLowerCase();
         if (ext === 'pdf') mime = 'application/pdf';
+        else if (ext === 'docx') mime = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
         else if (['jpg', 'jpeg'].includes(ext || '')) mime = 'image/jpeg';
         else if (ext === 'png') mime = 'image/png';
         else if (ext === 'webp') mime = 'image/webp';
       }
+      const isDocx = ext === 'docx' || mime.includes('word') || mime.includes('docx');
+      if (isDocx && !mime) {
+        mime = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      }
 
-      if (!validMimes.includes(mime)) {
-        showToast(`Arquivo "${f.name}" com formato não suportado. Aceitos: JPG, PNG, WebP e PDF.`, 'info');
+      if (!validMimes.includes(mime) && !isDocx) {
+        showToast(`Arquivo "${f.name}" com formato não suportado. Aceitos: JPG, PNG, WebP, PDF e DOCX.`, 'info');
         continue;
       }
 
@@ -709,7 +723,7 @@ export const MedicalRecordScanner: React.FC<MedicalRecordScannerProps> = ({
           ref={documentInputRef}
           type="file"
           multiple
-          accept="application/pdf,image/jpeg,image/png,image/webp"
+          accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword"
           className="hidden"
           onChange={e => {
             if (e.target.files) handleAddFiles(e.target.files);
@@ -729,7 +743,7 @@ export const MedicalRecordScanner: React.FC<MedicalRecordScannerProps> = ({
               </h2>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Escaneie ou envie imagens/PDFs de prontuários impressos ou manuscritos para extração inteligente por IA.
+              Escaneie ou envie fotos, PDFs ou documentos DOCX de prontuários para extração inteligente por IA.
             </p>
           </div>
 
@@ -789,7 +803,7 @@ export const MedicalRecordScanner: React.FC<MedicalRecordScannerProps> = ({
               <FileText className="w-6 h-6" />
             </div>
             <span className="text-sm font-bold text-slate-900">Enviar documento</span>
-            <span className="text-[11px] text-slate-500 mt-0.5">Prontuário digitalizado ou PDF</span>
+            <span className="text-[11px] text-slate-500 mt-0.5">PDF ou DOCX</span>
           </button>
         </div>
 
@@ -819,7 +833,7 @@ export const MedicalRecordScanner: React.FC<MedicalRecordScannerProps> = ({
                   className="px-2.5 py-1 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center gap-1 transition-colors"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  Adicionar fotos/PDF
+                  Adicionar fotos/PDF/DOCX
                 </button>
               </div>
             </div>
@@ -860,6 +874,16 @@ export const MedicalRecordScanner: React.FC<MedicalRecordScannerProps> = ({
                     {p.mimeType === 'application/pdf' ? (
                       <div className="flex flex-col items-center gap-1 text-slate-400 p-2 text-center">
                         <FileText className="w-8 h-8 text-rose-500" />
+                        <span className="text-[10px] font-medium text-slate-600 truncate max-w-[80px]">
+                          {p.name}
+                        </span>
+                      </div>
+                    ) : (p.mimeType?.includes('word') || p.name?.toLowerCase().endsWith('.docx')) ? (
+                      <div className="flex flex-col items-center gap-1 text-slate-400 p-2 text-center">
+                        <FileText className="w-8 h-8 text-indigo-600" />
+                        <span className="text-[9px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded uppercase">
+                          DOCX
+                        </span>
                         <span className="text-[10px] font-medium text-slate-600 truncate max-w-[80px]">
                           {p.name}
                         </span>
@@ -1135,6 +1159,19 @@ export const MedicalRecordScanner: React.FC<MedicalRecordScannerProps> = ({
                     title="Documento PDF"
                     className="w-full h-full rounded-lg"
                   />
+                ) : (activePage?.mimeType?.includes('word') || activePage?.name?.toLowerCase().endsWith('.docx')) ? (
+                  <div className="flex flex-col items-center justify-center p-8 text-center text-slate-300 max-w-sm">
+                    <div className="w-16 h-16 rounded-2xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center mb-4 text-indigo-400 shadow-sm">
+                      <FileText className="w-8 h-8" />
+                    </div>
+                    <span className="text-sm font-semibold text-white break-all">{activePage.name}</span>
+                    <span className="text-xs text-indigo-300 mt-1 font-mono uppercase bg-indigo-900/50 px-2.5 py-0.5 rounded border border-indigo-700/50">
+                      Documento DOCX
+                    </span>
+                    <p className="text-xs text-slate-400 mt-3 leading-relaxed">
+                      Texto e tabelas lidos em memória temporária para estruturação clínica por IA. O arquivo não é persistido nem visualizado como imagem.
+                    </p>
+                  </div>
                 ) : (
                   <img
                     src={activePage?.previewUrl}

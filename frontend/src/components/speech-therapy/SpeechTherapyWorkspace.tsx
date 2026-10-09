@@ -64,6 +64,7 @@ import { PhonologyComparisonView } from './PhonologyComparisonView';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
 import { ProfessionalModuleHeader } from '../common/ProfessionalModuleHeader';
 import { ClinicalModuleEmptyState } from '../clinical/ClinicalModuleEmptyState';
+import { ClinicalModuleShell } from '../clinical/ClinicalModuleShell';
 
 export interface StructuredGoalItem {
   id: string;
@@ -727,20 +728,31 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
     }
   ];
 
+  const speechTabs = [
+    { id: 'phonemes', label: 'Painel Fonêmico', icon: MessageSquare },
+    { id: 'language', label: 'Linguagem', icon: BookOpen },
+    { id: 'audiology', label: 'Audiologia & PAC', icon: Ear },
+    { id: 'fluency', label: 'Fluência da Fala', icon: Wind },
+    { id: 'dysphagia', label: 'Disfagia & IDDSI', icon: Activity },
+    { id: 'orofacial', label: 'Motricidade Orofacial', icon: Smile },
+    { id: 'voice', label: 'Voz & Áudio', icon: Volume2 },
+    { id: 'goals', label: 'Metas Mensuráveis', icon: Target },
+    { id: 'home_program', label: 'Casa & Escola', icon: BookOpen },
+    { id: 'treatment_plans', label: 'Plano Terapêutico', icon: Target },
+    { id: 'complementary', label: 'Testes Complementares', icon: FileText },
+    { id: 'finish', label: 'Finalizar Atendimento', icon: CheckCircle2 }
+  ];
+
   return (
-    <div className="flex flex-col h-full bg-slate-50 text-slate-800">
-      {completion.dialog}
-      {/* CABEÇALHO DO MÓDULO ZEMDAFONO */}
-      <ProfessionalModuleHeader
-        icon={Mic}
-        iconGradient="from-sky-500 to-blue-600"
-        iconShadow="shadow-sky-500/20"
-        title="ZemdaFono"
-        badgeLabel="Fonoaudiologia Especializada"
-        badgeVariant="bg-sky-100 text-sky-800 border-sky-200"
-        description="Painel fonêmico interativo, avaliação vocal com áudio, motricidade orofacial, audiologia e prontuário integrado."
-      >
-        {/* SWITCHER DE ÁREA DA FONOAUDIOLOGIA */}
+    <ClinicalModuleShell
+      title="ZemdaFono"
+      icon={Mic}
+      iconGradient="from-sky-500 to-blue-600"
+      iconShadow="shadow-sky-500/20"
+      badgeLabel="Fonoaudiologia Especializada"
+      badgeVariant="bg-sky-100 text-sky-800 border-sky-200"
+      description="Painel fonêmico interativo, avaliação vocal com áudio, motricidade orofacial, audiologia e prontuário integrado."
+      filterSlot={
         <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl">
           <span className="text-[10px] font-extrabold uppercase text-slate-400">Área:</span>
           <select
@@ -758,89 +770,124 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
             <option value="educacional">Fonoaudiologia Educacional / Escrita</option>
           </select>
         </div>
-
-        <PatientSearchSelect
-          compact
-          value={selectedPatientId}
-          selectedPatient={selectedPatient}
-          disabled={!!initialAppointmentId}
-          onChange={(id, pat) => {
-            setSelectedPatientId(id);
-            if (pat) setSelectedPatient(pat);
-            else if (!id) setSelectedPatient(null);
-          }}
-        />
-
-        {selectedPatientId && (
-          <ClinicalQuickHeaderActions
-            autosaveStatus={autosave.autosaveStatus}
-            lastSavedTime={autosave.lastSavedTime}
-            onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
-            onLoadSavedClinicalData={() => void loadPatientData(selectedPatientId, true)}
-            onViewReports={() => setIsAIReportOpen(true)}
-            onFinishConsultation={() => selectedPatientId ? setActiveTab('finish') : showToast('Selecione um paciente para finalizar o atendimento.', 'info')}
-            finishLabel="Finalizar Atendimento"
-            showFinish={!completion.isCompleted}
-            isSubmitting={saving}
-            tools={fonoQuickTools}
-            toolsVariant="sky"
-            toolsLabel="Ferramentas"
+      }
+      selectedPatientId={selectedPatientId}
+      onSelectPatient={(id: string, pat?: any) => {
+        setSelectedPatientId(id);
+        if (pat) setSelectedPatient(pat);
+        else if (!id) setSelectedPatient(null);
+      }}
+      onClearPatient={() => {
+        setSelectedPatientId('');
+        setSelectedPatient(null);
+      }}
+      selectedPatient={selectedPatient}
+      isLockedContext={!!initialAppointmentId}
+      autosaveStatus={autosave.autosaveStatus}
+      lastSavedTime={autosave.lastSavedTime}
+      onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
+      onLoadSavedClinicalData={() => void loadPatientData(selectedPatientId, true)}
+      onViewReports={() => setIsAIReportOpen(true)}
+      reportsLabel="Relatórios"
+      tools={fonoQuickTools}
+      toolsVariant="sky"
+      toolsLabel="Ferramentas"
+      onFinishConsultation={() => selectedPatientId ? setActiveTab('finish') : showToast('Selecione um paciente para finalizar o atendimento.', 'info')}
+      finishLabel="Finalizar Atendimento"
+      showFinish={!completion.isCompleted}
+      isSubmitting={saving}
+      tabs={speechTabs}
+      activeTab={activeTab}
+      onTabChange={tabId => setActiveTab(tabId as any)}
+      tabActiveVariant="bg-sky-600 text-white shadow-xs"
+      emptyStateColorVariant="sky"
+      emptyStateDescription="Escolha um paciente no menu superior para visualizar o painel fonêmico, avaliações vocais e condutas fonoaudiológicas."
+      modalsSlot={
+        <>
+          {completion.dialog}
+          {selectedPatientId && (
+            <>
+              <FluencyCounterModal key={selectedPatientId + (initialAppointmentId || "")}
+                isOpen={isFluencyModalOpen}
+                onClose={() => setIsFluencyModalOpen(false)}
+                patientId={selectedPatientId}
+                patientName={selectedPatient?.full_name}
+              />
+              <LanguageSampleModal key={selectedPatientId + (initialAppointmentId || "")}
+                isOpen={isLanguageSampleModalOpen}
+                onClose={() => setIsLanguageSampleModalOpen(false)}
+                patientId={selectedPatientId}
+                patientName={selectedPatient?.full_name}
+                onInsertAnalysis={text => {
+                  setLanguageData((prev: any) => ({
+                    ...prev,
+                    notes: prev.notes ? `${prev.notes}\n\n${text}` : text
+                  }));
+                  setActiveTab('language');
+                }}
+              />
+              <DysphagiaMatrixModal key={selectedPatientId + (initialAppointmentId || "")}
+                isOpen={isDysphagiaModalOpen}
+                onClose={() => setIsDysphagiaModalOpen(false)}
+                patientId={selectedPatientId}
+                patientName={selectedPatient?.full_name}
+                onInsertPrescription={text => {
+                  setConsultationConducts(prev => (prev ? `${prev}\n\n${text}` : text));
+                  setActiveTab('finish');
+                }}
+              />
+              <FonoEvolutionReportModal
+                isOpen={isAIReportOpen}
+                onClose={() => setIsAIReportOpen(false)}
+                patientId={selectedPatientId}
+                patientName={selectedPatient?.full_name}
+                onInsertIntoConsultation={reportText => {
+                  setConsultationEvolution(prev => (prev ? `${prev}\n\n${reportText}` : reportText));
+                  setActiveTab('finish');
+                }}
+              />
+              <EvolutionComparisonModal
+                isOpen={isComparisonModalOpen}
+                onClose={() => setIsComparisonModalOpen(false)}
+                title={comparisonTitle}
+                items={comparisonItems}
+              />
+              {showPreviousRecordsModal && (
+                <PatientPreviousRecordsModal
+                  isOpen={showPreviousRecordsModal}
+                  onClose={() => setShowPreviousRecordsModal(false)}
+                  patientId={selectedPatientId}
+                  patientName={selectedPatient?.full_name}
+                />
+              )}
+              {showFollowUpModal && (
+                <PatientFollowUpDocumentModal
+                  isOpen={showFollowUpModal}
+                  onClose={() => setShowFollowUpModal(false)}
+                  patientId={selectedPatientId}
+                  patientName={selectedPatient?.full_name || 'Paciente'}
+                  moduleType="ZemdaFono"
+                  professionalName={currentUser?.name}
+                  professionalCouncil={currentUser?.registrationNumber ? (currentUser.registrationType ? `${currentUser.registrationType}: ${currentUser.registrationNumber}` : `CRFa: ${currentUser.registrationNumber}`) : undefined}
+                  moduleData={{ conducts: consultationConducts, treatmentPlanData: planForm }}
+                  initialGuidelines={consultationConducts || undefined}
+                  homeActivitiesText={planForm?.homeSchoolGuidance || undefined}
+                />
+              )}
+            </>
+          )}
+          <ClinicalDraftRecoveryModal
+            isOpen={autosave.conflictModalOpen}
+            onClose={() => autosave.resolveConflict('local')}
+            serverDraftTime={autosave.serverDraftData?.updated_at || autosave.serverDraftData?.client_updated_at}
+            localDraftTime={autosave.localDraftData?.clientUpdatedAt}
+            onRecoverServer={() => autosave.resolveConflict('server')}
+            onKeepCurrent={() => autosave.resolveConflict('local')}
           />
-        )}
-      </ProfessionalModuleHeader>
-
-      {/* BARRA HORIZONTAL DE ABAS EXCLUSIVA (SEM INTERFERÊNCIA DE ATALHOS) */}
-      <div className="bg-white border-b border-slate-200 shrink-0">
-        <HorizontalTabNav scroll={tabScroll}>
-          <div {...tabScrollProps} className={`${tabScrollProps.className} flex items-center gap-1 py-1`}>
-            {[
-              { id: 'phonemes', label: 'Painel Fonêmico', icon: MessageSquare },
-              { id: 'language', label: 'Linguagem', icon: BookOpen },
-              { id: 'audiology', label: 'Audiologia & Audiograma', icon: Ear },
-              { id: 'fluency', label: 'Fluência da Fala', icon: Wind },
-              { id: 'dysphagia', label: 'Disfagia & IDDSI', icon: Activity },
-              { id: 'orofacial', label: 'Motricidade Orofacial', icon: Smile },
-              { id: 'voice', label: 'Voz & Áudio', icon: Volume2 },
-              { id: 'goals', label: 'Metas Mensuráveis', icon: Target },
-              { id: 'home_program', label: 'Casa & Escola', icon: BookOpen },
-              { id: 'treatment_plans', label: 'Plano Terapêutico', icon: Target },
-              { id: 'complementary', label: 'Testes Complementares', icon: FileText },
-              { id: 'finish', label: 'Finalizar Atendimento', icon: CheckCircle2 }
-            ].map(tab => {
-              const Icon = tab.icon;
-              const isActive = activeTab === (tab.id as any);
-              return (
-                <button
-                  key={tab.id}
-                  data-tour={`tab-${tab.id}`}
-                  data-active={isActive}
-                  type="button"
-                  onClick={() => setActiveTab(tab.id as any)}
-                  className={`flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap transition-colors cursor-pointer shrink-0 ${
-                    isActive
-                      ? 'border-sky-600 text-sky-700 bg-sky-50/50'
-                      : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'
-                  }`}
-                >
-                  <Icon className={`w-4 h-4 ${isActive ? 'text-sky-600' : 'text-slate-400'}`} />
-                  <span>{tab.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </HorizontalTabNav>
-      </div>
-
-      {/* CONTEÚDO PRINCIPAL */}
-      <div className="flex-1 p-6 overflow-y-auto">
-        {!selectedPatientId ? (
-          <ClinicalModuleEmptyState
-            icon={Mic}
-            colorVariant="sky"
-            description="Escolha um paciente no menu superior para visualizar o painel fonêmico, avaliações vocais e condutas fonoaudiológicas."
-          />
-        ) : (
-          <div className="max-w-6xl mx-auto space-y-6">
+        </>
+      }
+    >
+      <div className="max-w-6xl mx-auto space-y-6">
 
             {/* ABA 1: PAINEL FONÊMICO INTERATIVO */}
             {activeTab === 'phonemes' && (
@@ -1783,91 +1830,7 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
                 </div>
               </div>
             )}
-
           </div>
-        )}
-      </div>
-
-      {/* MODAIS AVANÇADOS DE FONOAUDIOLOGIA */}
-      {selectedPatientId && (
-        <>
-          <FluencyCounterModal key={selectedPatientId + (initialAppointmentId || "")}
-            isOpen={isFluencyModalOpen}
-            onClose={() => setIsFluencyModalOpen(false)}
-            patientId={selectedPatientId}
-            patientName={selectedPatient?.full_name}
-          />
-          <LanguageSampleModal key={selectedPatientId + (initialAppointmentId || "")}
-            isOpen={isLanguageSampleModalOpen}
-            onClose={() => setIsLanguageSampleModalOpen(false)}
-            patientId={selectedPatientId}
-            patientName={selectedPatient?.full_name}
-            onInsertAnalysis={text => {
-              setLanguageData((prev: any) => ({
-                ...prev,
-                notes: prev.notes ? `${prev.notes}\n\n${text}` : text
-              }));
-              setActiveTab('language');
-            }}
-          />
-          <DysphagiaMatrixModal key={selectedPatientId + (initialAppointmentId || "")}
-            isOpen={isDysphagiaModalOpen}
-            onClose={() => setIsDysphagiaModalOpen(false)}
-            patientId={selectedPatientId}
-            patientName={selectedPatient?.full_name}
-            onInsertPrescription={text => {
-              setConsultationConducts(prev => (prev ? `${prev}\n\n${text}` : text));
-              setActiveTab('finish');
-            }}
-          />
-          <FonoEvolutionReportModal
-            isOpen={isAIReportOpen}
-            onClose={() => setIsAIReportOpen(false)}
-            patientId={selectedPatientId}
-            patientName={selectedPatient?.full_name}
-            onInsertIntoConsultation={reportText => {
-              setConsultationEvolution(prev => (prev ? `${prev}\n\n${reportText}` : reportText));
-              setActiveTab('finish');
-            }}
-          />
-          <EvolutionComparisonModal
-            isOpen={isComparisonModalOpen}
-            onClose={() => setIsComparisonModalOpen(false)}
-            title={comparisonTitle}
-            items={comparisonItems}
-          />
-          {showPreviousRecordsModal && selectedPatientId && (
-            <PatientPreviousRecordsModal
-              isOpen={showPreviousRecordsModal}
-              onClose={() => setShowPreviousRecordsModal(false)}
-              patientId={selectedPatientId}
-              patientName={selectedPatient?.full_name}
-            />
-          )}
-          {showFollowUpModal && selectedPatientId && (
-            <PatientFollowUpDocumentModal
-              isOpen={showFollowUpModal}
-              onClose={() => setShowFollowUpModal(false)}
-              patientId={selectedPatientId}
-              patientName={selectedPatient?.full_name || 'Paciente'}
-              moduleType="ZemdaFono"
-              professionalName={currentUser?.name}
-              professionalCouncil={currentUser?.registrationNumber ? (currentUser.registrationType ? `${currentUser.registrationType}: ${currentUser.registrationNumber}` : `CRFa: ${currentUser.registrationNumber}`) : undefined}
-              moduleData={{ conducts: consultationConducts, treatmentPlanData: planForm }}
-              initialGuidelines={consultationConducts || undefined}
-              homeActivitiesText={planForm?.homeSchoolGuidance || undefined}
-            />
-          )}
-          <ClinicalDraftRecoveryModal
-            isOpen={autosave.conflictModalOpen}
-            onClose={() => autosave.resolveConflict('local')}
-            serverDraftTime={autosave.serverDraftData?.updated_at || autosave.serverDraftData?.client_updated_at}
-            localDraftTime={autosave.localDraftData?.clientUpdatedAt}
-            onRecoverServer={() => autosave.resolveConflict('server')}
-            onKeepCurrent={() => autosave.resolveConflict('local')}
-          />
-        </>
-      )}
-    </div>
+    </ClinicalModuleShell>
   );
 };

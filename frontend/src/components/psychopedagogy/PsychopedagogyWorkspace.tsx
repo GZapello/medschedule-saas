@@ -12,9 +12,7 @@ import { useClinicalAutosave } from '../../hooks/useClinicalAutosave';
 import { useHorizontalTabScroll, HorizontalTabNav } from '../../hooks/useHorizontalTabScroll';
 import { ClinicalQuickHeaderActions, ClinicalQuickToolItem } from '../clinical/ClinicalQuickHeaderActions';
 import { ClinicalDraftRecoveryModal } from '../clinical/ClinicalDraftRecoveryModal';
-import { PatientSearchSelect } from '../common/PatientSearchSelect';
-import { ProfessionalModuleHeader } from '../common/ProfessionalModuleHeader';
-import { ClinicalModuleEmptyState } from '../clinical/ClinicalModuleEmptyState';
+import { ClinicalModuleShell, ClinicalModuleTabItem } from '../clinical/ClinicalModuleShell';
 import {
   GraduationCap,
   BookOpen,
@@ -64,6 +62,17 @@ type TabKey =
   | 'family_school'
   | 'tests_attachments'
   | 'finish';
+
+const PP_TABS: ClinicalModuleTabItem[] = [
+  { id: 'evolution', label: '1. Evolução', icon: Clock },
+  { id: 'profile_anamnese', label: '2. Perfil & Anamnese', icon: BookOpen },
+  { id: 'assessment', label: '3. Avaliação Psicopedagógica', icon: Brain },
+  { id: 'learning', label: '4. Aprendizagem', icon: Pencil },
+  { id: 'plans_goals', label: '5. Plano & Metas', icon: Target },
+  { id: 'family_school', label: '6. Família & Escola', icon: School },
+  { id: 'tests_attachments', label: '7. Testes & Anexos', icon: Layers },
+  { id: 'finish', label: '8. Finalização', icon: CheckCircle2 }
+];
 
 type LearningSubTab = 'reading' | 'writing' | 'math' | 'cognition' | 'notebooks';
 
@@ -804,131 +813,258 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
 
   const selectedPatient = patientData;
 
-  return <>{completion.dialog}{(
-    <div className="flex flex-col h-full bg-slate-50 text-slate-800">
-      
-      {/* 10. NOVO CABEÇALHO DO MÓDULO ZEMDAPP */}
-      <ProfessionalModuleHeader
-        icon={GraduationCap}
-        iconGradient="from-indigo-600 to-violet-700"
-        iconShadow="shadow-indigo-500/20"
-        title="ZemdaPP"
-        badgeLabel="Psicopedagogia"
-        badgeVariant="bg-indigo-100 text-indigo-700 border-indigo-200"
-        secondaryBadge={
-          <span className="hidden sm:inline-flex items-center gap-1 text-[10px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
-            <Lock className="w-2.5 h-2.5 text-slate-400" />
-            Prontuário com acesso restrito
-          </span>
+  return (
+    <ClinicalModuleShell
+      title="ZemdaPP"
+      icon={GraduationCap}
+      iconGradient="from-indigo-600 to-violet-700"
+      iconShadow="shadow-indigo-500/20"
+      badgeLabel="Psicopedagogia"
+      badgeVariant="bg-indigo-100 text-indigo-700 border-indigo-200"
+      secondaryBadge={
+        <span className="hidden sm:inline-flex items-center gap-1 text-[10px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
+          <Lock className="w-2.5 h-2.5 text-slate-400" />
+          Prontuário com acesso restrito
+        </span>
+      }
+      description="Avaliação da aprendizagem, intervenção psicopedagógica e acompanhamento longitudinal."
+      selectedPatientId={selectedPatientId}
+      selectedPatient={selectedPatient}
+      onSelectPatient={(id, pat) => {
+        setSelectedPatientId(id);
+        if (pat) setPatientData(pat);
+        else if (!id) setPatientData(null);
+      }}
+      patientSearchPlaceholder="Buscar aprendente por nome, CPF ou prontuário..."
+      isLockedContext={!!initialAppointmentId}
+      autosaveStatus={autosave.autosaveStatus}
+      lastSavedTime={autosave.lastSavedTime}
+      onLoadSavedClinicalData={() => void loadPatientDetails(selectedPatientId)}
+      onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
+      onViewReports={() => {
+        setSelectedDocType('relatorio');
+        setShowDocumentModal(true);
+      }}
+      reportsLabel="Documentos & Pareceres"
+      onFinishConsultation={() => selectedPatientId ? setActiveTab('finish') : showToast('Selecione um aprendente para finalizar o atendimento.', 'info')}
+      finishLabel="Finalizar Atendimento"
+      showFinish={!completion.isCompleted}
+      isSubmitting={saving}
+      tools={[
+        {
+          id: 'documents',
+          label: 'Documentos & Pareceres',
+          icon: Printer,
+          onClick: () => {
+            setSelectedDocType('relatorio');
+            setShowDocumentModal(true);
+          }
+        },
+        {
+          id: 'ai_support',
+          label: 'IA Apoio Pedagógico',
+          icon: Sparkles,
+          highlight: true,
+          onClick: () => setShowAiModal(true)
         }
-        description="Avaliação da aprendizagem, intervenção psicopedagógica e acompanhamento longitudinal."
-      >
-        <PatientSearchSelect
-          compact
-          value={selectedPatientId}
-          selectedPatient={selectedPatient}
-          clientTermLabel="Aprendente"
-          disabled={!!initialAppointmentId}
-          onChange={(id, pat) => {
-            setSelectedPatientId(id);
-            if (pat) setPatientData(pat);
-            else if (!id) setPatientData(null);
-          }}
-        />
+      ]}
+      toolsVariant="indigo"
+      toolsLabel="Ferramentas"
+      tabs={PP_TABS}
+      activeTab={activeTab}
+      onTabChange={tabId => setActiveTab(tabId as TabKey)}
+      tabActiveVariant="bg-indigo-600 text-white shadow-xs"
+      emptyStateColorVariant="indigo"
+      emptyStateDescription="Escolha um aprendente no seletor acima para abrir a evolução clínica, anamnese pedagógica, testes e plano de intervenção."
+      contentMaxWidth="max-w-6xl mx-auto"
+      modalsSlot={
+        <>
+          {completion.dialog}
+          {showPostConsultationModal && completion.isCompleted && (
+            <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+              <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl border border-slate-200 overflow-hidden p-6 text-center space-y-5 animate-in zoom-in-95">
+                <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
+                  <CheckCircle2 className="w-8 h-8" />
+                </div>
 
-        {selectedPatientId && (
-          <ClinicalQuickHeaderActions
-            autosaveStatus={autosave.autosaveStatus}
-            lastSavedTime={autosave.lastSavedTime}
-            onLoadSavedClinicalData={() => void loadPatientDetails(selectedPatientId)}
-            onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
-            onViewReports={() => {
-              setSelectedDocType('relatorio');
-              setShowDocumentModal(true);
-            }}
-            reportsLabel="Documentos & Pareceres"
-            onFinishConsultation={() => selectedPatientId ? setActiveTab('finish') : showToast('Selecione um paciente para finalizar o atendimento.', 'info')}
-            finishLabel="Finalizar Atendimento"
-            showFinish={!completion.isCompleted}
-            isSubmitting={saving}
-            tools={[
-              {
-                id: 'documents',
-                label: 'Documentos & Pareceres',
-                icon: Printer,
-                onClick: () => {
-                  setSelectedDocType('relatorio');
-                  setShowDocumentModal(true);
-                }
-              },
-              {
-                id: 'ai_support',
-                label: 'IA Apoio Pedagógico',
-                icon: Sparkles,
-                highlight: true,
-                onClick: () => setShowAiModal(true)
-              }
-            ]}
-            toolsVariant="indigo"
-            toolsLabel="Ferramentas"
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">Atendimento Finalizado com Sucesso!</h2>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Evolução psicopedagógica selada e arquivada com integridade no prontuário do aprendente.
+                  </p>
+                </div>
+
+                <div className="space-y-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedDocType('relatorio');
+                      setShowDocumentModal(true);
+                    }}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+                  >
+                    <FileText className="w-4 h-4" />
+                    <span>Gerar Relatório Psicopedagógico</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedDocType('parecer');
+                      setShowDocumentModal(true);
+                    }}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+                  >
+                    <FileText className="w-4 h-4 text-indigo-600" />
+                    <span>Gerar Parecer Psicopedagógico</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedDocType('encaminhamento');
+                      setShowDocumentModal(true);
+                    }}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+                  >
+                    <Share2 className="w-4 h-4 text-indigo-600" />
+                    <span>Gerar Encaminhamento</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedDocType('orientacoes');
+                      setShowDocumentModal(true);
+                    }}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+                  >
+                    <School className="w-4 h-4 text-indigo-600" />
+                    <span>Gerar Orientações para Família/Escola</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowPreviousRecordsModal(true)}
+                    className="w-full flex items-center justify-center gap-2 py-2 px-4 text-indigo-600 hover:bg-indigo-50 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+                  >
+                    <History className="w-4 h-4" />
+                    <span>Ver Prontuário</span>
+                  </button>
+                </div>
+
+                <div className="pt-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowPostConsultationModal(false);
+                      if (onFinishConsultation) onFinishConsultation();
+                    }}
+                    className="w-full py-2 text-xs font-semibold text-slate-500 hover:text-slate-800 cursor-pointer"
+                  >
+                    Fechar
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showAiModal && (
+            <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+              <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-in zoom-in-95">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-5 h-5 text-purple-600" />
+                    <h3 className="font-bold text-slate-900 text-base">Assistente IA Psicopedagógica</h3>
+                  </div>
+                  <button
+                    onClick={() => setShowAiModal(false)}
+                    className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="bg-purple-50 p-3.5 rounded-2xl border border-purple-200 text-purple-900 text-xs leading-relaxed">
+                  <strong>Escopo Estrito de Apoio Pedagógico:</strong> A IA do ZemdaPP atua exclusivamente na sugestão de estratégias de mediação e formulação de hipóteses pedagógicas escolares. Não emite diagnósticos médicos ou psicológicos privativos.
+                </div>
+
+                <div className="space-y-2 text-xs">
+                  <label className="font-bold text-slate-700 block">Descreva o caso ou queixa pedagógica:</label>
+                  <textarea
+                    rows={4}
+                    value={aiPrompt}
+                    onChange={e => setAiPrompt(e.target.value)}
+                    placeholder="Ex: Aprendente do 3º ano com queixa de lentidão na decodificação de leitura, trocas fonológicas na escrita e boa compreensão auditiva..."
+                    className="w-full p-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+
+                {aiResult && (
+                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 text-xs space-y-2 max-h-60 overflow-y-auto">
+                    <strong className="text-slate-800 block">Sugestões Psicopedagógicas:</strong>
+                    <p className="text-slate-700 whitespace-pre-wrap leading-relaxed">{aiResult}</p>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100">
+                  <button
+                    onClick={() => setShowAiModal(false)}
+                    className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 text-xs font-bold cursor-pointer"
+                  >
+                    Fechar
+                  </button>
+                  <button
+                    onClick={handleRunAi}
+                    disabled={generatingAi || !aiPrompt.trim()}
+                    className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold cursor-pointer disabled:opacity-50"
+                  >
+                    {generatingAi ? 'Organizando ideias...' : 'Consultar IA'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showPreviousRecordsModal && selectedPatientId && (
+            <PatientPreviousRecordsModal
+              patientId={selectedPatientId}
+              patientName={selectedPatient?.full_name || selectedPatient?.name}
+              onClose={() => setShowPreviousRecordsModal(false)}
+            />
+          )}
+
+          {showDocumentModal && selectedPatient && (
+            <PsychopedagogyDocumentModal
+              isOpen={showDocumentModal}
+              onClose={() => setShowDocumentModal(false)}
+              patient={selectedPatient}
+              initialDocType={selectedDocType}
+              profileData={profile}
+              assessmentData={assessment}
+              sessionData={currentSession}
+              domainsData={domains}
+              instrumentsData={instruments}
+              planData={currentPlan}
+            />
+          )}
+
+          <ClinicalDraftRecoveryModal
+            isOpen={autosave.conflictModalOpen}
+            onClose={() => autosave.resolveConflict('local')}
+            serverDraftTime={autosave.serverDraftData?.updated_at || autosave.serverDraftData?.client_updated_at}
+            localDraftTime={autosave.localDraftData?.clientUpdatedAt}
+            onRecoverServer={() => autosave.resolveConflict('server')}
+            onKeepCurrent={() => autosave.resolveConflict('local')}
           />
-        )}
-      </ProfessionalModuleHeader>
-
-      {/* 1. NAVEGAÇÃO HORIZONTAL NAS 8 ABAS (PADRÃO MODERNO ZEMDA COM SCROLL FLUIDO) */}
-      <div className="bg-white border-b border-slate-200 shrink-0">
-        <HorizontalTabNav scroll={tabScroll}>
-          <div {...tabScrollProps} className={`${tabScrollProps.className} flex items-center gap-1 py-1`}>
-            {[
-              { id: 'evolution', label: '1. Evolução', icon: Clock },
-              { id: 'profile_anamnese', label: '2. Perfil & Anamnese', icon: BookOpen },
-              { id: 'assessment', label: '3. Avaliação Psicopedagógica', icon: Brain },
-              { id: 'learning', label: '4. Aprendizagem', icon: Pencil },
-              { id: 'plans_goals', label: '5. Plano & Metas', icon: Target },
-              { id: 'family_school', label: '6. Família & Escola', icon: School },
-              { id: 'tests_attachments', label: '7. Testes & Anexos', icon: Layers },
-              { id: 'finish', label: '8. Finalização', icon: CheckCircle2 }
-            ].map(tab => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  data-tour={`tab-${tab.id}`}
-                  data-active={isActive}
-                  type="button"
-                  onClick={() => setActiveTab(tab.id as TabKey)}
-                  className={`flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap transition-colors cursor-pointer shrink-0 ${
-                    isActive
-                      ? 'border-indigo-600 text-indigo-700 bg-indigo-50/50'
-                      : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'
-                  }`}
-                >
-                  <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-indigo-600' : 'text-slate-400'}`} />
-                  <span>{tab.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </HorizontalTabNav>
-      </div>
-
-      {/* ÁREA DE CONTEÚDO PRINCIPAL DAS 8 ABAS */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-        {!selectedPatientId ? (
-          <ClinicalModuleEmptyState
-            icon={GraduationCap}
-            colorVariant="indigo"
-            clientTermLabel="Aprendente"
-            description="Escolha um aprendente no seletor acima para abrir a evolução clínica, anamnese pedagógica, testes e plano de intervenção."
-          />
-        ) : (
-          <div className="max-w-6xl mx-auto space-y-6">
-
-            {/* ========================================================================= */}
-            {/* ABA 1: EVOLUÇÃO (Tela Principal do Atendimento) */}
-            {/* ========================================================================= */}
-            {activeTab === 'evolution' && (
+        </>
+      }
+    >
+      <div className="space-y-6">
+        {/* ========================================================================= */}
+        {/* ABA 1: EVOLUÇÃO (Tela Principal do Atendimento) */}
+        {/* ========================================================================= */}
+        {activeTab === 'evolution' && (
               <div className="space-y-6">
                 {/* Card de Nova Sessão */}
                 <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-5">
@@ -2576,195 +2712,9 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
               </div>
             )}
 
-          </div>
-        )}
       </div>
-
-      {/* ========================================================================= */}
-      {/* 9. MODAL PÓS-ATENDIMENTO COM OPÇÕES DE DOCUMENTOS */}
-      {/* ========================================================================= */}
-      {showPostConsultationModal && completion.isCompleted && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl border border-slate-200 overflow-hidden p-6 text-center space-y-5 animate-in zoom-in-95">
-            <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
-              <CheckCircle2 className="w-8 h-8" />
-            </div>
-
-            <div>
-              <h2 className="text-lg font-bold text-slate-900">Atendimento Finalizado com Sucesso!</h2>
-              <p className="text-xs text-slate-500 mt-1">
-                Evolução psicopedagógica selada e arquivada com integridade no prontuário do aprendente.
-              </p>
-            </div>
-
-            <div className="space-y-2 pt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedDocType('relatorio');
-                  setShowDocumentModal(true);
-                }}
-                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
-              >
-                <FileText className="w-4 h-4" />
-                <span>Gerar Relatório Psicopedagógico</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedDocType('parecer');
-                  setShowDocumentModal(true);
-                }}
-                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
-              >
-                <FileText className="w-4 h-4 text-indigo-600" />
-                <span>Gerar Parecer Psicopedagógico</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedDocType('encaminhamento');
-                  setShowDocumentModal(true);
-                }}
-                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
-              >
-                <Share2 className="w-4 h-4 text-indigo-600" />
-                <span>Gerar Encaminhamento</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedDocType('orientacoes');
-                  setShowDocumentModal(true);
-                }}
-                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
-              >
-                <School className="w-4 h-4 text-indigo-600" />
-                <span>Gerar Orientações para Família/Escola</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setShowPreviousRecordsModal(true)}
-                className="w-full flex items-center justify-center gap-2 py-2 px-4 text-indigo-600 hover:bg-indigo-50 font-bold text-xs rounded-xl transition-colors cursor-pointer"
-              >
-                <History className="w-4 h-4" />
-                <span>Ver Prontuário</span>
-              </button>
-            </div>
-
-            <div className="pt-2 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowPostConsultationModal(false);
-                  if (onFinishConsultation) onFinishConsultation();
-                }}
-                className="w-full py-2 text-xs font-semibold text-slate-500 hover:text-slate-800 cursor-pointer"
-              >
-                Fechar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL IA PSICOPEDAGÓGICA */}
-      {showAiModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-in zoom-in-95">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-purple-600" />
-                <h3 className="font-bold text-slate-900 text-base">Assistente IA Psicopedagógica</h3>
-              </div>
-              <button
-                onClick={() => setShowAiModal(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="bg-purple-50 p-3.5 rounded-2xl border border-purple-200 text-purple-900 text-xs leading-relaxed">
-              <strong>Escopo Estrito de Apoio Pedagógico:</strong> A IA do ZemdaPP atua exclusivamente na sugestão de estratégias de mediação e formulação de hipóteses pedagógicas escolares. Não emite diagnósticos médicos ou psicológicos privativos.
-            </div>
-
-            <div className="space-y-2 text-xs">
-              <label className="font-bold text-slate-700 block">Descreva o caso ou queixa pedagógica:</label>
-              <textarea
-                rows={4}
-                value={aiPrompt}
-                onChange={e => setAiPrompt(e.target.value)}
-                placeholder="Ex: Aprendente do 3º ano com queixa de lentidão na decodificação de leitura, trocas fonológicas na escrita e boa compreensão auditiva..."
-                className="w-full p-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-purple-500"
-              />
-            </div>
-
-            {aiResult && (
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 text-xs space-y-2 max-h-60 overflow-y-auto">
-                <strong className="text-slate-800 block">Sugestões Psicopedagógicas:</strong>
-                <p className="text-slate-700 whitespace-pre-wrap leading-relaxed">{aiResult}</p>
-              </div>
-            )}
-
-            <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100">
-              <button
-                onClick={() => setShowAiModal(false)}
-                className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 text-xs font-bold cursor-pointer"
-              >
-                Fechar
-              </button>
-              <button
-                onClick={handleRunAi}
-                disabled={generatingAi || !aiPrompt.trim()}
-                className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold cursor-pointer disabled:opacity-50"
-              >
-                {generatingAi ? 'Organizando ideias...' : 'Consultar IA'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL DE HISTÓRICO / PRONTUÁRIOS ANTERIORES */}
-      {showPreviousRecordsModal && selectedPatientId && (
-        <PatientPreviousRecordsModal
-          patientId={selectedPatientId}
-          patientName={selectedPatient?.full_name || selectedPatient?.name}
-          onClose={() => setShowPreviousRecordsModal(false)}
-        />
-      )}
-
-      {/* MODAL DE DOCUMENTOS PSICOPEDAGÓGICOS (A4) */}
-      {showDocumentModal && selectedPatient && (
-        <PsychopedagogyDocumentModal
-          isOpen={showDocumentModal}
-          onClose={() => setShowDocumentModal(false)}
-          patient={selectedPatient}
-          initialDocType={selectedDocType}
-          profileData={profile}
-          assessmentData={assessment}
-          sessionData={currentSession}
-          domainsData={domains}
-          instrumentsData={instruments}
-          planData={currentPlan}
-        />
-      )}
-
-      <ClinicalDraftRecoveryModal
-        isOpen={autosave.conflictModalOpen}
-        onClose={() => autosave.resolveConflict('local')}
-        serverDraftTime={autosave.serverDraftData?.updated_at || autosave.serverDraftData?.client_updated_at}
-        localDraftTime={autosave.localDraftData?.clientUpdatedAt}
-        onRecoverServer={() => autosave.resolveConflict('server')}
-        onKeepCurrent={() => autosave.resolveConflict('local')}
-      />
-    </div>
-  )}</>;
+    </ClinicalModuleShell>
+  );
 };
 
 export default PsychopedagogyWorkspace;

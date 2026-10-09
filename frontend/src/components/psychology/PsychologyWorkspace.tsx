@@ -47,13 +47,24 @@ import { MeasurableGoalsManager } from '../common/MeasurableGoalsManager';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
 import { ProfessionalModuleHeader } from '../common/ProfessionalModuleHeader';
 import { ClinicalQuickHeaderActions, ClinicalQuickToolItem } from '../clinical/ClinicalQuickHeaderActions';
-import { ClinicalModuleEmptyState } from '../clinical/ClinicalModuleEmptyState';
+import { ClinicalModuleShell, ClinicalModuleTabItem } from '../clinical/ClinicalModuleShell';
 
 interface PsychologyWorkspaceProps {
   initialPatientId?: string;
   initialAppointmentId?: string;
   onFinishConsultation?: () => void;
 }
+
+const PSICO_TABS: ClinicalModuleTabItem[] = [
+  { id: 'sessions', label: '1. Sessões & Evolução', icon: Clock },
+  { id: 'anamnese', label: '2. Anamnese Psicológica', icon: User },
+  { id: 'eem', label: '3. Exame do Estado Mental', icon: Brain },
+  { id: 'risk', label: '4. Avaliação de Risco', icon: AlertTriangle },
+  { id: 'assessments', label: '5. Avaliação & SATEPSI', icon: Award },
+  { id: 'screenings', label: '6. Triagens & Escalas', icon: BookOpen },
+  { id: 'goals', label: '7. Metas Terapêuticas', icon: Target },
+  { id: 'external_tests', label: '8. Testes Externos & Laudos', icon: FileCheck }
+];
 
 export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
   initialPatientId,
@@ -988,140 +999,300 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
     }
   ];
 
-  return <>{completion.dialog}{(
-    <div className="flex flex-col h-full bg-slate-50 text-slate-800">
-      {/* CABEÇALHO DO MÓDULO ZEMDAPSICO */}
-      <ProfessionalModuleHeader
-        icon={Brain}
-        iconGradient="from-purple-700 to-indigo-800"
-        iconShadow="shadow-purple-600/20"
-        title="ZemdaPsico"
-        badgeLabel="Psicologia Clínica"
-        badgeVariant="bg-purple-100 text-purple-800 border-purple-200"
-        secondaryBadge={
-          <span className="text-[10px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
-            CFP 2025
-          </span>
-        }
-        description="Prontuário psicológico confidencial, evolução de sessões, anamnese, exames de estado mental e resoluções CFP."
-      >
-        <PatientSearchSelect
-          compact
-          value={selectedPatientId}
-          selectedPatient={selectedPatient}
-          clientTermLabel={clientTermLabel || 'Paciente'}
-          disabled={!!initialAppointmentId}
-          onChange={(id, pat) => {
-            setSelectedPatientId(id);
-            if (pat) setSelectedPatient(pat);
-            else if (!id) setSelectedPatient(null);
-          }}
-        />
-
-        {selectedPatientId && (
-          <ClinicalQuickHeaderActions
-            autosaveStatus={autosaveStatus}
-            lastSavedTime={lastSavedTime}
-            onLoadSavedClinicalData={() => void loadPatientProfile(selectedPatientId)}
-            onViewPreviousRecords={() => setShowHistoryModal(true)}
-            previousRecordsLabel={`Histórico (${sessionsList.length})`}
-            onViewReports={() => setShowDocumentModal(true)}
-            reportsLabel="Emitir Documento CFP"
-            onFinishConsultation={handleQuickFinishClick}
-            finishLabel="Finalizar Atendimento"
-            showFinish={!completion.isCompleted}
-            isSubmitting={saving}
-            tools={psicoQuickTools}
-            toolsVariant="purple"
-            toolsLabel="Ferramentas"
-          />
-        )}
-      </ProfessionalModuleHeader>
-
-      {/* NAVEGAÇÃO POR ABAS PADRONIZADA (Trilha Horizontal com Scroll Suave) */}
-      <div className="bg-white border-b border-slate-200 shrink-0">
-        <HorizontalTabNav scroll={tabScroll}>
-          <div {...tabScrollProps} className={`${tabScrollProps.className} flex items-center gap-1 py-1`}>
-          {[
-            { id: 'sessions', label: '1. Sessões & Evolução', icon: Clock },
-            { id: 'anamnese', label: '2. Anamnese Psicológica', icon: User },
-            { id: 'eem', label: '3. Exame do Estado Mental', icon: Brain },
-            { id: 'risk', label: '4. Avaliação de Risco', icon: AlertTriangle },
-            { id: 'assessments', label: '5. Avaliação & SATEPSI', icon: Award },
-            { id: 'screenings', label: '6. Triagens & Escalas', icon: BookOpen },
-            { id: 'goals', label: '7. Metas Terapêuticas', icon: Target },
-            { id: 'external_tests', label: '8. Testes Externos & Laudos', icon: FileCheck }
-          ].map(tab => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                data-tour={`tab-${tab.id}`}
-                data-active={isActive}
-                type="button"
-                onClick={() => setActiveTab(tab.id as TabKey)}
-                className={`flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap transition-colors cursor-pointer shrink-0 ${
-                  isActive
-                    ? 'border-purple-600 text-purple-700 bg-purple-50/50'
-                    : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'
-                }`}
-              >
-                <Icon className={`w-4 h-4 ${isActive ? 'text-purple-600' : 'text-slate-400'}`} />
-                <span>{tab.label}</span>
-              </button>
-            );
-          })}
-        </div>
-        </HorizontalTabNav>
-      </div>
-
-      {/* CONTEÚDO PRINCIPAL */}
-      <div className="flex-1 p-6 overflow-y-auto">
-        {loading ? (
-          <div className="bg-white rounded-2xl p-12 text-center text-slate-500 text-xs border border-slate-200 max-w-6xl mx-auto">
-            Carregando prontuário psicológico com integridade e sigilo...
-          </div>
-        ) : !selectedPatientId ? (
-          <ClinicalModuleEmptyState
-            icon={Brain}
-            colorVariant="purple"
-            clientTermLabel={clientTermLabel || 'Paciente'}
-            description="Escolha um paciente no menu superior para visualizar o prontuário psicológico, evolução das sessões e avaliações."
-          />
-        ) : (
-          <div className="max-w-6xl mx-auto space-y-6">
-            {/* Informações do Paciente Selecionado */}
-            {selectedPatient && (
-              <div className="p-4 bg-white border border-purple-200 rounded-2xl shadow-xs flex flex-wrap items-center justify-between gap-4">
+  return (
+    <ClinicalModuleShell
+      title="ZemdaPsico"
+      icon={Brain}
+      iconGradient="from-purple-700 to-indigo-800"
+      iconShadow="shadow-purple-600/20"
+      badgeLabel="Psicologia Clínica"
+      badgeVariant="bg-purple-100 text-purple-800 border-purple-200"
+      secondaryBadge={
+        <span className="text-[10px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
+          CFP 2025
+        </span>
+      }
+      description="Prontuário psicológico confidencial, evolução de sessões, anamnese, exames de estado mental e resoluções CFP."
+      selectedPatientId={selectedPatientId}
+      selectedPatient={selectedPatient}
+      onSelectPatient={(id, pat) => {
+        setSelectedPatientId(id);
+        if (pat) setSelectedPatient(pat);
+        else if (!id) setSelectedPatient(null);
+      }}
+      isLockedContext={!!initialAppointmentId}
+      patientSearchPlaceholder={clientTermLabel ? `Buscar ${clientTermLabel.toLowerCase()}...` : undefined}
+      autosaveStatus={autosaveStatus}
+      lastSavedTime={lastSavedTime}
+      onLoadSavedClinicalData={() => void loadPatientProfile(selectedPatientId)}
+      onViewPreviousRecords={() => setShowHistoryModal(true)}
+      previousRecordsLabel={`Histórico (${sessionsList.length})`}
+      onViewReports={() => setShowDocumentModal(true)}
+      reportsLabel="Emitir Documento CFP"
+      onFinishConsultation={handleQuickFinishClick}
+      finishLabel="Finalizar Atendimento"
+      showFinish={!completion.isCompleted}
+      isSubmitting={saving}
+      tools={psicoQuickTools}
+      toolsVariant="purple"
+      toolsLabel="Ferramentas"
+      tabs={PSICO_TABS}
+      activeTab={activeTab}
+      onTabChange={tabId => setActiveTab(tabId as TabKey)}
+      tabActiveVariant="bg-purple-600 text-white shadow-xs"
+      emptyStateColorVariant="purple"
+      emptyStateDescription="Escolha um paciente no menu superior para visualizar o prontuário psicológico, evolução das sessões e avaliações."
+      contentMaxWidth="max-w-6xl mx-auto"
+      modalsSlot={
+        <>
+          {completion.dialog}
+          {showFinishConfirmModal && (
+            <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4" role="dialog" aria-modal="true">
+              <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-800 flex items-center justify-center font-black text-sm border border-purple-200">
-                    {(selectedPatient.full_name || selectedPatient.name || 'P').charAt(0)}
+                  <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                    <CheckCircle2 className="w-6 h-6" />
                   </div>
                   <div>
-                    <div className="text-sm font-bold text-slate-900">
-                      {selectedPatient.full_name || selectedPatient.name}
-                    </div>
-                    <div className="text-xs text-slate-500">
-                      CPF: {selectedPatient.cpf || '-'} • Nasc: {selectedPatient.birth_date ? new Date(selectedPatient.birth_date).toLocaleDateString('pt-BR') : '-'} • Telefone: {selectedPatient.phone || '-'}
-                    </div>
+                    <h3 className="text-base font-bold text-slate-900">Finalizar Atendimento Psicológico?</h3>
+                    <p className="text-xs text-slate-500">
+                      Esta ação salvará e selará a evolução com assinatura digital e hash SHA-256.
+                    </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <span className="px-3 py-1 bg-purple-50 text-purple-800 border border-purple-200 rounded-full text-xs font-bold">
-                    Prontuário Ativo (CFP)
-                  </span>
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs space-y-2">
+                  <div className="flex justify-between text-slate-700">
+                    <span>Paciente:</span>
+                    <strong>{selectedPatient?.full_name || selectedPatient?.name || 'Paciente'}</strong>
+                  </div>
+                  <div className="flex justify-between text-slate-700">
+                    <span>Modalidade:</span>
+                    <strong>{currentSession.modality === 'online' ? 'Online (TDIC)' : 'Presencial'}</strong>
+                  </div>
+                  <div className="flex justify-between text-slate-700">
+                    <span>Evolução clínica:</span>
+                    <span className={currentSession.clinicalEvolution && currentSession.clinicalEvolution.trim() ? 'text-emerald-700 font-semibold' : 'text-rose-700 font-semibold'}>
+                      {currentSession.clinicalEvolution && currentSession.clinicalEvolution.trim() ? 'Preenchida' : 'Pendente (Obrigatória)'}
+                    </span>
+                  </div>
+                </div>
+
+                {(!currentSession.clinicalEvolution || !currentSession.clinicalEvolution.trim()) && (
+                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600" />
+                    <span>O relato da evolução clínica é indispensável para concluir o atendimento (CFP 01/2009). Preencha-o na aba de Sessões.</span>
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowFinishConfirmModal(false)}
+                    className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 cursor-pointer"
+                  >
+                    Voltar e Revisar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={saving || !currentSession.clinicalEvolution || !currentSession.clinicalEvolution.trim()}
+                    onClick={confirmAndFinishConsultation}
+                    className="px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-xs flex items-center gap-2"
+                  >
+                    {saving ? (
+                      <>
+                        <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Concluindo e Selando...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="w-4 h-4" />
+                        Confirmar e Concluir
+                      </>
+                    )}
+                  </button>
                 </div>
               </div>
-            )}
+            </div>
+          )}
 
-            {/* ========================================================================= */}
-            {/* ABA 1: SESSÕES & EVOLUÇÃO (Com Selamento SHA-256 e Conclusão de Atendimento) */}
-            {/* ========================================================================= */}
-            {activeTab === 'sessions' && (
-              <div className="space-y-6">
-                <form onSubmit={handleFinishConsultation} className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-5">
+          {completionSuccessData && completion.isCompleted && (
+            <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4" role="dialog" aria-modal="true">
+              <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 text-center space-y-4">
+                <div className="w-14 h-14 bg-teal-100 text-teal-800 rounded-full flex items-center justify-center mx-auto shadow-xs">
+                  <CheckCircle2 className="w-8 h-8" />
+                </div>
+
+                <div className="space-y-1">
+                  <h3 className="text-lg font-extrabold text-slate-900">Atendimento Finalizado com Sucesso</h3>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    A evolução clínica foi salva, assinada digitalmente por <strong>{completionSuccessData.signerName}</strong> ({completionSuccessData.signerRegistration}) e selada com hash criptográfico SHA-256.
+                  </p>
+                </div>
+
+                <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-[11px] font-mono text-slate-600 break-all">
+                  Hash: {completionSuccessData.signatureHash}
+                </div>
+
+                <div className="pt-2 space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCompletionSuccessData(null);
+                      setShowDocumentModal(true);
+                    }}
+                    className="w-full py-2.5 bg-teal-700 hover:bg-teal-800 text-white font-extrabold rounded-xl text-xs transition-colors cursor-pointer shadow-xs flex items-center justify-center gap-2"
+                  >
+                    <FileText className="w-4 h-4" /> Emitir Documento Psicológico (CFP 06/2019)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCompletionSuccessData(null);
+                      if (onFinishConsultation) onFinishConsultation();
+                    }}
+                    className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors cursor-pointer"
+                  >
+                    Finalizar sem Documento
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <PsychologyDocumentModal
+            isOpen={showDocumentModal}
+            onClose={() => setShowDocumentModal(false)}
+            patientId={selectedPatientId}
+            appointmentId={initialAppointmentId}
+            patientName={selectedPatient?.full_name || selectedPatient?.name || 'Paciente'}
+            hasAssessmentBasis={hasAssessmentBasis}
+            onDocumentIssued={() => {
+              loadPatientProfile(selectedPatientId);
+            }}
+          />
+
+          <PsychologyHistoryModal
+            isOpen={showHistoryModal}
+            onClose={() => setShowHistoryModal(false)}
+            patientId={selectedPatientId}
+            patientName={selectedPatient?.full_name || selectedPatient?.name || 'Paciente'}
+          />
+
+          {showAiDrawer && (
+            <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-2xs flex justify-end" role="dialog" aria-modal="true">
+              <div className="bg-white w-full max-w-md h-full shadow-2xl p-6 flex flex-col space-y-4 overflow-y-auto">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <div className="flex items-center gap-2 text-purple-900 font-extrabold text-sm">
+                    <Sparkles className="w-4 h-4 text-purple-600" />
+                    Assistente de IA Ético (CFP)
+                  </div>
+                  <button
+                    onClick={() => setShowAiDrawer(false)}
+                    className="p-1 rounded-lg text-slate-400 hover:text-slate-700 cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 text-purple-950 text-xs leading-relaxed space-y-1">
+                  <div className="font-bold flex items-center gap-1.5 text-purple-900">
+                    <Shield className="w-3.5 h-3.5" /> Diretrizes Éticas do CFP sobre IA:
+                  </div>
+                  <p className="text-[11px] text-purple-900">
+                    A IA atua exclusivamente no suporte à formatação e estruturação textual. <strong>É vedado à IA diagnosticar, inferir risco ou tomar decisões clínicas autônomas.</strong> Todo texto gerado possui badge de rascunho e exige validação e responsabilidade ética do psicólogo.
+                  </p>
+                </div>
+
+                <div className="space-y-3 text-xs flex-1">
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Modo de Assistência</label>
+                    <select
+                      value={aiMode}
+                      onChange={e => setAiMode(e.target.value as any)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs"
+                    >
+                      <option value="structure_topics">Estruturar em Tópicos Clínicos</option>
+                      <option value="clarity">Revisão Gramatical e Clareza Textual</option>
+                      <option value="synthesis">Síntese Neutra dos Pontos Abordados</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Anotações Brutas da Sessão</label>
+                    <textarea
+                      value={aiInputText}
+                      onChange={e => setAiInputText(e.target.value)}
+                      placeholder="Cole aqui anotações rápidas feitas durante o atendimento para formatação..."
+                      rows={4}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-purple-500"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleRunAiAssist}
+                    disabled={loadingAi || !aiInputText.trim()}
+                    className="w-full py-2 bg-purple-700 hover:bg-purple-800 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+                  >
+                    {loadingAi ? 'Processando estruturação...' : 'Estruturar Rascunho com IA'}
+                  </button>
+
+                  {aiResultText && (
+                    <div className="space-y-2 pt-2 border-t border-slate-100">
+                      <label className="font-bold text-slate-800 block">Rascunho Gerado pela IA:</label>
+                      <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs whitespace-pre-wrap max-h-48 overflow-y-auto font-mono text-[11px] text-slate-800">
+                        {aiResultText}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleApplyAiText}
+                        className="w-full py-2 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-xs"
+                      >
+                        Inserir na Evolução Clínica da Sessão
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showDiarizationModal && (
+            <PsychologyAIOrganizerModal
+              initialTranscript={organizerTranscript}
+              isOpen={showDiarizationModal}
+              onClose={() => setShowDiarizationModal(false)}
+              patientId={selectedPatientId || undefined}
+              patientName={selectedPatient?.full_name}
+              appointmentId={initialAppointmentId || undefined}
+              currentData={{
+                session: currentSession,
+                anamnese: anamnese,
+                mentalState: mentalState,
+                riskAssessment: riskAssessment,
+                newAssessment: newAssessment,
+                newScreening: newScreening,
+                newGoal: newGoal,
+                newInstrument: newInstrument,
+                goalsList: goalsList
+              }}
+              onApplyField={handleApplyFromAIOrganizer}
+              onApplyGoal={handleApplyGoalFromAI}
+            />
+          )}
+        </>
+      }
+    >
+      {loading ? (
+        <div className="bg-white rounded-2xl p-12 text-center text-slate-500 text-xs border border-slate-200">
+          Carregando prontuário psicológico com integridade e sigilo...
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {activeTab === 'sessions' && (
+            <div className="space-y-6">
+              <form onSubmit={handleFinishConsultation} className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-5">
                   <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
                     <div>
                       <h3 className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
@@ -2367,252 +2538,6 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
             )}
           </div>
         )}
-      </div>
-
-      {/* ========================================================================= */}
-      {/* MODAL DE CONFIRMAÇÃO DE FINALIZAÇÃO RÁPIDA (ZemdaPsico) */}
-      {/* ========================================================================= */}
-      {showFinishConfirmModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4" role="dialog" aria-modal="true">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-                <CheckCircle2 className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-slate-900">Finalizar Atendimento Psicológico?</h3>
-                <p className="text-xs text-slate-500">
-                  Esta ação salvará e selará a evolução com assinatura digital e hash SHA-256.
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs space-y-2">
-              <div className="flex justify-between text-slate-700">
-                <span>Paciente:</span>
-                <strong>{selectedPatient?.full_name || selectedPatient?.name || 'Paciente'}</strong>
-              </div>
-              <div className="flex justify-between text-slate-700">
-                <span>Modalidade:</span>
-                <strong>{currentSession.modality === 'online' ? 'Online (TDIC)' : 'Presencial'}</strong>
-              </div>
-              <div className="flex justify-between text-slate-700">
-                <span>Evolução clínica:</span>
-                <span className={currentSession.clinicalEvolution && currentSession.clinicalEvolution.trim() ? 'text-emerald-700 font-semibold' : 'text-rose-700 font-semibold'}>
-                  {currentSession.clinicalEvolution && currentSession.clinicalEvolution.trim() ? 'Preenchida' : 'Pendente (Obrigatória)'}
-                </span>
-              </div>
-            </div>
-
-            {(!currentSession.clinicalEvolution || !currentSession.clinicalEvolution.trim()) && (
-              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600" />
-                <span>O relato da evolução clínica é indispensável para concluir o atendimento (CFP 01/2009). Preencha-o na aba de Sessões.</span>
-              </div>
-            )}
-
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowFinishConfirmModal(false)}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 cursor-pointer"
-              >
-                Voltar e Revisar
-              </button>
-              <button
-                type="button"
-                disabled={saving || !currentSession.clinicalEvolution || !currentSession.clinicalEvolution.trim()}
-                onClick={confirmAndFinishConsultation}
-                className="px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-xs flex items-center gap-2"
-              >
-                {saving ? (
-                  <>
-                    <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Concluindo e Selando...
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="w-4 h-4" />
-                    Confirmar e Concluir
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* MODAL OBRIGATÓRIO DE CONCLUSÃO DE ATENDIMENTO (CFP 06/2019) */}
-      {/* ========================================================================= */}
-      {completionSuccessData && completion.isCompleted && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4" role="dialog" aria-modal="true">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 text-center space-y-4">
-            <div className="w-14 h-14 bg-teal-100 text-teal-800 rounded-full flex items-center justify-center mx-auto shadow-xs">
-              <CheckCircle2 className="w-8 h-8" />
-            </div>
-
-            <div className="space-y-1">
-              <h3 className="text-lg font-extrabold text-slate-900">Atendimento Finalizado com Sucesso</h3>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                A evolução clínica foi salva, assinada digitalmente por <strong>{completionSuccessData.signerName}</strong> ({completionSuccessData.signerRegistration}) e selada com hash criptográfico SHA-256.
-              </p>
-            </div>
-
-            <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-[11px] font-mono text-slate-600 break-all">
-              Hash: {completionSuccessData.signatureHash}
-            </div>
-
-            <div className="pt-2 space-y-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setCompletionSuccessData(null);
-                  setShowDocumentModal(true);
-                }}
-                className="w-full py-2.5 bg-teal-700 hover:bg-teal-800 text-white font-extrabold rounded-xl text-xs transition-colors cursor-pointer shadow-xs flex items-center justify-center gap-2"
-              >
-                <FileText className="w-4 h-4" /> Emitir Documento Psicológico (CFP 06/2019)
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setCompletionSuccessData(null);
-                  if (onFinishConsultation) onFinishConsultation();
-                }}
-                className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors cursor-pointer"
-              >
-                Finalizar sem Documento
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL DE DOCUMENTOS PSICOLÓGICOS */}
-      <PsychologyDocumentModal
-        isOpen={showDocumentModal}
-        onClose={() => setShowDocumentModal(false)}
-        patientId={selectedPatientId}
-        appointmentId={initialAppointmentId}
-        patientName={selectedPatient?.full_name || selectedPatient?.name || 'Paciente'}
-        hasAssessmentBasis={hasAssessmentBasis}
-        onDocumentIssued={() => {
-          loadPatientProfile(selectedPatientId);
-        }}
-      />
-
-      {/* MODAL DE HISTÓRICO LONGITUDINAL */}
-      <PsychologyHistoryModal
-        isOpen={showHistoryModal}
-        onClose={() => setShowHistoryModal(false)}
-        patientId={selectedPatientId}
-        patientName={selectedPatient?.full_name || selectedPatient?.name || 'Paciente'}
-      />
-
-      {/* DRAWER DO ASSISTENTE DE IA ÉTICO */}
-      {showAiDrawer && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-2xs flex justify-end" role="dialog" aria-modal="true">
-          <div className="bg-white w-full max-w-md h-full shadow-2xl p-6 flex flex-col space-y-4 overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2 text-purple-900 font-extrabold text-sm">
-                <Sparkles className="w-4 h-4 text-purple-600" />
-                Assistente de IA Ético (CFP)
-              </div>
-              <button
-                onClick={() => setShowAiDrawer(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 text-purple-950 text-xs leading-relaxed space-y-1">
-              <div className="font-bold flex items-center gap-1.5 text-purple-900">
-                <Shield className="w-3.5 h-3.5" /> Diretrizes Éticas do CFP sobre IA:
-              </div>
-              <p className="text-[11px] text-purple-900">
-                A IA atua exclusivamente no suporte à formatação e estruturação textual. <strong>É vedado à IA diagnosticar, inferir risco ou tomar decisões clínicas autônomas.</strong> Todo texto gerado possui badge de rascunho e exige validação e responsabilidade ética do psicólogo.
-              </p>
-            </div>
-
-            <div className="space-y-3 text-xs flex-1">
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">Modo de Assistência</label>
-                <select
-                  value={aiMode}
-                  onChange={e => setAiMode(e.target.value as any)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs"
-                >
-                  <option value="structure_topics">Estruturar em Tópicos Clínicos</option>
-                  <option value="clarity">Revisão Gramatical e Clareza Textual</option>
-                  <option value="synthesis">Síntese Neutra dos Pontos Abordados</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">Anotações Brutas da Sessão</label>
-                <textarea
-                  value={aiInputText}
-                  onChange={e => setAiInputText(e.target.value)}
-                  placeholder="Cole aqui anotações rápidas feitas durante o atendimento para formatação..."
-                  rows={4}
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-purple-500"
-                />
-              </div>
-
-              <button
-                type="button"
-                onClick={handleRunAiAssist}
-                disabled={loadingAi || !aiInputText.trim()}
-                className="w-full py-2 bg-purple-700 hover:bg-purple-800 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-xs disabled:opacity-50"
-              >
-                {loadingAi ? 'Processando estruturação...' : 'Estruturar Rascunho com IA'}
-              </button>
-
-              {aiResultText && (
-                <div className="space-y-2 pt-2 border-t border-slate-100">
-                  <label className="font-bold text-slate-800 block">Rascunho Gerado pela IA:</label>
-                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs whitespace-pre-wrap max-h-48 overflow-y-auto font-mono text-[11px] text-slate-800">
-                    {aiResultText}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleApplyAiText}
-                    className="w-full py-2 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-xs"
-                  >
-                    Inserir na Evolução Clínica da Sessão
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showDiarizationModal && (
-        <PsychologyAIOrganizerModal
-          initialTranscript={organizerTranscript}
-          isOpen={showDiarizationModal}
-          onClose={() => setShowDiarizationModal(false)}
-          patientId={selectedPatientId || undefined}
-          patientName={selectedPatient?.full_name}
-          appointmentId={initialAppointmentId || undefined}
-          currentData={{
-            session: currentSession,
-            anamnese: anamnese,
-            mentalState: mentalState,
-            riskAssessment: riskAssessment,
-            newAssessment: newAssessment,
-            newScreening: newScreening,
-            newGoal: newGoal,
-            newInstrument: newInstrument,
-            goalsList: goalsList
-          }}
-          onApplyField={handleApplyFromAIOrganizer}
-          onApplyGoal={handleApplyGoalFromAI}
-        />
-      )}
-    </div>
-  )}</>;
+    </ClinicalModuleShell>
+  );
 };

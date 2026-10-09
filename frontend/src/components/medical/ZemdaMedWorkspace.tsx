@@ -17,6 +17,7 @@ import { ClinicalQuickHeaderActions } from '../clinical/ClinicalQuickHeaderActio
 import { ClinicalModuleEmptyState } from '../clinical/ClinicalModuleEmptyState';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
 import { ProfessionalModuleHeader } from '../common/ProfessionalModuleHeader';
+import { ClinicalModuleShell } from '../clinical/ClinicalModuleShell';
 import {
   Stethoscope,
   Activity,
@@ -965,138 +966,102 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
     { id: 'history', label: `Histórico (${consultationsHistory.length})`, icon: History }
   ];
 
-  return <>{completion.dialog}{(
-    <div className="flex flex-col h-full bg-slate-50 text-slate-800">
-      <ClinicalDraftRecoveryModal
-        isOpen={autosave.conflictModalOpen}
-        moduleName="ZemdaMed"
-        onSelectVersion={autosave.resolveConflict}
-        onClose={() => {}}
-      />
-      {bodyHistoryId && (
-        <React.Suspense fallback={null}>
-          <MedicalBodyHistory
-            isOpen
-            readOnly
-            patientId={selectedPatientId}
-            assessmentId={bodyHistoryId}
-            onClose={() => setBodyHistoryId(null)}
-          />
-        </React.Suspense>
-      )}
-
-      {/* CABEÇALHO DO MÓDULO ZEMDAMED */}
-      <ProfessionalModuleHeader
+  return (
+    <>
+      {completion.dialog}
+      <ClinicalModuleShell
+        title="ZemdaMed"
         icon={Stethoscope}
         iconGradient="from-teal-600 to-slate-800"
         iconShadow="shadow-teal-600/20"
-        title="ZemdaMed"
         badgeLabel="Medicina Especializada"
         badgeVariant="bg-teal-100 text-teal-800 border-teal-200"
         description="Prontuário médico com anamnese estruturada, sinais vitais, exame físico adaptativo à especialidade, notas SOAP e integração ao CID-10."
+        filterSlot={
+          allowedPresets.length > 1 ? (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl">
+              <span className="text-[10px] font-extrabold uppercase text-slate-400">Especialidade:</span>
+              <select
+                value={activePreset}
+                onChange={e => {
+                  userHasExplicitlySelectedPresetRef.current = true;
+                  setActivePreset(e.target.value);
+                }}
+                className="text-xs font-bold text-teal-900 bg-transparent focus:outline-none cursor-pointer"
+              >
+                {allowedPresets.map(preset => (
+                  <option key={preset.id} value={preset.id}>
+                    {preset.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : undefined
+        }
+        selectedPatientId={selectedPatientId}
+        onSelectPatient={async (id: string, pat?: any) => {
+          if (selectedPatientId && autosave.isDirty) {
+            const saved = await autosave.forceSaveDraft();
+            if (!saved) {
+              showToast('Salve o rascunho antes de trocar de paciente.', 'error');
+              return;
+            }
+          }
+          setSelectedPatientId(id);
+          if (pat) {
+            setSelectedPatient(pat);
+          } else if (!id) {
+            setSelectedPatient(null);
+            sessionStorage.removeItem('zemda_med_active_patient_id');
+          }
+        }}
+        onClearPatient={() => {
+          setSelectedPatientId('');
+          setSelectedPatient(null);
+          sessionStorage.removeItem('zemda_med_active_patient_id');
+        }}
+        selectedPatient={selectedPatient}
+        isLockedContext={!!initialAppointmentId}
+        autosaveStatus={autosave.autosaveStatus}
+        lastSavedTime={autosave.lastSavedTime}
+        onViewPreviousRecords={() => setActiveTab('history')}
+        previousRecordsLabel="Prontuários Anteriores"
+        onViewReports={() => setActiveTab('history')}
+        reportsLabel="Histórico & Relatórios"
+        onFinishConsultation={() => selectedPatientId ? setActiveTab('conduct') : showToast('Selecione um paciente para finalizar o atendimento.', 'info')}
+        finishLabel="Finalizar Atendimento"
+        showFinish={!completion.isCompleted}
+        isSubmitting={isFinishing}
+        toolsVariant="teal"
+        tabs={medicalTabs}
+        activeTab={activeTab}
+        onTabChange={tabId => setActiveTab(tabId as MedicalWorkspaceTab)}
+        tabActiveVariant="bg-teal-600 text-white shadow-xs"
+        emptyStateColorVariant="teal"
+        emptyStateDescription="Escolha um paciente no menu superior para iniciar o atendimento médico estruturado, sinais vitais e notas SOAP."
+        modalsSlot={
+          <>
+            <ClinicalDraftRecoveryModal
+              isOpen={autosave.conflictModalOpen}
+              moduleName="ZemdaMed"
+              onSelectVersion={autosave.resolveConflict}
+              onClose={() => {}}
+            />
+            {bodyHistoryId && (
+              <React.Suspense fallback={null}>
+                <MedicalBodyHistory
+                  isOpen
+                  readOnly
+                  patientId={selectedPatientId}
+                  assessmentId={bodyHistoryId}
+                  onClose={() => setBodyHistoryId(null)}
+                />
+              </React.Suspense>
+            )}
+          </>
+        }
       >
-        {/* Seletor Compacto de Especialidade quando houver mais de 1 */}
-        {allowedPresets.length > 1 && (
-          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl">
-            <span className="text-[10px] font-extrabold uppercase text-slate-400">Especialidade:</span>
-            <select
-              value={activePreset}
-              onChange={e => {
-                userHasExplicitlySelectedPresetRef.current = true;
-                setActivePreset(e.target.value);
-              }}
-              className="text-xs font-bold text-teal-900 bg-transparent focus:outline-none cursor-pointer"
-            >
-              {allowedPresets.map(preset => (
-                <option key={preset.id} value={preset.id}>
-                  {preset.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        <div data-tour="medical-patient-select" className="w-full">
-          <PatientSearchSelect
-            compact
-            value={selectedPatientId}
-            selectedPatient={selectedPatient}
-            clientTermLabel={clientTermLabel}
-            disabled={!!initialAppointmentId}
-            onChange={async (id, pat) => {
-              if (selectedPatientId && autosave.isDirty) {
-                const saved = await autosave.forceSaveDraft();
-                if (!saved) {
-                  showToast('Salve o rascunho antes de trocar de paciente.', 'error');
-                  return;
-                }
-              }
-              setSelectedPatientId(id);
-              if (pat) {
-                setSelectedPatient(pat);
-              } else if (!id) {
-                setSelectedPatient(null);
-                sessionStorage.removeItem('zemda_med_active_patient_id');
-              }
-            }}
-          />
-        </div>
-
-        {selectedPatientId && (
-          <ClinicalQuickHeaderActions
-            autosaveStatus={autosave.autosaveStatus}
-            lastSavedTime={autosave.lastSavedTime}
-            onViewPreviousRecords={() => setActiveTab('history')}
-            onViewReports={() => setActiveTab('history')}
-            onFinishConsultation={() => selectedPatientId ? setActiveTab('conduct') : showToast('Selecione um paciente para finalizar o atendimento.', 'info')}
-            finishLabel="Finalizar Atendimento"
-            showFinish={!completion.isCompleted}
-            isSubmitting={isFinishing}
-            toolsVariant="teal"
-          />
-        )}
-      </ProfessionalModuleHeader>
-
-      {/* BARRA HORIZONTAL DE ABAS PADRONIZADA (Trilha Horizontal com Scroll Suave) */}
-      <div className="bg-white border-b border-slate-200 shrink-0">
-        <HorizontalTabNav scroll={tabScroll}>
-          <div {...tabScrollProps} className={`${tabScrollProps.className} flex items-center gap-1 py-1`}>
-            {medicalTabs.map(tab => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  data-tour={`tab-${tab.id}`}
-                  data-active={isActive}
-                  type="button"
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap transition-colors cursor-pointer shrink-0 ${
-                    isActive
-                      ? 'border-teal-600 text-teal-700 bg-teal-50/50'
-                      : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'
-                  }`}
-                >
-                  <Icon className={`w-4 h-4 ${isActive ? 'text-teal-600' : 'text-slate-400'}`} />
-                  <span>{tab.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </HorizontalTabNav>
-      </div>
-
-      {/* CONTEÚDO PRINCIPAL */}
-      <div className="flex-1 p-6 overflow-y-auto">
-        {!selectedPatientId ? (
-          <ClinicalModuleEmptyState
-            icon={Stethoscope}
-            colorVariant="teal"
-            clientTermLabel={clientTermLabel}
-            description="Escolha um paciente no menu superior para iniciar o atendimento médico estruturado, sinais vitais e notas SOAP."
-          />
-        ) : (
-          <div className="max-w-6xl mx-auto space-y-6">
+        <div className="max-w-6xl mx-auto space-y-6">
 
             {/* ABA 1 — RESUMO */}
             {activeTab === 'summary' && (
@@ -1992,10 +1957,8 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
                 )}
               </div>
             )}
-
-          </div>
-        )}
-      </div>
-    </div>
-  )}</>;
+        </div>
+      </ClinicalModuleShell>
+    </>
+  );
 };

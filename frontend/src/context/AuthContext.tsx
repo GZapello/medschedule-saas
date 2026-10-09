@@ -248,10 +248,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const refreshTenant = async () => {
-    if (!localStorage.getItem('active_tenant_id')) return;
     try {
       const tenantData = await ApiClient.get<Tenant>('/v1/tenants/current');
-      setCurrentTenant(tenantData);
+      if (tenantData) {
+        setCurrentTenant(tenantData);
+        if (tenantData.id) {
+          localStorage.setItem('active_tenant_id', tenantData.id);
+        }
+      }
     } catch (err) {
       console.error('Erro ao recarregar clínica:', err);
     }
@@ -275,11 +279,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   useEffect(() => {
     const refreshSession = () => { if (localStorage.getItem('auth_token')) void reloadSession(); };
+    const handleClinicUpdated = (e: any) => {
+      if (e?.detail?.logo_url !== undefined) {
+        setCurrentTenant(prev => prev ? { ...prev, logo_url: e.detail.logo_url } : prev);
+      }
+      void refreshTenant();
+    };
+
     window.addEventListener('focus', refreshSession);
     window.addEventListener('zemda-profession-changed', refreshSession);
+    window.addEventListener('zemda-clinic-updated', handleClinicUpdated);
     return () => {
       window.removeEventListener('focus', refreshSession);
       window.removeEventListener('zemda-profession-changed', refreshSession);
+      window.removeEventListener('zemda-clinic-updated', handleClinicUpdated);
     };
   }, []);
 

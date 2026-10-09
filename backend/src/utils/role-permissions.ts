@@ -81,7 +81,8 @@ export const DEFAULT_CLINIC_ADMIN_PERMISSIONS: string[] = [
   'manage_professionals',
   'manage_staff',
   'manage_services',
-  'manage_settings'
+  'manage_settings',
+  'can_import_data'
 ];
 
 /**

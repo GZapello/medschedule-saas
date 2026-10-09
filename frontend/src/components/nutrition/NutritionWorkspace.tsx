@@ -50,6 +50,7 @@ import { ClinicalQuickHeaderActions, ClinicalQuickToolItem } from '../clinical/C
 import { ClinicalDraftRecoveryModal } from '../clinical/ClinicalDraftRecoveryModal';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
 import { ProfessionalModuleHeader } from '../common/ProfessionalModuleHeader';
+import { ClinicalModuleShell } from '../clinical/ClinicalModuleShell';
 
 interface NutritionWorkspaceProps {
   initialPatientId?: string;
@@ -98,6 +99,19 @@ export interface MealPlanMeal {
   mealTime: string;
   items: MealPlanFoodItem[];
 }
+
+const NUTRITION_TABS = [
+  { id: 'evolution', label: '1. Evolução', icon: Activity },
+  { id: 'anamnesis', label: '2. Anamnese', icon: BookOpen },
+  { id: 'anthropometry', label: '3. Antropometria', icon: Scale },
+  { id: 'bioimpedance', label: '4. Composição / Bioimpedância', icon: Activity },
+  { id: 'recalls', label: '5. Recordatório 24h', icon: Clock },
+  { id: 'calculations', label: '6. Cálculos Energéticos', icon: Calculator },
+  { id: 'meal_plans', label: '7. Plano Alimentar Builder', icon: Utensils },
+  { id: 'goals', label: '8. Metas', icon: Target },
+  { id: 'tests', label: '9. Testes Externos', icon: FileText },
+  { id: 'finish', label: '10. Finalização', icon: CheckCircle2 }
+];
 
 export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
   initialPatientId,
@@ -941,120 +955,217 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
   }, [planForm.meals, planTotals]);
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 text-slate-800">
-      {manualFoodTarget && planForm.meals[manualFoodTarget.mealIndex] && <ManualMealFoodModal
-        item={manualFoodTarget.itemIndex === undefined ? undefined : planForm.meals[manualFoodTarget.mealIndex].items[manualFoodTarget.itemIndex]}
-        onClose={() => setManualFoodTarget(null)}
-        onSave={item => {
-          setPlanForm(previous => ({ ...previous, meals: previous.meals.map((meal, index) => index !== manualFoodTarget.mealIndex ? meal : {
-            ...meal, items: manualFoodTarget.itemIndex === undefined ? [...meal.items, item] : meal.items.map((existing, itemIndex) => itemIndex === manualFoodTarget.itemIndex ? item : existing)
-          }) }));
-          setManualFoodTarget(null);
-        }} />}
-      {completion.dialog}
+    <ClinicalModuleShell
+      title="ZemdaNutri"
+      icon={Apple}
+      iconGradient="from-emerald-500 to-green-600"
+      iconShadow="shadow-emerald-500/20"
+      badgeLabel="Nutrição Especializada"
+      badgeVariant="bg-emerald-100 text-emerald-800 border-emerald-200"
+      description="Evolução, avaliação antropométrica, composição corporal, calculadoras energéticas, planos alimentares e metas."
+      selectedPatientId={selectedPatientId}
+      selectedPatient={selectedPatient}
+      onSelectPatient={(id, pat) => {
+        setSelectedPatientId(id);
+        if (pat) setSelectedPatient(pat);
+        else if (!id) setSelectedPatient(null);
+      }}
+      isLockedContext={!!initialAppointmentId}
+      onLoadSavedClinicalData={() => void loadPatientData(selectedPatientId, true)}
+      autosaveStatus={autosave.autosaveStatus}
+      lastSavedTime={autosave.lastSavedTime}
+      onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
+      onViewReports={() => setShowFollowUpModal(true)}
+      reportsLabel="Guia do Paciente"
+      reportsIcon={Printer}
+      onFinishConsultation={() => selectedPatientId ? setActiveTab('finish') : showToast('Selecione um paciente para finalizar o atendimento.', 'info')}
+      finishLabel="Finalizar Atendimento"
+      showFinish={!completion.isCompleted}
+      isSubmitting={saving}
+      tools={[
+        {
+          id: 'patient_guide',
+          label: 'Guia do Paciente',
+          icon: Printer,
+          onClick: () => setShowFollowUpModal(true)
+        }
+      ]}
+      toolsVariant="emerald"
+      toolsLabel="Ferramentas"
+      tabs={NUTRITION_TABS}
+      activeTab={activeTab}
+      onTabChange={tabId => setActiveTab(tabId as any)}
+      tabActiveVariant="bg-emerald-600 text-white shadow-xs"
+      emptyStateColorVariant="emerald"
+      emptyStateDescription="Escolha um paciente no seletor superior para iniciar a consulta nutricional, avaliar antropometria e construir o plano alimentar."
+      contentMaxWidth="max-w-6xl mx-auto"
+      modalsSlot={
+        <>
+          {manualFoodTarget && planForm.meals[manualFoodTarget.mealIndex] && (
+            <ManualMealFoodModal
+              item={manualFoodTarget.itemIndex === undefined ? undefined : planForm.meals[manualFoodTarget.mealIndex].items[manualFoodTarget.itemIndex]}
+              onClose={() => setManualFoodTarget(null)}
+              onSave={item => {
+                setPlanForm(previous => ({
+                  ...previous,
+                  meals: previous.meals.map((meal, index) =>
+                    index !== manualFoodTarget.mealIndex
+                      ? meal
+                      : {
+                          ...meal,
+                          items: manualFoodTarget.itemIndex === undefined
+                            ? [...meal.items, item]
+                            : meal.items.map((existing, itemIndex) =>
+                                itemIndex === manualFoodTarget.itemIndex ? item : existing
+                              )
+                        }
+                  )
+                }));
+                setManualFoodTarget(null);
+              }}
+            />
+          )}
+          {completion.dialog}
+          {showRecipeModal && (
+            <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+              <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden p-6 space-y-4 animate-in zoom-in-95">
+                <div className="flex items-center justify-between border-b pb-3">
+                  <h3 className="font-bold text-sm text-slate-900">Criador de Receita com Macros por Porção</h3>
+                  <button onClick={() => setShowRecipeModal(false)} className="p-1 text-slate-400 hover:text-slate-600">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
 
-      {/* CABEÇALHO DO MÓDULO ZEMDANUTRI */}
-      <ProfessionalModuleHeader
-        icon={Apple}
-        iconGradient="from-emerald-500 to-green-600"
-        iconShadow="shadow-emerald-500/20"
-        title="ZemdaNutri"
-        badgeLabel="Nutrição Especializada"
-        badgeVariant="bg-emerald-100 text-emerald-800 border-emerald-200"
-        description="Evolução, avaliação antropométrica, composição corporal, calculadoras energéticas, planos alimentares e metas."
-      >
-        <PatientSearchSelect
-          compact
-          value={selectedPatientId}
-          selectedPatient={selectedPatient}
-          disabled={!!initialAppointmentId}
-          onChange={(id, pat) => {
-            setSelectedPatientId(id);
-            if (pat) setSelectedPatient(pat);
-            else if (!id) setSelectedPatient(null);
-          }}
-        />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Nome da Receita *</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: Panqueca de Aveia e Banana"
+                      value={recipeName}
+                      onChange={e => setRecipeName(e.target.value)}
+                      className="w-full px-3 py-2 text-xs border rounded-xl"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Rendimento (Nº de Porções) *</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={recipeServings}
+                      onChange={e => setRecipeServings(parseInt(e.target.value) || 1)}
+                      className="w-full px-3 py-2 text-xs border rounded-xl font-bold"
+                    />
+                  </div>
+                </div>
 
-        {selectedPatientId && (
-          <ClinicalQuickHeaderActions
-            onLoadSavedClinicalData={() => void loadPatientData(selectedPatientId, true)}
-            autosaveStatus={autosave.autosaveStatus}
-            lastSavedTime={autosave.lastSavedTime}
-            onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
-            onViewReports={() => setShowFollowUpModal(true)}
-            onFinishConsultation={() => selectedPatientId ? setActiveTab('finish') : showToast('Selecione um paciente para finalizar o atendimento.', 'info')}
-            finishLabel="Finalizar Atendimento"
-            showFinish={!completion.isCompleted}
-            isSubmitting={saving}
-            tools={[
-              {
-                id: 'patient_guide',
-                label: 'Guia do Paciente',
-                icon: Printer,
-                onClick: () => setShowFollowUpModal(true)
-              }
-            ]}
-            toolsVariant="emerald"
-            toolsLabel="Ferramentas"
+                <div className="space-y-2">
+                  <span className="text-xs font-bold text-slate-700 block">
+                    Ingredientes ({recipeIngredients.length}):
+                  </span>
+                  {recipeIngredients.length === 0 ? (
+                    <p className="text-xs text-slate-400 italic bg-slate-50 p-2.5 rounded-xl">
+                      Nenhum ingrediente adicionado. Pesquise no banco TACO acima e clique em Adicionar.
+                    </p>
+                  ) : (
+                    <div className="max-h-36 overflow-y-auto space-y-1.5">
+                      {recipeIngredients.map((item, idx) => (
+                        <div key={idx} className="flex items-center justify-between text-xs p-2 bg-slate-50 rounded-xl border border-slate-200">
+                          <span className="font-medium text-slate-800">{item.food.name}</span>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              min={1}
+                              value={item.grams}
+                              onChange={e => {
+                                const updated = [...recipeIngredients];
+                                updated[idx].grams = parseInt(e.target.value) || 100;
+                                setRecipeIngredients(updated);
+                              }}
+                              className="w-16 px-1.5 py-0.5 border rounded text-xs font-bold text-center"
+                            />
+                            <span className="text-slate-400">g</span>
+                            <button
+                              type="button"
+                              onClick={() => setRecipeIngredients(recipeIngredients.filter((_, i) => i !== idx))}
+                              className="text-slate-400 hover:text-rose-600 p-0.5"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="p-3 bg-emerald-50 rounded-xl text-xs space-y-1">
+                  <span className="text-[10px] font-bold text-emerald-900 uppercase">Valores por Porção (1/{recipeServings}):</span>
+                  <div className="grid grid-cols-4 gap-2 text-center font-bold text-emerald-800">
+                    <div>{recipeTotals.perServingCal} kcal</div>
+                    <div>CHO: {recipeTotals.perServingCarb}g</div>
+                    <div>PTN: {recipeTotals.perServingProt}g</div>
+                    <div>LIP: {recipeTotals.perServingFat}g</div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t">
+                  <button
+                    type="button"
+                    onClick={() => setShowRecipeModal(false)}
+                    className="px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded-xl font-medium"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleApplyRecipeToMeal(selectedMealIndexForAdd)}
+                    className="px-4 py-2 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-xs"
+                  >
+                    Inserir na Refeição Selecionada
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+          {showPreviousRecordsModal && selectedPatientId && (
+            <PatientPreviousRecordsModal
+              patientId={selectedPatientId}
+              patientName={selectedPatient?.full_name}
+              onClose={() => setShowPreviousRecordsModal(false)}
+            />
+          )}
+          {showFollowUpModal && selectedPatientId && (
+            <PatientFollowUpDocumentModal
+              isOpen={showFollowUpModal}
+              onClose={() => setShowFollowUpModal(false)}
+              patientId={selectedPatientId}
+              patientName={selectedPatient?.full_name || 'Paciente'}
+              moduleType="ZemdaNutri"
+              professionalName={currentUser?.name}
+              professionalCouncil={currentUser?.registrationNumber ? (currentUser.registrationType ? `${currentUser.registrationType}: ${currentUser.registrationNumber}` : `CRN: ${currentUser.registrationNumber}`) : undefined}
+              appointmentId={initialAppointmentId}
+              moduleData={planForm}
+              initialGuidelines={planForm.generalGuidelines}
+              mealPlanText={generatedMealPlanText}
+            />
+          )}
+          <ClinicalDraftRecoveryModal
+            isOpen={autosave.conflictModalOpen}
+            onClose={() => autosave.resolveConflict('local')}
+            serverDraftTime={autosave.serverDraftData?.updated_at || autosave.serverDraftData?.client_updated_at}
+            localDraftTime={autosave.localDraftData?.clientUpdatedAt}
+            onRecoverServer={() => autosave.resolveConflict('server')}
+            onKeepCurrent={() => autosave.resolveConflict('local')}
           />
-        )}
-      </ProfessionalModuleHeader>
-
-      {/* 10 ABAS DE NAVEGAÇÃO ORDENADAS (Trilha Limpa com Rolagem Livre) */}
-      <div className="bg-white border-b border-slate-200 shrink-0">
-        <HorizontalTabNav scroll={tabScroll}>
-          <div {...tabScrollProps} className={`${tabScrollProps.className} flex items-center gap-1 py-1`}>
-            {[
-              { id: 'evolution', label: '1. Evolução', icon: Activity },
-              { id: 'anamnesis', label: '2. Anamnese', icon: BookOpen },
-              { id: 'anthropometry', label: '3. Antropometria', icon: Scale },
-              { id: 'bioimpedance', label: '4. Composição / Bioimpedância', icon: Activity },
-              { id: 'recalls', label: '5. Recordatório 24h', icon: Clock },
-              { id: 'calculations', label: '6. Cálculos Energéticos', icon: Calculator },
-              { id: 'meal_plans', label: '7. Plano Alimentar Builder', icon: Utensils },
-              { id: 'goals', label: '8. Metas', icon: Target },
-              { id: 'tests', label: '9. Testes Externos', icon: FileText },
-              { id: 'finish', label: '10. Finalização', icon: CheckCircle2 }
-            ].map(tab => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  data-tour={`tab-${tab.id}`}
-                  data-active={isActive}
-                  type="button"
-                  onClick={() => setActiveTab(tab.id as any)}
-                  className={`flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap transition-colors cursor-pointer shrink-0 ${
-                    isActive
-                      ? 'border-emerald-600 text-emerald-700 bg-emerald-50/50'
-                      : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'
-                  }`}
-                >
-                  <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-emerald-600' : 'text-slate-400'}`} />
-                  <span>{tab.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </HorizontalTabNav>
-      </div>
-
-      {/* CONTEÚDO PRINCIPAL */}
-      <div className="flex-1 p-6 overflow-y-auto">
-        {!selectedPatientId ? (
-          <ClinicalModuleEmptyState
-            icon={Apple}
-            colorVariant="emerald"
-            description="Escolha um paciente no seletor superior para iniciar a consulta nutricional, avaliar antropometria e construir o plano alimentar."
-          />
-        ) : (
-          <div className="max-w-6xl mx-auto space-y-6">
-
-            {/* ========================================== */}
-            {/* ABA 1: EVOLUÇÃO CLÍNICA NUTRICIONAL */}
-            {/* ========================================== */}
-            {activeTab === 'evolution' && (
+        </>
+      }
+    >
+      <div className="space-y-6">
+        {/* ========================================== */}
+        {/* ABA 1: EVOLUÇÃO CLÍNICA NUTRICIONAL */}
+        {/* ========================================== */}
+        {activeTab === 'evolution' && (
               <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-5">
                 <div className="flex items-center justify-between pb-4 border-b border-slate-100">
                   <div>
@@ -2287,150 +2398,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
               </div>
             )}
 
-          </div>
-        )}
       </div>
-
-      {/* Modal Criar Receita */}
-      {showRecipeModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden p-6 space-y-4 animate-in zoom-in-95">
-            <div className="flex items-center justify-between border-b pb-3">
-              <h3 className="font-bold text-sm text-slate-900">Criador de Receita com Macros por Porção</h3>
-              <button onClick={() => setShowRecipeModal(false)} className="p-1 text-slate-400 hover:text-slate-600">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Nome da Receita *</label>
-                <input
-                  type="text"
-                  placeholder="Ex: Panqueca de Aveia e Banana"
-                  value={recipeName}
-                  onChange={e => setRecipeName(e.target.value)}
-                  className="w-full px-3 py-2 text-xs border rounded-xl"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Rendimento (Nº de Porções) *</label>
-                <input
-                  type="number"
-                  min={1}
-                  value={recipeServings}
-                  onChange={e => setRecipeServings(parseInt(e.target.value) || 1)}
-                  className="w-full px-3 py-2 text-xs border rounded-xl font-bold"
-                />
-              </div>
-            </div>
-
-            {/* Ingredientes adicionados */}
-            <div className="space-y-2">
-              <span className="text-xs font-bold text-slate-700 block">
-                Ingredientes ({recipeIngredients.length}):
-              </span>
-              {recipeIngredients.length === 0 ? (
-                <p className="text-xs text-slate-400 italic bg-slate-50 p-2.5 rounded-xl">
-                  Nenhum ingrediente adicionado. Pesquise no banco TACO acima e clique em Adicionar.
-                </p>
-              ) : (
-                <div className="max-h-36 overflow-y-auto space-y-1.5">
-                  {recipeIngredients.map((item, idx) => (
-                    <div key={idx} className="flex items-center justify-between text-xs p-2 bg-slate-50 rounded-xl border border-slate-200">
-                      <span className="font-medium text-slate-800">{item.food.name}</span>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          min={1}
-                          value={item.grams}
-                          onChange={e => {
-                            const updated = [...recipeIngredients];
-                            updated[idx].grams = parseInt(e.target.value) || 100;
-                            setRecipeIngredients(updated);
-                          }}
-                          className="w-16 px-1.5 py-0.5 border rounded text-xs font-bold text-center"
-                        />
-                        <span className="text-slate-400">g</span>
-                        <button
-                          type="button"
-                          onClick={() => setRecipeIngredients(recipeIngredients.filter((_, i) => i !== idx))}
-                          className="text-slate-400 hover:text-rose-600 p-0.5"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Painel por porção */}
-            <div className="p-3 bg-emerald-50 rounded-xl text-xs space-y-1">
-              <span className="text-[10px] font-bold text-emerald-900 uppercase">Valores por Porção (1/{recipeServings}):</span>
-              <div className="grid grid-cols-4 gap-2 text-center font-bold text-emerald-800">
-                <div>{recipeTotals.perServingCal} kcal</div>
-                <div>CHO: {recipeTotals.perServingCarb}g</div>
-                <div>PTN: {recipeTotals.perServingProt}g</div>
-                <div>LIP: {recipeTotals.perServingFat}g</div>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2 border-t">
-              <button
-                type="button"
-                onClick={() => setShowRecipeModal(false)}
-                className="px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded-xl font-medium"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={() => handleApplyRecipeToMeal(selectedMealIndexForAdd)}
-                className="px-4 py-2 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-xs"
-              >
-                Inserir na Refeição Selecionada
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal de Prontuários Anteriores */}
-      {showPreviousRecordsModal && selectedPatientId && (
-        <PatientPreviousRecordsModal
-          patientId={selectedPatientId}
-          patientName={selectedPatient?.full_name}
-          onClose={() => setShowPreviousRecordsModal(false)}
-        />
-      )}
-
-      {/* Modal Guia do Paciente (PDF Handout) */}
-      {showFollowUpModal && selectedPatientId && (
-        <PatientFollowUpDocumentModal
-          isOpen={showFollowUpModal}
-          onClose={() => setShowFollowUpModal(false)}
-          patientId={selectedPatientId}
-          patientName={selectedPatient?.full_name || 'Paciente'}
-          moduleType="ZemdaNutri"
-          professionalName={currentUser?.name}
-          professionalCouncil={currentUser?.registrationNumber ? (currentUser.registrationType ? `${currentUser.registrationType}: ${currentUser.registrationNumber}` : `CRN: ${currentUser.registrationNumber}`) : undefined}
-          appointmentId={initialAppointmentId}
-          moduleData={planForm}
-          initialGuidelines={planForm.generalGuidelines}
-          mealPlanText={generatedMealPlanText}
-        />
-      )}
-
-      <ClinicalDraftRecoveryModal
-        isOpen={autosave.conflictModalOpen}
-        onClose={() => autosave.resolveConflict('local')}
-        serverDraftTime={autosave.serverDraftData?.updated_at || autosave.serverDraftData?.client_updated_at}
-        localDraftTime={autosave.localDraftData?.clientUpdatedAt}
-        onRecoverServer={() => autosave.resolveConflict('server')}
-        onKeepCurrent={() => autosave.resolveConflict('local')}
-      />
-    </div>
+    </ClinicalModuleShell>
   );
 };

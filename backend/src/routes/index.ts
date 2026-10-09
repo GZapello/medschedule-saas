@@ -62,7 +62,7 @@ import { ServiceReminderController } from '../controllers/service-reminder.contr
 
 import { authMiddleware, onboardingGate } from '../middlewares/auth.middleware';
 import { tenantMiddleware, requireTenant } from '../middlewares/tenant.middleware';
-import { requireRole } from '../middlewares/rbac.middleware';
+import { requireRole, requirePermissionOrRole } from '../middlewares/rbac.middleware';
 import { requireCapability } from '../middlewares/capability.middleware';
 
 const api = Router();
@@ -825,16 +825,16 @@ api.post('/v1/ai/psychology/transcript-structure', requireTenant, requireRole('c
 api.get('/v1/ai/psychology/diarization-status', requireTenant, requireRole('clinic_admin', 'professional'), AIController.getPsychologyDiarizationStatus);
 
 // Importação Inteligente de Dados (Word .docx, Planilhas .xlsx/.csv/.txt, Heurística e Lotes)
-api.post('/v1/import/parse-file', requireTenant, requireRole('clinic_admin', 'professional', 'receptionist'), ImportController.parseFile);
-api.post('/v1/import/execute', requireTenant, requireRole('clinic_admin'), ImportController.executeImport);
-api.get('/v1/import/batches', requireTenant, requireRole('clinic_admin'), ImportController.listBatches);
+api.post('/v1/import/parse-file', requireTenant, requirePermissionOrRole('can_import_data', 'clinic_admin'), ImportController.parseFile);
+api.post('/v1/import/execute', requireTenant, requirePermissionOrRole('can_import_data', 'clinic_admin'), ImportController.executeImport);
+api.get('/v1/import/batches', requireTenant, requirePermissionOrRole('can_import_data', 'clinic_admin'), ImportController.listBatches);
 api.post('/v1/import/batches/:id/rollback', requireTenant, requireRole('clinic_admin'), ImportController.rollbackBatch);
 api.post('/v1/import/export-custom-docx', requireTenant, ImportController.exportCustomDocx);
 
 // Importação de Prontuário por Foto / Documento Efêmero (Sem Armazenar as Fotos)
-api.post('/v1/import/medical-record/analyze', requireTenant, requireRole('clinic_admin', 'professional'), ImportController.analyzeMedicalRecord);
-api.post('/v1/import/medical-record/execute', requireTenant, requireRole('clinic_admin', 'professional'), ImportController.executeMedicalRecord);
-api.get('/v1/import/medical-record/search-patient', requireTenant, requireRole('clinic_admin', 'professional'), ImportController.searchPatientDuplicate);
+api.post('/v1/import/medical-record/analyze', requireTenant, requirePermissionOrRole('can_import_data', 'clinic_admin'), ImportController.analyzeMedicalRecord);
+api.post('/v1/import/medical-record/execute', requireTenant, requirePermissionOrRole('can_import_data', 'clinic_admin'), ImportController.executeMedicalRecord);
+api.get('/v1/import/medical-record/search-patient', requireTenant, requirePermissionOrRole('can_import_data', 'clinic_admin'), ImportController.searchPatientDuplicate);
 
 // Central de Chamados & Suporte
 api.get('/v1/support/tickets', SupportController.list);

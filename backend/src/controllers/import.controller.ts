@@ -326,6 +326,45 @@ function parseDocxContent(buffer: Buffer): { headers: string[]; rows: Record<str
   return { headers, rows: allFoundRows };
 }
 
+/**
+ * Extrai texto completo de documento Word (.docx) em memória efêmera
+ * Suporta parágrafos normais, listas e tabelas (células formatadas em linhas).
+ * REGRA CRÍTICA: Não salva arquivos em disco, R2 ou logs.
+ */
+export function extractDocxFullText(buffer: Buffer): string {
+  try {
+    const zip = new AdmZip(buffer);
+    const docEntry = zip.getEntry('word/document.xml');
+    if (!docEntry) {
+      throw new Error('Arquivo .docx inválido ou corrompido: não contém word/document.xml');
+    }
+
+    const xml = docEntry.getData().toString('utf8');
+
+    // Transforma quebras de células e linhas em texto estruturado legível
+    const text = xml
+      .replace(/<w:tab[^>]*\/>/gi, '\t')
+      .replace(/<w:br[^>]*\/>/gi, '\n')
+      .replace(/<\/w:tc>/gi, ' | ')
+      .replace(/<\/w:tr>/gi, '\n')
+      .replace(/<\/w:p>/gi, '\n')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'");
+
+    return text
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0)
+      .join('\n');
+  } catch (err: any) {
+    throw new Error(`Falha ao processar arquivo .docx: ${err.message}`);
+  }
+}
+
 function parseCsvContent(buffer: Buffer): { headers: string[]; rows: Record<string, string>[] } {
   let content = buffer.toString('utf8');
   if (content.includes('\uFFFD')) {
@@ -1151,14 +1190,25 @@ export class ImportController {
   static listBatches(req: Request, res: Response): void {
     try {
       const tenantId = req.tenantId;
-      const batches = db.prepare(`
-        SELECT ib.*, u.name as imported_by_name
-        FROM import_batches ib
-        LEFT JOIN users u ON u.id = ib.user_id
-        WHERE ib.tenant_id = ?
-        ORDER BY ib.created_at DESC
-        LIMIT 50
-      `).all(tenantId);
+      const isClinicAdminOrSuper = req.user?.role === 'clinic_admin' || req.user?.role === 'superadmin';
+
+      const batches = isClinicAdminOrSuper
+        ? db.prepare(`
+            SELECT ib.*, u.name as imported_by_name
+            FROM import_batches ib
+            LEFT JOIN users u ON u.id = ib.user_id
+            WHERE ib.tenant_id = ?
+            ORDER BY ib.created_at DESC
+            LIMIT 50
+          `).all(tenantId)
+        : db.prepare(`
+            SELECT ib.*, u.name as imported_by_name
+            FROM import_batches ib
+            LEFT JOIN users u ON u.id = ib.user_id
+            WHERE ib.tenant_id = ? AND ib.user_id = ?
+            ORDER BY ib.created_at DESC
+            LIMIT 50
+          `).all(tenantId, req.user?.userId);
 
       res.json(batches);
     } catch (err: any) {
@@ -1172,6 +1222,11 @@ export class ImportController {
    */
   static rollbackBatch(req: Request, res: Response): void {
     try {
+      if (req.user?.role !== 'clinic_admin' && req.user?.role !== 'superadmin') {
+        res.status(403).json({ error: 'A reversão (rollback) de lotes é restrita exclusivamente ao Administrador da Clínica.' });
+        return;
+      }
+
       const tenantId = req.tenantId;
       const { id: batchId } = req.params;
 
@@ -1308,7 +1363,15 @@ export class ImportController {
         return;
       }
 
-      const validMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg', 'application/pdf'];
+      const docxMimes = [
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/docx',
+        'application/msword'
+      ];
+      const validMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg', 'application/pdf', ...docxMimes];
+
+      const processedFiles: Array<{ mimeType: string; base64?: string; text?: string; fileName?: string }> = [];
+
       for (let i = 0; i < files.length; i++) {
         const f = files[i];
         if (!f.base64 || typeof f.base64 !== 'string') {
@@ -1316,14 +1379,48 @@ export class ImportController {
           return;
         }
         const mime = (f.mimeType || '').toLowerCase().trim();
-        if (!validMimes.includes(mime)) {
-          res.status(400).json({ error: `Formato da página ${i + 1} não suportado (${mime}). Aceitos: JPG, PNG, WebP e PDF.` });
+        const fileName = (f.fileName || '').toLowerCase().trim();
+        const isDocx = docxMimes.includes(mime) || fileName.endsWith('.docx');
+
+        if (!isDocx && !validMimes.includes(mime)) {
+          res.status(400).json({ error: `Formato da página ${i + 1} não suportado (${mime}). Aceitos: JPG, PNG, WebP, PDF e DOCX.` });
           return;
+        }
+
+        if (isDocx) {
+          // Extração em memória exclusivamente temporária (LGPD e privacidade estrita: nunca salva em disco ou banco)
+          let buffer: Buffer | null = Buffer.from(f.base64, 'base64');
+          let docxText = '';
+          try {
+            docxText = extractDocxFullText(buffer);
+          } catch (docxErr: any) {
+            res.status(400).json({ error: `Erro ao processar documento Word (.docx): ${docxErr.message}` });
+            return;
+          } finally {
+            buffer = null; // Descarte imediato do buffer original da memória
+          }
+
+          if (!docxText || docxText.length < 5) {
+            res.status(400).json({ error: `O documento Word (${f.fileName || 'DOCX'}) está vazio ou não contém texto legível.` });
+            return;
+          }
+
+          processedFiles.push({
+            fileName: f.fileName || `documento_${i + 1}.docx`,
+            mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            text: docxText
+          });
+        } else {
+          processedFiles.push({
+            fileName: f.fileName,
+            mimeType: f.mimeType,
+            base64: f.base64
+          });
         }
       }
 
       // Chama extração multimodal do Gemini (ou mock determinístico em ambiente de testes)
-      const extracted = await GeminiService.extractMedicalRecordFromDocuments({ files });
+      const extracted = await GeminiService.extractMedicalRecordFromDocuments({ files: processedFiles });
 
       if (!extracted) {
         res.status(502).json({

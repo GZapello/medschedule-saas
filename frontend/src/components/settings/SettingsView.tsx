@@ -80,7 +80,7 @@ export interface SettingsViewProps {
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNavigateView }) => {
-  const { currentUser, currentTenant, isClinicAdmin, refreshTenant, reloadSession } = useAuth();
+  const { currentUser, currentTenant, isClinicAdmin, refreshTenant, reloadSession, hasPermission } = useAuth();
   const { showToast } = useToast();
 
   const [activeSection, setActiveSection] = useState<string>(() => {
@@ -787,6 +787,23 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
     }
   ];
 
+  const canImportData = isClinicAdmin || hasPermission('can_import_data');
+
+  const importCard = {
+    id: 'import',
+    title: 'Importação de Dados',
+    desc: 'Importe dados de pacientes, agendamentos e prontuários a partir de planilhas Excel/CSV, DOCX ou fotos.',
+    icon: Upload,
+    iconBg: 'bg-amber-50',
+    iconColor: 'text-amber-600',
+    tags: ['Planilhas', 'DOCX', 'Prontuários', 'Migração'],
+    defaultTab: 'import'
+  };
+
+  const effectiveStaffCards = canImportData
+    ? [...staffCards.slice(0, 3), importCard, ...staffCards.slice(3)]
+    : staffCards;
+
   const cards = isClinicAdmin
     ? (currentUser?.professionalId ? [
         adminCards[0],
@@ -801,10 +818,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
         },
         ...adminCards.slice(1)
       ] : adminCards)
-    : staffCards;
+    : effectiveStaffCards;
 
   const getSectionTitle = (sec: string) => {
-    const found = [...adminCards, ...staffCards].find(c => c.id === sec);
+    const found = [...adminCards, ...staffCards, importCard].find(c => c.id === sec);
     return found ? found.title : 'Configurações';
   };
 

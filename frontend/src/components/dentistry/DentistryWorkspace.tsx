@@ -52,10 +52,20 @@ import { useClinicalAutosave } from '../../hooks/useClinicalAutosave';
 import { useHorizontalTabScroll, HorizontalTabNav } from '../../hooks/useHorizontalTabScroll';
 import { ClinicalQuickHeaderActions, ClinicalQuickToolItem } from '../clinical/ClinicalQuickHeaderActions';
 import { ClinicalDraftRecoveryModal } from '../clinical/ClinicalDraftRecoveryModal';
-import { PatientSearchSelect } from '../common/PatientSearchSelect';
-import { ProfessionalModuleHeader } from '../common/ProfessionalModuleHeader';
 import { ClinicalInventorySelector, ClinicalInventorySelection } from '../clinical/ClinicalInventorySelector';
-import { ClinicalModuleEmptyState } from '../clinical/ClinicalModuleEmptyState';
+import { ClinicalModuleShell, ClinicalModuleTabItem } from '../clinical/ClinicalModuleShell';
+
+const DENTAL_TABS: ClinicalModuleTabItem[] = [
+  { id: 'odontogram', label: 'Odontograma 2D', icon: Smile },
+  { id: 'treatment_plans', label: 'Planos & Orçamento', icon: DollarSign },
+  { id: 'perio', label: 'Periodontia (PERIO)', icon: Activity },
+  { id: 'endo', label: 'Endodontia (ENDO)', icon: Scissors },
+  { id: 'prosthetics', label: 'Prótese & Laboratório', icon: Package },
+  { id: 'ortho_hof', label: 'Ortodontia & HOF', icon: Sparkles },
+  { id: 'anamnesis', label: 'Anamnese Odonto', icon: Shield },
+  { id: 'implants', label: 'Implantes & Cirurgia', icon: CheckCircle2 },
+  { id: 'photos_exams', label: 'Fotos & Exames', icon: Camera }
+];
 
 export interface DentistryInventoryUsageItem {
   id: string;
@@ -997,158 +1007,138 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
 
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 text-slate-800">
-      {completion.dialog}
-
-      {/* CABEÇALHO DO MÓDULO ZEMDAODONTO */}
-      <ProfessionalModuleHeader
-        icon={Smile}
-        iconGradient="from-cyan-600 to-teal-700"
-        iconShadow="shadow-cyan-600/20"
-        title="ZemdaOdonto"
-        badgeLabel="Odontologia Especializada"
-        badgeVariant="bg-cyan-100 text-cyan-800 border-cyan-200"
-        description="Odontograma FDI interativo, periodontia, endodontia, planos de tratamento e orçamentos, prótese e HOF."
-      >
-        <PatientSearchSelect
-          compact
-          value={selectedPatientId}
-          selectedPatient={selectedPatient}
-          disabled={!!initialAppointmentId}
-          onChange={(id, pat) => {
-            setSelectedPatientId(id);
-            if (pat) setSelectedPatient(pat);
-            else if (!id) setSelectedPatient(null);
-          }}
-        />
-
-        {selectedPatientId && (
-          <ClinicalQuickHeaderActions
-            autosaveStatus={autosave.autosaveStatus}
-            lastSavedTime={autosave.lastSavedTime}
-            onLoadSavedClinicalData={() => void loadPatientDentalData(selectedPatientId)}
-            onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
-            onViewReports={() => setActiveTab('treatment_plans')}
-            reportsLabel="Planos & Orçamento"
-            onFinishConsultation={handleFinishConsultation}
-            finishLabel="Finalizar Atendimento"
-            showFinish={!completion.isCompleted}
-            isSubmitting={saving}
-            tools={[
-              {
-                id: 'dictation',
-                label: 'Ditado Clínico IA',
-                icon: Sparkles,
-                highlight: true,
-                onClick: () => setIsDictationModalOpen(true)
-              }
-            ]}
-            toolsVariant="cyan"
-            toolsLabel="Ferramentas"
+    <ClinicalModuleShell
+      title="ZemdaOdonto"
+      icon={Smile}
+      iconGradient="from-cyan-600 to-teal-700"
+      iconShadow="shadow-cyan-600/20"
+      badgeLabel="Odontologia Especializada"
+      badgeVariant="bg-cyan-100 text-cyan-800 border-cyan-200"
+      description="Odontograma FDI interativo, periodontia, endodontia, planos de tratamento e orçamentos, prótese e HOF."
+      selectedPatientId={selectedPatientId}
+      selectedPatient={selectedPatient}
+      onSelectPatient={(id, pat) => {
+        setSelectedPatientId(id);
+        if (pat) setSelectedPatient(pat);
+        else if (!id) setSelectedPatient(null);
+      }}
+      isLockedContext={!!initialAppointmentId}
+      autosaveStatus={autosave.autosaveStatus}
+      lastSavedTime={autosave.lastSavedTime}
+      onLoadSavedClinicalData={() => void loadPatientDentalData(selectedPatientId)}
+      onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
+      onViewReports={() => setActiveTab('treatment_plans')}
+      reportsLabel="Planos & Orçamento"
+      onFinishConsultation={handleFinishConsultation}
+      finishLabel="Finalizar Atendimento"
+      showFinish={!completion.isCompleted}
+      isSubmitting={saving}
+      tools={[
+        {
+          id: 'dictation',
+          label: 'Ditado Clínico IA',
+          icon: Sparkles,
+          highlight: true,
+          onClick: () => setIsDictationModalOpen(true)
+        }
+      ]}
+      toolsVariant="cyan"
+      toolsLabel="Ferramentas"
+      tabs={DENTAL_TABS}
+      activeTab={activeTab}
+      onTabChange={tabId => setActiveTab(tabId as any)}
+      tabActiveVariant="bg-cyan-600 text-white shadow-xs"
+      emptyStateColorVariant="cyan"
+      emptyStateDescription="Escolha um paciente no menu superior para visualizar o odontograma anatômico, periodontia, endodontia e condutas odontológicas."
+      contentMaxWidth="max-w-6xl mx-auto"
+      modalsSlot={
+        <>
+          {completion.dialog}
+          <ToothDossierDrawer
+            isOpen={isDossierOpen}
+            onClose={() => setIsDossierOpen(false)}
+            patientId={selectedPatientId}
+            toothNumber={dossierToothNumber}
           />
-        )}
-      </ProfessionalModuleHeader>
-
-      {/* NAVEGAÇÃO POR ABAS PADRONIZADA (Trilha Horizontal com Scroll Suave) */}
-      <div className="bg-white border-b border-slate-200 shrink-0">
-        <HorizontalTabNav scroll={tabScroll}>
-          <div {...tabScrollProps} className={`${tabScrollProps.className} flex items-center gap-1 py-1`}>
-            {[
-              { id: 'odontogram', label: 'Odontograma 2D', icon: Smile },
-              { id: 'treatment_plans', label: 'Planos & Orçamento', icon: DollarSign },
-              { id: 'perio', label: 'Periodontia (PERIO)', icon: Activity },
-              { id: 'endo', label: 'Endodontia (ENDO)', icon: Scissors },
-              { id: 'prosthetics', label: 'Prótese & Laboratório', icon: Package },
-              { id: 'ortho_hof', label: 'Ortodontia & HOF', icon: Sparkles },
-              { id: 'anamnesis', label: 'Anamnese Odonto', icon: Shield },
-              { id: 'implants', label: 'Implantes & Cirurgia', icon: CheckCircle2 },
-              { id: 'photos_exams', label: 'Fotos & Exames', icon: Camera }
-            ].map(tab => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  data-tour={`tab-${tab.id}`}
-                  data-active={isActive}
-                  type="button"
-                  onClick={() => setActiveTab(tab.id as any)}
-                  className={`flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap transition-colors cursor-pointer shrink-0 ${
-                    isActive
-                      ? 'border-cyan-600 text-cyan-700 bg-cyan-50/50'
-                      : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'
-                  }`}
-                >
-                  <Icon className={`w-4 h-4 ${isActive ? 'text-cyan-600' : 'text-slate-400'}`} />
-                  <span>{tab.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </HorizontalTabNav>
-      </div>
-
-      {/* CONTEÚDO PRINCIPAL */}
-      <div className="flex-1 p-6 overflow-y-auto">
+          <DentalAIDictationModal
+            isOpen={isDictationModalOpen}
+            onClose={() => setIsDictationModalOpen(false)}
+            onApply={({ parsed, target }) => {
+              if (target === 'both' || target === 'evolution') {
+                setConsultationEvolution(prev => prev ? `${prev}\n\n${parsed.freeEvolution}` : parsed.freeEvolution);
+              }
+              if (target === 'both' || target === 'structured') {
+                if (parsed.procedure) {
+                  const detail = `${parsed.procedure}${parsed.tooth ? ` dente ${parsed.tooth}` : ''}${parsed.surfaces.length ? ` (${parsed.surfaces.join(', ')})` : ''}`;
+                  setConsultationProcedures(prev => prev ? `${prev}; ${detail}` : detail);
+                }
+                if (parsed.tooth) {
+                  const toothNum = parseInt(parsed.tooth);
+                  if (toothNum) {
+                    setOdontogramData(prev => ({
+                      ...prev,
+                      [toothNum]: {
+                        ...prev[toothNum],
+                        whole: parsed.procedure.toLowerCase().includes('canal') ? 'endodontics' : 'restoration_resin'
+                      }
+                    }));
+                  }
+                }
+              }
+              setSuccessMsg('Ditado estruturado aplicado com sucesso!');
+            }}
+          />
+          <ProcedureSuggestionModal
+            isOpen={isProcedureSuggestionOpen}
+            onClose={() => setIsProcedureSuggestionOpen(false)}
+            suggestions={procedureSuggestions}
+            onConfirm={(accepted) => {
+              accepted.forEach(item => {
+                setOdontogramData(prev => ({
+                  ...prev,
+                  [item.toothNumber]: {
+                    ...prev[item.toothNumber],
+                    whole: item.suggestedCondition
+                  }
+                }));
+              });
+              setSuccessMsg(`${accepted.length} elemento(s) atualizado(s) no Odontograma!`);
+            }}
+          />
+          {showPreviousRecordsModal && selectedPatientId && (
+            <PatientPreviousRecordsModal
+              isOpen={showPreviousRecordsModal}
+              onClose={() => setShowPreviousRecordsModal(false)}
+              patientId={selectedPatientId}
+              patientName={selectedPatient?.full_name || selectedPatient?.name}
+            />
+          )}
+          <ClinicalDraftRecoveryModal
+            isOpen={autosave.conflictModalOpen}
+            onClose={() => autosave.resolveConflict('local')}
+            serverDraftTime={autosave.serverDraftData?.updated_at || autosave.serverDraftData?.client_updated_at}
+            localDraftTime={autosave.localDraftData?.clientUpdatedAt}
+            onRecoverServer={() => autosave.resolveConflict('server')}
+            onKeepCurrent={() => autosave.resolveConflict('local')}
+          />
+        </>
+      }
+    >
+      <div className="space-y-6">
         {/* Alertas de Notificação */}
         {successMsg && (
-          <div className="mb-4 p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold rounded-2xl flex items-center gap-2 animate-fadeIn max-w-6xl mx-auto">
+          <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold rounded-2xl flex items-center gap-2 animate-fadeIn">
             <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
             <span>{successMsg}</span>
           </div>
         )}
 
         {errorMsg && (
-          <div className="mb-4 p-4 bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold rounded-2xl flex items-center gap-2 animate-fadeIn max-w-6xl mx-auto">
+          <div className="p-4 bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold rounded-2xl flex items-center gap-2 animate-fadeIn">
             <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
             <span>{errorMsg}</span>
           </div>
         )}
-
-        {!selectedPatientId ? (
-          <ClinicalModuleEmptyState
-            icon={Smile}
-            colorVariant="cyan"
-            description="Escolha um paciente no menu superior para visualizar o odontograma anatômico, periodontia, endodontia e condutas odontológicas."
-          />
-        ) : (
-          <div className="max-w-6xl mx-auto space-y-6">
-            {/* Informações do Paciente Selecionado */}
-            {selectedPatient && (
-              <div className="p-4 bg-white border border-cyan-200 rounded-2xl shadow-xs flex flex-wrap items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-cyan-100 text-cyan-800 flex items-center justify-center font-black text-sm border border-cyan-200">
-                    {(selectedPatient.full_name || selectedPatient.name || 'P').charAt(0)}
-                  </div>
-                  <div>
-                    <div className="text-sm font-bold text-slate-900">
-                      {selectedPatient.full_name || selectedPatient.name}
-                    </div>
-                    <div className="text-xs text-slate-500">
-                      CPF: {selectedPatient.cpf || '-'} • Nasc: {selectedPatient.birth_date || '-'} • Telefone: {selectedPatient.phone || '-'}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  {!initialPatientId && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedPatientId('');
-                        setSelectedPatient(null);
-                      }}
-                      className="px-3 py-1.5 text-xs font-bold text-slate-600 hover:text-rose-600 bg-slate-100 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer mr-1"
-                    >
-                      Trocar Paciente
-                    </button>
-                  )}
-                  <span className="px-3 py-1 bg-cyan-50 text-cyan-800 border border-cyan-200 rounded-full text-xs font-bold">
-                    Prontuário Ativo
-                  </span>
-                </div>
-              </div>
-            )}
 
           {/* ========================================================================= */}
           {/* ABA 1: ODONTOGRAMA INTERATIVO */}
@@ -2631,82 +2621,10 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
               )}
             </div>
           )}
-        </div>
-      )}
       </div>
-
-      {/* Dossiê do Dente Drawer */}
-      <ToothDossierDrawer
-        isOpen={isDossierOpen}
-        onClose={() => setIsDossierOpen(false)}
-        patientId={selectedPatientId}
-        toothNumber={dossierToothNumber}
-      />
-
-      {/* Ditado Odontológico por IA (GERAR -> REVISAR -> CONFIRMAR -> SALVAR) */}
-      <DentalAIDictationModal
-        isOpen={isDictationModalOpen}
-        onClose={() => setIsDictationModalOpen(false)}
-        onApply={({ parsed, target }) => {
-          if (target === 'both' || target === 'evolution') {
-            setConsultationEvolution(prev => prev ? `${prev}\n\n${parsed.freeEvolution}` : parsed.freeEvolution);
-          }
-          if (target === 'both' || target === 'structured') {
-            if (parsed.procedure) {
-              const detail = `${parsed.procedure}${parsed.tooth ? ` dente ${parsed.tooth}` : ''}${parsed.surfaces.length ? ` (${parsed.surfaces.join(', ')})` : ''}`;
-              setConsultationProcedures(prev => prev ? `${prev}; ${detail}` : detail);
-            }
-            if (parsed.tooth) {
-              const toothNum = parseInt(parsed.tooth);
-              if (toothNum) {
-                setOdontogramData(prev => ({
-                  ...prev,
-                  [toothNum]: {
-                    ...prev[toothNum],
-                    whole: parsed.procedure.toLowerCase().includes('canal') ? 'endodontics' : 'restoration_resin'
-                  }
-                }));
-              }
-            }
-          }
-          setSuccessMsg('Ditado estruturado aplicado com sucesso!');
-        }}
-      />
-
-      {/* Sugestão de Atualização de Odontograma */}
-      <ProcedureSuggestionModal
-        isOpen={isProcedureSuggestionOpen}
-        onClose={() => setIsProcedureSuggestionOpen(false)}
-        suggestions={procedureSuggestions}
-        onConfirm={(accepted) => {
-          accepted.forEach(item => {
-            setOdontogramData(prev => ({
-              ...prev,
-              [item.toothNumber]: {
-                ...prev[item.toothNumber],
-                whole: item.suggestedCondition
-              }
-            }));
-          });
-          setSuccessMsg(`${accepted.length} elemento(s) atualizado(s) no Odontograma!`);
-        }}
-      />
-      {showPreviousRecordsModal && selectedPatientId && (
-        <PatientPreviousRecordsModal
-          isOpen={showPreviousRecordsModal}
-          onClose={() => setShowPreviousRecordsModal(false)}
-          patientId={selectedPatientId}
-          patientName={selectedPatient?.full_name || selectedPatient?.name}
-        />
-      )}
-      <ClinicalDraftRecoveryModal
-        isOpen={autosave.conflictModalOpen}
-        onClose={() => autosave.resolveConflict('local')}
-        serverDraftTime={autosave.serverDraftData?.updated_at || autosave.serverDraftData?.client_updated_at}
-        localDraftTime={autosave.localDraftData?.clientUpdatedAt}
-        onRecoverServer={() => autosave.resolveConflict('server')}
-        onKeepCurrent={() => autosave.resolveConflict('local')}
-      />
-    </div>
+    </ClinicalModuleShell>
   );
 };
+
+export default DentistryWorkspace;
+
