@@ -121,7 +121,8 @@ const EXPECTED_RECEPTIONIST_PERMS = [
   'view_budgets',
   'manage_budgets',
   'view_inventory',
-  'manage_inventory'
+  'manage_inventory',
+  'can_import_data'
 ];
 
 async function run() {
@@ -134,10 +135,10 @@ async function run() {
     // -----------------------------------------------------------------
     assert(
       Array.isArray(DEFAULT_RECEPTIONIST_PERMISSIONS) &&
-      DEFAULT_RECEPTIONIST_PERMISSIONS.length === 14 &&
+      DEFAULT_RECEPTIONIST_PERMISSIONS.length === EXPECTED_RECEPTIONIST_PERMS.length &&
       EXPECTED_RECEPTIONIST_PERMS.every(p => DEFAULT_RECEPTIONIST_PERMISSIONS.includes(p)),
       1,
-      'DEFAULT_RECEPTIONIST_PERMISSIONS contém exatamente as 14 permissões canônicas especificadas'
+      `DEFAULT_RECEPTIONIST_PERMISSIONS contém exatamente as ${EXPECTED_RECEPTIONIST_PERMS.length} permissões canônicas especificadas`
     );
 
     assert(
@@ -208,9 +209,9 @@ async function run() {
       recepUser.role === 'receptionist' &&
       recepProf === undefined &&
       EXPECTED_RECEPTIONIST_PERMS.every(p => recepPerms.includes(p)) &&
-      recepPerms.length === 14,
+      recepPerms.length === EXPECTED_RECEPTIONIST_PERMS.length,
       4,
-      'Recepcionista via convite recebe 14 permissões padrão em clinic_users.permissions_json e NÃO cria registro em professionals'
+      `Recepcionista via convite recebe ${EXPECTED_RECEPTIONIST_PERMS.length} permissões padrão em clinic_users.permissions_json e NÃO cria registro em professionals`
     );
 
     // -----------------------------------------------------------------

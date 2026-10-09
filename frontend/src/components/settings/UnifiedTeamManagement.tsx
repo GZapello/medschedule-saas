@@ -85,7 +85,7 @@ const PERMISSION_PRESETS = [
   {
     id: 'receptionist',
     label: 'Recepcionista',
-    desc: 'Agenda, pacientes, exames, financeiro, recibos, orçamentos e estoque de insumos',
+    desc: 'Agenda, pacientes, exames, financeiro, recibos, orçamentos, estoque de insumos e importação de dados',
     perms: [
       'view_schedule',
       'create_appointment',
@@ -100,13 +100,14 @@ const PERMISSION_PRESETS = [
       'view_budgets',
       'manage_budgets',
       'view_inventory',
-      'manage_inventory'
+      'manage_inventory',
+      'can_import_data'
     ]
   },
   {
     id: 'professional',
     label: 'Profissional de Saúde',
-    desc: 'Agenda própria, gestão direta de pacientes e orçamentos',
+    desc: 'Agenda própria, prontuário, gestão direta de pacientes, orçamentos e importação de dados',
     perms: [
       'view_schedule',
       'create_appointment',
@@ -116,13 +117,14 @@ const PERMISSION_PRESETS = [
       'edit_patient',
       'view_exams',
       'view_budgets',
-      'manage_budgets'
+      'manage_budgets',
+      'can_import_data'
     ]
   },
   {
     id: 'dentist',
     label: 'Cirurgião-Dentista',
-    desc: 'Agenda própria, prontuário, gestão de pacientes e orçamentos',
+    desc: 'Agenda própria, prontuário, gestão de pacientes, orçamentos e importação de dados',
     perms: [
       'view_schedule',
       'create_appointment',
@@ -132,7 +134,8 @@ const PERMISSION_PRESETS = [
       'edit_patient',
       'view_exams',
       'view_budgets',
-      'manage_budgets'
+      'manage_budgets',
+      'can_import_data'
     ]
   },
   {

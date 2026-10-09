@@ -17,7 +17,8 @@ export const DEFAULT_RECEPTIONIST_PERMISSIONS: string[] = [
   'view_budgets',
   'manage_budgets',
   'view_inventory',
-  'manage_inventory'
+  'manage_inventory',
+  'can_import_data'
 ];
 
 export const DEFAULT_PROFESSIONAL_PERMISSIONS: string[] = [
@@ -28,7 +29,8 @@ export const DEFAULT_PROFESSIONAL_PERMISSIONS: string[] = [
   'create_patient',
   'edit_patient',
   'view_budgets',
-  'manage_budgets'
+  'manage_budgets',
+  'can_import_data'
 ];
 
 export const DEFAULT_FINANCIAL_PERMISSIONS: string[] = [

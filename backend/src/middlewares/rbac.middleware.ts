@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { db } from '../config/database';
+import { getDefaultPermissionsForRole } from '../utils/role-permissions';
 
 export type Role = 'superadmin' | 'clinic_admin' | 'professional' | 'receptionist' | 'patient';
 
@@ -48,12 +49,22 @@ export function requirePermissionOrRole(permissionId: string, ...allowedRoles: R
     // Verifica se o usuário possui permissão concedida na clínica
     if (req.tenantId && req.user.userId) {
       try {
-        const cu = db.prepare('SELECT permissions_json FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, req.tenantId) as any;
+        const cu = db.prepare('SELECT permissions_json, role FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, req.tenantId) as any;
+        let perms: string[] = [];
         if (cu?.permissions_json) {
-          const perms = JSON.parse(cu.permissions_json);
-          if (Array.isArray(perms) && perms.includes(permissionId)) {
-            return next();
-          }
+          try {
+            const parsed = JSON.parse(cu.permissions_json);
+            if (Array.isArray(parsed)) perms = parsed;
+          } catch (_) {}
+        }
+
+        // Mescla com as permissões padrão do papel (garante compatibilidade retroativa para usuários existentes)
+        const userRole = cu?.role || req.user.role;
+        const defaultPerms = getDefaultPermissionsForRole(userRole);
+        const effectivePerms = Array.from(new Set([...perms, ...defaultPerms]));
+
+        if (effectivePerms.includes(permissionId)) {
+          return next();
         }
       } catch (_) {}
     }

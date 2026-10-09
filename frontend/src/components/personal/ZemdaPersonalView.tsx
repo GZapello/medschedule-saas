@@ -282,6 +282,8 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
     }
   };
 
+  const selectedStudentObj = students.find(s => s.id === selectedStudentId);
+
   return (
     <div className="flex flex-col h-full bg-slate-50 text-slate-800">
       {/* CABEÇALHO DO MÓDULO ZEMDAPERSONAL */}
@@ -299,7 +301,6 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
         badgeVariant="bg-emerald-100 text-emerald-800 border-emerald-200"
         description="Gestão de alunos, dobras cutâneas (Pollock), periodização e mapa 3D de sobrecarga muscular."
       >
-      {!appointmentCompleted && <ClinicalFinishButton onClick={requestFinish} disabled={openingFinish} />}
         {/* Barra de Busca Rápida Global */}
         <div className="relative flex-1 min-w-[220px] max-w-xs md:max-w-sm">
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -411,6 +412,43 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
           </button>
         </div>
       </ProfessionalModuleHeader>
+
+      {/* LINHA 2 — FAIXA HORIZONTAL DO ATENDIMENTO (SOMENTE SE ALUNO ESTIVER SELECIONADO) */}
+      {Boolean(selectedStudentId) && (
+        <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-2.5 shrink-0 shadow-2xs">
+          <div className="max-w-6xl mx-auto flex items-center gap-2.5 sm:gap-3 flex-wrap">
+            {/* Aluno selecionado com chip visual com "X" para desmarcar */}
+            <div className="inline-flex items-center gap-2 bg-slate-100 hover:bg-slate-200/70 border border-slate-200 rounded-xl px-2.5 py-1 transition-colors shrink-0">
+              <div className="w-6 h-6 rounded-lg bg-white border border-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center shrink-0">
+                <Users className="w-3.5 h-3.5" />
+              </div>
+              <span className="font-bold text-xs text-slate-900 truncate max-w-[180px] sm:max-w-[240px]">
+                {selectedStudentObj?.name || 'Aluno Selecionado'}
+              </span>
+              {selectedStudentObj?.phone && (
+                <span className="text-[10px] text-slate-500 font-mono hidden sm:inline">
+                  {selectedStudentObj.phone}
+                </span>
+              )}
+              {!lockStudentContext && (
+                <button
+                  type="button"
+                  onClick={() => handleSelectStudent(null)}
+                  className="p-0.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
+                  title="Desmarcar aluno"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Finalizar Atendimento */}
+            {!appointmentCompleted && (
+              <ClinicalFinishButton onClick={requestFinish} disabled={openingFinish} />
+            )}
+          </div>
+        </div>
+      )}
 
       {/* NAVEGAÇÃO POR ABAS PADRONIZADA (Trilha Horizontal com Scroll Suave) */}
       <div className="bg-white border-b border-slate-200 shrink-0">

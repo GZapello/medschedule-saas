@@ -141,13 +141,14 @@ export const ClinicalModuleShell: React.FC<ClinicalModuleShellProps> = ({
   const { tabScrollProps } = tabScroll;
 
   const patientDisplayName = selectedPatient?.full_name || selectedPatient?.name;
+  const handleClear = onClearPatient || (() => onSelectPatient('', null));
 
   return (
     <div className={`flex flex-col min-h-screen bg-slate-50 text-slate-800 ${className}`}>
       {/* Modais Globais / Slots */}
       {modalsSlot}
 
-      {/* 1. CABEÇALHO PROFISSIONAL PADRÃO */}
+      {/* LINHA 1 — CABEÇALHO DO MÓDULO (Ícone, Nome, Badges, Descrição, Filtros da Área e Busca de Paciente) */}
       <ProfessionalModuleHeader
         icon={ModuleIcon}
         iconGradient={iconGradient}
@@ -158,113 +159,75 @@ export const ClinicalModuleShell: React.FC<ClinicalModuleShellProps> = ({
         secondaryBadge={secondaryBadge}
         description={description}
       >
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           {filterSlot}
+          <div className="w-64 sm:w-72 lg:w-80" data-tour="clinical-patient-select">
+            <PatientSearchSelect
+              value={selectedPatientId || ''}
+              onChange={onSelectPatient}
+              placeholder={patientSearchPlaceholder}
+              compact
+            />
+          </div>
           {headerActions}
         </div>
       </ProfessionalModuleHeader>
 
-      {/* 2. BARRA DE PACIENTE & AÇÕES RÁPIDAS */}
-      <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-3 shrink-0 shadow-2xs">
-        <div className={`${contentMaxWidth} flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3`}>
-          {/* Seletor / Identificação do Paciente */}
-          <div className="flex items-center gap-3 flex-1 min-w-0">
-            {!selectedPatientId ? (
-              <div className="w-full max-w-md">
-                <PatientSearchSelect
-                  value={selectedPatientId || ''}
-                  onChange={onSelectPatient}
-                  placeholder={patientSearchPlaceholder}
-                  compact
-                />
+      {/* LINHA 2 — FAIXA HORIZONTAL DO ATENDIMENTO (SOMENTE SE PACIENTE ESTIVER SELECIONADO) */}
+      {Boolean(selectedPatientId) && (
+        <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-2.5 shrink-0 shadow-2xs">
+          <div className={`${contentMaxWidth} flex items-center gap-2.5 sm:gap-3 flex-wrap`}>
+            {/* Paciente selecionado com chip visual com "X" para desmarcar */}
+            <div className="inline-flex items-center gap-2 bg-slate-100 hover:bg-slate-200/70 border border-slate-200 rounded-xl px-2.5 py-1 transition-colors shrink-0">
+              <div className="w-6 h-6 rounded-lg bg-white border border-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center shrink-0">
+                <User className="w-3.5 h-3.5" />
               </div>
-            ) : (
-              <div className="flex items-center gap-3 flex-wrap">
-                <div className="flex items-center gap-2 bg-slate-50 border border-slate-200/90 rounded-xl px-3 py-1.5 shadow-2xs">
-                  <div className="w-7 h-7 rounded-lg bg-slate-200/80 text-slate-700 font-bold text-xs flex items-center justify-center shrink-0">
-                    <User className="w-4 h-4" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-xs text-slate-900 truncate">
-                        {patientDisplayName || 'Paciente Selecionado'}
-                      </span>
-                      {selectedPatient?.gender && (
-                        <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-slate-200/60 text-slate-600 uppercase">
-                          {selectedPatient.gender}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 text-[11px] text-slate-500">
-                      {selectedPatient?.birth_date && (
-                        <span>
-                          Nasc: {new Date(selectedPatient.birth_date).toLocaleDateString('pt-BR')}
-                        </span>
-                      )}
-                      {selectedPatient?.phone && (
-                        <>
-                          <span>•</span>
-                          <span className="font-mono">{selectedPatient.phone}</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  {!isLockedContext && onClearPatient && (
-                    <button
-                      type="button"
-                      onClick={onClearPatient}
-                      className="ml-1 p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
-                      title="Trocar paciente"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-
-                {!isLockedContext && !onClearPatient && (
-                  <div className="w-64">
-                    <PatientSearchSelect
-                      value={selectedPatientId}
-                      onChange={onSelectPatient}
-                      placeholder="Trocar paciente..."
-                      compact
-                    />
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Barra de Ações Clínicas Rápidas (quando há paciente) */}
-          {selectedPatientId && (
-            <div className="flex items-center gap-2 flex-wrap justify-end">
-              {extraQuickActions}
-              <ClinicalQuickHeaderActions
-                autosaveStatus={autosaveStatus}
-                lastSavedTime={lastSavedTime}
-                onViewPreviousRecords={onViewPreviousRecords}
-                previousRecordsLabel={previousRecordsLabel}
-                onLoadSavedClinicalData={onLoadSavedClinicalData}
-                onViewReports={onViewReports}
-                reportsLabel={reportsLabel}
-                reportsIcon={reportsIcon}
-                tools={tools}
-                toolsLabel={toolsLabel}
-                toolsVariant={toolsVariant}
-                onFinishConsultation={onFinishConsultation}
-                showFinish={showFinish}
-                finishLabel={finishLabel}
-                isSubmitting={isSubmitting}
-              />
+              <span className="font-bold text-xs text-slate-900 truncate max-w-[160px] sm:max-w-[240px]">
+                {patientDisplayName || 'Paciente Selecionado'}
+              </span>
+              {selectedPatient?.birth_date && (
+                <span className="text-[10px] text-slate-500 hidden md:inline">
+                  ({new Date(selectedPatient.birth_date).toLocaleDateString('pt-BR')})
+                </span>
+              )}
+              {!isLockedContext && (
+                <button
+                  type="button"
+                  onClick={handleClear}
+                  className="p-0.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
+                  title="Desmarcar paciente"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
-          )}
-        </div>
-      </div>
 
-      {/* 3. MENU HORIZONTAL DE ABAS CLÍNICAS (quando há paciente e abas) */}
-      {selectedPatientId && tabs.length > 0 && onTabChange && (
-        <div className="bg-white border-b border-slate-200 shrink-0">
+            {/* Demais itens da linha contínua: Autosave, Prontuários Anteriores, Carregar últimos dados, Relatórios/Guia, Ferramentas, Finalizar Atendimento */}
+            <ClinicalQuickHeaderActions
+              autosaveStatus={autosaveStatus}
+              lastSavedTime={lastSavedTime}
+              onViewPreviousRecords={onViewPreviousRecords}
+              previousRecordsLabel={previousRecordsLabel}
+              onLoadSavedClinicalData={onLoadSavedClinicalData}
+              onViewReports={onViewReports}
+              reportsLabel={reportsLabel}
+              reportsIcon={reportsIcon}
+              tools={tools}
+              toolsLabel={toolsLabel}
+              toolsVariant={toolsVariant}
+              onFinishConsultation={onFinishConsultation}
+              showFinish={showFinish}
+              finishLabel={finishLabel}
+              isSubmitting={isSubmitting}
+            />
+            {extraQuickActions}
+          </div>
+        </div>
+      )}
+
+      {/* LINHA 3 — ABAS DO MÓDULO (HorizontalTabNav com scroll horizontal e setas) */}
+      {tabs.length > 0 && onTabChange && (
+        <div className="bg-white border-b border-slate-200 shrink-0 sticky top-0 z-10 shadow-2xs">
           <HorizontalTabNav scroll={tabScroll}>
             <div
               {...tabScrollProps}
@@ -308,7 +271,7 @@ export const ClinicalModuleShell: React.FC<ClinicalModuleShellProps> = ({
         </div>
       )}
 
-      {/* 4. CONTEÚDO PRINCIPAL DO WORKSPACE */}
+      {/* CONTEÚDO: ABA ATIVA OU ESTADO VAZIO */}
       <main className="flex-1 p-4 sm:p-6 overflow-y-auto">
         <div className={contentMaxWidth}>
           {!selectedPatientId ? (

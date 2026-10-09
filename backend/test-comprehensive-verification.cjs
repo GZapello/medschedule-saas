@@ -108,19 +108,19 @@ async function run() {
       VALUES ('cu-prof-perm', ?, ?, 'professional', 'active', ?)
     `).run(tenantId, profWithPermId, JSON.stringify(['can_import_data', 'can_manage_records']));
 
-    // Profissional sem permissão de importação
+    // Colaborador sem permissão de importação (assistente)
     db.prepare(`
       INSERT INTO users (id, tenant_id, name, email, password_hash, role, status)
-      VALUES (?, ?, 'Dr. Fisio Bloqueado', 'fisio.bloqueado@clinica.test', 'hash123', 'professional', 'active')
+      VALUES (?, ?, 'Assistente Bloqueado', 'asst.bloqueado@clinica.test', 'hash123', 'assistant', 'active')
     `).run(profWithoutPermId, tenantId);
     db.prepare(`
       INSERT INTO clinic_users (id, tenant_id, user_id, role, status, permissions_json)
-      VALUES ('cu-prof-noperm', ?, ?, 'professional', 'active', ?)
+      VALUES ('cu-prof-noperm', ?, ?, 'assistant', 'active', ?)
     `).run(tenantId, profWithoutPermId, JSON.stringify(['can_manage_records']));
 
     const adminToken = generateToken({ userId: adminId, tenantId, email: 'admin@clinica.test', role: 'clinic_admin' });
     const profPermToken = generateToken({ userId: profWithPermId, tenantId, email: 'fono.autorizada@clinica.test', role: 'professional' });
-    const profNoPermToken = generateToken({ userId: profWithoutPermId, tenantId, email: 'fisio.bloqueado@clinica.test', role: 'professional' });
+    const profNoPermToken = generateToken({ userId: profWithoutPermId, tenantId, email: 'asst.bloqueado@clinica.test', role: 'assistant' });
 
     const adminHeaders = { 'Authorization': `Bearer ${adminToken}`, 'X-Tenant-ID': tenantId };
     const profPermHeaders = { 'Authorization': `Bearer ${profPermToken}`, 'X-Tenant-ID': tenantId };

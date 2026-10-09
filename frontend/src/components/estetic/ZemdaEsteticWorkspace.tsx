@@ -8,6 +8,7 @@ import { ClinicalAutosaveIndicator } from '../clinical/ClinicalAutosaveIndicator
 import { ClinicalDraftRecoveryModal } from '../clinical/ClinicalDraftRecoveryModal';
 import { FinishConsultationModal } from '../clinical/FinishConsultationModal';
 import { ClinicalBooleanSelect } from '../clinical/ClinicalBooleanSelect';
+import { ClinicalModuleEmptyState } from '../clinical/ClinicalModuleEmptyState';
 import { useHorizontalTabScroll, HorizontalTabNav } from '../../hooks/useHorizontalTabScroll';
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import {
@@ -1016,7 +1017,7 @@ interface EsteticPlanItemForm {
         );
       })()}
       {dataError && <div role="alert" className="m-4 p-3 rounded-xl bg-red-50 text-red-800">{dataError} <button type="button" onClick={() => loadPatientData(selectedPatientId, activeArea)}>Tentar novamente</button></div>}
-      {/* 1. CABEÇALHO PROFISSIONAL COM SELETOR DE ÁREA E AÇÕES RÁPIDAS */}
+      {/* 1. CABEÇALHO PROFISSIONAL COM SELETOR DE ÁREA E BUSCA DE PACIENTE (LINHA 1) */}
       <ProfessionalModuleHeader
         icon={Sparkles}
         iconGradient={areaTheme.gradient}
@@ -1033,11 +1034,7 @@ interface EsteticPlanItemForm {
         }
         description="Avaliação estruturada por área, rastreabilidade de produtos, fotos clínicas e motor anatômico Zemda360."
       >
-        <div className="flex items-center gap-2 flex-wrap">
-          {selectedPatientId && <ClinicalAutosaveIndicator status={autosave.autosaveStatus} lastSavedTime={autosave.lastSavedTime} />}
-          {selectedPatientId && !appointmentCompleted && (
-            <ClinicalFinishButton onClick={requestFinish} disabled={savingRecord} />
-          )}
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           {/* SELETOR DE ÁREA DE ATUAÇÃO (FACIAL, CORPORAL, CAPILAR) */}
           <div className="relative">
             <button
@@ -1096,55 +1093,7 @@ interface EsteticPlanItemForm {
             )}
           </div>
 
-          {/* BOTÕES DE AÇÕES RÁPIDAS */}
-          {selectedPatientId && (
-            <>
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab('assessment');
-                }}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-bold shadow-xs cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5 text-rose-600" />
-                <span>Nova Avaliação</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setIsNewPhotoModalOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-bold shadow-xs cursor-pointer"
-              >
-                <Camera className="w-3.5 h-3.5 text-sky-600" />
-                <span>Fotografias</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setIsNewProcedureModalOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs cursor-pointer transition-colors"
-              >
-                <Scissors className="w-3.5 h-3.5" />
-                <span>Procedimento</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={async () => { if (!mapSave.current || await mapSave.current()) setIsZemda360ModalOpen(true); }}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold shadow-xs cursor-pointer transition-colors"
-              >
-                <Activity className="w-3.5 h-3.5" />
-                <span>Zemda360</span>
-              </button>
-            </>
-          )}
-        </div>
-      </ProfessionalModuleHeader>
-
-      {/* 2. BARRA DE SELEÇÃO DO PACIENTE */}
-      <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-3 shrink-0">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-          <div className="w-full md:w-96" data-tour="estetic-patient-select">
+          <div className="w-64 sm:w-72 lg:w-80" data-tour="estetic-patient-select">
             <PatientSearchSelect
               value={selectedPatientId}
               onChange={handleSelectPatient}
@@ -1152,97 +1101,136 @@ interface EsteticPlanItemForm {
               compact
             />
           </div>
+        </div>
+      </ProfessionalModuleHeader>
 
-          {selectedPatientId && overviewData?.patient && (
-            <div className="flex items-center gap-2 sm:gap-4 text-xs text-slate-600 flex-wrap">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-bold text-slate-800">{overviewData.patient.full_name}</span>
-                {overviewData.patient.gender && (
-                  <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 font-medium">
-                    {overviewData.patient.gender}
-                  </span>
-                )}
-                {overviewData.patient.birth_date && (
-                  <span className="text-slate-500">
-                    Nasc: {new Date(overviewData.patient.birth_date).toLocaleDateString('pt-BR')}
-                  </span>
-                )}
-                {overviewData.patient.phone && (
-                  <span className="text-slate-500 font-mono">
-                    Tel: {overviewData.patient.phone}
-                  </span>
-                )}
+      {/* 2. FAIXA HORIZONTAL DO ATENDIMENTO (LINHA 2 — SOMENTE SE PACIENTE ESTIVER SELECIONADO) */}
+      {Boolean(selectedPatientId) && (
+        <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-2.5 shrink-0 shadow-2xs">
+          <div className="max-w-7xl mx-auto flex items-center gap-2.5 sm:gap-3 flex-wrap">
+            {/* Paciente selecionado com chip visual com "X" para desmarcar */}
+            <div className="inline-flex items-center gap-2 bg-slate-100 hover:bg-slate-200/70 border border-slate-200 rounded-xl px-2.5 py-1 transition-colors shrink-0">
+              <div className="w-6 h-6 rounded-lg bg-white border border-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center shrink-0">
+                <User className="w-3.5 h-3.5" />
               </div>
+              <span className="font-bold text-xs text-slate-900 truncate max-w-[160px] sm:max-w-[240px]">
+                {overviewData?.patient?.full_name || selectedPatient?.full_name || selectedPatient?.name || 'Paciente Selecionado'}
+              </span>
+              {(overviewData?.patient?.birth_date || selectedPatient?.birth_date) && (
+                <span className="text-[10px] text-slate-500 hidden sm:inline">
+                  ({new Date(overviewData?.patient?.birth_date || selectedPatient?.birth_date!).toLocaleDateString('pt-BR')})
+                </span>
+              )}
+              {!initialAppointmentId && (
+                <button
+                  type="button"
+                  onClick={() => handleSelectPatient('')}
+                  className="p-0.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
+                  title="Desmarcar paciente"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
-          )}
-        </div>
-      </div>
 
-      {/* 3. MENU HORIZONTAL DE ABAS CLÍNICAS */}
-      {selectedPatientId ? (
-        <div className="bg-white border-b border-slate-200 shrink-0">
-          <HorizontalTabNav scroll={tabScroll}>
-            <div {...tabScrollProps} className={`${tabScrollProps.className} max-w-7xl mx-auto flex items-center gap-1 py-2`}>
-              {[
-                { id: 'overview', label: 'Visão Geral', icon: Layers },
-                { id: 'assessment', label: 'Avaliação Estética', icon: FileText },
-                { id: 'photos', label: `Fotos (${photos.length})`, icon: Camera },
-                { id: 'planning', label: `Planejamento (${plans.length})`, icon: Calendar },
-                { id: 'procedures', label: `Procedimentos (${procedures.length})`, icon: Scissors },
-                { id: 'zemda360', label: 'Zemda360', icon: Activity },
-                { id: 'evolutions', label: `Evoluções (${evolutions.length})`, icon: CheckCircle2 },
-                { id: 'returns', label: `Retornos (${returnsList.length})`, icon: Clock },
-                { id: 'before_after', label: 'Antes × Depois', icon: ArrowLeftRight },
-                { id: 'history', label: 'Histórico Completo', icon: RefreshCw },
-                ...(selectedPatientId && !appointmentCompleted
-                  ? [{ id: 'finish', label: 'Finalizar Atendimento', icon: CheckCircle2 }]
-                  : [])
-              ].map(tab => {
-                const Icon = tab.icon;
-                const isActive = activeTab === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    data-active={isActive ? 'true' : 'false'}
-                    data-tour={`tab-${tab.id}`}
-                    onClick={() => tab.id === 'finish' ? void requestFinish() : void changeTab(tab.id as any)}
-                    className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
-                      isActive
-                        ? areaTheme.activeTab
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                    }`}
-                  >
-                    <Icon className="w-4 h-4" />
-                    <span>{tab.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </HorizontalTabNav>
+            {/* Autosave */}
+            <ClinicalAutosaveIndicator status={autosave.autosaveStatus} lastSavedTime={autosave.lastSavedTime} />
+
+            {/* Ferramentas e Ações Rápidas */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('assessment')}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-bold shadow-xs cursor-pointer whitespace-nowrap"
+            >
+              <Plus className="w-3.5 h-3.5 text-rose-600" />
+              <span>Nova Avaliação</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsNewPhotoModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-bold shadow-xs cursor-pointer whitespace-nowrap"
+            >
+              <Camera className="w-3.5 h-3.5 text-sky-600" />
+              <span>Fotografias</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsNewProcedureModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs cursor-pointer transition-colors whitespace-nowrap"
+            >
+              <Scissors className="w-3.5 h-3.5" />
+              <span>Procedimento</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={async () => { if (!mapSave.current || await mapSave.current()) setIsZemda360ModalOpen(true); }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold shadow-xs cursor-pointer transition-colors whitespace-nowrap"
+            >
+              <Activity className="w-3.5 h-3.5" />
+              <span>Zemda360</span>
+            </button>
+
+            {/* Finalizar Atendimento */}
+            {!appointmentCompleted && (
+              <ClinicalFinishButton onClick={requestFinish} disabled={savingRecord} />
+            )}
+          </div>
         </div>
-      ) : null}
+      )}
+
+      {/* 3. MENU HORIZONTAL DE ABAS CLÍNICAS (LINHA 3) */}
+      <div className="bg-white border-b border-slate-200 shrink-0 sticky top-0 z-10 shadow-2xs">
+        <HorizontalTabNav scroll={tabScroll}>
+          <div {...tabScrollProps} className={`${tabScrollProps.className} max-w-7xl mx-auto flex items-center gap-1 py-2`}>
+            {[
+              { id: 'overview', label: 'Visão Geral', icon: Layers },
+              { id: 'assessment', label: 'Avaliação Estética', icon: FileText },
+              { id: 'photos', label: `Fotos (${photos.length})`, icon: Camera },
+              { id: 'planning', label: `Planejamento (${plans.length})`, icon: Calendar },
+              { id: 'procedures', label: `Procedimentos (${procedures.length})`, icon: Scissors },
+              { id: 'zemda360', label: 'Zemda360', icon: Activity },
+              { id: 'evolutions', label: `Evoluções (${evolutions.length})`, icon: CheckCircle2 },
+              { id: 'returns', label: `Retornos (${returnsList.length})`, icon: Clock },
+              { id: 'before_after', label: 'Antes × Depois', icon: ArrowLeftRight },
+              { id: 'history', label: 'Histórico Completo', icon: RefreshCw }
+            ].map(tab => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  data-active={isActive ? 'true' : 'false'}
+                  data-tour={`tab-${tab.id}`}
+                  onClick={() => changeTab(tab.id as any)}
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                    isActive
+                      ? areaTheme.activeTab
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </HorizontalTabNav>
+      </div>
 
       {/* 4. CONTEÚDO PRINCIPAL DO WORKSPACE */}
       <div className="flex-1 p-4 md:p-6 overflow-y-auto">
         <div className="max-w-7xl mx-auto">
           {!selectedPatientId ? (
-            <div className="flex flex-col items-center justify-center min-h-[50vh] text-center p-8 bg-white rounded-3xl border border-slate-200 shadow-xs">
-              <div className="w-16 h-16 rounded-3xl bg-rose-50 text-rose-600 flex items-center justify-center mb-4">
-                <Sparkles className="w-8 h-8" />
-              </div>
-              <h2 className="text-xl font-bold text-slate-800 mb-2">Módulo Clínico ZemdaEstetic</h2>
-              <p className="text-sm text-slate-500 max-w-md mb-6">
-                Selecione ou busque um paciente acima para iniciar a avaliação, planejar tratamentos, registrar procedimentos com rastreabilidade de lote e acessar o Zemda360.
-              </p>
-              <div className="w-full max-w-sm">
-                <PatientSearchSelect
-                  value={selectedPatientId}
-                  onChange={handleSelectPatient}
-                  placeholder="Selecione o paciente..."
-                />
-              </div>
-            </div>
+            <ClinicalModuleEmptyState
+              icon={Sparkles}
+              title={`Selecione um paciente para iniciar o atendimento no ZemdaEstetic (${areaTheme.title})`}
+              description="Escolha um paciente na busca superior para iniciar a avaliação estética, planejar tratamentos, registrar procedimentos com rastreabilidade de lote e acessar o Zemda360."
+              colorVariant={activeArea === 'FACIAL' ? 'rose' : activeArea === 'CORPORAL' ? 'teal' : 'amber'}
+            />
           ) : (
             <>
               {/* ABA 1: VISÃO GERAL (OVERVIEW) */}

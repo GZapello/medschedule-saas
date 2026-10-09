@@ -460,7 +460,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   }
 
-  const userPermissions = (currentUser as any)?.permissions || [];
+  const rawPermissions = (currentUser as any)?.permissions || [];
+  const isEligibleForImport = Boolean(
+    isClinicAdmin ||
+    isProfessional ||
+    isReceptionist ||
+    (currentUser?.role as string) === 'secretary'
+  );
+  const userPermissions = Array.from(new Set([
+    ...rawPermissions,
+    ...(isEligibleForImport ? ['can_import_data'] : [])
+  ]));
 
   // Módulos com estrita exclusividade mútua (apenas o módulo correspondente à profissão atual fica ativo)
   const isPhysiotherapist = isEligibleStaff && (activeModule ? activeModule === 'ZemdaFisio' : Boolean(currentUser?.zemdaFisioEnabled));
@@ -555,6 +565,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const hasPermission = (permId: string): boolean => {
     if (isSuperAdmin && !isSandboxSession) return true;
     if (isClinicAdmin) return true;
+    if (permId === 'can_import_data' && isEligibleForImport) return true;
     return userPermissions.includes(permId);
   };
 
