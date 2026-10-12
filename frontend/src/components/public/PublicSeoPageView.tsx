@@ -10,7 +10,7 @@ interface PublicSeoPageViewProps {
 }
 export const PublicSeoPageView: React.FC<PublicSeoPageViewProps> = ({pageData,onNavigateHome,onNavigatePage,onLogin,onRegisterClinic}) => {
  useEffect(()=>{window.scrollTo({top:0,behavior:'instant'});},[pageData.path]);
- return <div className="min-h-screen bg-[#fafbfc] text-slate-800">
+ return <div className="min-h-screen bg-white text-slate-800">
   <PublicHeader onLogin={onLogin} onRegisterClinic={onRegisterClinic} isLegalOrAuxiliary onNavigateHome={onNavigateHome}/>
   <main className="seo-editorial" onClick={event=>{
    const a=(event.target as HTMLElement).closest('a');

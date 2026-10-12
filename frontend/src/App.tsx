@@ -56,6 +56,7 @@ const MyResourcesView = lazyWithRetry(() => import('./components/profile/MyResou
 const SuperAdminLaboratoryView = lazyWithRetry(() => import('./components/superadmin/SuperAdminLaboratoryView').then(module => ({ default: module.SuperAdminLaboratoryView })), 'SuperAdminLaboratoryView');
 import { ZemdaLandingPage } from './components/public/ZemdaLandingPage';
 import { PublicSeoPageView } from './components/public/PublicSeoPageView';
+import { PublicPlansLayout } from './components/public/PublicPlansLayout';
 import { PublicHeader } from './components/public/PublicHeader';
 import { PublicFooter } from './components/public/PublicFooter';
 import { SEO_PAGES, isValidApplicationRoute, isValidInternalRoute, buildCanonical } from './data/seoPagesData';
@@ -979,7 +980,7 @@ const AppContent: React.FC = () => {
   if (callback || window.location.pathname === '/planos') {
     if (!currentUser && window.location.pathname === '/planos') {
       return (
-        <main>
+        <PublicPlansLayout>
           <BillingView
             publicPage
             onBack={() => {
@@ -988,7 +989,7 @@ const AppContent: React.FC = () => {
               window.history.pushState(null, '', '/');
             }}
           />
-        </main>
+        </PublicPlansLayout>
       );
     }
     return (
