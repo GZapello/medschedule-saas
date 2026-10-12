@@ -1,5 +1,4 @@
 .signup-auth-host { display:block; padding:0 }
-.signup-auth-host > :not(.signup-page) { display:none }
 .signup-page { height:100dvh; overflow-y:auto; background:linear-gradient(135deg,#f0fdfa,#fafcfc 45%,#fff); display:grid; grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr); align-items:center; gap:clamp(24px,4vw,60px); padding:clamp(14px,2.2vh,28px) max(24px,calc((100vw - 1200px)/2)); color:#0f172a }
 .signup-intro { position:sticky; top:0; padding:10px 0; min-width:0 }
 .signup-logo { width:135px; height:auto; object-fit:contain }

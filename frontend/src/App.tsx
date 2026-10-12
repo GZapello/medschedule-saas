@@ -877,13 +877,13 @@ const AppContent: React.FC = () => {
         }}
         onLogin={() => {
           setActiveLegalPage(null);
-          window.history.pushState(null, '', '/');
+          window.history.pushState(null, '', '/login');
           setAuthInitialAction('login');
           setPublicView('login');
         }}
         onRegisterClinic={() => {
           setActiveLegalPage(null);
-          window.history.pushState(null, '', '/');
+          window.history.pushState(null, '', '/cadastro');
           setAuthInitialAction('create-clinic');
           setPublicView('login');
         }}
@@ -901,13 +901,13 @@ const AppContent: React.FC = () => {
         }}
         onLogin={() => {
           setActiveLegalPage(null);
-          window.history.pushState(null, '', '/');
+          window.history.pushState(null, '', '/login');
           setAuthInitialAction('login');
           setPublicView('login');
         }}
         onRegisterClinic={() => {
           setActiveLegalPage(null);
-          window.history.pushState(null, '', '/');
+          window.history.pushState(null, '', '/cadastro');
           setAuthInitialAction('create-clinic');
           setPublicView('login');
         }}
@@ -1024,9 +1024,9 @@ const AppContent: React.FC = () => {
             setPublicView('landing');
             window.history.pushState(null, '', '/');
           }}
-          initialAction={isRegisterPath ? 'create-clinic' : authInitialAction}
-          initialPlan={selectedRegistrationPlan}
-          isTrial={isRegistrationTrial}
+          initialAction={isRegisterPath ? 'create-clinic' : isLoginPath ? 'login' : authInitialAction}
+          initialPlan={new URLSearchParams(window.location.search).get('plan') || selectedRegistrationPlan}
+          isTrial={new URLSearchParams(window.location.search).has('isTrial') ? new URLSearchParams(window.location.search).get('isTrial') === 'true' : isRegistrationTrial}
         />
       );
     }
@@ -1043,8 +1043,8 @@ const AppContent: React.FC = () => {
             window.history.pushState(null, '', '/');
           }}
           initialAction="login"
-          initialPlan={selectedRegistrationPlan}
-          isTrial={isRegistrationTrial}
+          initialPlan={new URLSearchParams(window.location.search).get('plan') || selectedRegistrationPlan}
+          isTrial={new URLSearchParams(window.location.search).has('isTrial') ? new URLSearchParams(window.location.search).get('isTrial') === 'true' : isRegistrationTrial}
         />
       );
     }
@@ -1133,9 +1133,12 @@ const AppContent: React.FC = () => {
           onRegisterClinic={(plan, isTrial) => {
             setSelectedRegistrationPlan(plan);
             setIsRegistrationTrial(isTrial);
+            const query = new URLSearchParams();
+            if (plan) query.set('plan', plan);
+            if (isTrial !== undefined) query.set('isTrial', String(isTrial));
             setAuthInitialAction('create-clinic');
             setPublicView('login');
-            window.history.pushState(null, '', '/cadastro');
+            window.history.pushState(null, '', `/cadastro${query.size ? `?${query}` : ''}`);
           }}
           onRegisterUser={() => {
             setAuthInitialAction('register-user');
@@ -1157,8 +1160,8 @@ const AppContent: React.FC = () => {
           window.history.pushState(null, '', '/');
         }}
         initialAction={authInitialAction}
-        initialPlan={selectedRegistrationPlan}
-        isTrial={isRegistrationTrial}
+        initialPlan={new URLSearchParams(window.location.search).get('plan') || selectedRegistrationPlan}
+        isTrial={new URLSearchParams(window.location.search).has('isTrial') ? new URLSearchParams(window.location.search).get('isTrial') === 'true' : isRegistrationTrial}
       />
     );
   }

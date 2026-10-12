@@ -48,6 +48,7 @@ export const BillingView: React.FC<BillingViewProps> = ({
   useEffect(() => { if (currentUser && canManage) ApiClient.get<any>('/v1/subscriptions/profile').then(p => { setProfile(Object.fromEntries(Object.keys(emptyProfile).map(k => [k, p[k] || ''])) as typeof emptyProfile); if (!p.cpfCnpj || !p.postalCode || !p.address || !p.addressNumber || !p.province) setProfileOpen(true); }).catch(() => { }); }, [currentUser?.id, canManage]);
   const refresh = async () => { await reload(); window.dispatchEvent(new Event('zemda-billing-refresh')); };
   const startSoloTrial = async () => {
+    if (!currentUser) { window.location.assign('/cadastro?plan=SOLO&isTrial=true'); return; }
     if (busy) return; setBusy(true); setError(''); setNotice('');
     try {
       const res = await ApiClient.post<any>('/v1/subscriptions/start-trial', {});
@@ -62,7 +63,7 @@ export const BillingView: React.FC<BillingViewProps> = ({
     window.location.assign(result.url);
   };
   const choose = async (code: string) => {
-    if (!currentUser) { window.location.assign('/assinatura?plan=' + encodeURIComponent(code)); return; }
+    if (!currentUser) { window.location.assign('/cadastro?plan=' + encodeURIComponent(code)); return; }
     if (summary?.isTrial && code !== 'SOLO') {
       setError('O teste grátis de 7 dias é exclusivo do plano Zemda Solo. Para migrar para os planos Equipe ou Clínica, entre em contato com nosso suporte pelo e-mail suporte@zemda.com.br.');
       return;

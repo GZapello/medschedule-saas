@@ -1,7 +1,7 @@
 import './auth-experience.css';
 import { googleAuthError } from './googleAuthErrors';
 import { GoogleAccountLinkDialog } from './GoogleAccountLinkDialog';
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
@@ -106,6 +106,25 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     }
   };
 
+  const openRegistration = () => {
+    const query = new URLSearchParams(window.location.search);
+    if (initialPlan) query.set('plan', initialPlan);
+    if (isTrial !== undefined) query.set('isTrial', String(isTrial));
+    if (window.location.pathname !== '/cadastro') {
+      window.history.pushState({ registrationFrom: '/login' }, '', `/cadastro${query.size ? `?${query}` : ''}`);
+    }
+    setIsCreateClinicOpen(true);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  };
+  useEffect(() => {
+    const sync = () => setIsCreateClinicOpen(window.location.pathname === '/cadastro');
+    window.addEventListener('popstate', sync);
+    return () => window.removeEventListener('popstate', sync);
+  }, []);
+  useEffect(() => {
+    setIsCreateClinicOpen(window.location.pathname === '/cadastro' || initialAction === 'create-clinic');
+  }, [initialAction]);
+
   const handleGoogleSuccess = async (idToken: string) => {
     try {
       setLoading(true);
@@ -124,7 +143,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       }
 
       if (res.requiresPasswordToLink) {
-        setIsCreateClinicOpen(false);
         setGoogleLinkingState({
           idToken,
           email: res.email || '',
@@ -141,7 +159,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           name: res.googleUser?.name || '',
           email: res.googleUser?.email || ''
         });
-        setIsCreateClinicOpen(true);
+        openRegistration();
         return;
       }
       throw new Error('Resposta inesperada ao entrar com Google. Tente novamente.');
@@ -156,6 +174,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
   return (
     <div className={`${isCreateClinicOpen ? 'signup-auth-host' : ''} auth-experience min-h-screen bg-[#fafbfc] text-slate-800 flex flex-col items-center justify-center p-4 sm:p-6 relative overflow-hidden font-sans`}>
+      {!isCreateClinicOpen && <>
       {/* Glow sutil de fundo característico do Zemda */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[450px] bg-gradient-to-b from-teal-100/60 via-emerald-50/30 to-transparent blur-3xl -z-10 pointer-events-none" />
 
@@ -355,7 +374,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
               {/* Botão de Criação de Conta */}
               <button
                 type="button"
-                onClick={() => setIsCreateClinicOpen(true)}
+                onClick={openRegistration}
                 className="w-full py-2.5 px-3 bg-teal-50 hover:bg-teal-100/80 text-teal-800 font-bold text-xs rounded-xl border border-teal-200/70 transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
               >
                 <Building2 className="w-3.5 h-3.5 text-teal-600" />
@@ -373,21 +392,24 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         </div>
       </div>
 
+      </>}
+
       {/* Modais de Autenticação e Cadastro */}
       <RegisterUserModal
         isOpen={isRegisterUserOpen}
         onClose={() => setIsRegisterUserOpen(false)}
       />
 
-      <CreateClinicModal
+      {isCreateClinicOpen && <CreateClinicModal
         presentation="page"
         isOpen={isCreateClinicOpen}
         onClose={() => {
           setIsCreateClinicOpen(false);
           setGoogleSignupData(null);
-          if (window.location.pathname === '/cadastro') {
-            window.history.pushState(null, '', '/login');
-          }
+          const destination = window.history.state?.registrationFrom === '/login' ? '/login' : '/';
+          window.history.pushState(null, '', destination);
+          window.dispatchEvent(new PopStateEvent('popstate'));
+          if (destination === '/') onBackToLanding?.();
         }}
         onSuccess={() => {
           setIsCreateClinicOpen(false);
@@ -400,7 +422,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         isTrial={isTrial}
         initialGoogleData={googleSignupData}
         onGoogleSuccess={handleGoogleSuccess}
-      />
+      />}
 
       <ForgotPasswordModal
         isOpen={isForgotPasswordOpen}
