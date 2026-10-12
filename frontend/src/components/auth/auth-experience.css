@@ -1,0 +1,50 @@
+/* Public auth presentation only. Authentication and registration behavior is unchanged. */
+.auth-experience{background:linear-gradient(125deg,#eff9f5 0%,#f8fbfa 45%,#fff 85%);padding:32px 24px}
+.auth-experience .auth-login-layout{max-width:1080px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,460px);gap:24px 72px;align-items:center}
+.auth-experience .auth-login-layout>*{margin-top:0!important;min-width:0}
+.auth-back{grid-column:1/-1}
+.auth-login-brand{text-align:left}
+.auth-login-brand>div:first-child{justify-content:flex-start;margin-bottom:20px}
+.auth-login-brand>p{font-size:10px;letter-spacing:.16em;color:#52746a}
+.auth-brand-copy h1{font-size:clamp(34px,3.2vw,46px);line-height:1.15;letter-spacing:-.04em;font-weight:800;color:#163f36;margin:26px 0 18px}
+.auth-brand-copy h1 span{color:#0f8b7a}
+.auth-brand-copy>p{font-size:15px;line-height:1.8;color:#557069;max-width:370px}
+.auth-brand-copy ul{display:grid;gap:14px;margin-top:28px;max-width:400px}
+.auth-brand-copy li{display:flex;align-items:flex-start;gap:10px;font-size:13px;line-height:1.6;color:#36594f}
+.auth-brand-copy li svg{width:18px;height:18px;flex-shrink:0;color:#15967c;margin-top:2px}
+.auth-experience .auth-login-card{padding:32px;border-radius:24px;border-color:#dce9e3;box-shadow:0 18px 54px -20px #164f392b,0 2px 8px #164f3905}
+.auth-login-card h2{font-size:25px;letter-spacing:-.03em;font-weight:750;color:#163f36}
+.auth-login-card h2+p{font-size:13px;line-height:1.7;margin-top:8px}
+.auth-login-card form input{height:46px;font-size:14px;border-radius:12px;transition:border-color .15s,box-shadow .15s}
+.auth-login-card form label{font-weight:650;margin-bottom:6px}
+.auth-login-card form button[type=submit]{min-height:48px;font-size:14px;box-shadow:0 6px 16px #0f766e1c;transform:none}
+.auth-experience :is(button,a,input,select):focus-visible{outline:2px solid #0f766e;outline-offset:3px}
+.auth-experience button:disabled{cursor:wait;transform:none}
+.auth-experience .auth-google-entry{padding:10px 8px;background:#f8fbf9;border:1px solid #e4ece7;border-radius:14px}
+/* Scope registration refinement to AuthPage, excluding the invitation trial screen. */
+.auth-experience.signup-auth-host{padding:0}
+.auth-experience .signup-page{background:linear-gradient(125deg,#eff9f5,#f9fcfa 50%,#fff);gap:40px;grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr)}
+.auth-experience .signup-logo{width:155px}
+.auth-experience .signup-pitch h1{font-size:clamp(30px,3vw,42px);line-height:1.15}
+.auth-experience .signup-pitch>p{line-height:1.8;color:#557069;max-width:380px}
+.auth-experience .signup-pitch ul{gap:12px;margin-top:26px}
+.auth-experience .signup-pitch li{padding:12px 14px;background:#ffffffa6;border:1px solid #deebe4;border-radius:12px;max-width:390px}
+.auth-experience .signup-card{border-radius:24px;box-shadow:0 18px 54px -20px #164f392b,0 2px 8px #164f3905;border-color:#dce9e3}
+.auth-experience .signup-card-header{padding:16px 24px;border-bottom:1px solid #edf2ee}
+.auth-experience .signup-content{padding:22px 24px}
+.auth-experience .signup-content input:not([type=checkbox]):not([type=radio]),.auth-experience .signup-content select{min-height:42px;border-radius:12px;font-size:13px}
+.auth-experience .signup-page button[type=submit]{min-height:46px;font-size:14px;border-radius:12px}
+@media(max-width:1023px){
+ .auth-experience .auth-login-layout{max-width:460px;display:flex;flex-direction:column;gap:22px;align-items:stretch}
+ .auth-login-brand{text-align:center}.auth-login-brand>div:first-child{justify-content:center;margin-bottom:10px}
+ .auth-brand-copy{display:none}
+ .auth-experience .signup-page{gap:20px}
+}
+@media(max-width:640px){
+ .auth-experience:not(.signup-auth-host){padding:20px 16px;justify-content:flex-start}
+ .auth-experience .auth-login-card{padding:24px 20px;border-radius:20px}
+ .auth-experience .signup-content{padding:20px 16px}
+ .auth-experience .signup-card-header{padding:14px 16px}
+ .auth-login-card form input,.auth-experience .signup-content input:not([type=checkbox]):not([type=radio]),.auth-experience .signup-content select{font-size:16px;min-height:44px}
+}
+@media(prefers-reduced-motion:reduce){.auth-experience *{transition:none!important}}

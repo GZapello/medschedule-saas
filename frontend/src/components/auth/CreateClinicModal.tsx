@@ -1068,6 +1068,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
               {!googleAuthData ? (
                 <div className="space-y-1.5 pb-1">
                   <GoogleAuthButton
+                    className="auth-google-entry"
                     text="continue_with"
                     customLabel="Continuar com Google"
                     onSuccess={async (idToken) => {

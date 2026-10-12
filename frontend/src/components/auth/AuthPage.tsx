@@ -1,3 +1,4 @@
+import './auth-experience.css';
 import { googleAuthError } from './googleAuthErrors';
 import { GoogleAccountLinkDialog } from './GoogleAccountLinkDialog';
 import React, { useState, useRef } from 'react';
@@ -154,14 +155,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   };
 
   return (
-    <div className={`${isCreateClinicOpen ? 'signup-auth-host' : ''} min-h-screen bg-[#fafbfc] text-slate-800 flex flex-col items-center justify-center p-4 sm:p-6 relative overflow-hidden font-sans`}>
+    <div className={`${isCreateClinicOpen ? 'signup-auth-host' : ''} auth-experience min-h-screen bg-[#fafbfc] text-slate-800 flex flex-col items-center justify-center p-4 sm:p-6 relative overflow-hidden font-sans`}>
       {/* Glow sutil de fundo característico do Zemda */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[450px] bg-gradient-to-b from-teal-100/60 via-emerald-50/30 to-transparent blur-3xl -z-10 pointer-events-none" />
 
-      <div className="w-full max-w-md space-y-6">
+      <div className="auth-login-layout w-full max-w-md space-y-6">
         {/* Botão de Retorno ao Portal Zemda */}
         {onBackToLanding && (
-          <div className="flex justify-start">
+          <div className="auth-back flex justify-start">
             <button
               type="button"
               onClick={onBackToLanding}
@@ -174,7 +175,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         )}
 
         {/* Brand Header Institucional Zemda */}
-        <div className="text-center space-y-2 select-none">
+        <div className="auth-login-brand text-center space-y-2 select-none">
           <div className="flex items-center justify-center mb-1">
             <img
               src="/brand/zemda-logo.png"
@@ -185,10 +186,19 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           <p className="text-xs text-teal-700 font-bold uppercase tracking-widest">
             Saúde e Gestão em Harmonia
           </p>
+          <div className="auth-brand-copy">
+            <h1>Mais cuidado.<br />Mais organização.<br /><span>Seu Zemda.</span></h1>
+            <p>Sua rotina clínica conectada, do primeiro agendamento à continuidade do cuidado.</p>
+            <ul>
+              <li><CheckCircle2 aria-hidden="true" />Agenda, prontuários e gestão em um só lugar</li>
+              <li><CheckCircle2 aria-hidden="true" />Ferramentas para sua profissão</li>
+              <li><CheckCircle2 aria-hidden="true" />Acesso organizado para você e sua equipe</li>
+            </ul>
+          </div>
         </div>
 
         {/* Login Box */}
-        <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-xl shadow-teal-900/5 border border-slate-200/80 space-y-5">
+        <div className="auth-login-card bg-white rounded-3xl p-6 sm:p-8 shadow-xl shadow-teal-900/5 border border-slate-200/80 space-y-5">
           <div className="space-y-1">
             <h2 className="text-lg font-black text-slate-900">Acessar Plataforma</h2>
             <p className="text-xs text-slate-500">
@@ -199,6 +209,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           {/* Autenticação com Google */}
           <div className="space-y-3">
             <GoogleAuthButton
+              className="auth-google-entry"
               text="continue_with"
               customLabel="Continuar com Google"
               onSuccess={handleGoogleSuccess}
@@ -253,11 +264,15 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
           <form onSubmit={handleSubmit} onFocusCapture={notifyLoginStarted} onChangeCapture={notifyLoginStarted} className="space-y-4">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">E-mail de Acesso</label>
+              <label htmlFor="zemda-login-email" className="block text-xs font-bold text-slate-700 mb-1">E-mail de Acesso</label>
               <div className="relative">
                 <Mail className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="email"
+                  id="zemda-login-email"
+                  autoComplete="username"
+                  aria-invalid={!!validationErrors.email}
+                  aria-describedby={validationErrors.email ? "login-email-error" : undefined}
                   value={email}
                   onChange={e => {
                     setEmail(e.target.value);
@@ -272,13 +287,13 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 />
               </div>
               {validationErrors.email && (
-                <p className="text-[11px] text-red-600 mt-1 font-semibold">{validationErrors.email}</p>
+                <p id="login-email-error" className="text-[11px] text-red-600 mt-1 font-semibold">{validationErrors.email}</p>
               )}
             </div>
 
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="block text-xs font-bold text-slate-700">Senha</label>
+                <label htmlFor="zemda-login-password" className="block text-xs font-bold text-slate-700">Senha</label>
                 <button
                   type="button"
                   onClick={() => setIsForgotPasswordOpen(true)}
@@ -291,6 +306,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 <Lock className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="password"
+                  id="zemda-login-password"
+                  autoComplete="current-password"
+                  aria-invalid={!!validationErrors.password}
+                  aria-describedby={validationErrors.password ? "login-password-error" : undefined}
                   value={password}
                   onChange={e => {
                     setPassword(e.target.value);
@@ -305,12 +324,13 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 />
               </div>
               {validationErrors.password && (
-                <p className="text-[11px] text-red-600 mt-1 font-semibold">{validationErrors.password}</p>
+                <p id="login-password-error" className="text-[11px] text-red-600 mt-1 font-semibold">{validationErrors.password}</p>
               )}
             </div>
 
             <button
               type="submit"
+              aria-busy={loading}
               disabled={loading}
               className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white font-bold text-xs rounded-xl shadow-md shadow-teal-600/20 hover:scale-[1.01] active:scale-[0.99] transition-all cursor-pointer disabled:opacity-50"
             >
