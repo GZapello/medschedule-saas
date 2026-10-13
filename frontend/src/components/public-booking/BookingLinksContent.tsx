@@ -6,13 +6,33 @@ import { useToast } from '../../context/ToastContext';
 import { clinicBookingPath } from '../../utils/publicBooking';
 
 export const BookingLinksContent: React.FC = () => {
-  const { currentUser, currentTenant, isClinicAdmin, isProfessional } = useAuth();
+  const { currentUser, currentTenant, isClinicAdmin, isProfessional, refreshTenant } = useAuth();
   const { showToast } = useToast();
 
   const [tenant, setTenant] = useState<any>(null);
   const [professionals, setProfessionals] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>('');
+  const [activatingClinic, setActivatingClinic] = useState<boolean>(false);
+
+  const canManageClinicBooking = isClinicAdmin;
+
+  const handleActivateClinicBooking = async () => {
+    setActivatingClinic(true);
+    try {
+      await ApiClient.put('/v1/tenants/current', { publicBookingEnabled: true });
+      const fresh = await ApiClient.get<any>('/v1/tenants/current');
+      setTenant(fresh);
+      if (refreshTenant) {
+        await refreshTenant();
+      }
+      showToast('Página de agendamento da clínica ativada com sucesso!', 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Não foi possível ativar a página de agendamento.', 'error');
+    } finally {
+      setActivatingClinic(false);
+    }
+  };
 
   useEffect(() => {
     let active = true;
@@ -152,11 +172,35 @@ export const BookingLinksContent: React.FC = () => {
             </div>
           </div>
         ) : (
-          <p className="text-[11px] text-slate-500 italic pt-1 border-t border-slate-200/60">
-            {isClinicEnabled
-              ? 'O link estará disponível após salvar as configurações da clínica.'
-              : 'Página desativada. Ative em Configurações > Clínica.'}
-          </p>
+          <div className="space-y-2.5 pt-2 border-t border-slate-200/60">
+            <p className="text-[11px] text-slate-500">
+              A página pública da clínica permite que pacientes encontrem especialidades e agendem horários online.
+            </p>
+            {canManageClinicBooking ? (
+              <button
+                type="button"
+                disabled={activatingClinic}
+                onClick={handleActivateClinicBooking}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold transition-all shadow-xs disabled:opacity-50 cursor-pointer w-full sm:w-auto"
+              >
+                {activatingClinic ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Ativando página...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Ativar página de agendamento</span>
+                  </>
+                )}
+              </button>
+            ) : (
+              <p className="text-[11px] text-slate-500 italic">
+                A página de agendamento da clínica está desativada no momento.
+              </p>
+            )}
+          </div>
         )}
       </div>
 
