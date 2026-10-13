@@ -280,11 +280,11 @@ api.delete('/v1/professionals/blocks/:blockId', requireTenant, requireRole('clin
 
 // Serviços e Salas
 api.get('/v1/services', requireTenant, ServiceController.list);
-api.post('/v1/services', requireTenant, requireRole('clinic_admin'), ServiceController.create);
+api.post('/v1/services', requireTenant, requirePermissionOrRole('manage_services', 'clinic_admin'), ServiceController.create);
 api.put('/v1/services/:id', requireTenant, requireRole('clinic_admin'), ServiceController.update);
 api.delete('/v1/services/:id', requireTenant, requireRole('clinic_admin'), ServiceController.delete);
 api.get('/v1/rooms', requireTenant, ServiceController.listRooms);
-api.post('/v1/rooms', requireTenant, requireRole('clinic_admin'), ServiceController.createRoom);
+api.post('/v1/rooms', requireTenant, requirePermissionOrRole('manage_services', 'clinic_admin'), ServiceController.createRoom);
 
 // Lembretes de Contato / Retorno por Serviço
 api.get('/v1/service-reminders', requireTenant, ServiceReminderController.list);
@@ -795,7 +795,13 @@ api.post('/v1/clinical/consultations/start', requireTenant, requireRole('clinic_
 
 // Gestão de Convênios
 api.get('/v1/insurances/clinic', requireTenant, InsuranceController.listClinicInsurances);
-api.post('/v1/insurances/clinic', requireTenant, requireRole('clinic_admin'), InsuranceController.createClinicInsurance);
+api.post('/v1/insurances/clinic', requireTenant, (req, res, next) => {
+  if (req.user?.role === 'superadmin' || req.user?.role === 'clinic_admin') return next();
+  requirePermissionOrRole('manage_settings', 'clinic_admin')(req, res, (err) => {
+    if (!err) return next();
+    requirePermissionOrRole('manage_services', 'clinic_admin')(req, res, next);
+  });
+}, InsuranceController.createClinicInsurance);
 api.put('/v1/insurances/clinic/:id', requireTenant, requireRole('clinic_admin'), InsuranceController.updateClinicInsurance);
 api.get('/v1/patients/:patientId/insurances', requireTenant, InsuranceController.listPatientInsurances);
 api.post('/v1/patients/:patientId/insurances', requireTenant, requireRole('clinic_admin', 'receptionist'), InsuranceController.addPatientInsurance);

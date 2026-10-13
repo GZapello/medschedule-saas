@@ -412,33 +412,49 @@ export class AppointmentController {
       const normalizedStartTime = String(startTime).trim().replace(' ', 'T');
       const normalizedEndTime = String(endTime).trim().replace(' ', 'T');
 
-      // 0. Validação dos horários de funcionamento da clínica (Item 3)
-      const hoursCheck = validateClinicBusinessHours(tenantId, normalizedStartTime, normalizedEndTime);
-      if (!hoursCheck.valid) {
-        res.status(400).json({ error: hoursCheck.error });
-        return;
-      }
+      const isCustomTime = Boolean(req.body.isCustomTime || req.body.is_custom_time);
 
-      // 0b. Validação da escala de trabalho ativa do profissional (Item 1)
-      const scheduleCheck = validateProfessionalSchedule(tenantId, professionalId, normalizedStartTime, normalizedEndTime);
-      if (!scheduleCheck.valid) {
-        res.status(400).json({ error: scheduleCheck.error });
-        return;
+      // 0. Validação dos horários de funcionamento da clínica (Item 3) e escala de trabalho (Item 1)
+      // Agendamento em horário avulso (!isPublic && isCustomTime) é exceção pontual que permite horário fora da disponibilidade habitual
+      if (!isCustomTime || isPublic) {
+        const hoursCheck = validateClinicBusinessHours(tenantId, normalizedStartTime, normalizedEndTime);
+        if (!hoursCheck.valid) {
+          res.status(400).json({ error: hoursCheck.error });
+          return;
+        }
+
+        // 0b. Validação da escala de trabalho ativa do profissional (Item 1)
+        const scheduleCheck = validateProfessionalSchedule(tenantId, professionalId, normalizedStartTime, normalizedEndTime);
+        if (!scheduleCheck.valid) {
+          res.status(400).json({ error: scheduleCheck.error });
+          return;
+        }
       }
 
       // 1. Verifica concorrência do PROFISSIONAL (Item 7)
       const profConflict = db.prepare(`
-        SELECT id FROM appointments
-        WHERE tenant_id = ?
-          AND professional_id = ?
-          AND status NOT IN ('cancelled')
-          AND REPLACE(start_time, ' ', 'T') < ? AND REPLACE(end_time, ' ', 'T') > ?
-      `).get(tenantId, professionalId, normalizedEndTime, normalizedStartTime);
+        SELECT a.id, a.start_time, a.end_time, p.name as professional_name, s.name as service_name
+        FROM appointments a
+        JOIN professionals p ON p.id = a.professional_id
+        JOIN services s ON s.id = a.service_id
+        WHERE a.tenant_id = ?
+          AND a.professional_id = ?
+          AND a.status NOT IN ('cancelled')
+          AND REPLACE(a.start_time, ' ', 'T') < ? AND REPLACE(a.end_time, ' ', 'T') > ?
+      `).get(tenantId, professionalId, normalizedEndTime, normalizedStartTime) as any;
 
       if (profConflict) {
         res.status(409).json({
           error: 'Este horário não está mais disponível. Escolha outro horário.',
-          code: 'PROFESSIONAL_SLOT_OCCUPIED'
+          code: 'PROFESSIONAL_SLOT_OCCUPIED',
+          ...(isPublic ? {} : {
+            conflict: {
+              startTime: profConflict.start_time,
+              endTime: profConflict.end_time,
+              professionalName: profConflict.professional_name,
+              serviceName: profConflict.service_name
+            }
+          })
         });
         return;
       }

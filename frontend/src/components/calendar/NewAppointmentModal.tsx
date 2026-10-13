@@ -7,6 +7,9 @@ import { X, Calendar, Clock, User, Plus, CheckCircle2 } from 'lucide-react';
 import { isMeetingUrl } from '../../utils/teleconsultation';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
 import { NewPatientModal } from '../patients/NewPatientModal';
+import { NewServiceModal } from '../services/NewServiceModal';
+import { NewInsuranceModal } from '../settings/NewInsuranceModal';
+import { NewRoomModal } from '../services/NewRoomModal';
 
 interface NewAppointmentModalProps {
   isOpen: boolean;
@@ -22,7 +25,17 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
   initialPrefill
 }) => {
   const { showToast } = useToast();
-  const { clientTermLabel } = useAuth();
+  const { clientTermLabel, isProfessional, currentUser, isClinicAdmin, hasPermission } = useAuth();
+  const canManageServices = isClinicAdmin || hasPermission('manage_services');
+  const canManageRooms = isClinicAdmin || hasPermission('manage_services');
+  const canManageInsurances = isClinicAdmin || hasPermission('manage_settings') || hasPermission('manage_services');
+
+  const [isCustomTime, setIsCustomTime] = useState<boolean>(false);
+  const [customTime, setCustomTime] = useState<string>('18:30');
+
+  const [isNewServiceModalOpen, setIsNewServiceModalOpen] = useState(false);
+  const [isNewInsuranceModalOpen, setIsNewInsuranceModalOpen] = useState(false);
+  const [isNewRoomModalOpen, setIsNewRoomModalOpen] = useState(false);
 
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [services, setServices] = useState<Service[]>([]);
@@ -55,11 +68,18 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setMeetingUrl('');
+      setIsCustomTime(false);
+      setCustomTime(initialPrefill?.time || '18:30');
     } else {
       setPatientId('');
       setSelectedPatientObj(null);
       setIsNewPatientModalOpen(false);
       setNewPatientSearchQuery('');
+      setIsCustomTime(false);
+      setCustomTime('18:30');
+      setIsNewServiceModalOpen(false);
+      setIsNewInsuranceModalOpen(false);
+      setIsNewRoomModalOpen(false);
     }
   }, [isOpen]);
 
@@ -74,6 +94,45 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
   const handleOpenCreatePatient = (query?: string) => {
     setNewPatientSearchQuery(query || '');
     setIsNewPatientModalOpen(true);
+  };
+
+  const handleServiceCreated = async (created: any) => {
+    setIsNewServiceModalOpen(false);
+    try {
+      const srvs = await ApiClient.get<Service[]>('/v1/services');
+      setServices(srvs || []);
+      if (created?.id) {
+        setServiceId(created.id);
+      }
+    } catch (e) {
+      console.warn('Erro ao atualizar serviços:', e);
+    }
+  };
+
+  const handleInsuranceCreated = async (created: any) => {
+    setIsNewInsuranceModalOpen(false);
+    try {
+      const insList = await ApiClient.get<any[]>('/v1/insurances/clinic');
+      setInsurances(insList || []);
+      if (created?.id) {
+        setInsuranceId(created.id);
+      }
+    } catch (e) {
+      console.warn('Erro ao atualizar convênios:', e);
+    }
+  };
+
+  const handleRoomCreated = async (created: any) => {
+    setIsNewRoomModalOpen(false);
+    try {
+      const rmsList = await ApiClient.get<any[]>('/v1/rooms');
+      setRooms(rmsList || []);
+      if (created?.id) {
+        setRoomId(created.id);
+      }
+    } catch (e) {
+      console.warn('Erro ao atualizar salas:', e);
+    }
   };
 
   // Filtra serviços pelo profissional selecionado
@@ -112,9 +171,12 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
         setServices(srvs);
         setInsurances(ins || []);
         setRooms(rms || []);
-        const targetProfId = initialPrefill?.professionalId && profs.some(p => p.id === initialPrefill.professionalId)
+        const userProfId = isProfessional && currentUser?.professionalId ? currentUser.professionalId : '';
+        const targetProfId = (initialPrefill?.professionalId && profs.some(p => p.id === initialPrefill.professionalId))
           ? initialPrefill.professionalId
-          : (profs.length > 0 ? profs[0].id : '');
+          : (userProfId && profs.some(p => p.id === userProfId)
+            ? userProfId
+            : (profs.length > 0 ? profs[0].id : ''));
         setProfessionalId(targetProfId);
         const matchingSrvs = targetProfId ? srvs.filter(s => s.professional_id === targetProfId) : srvs;
         if (matchingSrvs.length > 0) {
@@ -162,15 +224,54 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
 
   if (!isOpen) return null;
 
+  const computeStartAndEnd = (dateStr: string, timeStr: string, durationMinutes: number) => {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const timeClean = (timeStr || '18:30').trim().slice(0, 5);
+    const [hours, minutes] = timeClean.split(':').map(Number);
+    const start = new Date(y, (m || 1) - 1, d || 1, hours || 0, minutes || 0, 0);
+    const end = new Date(start.getTime() + (durationMinutes || 30) * 60 * 1000);
+
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const startStr = `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}T${pad(start.getHours())}:${pad(start.getMinutes())}:00`;
+    const endStr = `${end.getFullYear()}-${pad(end.getMonth() + 1)}-${pad(end.getDate())}T${pad(end.getHours())}:${pad(end.getMinutes())}:00`;
+    return { startStr, endStr };
+  };
+
   const handleBook = async () => {
-    if (!patientId || !professionalId || !serviceId || !selectedSlot) {
-      showToast('Preencha todos os campos e selecione um horário disponível', 'error');
+    if (!patientId || !professionalId || !serviceId) {
+      showToast('Preencha todos os campos obrigatórios', 'error');
+      return;
+    }
+
+    if (!isCustomTime && !selectedSlot) {
+      showToast('Selecione um horário disponível ou agende em horário avulso', 'error');
+      return;
+    }
+
+    if (isCustomTime && (!date || !customTime)) {
+      showToast('Informe a data e o horário do atendimento avulso', 'error');
       return;
     }
 
     if (modality === 'online' && meetingUrl.trim() && !isMeetingUrl(meetingUrl)) {
-      showToast('Informe um link HTTPS válido para a teleconsulta.', 'error'); return;
+      showToast('Informe um link HTTPS válido para a teleconsulta.', 'error');
+      return;
     }
+
+    let startIso = '';
+    let endIso = '';
+
+    if (isCustomTime) {
+      const selectedService = services.find(s => s.id === serviceId);
+      const duration = selectedService?.duration_minutes || (selectedService as any)?.duration || 30;
+      const { startStr, endStr } = computeStartAndEnd(date, customTime, duration);
+      startIso = startStr;
+      endIso = endStr;
+    } else {
+      startIso = selectedSlot!.startTime;
+      endIso = selectedSlot!.endTime;
+    }
+
     try {
       setLoading(true);
       setConflictError(null);
@@ -180,11 +281,12 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
         serviceId,
         roomId: roomId || null,
         insuranceId: insuranceId || null,
-        startTime: selectedSlot.startTime,
-        endTime: selectedSlot.endTime,
+        startTime: startIso,
+        endTime: endIso,
         modality,
         meeting_url: modality === 'online' ? meetingUrl.trim() || null : null,
-        internalNotes: notes || null
+        internalNotes: notes || null,
+        isCustomTime: isCustomTime ? true : undefined
       });
 
       showToast('Atendimento agendado com sucesso!', 'success');
@@ -206,7 +308,9 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
         ApiClient.get<any>(`/v1/slots/available?professionalId=${professionalId}&serviceId=${serviceId}&date=${date}${roomParam}`)
           .then(data => {
             setAvailableSlots(data.slots || []);
-            setSelectedSlot(null);
+            if (!isCustomTime) {
+              setSelectedSlot(null);
+            }
           })
           .catch(() => {})
           .finally(() => setLoadingSlots(false));
@@ -254,7 +358,19 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
               </select>
             </div>
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Serviço *</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block font-semibold text-slate-700">Serviço *</label>
+                {canManageServices && (
+                  <button
+                    type="button"
+                    onClick={() => setIsNewServiceModalOpen(true)}
+                    className="text-[11px] font-bold text-teal-600 hover:text-teal-700 hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    + Adicionar novo serviço
+                  </button>
+                )}
+              </div>
               <select
                 value={serviceId}
                 onChange={e => setServiceId(e.target.value)}
@@ -275,7 +391,19 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Convênio</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block font-semibold text-slate-700">Convênio</label>
+                {canManageInsurances && (
+                  <button
+                    type="button"
+                    onClick={() => setIsNewInsuranceModalOpen(true)}
+                    className="text-[11px] font-bold text-teal-600 hover:text-teal-700 hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    + Adicionar novo convênio
+                  </button>
+                )}
+              </div>
               <select
                 value={insuranceId}
                 onChange={e => setInsuranceId(e.target.value)}
@@ -290,7 +418,19 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
               </select>
             </div>
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Sala de Atendimento</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block font-semibold text-slate-700">Sala de Atendimento</label>
+                {canManageRooms && (
+                  <button
+                    type="button"
+                    onClick={() => setIsNewRoomModalOpen(true)}
+                    className="text-[11px] font-bold text-teal-600 hover:text-teal-700 hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    + Adicionar nova sala
+                  </button>
+                )}
+              </div>
               <select
                 value={roomId}
                 onChange={e => setRoomId(e.target.value)}
@@ -345,36 +485,100 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
             </div>
           )}
 
-          {/* Horários disponíveis calculados em tempo real */}
-          <div>
-            <label className="block font-semibold text-slate-700 mb-1.5">
-              Horários Livres Disponíveis (respeitando intervalos e bloqueios)
-            </label>
-            {loadingSlots ? (
-              <p className="text-slate-400 italic text-[11px]">Calculando slots...</p>
-            ) : availableSlots.length === 0 ? (
-              <p className="text-amber-600 font-medium text-[11px]">
-                Nenhum horário livre disponível para esta data e profissional.
-              </p>
-            ) : (
-              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-36 overflow-y-auto p-1">
-                {availableSlots.map(slot => (
-                  <button
-                    key={slot.time}
-                    type="button"
-                    onClick={() => setSelectedSlot(slot)}
-                    className={`py-2 px-1 rounded-xl text-center font-bold text-xs transition-all cursor-pointer ${
-                      selectedSlot?.time === slot.time
-                        ? 'bg-indigo-600 text-white shadow-xs'
-                        : 'bg-slate-50 border border-slate-200 text-slate-700 hover:border-indigo-400'
-                    }`}
-                  >
-                    {slot.time}
-                  </button>
-                ))}
+          {/* Horários disponíveis / Horário Avulso */}
+          {isCustomTime ? (
+            <div className="p-3.5 bg-amber-50/70 border border-amber-200 rounded-2xl space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                  <span className="font-bold text-amber-900 text-xs">Agendamento em Horário Avulso</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsCustomTime(false);
+                    setSelectedSlot(null);
+                  }}
+                  className="text-[11px] text-slate-500 hover:text-slate-800 underline cursor-pointer"
+                >
+                  Voltar aos horários da grade
+                </button>
               </div>
-            )}
-          </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Data do atendimento *</label>
+                  <input
+                    type="date"
+                    value={date}
+                    min={new Date().toISOString().split('T')[0]}
+                    onChange={e => setDate(e.target.value)}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Horário do atendimento *</label>
+                  <input
+                    type="time"
+                    value={customTime}
+                    onChange={e => setCustomTime(e.target.value)}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white"
+                    required
+                  />
+                </div>
+              </div>
+
+              <p className="text-[11px] text-slate-600 italic">
+                Este horário será válido apenas para este atendimento e não altera a disponibilidade habitual do profissional.
+              </p>
+            </div>
+          ) : (
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1.5">
+                Horários Livres Disponíveis (respeitando intervalos e bloqueios)
+              </label>
+              {loadingSlots ? (
+                <p className="text-slate-400 italic text-[11px]">Calculando slots...</p>
+              ) : availableSlots.length === 0 ? (
+                <div className="space-y-2.5">
+                  <p className="text-amber-600 font-medium text-[11px]">
+                    Nenhum horário livre disponível para esta data e profissional.
+                  </p>
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsCustomTime(true);
+                        if (!customTime) {
+                          setCustomTime(initialPrefill?.time || '18:30');
+                        }
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition-colors cursor-pointer"
+                    >
+                      + Agendar em horário avulso
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-36 overflow-y-auto p-1">
+                  {availableSlots.map(slot => (
+                    <button
+                      key={slot.time}
+                      type="button"
+                      onClick={() => setSelectedSlot(slot)}
+                      className={`py-2 px-1 rounded-xl text-center font-bold text-xs transition-all cursor-pointer ${
+                        selectedSlot?.time === slot.time
+                          ? 'bg-indigo-600 text-white shadow-xs'
+                          : 'bg-slate-50 border border-slate-200 text-slate-700 hover:border-indigo-400'
+                      }`}
+                    >
+                      {slot.time}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           <div>
             <label className="block font-semibold text-slate-700 mb-1">Observações Internas</label>
@@ -396,7 +600,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
             </button>
             <button
               onClick={handleBook}
-              disabled={!selectedSlot || loading}
+              disabled={(!isCustomTime ? !selectedSlot : (!date || !customTime)) || !patientId || !professionalId || !serviceId || loading}
               className="w-full sm:w-auto px-6 py-2.5 font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs disabled:opacity-50 cursor-pointer min-h-[44px]"
             >
               Confirmar Agendamento
@@ -426,6 +630,32 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
             showToast(`${clientTermLabel} cadastrado e selecionado!`, 'success');
           }
         }}
+      />
+
+      {/* Modal de Cadastro Rápido de Serviço */}
+      <NewServiceModal
+        isOpen={isNewServiceModalOpen}
+        initialProfessionalId={professionalId}
+        professionals={professionals}
+        zIndex="z-[60]"
+        onClose={() => setIsNewServiceModalOpen(false)}
+        onSuccess={handleServiceCreated}
+      />
+
+      {/* Modal de Cadastro Rápido de Convênio */}
+      <NewInsuranceModal
+        isOpen={isNewInsuranceModalOpen}
+        zIndex="z-[60]"
+        onClose={() => setIsNewInsuranceModalOpen(false)}
+        onSuccess={handleInsuranceCreated}
+      />
+
+      {/* Modal de Cadastro Rápido de Sala */}
+      <NewRoomModal
+        isOpen={isNewRoomModalOpen}
+        zIndex="z-[60]"
+        onClose={() => setIsNewRoomModalOpen(false)}
+        onSuccess={handleRoomCreated}
       />
     </div>
   );

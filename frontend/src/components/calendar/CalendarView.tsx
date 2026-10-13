@@ -424,10 +424,18 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
       fetchSelectedProfSchedule(selectedProfRef.current);
     }
 
-    const handleRemoteUpdate = () => {
+    const handleRemoteUpdate = (e?: any) => {
       fetchCalendarData();
       if (selectedProfRef.current && selectedProfRef.current !== 'all') {
         fetchSelectedProfSchedule(selectedProfRef.current);
+      }
+      const rawDate = e?.detail?.startTime || e?.detail?.date;
+      if (rawDate) {
+        const datePart = String(rawDate).slice(0, 10);
+        const [y, m, d] = datePart.split('-').map(Number);
+        if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+          setCurrentDate(new Date(y, m - 1, d, 12, 0, 0));
+        }
       }
     };
 
@@ -704,15 +712,17 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
         }
       }
 
-      const dayAppts = filteredAppointments.filter(a => a.start_time.startsWith(dayStr));
+      const dayAppts = filteredAppointments.filter(a => (a.start_time || '').replace(' ', 'T').startsWith(dayStr));
       for (const appt of dayAppts) {
-        if (appt.start_time && appt.start_time.length >= 13) {
-          const h = parseInt(appt.start_time.slice(11, 13), 10);
+        const sTime = (appt.start_time || '').replace(' ', 'T');
+        const eTime = (appt.end_time || '').replace(' ', 'T');
+        if (sTime.length >= 13) {
+          const h = parseInt(sTime.slice(11, 13), 10);
           if (!isNaN(h) && h < minHour) minHour = Math.max(0, h);
         }
-        if (appt.end_time && appt.end_time.length >= 13) {
-          const h = parseInt(appt.end_time.slice(11, 13), 10);
-          const m = parseInt(appt.end_time.slice(14, 16), 10) || 0;
+        if (eTime.length >= 13) {
+          const h = parseInt(eTime.slice(11, 13), 10);
+          const m = parseInt(eTime.slice(14, 16), 10) || 0;
           const effectiveEnd = m > 0 ? h + 1 : h;
           if (!isNaN(effectiveEnd) && effectiveEnd > maxHour) {
             maxHour = Math.min(23, effectiveEnd);
@@ -864,7 +874,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
 
                     // Filtra agendamentos nesta data e hora
                     const slotAppts = filteredAppointments.filter(a => {
-                      return a.start_time.startsWith(slotStartPrefix.slice(0, 13)); // Match no início da hora
+                      return (a.start_time || '').replace(' ', 'T').startsWith(slotStartPrefix.slice(0, 13)); // Match no início da hora
                     });
 
                     const isAvailable = availability.available;
@@ -915,7 +925,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                             </div>
                             <div className="text-[10px] opacity-80 flex items-center gap-1 mt-1">
                               <Clock className="w-2.5 h-2.5" />
-                              {appt.start_time.split('T')[1].slice(0, 5)}
+                              {((appt.start_time || '').replace(' ', 'T').split('T')[1] || '').slice(0, 5)}
                             </div>
                           </div>
                         ))}
@@ -981,7 +991,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
               const currentDateStr = formatDateLocal(currentDate);
               const availability = getSlotAvailability(currentDateStr, timeSlot);
               const slotAppts = filteredAppointments.filter(a =>
-                a.start_time.startsWith(`${currentDateStr}T${timeSlot.slice(0, 2)}`)
+                (a.start_time || '').replace(' ', 'T').startsWith(`${currentDateStr}T${timeSlot.slice(0, 2)}`)
               );
               const isAvailable = availability.available;
               const hasAppointments = slotAppts.length > 0;
@@ -1032,7 +1042,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                           >
                             <div className="flex items-center gap-4">
                               <div className="text-center font-bold text-indigo-700 bg-indigo-50 px-3 py-1.5 rounded-lg text-xs">
-                                {appt.start_time.split('T')[1].slice(0, 5)}
+                                {((appt.start_time || '').replace(' ', 'T').split('T')[1] || '').slice(0, 5)}
                               </div>
                               <div>
                                 <h4 className="font-bold text-slate-900 text-sm">{appt.modality === 'online' ? <button type="button" className="hover:underline" onClick={e => { e.stopPropagation(); setTeleAppt(appt); }}>{appt.patient_name}</button> : appt.patient_name}</h4>
