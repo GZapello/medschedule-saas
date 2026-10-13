@@ -1096,6 +1096,7 @@ interface EsteticPlanItemForm {
           <div className="w-64 sm:w-72 lg:w-80" data-tour="estetic-patient-select">
             <PatientSearchSelect
               value={selectedPatientId}
+              selectedPatient={selectedPatient}
               onChange={handleSelectPatient}
               placeholder="Buscar paciente para atendimento estético..."
               compact

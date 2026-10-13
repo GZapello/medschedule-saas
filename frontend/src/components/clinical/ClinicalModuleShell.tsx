@@ -164,6 +164,7 @@ export const ClinicalModuleShell: React.FC<ClinicalModuleShellProps> = ({
           <div className="w-64 sm:w-72 lg:w-80" data-tour="clinical-patient-select">
             <PatientSearchSelect
               value={selectedPatientId || ''}
+              selectedPatient={selectedPatient as any}
               onChange={onSelectPatient}
               placeholder={patientSearchPlaceholder}
               compact

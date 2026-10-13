@@ -2,7 +2,8 @@ import { ClinicalFinishButton } from '../clinical/ClinicalFinishButton';
 import { resolveConsultationAppointment } from '../clinical/resolveConsultationAppointment';
 import { FinishConsultationModal } from '../clinical/FinishConsultationModal';
 import { AnthropometricSexField } from './PersonalTechnicalFields';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { NewPatientModal } from '../patients/NewPatientModal';
 import { useHorizontalTabScroll, HorizontalTabNav } from '../../hooks/useHorizontalTabScroll';
 import {
   Dumbbell,
@@ -128,6 +129,28 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<{ students: any[]; exercises: any[]; workouts: any[] } | null>(null);
   const [isSearching, setIsSearching] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isNewPatientModalOpen, setIsNewPatientModalOpen] = useState(false);
+  const [newPatientSearchQuery, setNewPatientSearchQuery] = useState('');
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
+        setIsSearchOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const isQueryPhone = useMemo(() => {
+    const clean = newPatientSearchQuery.replace(/\D/g, '');
+    return clean.length >= 8 && /^[\d\s\(\)\-\.]+$/.test(newPatientSearchQuery);
+  }, [newPatientSearchQuery]);
+
+  const prefillName = isQueryPhone ? '' : newPatientSearchQuery;
+  const prefillPhone = isQueryPhone ? newPatientSearchQuery : '';
 
   // Modais
   const [isExerciseLibraryOpen, setIsExerciseLibraryOpen] = useState(false);
@@ -302,20 +325,47 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
         description="Gestão de alunos, dobras cutâneas (Pollock), periodização e mapa 3D de sobrecarga muscular."
       >
         {/* Barra de Busca Rápida Global */}
-        <div className="relative flex-1 min-w-[220px] max-w-xs md:max-w-sm">
+        <div ref={searchContainerRef} className="relative flex-1 min-w-[220px] max-w-xs md:max-w-sm">
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
             placeholder="Buscar aluno, exercício ou treino..."
             value={searchQuery}
-            onChange={(e) => handleGlobalSearch(e.target.value)}
+            onFocus={() => setIsSearchOpen(true)}
+            onChange={(e) => {
+              setIsSearchOpen(true);
+              handleGlobalSearch(e.target.value);
+            }}
             className="w-full pl-10 pr-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:bg-white outline-none transition-all"
           />
 
           {/* Dropdown de Resultados da Busca */}
-          {searchResults && (
+          {(isSearchOpen || searchResults) && (
             <div className="absolute top-full right-0 mt-2 w-80 bg-white rounded-2xl shadow-xl border border-slate-200 p-3 z-50 max-h-80 overflow-y-auto space-y-3 animate-slideDown">
-              {searchResults.students?.length > 0 && (
+              {/* Botão + Cadastrar novo paciente */}
+              <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-xs border-b border-slate-100 p-1 mb-2">
+                <button
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setNewPatientSearchQuery(searchQuery.trim());
+                    setIsNewPatientModalOpen(true);
+                    setIsSearchOpen(false);
+                    setSearchResults(null);
+                  }}
+                  className="w-full text-left px-3 py-2 flex items-center gap-2.5 rounded-xl text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100/90 transition-colors cursor-pointer border border-teal-200/70 shadow-2xs"
+                >
+                  <div className="w-5 h-5 rounded-lg bg-teal-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                    <Plus className="w-3.5 h-3.5" />
+                  </div>
+                  <span className="truncate">
+                    + Cadastrar novo paciente{searchQuery.trim() ? ` "${searchQuery.trim()}"` : ''}
+                  </span>
+                </button>
+              </div>
+
+              {searchResults?.students && searchResults.students.length > 0 && (
                 <div>
                   <span className="text-[10px] uppercase font-bold text-slate-400 block px-2 mb-1">Alunos</span>
                   {searchResults.students.map((s) => (
@@ -324,6 +374,7 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
                       onClick={() => {
                         handleSelectStudent(s.id);
                         setSearchResults(null);
+                        setIsSearchOpen(false);
                         setSearchQuery('');
                       }}
                       className="p-2 hover:bg-slate-50 rounded-xl cursor-pointer text-xs flex items-center justify-between"
@@ -335,7 +386,7 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
                 </div>
               )}
 
-              {searchResults.exercises?.length > 0 && (
+              {searchResults?.exercises && searchResults.exercises.length > 0 && (
                 <div>
                   <span className="text-[10px] uppercase font-bold text-slate-400 block px-2 mb-1">Exercícios</span>
                   {searchResults.exercises.map((e) => (
@@ -344,6 +395,7 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
                       onClick={() => {
                         setIsExerciseLibraryOpen(true);
                         setSearchResults(null);
+                        setIsSearchOpen(false);
                         setSearchQuery('');
                       }}
                       className="p-2 hover:bg-slate-50 rounded-xl cursor-pointer text-xs flex items-center justify-between"
@@ -357,7 +409,7 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
                 </div>
               )}
 
-              {searchResults.workouts?.length > 0 && (
+              {searchResults?.workouts && searchResults.workouts.length > 0 && (
                 <div>
                   <span className="text-[10px] uppercase font-bold text-slate-400 block px-2 mb-1">Treinos</span>
                   {searchResults.workouts.map((w) => (
@@ -366,6 +418,7 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
                       onClick={() => {
                         handleSelectStudent(w.patient_id);
                         setSearchResults(null);
+                        setIsSearchOpen(false);
                         setSearchQuery('');
                       }}
                       className="p-2 hover:bg-slate-50 rounded-xl cursor-pointer text-xs flex items-center justify-between"
@@ -379,7 +432,7 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
                 </div>
               )}
 
-              {(!searchResults.students?.length && !searchResults.exercises?.length && !searchResults.workouts?.length) && (
+              {searchResults && (!searchResults.students?.length && !searchResults.exercises?.length && !searchResults.workouts?.length) && (
                 <div className="text-center py-4 text-xs text-slate-400">
                   Nenhum resultado encontrado.
                 </div>
@@ -814,6 +867,23 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Modal de Cadastro Rápido de Paciente (Fluxo Idêntico ao Novo Agendamento) */}
+      <NewPatientModal
+        isOpen={isNewPatientModalOpen}
+        initialName={prefillName}
+        initialPhone={prefillPhone}
+        zIndex="z-[60]"
+        onClose={() => setIsNewPatientModalOpen(false)}
+        onSuccess={async (created) => {
+          setIsNewPatientModalOpen(false);
+          if (created?.id) {
+            await loadStudents();
+            handleSelectStudent(created.id);
+            showToast('Paciente cadastrado e selecionado!', 'success');
+          }
+        }}
+      />
     </div>
   );
 };
