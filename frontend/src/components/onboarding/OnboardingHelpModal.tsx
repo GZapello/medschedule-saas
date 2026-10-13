@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useOnboarding } from './OnboardingContext';
 import { useToast } from '../../context/ToastContext';
+import { BookingLinksContent } from '../public-booking/BookingLinksContent';
 import {
   HelpCircle,
   Compass,
-  Sparkles,
   Layers,
   LifeBuoy,
   X,
@@ -12,7 +12,8 @@ import {
   CheckCircle2,
   ArrowLeft,
   Briefcase,
-  Activity
+  Activity,
+  Link
 } from 'lucide-react';
 
 export const OnboardingHelpModal: React.FC = () => {
@@ -24,7 +25,6 @@ export const OnboardingHelpModal: React.FC = () => {
     resumeTour,
     resetTour,
     startModuleTour,
-    openWhatsNew,
     availableModules,
     isPureAdmin,
     isZemdaBody,
@@ -33,8 +33,14 @@ export const OnboardingHelpModal: React.FC = () => {
 
   const { showToast } = useToast();
   const [selectingModule, setSelectingModule] = useState<boolean>(false);
+  const [showingBookingLinks, setShowingBookingLinks] = useState<boolean>(false);
 
-  useEffect(() => { if (!isHelpOpen) setSelectingModule(false); }, [isHelpOpen]);
+  useEffect(() => {
+    if (!isHelpOpen) {
+      setSelectingModule(false);
+      setShowingBookingLinks(false);
+    }
+  }, [isHelpOpen]);
 
   if (!isHelpOpen) return null;
 
@@ -79,14 +85,17 @@ export const OnboardingHelpModal: React.FC = () => {
       aria-modal="true"
       aria-labelledby="help-modal-title"
     >
-      <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 max-w-md w-full max-h-[calc(100dvh-32px)] overflow-y-auto p-6 flex flex-col gap-4 animate-in zoom-in-95 duration-200 relative">
+      <div className={`bg-white rounded-3xl shadow-2xl border border-slate-100 ${showingBookingLinks ? 'max-w-lg' : 'max-w-md'} w-full max-h-[calc(100dvh-32px)] overflow-y-auto p-6 flex flex-col gap-4 animate-in zoom-in-95 duration-200 relative`}>
         {/* Header do Menu de Ajuda */}
         <div className="flex items-center justify-between pb-2 border-b border-slate-100">
           <div className="flex items-center gap-2.5">
-            {selectingModule && (
+            {(selectingModule || showingBookingLinks) && (
               <button
                 type="button"
-                onClick={() => setSelectingModule(false)}
+                onClick={() => {
+                  setSelectingModule(false);
+                  setShowingBookingLinks(false);
+                }}
                 className="p-1 -ml-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
                 title="Voltar"
               >
@@ -94,14 +103,22 @@ export const OnboardingHelpModal: React.FC = () => {
               </button>
             )}
             <div className="w-8 h-8 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center">
-              <HelpCircle className="w-4 h-4" />
+              {showingBookingLinks ? <Link className="w-4 h-4" /> : <HelpCircle className="w-4 h-4" />}
             </div>
             <div>
               <h2 id="help-modal-title" className="text-sm font-bold text-slate-900 leading-tight">
-                {selectingModule ? 'Qual módulo deseja conhecer?' : 'Central de Ajuda Zemda'}
+                {showingBookingLinks
+                  ? 'Links de agendamento'
+                  : selectingModule
+                  ? 'Qual módulo deseja conhecer?'
+                  : 'Central de Ajuda Zemda'}
               </h2>
               <p className="text-[11px] text-slate-500">
-                {selectingModule ? 'Selecione o módulo para iniciar o tour' : 'Tours guiados, novidades e suporte rápido'}
+                {showingBookingLinks
+                  ? 'Acesse e compartilhe os links públicos com seus pacientes'
+                  : selectingModule
+                  ? 'Selecione o módulo para iniciar o tour'
+                  : 'Tours guiados, links e suporte rápido'}
               </p>
             </div>
           </div>
@@ -109,6 +126,7 @@ export const OnboardingHelpModal: React.FC = () => {
           <button
             onClick={() => {
               setSelectingModule(false);
+              setShowingBookingLinks(false);
               closeHelp();
             }}
             className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
@@ -118,8 +136,11 @@ export const OnboardingHelpModal: React.FC = () => {
           </button>
         </div>
 
-        {/* Seleção de Módulo Específico (apenas exibido quando há mais de 1 módulo autorizado) */}
-        {selectingModule ? (
+        {/* Exibição dos Links de Agendamento */}
+        {showingBookingLinks ? (
+          <BookingLinksContent />
+        ) : selectingModule ? (
+          /* Seleção de Módulo Específico (apenas exibido quando há mais de 1 módulo autorizado) */
           <div className="flex flex-col gap-2 max-h-80 overflow-y-auto pr-1">
             {availableModules.map(mod => {
               const isCompleted = onboardingData.moduleToursCompleted.includes(mod.id);
@@ -242,34 +263,27 @@ export const OnboardingHelpModal: React.FC = () => {
               </button>
             )}
 
-            {/* 4. Ver novidades */}
+            {/* 4. Links de agendamento */}
             <button
               type="button"
-              onClick={() => {
-                closeHelp();
-                openWhatsNew();
-              }}
-              className="w-full flex items-center justify-between p-3 rounded-2xl border border-slate-100 bg-slate-50/70 hover:bg-amber-50 hover:border-amber-200 transition-all text-left cursor-pointer group"
+              disabled={loading}
+              onClick={() => setShowingBookingLinks(true)}
+              className="w-full flex items-center justify-between p-3 rounded-2xl border border-slate-100 bg-slate-50/70 hover:bg-teal-50 hover:border-teal-200 transition-all text-left cursor-pointer group"
             >
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 border border-amber-100 flex items-center justify-center shadow-xs">
-                  <Sparkles className="w-4 h-4" />
+                <div className="w-9 h-9 rounded-xl bg-teal-50 text-teal-600 border border-teal-100 flex items-center justify-center shadow-xs">
+                  <Link className="w-4 h-4" />
                 </div>
                 <div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs font-bold text-slate-800 group-hover:text-amber-900 block">
-                      Ver novidades
-                    </span>
-                    <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800">
-                      Atualizado
-                    </span>
-                  </div>
+                  <span className="text-xs font-bold text-slate-800 group-hover:text-teal-900 block">
+                    Links de agendamento
+                  </span>
                   <span className="text-[11px] text-slate-500">
-                    Recursos e melhorias mais recentes da plataforma
+                    Acesse e compartilhe os links públicos de agendamento da clínica e dos profissionais.
                   </span>
                 </div>
               </div>
-              <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-amber-600 shrink-0" />
+              <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-teal-600 shrink-0" />
             </button>
 
             {/* 5. Central de suporte */}

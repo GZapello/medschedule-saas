@@ -52,7 +52,6 @@ const BudgetsView = lazyWithRetry(() => import('./components/budgets/BudgetsView
 const ProfessionalPayrollView = lazyWithRetry(() => import('./components/payroll/ProfessionalPayrollView').then(module => ({ default: module.ProfessionalPayrollView })), 'ProfessionalPayrollView');
 const ZemdaMedWorkspace = lazyWithRetry(() => import('./components/medical/ZemdaMedWorkspace').then(module => ({ default: module.ZemdaMedWorkspace })), 'ZemdaMedWorkspace');
 const ZemdaEsteticWorkspace = lazyWithRetry(() => import('./components/estetic/ZemdaEsteticWorkspace').then(module => ({ default: module.ZemdaEsteticWorkspace })), 'ZemdaEsteticWorkspace');
-const MyResourcesView = lazyWithRetry(() => import('./components/profile/MyResourcesView').then(module => ({ default: module.MyResourcesView })), 'MyResourcesView');
 const SuperAdminLaboratoryView = lazyWithRetry(() => import('./components/superadmin/SuperAdminLaboratoryView').then(module => ({ default: module.SuperAdminLaboratoryView })), 'SuperAdminLaboratoryView');
 import { ZemdaLandingPage } from './components/public/ZemdaLandingPage';
 import { PublicSeoPageView } from './components/public/PublicSeoPageView';
@@ -279,7 +278,7 @@ const AppContent: React.FC = () => {
     const clean = window.location.pathname.replace(/\/+$/, '') || '/';
     if (['/profissionais', '/equipe', '/horarios'].includes(clean)) return 'team';
     if (clean === '/servicos') return 'services';
-    if (clean === '/meus-recursos') return 'resources';
+    if (clean === '/meus-recursos') return 'profile_professional';
     if (['/import', '/importar-dados'].includes(clean)) return 'import';
     if (['/assinatura', '/billing'].includes(clean)) return 'billing';
     if (['/comissoes', '/payroll'].includes(clean)) return 'financial';
@@ -316,11 +315,11 @@ const AppContent: React.FC = () => {
       return;
     }
     if (['my-resources', 'resources'].includes(view)) {
-      setSettingsSection('resources');
+      setSettingsSection('profile_professional');
       setCurrentView('settings');
       sessionStorage.setItem('activeView', 'settings');
-      if (window.location.pathname !== '/meus-recursos') {
-        window.history.pushState({ view: 'settings', subId }, '', '/meus-recursos');
+      if (window.location.pathname !== '/configuracoes') {
+        window.history.pushState({ view: 'settings', subId }, '', '/configuracoes');
       }
       return;
     }
@@ -684,7 +683,7 @@ const AppContent: React.FC = () => {
             sessionStorage.setItem('activeView', 'settings');
           } else if (['my-resources', 'resources'].includes(parsed.view)) {
             setCurrentView('settings');
-            setSettingsSection('resources');
+            setSettingsSection('profile_professional');
             sessionStorage.setItem('activeView', 'settings');
           } else if (['import', 'importar-dados'].includes(parsed.view)) {
             setCurrentView('settings');
@@ -1737,7 +1736,7 @@ const AppContent: React.FC = () => {
           )}
 
           {currentView === 'my-resources' && (
-            <SettingsView initialSection="resources" onNavigateView={handleNavigateView} />
+            <SettingsView initialSection="profile_professional" onNavigateView={handleNavigateView} />
           )}
 
           {(currentView === 'sandbox' || currentView === 'laboratory') && isSuperAdmin && (

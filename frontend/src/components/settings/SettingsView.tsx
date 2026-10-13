@@ -7,7 +7,6 @@ import { useToast } from '../../context/ToastContext';
 import { openCookiePreferencesModal } from '../../utils/cookieConsent';
 import { UnifiedTeamManagement } from './UnifiedTeamManagement';
 import { ServicesView } from '../services/ServicesView';
-import { MyResourcesView } from '../profile/MyResourcesView';
 import { ProfileSpecialties } from '../profile/ProfileSpecialties';
 import { ImportDataView } from '../import/ImportDataView';
 import { ProfessionalPayrollView } from '../payroll/ProfessionalPayrollView';
@@ -87,7 +86,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
     if (initialSection) {
       if (['team', 'professionals', 'staff', 'schedules', 'work-schedules'].includes(initialSection)) return 'team';
       if (initialSection === 'services') return 'services';
-      if (['resources', 'my-resources'].includes(initialSection)) return 'resources';
+      if (['resources', 'my-resources'].includes(initialSection)) return 'profile_professional';
       if (['import', 'importar-dados'].includes(initialSection)) return 'import';
       if (['financial', 'comissoes', 'payroll'].includes(initialSection)) return 'financial';
       if (['billing', 'assinatura'].includes(initialSection)) return 'billing';
@@ -105,7 +104,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
     if (initialSection) {
       if (['team', 'professionals', 'staff', 'schedules', 'work-schedules'].includes(initialSection)) setActiveSection('team');
       else if (initialSection === 'services') setActiveSection('services');
-      else if (['resources', 'my-resources'].includes(initialSection)) setActiveSection('resources');
+      else if (['resources', 'my-resources'].includes(initialSection)) setActiveSection('profile_professional');
       else if (['import', 'importar-dados'].includes(initialSection)) setActiveSection('import');
       else if (['financial', 'comissoes', 'payroll'].includes(initialSection)) setActiveSection('financial');
       else if (['billing', 'assinatura'].includes(initialSection)) setActiveSection('billing');
@@ -708,15 +707,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
       tags: ['Comissões', 'Repasses', 'Folha']
     },
     {
-      id: 'resources',
-      title: 'Módulos & Recursos',
-      desc: 'Habilitação e parametrização dos módulos do ecossistema Zemda e recursos clínicos opcionais da clínica.',
-      icon: Sparkles,
-      iconBg: 'bg-purple-50',
-      iconColor: 'text-purple-600',
-      tags: ['Zemda360', 'Módulos Clínicos']
-    },
-    {
       id: 'import',
       title: 'Importação de Dados',
       desc: 'Importe dados de pacientes, agendamentos e prontuários a partir de planilhas Excel/CSV ou outros sistemas.',
@@ -948,9 +938,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
 
       {/* SEÇÃO: AGENDA & OPERAÇÃO (Serviços e Salas) */}
       {activeSection === 'services' && <ServicesView />}
-
-      {/* SEÇÃO: MÓDULOS & RECURSOS */}
-      {activeSection === 'resources' && <MyResourcesView />}
 
       {/* SEÇÃO: IMPORTAÇÃO DE DADOS */}
       {activeSection === 'import' && <ImportDataView onNavigate={onNavigateView} />}
