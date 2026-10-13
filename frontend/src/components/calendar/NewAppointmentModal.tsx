@@ -6,6 +6,7 @@ import { Professional, Service, Patient, AvailableSlot } from '../../types';
 import { X, Calendar, Clock, User, Plus, CheckCircle2 } from 'lucide-react';
 import { isMeetingUrl } from '../../utils/teleconsultation';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
+import { QuickActionDropdown } from '../common/QuickActionDropdown';
 import { NewPatientModal } from '../patients/NewPatientModal';
 import { NewServiceModal } from '../services/NewServiceModal';
 import { NewInsuranceModal } from '../settings/NewInsuranceModal';
@@ -344,7 +345,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
             onCreateNew={handleOpenCreatePatient}
           />
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 relative z-30">
             <div>
               <label className="block font-semibold text-slate-700 mb-1">Profissional *</label>
               <select
@@ -358,91 +359,64 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
               </select>
             </div>
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block font-semibold text-slate-700">Serviço *</label>
-                {canManageServices && (
-                  <button
-                    type="button"
-                    onClick={() => setIsNewServiceModalOpen(true)}
-                    className="text-[11px] font-bold text-teal-600 hover:text-teal-700 hover:underline flex items-center gap-1 cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    + Adicionar novo serviço
-                  </button>
-                )}
-              </div>
-              <select
+              <label className="block font-semibold text-slate-700 mb-1">Serviço *</label>
+              <QuickActionDropdown
                 value={serviceId}
-                onChange={e => setServiceId(e.target.value)}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50"
-              >
-                {filteredServices.length === 0 ? (
-                  <option value="">Nenhum serviço disponível para este profissional</option>
-                ) : (
-                  filteredServices.map(s => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} (R$ {s.price})
-                    </option>
-                  ))
-                )}
-              </select>
+                onChange={val => setServiceId(val)}
+                options={filteredServices.map(s => ({
+                  value: s.id,
+                  label: `${s.name} (R$ ${s.price})`,
+                  sublabel: s.duration_minutes ? `${s.duration_minutes} min` : undefined
+                }))}
+                placeholder={filteredServices.length === 0 ? "Nenhum serviço disponível" : "Selecione um serviço..."}
+                emptyMessage="Nenhum serviço disponível para este profissional"
+                actionLabel="+ Adicionar novo serviço"
+                onAction={() => setIsNewServiceModalOpen(true)}
+                showAction={canManageServices}
+              />
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 relative z-20">
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block font-semibold text-slate-700">Convênio</label>
-                {canManageInsurances && (
-                  <button
-                    type="button"
-                    onClick={() => setIsNewInsuranceModalOpen(true)}
-                    className="text-[11px] font-bold text-teal-600 hover:text-teal-700 hover:underline flex items-center gap-1 cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    + Adicionar novo convênio
-                  </button>
-                )}
-              </div>
-              <select
+              <label className="block font-semibold text-slate-700 mb-1">Convênio</label>
+              <QuickActionDropdown
                 value={insuranceId}
-                onChange={e => setInsuranceId(e.target.value)}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50"
-              >
-                <option value="">Particular (Sem Convênio)</option>
-                {insurances.map(ins => (
-                  <option key={ins.id} value={ins.id}>
-                    {ins.name}
-                  </option>
-                ))}
-              </select>
+                onChange={val => setInsuranceId(val)}
+                options={[
+                  { value: '', label: 'Particular (Sem Convênio)' },
+                  ...insurances.map(ins => ({
+                    value: ins.id,
+                    label: ins.name,
+                    sublabel: ins.ans_code ? `ANS: ${ins.ans_code}` : undefined
+                  }))
+                ]}
+                placeholder="Particular (Sem Convênio)"
+                emptyMessage="Nenhum convênio cadastrado"
+                actionLabel="+ Adicionar novo convênio"
+                onAction={() => setIsNewInsuranceModalOpen(true)}
+                showAction={canManageInsurances}
+              />
             </div>
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block font-semibold text-slate-700">Sala de Atendimento</label>
-                {canManageRooms && (
-                  <button
-                    type="button"
-                    onClick={() => setIsNewRoomModalOpen(true)}
-                    className="text-[11px] font-bold text-teal-600 hover:text-teal-700 hover:underline flex items-center gap-1 cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    + Adicionar nova sala
-                  </button>
-                )}
-              </div>
-              <select
+              <label className="block font-semibold text-slate-700 mb-1">Sala de Atendimento</label>
+              <QuickActionDropdown
                 value={roomId}
-                onChange={e => setRoomId(e.target.value)}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50"
-              >
-                <option value="">Nenhuma / Sem sala fixa</option>
-                {rooms.map(r => (
-                  <option key={r.id} value={r.id}>
-                    {r.name}
-                  </option>
-                ))}
-              </select>
+                onChange={val => setRoomId(val)}
+                options={[
+                  { value: '', label: 'Nenhuma / Sem sala fixa' },
+                  ...rooms.map(r => ({
+                    value: r.id,
+                    label: r.name,
+                    sublabel: r.description || undefined
+                  }))
+                ]}
+                placeholder="Nenhuma / Sem sala fixa"
+                emptyMessage="Nenhuma sala cadastrada"
+                actionLabel="+ Adicionar nova sala"
+                onAction={() => setIsNewRoomModalOpen(true)}
+                showAction={canManageRooms}
+              />
             </div>
           </div>
 
