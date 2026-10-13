@@ -37,7 +37,7 @@ export function PatientConsentsPanel({patientId,patient,guardians=[]}:{patientId
       ? (guardian.name || row?.signer?.name || 'Responsável legal')
       : (patient?.full_name || patient?.name || 'Paciente');
     const targetPhone = isGuard
-      ? (guardian.phone || row?.signer?.phone)
+      ? (guardian.phone || row?.signer?.phone || (guardians?.find((g: any) => g.phone)?.phone))
       : (patient?.whatsapp || patient?.phone);
     const clinic = currentTenant?.trade_name || currentTenant?.name || 'Clínica';
 
@@ -158,8 +158,8 @@ export function PatientConsentsPanel({patientId,patient,guardians=[]}:{patientId
           { label: 'Validade', value: whatsappData.expiresAt ? consentDate(whatsappData.expiresAt) : '7 dias' }
         ]}
         defaultMessage={whatsappData.defaultMessage}
-        confirmButtonText="Abrir no WhatsApp Web/App"
-        noticeText="O link é seguro e de uso individual. O documento permanecerá aguardando assinatura até que o destinatário conclua."
+        confirmButtonText="Abrir no WhatsApp"
+        noticeText="A mensagem será aberta no WhatsApp com o contato e texto preenchidos. O envio será feito manualmente por você. O link é seguro e de uso individual."
       />
     )}
     {activeToken&&<div role="dialog" aria-modal="true" aria-label="Assinar termo" className="fixed inset-0 z-[10001] overflow-y-auto bg-slate-50"><div className="sticky top-0 z-10 bg-white border-b p-3"><button type="button" className="consent-secondary" onClick={()=>{setActiveToken(null);void run(load);notify();}}>Voltar aos termos</button></div><PublicConsentPage token={activeToken}/></div>}
@@ -186,15 +186,15 @@ export function PatientConsentsPanel({patientId,patient,guardians=[]}:{patientId
       {useGuardian&&<fieldset className="grid sm:grid-cols-2 gap-3"><legend className="text-sm font-semibold mb-2">Responsável legal</legend>{([{key:'name',label:'Nome do responsável',type:'text'},{key:'cpf',label:'CPF',type:'text'},{key:'relationship',label:'Parentesco',type:'text'},{key:'phone',label:'Telefone',type:'tel'},{key:'email',label:'E-mail',type:'email'}] as const).map(f=><label key={f.key} className="text-sm">{f.label}<input required id={f.key==='email'?'consent-guardian-email':undefined} className="consent-field mt-1" type={f.type} maxLength={f.key==='email'?254:180} value={guardian[f.key]} onChange={e=>setGuardian(g=>({...g,[f.key]:e.target.value}))}/></label>)}</fieldset>}
       <label className="flex gap-2 text-sm"><input type="checkbox" checked={photoRequested} onChange={e=>setPhotoRequested(e.target.checked)}/>Solicitar foto no momento da assinatura</label><p className="text-xs text-slate-500">Opcional para o assinante. Esta escolha vale para esta nova solicitação.</p>
       <div className="flex flex-wrap gap-2">{(()=>{
-        const targetPhone = useGuardian ? (guardian.phone) : (patient?.whatsapp || patient?.phone);
+        const targetPhone = useGuardian ? (guardian.phone || (guardians?.find((g: any) => g.phone)?.phone)) : (patient?.whatsapp || patient?.phone);
         const hasPhone = isValidPhoneNumber(targetPhone);
         return (<>
           {[['device','Assinar agora'],['copy','Copiar link'],['send','Enviar por e-mail'],['qr','QR Code']].map(([value,label])=><button key={value} value={value} type="submit" className={value==='device'?'consent-primary':'consent-secondary'} disabled={busy||!selectedTemplate}>{label}</button>)}
-          <button key="whatsapp" value="whatsapp" type="submit" className="consent-secondary flex items-center gap-1.5" disabled={busy||!selectedTemplate||!hasPhone} title={!hasPhone ? 'Paciente sem telefone/WhatsApp cadastrado.' : 'Enviar pelo WhatsApp'}>
+          <button key="whatsapp" value="whatsapp" type="submit" className="consent-secondary flex items-center gap-1.5" disabled={busy||!selectedTemplate||!hasPhone} title={!hasPhone ? (useGuardian ? 'Responsável legal sem telefone cadastrado.' : 'Paciente sem telefone/WhatsApp cadastrado.') : 'Abrir no WhatsApp'}>
             <WhatsAppIcon className="w-3.5 h-3.5 fill-emerald-600" />
             <span>WhatsApp</span>
           </button>
-          {!hasPhone && <span className="text-[11px] text-amber-700 self-center">Paciente sem telefone/WhatsApp cadastrado.</span>}
+          {!hasPhone && <span className="text-[11px] text-amber-700 self-center">{useGuardian ? 'Responsável legal sem telefone cadastrado.' : 'Paciente sem telefone/WhatsApp cadastrado.'}</span>}
         </>);
       })()}<button type="button" className="consent-secondary" disabled={busy} onClick={()=>setRequesting(false)}>Voltar</button></div>{busy&&<p role="status">Preparando solicitação...</p>}
       </fieldset>

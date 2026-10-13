@@ -1230,7 +1230,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                           }
                         }}
                         disabled={!hasPhone}
-                        title={hasPhone ? 'Enviar lembrete pelo WhatsApp' : 'Paciente sem telefone cadastrado'}
+                        title={hasPhone ? 'Abrir no WhatsApp' : 'Paciente sem telefone cadastrado'}
                         className={`w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold transition-all ${
                           hasPhone
                             ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300/80 shadow-xs cursor-pointer'
@@ -1238,7 +1238,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                         }`}
                       >
                         <WhatsAppIcon className={`w-4 h-4 ${hasPhone ? 'fill-emerald-600' : 'fill-slate-400'}`} />
-                        <span>Enviar lembrete pelo WhatsApp</span>
+                        <span>Abrir no WhatsApp</span>
                       </button>
                     );
                   })()}

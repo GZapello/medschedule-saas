@@ -502,8 +502,8 @@ export function TodayWorklist({ data, onNavigate, onPatient }: {
             serviceName: whatsappReminder.service_name || 'serviço',
             clinicName: currentTenant?.trade_name || currentTenant?.name || 'Clínica'
           })}
-          confirmButtonText="Abrir no WhatsApp Web/App"
-          noticeText="O contato é manual. A abertura do WhatsApp NÃO marca este lembrete como concluído."
+          confirmButtonText="Abrir no WhatsApp"
+          noticeText="A mensagem será aberta no WhatsApp com o contato e texto preenchidos. O envio será feito manualmente por você. A abertura do WhatsApp NÃO marca este lembrete como concluído."
         />
       )}
 
@@ -620,15 +620,15 @@ export function TodayWorklist({ data, onNavigate, onPatient }: {
                           <div className="flex items-center gap-2 text-[11px] text-slate-500 pt-0.5">
                             <span>Tel: {row.patient_phone || row.patient_whatsapp}</span>
                             {phoneDigits && (
-                              <a
-                                href={`https://wa.me/55${phoneDigits}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-emerald-600 hover:text-emerald-700 font-semibold"
-                                title="Abrir WhatsApp com paciente"
+                              <button
+                                type="button"
+                                onClick={() => setWhatsappReminder(row)}
+                                className="inline-flex items-center gap-1 text-emerald-600 hover:text-emerald-700 font-semibold cursor-pointer"
+                                title="Abrir no WhatsApp"
                               >
-                                <MessageCircle className="w-3.5 h-3.5" /> WhatsApp
-                              </a>
+                                <WhatsAppIcon className="w-3.5 h-3.5 fill-emerald-600" />
+                                <span>WhatsApp</span>
+                              </button>
                             )}
                           </div>
                         )}

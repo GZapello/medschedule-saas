@@ -205,8 +205,10 @@ export class BillingWebhookService {
         }
       }
       if (['TRIAL', 'TRIAL_EXPIRED'].includes(s.status)) {
-        db.prepare("UPDATE trial_history SET status = 'CONVERTED', converted_at = datetime('now'), updated_at = datetime('now') WHERE subscription_id = ?").run(s.id);
+        db.prepare("UPDATE trial_history SET status = 'CONVERTED', converted_at = datetime('now'), updated_at = datetime('now') WHERE subscription_id = ? OR tenant_id = ?").run(s.id, s.clinic_id);
         billingAudit(s, 'TRIAL_CONVERTED_TO_ACTIVE', s.status, 'ACTIVE');
+      } else {
+        db.prepare("UPDATE trial_history SET status = 'CONVERTED', converted_at = datetime('now'), updated_at = datetime('now') WHERE tenant_id = ? AND status IN ('ACTIVE', 'EXPIRED')").run(s.clinic_id);
       }
     }
     if(status!==s.status) billingAudit(s,status==='ACTIVE' && ['SUSPENDED','PAST_DUE'].includes(s.status)?'REACTIVATED':status,s.status,status);

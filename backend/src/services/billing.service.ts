@@ -129,9 +129,6 @@ export class BillingService {
   static async checkout(clinic:string,code:unknown,user:string):Promise<{url:string}> {
     const plan=chosenPlan(code);
     let s=currentSubscription(clinic);
-    if (s?.managed && s.status==='TRIAL' && plan.code!=='SOLO') {
-      throw new BillingError('TRIAL_UPGRADE_CONTACT_REQUIRED','Para migrar seu teste para os planos Equipe ou Clínica, entre em contato com suporte@zemda.com.br.',400);
-    }
     AsaasService.config(); const app=AsaasService.appUrl();
     if ((process.env.ASAAS_WEBHOOK_TOKEN || '').length<32) throw new BillingError('WEBHOOK_NOT_CONFIGURED','Configure a autenticação do webhook antes de iniciar assinaturas.',503);
     return withOperation(clinic,async()=> {

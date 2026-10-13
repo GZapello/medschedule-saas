@@ -41,6 +41,7 @@ export const BillingView: React.FC<BillingViewProps> = ({
   const [historyOpen, setHistoryOpen] = useState(false);
   const checkoutRequested = useRef(new URLSearchParams(window.location.search).get('checkout') === '1');
   const [registrationCheckout, setRegistrationCheckout] = useState(false);
+  const [pendingPlanCode, setPendingPlanCode] = useState<string | null>(null);
   useEffect(() => { if (callback === 'sucesso' && summary?.canManage && summary.status === 'ACTIVE') trackConfirmedPurchase(summary.confirmedPurchase); }, [callback, summary]);
   const [profileOpen, setProfileOpen] = useState(false), [profile, setProfile] = useState(emptyProfile);
   const canManage = summary?.canManage ?? (!currentUser || ['superadmin', 'clinic_admin'].includes(currentUser.role) || (currentUser as any).permissions?.includes('manage_subscription'));
@@ -64,10 +65,7 @@ export const BillingView: React.FC<BillingViewProps> = ({
   };
   const choose = async (code: string) => {
     if (!currentUser) { window.location.assign('/cadastro?plan=' + encodeURIComponent(code)); return; }
-    if (summary?.isTrial && code !== 'SOLO') {
-      setError('O teste grátis de 7 dias é exclusivo do plano Zemda Solo. Para migrar para os planos Equipe ou Clínica, entre em contato com nosso suporte pelo e-mail suporte@zemda.com.br.');
-      return;
-    }
+    setPendingPlanCode(code);
     if (busy) return; setBusy(true); setError(''); setNotice('');
     try {
       if (summary?.managed && summary.status === 'ACTIVE') {
@@ -89,7 +87,11 @@ export const BillingView: React.FC<BillingViewProps> = ({
     try {
       const result = await ApiClient.put<any>('/v1/subscriptions/profile', profile);
       setNotice(result.message); setProfileOpen(false);
-      if (registrationCheckout && summary?.selectedPlan) await openCheckout(summary.selectedPlan.code);
+      const targetCode = pendingPlanCode || (registrationCheckout && summary?.selectedPlan ? summary.selectedPlan.code : null);
+      if (targetCode) {
+        setPendingPlanCode(null);
+        await openCheckout(targetCode);
+      }
     } catch (e: any) {
       setError(e.message); setProfileOpen(true);
     } finally { setBusy(false); }
@@ -284,7 +286,18 @@ export const BillingView: React.FC<BillingViewProps> = ({
 
             let topBadge = isFeatured ? 'Mais Escolhido' : null;
             let subDescription = plan.max_users === 1 ? 'Para atendimento autônomo individual.' : plan.max_users <= 5 ? 'Para clínicas e consultórios com até 5 acessos.' : 'Para clínicas consolidadas com até 20 acessos.';
-            let buttonText = summary?.managed && summary.status === 'ACTIVE' ? 'Programar mudança' : 'Assinar agora';
+
+            const planButtonLabel = isSolo
+              ? 'Assinar Zemda Solo'
+              : (plan.code || '').toUpperCase() === 'TEAM' || (plan.name || '').toLowerCase().includes('equipe')
+                ? 'Assinar Zemda Equipe'
+                : (plan.code || '').toUpperCase() === 'CLINIC' || (plan.name || '').toLowerCase().includes('clínica') || (plan.name || '').toLowerCase().includes('clinica')
+                  ? 'Assinar Zemda Clínica'
+                  : `Assinar ${plan.name}`;
+
+            let buttonText = summary?.managed && summary.status === 'ACTIVE'
+              ? (summary?.plan?.code === plan.code ? 'Plano atual' : 'Programar mudança')
+              : planButtonLabel;
             let buttonAction = () => void choose(plan.code);
             let buttonDisabled = busy || (summary?.plan?.code === plan.code && summary?.status === 'ACTIVE');
 
@@ -307,11 +320,8 @@ export const BillingView: React.FC<BillingViewProps> = ({
               }
             } else {
               if (summary?.isTrial) {
-                buttonText = 'Falar com suporte';
-                buttonAction = () => {
-                  setError('O teste grátis é exclusivo do plano Zemda Solo. Para migrar para os planos Equipe ou Clínica, entre em contato pelo e-mail suporte@zemda.com.br.');
-                  window.location.assign('mailto:suporte@zemda.com.br?subject=Migracao%20para%20plano%20' + encodeURIComponent(plan.name));
-                };
+                buttonText = planButtonLabel;
+                buttonAction = () => void choose(plan.code);
               }
             }
 
@@ -390,9 +400,9 @@ export const BillingView: React.FC<BillingViewProps> = ({
           })}
         </div>
 
-        {/* Aviso de suporte exclusivo para planos coletivos */}
+        {/* Aviso de suporte e condições comerciais */}
         <div className="p-4 bg-slate-50 border border-slate-200/90 rounded-2xl text-center text-xs text-slate-600 leading-relaxed">
-          O teste grátis de 7 dias é exclusivo do plano <strong>Zemda Solo</strong>. Para informações comerciais, migrações e condições de implantação dos planos <strong>Equipe</strong> e <strong>Clínica</strong>, entre em contato pelo <a href="mailto:suporte@zemda.com.br" className="text-teal-700 font-bold underline hover:text-teal-900">suporte@zemda.com.br</a>.
+          O teste grátis de 7 dias é exclusivo do plano <strong>Zemda Solo</strong>. Para dúvidas comerciais ou condições personalizadas de implantação dos planos <strong>Equipe</strong> e <strong>Clínica</strong>, entre em contato pelo <a href="mailto:suporte@zemda.com.br" className="text-teal-700 font-bold underline hover:text-teal-900">suporte@zemda.com.br</a>.
         </div>
       </div>
     )}

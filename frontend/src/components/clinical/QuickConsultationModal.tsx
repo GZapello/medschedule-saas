@@ -1,4 +1,5 @@
 import { takeReviewedEvolution } from '../../utils/teleconsultation';
+import { generateWhatsAppUrl } from '../../utils/phone.utils';
 import { ClinicalPainScale } from './ClinicalPainScale';
 import { useClinicalFormReset } from '../../hooks/useClinicalFormReset';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -1030,11 +1031,11 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
                         {patientPhone}
                         {cleanPhone.length >= 10 && (
                           <a
-                            href={`https://wa.me/55${cleanPhone}`}
+                            href={generateWhatsAppUrl(patientPhone, '')}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="inline-flex items-center gap-0.5 text-emerald-600 hover:text-emerald-700 font-bold ml-1"
-                            title="Abrir WhatsApp"
+                            title="Abrir no WhatsApp"
                           >
                             <MessageCircle className="w-3.5 h-3.5" />
                             <span>WhatsApp</span>

@@ -269,7 +269,7 @@ ${prog.instructions}
                     type="button"
                     onClick={() => copyToClipboard(prog)}
                     className="p-1.5 text-slate-400 hover:text-teal-600 hover:bg-slate-50 rounded-lg transition-colors cursor-pointer"
-                    title="Copiar texto formatado para enviar pelo WhatsApp ou e-mail"
+                    title="Copiar texto formatado para compartilhar por WhatsApp ou e-mail"
                   >
                     <Copy className="w-3.5 h-3.5" />
                   </button>

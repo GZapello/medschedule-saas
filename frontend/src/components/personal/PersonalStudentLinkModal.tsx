@@ -125,7 +125,7 @@ export const PersonalStudentLinkModal: React.FC<PersonalStudentLinkModalProps> =
       }).catch(() => {});
     } else {
       const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
-      window.open(whatsappUrl, '_blank');
+      window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
     }
   };
 

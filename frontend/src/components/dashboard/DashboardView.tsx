@@ -571,7 +571,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                               }
                             }}
                             disabled={!hasPhone}
-                            title={hasPhone ? 'Enviar lembrete pelo WhatsApp' : 'Paciente sem telefone cadastrado'}
+                            title={hasPhone ? 'Abrir no WhatsApp' : 'Paciente sem telefone cadastrado'}
                             className={`flex items-center gap-1 px-2 py-1 text-xs font-semibold rounded-lg transition-all ${
                               hasPhone
                                 ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/80 cursor-pointer shadow-2xs'
