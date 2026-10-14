@@ -1,6 +1,6 @@
 import { ClinicBookingSettings, ProfessionalBookingSettings } from '../public-booking/BookingLinkSettings';
 import { BillingView } from '../billing/BillingView';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -269,6 +269,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
   const [zipCode, setZipCode] = useState<string>('');
   const [logoUrl, setLogoUrl] = useState<string>('');
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [logoDirty, setLogoDirty] = useState<boolean>(false);
+  const logoDirtyRef = useRef<boolean>(false);
+  const lastTenantIdRef = useRef<string | null>(null);
   const [clientTermLabel, setClientTermLabel] = useState<string>('Paciente');
   const [primaryColor, setPrimaryColor] = useState<string>('#4f46e5');
   const [loadingClinic, setLoadingClinic] = useState<boolean>(false);
@@ -499,6 +502,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
           showToast(`A resolução da imagem é muito baixa (${img.width}x${img.height}px). O tamanho mínimo permitido é 180x180 pixels para garantir nitidez nos documentos e impressões.`, 'error');
           return;
         }
+        logoDirtyRef.current = true;
+        setLogoDirty(true);
         setLogoPreview(base64);
         setLogoUrl(base64);
         showToast('Prévia do logotipo carregada em alta resolução! Clique em Salvar para fixar na clínica.', 'info');
@@ -509,6 +514,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
       img.src = base64;
     };
     reader.readAsDataURL(file);
+    e.target.value = '';
   };
 
   useEffect(() => {
@@ -535,8 +541,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
       setCity(currentTenant.city || '');
       setState(currentTenant.state || '');
       setZipCode((currentTenant as any).zip_code ? formatCEP((currentTenant as any).zip_code) : '');
-      setLogoUrl((currentTenant as any).logo_url || '');
-      setLogoPreview((currentTenant as any).logo_url || null);
+      const isDifferentTenant = lastTenantIdRef.current !== currentTenant.id;
+      if (isDifferentTenant) {
+        lastTenantIdRef.current = currentTenant.id;
+        logoDirtyRef.current = false;
+        setLogoDirty(false);
+        setLogoUrl((currentTenant as any).logo_url || '');
+        setLogoPreview((currentTenant as any).logo_url || null);
+      } else if (!logoDirtyRef.current) {
+        setLogoUrl((currentTenant as any).logo_url || '');
+        setLogoPreview((currentTenant as any).logo_url || null);
+      }
       setClientTermLabel(currentTenant.client_term_label || 'Paciente');
       setPrimaryColor(currentTenant.primary_color || '#4f46e5');
 
@@ -597,8 +612,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
         businessHoursJson: JSON.stringify(businessHours)
       });
       showToast('Dados da conta e estabelecimento salvos com sucesso!', 'success');
-      refreshTenant();
+      await refreshTenant();
       await reloadSession();
+      logoDirtyRef.current = false;
+      setLogoDirty(false);
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('zemda-clinic-updated', { detail: { logo_url: logoUrl } }));
       }
@@ -1423,6 +1440,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
                     onClick={() => {
                       setLogoPreview(null);
                       setLogoUrl('');
+                      logoDirtyRef.current = true;
+                      setLogoDirty(true);
                     }}
                     className="absolute -top-2 -right-2 p-1 bg-rose-600 text-white rounded-full hover:bg-rose-700 shadow-xs transition-colors"
                     title="Remover logotipo"
