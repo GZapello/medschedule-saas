@@ -291,7 +291,7 @@ export class ProfessionalController {
             registration_type = CASE WHEN ? = 1 THEN ? ELSE registration_type END,
             registration_number = CASE WHEN ? = 1 THEN ? ELSE registration_number END,
             updated_at = datetime('now')
-          WHERE id = ?
+          WHERE id = ? AND (SELECT COUNT(*) FROM clinic_users cu WHERE cu.user_id=users.id)<=1
         `).run(
           hasRegType,
           cleanRegType,

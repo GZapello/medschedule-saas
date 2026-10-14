@@ -1,0 +1,407 @@
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../../context/AuthContext';
+import {
+  LayoutDashboard,
+  Calendar,
+  Users,
+  FileText,
+  Activity,
+  ClipboardList,
+  DollarSign,
+  BarChart3,
+  ShieldCheck,
+  Globe,
+  Package,
+  FileSpreadsheet,
+  LifeBuoy,
+  ChevronDown,
+  ChevronRight,
+  Smile,
+  Apple,
+  Hand,
+  Mic,
+  Brain,
+  Dumbbell,
+  GraduationCap,
+  Stethoscope,
+  Sparkles,
+  X
+} from 'lucide-react';
+
+interface SidebarProps {
+  currentView: string;
+  onNavigate: (view: string) => void;
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+interface NavItem {
+  id: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  visible: boolean;
+}
+
+interface NavCategory {
+  id: string;
+  label: string;
+  items: NavItem[];
+}
+
+export const Sidebar: React.FC<SidebarProps> = ({
+  currentView,
+  onNavigate,
+  isOpen,
+  onClose
+}) => {
+  const {
+    isSuperAdmin,
+    isClinicAdmin,
+    isProfessional,
+    isReceptionist,
+    isPhysiotherapist,
+    isZemdaFisio,
+    isDentist,
+    isZemdaOdonto,
+    isNutritionist,
+    isZemdaNutri,
+    isOccupationalTherapist,
+    isZemdaTO,
+    isSpeechTherapist,
+    isZemdaFono,
+    isPsychologist,
+    isZemdaPsico,
+    isPsychopedagogue,
+    isZemdaPP,
+    isPersonalTrainer,
+    isZemdaPersonal,
+    isDoctor,
+    isZemdaMed,
+    isEsthetician,
+    isZemdaEstetic,
+    hasCapability,
+    hasPermission,
+    isZemdaBody,
+    commercialModule,
+    clinicalWorkspace,
+    clientTermLabel
+  } = useAuth();
+
+  const isEligibleClinical = isClinicAdmin || isProfessional;
+
+  const categories: NavCategory[] = [
+    {
+      id: 'attendance',
+      label: 'Atendimento & Agenda',
+      items: [
+        { id: 'dashboard', label: 'Painel', icon: LayoutDashboard, visible: true },
+        {
+          id: 'calendar',
+          label: 'Agenda Interativa',
+          icon: Calendar,
+          visible: isClinicAdmin || isProfessional || isReceptionist || hasPermission('view_schedule')
+        },
+        {
+          id: 'patients',
+          label: `${clientTermLabel}s`,
+          icon: Users,
+          visible: isClinicAdmin || isProfessional || isReceptionist || hasPermission('create_patient') || hasPermission('edit_patient')
+        },
+        {
+          id: 'clinical',
+          label: (commercialModule === null && (clinicalWorkspace === 'general' || isProfessional))
+            ? 'Atendimento Clínico'
+            : 'Prontuário & Evolução',
+          icon: FileText,
+          visible: isEligibleClinical
+        },
+        {
+          id: 'zemda-med',
+          label: 'ZemdaMed (Medicina)',
+          icon: Stethoscope,
+          visible: isEligibleClinical && (isDoctor || isZemdaMed || commercialModule === 'ZemdaMed')
+        },
+        {
+          id: 'zemda-body',
+          label: 'Zemda360 (Mapeamento)',
+          icon: Activity,
+          visible: isClinicAdmin || isZemdaBody
+        },
+        {
+          id: 'zemda-fisio',
+          label: 'ZemdaFisio (Fisioterapia)',
+          icon: Activity,
+          visible: isEligibleClinical && (isPhysiotherapist || isZemdaFisio || commercialModule === 'ZemdaFisio')
+        },
+        {
+          id: 'zemda-odonto',
+          label: 'ZemdaOdonto (Odontologia)',
+          icon: Smile,
+          visible: isEligibleClinical && (isDentist || isZemdaOdonto || commercialModule === 'ZemdaOdonto')
+        },
+        {
+          id: 'zemda-estetic',
+          label: 'ZemdaEstetic (Estética)',
+          icon: Sparkles,
+          visible: isEligibleClinical && (isEsthetician || isZemdaEstetic || commercialModule === 'ZemdaEstetic')
+        },
+        {
+          id: 'zemda-nutri',
+          label: 'ZemdaNutri (Nutrição)',
+          icon: Apple,
+          visible: isEligibleClinical && (isNutritionist || isZemdaNutri || commercialModule === 'ZemdaNutri')
+        },
+        {
+          id: 'zemda-to',
+          label: 'ZemdaTO (Terapia Ocupacional)',
+          icon: Hand,
+          visible: isEligibleClinical && (isOccupationalTherapist || isZemdaTO || commercialModule === 'ZemdaTO')
+        },
+        {
+          id: 'zemda-fono',
+          label: 'ZemdaFono (Fonoaudiologia)',
+          icon: Mic,
+          visible: isEligibleClinical && (isSpeechTherapist || isZemdaFono || commercialModule === 'ZemdaFono')
+        },
+        {
+          id: 'zemda-psico',
+          label: 'ZemdaPsico (Psicologia)',
+          icon: Brain,
+          visible: isEligibleClinical && (isPsychologist || isZemdaPsico || commercialModule === 'ZemdaPsico')
+        },
+        {
+          id: 'zemda-pp',
+          label: 'ZemdaPP (Psicopedagogia)',
+          icon: GraduationCap,
+          visible: isEligibleClinical && (isPsychopedagogue || isZemdaPP || commercialModule === 'ZemdaPP')
+        },
+        {
+          id: 'zemda-personal',
+          label: 'ZemdaPersonal (Treinamento)',
+          icon: Dumbbell,
+          visible: isEligibleClinical && (isPersonalTrainer || isZemdaPersonal || commercialModule === 'ZemdaPersonal')
+        },
+        {
+          id: 'pending-exams',
+          label: 'Exames a Receber',
+          icon: ClipboardList,
+          visible: isClinicAdmin || hasCapability('CORE_EXAMS_RECEIVED') || hasCapability('CORE_EXAM_REQUEST') || hasPermission('view_exams')
+        },
+      ]
+    },
+    {
+      id: 'management',
+      label: 'Gestão',
+      items: [
+        {
+          id: 'financial',
+          label: 'Financeiro',
+          icon: DollarSign,
+          visible: isClinicAdmin || hasPermission('view_financial')
+        },
+        {
+          id: 'inventory',
+          label: 'Estoque de Insumos',
+          icon: Package,
+          visible: isClinicAdmin || hasPermission('manage_inventory') || hasPermission('view_inventory')
+        },
+        {
+          id: 'budgets',
+          label: 'Orçamentos',
+          icon: FileSpreadsheet,
+          visible: isClinicAdmin || isProfessional || hasPermission('view_budgets') || hasPermission('manage_budgets')
+        },
+        {
+          id: 'reports',
+          label: 'Relatórios',
+          icon: BarChart3,
+          visible: isClinicAdmin || hasPermission('view_reports')
+        },
+      ]
+    }
+  ];
+
+  // Menu Simplificado do SuperAdmin
+  const superAdminCategories: NavCategory[] = [
+    {
+      id: 'superadmin_main',
+      label: 'Administração Global',
+      items: [
+        { id: 'superadmin', label: 'Painel Global', icon: Globe, visible: true },
+        { id: 'support-tickets', label: 'Chamados', icon: LifeBuoy, visible: true },
+        { id: 'audit', label: 'Auditoria LGPD', icon: ShieldCheck, visible: true }
+      ]
+    }
+  ];
+
+  const effectiveCategories = isSuperAdmin ? superAdminCategories : categories;
+
+  // Identifica qual categoria contém a view ativa inicialmente
+  const getInitialOpenCategories = () => {
+    if (isSuperAdmin) {
+      return { superadmin_main: true };
+    }
+    const initial: Record<string, boolean> = {
+      attendance: true,
+      management: true
+    };
+    for (const cat of categories) {
+      if (cat.items.some(item => item.id === currentView)) {
+        initial[cat.id] = true;
+      }
+    }
+    return initial;
+  };
+
+  const [openCategories, setOpenCategories] = useState<Record<string, boolean>>(getInitialOpenCategories);
+
+  // Mantém categoria ativa aberta caso a visualização mude
+  useEffect(() => {
+    for (const cat of effectiveCategories) {
+      if (cat.items.some(item => item.id === currentView)) {
+        setOpenCategories(prev => ({ ...prev, [cat.id]: true }));
+      }
+    }
+  }, [currentView, isSuperAdmin]);
+
+  useEffect(() => {
+    const prepare = (event: Event) => {
+      const route = (event as CustomEvent).detail?.route;
+      const category = effectiveCategories.find(cat => cat.items.some(item => item.id === route && item.visible));
+      if (category) setOpenCategories(prev => ({ ...prev, [category.id]: true }));
+    };
+    window.addEventListener('zemda-tour-prepare', prepare);
+    return () => window.removeEventListener('zemda-tour-prepare', prepare);
+  });
+
+  const toggleCategory = (categoryId: string) => {
+    setOpenCategories(prev => ({
+      ...prev,
+      [categoryId]: !prev[categoryId]
+    }));
+  };
+
+  return (
+    <>
+      {/* Mobile Backdrop */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 bg-slate-900/40 z-40 lg:hidden backdrop-blur-xs transition-opacity mobile-modal"
+          onClick={onClose}
+        />
+      )}
+
+      <aside
+        data-tour-routes={effectiveCategories.flatMap(category => category.items.filter(item => item.visible).map(item => item.id)).join(" ")}
+        className={`fixed top-0 bottom-0 left-0 z-50 w-64 max-w-[85vw] bg-white text-slate-700 flex flex-col transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:z-auto border-r border-slate-200/80 ${
+          isOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'
+        }`}
+      >
+        {/* Brand Header */}
+        <div className="h-16 flex items-center justify-between px-5 border-b border-slate-100 bg-white">
+          <div className="flex items-center">
+            <img
+              src="/brand/zemda-logo.png"
+              alt="Zemda"
+              className="h-8 w-auto object-contain"
+            />
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg lg:hidden cursor-pointer"
+            aria-label="Fechar menu"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Accordion Categories Container */}
+        <div className="flex-1 overflow-y-auto py-3 px-3 space-y-2 scrollbar-thin scrollbar-thumb-slate-200">
+          {effectiveCategories.map(category => {
+            const visibleItems = category.items.filter(item => item.visible);
+            if (visibleItems.length === 0) return null;
+
+            const isExpanded = !!openCategories[category.id];
+            const hasActiveChild = visibleItems.some(item => item.id === currentView);
+
+            return (
+              <div key={category.id} className="rounded-xl overflow-hidden">
+                {/* Category Header Accordion Button */}
+                <button
+                  data-tour-group={category.id}
+                  aria-expanded={isExpanded}
+                  onClick={() => toggleCategory(category.id)}
+                  className={`w-full flex items-center justify-between px-3 py-2 text-xs font-bold tracking-wider uppercase transition-colors rounded-xl cursor-pointer ${
+                    hasActiveChild
+                      ? 'text-teal-800 bg-teal-50/70'
+                      : 'text-slate-400 hover:text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <span className="truncate">{category.label}</span>
+                  {isExpanded ? (
+                    <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+                  )}
+                </button>
+
+                {/* Subitems List */}
+                {isExpanded && (
+                  <div className="mt-1 pl-1 space-y-0.5 transition-all duration-200">
+                    {visibleItems.map(item => {
+                      const Icon = item.icon;
+                      const isActive = currentView === item.id;
+                      const isUserModule = (
+                        (item.id === 'zemda-med' && isZemdaMed) ||
+                        (item.id === 'zemda-fono' && isZemdaFono) ||
+                        (item.id === 'zemda-psico' && isZemdaPsico) ||
+                        (item.id === 'zemda-odonto' && isZemdaOdonto) ||
+                        (item.id === 'zemda-nutri' && isZemdaNutri) ||
+                        (item.id === 'zemda-fisio' && isZemdaFisio) ||
+                        (item.id === 'zemda-to' && isZemdaTO) ||
+                        (item.id === 'zemda-personal' && isZemdaPersonal) ||
+                        (item.id === 'zemda-pp' && isZemdaPP) ||
+                        (item.id === 'zemda-estetic' && isZemdaEstetic) ||
+                        (item.id === 'clinical' && (isProfessional || isClinicAdmin))
+                      );
+
+                      return (
+                        <button
+                          key={item.id}
+                          data-tour={`nav-${item.id}`}
+                          data-nav-id={item.id}
+                          data-clinical-module={isUserModule ? "true" : undefined}
+                          onClick={() => {
+                            onNavigate(item.id);
+                            onClose();
+                          }}
+                          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                            isActive
+                              ? 'bg-gradient-to-r from-teal-600 to-emerald-600 text-white shadow-xs shadow-teal-700/20'
+                              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
+                          }`}
+                        >
+                          <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-slate-400'}`} />
+                          <span className="truncate text-left">{item.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Footer info */}
+        <div className="p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-slate-100 text-[11px] text-slate-400 bg-slate-50/40 flex items-center justify-between">
+          <span>Ambiente Seguro • LGPD</span>
+          <span className="inline-flex items-center gap-1.5 text-emerald-600 font-semibold">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            Online
+          </span>
+        </div>
+      </aside>
+    </>
+  );
+};

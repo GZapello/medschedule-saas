@@ -1,0 +1,356 @@
+import React, { useEffect, useId, useRef, useState, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
+import { ChevronDown, Search, X, Check, Sparkles, RefreshCw } from 'lucide-react';
+import { RegistrationProfessionOption } from '../../types/professions';
+
+export interface RegistrationProfessionSelectProps {
+  value: string;
+  onChange: (value: string) => void;
+  options?: RegistrationProfessionOption[];
+  loading?: boolean;
+  compact?: boolean;
+}
+
+export const RegistrationProfessionSelect: React.FC<RegistrationProfessionSelectProps> = ({
+  value,
+  onChange,
+  options,
+  loading,
+  compact = false
+}) => {
+  const id = useId();
+  const [open, setOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [coords, setCoords] = useState<{
+    top: number;
+    left: number;
+    width: number;
+    maxHeight: number;
+    placeAbove?: boolean;
+  }>({
+    top: 0,
+    left: 0,
+    width: 0,
+    maxHeight: 320,
+    placeAbove: false
+  });
+
+  const rootRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const listboxRef = useRef<HTMLDivElement>(null);
+
+  const list = options || [];
+
+  const norm = (str: string) =>
+    str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+
+  const filteredList = useMemo(() => {
+    if (!searchQuery.trim()) return list;
+    const q = norm(searchQuery);
+    return list.filter(opt => {
+      const label = norm(opt.label || opt.name || '');
+      const canonical = norm(opt.canonicalName || '');
+      const display = norm(opt.displayOption || '');
+      const board = norm(opt.boardLabel || '');
+      const mods = (opt.modules || []).map(m => norm(m)).join(' ');
+      const slug = norm(opt.slug || '');
+      return (
+        label.includes(q) ||
+        canonical.includes(q) ||
+        display.includes(q) ||
+        board.includes(q) ||
+        mods.includes(q) ||
+        slug.includes(q)
+      );
+    });
+  }, [list, searchQuery]);
+
+  const selectedOption = list.find(option => option.id === value);
+
+  const updatePosition = useCallback(() => {
+    if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      const margin = 4;
+      const spaceBelow = window.innerHeight - rect.bottom - 16;
+      const spaceAbove = rect.top - 16;
+
+      // Preferência estrita por abrir para BAIXO (placement: bottom-start).
+      // Só inverte para cima se o espaço abaixo for criticamente restrito (< 140px) E houver mais espaço acima.
+      const placeAbove = spaceBelow < 140 && spaceAbove > spaceBelow;
+
+      const availableHeight = placeAbove
+        ? Math.min(360, Math.max(140, spaceAbove))
+        : Math.min(320, Math.max(160, spaceBelow));
+
+      setCoords({
+        top: placeAbove ? rect.top - margin : rect.bottom + margin,
+        left: rect.left,
+        width: rect.width,
+        maxHeight: availableHeight,
+        placeAbove
+      });
+    }
+  }, []);
+
+  const handleOpen = () => {
+    updatePosition();
+    setOpen(true);
+    setSearchQuery('');
+    const idx = filteredList.findIndex(o => o.id === value);
+    setActiveIndex(idx >= 0 ? idx : 0);
+  };
+
+  const handleClose = () => {
+    setOpen(false);
+    buttonRef.current?.focus();
+  };
+
+  const chooseOption = (option: RegistrationProfessionOption) => {
+    onChange(option.id);
+    setOpen(false);
+    buttonRef.current?.focus();
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    updatePosition();
+    const onScrollOrResize = () => updatePosition();
+    window.addEventListener('resize', onScrollOrResize);
+    window.addEventListener('scroll', onScrollOrResize, true);
+    return () => {
+      window.removeEventListener('resize', onScrollOrResize);
+      window.removeEventListener('scroll', onScrollOrResize, true);
+    };
+  }, [open, updatePosition]);
+
+  // Auto-focus search input when opened
+  useEffect(() => {
+    if (open) {
+      setTimeout(() => {
+        searchInputRef.current?.focus();
+      }, 50);
+    }
+  }, [open]);
+
+  // Scroll active item into view when activeIndex changes
+  useEffect(() => {
+    if (open && activeIndex >= 0) {
+      const el = document.getElementById(`${id}-${activeIndex}`);
+      if (el) {
+        el.scrollIntoView({ block: 'nearest' });
+      }
+    }
+  }, [open, activeIndex, id]);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      handleClose();
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveIndex(prev => Math.min(filteredList.length - 1, prev + 1));
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveIndex(prev => Math.max(0, prev - 1));
+      return;
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (filteredList[activeIndex]) {
+        chooseOption(filteredList[activeIndex]);
+      }
+      return;
+    }
+  };
+
+  return (
+    <div ref={rootRef} className="relative min-w-0 w-full">
+      {/* Trigger Button */}
+      <button
+        ref={buttonRef}
+        id="registration-profession"
+        type="button"
+        role="combobox"
+        aria-label="Profissão"
+        aria-required="true"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => (open ? handleClose() : handleOpen())}
+        onKeyDown={e => {
+          if (['ArrowDown', 'ArrowUp', 'Enter', ' '].includes(e.key) && !open) {
+            e.preventDefault();
+            handleOpen();
+          }
+        }}
+        className={`w-full min-w-0 ${
+          compact
+            ? 'pl-9 pr-8 py-1.5 h-9 text-xs rounded-xl'
+            : 'pl-11 pr-10 py-3 sm:py-2.5 text-base sm:text-sm rounded-2xl'
+        } border border-slate-200 bg-slate-50 hover:bg-white focus:bg-white focus:ring-2 focus:ring-teal-500 font-medium text-slate-800 transition-all cursor-pointer flex items-center justify-between shadow-xs`}
+      >
+        <span className="truncate">
+          {selectedOption ? (
+            <span className="text-slate-900 font-bold">
+              {selectedOption.label || selectedOption.name}
+            </span>
+          ) : loading ? (
+            <span className="text-slate-400 flex items-center gap-2 text-xs">
+              <RefreshCw className="w-3.5 h-3.5 animate-spin text-teal-600" />
+              Carregando profissões ativas...
+            </span>
+          ) : (
+            <span className="text-slate-400 text-xs sm:text-sm">Selecione sua profissão...</span>
+          )}
+        </span>
+        <ChevronDown
+          aria-hidden="true"
+          className={`${compact ? 'w-4 h-4' : 'w-5 h-5'} text-slate-400 transition-transform duration-200 shrink-0 ${open ? 'rotate-180 text-teal-600' : ''}`}
+        />
+      </button>
+
+      {/* Dropdown with transparent backdrop rendered in Portal */}
+      {open && typeof document !== 'undefined' && createPortal(
+        <>
+          {/* Backdrop for click outside without layout interference */}
+          <div
+            className="fixed inset-0 z-[9998] bg-black/20 sm:bg-transparent backdrop-blur-2xs sm:backdrop-blur-none cursor-default mobile-modal"
+            onClick={handleClose}
+          />
+
+          {/* Floating Dropdown Listbox */}
+          <div
+            ref={listboxRef}
+            role="listbox"
+            aria-label="Profissões disponíveis"
+            style={
+              typeof window !== 'undefined' && window.innerWidth < 640
+                ? {}
+                : {
+                    position: 'fixed',
+                    top: coords.placeAbove ? 'auto' : `${coords.top}px`,
+                    bottom: coords.placeAbove ? `${window.innerHeight - coords.top}px` : 'auto',
+                    left: `${coords.left}px`,
+                    width: `${coords.width}px`,
+                    maxHeight: `${coords.maxHeight}px`
+                  }
+            }
+            className="fixed inset-x-3 bottom-3 sm:inset-auto z-[9999] bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden flex flex-col max-h-[80vh] animate-in fade-in-50 zoom-in-95 duration-150 ring-1 ring-black/10"
+          >
+            {/* Search Input Box */}
+            <div className="p-2 sm:p-2.5 bg-slate-50 border-b border-slate-100 shrink-0 space-y-1">
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={searchQuery}
+                  onChange={e => {
+                    setSearchQuery(e.target.value);
+                    setActiveIndex(0);
+                  }}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Buscar profissão (ex: fisio, psico, odonto, médico)..."
+                  className="w-full pl-8 pr-8 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-slate-800 placeholder:text-slate-400 transition-all shadow-xs"
+                  onClick={e => e.stopPropagation()}
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery('');
+                      searchInputRef.current?.focus();
+                    }}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-md cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between px-1 text-[10px] text-slate-500 font-semibold">
+                <span>
+                  {searchQuery.trim()
+                    ? `${filteredList.length} encontrada(s)`
+                    : `${list.length} profissões no catálogo`}
+                </span>
+                <span className="text-[9px] text-slate-400 font-normal">Use ↑ ↓ para navegar</span>
+              </div>
+            </div>
+
+            {/* Scrollable Items List */}
+            <div className="overflow-y-auto overscroll-contain flex-1 divide-y divide-slate-100 scroll-smooth">
+              {loading ? (
+                <div className="p-8 text-center text-xs text-slate-500 flex flex-col items-center justify-center gap-2">
+                  <RefreshCw className="w-5 h-5 animate-spin text-teal-600" />
+                  <span className="font-semibold">Carregando profissões do catálogo...</span>
+                </div>
+              ) : filteredList.length === 0 ? (
+                <div className="p-8 text-center text-xs text-slate-500 space-y-1">
+                  <p className="font-bold text-slate-700">Nenhuma profissão ativa encontrada</p>
+                  <p className="text-slate-400">Não encontramos resultados para &ldquo;{searchQuery}&rdquo;.</p>
+                </div>
+              ) : (
+                filteredList.map((option, idx) => {
+                  const isSelected = option.id === value;
+                  const isActive = activeIndex === idx;
+                  const modulesList = option.modules || (option.module ? [option.module, 'Zemda360'] : ['Recursos gerais do Zemda', 'Zemda360']);
+                  const modulesLabel = modulesList.join(' + ');
+
+                  return (
+                    <div
+                      key={option.id}
+                      id={`${id}-${idx}`}
+                      role="option"
+                      aria-selected={isSelected}
+                      onClick={() => chooseOption(option)}
+                      onMouseEnter={() => setActiveIndex(idx)}
+                      className={`px-3.5 py-2 text-xs cursor-pointer transition-all flex items-center justify-between gap-2.5 border-l-4 ${
+                        isSelected
+                          ? 'bg-teal-50 text-teal-950 font-bold border-l-teal-600 shadow-2xs'
+                          : isActive
+                          ? 'bg-slate-50/90 text-slate-900 border-l-teal-400'
+                          : 'border-l-transparent text-slate-700 hover:bg-slate-50/80 hover:border-l-slate-300'
+                      }`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`text-xs ${isSelected ? 'font-black text-teal-950' : 'font-bold text-slate-900'}`}>
+                            {option.label || option.name}
+                          </span>
+                          {option.boardLabel && (
+                            <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200 uppercase tracking-wide">
+                              {option.boardLabel}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[10px] text-teal-700 font-medium mt-0.5 flex items-center gap-1.5">
+                          <Sparkles className="w-2.5 h-2.5 text-teal-500 shrink-0" />
+                          <span className="truncate">{modulesLabel}</span>
+                        </div>
+                      </div>
+
+                      {isSelected ? (
+                        <div className="w-5 h-5 rounded-full bg-teal-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                          <Check className="w-3 h-3 stroke-[3]" />
+                        </div>
+                      ) : (
+                        <div className="w-4.5 h-4.5 rounded-full border border-slate-200 shrink-0 flex items-center justify-center text-transparent hover:border-teal-400" />
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </>,
+        document.body
+      )}
+    </div>
+  );
+};

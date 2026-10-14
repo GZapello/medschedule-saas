@@ -238,12 +238,25 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const switchTenant = async (tenantId: string) => {
+    const previous = localStorage.getItem('active_tenant_id');
     localStorage.setItem('active_tenant_id', tenantId);
     try {
-      const tenantData = await ApiClient.get<Tenant>('/v1/tenants/current');
-      setCurrentTenant(tenantData);
+      if (currentUser?.role === 'superadmin') {
+        const tenantData = await ApiClient.get<Tenant>('/v1/tenants/current');
+        setCurrentTenant(tenantData);
+        return;
+      }
+      const data = await ApiClient.get<{user: User; tenant: Tenant}>('/v1/auth/me');
+      await ApiClient.post('/v1/auth/active-clinic', {});
+      setCurrentUser(data.user);
+      setCurrentTenant(data.tenant);
+      // Discard mounted views and clinic-scoped in-memory state, keeping the same session.
+      sessionStorage.removeItem('activeView');
+      window.location.assign('/dashboard');
     } catch (err) {
-      console.error('Erro ao alternar tenant:', err);
+      if (previous) localStorage.setItem('active_tenant_id', previous);
+      else localStorage.removeItem('active_tenant_id');
+      throw err;
     }
   };
 

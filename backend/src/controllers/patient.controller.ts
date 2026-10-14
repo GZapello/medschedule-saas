@@ -1,3 +1,4 @@
+import { canAccessPatient } from '../services/patient-sharing.service';
 import { referenceSex } from '../services/personal-assessment-calculation.service';
 import { Request, Response } from 'express';
 import { db } from '../config/database';
@@ -34,12 +35,18 @@ export class PatientController {
         SELECT 
           p.id, p.tenant_id, p.full_name, p.social_name, p.birth_date, p.cpf, p.gender, p.anthropometric_sex,
           p.email, p.phone, p.whatsapp, p.city, p.state, p.is_child, p.active, p.created_at,
-          (SELECT COUNT(*) FROM appointments WHERE patient_id = p.id) as total_appointments,
-          (SELECT COUNT(*) FROM records WHERE patient_id = p.id) as total_records
+          (SELECT COUNT(*) FROM appointments WHERE patient_id = p.id AND tenant_id = ?) as total_appointments,
+          (SELECT COUNT(*) FROM records WHERE patient_id = p.id AND tenant_id = ?) as total_records
         FROM patients p
-        WHERE p.tenant_id = ?
+        WHERE (p.tenant_id = ? OR EXISTS (
+          SELECT 1 FROM shared_patient_links l JOIN clinic_data_shares sh ON sh.id=l.share_id
+          JOIN tenants source ON source.id=sh.source_tenant_id
+          WHERE l.patient_id=p.id AND sh.target_tenant_id=? AND sh.source_tenant_id=p.tenant_id
+          AND sh.status='ACTIVE' AND source.status='active'
+          AND EXISTS(SELECT 1 FROM json_each(sh.scope_json) WHERE value='patient')
+        ))
       `;
-      const params: any[] = [tenantId];
+      const params: any[] = [tenantId, tenantId, tenantId, tenantId];
 
       if (search && typeof search === 'string' && search.trim().length > 0) {
         const raw = search.trim();
@@ -70,7 +77,17 @@ export class PatientController {
       }
 
       const stmt = db.prepare(query);
-      const patients = stmt.all(...params);
+      let patients = stmt.all(...params);
+      const visibleIds = new Set(patients.map(p=>p.id));
+      const retained = db.prepare('SELECT patient_id,identity_json FROM clinic_patient_contexts WHERE tenant_id=?').all(tenantId);
+      for (const context of retained) {
+        if (visibleIds.has(context.patient_id)) continue;
+        const identity = JSON.parse(context.identity_json);
+        if (search && !String(identity.full_name).toLowerCase().includes(String(search).trim().toLowerCase())) continue;
+        patients.push({...identity,tenant_id:tenantId,active:1,retained:true,shared:true});
+      }
+      patients.sort((a,b)=>String(a.full_name).localeCompare(String(b.full_name),'pt-BR'));
+      if (limit && Number(limit)>0) patients=patients.slice(0,Number(limit));
       res.json(patients);
     } catch (err: any) {
       console.error('[PatientController.list] Erro:', err);
@@ -93,8 +110,18 @@ export class PatientController {
         FROM patients
         WHERE id = ? AND tenant_id = ?
       `);
-      const patient = stmt.get(id, tenantId) as any;
+      let patient = stmt.get(id, tenantId) as any;
+      if (!patient && req.user && tenantId && canAccessPatient(req.user.userId, tenantId, String(id))) {
+        // Explicit clinical identity projection; no administrative notes or insurance.
+        patient = db.prepare(`SELECT id,tenant_id,full_name,social_name,birth_date,gender,anthropometric_sex,
+          phone,email,is_child,active,created_at FROM patients WHERE id=?`).get(id);
+        patient.shared = true;
+      }
 
+      if (!patient) {
+        const retained = db.prepare('SELECT identity_json FROM clinic_patient_contexts WHERE tenant_id=? AND patient_id=?').get(tenantId,id);
+        if (retained) patient={...JSON.parse(retained.identity_json),tenant_id:tenantId,retained:true,shared:true,active:1};
+      }
       if (!patient) {
         const otherTenantCheck = db.prepare('SELECT tenant_id FROM patients WHERE id = ?').get(id) as { tenant_id: string } | undefined;
         if (otherTenantCheck && otherTenantCheck.tenant_id !== tenantId) {

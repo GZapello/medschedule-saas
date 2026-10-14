@@ -1,3 +1,4 @@
+import { PatientShareManagement } from '../staff/PatientShareManagement';
 import React, { useState, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -601,6 +602,7 @@ export const UnifiedTeamManagement: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      <PatientShareManagement />
       {/* Cabeçalho da Seção de Equipe */}
       <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -821,6 +823,18 @@ export const UnifiedTeamManagement: React.FC = () => {
                           <p className="text-xs text-indigo-600 font-medium mt-0.5">
                             {member.effectiveProfession || 'Profissional'}
                           </p>
+                          <div className="flex flex-wrap items-center gap-1 mt-1">
+                            {Boolean(member.is_linked) && (
+                              <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200">
+                                Usuário Vinculado
+                              </span>
+                            )}
+                            {Number(member.shared_patient_count) > 0 && (
+                              <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200">
+                                {member.shared_patient_count} {member.shared_patient_count === 1 ? 'paciente compartilhado' : 'pacientes compartilhados'}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
 

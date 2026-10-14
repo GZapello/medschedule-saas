@@ -1,0 +1,164 @@
+import { dashboardWorklist } from '../services/dashboard-worklist.service';
+import { Request, Response } from 'express';
+import { db } from '../config/database';
+
+export class DashboardController {
+  static getMetrics(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      if (!tenantId) {
+        res.status(400).json({ error: 'Tenant não informado' });
+        return;
+      }
+
+      // Determina a data de hoje respeitando o fuso de Brasília (ou query param opcional ?date=YYYY-MM-DD)
+      const requestedDate = req.query.date ? String(req.query.date).trim() : null;
+      const spDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+      const today = requestedDate && /^\d{4}-\d{2}-\d{2}$/.test(requestedDate) ? requestedDate : spDateStr;
+      const monthStart = `${today.slice(0, 7)}-01`;
+
+      // Filtro de profissional se o usuário logado for 'professional' (não-admin)
+      let profFilterToday = '';
+      let profFilterMonth = '';
+      const todayParams: any[] = [tenantId, `${today}%`];
+      const countParams: any[] = [tenantId, monthStart];
+
+      if ((req as any).user && (req as any).user.role === 'professional') {
+        profFilterToday = ' AND a.professional_id IN (SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ? AND active = 1)';
+        todayParams.push((req as any).user.userId, tenantId);
+
+        profFilterMonth = ' AND professional_id IN (SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ? AND active = 1)';
+        countParams.push((req as any).user.userId, tenantId);
+      }
+
+      const canViewFinance = req.user?.role === 'clinic_admin';
+      // 1. Atendimentos de hoje (inclui completed, in_progress, scheduled, etc. - nunca exclui atendimentos finalizados)
+      const todayApptsStmt = db.prepare(`
+        SELECT 
+          a.id, a.patient_id, a.professional_id, a.service_id, a.appointment_number, a.start_time, a.end_time, a.status, a.modality, a.meeting_url, a.clinical_module,
+          s.clinical_module as service_clinical_module,
+          pat.full_name as patient_name, pat.phone as patient_phone,
+          p.name as professional_name,
+          s.name as service_name,
+          (SELECT id FROM records WHERE appointment_id = a.id LIMIT 1) as record_id,
+          (SELECT COUNT(*) FROM records WHERE appointment_id = a.id) as has_evolution,
+          (SELECT id FROM clinical_certificates WHERE appointment_id = a.id LIMIT 1) as certificate_id,
+          (SELECT id FROM clinical_prescriptions WHERE appointment_id = a.id LIMIT 1) as prescription_id,
+          (SELECT id FROM clinical_exam_requests WHERE appointment_id = a.id LIMIT 1) as exam_request_id
+        FROM appointments a
+        LEFT JOIN patients pat ON pat.id = a.patient_id
+        LEFT JOIN professionals p ON p.id = a.professional_id
+        LEFT JOIN services s ON s.id = a.service_id
+        WHERE a.tenant_id = ? AND a.start_time LIKE ? ${profFilterToday}
+        ORDER BY a.start_time ASC
+      `);
+      const todayAppointments = todayApptsStmt.all(...todayParams);
+
+      // 2. Contadores do mês
+      const countStmt = db.prepare(`
+        SELECT 
+          COUNT(*) as total_month,
+          SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_month,
+          SUM(CASE WHEN status = 'no_show' THEN 1 ELSE 0 END) as no_show_month,
+          SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_month
+        FROM appointments
+        WHERE tenant_id = ? AND start_time >= ? ${profFilterMonth}
+      `);
+      const counts = countStmt.get(...countParams) as any;
+
+      // 3. Faturamento do mês
+      const financeStmt = db.prepare(`
+        SELECT 
+          SUM(CASE WHEN status = 'paid' THEN amount ELSE 0 END) as revenue_month,
+          SUM(CASE WHEN status = 'pending' THEN amount ELSE 0 END) as pending_month
+        FROM payments
+        WHERE tenant_id = ? AND created_at >= ?
+      `);
+      const finance = canViewFinance ? financeStmt.get(tenantId, monthStart) as any : {};
+
+      // 4. Novos pacientes do mês
+      const patientCountStmt = db.prepare(`
+        SELECT COUNT(*) as new_patients
+        FROM patients pat
+        WHERE tenant_id = ? AND created_at >= ?
+        ${req.user?.role === 'professional' ? `AND EXISTS (
+          SELECT 1 FROM appointments a JOIN professionals p ON p.id=a.professional_id
+          WHERE a.patient_id=pat.id AND a.tenant_id=pat.tenant_id
+          AND p.tenant_id=pat.tenant_id AND p.user_id=? AND p.active=1)` : ''}
+      `);
+      const newPatients = (patientCountStmt.get(tenantId, monthStart,
+        ...(req.user?.role === 'professional' ? [req.user.userId] : [])) as any)?.new_patients || 0;
+
+      // 5. Total de profissionais e salas ativas
+      const totalsStmt = db.prepare(`
+        SELECT 
+          (SELECT COUNT(*) FROM professionals WHERE tenant_id = ? AND active = 1) as active_professionals,
+          (SELECT COUNT(*) FROM services WHERE tenant_id = ? AND active = 1) as active_services,
+          (SELECT COUNT(*) FROM rooms WHERE tenant_id = ? AND active = 1) as active_rooms
+      `);
+      const totals = totalsStmt.get(tenantId, tenantId, tenantId) as any;
+      if (req.user?.role === 'professional') {
+        const myActiveCount = (db.prepare('SELECT COUNT(*) AS count FROM professionals WHERE tenant_id=? AND user_id=? AND active=1').get(tenantId, req.user.userId) as any)?.count || 1;
+        totals.active_professionals = myActiveCount;
+        delete totals.active_services;
+        delete totals.active_rooms;
+      }
+
+      // 6. Taxa de ocupação estimada (baseada em agendamentos vs capacidade de 8 slots/dia por profissional)
+      const totalMonth = counts.total_month || 0;
+      const profCount = totals.active_professionals || 1;
+      const estimatedCapacity = profCount * 8 * 22; // 22 dias úteis
+      const occupancyRate = Math.min(100, Math.round((totalMonth / (estimatedCapacity || 1)) * 100));
+
+      // 7. Dados dos últimos 6 meses para gráficos
+      const monthsData: { month: string; appointments: number; revenue: number | undefined }[] = [];
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date();
+        d.setMonth(d.getMonth() - i);
+        const yMonth = d.toISOString().slice(0, 7);
+        const monthLabel = d.toLocaleString('pt-BR', { month: 'short' });
+
+        const apptCount = (db.prepare(`
+          SELECT COUNT(*) as c FROM appointments 
+          WHERE tenant_id = ? AND start_time LIKE ? AND status != 'cancelled' ${profFilterMonth}
+        `).get(tenantId, `${yMonth}%`, ...countParams.slice(2)) as any)?.c || 0;
+
+        const revSum = canViewFinance ? (db.prepare(`
+          SELECT SUM(amount) as s FROM payments 
+          WHERE tenant_id = ? AND created_at LIKE ? AND status = 'paid'
+        `).get(tenantId, `${yMonth}%`) as any)?.s || 0 : undefined;
+
+        monthsData.push({
+          month: monthLabel,
+          appointments: apptCount,
+          revenue: revSum
+        });
+      }
+
+      res.json({
+        permissions: { finance: canViewFinance },
+        worklist: dashboardWorklist(req, today),
+        today: {
+          date: today,
+          total: todayAppointments.length,
+          appointments: todayAppointments
+        },
+        monthly: {
+          totalAppointments: counts.total_month || 0,
+          completed: counts.completed_month || 0,
+          noShow: counts.no_show_month || 0,
+          cancelled: counts.cancelled_month || 0,
+          ...(canViewFinance ? { revenue: finance.revenue_month || 0, pending: finance.pending_month || 0 } : {}),
+
+          newPatients,
+          occupancyRate
+        },
+        totals,
+        chart: monthsData
+      });
+    } catch (err: any) {
+      console.error('[DashboardController.getMetrics] Erro:', err);
+      res.status(500).json({ error: 'Erro ao compilar indicadores do dashboard' });
+    }
+  }
+}

@@ -1,0 +1,108 @@
+backend/src\config\billing-migration.ts:124:        SELECT cu.tenant_id AS clinic_id,u.id AS user_id FROM clinic_users cu JOIN users u ON u.id=cu.user_id
+backend/src\config\billing-migration.ts:127:        SELECT u.tenant_id,u.id FROM users u WHERE u.status='active' AND u.role!='superadmin' AND u.tenant_id IS NOT NULL
+backend/src\config\billing-migration.ts:128:          AND NOT EXISTS(SELECT 1 FROM clinic_users cu WHERE cu.tenant_id=u.tenant_id AND cu.user_id=u.id);
+backend/src\middlewares\auth.middleware.ts:45:    const membership = db.prepare('SELECT status FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(payload.userId, payload.tenantId) as any;
+backend/src\middlewares\rbac.middleware.ts:52:        const cu = db.prepare('SELECT permissions_json, role FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, req.tenantId) as any;
+backend/src\controllers\auth.controller.ts:120:      if (user.tenant_id) {
+backend/src\controllers\auth.controller.ts:129:        tenantData = tenantStmt.get(user.tenant_id);
+backend/src\controllers\auth.controller.ts:176:        tenantId: user.tenant_id,
+backend/src\controllers\auth.controller.ts:198:        `).get(user.id, user.tenant_id);
+backend/src\controllers\auth.controller.ts:208:            WHERE cu.user_id = ? AND cu.tenant_id = ?
+backend/src\controllers\auth.controller.ts:209:          `).get(user.id, user.tenant_id) as any;
+backend/src\controllers\auth.controller.ts:251:      if (user.tenant_id) {
+backend/src\controllers\auth.controller.ts:252:        cuRow = db.prepare('SELECT permissions_json, zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled, zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled, zemda_body_enabled, zemda_estetic_enabled FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(user.id, user.tenant_id) as any;
+backend/src\controllers\auth.controller.ts:267:        profDetails = completeProfessionalProfile(user.id, user.tenant_id, profDetails);
+backend/src\controllers\auth.controller.ts:291:      const computedCaps = (user.tenant_id && user.role !== 'superadmin')
+backend/src\controllers\auth.controller.ts:292:        ? CapabilityService.computeUserCapabilities(user.id, user.tenant_id)
+backend/src\controllers\auth.controller.ts:331:          tenantId: user.tenant_id,
+backend/src\controllers\auth.controller.ts:383:      tenantId: user.tenant_id,
+backend/src\controllers\auth.controller.ts:401:      `).get(user.id, user.tenant_id);
+backend/src\controllers\auth.controller.ts:410:          WHERE cu.user_id = ? AND cu.tenant_id = ?
+backend/src\controllers\auth.controller.ts:411:        `).get(user.id, user.tenant_id) as any;
+backend/src\controllers\auth.controller.ts:455:    if (user.tenant_id) {
+backend/src\controllers\auth.controller.ts:456:      cuRow = db.prepare('SELECT permissions_json, zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled, zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled, zemda_body_enabled, zemda_estetic_enabled FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(user.id, user.tenant_id) as any;
+backend/src\controllers\auth.controller.ts:471:      profDetails = completeProfessionalProfile(user.id, user.tenant_id, profDetails);
+backend/src\controllers\auth.controller.ts:494:    const computedCaps = (user.tenant_id && user.role !== 'superadmin')
+backend/src\controllers\auth.controller.ts:495:      ? CapabilityService.computeUserCapabilities(user.id, user.tenant_id)
+backend/src\controllers\auth.controller.ts:533:        tenantId: user.tenant_id,
+backend/src\controllers\auth.controller.ts:598:      if (req.user.role !== 'superadmin') user.tenant_id = req.tenantId;
+backend/src\controllers\auth.controller.ts:601:      if (user.tenant_id) {
+backend/src\controllers\auth.controller.ts:610:        tenantData = tenantStmt.get(user.tenant_id);
+backend/src\controllers\auth.controller.ts:626:        `).get(user.id, user.tenant_id);
+backend/src\controllers\auth.controller.ts:635:            WHERE cu.user_id = ? AND cu.tenant_id = ?
+backend/src\controllers\auth.controller.ts:636:          `).get(user.id, user.tenant_id) as any;
+backend/src\controllers\auth.controller.ts:676:      if (user.tenant_id) {
+backend/src\controllers\auth.controller.ts:677:        cuRow = db.prepare('SELECT permissions_json, zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled, zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled, zemda_body_enabled, zemda_estetic_enabled FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(user.id, user.tenant_id) as any;
+backend/src\controllers\auth.controller.ts:697:        profDetails = completeProfessionalProfile(user.id, user.tenant_id, profDetails);
+backend/src\controllers\auth.controller.ts:721:      const computedCaps = (user.tenant_id && user.role !== 'superadmin')
+backend/src\controllers\auth.controller.ts:722:        ? CapabilityService.computeUserCapabilities(user.id, user.tenant_id)
+backend/src\controllers\auth.controller.ts:758:          tenantId: user.tenant_id,
+backend/src\controllers\auth.controller.ts:1137:      if (user.tenant_id) {
+backend/src\controllers\auth.controller.ts:1141:        `).run(cleanEmail, user.tenant_id, user.email);
+backend/src\controllers\auth.controller.ts:1922:        if (user.tenant_id) {
+backend/src\controllers\auth.controller.ts:1930:          `).get(user.tenant_id);
+backend/src\controllers\billing.controller.ts:28:  const membership=db.prepare('SELECT is_manager,permissions_json FROM clinic_users WHERE tenant_id=? AND user_id=? AND status=\'active\'').get(req.tenantId,req.user?.userId);
+backend/src\controllers\billing.controller.ts:89:    const member=db.prepare('SELECT is_manager,permissions_json FROM clinic_users WHERE tenant_id=? AND user_id=?').get(req.tenantId,req.user?.userId);
+backend/src\controllers\body-assessment.controller.ts:26:      const cu = db.prepare('SELECT status FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, req.tenantId) as any;
+backend/src\controllers\body-assessment.controller.ts:32:    const cu = db.prepare('SELECT status, role FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, req.tenantId) as any;
+backend/src\controllers\capability.controller.ts:123:        LEFT JOIN clinic_users cu ON cu.user_id = u.id AND cu.tenant_id = ?
+backend/src\utils\clinical-module.ts:175:        const matched = db.prepare('SELECT id FROM users WHERE tenant_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?)) LIMIT 1').get(effectiveTenantId, prof.name) as any;
+backend/src\utils\clinical-module.ts:182:      const cu = db.prepare('SELECT * FROM clinic_users WHERE user_id = ? AND (tenant_id = ? OR ? IS NULL) LIMIT 1').get(effectiveUserId, effectiveTenantId, effectiveTenantId) as any;
+backend/src\services\billing-webhook.service.ts:201:        const manager=db.prepare("SELECT user_id FROM clinic_users WHERE tenant_id=? AND is_manager=1 AND status='pending' ORDER BY created_at LIMIT 1").get(s.clinic_id);
+backend/src\services\billing.service.ts:50:  return user?.role==='clinic_admin' && user.status==='pending' && !!db.prepare("SELECT 1 FROM tenants t JOIN clinic_users cu ON cu.tenant_id=t.id WHERE t.id=? AND cu.user_id=? AND t.status='pending' AND t.billing_required=1 AND cu.is_manager=1 AND cu.status='pending'").get(user.tenant_id,user.id);
+backend/src\services\billing.service.ts:355:        const manager = db.prepare("SELECT user_id FROM clinic_users WHERE tenant_id = ? AND is_manager = 1 AND status = 'pending' ORDER BY created_at LIMIT 1").get(clinicId) as { user_id: string } | undefined;
+backend/src\services\clinic-control.service.ts:55:        if (user.tenant_id !== id && !links.some(r => r.tenant_id === id)) continue;
+backend/src\services\clinic-control.service.ts:57:        if (user.role === 'superadmin' || other || (user.tenant_id && user.tenant_id !== id)) {
+backend/src\services\clinic-control.service.ts:58:          if (user.tenant_id === id) db.prepare('UPDATE users SET tenant_id = ? WHERE id = ?').run(other?.tenant_id || null, user.id);
+backend/src\services\capability.service.ts:339:      LEFT JOIN clinic_users cu ON cu.user_id = u.id AND cu.tenant_id = ?
+backend/src\controllers\clinical.controller.ts:42:      LEFT JOIN clinic_users cu ON cu.user_id = u.id AND cu.tenant_id = ?
+backend/src\utils\professional-profile.ts:8:    SELECT u.tenant_id, u.name AS user_name, u.profession_name, u.practice_areas AS user_areas,
+backend/src\utils\professional-profile.ts:11:    FROM users u LEFT JOIN clinic_users cu ON cu.user_id=u.id AND cu.tenant_id=?
+backend/src\controllers\dentistry.controller.ts:37:    LEFT JOIN clinic_users cu ON cu.user_id = u.id AND cu.tenant_id = ?
+backend/src\services\dashboard-worklist.service.ts:28:      const cu = db.prepare('SELECT permissions_json FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenant) as any;
+backend/src\shared\clinical-assessments\access.ts:16:  const membership = db.prepare('SELECT status,role FROM clinic_users WHERE user_id=? AND tenant_id=?').get(req.user.userId, req.tenantId) as any;
+backend/src\shared\clinical-assessments\access.ts:20:  if (!membership && !professional && !db.prepare("SELECT id FROM users WHERE id=? AND tenant_id=? AND role='clinic_admin' AND status='active'").get(req.user.userId,req.tenantId)) return deny(403,'Profissional sem vínculo com a clínica');
+backend/src\controllers\medical.controller.ts:35:    LEFT JOIN clinic_users cu ON cu.user_id = u.id AND cu.tenant_id = ?
+backend/src\services\profession-taxonomy.service.ts:187:      const cuRow = db.prepare('SELECT permissions_json FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(userId, tenantId) as any;
+backend/src\controllers\nutrition.controller.ts:36:    LEFT JOIN clinic_users cu ON cu.user_id = u.id AND cu.tenant_id = ?
+backend/src\controllers\occupational-therapy.controller.ts:30:    LEFT JOIN clinic_users cu ON cu.user_id = u.id AND cu.tenant_id = ?
+backend/src\services\registration-cleanup.service.ts:18:  if (db.prepare(`SELECT 1 FROM users u WHERE (u.tenant_id=? OR u.id IN
+backend/src\services\registration-cleanup.service.ts:19:    (SELECT user_id FROM clinic_users WHERE tenant_id=?)) AND
+backend/src\services\registration-cleanup.service.ts:20:    (u.status<>'pending' OR u.role<>'clinic_admin' OR u.tenant_id IS NULL OR u.tenant_id<>?
+backend/src\services\registration-cleanup.service.ts:21:     OR EXISTS(SELECT 1 FROM clinic_users cu WHERE cu.user_id=u.id AND cu.tenant_id<>?))`).get(id,id,id,id)) return false;
+backend/src\services\registration-cleanup.service.ts:22:  if (db.prepare(`SELECT 1 FROM clinic_users WHERE tenant_id=? AND
+backend/src\services\registration-cleanup.service.ts:25:    (user_id IS NULL OR user_id NOT IN (SELECT id FROM users WHERE tenant_id=? AND status='pending' AND role='clinic_admin'))`).get(id,id)) return false;
+backend/src\controllers\personal.controller.ts:100:    LEFT JOIN clinic_users cu ON cu.user_id = u.id AND cu.tenant_id = ?
+backend/src\controllers\personal.controller.ts:101:    LEFT JOIN tenants t ON t.id = cu.tenant_id
+backend/src\controllers\personal.controller.ts:161:      LEFT JOIN tenants t ON t.id = cu.tenant_id
+backend/src\controllers\personal.controller.ts:162:      WHERE cu.user_id = ? AND cu.tenant_id = ?
+backend/src\controllers\personal.controller.ts:173:    const cu = db.prepare('SELECT permissions_json, zemda_personal_enabled FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, req.tenantId) as any;
+backend/src\controllers\personal.controller.ts:1145:      const professional=db.prepare('SELECT id,name,registration_type,registration_number FROM professionals WHERE id=? AND tenant_id=?').get(original.professional_id,tenant) || db.prepare('SELECT id,name,registration_type,registration_number FROM users WHERE id=? AND tenant_id=?').get(original.professional_id,tenant);
+backend/src\controllers\physiotherapy.controller.ts:34:    LEFT JOIN clinic_users cu ON cu.user_id = u.id AND cu.tenant_id = ?
+backend/src\controllers\professional.controller.ts:319:          const cu = db.prepare('SELECT is_manager FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(currentProf.user_id, tenantId) as any;
+backend/src\controllers\psychology.controller.ts:42:    LEFT JOIN clinic_users cu ON cu.user_id = u.id AND cu.tenant_id = ?
+backend/src\controllers\psychopedagogy.controller.ts:30:    LEFT JOIN clinic_users cu ON cu.user_id = u.id AND cu.tenant_id = ?
+backend/src\controllers\staff.controller.ts:26:      JOIN clinic_users cu ON cu.user_id = u.id AND cu.tenant_id = ?
+backend/src\controllers\staff.controller.ts:45:      db.prepare("DELETE FROM clinic_users WHERE user_id = ? AND tenant_id = ?").run(exp.id, tenantId);
+backend/src\controllers\staff.controller.ts:68:          u.id, u.tenant_id, u.name, u.email, u.role, u.phone, u.avatar_url,
+backend/src\controllers\staff.controller.ts:80:        JOIN clinic_users cu ON cu.user_id = u.id AND cu.tenant_id = ?
+backend/src\controllers\staff.controller.ts:84:        WHERE cu.tenant_id = ? AND u.role NOT IN ('patient')
+backend/src\controllers\staff.controller.ts:156:      if (user.tenant_id !== tenantId) {
+backend/src\controllers\staff.controller.ts:162:      const cu = db.prepare("SELECT role, permissions_json, profession_custom, practice_areas FROM clinic_users WHERE user_id = ? AND tenant_id = ?").get(id, tenantId) as any;
+backend/src\controllers\staff.controller.ts:224:      if (user.tenant_id !== tenantId) {
+backend/src\controllers\staff.controller.ts:259:      if (user.tenant_id !== tenantId) {
+backend/src\controllers\staff.controller.ts:308:      const cuRow = db.prepare('SELECT permissions_json FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(id, tenantId) as any;
+backend/src\controllers\staff.controller.ts:394:      if (!user || user.tenant_id !== tenantId) {
+backend/src\controllers\staff.controller.ts:441:      if (!user || user.tenant_id !== tenantId) {
+backend/src\controllers\speech-therapy.controller.ts:36:    LEFT JOIN clinic_users cu ON cu.user_id = u.id AND cu.tenant_id = ?
+backend/src\controllers\tenant.controller.ts:600:      requireCapacity(String(id), (db.prepare("SELECT COUNT(*) n FROM users WHERE tenant_id=? AND status='pending' AND role!='superadmin'").get(id) as any).n);
+backend/src\controllers\tenant.controller.ts:699:      requireCapacity(String(id), (db.prepare("SELECT COUNT(*) n FROM users WHERE tenant_id=? AND status!='active' AND role!='superadmin'").get(id) as any).n);
+
+104 matches
+99 matched lines
+30 files contained matches
+163 files searched
+14688 bytes printed
+3502900 bytes searched
+0.090599 seconds spent searching
+0.055737 seconds total

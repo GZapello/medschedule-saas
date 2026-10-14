@@ -1,3 +1,4 @@
+import { selectLoginClinic } from '../services/membership.service';
 import crypto from 'crypto';
 import { completeProfessionalProfile } from '../utils/professional-profile';
 import { resolveProfessionModule, resolveCanonicalProfession } from '../utils/profession-module';
@@ -114,6 +115,8 @@ export class AuthController {
         });
         return;
       }
+
+      selectLoginClinic(user);
 
       // Busca dados do tenant se o usuário for vinculado a um
       let tenantData: any = null;
@@ -378,6 +381,8 @@ export class AuthController {
   }
 
   static buildUserAuthResponse(user: any, tenantData: any) {
+    selectLoginClinic(user);
+    if (user.tenant_id && tenantData?.id !== user.tenant_id) tenantData = db.prepare('SELECT id,slug,name,corporate_name,trade_name,email,phone,logo_url,primary_color,client_term_label,status,onboarding_status,onboarding_completed,onboarding_step,manager_confirmed,manager_profession,manager_practice_areas FROM tenants WHERE id=?').get(user.tenant_id);
     const token = generateToken({
       userId: user.id,
       tenantId: user.tenant_id,
@@ -595,7 +600,7 @@ export class AuthController {
         return;
       }
 
-      if (req.user.role !== 'superadmin') user.tenant_id = req.tenantId;
+      if (req.user.role !== 'superadmin') { user.tenant_id = req.tenantId; user.role = req.user.role; }
 
       let tenantData: any = null;
       if (user.tenant_id) {
@@ -1177,6 +1182,7 @@ export class AuthController {
         SELECT 
           ci.id, ci.tenant_id, ci.token, ci.role, ci.expires_at, ci.status,
           ci.max_uses, ci.used_count, ci.created_at,
+          (SELECT name FROM users WHERE id=ci.created_by) AS inviter_name,
           t.name as clinic_name, t.slug as clinic_slug, t.logo_url as clinic_logo_url,
           t.status as clinic_status, t.registrations_blocked
         FROM clinic_invites ci
@@ -1234,7 +1240,8 @@ export class AuthController {
       }
 
       // Verifica uso prévio
-      if (invite.status === 'used' || (invite.used_count >= invite.max_uses)) {
+      const alreadyMember = !!(req.user && db.prepare("SELECT 1 FROM clinic_users WHERE user_id=? AND tenant_id=? AND status='active'").get(req.user.userId, invite.tenant_id));
+      if (!alreadyMember && (invite.status === 'used' || (invite.used_count >= invite.max_uses))) {
         res.status(410).json({
           valid: false,
           code: 'INVITE_ALREADY_USED',
@@ -1246,7 +1253,7 @@ export class AuthController {
       // Verifica expiração
       const now = new Date();
       const expiresAt = new Date(invite.expires_at.replace(' ', 'T') + 'Z');
-      if (invite.status === 'expired' || now > expiresAt) {
+      if (!alreadyMember && (invite.status === 'expired' || now > expiresAt)) {
         // Atualiza status no banco caso ainda constasse pending
         if (invite.status === 'pending') {
           db.prepare("UPDATE clinic_invites SET status = 'expired', updated_at = datetime('now') WHERE id = ?").run(invite.id);
@@ -1259,6 +1266,7 @@ export class AuthController {
         return;
       }
 
+      logAudit(req, 'VIEW_CLINIC_INVITE', 'clinic_invites', invite.id, {targetTenantId: invite.tenant_id});
       res.json({
         valid: true,
         tenant: {
@@ -1268,6 +1276,9 @@ export class AuthController {
           logoUrl: invite.clinic_logo_url
         },
         role: invite.role,
+        alreadyMember,
+        inviterName: invite.inviter_name,
+        permissions: getDefaultPermissionsForRole(invite.role),
         expiresAt: invite.expires_at
       });
     } catch (err: any) {
@@ -1420,7 +1431,7 @@ export class AuthController {
           return;
         }
         if (msg.startsWith('EMAIL_EXISTS:')) {
-          res.status(409).json({ error: 'Este e-mail já está cadastrado na plataforma' });
+          res.status(409).json({ code: 'INVITE_LOGIN_REQUIRED', error: 'Esta pessoa já possui uma conta Zemda. Entre na conta para aceitar o convite.' });
           return;
         }
         res.status(400).json({ error: msg || 'Erro ao validar convite' });
@@ -1917,6 +1928,7 @@ export class AuthController {
           return;
         }
 
+        selectLoginClinic(user);
         // Tenant
         let tenantData: any = null;
         if (user.tenant_id) {

@@ -26,8 +26,8 @@ export async function login(page: Page, account = 'fisio') {
   if (account === 'estetic') await expect(page.getByRole('button', { name: 'ZemdaEstetic (Estética)', exact: true })).toBeVisible();
   else {
     // Professional login may land directly in the clinical workspace.
-    await page.getByRole('button', { name: 'Dashboard', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'Agenda de Hoje', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Painel', exact: true }).click();
+    await expect(page.getByRole('heading', { name: /^Boa (?:tarde|noite)|^Bom dia/, exact: true })).toBeVisible();
   }
 }
 export async function apiLogin(request: APIRequestContext, account: string) {

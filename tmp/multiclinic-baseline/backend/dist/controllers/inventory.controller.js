@@ -1,0 +1,283 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.InventoryController = void 0;
+const database_1 = require("../config/database");
+const uuid_1 = require("uuid");
+const audit_middleware_1 = require("../middlewares/audit.middleware");
+class InventoryController {
+    // Lista itens de estoque com status de alertas (baixo, zerado, validade próxima)
+    static list(req, res) {
+        try {
+            const tenantId = req.tenantId;
+            if (!tenantId) {
+                res.status(400).json({ error: 'Tenant não informado' });
+                return;
+            }
+            const { category, search, filterAlert } = req.query;
+            let query = `
+        SELECT
+          id, tenant_id, name, category, product_type, brand, presentation, volume_ml,
+          quantity, unit, batch_number, expiration_date, unit_cost, supplier, min_stock,
+          notes, active, created_at, updated_at
+        FROM inventory_items
+        WHERE tenant_id = ? AND active = 1
+      `;
+            const params = [tenantId];
+            if (category) {
+                query += ' AND category = ?';
+                params.push(category);
+            }
+            if (search) {
+                query += ' AND (name LIKE ? OR brand LIKE ? OR supplier LIKE ? OR batch_number LIKE ?)';
+                const pattern = `%${search}%`;
+                params.push(pattern, pattern, pattern, pattern);
+            }
+            query += ' ORDER BY name ASC';
+            const items = database_1.db.prepare(query).all(...params);
+            const now = new Date();
+            const in30Days = new Date();
+            in30Days.setDate(in30Days.getDate() + 30);
+            const in30DaysStr = in30Days.toISOString().split('T')[0];
+            const todayStr = now.toISOString().split('T')[0];
+            let lowStockCount = 0;
+            let zeroStockCount = 0;
+            let expiringSoonCount = 0;
+            const processedItems = items.map(item => {
+                const isZero = item.quantity <= 0;
+                const isLow = !isZero && item.quantity <= (item.min_stock || 5);
+                const isExpiring = item.expiration_date && item.expiration_date <= in30DaysStr && item.expiration_date >= todayStr;
+                const isExpired = item.expiration_date && item.expiration_date < todayStr;
+                if (isZero)
+                    zeroStockCount++;
+                if (isLow)
+                    lowStockCount++;
+                if (isExpiring || isExpired)
+                    expiringSoonCount++;
+                return {
+                    ...item,
+                    is_zero_stock: isZero,
+                    is_low_stock: isLow,
+                    is_expiring_soon: Boolean(isExpiring),
+                    is_expired: Boolean(isExpired)
+                };
+            });
+            // Filtro específico por alerta
+            let filtered = processedItems;
+            if (filterAlert === 'low') {
+                filtered = processedItems.filter(i => i.is_low_stock);
+            }
+            else if (filterAlert === 'zero') {
+                filtered = processedItems.filter(i => i.is_zero_stock);
+            }
+            else if (filterAlert === 'expiring') {
+                filtered = processedItems.filter(i => i.is_expiring_soon || i.is_expired);
+            }
+            res.json({
+                totalItems: items.length,
+                metrics: {
+                    total: items.length,
+                    lowStock: lowStockCount,
+                    zeroStock: zeroStockCount,
+                    expiringSoon: expiringSoonCount
+                },
+                items: filtered
+            });
+        }
+        catch (err) {
+            console.error('[InventoryController.list] Erro:', err);
+            res.status(500).json({ error: 'Erro ao listar estoque' });
+        }
+    }
+    // Criação de item
+    static createItem(req, res) {
+        try {
+            const tenantId = req.tenantId;
+            if (!tenantId) {
+                res.status(400).json({ error: 'Tenant não informado' });
+                return;
+            }
+            const { name, category, productType, brand, presentation, volumeMl, quantity, unit, batchNumber, expirationDate, unitCost, supplier, minStock, notes } = req.body;
+            if (!name) {
+                res.status(400).json({ error: 'Nome do item/produto é obrigatório' });
+                return;
+            }
+            const itemId = 'inv-' + (0, uuid_1.v4)().slice(0, 8);
+            const initialQty = Number(quantity) || 0;
+            database_1.db.prepare(`
+        INSERT INTO inventory_items (
+          id, tenant_id, name, category, product_type, brand, presentation, volume_ml,
+          quantity, unit, batch_number, expiration_date, unit_cost, supplier, min_stock,
+          notes, active, created_at, updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, datetime('now'), datetime('now'))
+      `).run(itemId, tenantId, name.trim(), category || null, productType || null, brand || null, presentation || 'unidade', volumeMl !== undefined ? Number(volumeMl) : null, initialQty, unit || 'un', batchNumber || null, expirationDate || null, unitCost !== undefined ? Number(unitCost) : 0, supplier || null, minStock !== undefined ? Number(minStock) : 5, notes || null);
+            // Se cadastrou com quantidade inicial maior que zero, registra movimentação inicial
+            if (initialQty > 0) {
+                database_1.db.prepare(`
+          INSERT INTO inventory_movements (
+            id, tenant_id, item_id, movement_type, quantity, previous_quantity, new_quantity,
+            reason, user_id, created_at
+          )
+          VALUES (?, ?, ?, 'in', ?, 0, ?, 'Saldo inicial no cadastro', ?, datetime('now'))
+        `).run('mov-' + (0, uuid_1.v4)().slice(0, 8), tenantId, itemId, initialQty, initialQty, req.user?.userId || null);
+            }
+            (0, audit_middleware_1.logAudit)(req, 'CREATE_INVENTORY_ITEM', 'inventory_items', itemId, { name, initialQty });
+            res.status(201).json({ id: itemId, message: 'Item cadastrado no estoque com sucesso' });
+        }
+        catch (err) {
+            console.error('[InventoryController.createItem] Erro:', err);
+            res.status(500).json({ error: 'Erro ao cadastrar item de estoque' });
+        }
+    }
+    // Atualização cadastral do item
+    static updateItem(req, res) {
+        try {
+            const { id } = req.params;
+            const tenantId = req.tenantId;
+            if (!database_1.db.prepare('SELECT id FROM inventory_items WHERE id=? AND tenant_id=?').get(id, tenantId)) {
+                res.status(404).json({ error: 'Item de estoque não encontrado' });
+                return;
+            }
+            const { name, category, productType, brand, presentation, volumeMl, unit, batchNumber, expirationDate, unitCost, supplier, minStock, notes } = req.body;
+            database_1.db.prepare(`
+        UPDATE inventory_items SET
+          name = COALESCE(?, name),
+          category = COALESCE(?, category),
+          product_type = COALESCE(?, product_type),
+          brand = COALESCE(?, brand),
+          presentation = COALESCE(?, presentation),
+          volume_ml = COALESCE(?, volume_ml),
+          unit = COALESCE(?, unit),
+          batch_number = COALESCE(?, batch_number),
+          expiration_date = COALESCE(?, expiration_date),
+          unit_cost = COALESCE(?, unit_cost),
+          supplier = COALESCE(?, supplier),
+          min_stock = COALESCE(?, min_stock),
+          notes = COALESCE(?, notes),
+          updated_at = datetime('now')
+        WHERE id = ? AND tenant_id = ?
+      `).run(name || null, category || null, productType || null, brand || null, presentation || null, volumeMl !== undefined ? Number(volumeMl) : null, unit || null, batchNumber || null, expirationDate || null, unitCost !== undefined ? Number(unitCost) : null, supplier || null, minStock !== undefined ? Number(minStock) : null, notes !== undefined ? notes : null, id, tenantId);
+            (0, audit_middleware_1.logAudit)(req, 'UPDATE_INVENTORY_ITEM', 'inventory_items', id);
+            res.json({ message: 'Item atualizado com sucesso' });
+        }
+        catch (err) {
+            console.error('[InventoryController.updateItem] Erro:', err);
+            res.status(500).json({ error: 'Erro ao atualizar item de estoque' });
+        }
+    }
+    // Lançar movimentação de estoque (entrada, saída ou ajuste)
+    static recordMovement(req, res) {
+        try {
+            const tenantId = req.tenantId;
+            const { itemId, movementType, quantity, reason, documentReference } = req.body;
+            if (!itemId || !movementType || !quantity) {
+                res.status(400).json({ error: 'Item, tipo de movimentação e quantidade são obrigatórios' });
+                return;
+            }
+            const qty = Number(quantity);
+            if (!Number.isFinite(qty) || qty <= 0) {
+                res.status(400).json({ error: 'Informe uma quantidade válida maior que zero' });
+                return;
+            }
+            const result = database_1.db.transaction(() => {
+                const item = database_1.db.prepare('SELECT id, quantity, name FROM inventory_items WHERE id = ? AND tenant_id = ?').get(itemId, tenantId);
+                if (!item) {
+                    return { status: 404, data: { error: 'Item de estoque não encontrado' } };
+                }
+                const prevQty = Number(item.quantity) || 0;
+                let newQty = prevQty;
+                if (movementType === 'in') {
+                    newQty = prevQty + qty;
+                }
+                else if (movementType === 'out') {
+                    if (qty > prevQty)
+                        return { status: 409, data: { error: 'Estoque insuficiente para esta saída' } };
+                    newQty = prevQty - qty;
+                }
+                else if (movementType === 'adjustment') {
+                    newQty = qty; // No ajuste, define o novo saldo real apurado
+                }
+                else {
+                    return { status: 400, data: { error: 'Tipo de movimentação inválido (deve ser: in, out ou adjustment)' } };
+                }
+                // Atualiza saldo do item
+                database_1.db.prepare('UPDATE inventory_items SET quantity = ?, updated_at = datetime(\'now\') WHERE id = ? AND tenant_id = ?').run(newQty, itemId, tenantId);
+                // Registra no histórico de movimentações
+                const movementId = 'mov-' + (0, uuid_1.v4)().slice(0, 8);
+                database_1.db.prepare(`
+          INSERT INTO inventory_movements (
+            id, tenant_id, item_id, movement_type, quantity, previous_quantity, new_quantity,
+            reason, document_reference, user_id, created_at
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        `).run(movementId, tenantId, itemId, movementType, qty, prevQty, newQty, reason || null, documentReference || null, req.user?.userId || null);
+                (0, audit_middleware_1.logAudit)(req, 'INVENTORY_MOVEMENT', 'inventory_movements', movementId, {
+                    itemName: item.name,
+                    movementType,
+                    qty,
+                    newQty
+                });
+                return { status: 201, data: {
+                        id: movementId,
+                        message: 'Movimentação registrada com sucesso',
+                        newQuantity: newQty
+                    } };
+            })();
+            res.status(result.status).json(result.data);
+        }
+        catch (err) {
+            console.error('[InventoryController.recordMovement] Erro:', err);
+            res.status(500).json({ error: 'Erro ao registrar movimentação de estoque' });
+        }
+    }
+    // Histórico de movimentações
+    static listMovements(req, res) {
+        try {
+            const tenantId = req.tenantId;
+            const { itemId } = req.query;
+            let query = `
+        SELECT
+          m.id, m.tenant_id, m.item_id, m.movement_type, m.quantity, m.previous_quantity,
+          m.new_quantity, m.reason, m.document_reference, m.created_at,
+          m.module_type, m.batch, m.professional_id, m.patient_id, m.appointment_id,
+          i.name as item_name, i.unit,
+          u.name as user_name,
+          COALESCE(p.full_name, p.name) as patient_name,
+          prof.name as professional_name
+        FROM inventory_movements m
+        JOIN inventory_items i ON i.id = m.item_id
+        LEFT JOIN users u ON u.id = m.user_id
+        LEFT JOIN patients p ON p.id = m.patient_id
+        LEFT JOIN professionals prof ON prof.id = m.professional_id
+        WHERE m.tenant_id = ?
+      `;
+            const params = [tenantId];
+            if (itemId) {
+                query += ' AND m.item_id = ?';
+                params.push(itemId);
+            }
+            query += ' ORDER BY m.created_at DESC LIMIT 150';
+            const movements = database_1.db.prepare(query).all(...params);
+            res.json(movements);
+        }
+        catch (err) {
+            console.error('[InventoryController.listMovements] Erro:', err);
+            res.status(500).json({ error: 'Erro ao listar movimentações' });
+        }
+    }
+    // Desativar / Excluir item de estoque
+    static deleteItem(req, res) {
+        try {
+            const { id } = req.params;
+            const tenantId = req.tenantId;
+            database_1.db.prepare('UPDATE inventory_items SET active = 0, updated_at = datetime(\'now\') WHERE id = ? AND tenant_id = ?').run(id, tenantId);
+            (0, audit_middleware_1.logAudit)(req, 'DELETE_INVENTORY_ITEM', 'inventory_items', id);
+            res.json({ success: true, message: 'Item desativado do estoque com sucesso' });
+        }
+        catch (err) {
+            console.error('[InventoryController.deleteItem] Erro:', err);
+            res.status(500).json({ success: false, error: 'Erro ao desativar item de estoque' });
+        }
+    }
+}
+exports.InventoryController = InventoryController;

@@ -1,0 +1,315 @@
+import React, { useEffect, useState } from 'react';
+import { useOnboarding } from './OnboardingContext';
+import { useToast } from '../../context/ToastContext';
+import { BookingLinksContent } from '../public-booking/BookingLinksContent';
+import {
+  HelpCircle,
+  Compass,
+  Layers,
+  LifeBuoy,
+  X,
+  ChevronRight,
+  CheckCircle2,
+  ArrowLeft,
+  Briefcase,
+  Activity,
+  Link
+} from 'lucide-react';
+
+export const OnboardingHelpModal: React.FC = () => {
+  const {
+    isHelpOpen,
+    loading,
+    closeHelp,
+    startTour,
+    resumeTour,
+    resetTour,
+    startModuleTour,
+    availableModules,
+    isPureAdmin,
+    isZemdaBody,
+    onboardingData
+  } = useOnboarding();
+
+  const { showToast } = useToast();
+  const [selectingModule, setSelectingModule] = useState<boolean>(false);
+  const [showingBookingLinks, setShowingBookingLinks] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!isHelpOpen) {
+      setSelectingModule(false);
+      setShowingBookingLinks(false);
+    }
+  }, [isHelpOpen]);
+
+  if (!isHelpOpen) return null;
+
+  const handleModuleClick = () => {
+    // Caso 1: Gestor Puramente Administrativo (sem especialidade clínica)
+    if (isPureAdmin) {
+      closeHelp();
+      startTour('clinic_admin');
+      return;
+    }
+
+    // Caso 2: Usuário com exatamente 1 módulo clínico (fluxo normal - sem modal de seleção)
+    if (availableModules.length === 1) {
+      closeHelp();
+      startModuleTour(availableModules[0].id);
+      return;
+    }
+
+    // Caso 3: Usuário com múltiplos módulos autorizados
+    if (availableModules.length > 1) {
+      setSelectingModule(true);
+      return;
+    }
+
+    // Caso 4: Fallback quando não há módulo clínico identificado
+    closeHelp();
+    showToast(
+      'Nenhum módulo profissional foi identificado para esta conta. Verifique sua profissão em Configurações.',
+      'info'
+    );
+  };
+
+  const handleSupportClick = () => {
+    closeHelp();
+    window.dispatchEvent(new CustomEvent('zemda-navigate', { detail: { view: 'support-tickets' } }));
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[9990] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-200 mobile-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="help-modal-title"
+    >
+      <div className={`bg-white rounded-3xl shadow-2xl border border-slate-100 ${showingBookingLinks ? 'max-w-lg' : 'max-w-md'} w-full max-h-[calc(100dvh-32px)] overflow-y-auto p-6 flex flex-col gap-4 animate-in zoom-in-95 duration-200 relative`}>
+        {/* Header do Menu de Ajuda */}
+        <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+          <div className="flex items-center gap-2.5">
+            {(selectingModule || showingBookingLinks) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectingModule(false);
+                  setShowingBookingLinks(false);
+                }}
+                className="p-1 -ml-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                title="Voltar"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </button>
+            )}
+            <div className="w-8 h-8 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center">
+              {showingBookingLinks ? <Link className="w-4 h-4" /> : <HelpCircle className="w-4 h-4" />}
+            </div>
+            <div>
+              <h2 id="help-modal-title" className="text-sm font-bold text-slate-900 leading-tight">
+                {showingBookingLinks
+                  ? 'Links de agendamento'
+                  : selectingModule
+                  ? 'Qual módulo deseja conhecer?'
+                  : 'Central de Ajuda Zemda'}
+              </h2>
+              <p className="text-[11px] text-slate-500">
+                {showingBookingLinks
+                  ? 'Acesse e compartilhe os links públicos com seus pacientes'
+                  : selectingModule
+                  ? 'Selecione o módulo para iniciar o tour'
+                  : 'Tours guiados, links e suporte rápido'}
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => {
+              setSelectingModule(false);
+              setShowingBookingLinks(false);
+              closeHelp();
+            }}
+            className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+            aria-label="Fechar Central de Ajuda"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Exibição dos Links de Agendamento */}
+        {showingBookingLinks ? (
+          <BookingLinksContent />
+        ) : selectingModule ? (
+          /* Seleção de Módulo Específico (apenas exibido quando há mais de 1 módulo autorizado) */
+          <div className="flex flex-col gap-2 max-h-80 overflow-y-auto pr-1">
+            {availableModules.map(mod => {
+              const isCompleted = onboardingData.moduleToursCompleted.includes(mod.id);
+              return (
+                <button
+                  key={mod.id}
+                  onClick={() => {
+                    setSelectingModule(false);
+                    closeHelp();
+                    startModuleTour(mod.id);
+                  }}
+                  className="w-full flex items-center justify-between p-3 rounded-2xl border border-slate-100 bg-slate-50/70 hover:bg-teal-50 hover:border-teal-200 transition-all text-left cursor-pointer group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-xl bg-white border border-slate-200 group-hover:border-teal-300 flex items-center justify-center text-teal-600 shadow-2xs">
+                      <Layers className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-slate-800 group-hover:text-teal-900 block">
+                        {mod.name}
+                      </span>
+                      <span className="text-[10px] text-slate-500">
+                        {isCompleted ? 'Concluído anteriormente (clique para refazer)' : 'Tour especializado do módulo'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {isCompleted ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-teal-600 shrink-0" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          /* Lista Principal de Opções da Central de Ajuda: exatamente 5 opções */
+          <div className="flex flex-col gap-2">
+            {onboardingData.onboardingStatus === 'in_progress' && <button type="button" disabled={loading} onClick={resumeTour} className="p-3 rounded-2xl bg-teal-600 text-white text-sm font-bold text-left">Continuar tour</button>}
+            {/* 1. Reiniciar tour */}
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => {
+                closeHelp();
+                void resetTour();
+              }}
+              className="w-full flex items-center justify-between p-3 rounded-2xl border border-slate-100 bg-slate-50/70 hover:bg-teal-50 hover:border-teal-200 transition-all text-left cursor-pointer group"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-teal-600 to-emerald-500 text-white flex items-center justify-center shadow-xs">
+                  <Compass className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-slate-800 group-hover:text-teal-900 block">
+                    Reiniciar tour
+                  </span>
+                  <span className="text-[11px] text-slate-500">
+                    Revisar as principais funções da sua rotina
+                  </span>
+                </div>
+              </div>
+              <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-teal-600 shrink-0" />
+            </button>
+
+            {/* 2. Conhecer meu módulo OU Conhecer recursos de gestão */}
+            <button
+              type="button"
+              disabled={loading}
+              onClick={handleModuleClick}
+              className="w-full flex items-center justify-between p-3 rounded-2xl border border-slate-100 bg-slate-50/70 hover:bg-teal-50 hover:border-teal-200 transition-all text-left cursor-pointer group"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-sky-50 text-sky-600 border border-sky-100 flex items-center justify-center shadow-xs">
+                  {isPureAdmin ? <Briefcase className="w-4 h-4" /> : <Layers className="w-4 h-4" />}
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-slate-800 group-hover:text-sky-900 block">
+                    {isPureAdmin ? 'Conhecer recursos de gestão' : 'Conhecer meu módulo'}
+                  </span>
+                  <span className="text-[11px] text-slate-500">
+                    {isPureAdmin
+                      ? 'Visão executiva, equipe, serviços e relatórios'
+                      : availableModules.length === 1
+                      ? availableModules[0].name
+                      : availableModules.length > 1
+                      ? 'Escolha entre seus módulos profissionais liberados'
+                      : 'Tour específico do seu ambiente clínico'}
+                  </span>
+                </div>
+              </div>
+              <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-sky-600 shrink-0" />
+            </button>
+
+            {/* 3. Conhecer o Zemda360 (Mapeamento Visual e Anatômico Integrado) */}
+            {isZemdaBody && (
+              <button
+                type="button"
+                onClick={() => {
+                  closeHelp();
+                  startModuleTour('zemda_body');
+                }}
+                className="w-full flex items-center justify-between p-3 rounded-2xl border border-slate-100 bg-slate-50/70 hover:bg-indigo-50 hover:border-indigo-200 transition-all text-left cursor-pointer group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100 flex items-center justify-center shadow-xs">
+                    <Activity className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold text-slate-800 group-hover:text-indigo-900 block">
+                      Conhecer o Zemda360
+                    </span>
+                    <span className="text-[11px] text-slate-500">
+                      Mapeamento anatômico 360° e demarcações visuais
+                    </span>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 shrink-0" />
+              </button>
+            )}
+
+            {/* 4. Links de agendamento */}
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => setShowingBookingLinks(true)}
+              className="w-full flex items-center justify-between p-3 rounded-2xl border border-slate-100 bg-slate-50/70 hover:bg-teal-50 hover:border-teal-200 transition-all text-left cursor-pointer group"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-teal-50 text-teal-600 border border-teal-100 flex items-center justify-center shadow-xs">
+                  <Link className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-slate-800 group-hover:text-teal-900 block">
+                    Links de agendamento
+                  </span>
+                  <span className="text-[11px] text-slate-500">
+                    Acesse e compartilhe os links públicos de agendamento da clínica e dos profissionais.
+                  </span>
+                </div>
+              </div>
+              <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-teal-600 shrink-0" />
+            </button>
+
+            {/* 5. Central de suporte */}
+            <button
+              type="button"
+              onClick={handleSupportClick}
+              className="w-full flex items-center justify-between p-3 rounded-2xl border border-slate-100 bg-slate-50/70 hover:bg-teal-50 hover:border-teal-200 transition-all text-left cursor-pointer group"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-teal-50 text-teal-600 border border-teal-100 flex items-center justify-center shadow-xs">
+                  <LifeBuoy className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-slate-800 group-hover:text-teal-900 block">
+                    Central de suporte
+                  </span>
+                  <span className="text-[11px] text-slate-500">
+                    Abra chamados ou tire dúvidas com nossa equipe
+                  </span>
+                </div>
+              </div>
+              <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-teal-600 shrink-0" />
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};

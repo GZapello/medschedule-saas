@@ -1,0 +1,96 @@
+{
+  "ANTHROPOMETRY": [
+    "weight",
+    "height",
+    "bmi",
+    "bmi_classification",
+    "whr",
+    "whr_classification",
+    "whtr",
+    "whtr_classification",
+    "neck_cm",
+    "shoulder_cm",
+    "chest_cm",
+    "waist_cm",
+    "abdomen_cm",
+    "hip_cm",
+    "arm_*",
+    "forearm_*",
+    "wrist_*",
+    "thigh_*",
+    "calf_*",
+    "fold_*",
+    "skinfold*",
+    "humerus_breadth_cm",
+    "femur_breadth_cm",
+    "protocol",
+    "measurement_quality_json",
+    "anthropometric_sex_at_assessment",
+    "age_at_assessment"
+  ],
+  "BODY_COMPOSITION": [
+    "composition_method",
+    "body_fat*",
+    "fat_mass_kg",
+    "lean_mass_kg",
+    "muscle_mass*",
+    "body_water_liters",
+    "bmr_*",
+    "tav_*",
+    "vai_*",
+    "somatotype_*",
+    "somatochart_*",
+    "raw_composition*",
+    "glucose*",
+    "triglycerides*",
+    "ldl_*",
+    "hdl_*",
+    "hba1c_*",
+    "uric_acid*",
+    "biochemical_*",
+    "calculation_version",
+    "calculation_metadata_json",
+    "bodyFat",
+    "predictedTav",
+    "vai",
+    "tav",
+    "somatotype"
+  ],
+  "MUSCLE_STRENGTH": [
+    "strength_tests*"
+  ],
+  "FUNCTIONAL_TESTS": [
+    "muscular_endurance_tests*",
+    "endurance_*",
+    "vo2_*"
+  ],
+  "MOBILITY_ASSESSMENT": [
+    "flexibility_*",
+    "mobility_json"
+  ],
+  "PAIN_ASSESSMENT": [
+    "pain_json"
+  ],
+  "POSTURE_GAIT": [
+    "posture",
+    "posture_json",
+    "has_posture",
+    "posture_summary",
+    "posture_history",
+    "gait_json"
+  ],
+  "FUNCTIONAL_ASSESSMENT": [
+    "functional_json"
+  ],
+  "PHOTO_MONITORING": [
+    "photos",
+    "photos_count",
+    "photo_*",
+    "file_id",
+    "fileId"
+  ],
+  "MEDICAL_VITAL_SIGNS": [
+    "resting_heart_rate_bpm",
+    "blood_pressure_*"
+  ]
+}

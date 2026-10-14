@@ -1,0 +1,900 @@
+import { ClinicalSnapshot } from './ClinicalSnapshot';
+import { ZemdaBodyModal } from '../zemda-body/ZemdaBodyModal';
+import React, { useState, useEffect } from 'react';
+import { ApiClient } from '../../api/client';
+import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
+import { Patient, ClinicalRecord } from '../../types';
+import { PatientSearchSelect } from '../common/PatientSearchSelect';
+import {
+  FileText,
+  ShieldCheck,
+  Lock,
+  Plus,
+  Calendar,
+  User,
+  Clock,
+  CheckCircle2,
+  X,
+  AlertCircle,
+  Eye,
+  Edit3,
+  Printer,
+  Download,
+  History,
+  Smile,
+  Apple,
+  Hand,
+  Mic,
+  Activity,
+  Stethoscope,
+  Brain,
+  Dumbbell,
+  Sparkles,
+  Compass,
+  GraduationCap,
+  ChevronDown,
+  ChevronUp
+} from 'lucide-react';
+
+export const ClinicalRecordsView: React.FC = () => {
+  const { clientTermLabel, currentTenant } = useAuth();
+  const { showToast } = useToast();
+
+  const [selectedPatientId, setSelectedPatientId] = useState<string>('');
+  const [currentPatient, setCurrentPatient] = useState<any | null>(null);
+  const [records, setRecords] = useState<ClinicalRecord[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [expandedRecordId, setExpandedRecordId] = useState<string | null>(null);
+
+  // Modal Nova Evolução
+  const [showNewModal, setShowNewModal] = useState<boolean>(false);
+  const [title, setTitle] = useState<string>('');
+  const [sessionDate, setSessionDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [clinicalEvolution, setClinicalEvolution] = useState<string>('');
+  const [technicalNotes, setTechnicalNotes] = useState<string>('');
+  const [isSealed, setIsSealed] = useState<boolean>(false);
+
+  // Modal Visualizar Evolução
+  const [viewingRecord, setViewingRecord] = useState<ClinicalRecord | null>(null);
+
+  // Modal Editar Evolução
+  const [editingRecord, setEditingRecord] = useState<ClinicalRecord | null>(null);
+  const [editTitle, setEditTitle] = useState<string>('');
+  const [editClinicalEvolution, setEditClinicalEvolution] = useState<string>('');
+  const [editTechnicalNotes, setEditTechnicalNotes] = useState<string>('');
+  const [editIsSealed, setEditIsSealed] = useState<boolean>(false);
+  const [savingEdit, setSavingEdit] = useState<boolean>(false);
+
+  // ZemdaBody - Mapas Corporais Vinculados ao Prontuário
+  const [patientBodyAssessments, setPatientBodyAssessments] = useState<any[]>([]);
+  const [viewingBodyAssessment, setViewingBodyAssessment] = useState<any | null>(null);
+
+  const fetchRecords = async (patientId: string) => {
+    try {
+      setLoading(true);
+      const data = await ApiClient.get<ClinicalRecord[]>(`/v1/clinical-records/patient/${patientId}`);
+      setRecords(data);
+
+      try {
+        const bodyData = await ApiClient.get<any[]>(`/v1/body-assessments/patient/${patientId}`);
+        setPatientBodyAssessments(bodyData || []);
+      } catch {
+        setPatientBodyAssessments([]);
+      }
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao carregar prontuário', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedPatientId) {
+      fetchRecords(selectedPatientId);
+    } else {
+      setRecords([]);
+      setPatientBodyAssessments([]);
+    }
+  }, [selectedPatientId]);
+
+  const handleSaveRecord = async () => {
+    if (!title || !clinicalEvolution) {
+      showToast('Título e anotação da evolução são obrigatórios', 'error');
+      return;
+    }
+
+    try {
+      await ApiClient.post('/v1/clinical-records', {
+        patientId: selectedPatientId,
+        sessionDate,
+        title,
+        clinicalEvolution,
+        technicalNotes: technicalNotes || null,
+        isSealed
+      });
+
+      showToast('Evolução clínica gravada com sucesso!', 'success');
+      setShowNewModal(false);
+      setTitle('');
+      setClinicalEvolution('');
+      setTechnicalNotes('');
+      setIsSealed(false);
+
+      if (selectedPatientId) {
+        fetchRecords(selectedPatientId);
+      }
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao salvar evolução', 'error');
+    }
+  };
+
+  // Iniciar Edição
+  const handleStartEdit = (record: ClinicalRecord) => {
+    if (record.is_sealed === 1) {
+      showToast('Este prontuário foi lacrado e não pode ser editado (validade jurídica).', 'info');
+      return;
+    }
+    setEditingRecord(record);
+    setEditTitle(record.title || '');
+    setEditClinicalEvolution(record.clinical_evolution || '');
+    setEditTechnicalNotes(record.technical_notes || '');
+    setEditIsSealed(false);
+  };
+
+  // Salvar Edição com Auditoria
+  const handleSaveEdit = async () => {
+    if (!editingRecord) return;
+    if (!editTitle.trim() || !editClinicalEvolution.trim()) {
+      showToast('Título e evolução clínica são obrigatórios', 'error');
+      return;
+    }
+
+    try {
+      setSavingEdit(true);
+      await ApiClient.put(`/v1/clinical-records/${editingRecord.id}`, {
+        title: editTitle.trim(),
+        clinicalEvolution: editClinicalEvolution.trim(),
+        technicalNotes: editTechnicalNotes.trim() || null,
+        isSealed: editIsSealed
+      });
+
+      showToast('Evolução clínica atualizada e auditoria registrada!', 'success');
+      setEditingRecord(null);
+      if (selectedPatientId) {
+        fetchRecords(selectedPatientId);
+      }
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao atualizar prontuário', 'error');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  // Imprimir / Baixar PDF Oficial com Cabeçalho e Cidade da Clínica
+  const handlePrintRecord = (record: ClinicalRecord) => {
+    const token = localStorage.getItem('auth_token') || localStorage.getItem('token');
+    const printUrl = `${ApiClient.getBaseUrl()}/v1/clinical-records/${record.id}/print?token=${token}&autoprint=true`;
+    window.open(printUrl, '_blank');
+  };
+
+  // Parser de histórico de auditoria
+  const parseEditHistory = (jsonStr?: string): any[] => {
+    if (!jsonStr) return [];
+    try {
+      const parsed = JSON.parse(jsonStr);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      return [];
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* LGPD Banner */}
+      <div className="bg-indigo-900 text-white p-4 rounded-2xl flex items-center justify-between shadow-xs">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-white/10 rounded-xl">
+            <ShieldCheck className="w-5 h-5 text-teal-400" />
+          </div>
+          <div>
+            <h3 className="font-bold text-sm">Prontuário Eletrônico & Sigilo Profissional</h3>
+            <p className="text-xs text-indigo-200">
+              Conformidade rigorosa com a LGPD e conselhos de classe. Acesso restrito e auditado.
+            </p>
+          </div>
+        </div>
+        <span className="hidden sm:inline-block text-xs font-semibold px-3 py-1 bg-white/10 rounded-full border border-white/20">
+          Criptografia & Auditoria Ativa
+        </span>
+      </div>
+
+      {/* Patient Selector & Action */}
+      <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
+          <label className="text-xs font-bold text-slate-700 whitespace-nowrap">
+            Selecione o {clientTermLabel}:
+          </label>
+          <div className="w-full sm:w-80">
+            <PatientSearchSelect
+              value={selectedPatientId}
+              onChange={(id, pat) => {
+                setSelectedPatientId(id);
+                setCurrentPatient(pat || null);
+              }}
+              clientTermLabel={clientTermLabel}
+              placeholder={`Buscar ${clientTermLabel.toLowerCase()}...`}
+            />
+          </div>
+        </div>
+
+        <button
+          onClick={() => {
+            if (!selectedPatientId) {
+              showToast(`Selecione um ${clientTermLabel.toLowerCase()} primeiro`, 'info');
+              return;
+            }
+            setShowNewModal(true);
+          }}
+          disabled={!selectedPatientId}
+          className="flex items-center justify-center gap-1.5 w-full sm:w-auto px-4 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-all whitespace-nowrap cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed min-h-[40px]"
+        >
+          <Plus className="w-4 h-4" />
+          Nova Evolução Clínica
+        </button>
+      </div>
+
+      {/* Records Timeline */}
+      <div className="space-y-4">
+        {loading ? (
+          <div className="py-12 text-center text-xs text-slate-400">
+            <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+            Carregando histórico do prontuário...
+          </div>
+        ) : !selectedPatientId ? (
+          <div className="bg-white p-8 sm:p-12 rounded-2xl border border-dashed border-slate-200 text-center text-slate-400">
+            <User className="w-10 h-10 mx-auto mb-2 opacity-40 text-slate-400" />
+            <p className="font-medium text-sm text-slate-600">Nenhum {clientTermLabel.toLowerCase()} selecionado.</p>
+            <p className="text-xs text-slate-400 mt-1">Busque e selecione um {clientTermLabel.toLowerCase()} acima para carregar o prontuário.</p>
+          </div>
+        ) : records.length === 0 ? (
+          <div className="bg-white p-8 sm:p-12 rounded-2xl border border-dashed border-slate-200 text-center text-slate-400">
+            <FileText className="w-10 h-10 mx-auto mb-2 opacity-40 text-slate-400" />
+            <p className="font-medium text-sm text-slate-600">Nenhum registro clínico cadastrado para este paciente.</p>
+            <p className="text-xs text-slate-400 mt-1">Clique em "Nova Evolução Clínica" para iniciar o prontuário.</p>
+          </div>
+        ) : (
+          <div className="relative border-l-2 border-indigo-200 ml-2 sm:ml-4 pl-4 sm:pl-6 space-y-6">
+            {records.map(r => {
+              const editHistory = parseEditHistory(r.edit_history_json);
+              const isExpanded = expandedRecordId === r.id;
+
+              return (
+                <div
+                  key={r.id}
+                  className={`relative bg-white rounded-2xl border transition-all duration-200 shadow-xs ${
+                    isExpanded ? 'border-indigo-300 ring-2 ring-indigo-100 p-4 sm:p-6' : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/60 p-4 sm:p-5'
+                  }`}
+                >
+                  {/* Timeline Dot */}
+                  <div className={`absolute -left-[25px] sm:-left-[31px] top-5 w-4 h-4 rounded-full border-4 border-white shadow-xs transition-colors ${isExpanded ? 'bg-indigo-600 ring-2 ring-indigo-200' : 'bg-slate-400'}`} />
+
+                  {/* CABEÇALHO COMPACTO (Sempre visível: data, profissional, módulo, procedimento, status e seta) */}
+                  <div
+                    onClick={() => setExpandedRecordId(prev => prev === r.id ? null : r.id)}
+                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer select-none"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                        {/* Data */}
+                        <span className="inline-flex items-center gap-1 text-xs font-bold text-slate-800 bg-slate-100 px-2.5 py-1 rounded-lg">
+                          <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                          {r.session_date ? new Date(r.session_date + 'T12:00:00').toLocaleDateString('pt-BR') : '-'}
+                        </span>
+
+                        {/* Especialidade / Módulo */}
+                        {r.module_type === 'ZemdaOdonto' && (
+                          <span className="flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-800 border border-cyan-200">
+                            <Smile className="w-3 h-3 text-cyan-700" /> ZemdaOdonto
+                          </span>
+                        )}
+                        {r.module_type === 'ZemdaNutri' && (
+                          <span className="flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-lime-100 text-lime-800 border border-lime-200">
+                            <Apple className="w-3 h-3 text-lime-700" /> ZemdaNutri
+                          </span>
+                        )}
+                        {r.module_type === 'ZemdaTO' && (
+                          <span className="flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                            <Hand className="w-3 h-3 text-amber-700" /> ZemdaTO
+                          </span>
+                        )}
+                        {r.module_type === 'ZemdaFono' && (
+                          <span className="flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-200">
+                            <Mic className="w-3 h-3 text-purple-700" /> ZemdaFono
+                          </span>
+                        )}
+                        {r.module_type === 'ZemdaFisio' && (
+                          <span className="flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 border border-teal-200">
+                            <Activity className="w-3 h-3 text-teal-700" /> ZemdaFisio
+                          </span>
+                        )}
+                        {r.module_type === 'ZemdaMed' && (
+                          <span className="flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
+                            <Stethoscope className="w-3 h-3 text-blue-700" /> ZemdaMed
+                          </span>
+                        )}
+                        {r.module_type === 'ZemdaPsico' && (
+                          <span className="flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-800 border border-violet-200">
+                            <Brain className="w-3 h-3 text-violet-700" /> ZemdaPsico
+                          </span>
+                        )}
+                        {r.module_type === 'ZemdaPersonal' && (
+                          <span className="flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 border border-orange-200">
+                            <Dumbbell className="w-3 h-3 text-orange-700" /> ZemdaPersonal
+                          </span>
+                        )}
+                        {r.module_type === 'ZemdaEstetic' && (
+                          <span className="flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-200">
+                            <Sparkles className="w-3 h-3 text-rose-700" /> ZemdaEstetic
+                          </span>
+                        )}
+                        {r.module_type === 'Zemda360' && (
+                          <span className="flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">
+                            <Compass className="w-3 h-3 text-indigo-700" /> Zemda360
+                          </span>
+                        )}
+                        {r.module_type === 'ZemdaPP' && (
+                          <span className="flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            <GraduationCap className="w-3 h-3 text-emerald-700" /> ZemdaPP
+                          </span>
+                        )}
+                        {(!r.module_type || r.module_type === 'general') && (
+                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                            Geral / Clínico
+                          </span>
+                        )}
+
+                        {/* Status */}
+                        {r.is_sealed === 1 ? (
+                          <span className="flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                            <Lock className="w-3 h-3" /> Lacrado
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                            <CheckCircle2 className="w-3 h-3 text-slate-400" /> Finalizado
+                          </span>
+                        )}
+
+                        {editHistory.length > 0 && (
+                          <span className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                            <History className="w-3 h-3" /> {editHistory.length} {editHistory.length === 1 ? 'edição' : 'edições'}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Procedimento e Profissional */}
+                      <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+                        <h4 className="font-bold text-slate-900 text-sm sm:text-base">{r.title}</h4>
+                        <span className="text-slate-300 hidden sm:inline">•</span>
+                        <p className="text-xs text-slate-500">
+                          Profissional: <span className="font-semibold text-slate-700">{r.professional_name}</span> {r.registration_number ? `(${r.registration_number})` : ''}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Botão lateral / Ícone: Ver detalhes / Seta */}
+                    <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExpandedRecordId(prev => prev === r.id ? null : r.id);
+                        }}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl transition cursor-pointer ${
+                          isExpanded
+                            ? 'bg-indigo-600 text-white shadow-xs'
+                            : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700'
+                        }`}
+                        title={isExpanded ? 'Recolher detalhes deste atendimento' : 'Ver detalhes completos deste atendimento'}
+                      >
+                        <span>{isExpanded ? 'Recolher' : 'Ver detalhes'}</span>
+                        {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* CONTEÚDO EXPANDIDO (Visível apenas quando selecionado) */}
+                  {isExpanded && (
+                    <div className="mt-5 pt-4 border-t border-slate-100 space-y-4">
+                      {/* Clinical Evolution Text */}
+                      <div className="space-y-3 text-xs text-slate-700 leading-relaxed">
+                        <div>
+                          <h5 className="font-bold text-slate-800 uppercase tracking-wider text-[11px] mb-1">
+                            Evolução da Sessão / Conduta Clínica
+                          </h5>
+                          <p className="bg-slate-50 p-3.5 rounded-xl border border-slate-100 whitespace-pre-wrap font-sans text-slate-800">
+                            {r.clinical_evolution}
+                          </p>
+                        </div>
+
+                        {r.technical_notes && r.module_type !== 'ZemdaMed' && (
+                          <div>
+                            <h5 className="font-bold text-slate-800 uppercase tracking-wider text-[11px] mb-1">
+                              Anotações Técnicas & Encaminhamentos
+                            </h5>
+                            <p className="bg-teal-50/50 p-3 rounded-xl border border-teal-100 text-teal-900 whitespace-pre-wrap">
+                              {r.technical_notes}
+                            </p>
+                          </div>
+                        )}
+
+                        <ClinicalSnapshot record={r} />
+
+                        {/* ZEMDABODY INTEGRADO AO PRONTUÁRIO */}
+                        {(() => {
+                          const bodyAss = patientBodyAssessments.find(
+                            ba => (r.appointment_id && ba.appointment_id === r.appointment_id)
+                          );
+                          if (!bodyAss) return null;
+
+                          let parsedNotes: any = null;
+                          let displayNotes = '';
+                          let regionsList: string[] = [];
+                          let hasDrawings = false;
+
+                          if (bodyAss.notes) {
+                            try {
+                              parsedNotes = JSON.parse(bodyAss.notes);
+                              if (typeof parsedNotes === 'object' && parsedNotes !== null) {
+                                displayNotes = parsedNotes.clinicalNotes || '';
+                                if (Array.isArray(parsedNotes.selectedRegions) && parsedNotes.selectedRegions.length > 0) {
+                                  regionsList = parsedNotes.selectedRegions;
+                                }
+                                if (Array.isArray(parsedNotes.drawings) && parsedNotes.drawings.length > 0) {
+                                  hasDrawings = true;
+                                }
+                              } else {
+                                displayNotes = String(bodyAss.notes);
+                              }
+                            } catch {
+                              displayNotes = String(bodyAss.notes);
+                            }
+                          }
+
+                          return (
+                            <div className="bg-gradient-to-br from-teal-50/80 via-emerald-50/40 to-slate-50 border border-teal-200/90 rounded-2xl p-4 my-3 shadow-2xs">
+                              <div className="flex items-center justify-between flex-wrap gap-2">
+                                <div className="flex items-center gap-2.5">
+                                  <div className="w-8 h-8 rounded-xl bg-teal-600 text-white flex items-center justify-center shadow-xs">
+                                    <Activity className="w-4 h-4" />
+                                  </div>
+                                  <div>
+                                    <span className="text-[10px] font-extrabold text-teal-700 uppercase tracking-wider block">
+                                      Zemda360 • Mapeamento Anatômico
+                                    </span>
+                                    <span className="text-xs font-bold text-slate-800">
+                                      {bodyAss.total_markers || regionsList.length || 0} regiões marcadas
+                                      {hasDrawings ? ' • Com anotações de caneta' : ''} • Modelo {bodyAss.body_model === 'male' ? 'Masculino' : 'Feminino'}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => setViewingBodyAssessment(bodyAss)}
+                                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-xl shadow-xs transition-all cursor-pointer"
+                                  title="Abrir o mapa corporal deste atendimento em modo visualização"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                  <span>Visualizar mapa corporal</span>
+                                </button>
+                              </div>
+
+                              {(displayNotes || regionsList.length > 0) && (
+                                <div className="text-xs text-slate-600 bg-white/80 p-2.5 rounded-xl border border-teal-100 mt-2 space-y-1">
+                                  {regionsList.length > 0 && (
+                                    <p>
+                                      <strong>Regiões anatômicas:</strong> {regionsList.join(', ')}
+                                    </p>
+                                  )}
+                                  {displayNotes && (
+                                    <p>
+                                      <strong>Observações clínicas:</strong> {displayNotes}
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </div>
+
+                      {/* AÇÕES CLÍNICAS: VISUALIZAR, EDITAR, BAIXAR PDF, IMPRIMIR */}
+                      <div className="pt-3 mt-4 border-t border-slate-100 flex items-center justify-between flex-wrap gap-2">
+                        <div className="text-[11px] text-slate-400">
+                          {currentTenant?.city && (
+                            <span>Local: <strong className="text-slate-600">{currentTenant.city}</strong></span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setViewingRecord(r)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
+                            title="Visualizar detalhes completos da evolução"
+                          >
+                            <Eye className="w-3.5 h-3.5 text-slate-600" />
+                            <span>Visualizar</span>
+                          </button>
+
+                          {r.is_sealed !== 1 ? (
+                            <button
+                              onClick={() => handleStartEdit(r)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-colors cursor-pointer"
+                              title="Editar evolução clínica com auditoria"
+                            >
+                              <Edit3 className="w-3.5 h-3.5 text-indigo-600" />
+                              <span>Editar</span>
+                            </button>
+                          ) : (
+                            <span
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-slate-400 bg-slate-50 border border-slate-200 rounded-xl cursor-not-allowed"
+                              title="Prontuário lacrado para validade jurídica não permite alteração de texto"
+                            >
+                              <Lock className="w-3 h-3 text-slate-400" />
+                              <span>Lacrado</span>
+                            </span>
+                          )}
+
+                          <button
+                            onClick={() => handlePrintRecord(r)}
+                            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-xl transition-colors cursor-pointer shadow-xs"
+                            title="Imprimir ou baixar PDF em folha A4 oficial com cabeçalho da clínica"
+                          >
+                            <Printer className="w-3.5 h-3.5 text-teal-600" />
+                            <span>Imprimir / PDF</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* MODAL 1: VISUALIZAR PRONTUÁRIO */}
+      {viewingRecord && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto mobile-modal">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-4 sm:p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <span className="text-xs font-bold text-teal-600 uppercase tracking-wider">Visualização de Prontuário</span>
+                <h3 className="text-base sm:text-lg font-bold text-slate-900">{viewingRecord.title}</h3>
+              </div>
+              <button aria-label="Fechar"
+                onClick={() => setViewingRecord(null)}
+                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg shrink-0"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+              <div>
+                <span className="text-slate-400 font-medium">Paciente:</span>
+                <p className="font-bold text-slate-800">{currentPatient?.full_name}</p>
+              </div>
+              <div>
+                <span className="text-slate-400 font-medium">Profissional Responsável:</span>
+                <p className="font-bold text-slate-800">{viewingRecord.professional_name}</p>
+              </div>
+              <div>
+                <span className="text-slate-400 font-medium">Data do Atendimento:</span>
+                <p className="font-bold text-slate-800">
+                  {viewingRecord.session_date ? new Date(viewingRecord.session_date + 'T12:00:00').toLocaleDateString('pt-BR') : '-'}
+                </p>
+              </div>
+              <div>
+                <span className="text-slate-400 font-medium">Status Jurídico:</span>
+                <p className="font-bold">
+                  {viewingRecord.is_sealed === 1 ? (
+                    <span className="text-emerald-700 flex items-center gap-1">
+                      <Lock className="w-3 h-3" /> Lacrado com Validade
+                    </span>
+                  ) : (
+                    <span className="text-slate-600">Registro Aberto</span>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            {(viewingRecord.signature_hash || viewingRecord.is_sealed === 1) && (
+              <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-950 space-y-1">
+                <div className="font-semibold flex items-center gap-1.5">
+                  <Lock className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span>
+                    Documento assinado eletronicamente por {viewingRecord.signer_name || viewingRecord.professional_name}
+                    {(viewingRecord.signer_registration || viewingRecord.registration_number) && (
+                      <span> — {viewingRecord.signer_registration || `${viewingRecord.registration_type || 'Conselho'} ${viewingRecord.registration_number}`}</span>
+                    )}
+                    {viewingRecord.signed_at && (
+                      <span> em {new Date(viewingRecord.signed_at).toLocaleString('pt-BR')}</span>
+                    )}
+                  </span>
+                </div>
+                {viewingRecord.signature_hash && (
+                  <div className="font-mono text-[10px] text-emerald-800 break-all">
+                    Hash de integridade SHA-256: {viewingRecord.signature_hash}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div>
+              <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                Evolução Clínica & Conduta
+              </h4>
+              <div className="bg-white p-4 rounded-xl border border-slate-200 text-xs leading-relaxed text-slate-800 whitespace-pre-wrap shadow-inner font-sans">
+                {viewingRecord.clinical_evolution}
+              </div>
+            </div>
+
+            {viewingRecord.technical_notes && viewingRecord.module_type !== 'ZemdaMed' && (
+              <div>
+                <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Orientações Complementares
+                </h4>
+                <div className="bg-teal-50/50 p-3.5 rounded-xl border border-teal-100 text-xs text-teal-950 whitespace-pre-wrap">
+                  {viewingRecord.technical_notes}
+                </div>
+              </div>
+            )}
+
+            <ClinicalSnapshot record={viewingRecord} />
+
+            {/* Histórico de Auditoria / Revisões */}
+            {viewingRecord.edit_history_json && parseEditHistory(viewingRecord.edit_history_json).length > 0 && (
+              <div className="p-3.5 bg-amber-50/60 rounded-xl border border-amber-200 text-xs space-y-2">
+                <div className="flex items-center gap-1.5 font-bold text-amber-900">
+                  <History className="w-3.5 h-3.5 text-amber-700" />
+                  <span>Histórico de Auditoria e Revisões</span>
+                </div>
+                <div className="space-y-1.5 text-[11px] text-amber-800">
+                  {parseEditHistory(viewingRecord.edit_history_json).map((item: any, idx: number) => (
+                    <div key={idx} className="bg-white/80 p-2 rounded-lg border border-amber-100">
+                      <div className="flex justify-between font-semibold">
+                        <span>Revisão #{idx + 1}</span>
+                        <span>{item.edited_at ? new Date(item.edited_at).toLocaleString('pt-BR') : '-'}</span>
+                      </div>
+                      <p className="mt-1 text-slate-600">Título anterior: "{item.previous_title}"</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex flex-col-reverse sm:flex-row justify-between items-stretch sm:items-center gap-2 pt-3 border-t border-slate-100">
+              <button
+                onClick={() => handlePrintRecord(viewingRecord)}
+                className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-xl shadow-xs min-h-[40px]"
+              >
+                <Printer className="w-3.5 h-3.5 text-teal-600" />
+                <span>Imprimir Folha A4</span>
+              </button>
+
+              <button
+                onClick={() => setViewingRecord(null)}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl min-h-[40px]"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 2: EDITAR PRONTUÁRIO COM AUDITORIA */}
+      {editingRecord && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto mobile-modal">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-4 sm:p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <span className="text-xs font-bold text-indigo-600 uppercase">Edição com Auditoria LGPD</span>
+                <h3 className="text-base sm:text-lg font-bold text-slate-900">{editingRecord.title}</h3>
+              </div>
+              <button aria-label="Fechar"
+                onClick={() => setEditingRecord(null)}
+                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg shrink-0"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3 bg-blue-50 text-blue-900 rounded-xl border border-blue-100 text-xs flex items-start gap-2">
+              <ShieldCheck className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+              <span>
+                Esta alteração será registrada no histórico de auditoria do prontuário, preservando o texto anterior para total transparência clínica e jurídica.
+              </span>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Título da Sessão *</label>
+                <input
+                  type="text"
+                  value={editTitle}
+                  onChange={e => setEditTitle(e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Evolução Clínica *</label>
+                <textarea
+                  rows={6}
+                  value={editClinicalEvolution}
+                  onChange={e => setEditClinicalEvolution(e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl p-3 text-xs leading-relaxed"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Anotações Técnicas / Orientações</label>
+                <textarea
+                  rows={2}
+                  value={editTechnicalNotes}
+                  onChange={e => setEditTechnicalNotes(e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl p-3 text-xs"
+                />
+              </div>
+
+              <div className="bg-amber-50 p-3.5 rounded-xl border border-amber-200 flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="editSealCheck"
+                  checked={editIsSealed}
+                  onChange={e => setEditIsSealed(e.target.checked)}
+                  className="w-4 h-4 text-indigo-600 rounded-sm"
+                />
+                <label htmlFor="editSealCheck" className="text-xs font-semibold text-amber-900 cursor-pointer">
+                  Lacrar prontuário eletrônico agora (bloqueia qualquer edição futura)
+                </label>
+              </div>
+            </div>
+
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-3 border-t border-slate-100">
+              <button
+                onClick={() => setEditingRecord(null)}
+                className="w-full sm:w-auto px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl min-h-[40px]"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                disabled={savingEdit}
+                className="w-full sm:w-auto px-6 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs disabled:opacity-50 min-h-[40px]"
+              >
+                {savingEdit ? 'Salvando...' : 'Salvar Alterações'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 3: NOVA EVOLUÇÃO */}
+      {showNewModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto mobile-modal">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-4 sm:p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <div>
+                <span className="text-xs font-bold text-indigo-600 uppercase">Novo Registro Clínico</span>
+                <h3 className="text-lg sm:text-xl font-bold text-slate-900">{currentPatient?.full_name}</h3>
+              </div>
+              <button aria-label="Fechar" onClick={() => setShowNewModal(false)} className="p-1 text-slate-400 hover:text-slate-700 rounded-lg shrink-0">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Data do Atendimento *</label>
+                  <input
+                    type="date"
+                    value={sessionDate}
+                    onChange={e => setSessionDate(e.target.value)}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Título da Sessão *</label>
+                  <input
+                    type="text"
+                    value={title}
+                    onChange={e => setTitle(e.target.value)}
+                    placeholder="Ex: Sessão 5 - Regulação Emocional"
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Evolução Clínica / Anotações do Atendimento *
+                </label>
+                <textarea
+                  rows={5}
+                  value={clinicalEvolution}
+                  onChange={e => setClinicalEvolution(e.target.value)}
+                  placeholder="Descreva a evolução do paciente, intervenções aplicadas e resposta terapêutica..."
+                  className="w-full border border-slate-200 rounded-xl p-3 text-xs focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Anotações Técnicas / Plano para Próxima Sessão
+                </label>
+                <textarea
+                  rows={2}
+                  value={technicalNotes}
+                  onChange={e => setTechnicalNotes(e.target.value)}
+                  placeholder="Orientações dadas aos pais, atividades para casa ou lembretes clínicos..."
+                  className="w-full border border-slate-200 rounded-xl p-3 text-xs"
+                />
+              </div>
+
+              <div className="bg-amber-50 p-3.5 rounded-2xl border border-amber-200 flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="sealCheck"
+                  checked={isSealed}
+                  onChange={e => setIsSealed(e.target.checked)}
+                  className="w-4 h-4 text-indigo-600 rounded-sm"
+                />
+                <label htmlFor="sealCheck" className="text-xs font-semibold text-amber-900 cursor-pointer">
+                  Lacrar e finalizar prontuário (bloqueia edições futuras para validade jurídica)
+                </label>
+              </div>
+
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  onClick={() => setShowNewModal(false)}
+                  className="w-full sm:w-auto px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl min-h-[40px]"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleSaveRecord}
+                  className="w-full sm:w-auto px-6 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs min-h-[40px]"
+                >
+                  Salvar no Prontuário
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL ZEMDABODY (VISUALIZAR MAPA CORPORAL HISTÓRICO) */}
+      {viewingBodyAssessment && (
+        <ZemdaBodyModal
+          isOpen={!!viewingBodyAssessment}
+          onClose={() => setViewingBodyAssessment(null)}
+          patientId={viewingBodyAssessment.patient_id}
+          patientName={viewingBodyAssessment.patient_name || currentPatient?.full_name}
+          assessmentId={viewingBodyAssessment.id}
+          appointmentId={viewingBodyAssessment.appointment_id}
+          professionalId={viewingBodyAssessment.professional_id}
+          professionalName={viewingBodyAssessment.professional_name}
+          module={viewingBodyAssessment.module}
+          initialBodyModel={viewingBodyAssessment.body_model}
+          readOnly={true}
+        />
+      )}
+    </div>
+  );
+};

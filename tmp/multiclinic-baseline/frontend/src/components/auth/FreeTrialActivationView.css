@@ -1,0 +1,32 @@
+.trial-activation-page { align-items:start; }
+.trial-activation-page .signup-intro { top:28px; align-self:start; padding-top:48px; }
+.trial-brand-link { display:inline-flex; border-radius:8px; }
+.trial-activation-page .signup-pitch li { flex-wrap:nowrap; align-items:flex-start; line-height:1.5; }
+.trial-activation-page .signup-pitch li svg { flex-shrink:0; margin-top:2px; }
+.trial-activation-card { width:100%; background:#fff; border:1px solid #e2e8f0; overflow:hidden; }
+.trial-card-header { display:flex; align-items:center; justify-content:space-between; gap:12px; border-bottom:1px solid #f1f5f9; }
+.trial-card-brand { display:flex; align-items:center; gap:8px; font-size:12px; font-weight:700; color:#134e4a; }
+.trial-badge { display:inline-flex; align-items:center; gap:5px; padding:5px 8px; border-radius:999px; background:#f0fdfa; color:#0f766e; font-size:10px; font-weight:700; white-space:nowrap; }
+.trial-heading { margin:4px 0 18px; }
+.trial-plan { color:#0f766e; font-size:11px; font-weight:650; margin-bottom:6px; }
+.trial-heading h2 { font-size:26px; line-height:1.2; letter-spacing:-.035em; font-weight:800; color:#134e4a; }
+.trial-heading p { font-size:13px; line-height:1.6; color:#64748b; margin-top:8px; }
+.trial-notice { margin-bottom:20px; }
+.trial-form :is(input:not([type=checkbox]),select) { height:36px; padding-top:6px; padding-bottom:6px; font-size:12px; }
+.trial-module-note { color:#64748b; font-size:11px; line-height:1.5; margin-top:8px; padding:8px 10px; background:#f0fdfa; border-radius:8px; }
+.trial-module-note strong { color:#0f766e; font-weight:600; }
+.trial-submit { min-height:48px; }
+.trial-security { padding:0 20px 20px; line-height:1.5; color:#64748b; }
+.trial-security svg { flex-shrink:0; }
+@media(max-width:1023px) {
+  .trial-activation-page .signup-intro { align-self:center; padding:0; }
+  .trial-activation-page .signup-pitch { display:block; margin-top:12px; text-align:center; }
+  .trial-activation-page .signup-pitch h1 { font-size:23px; max-width:430px; }
+  .trial-activation-page .signup-pitch > p,.trial-activation-page .signup-pitch ul { display:none; }
+  .trial-brand-link { display:flex; justify-content:center; width:100%; }
+}
+@media(max-width:640px) {
+  .trial-heading h2 { font-size:24px; }
+  .trial-form :is(input:not([type=checkbox]),select) { height:44px; font-size:16px; }
+  .trial-form .grid { grid-template-columns:minmax(0,1fr); }
+}

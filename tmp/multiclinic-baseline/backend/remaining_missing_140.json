@@ -1,0 +1,2189 @@
+[
+  {
+    "id": "ex-remada-alta-barra",
+    "name": "Remada Alta com Barra W",
+    "category": "Musculação",
+    "muscle_group": "Ombros",
+    "secondary_muscles": [
+      "Trapézio Superior",
+      "Bíceps"
+    ],
+    "equipment": "Barra",
+    "execution_type": "bilateral",
+    "mechanics": "peso livre",
+    "instructions": "Pegada na largura dos ombros, puxe a barra verticalmente até a altura do peito conduzindo pelos cotovelos.",
+    "technical_notes": "Não utilize pegada excessivamente fechada para evitar pinçamento subacromial.",
+    "photo_url": "/exercise-fallbacks/ex-remada-alta-barra.webp"
+  },
+  {
+    "id": "ex-abdominal-infra-solo",
+    "name": "Abdominal Infra no Solo com Elevação de Pernas",
+    "category": "Funcional",
+    "muscle_group": "Abdômen/Core",
+    "secondary_muscles": [
+      "Iliopsoas",
+      "Reto Femoral"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "bilateral",
+    "mechanics": "peso corporal",
+    "instructions": "Deitado com pernas estendidas, eleve as pernas e finalize tirando levemente o quadril do solo.",
+    "technical_notes": "Mantenha a lombar apoiada no solo ao descer as pernas.",
+    "photo_url": "/exercise-fallbacks/ex-abdominal-infra-solo.webp"
+  },
+  {
+    "id": "ex-abdominal-obliquo-solo",
+    "name": "Abdominal Oblíquo Cruzado no Solo",
+    "category": "Funcional",
+    "muscle_group": "Abdômen/Core",
+    "secondary_muscles": [
+      "Oblíquos Interno e Externo"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "unilateral",
+    "mechanics": "peso corporal",
+    "instructions": "Com uma perna cruzada sobre o joelho oposto, eleve o tronco direcionando o cotovelo ao joelho contrário.",
+    "technical_notes": "Foco na rotação do tronco sem puxar a cervical.",
+    "photo_url": "/exercise-fallbacks/ex-abdominal-obliquo-solo.webp"
+  },
+  {
+    "id": "ex-prancha-isometrica",
+    "name": "Prancha Ventral Isométrica no Solo",
+    "category": "Funcional",
+    "muscle_group": "Abdômen/Core",
+    "secondary_muscles": [
+      "Transverso do Abdômen",
+      "Glúteos",
+      "Lombar"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "bilateral",
+    "mechanics": "isométrico",
+    "instructions": "Apoie antebraços e pontas dos pés no solo, mantendo linha reta dos tornozelos aos ombros com abdômen contraído.",
+    "technical_notes": "Não deixe o quadril ceder ou subir em excesso.",
+    "photo_url": "/exercise-photos/ex-prancha-isometrica-123b6d7c2f36.webp"
+  },
+  {
+    "id": "ex-prancha-lateral",
+    "name": "Prancha Lateral Isométrica",
+    "category": "Funcional",
+    "muscle_group": "Abdômen/Core",
+    "secondary_muscles": [
+      "Quadrado Lombar",
+      "Glúteo Médio"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "unilateral",
+    "mechanics": "isométrico",
+    "instructions": "De lado com apoio no antebraço e lateral do pé, eleve o quadril mantendo alinhamento de coluna.",
+    "technical_notes": "Fundamental para estabilização da coluna lombar no plano frontal.",
+    "photo_url": "/exercise-fallbacks/ex-prancha-lateral.webp"
+  },
+  {
+    "id": "ex-superman-solo",
+    "name": "Superman Isométrico no Solo",
+    "category": "Funcional",
+    "muscle_group": "Lombar",
+    "secondary_muscles": [
+      "Glúteos",
+      "Deltoides"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "bilateral",
+    "mechanics": "isométrico",
+    "instructions": "Deitado de barriga para baixo, eleve simultaneamente braços e pernas do chão segurando a posição.",
+    "technical_notes": "Fortalecimento seguro da cadeia posterior sem cargas compressivas axiais.",
+    "photo_url": "/exercise-fallbacks/ex-superman-solo.webp"
+  },
+  {
+    "id": "ex-leg-press-horizontal",
+    "name": "Leg Press Horizontal",
+    "category": "Musculação",
+    "muscle_group": "Quadríceps",
+    "secondary_muscles": [
+      "Glúteos"
+    ],
+    "equipment": "Máquina",
+    "execution_type": "bilateral",
+    "mechanics": "máquina",
+    "instructions": "Sentado com as costas firmes no encosto, empurre o carrinho estendendo os joelhos com controle.",
+    "technical_notes": "Excelente para idosos, reabilitação ou iniciantes.",
+    "photo_url": "/exercise-fallbacks/ex-leg-press-horizontal.webp"
+  },
+  {
+    "id": "ex-flexora-em-pe",
+    "name": "Flexora em Pé Unilateral na Máquina / Cabo",
+    "category": "Musculação",
+    "muscle_group": "Posteriores de coxa",
+    "secondary_muscles": [
+      "Glúteos"
+    ],
+    "equipment": "Máquina",
+    "execution_type": "unilateral",
+    "mechanics": "máquina",
+    "instructions": "Apoiado de frente para a máquina, flexione um joelho levando o calcanhar ao glúteo.",
+    "technical_notes": "Ideal para corrigir assimetrias de força muscular nos isquiotibiais.",
+    "photo_url": "/exercise-fallbacks/ex-flexora-em-pe.webp"
+  },
+  {
+    "id": "ex-nordic-hamstring",
+    "name": "Flexão Nórdica Excêntrica (Nordic Hamstring Curl)",
+    "category": "Funcional",
+    "muscle_group": "Posteriores de coxa",
+    "secondary_muscles": [
+      "Glúteos",
+      "Abdômen/Core"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "bilateral",
+    "mechanics": "peso corporal",
+    "instructions": "De joelhos com tornozelos travados, desça o corpo para frente controlando a descida apenas com os posteriores de coxa.",
+    "technical_notes": "Padrão ouro científico para prevenção de lesões musculares em esportes e sprints.",
+    "photo_url": "/exercise-fallbacks/ex-nordic-hamstring.webp"
+  },
+  {
+    "id": "ex-elevacao-pelvica-barra",
+    "name": "Elevação Pélvica com Barra no Banco (Hip Thrust)",
+    "category": "Musculação",
+    "muscle_group": "Glúteos",
+    "secondary_muscles": [
+      "Posteriores de coxa",
+      "Abdômen/Core"
+    ],
+    "equipment": "Barra",
+    "execution_type": "bilateral",
+    "mechanics": "peso livre",
+    "instructions": "Escápulas apoiadas no banco, barra sobre o quadril com almofada protetora. Empurre os calcanhares no chão e eleve o quadril até travar no topo com 1s de contração.",
+    "technical_notes": "No topo, mantenha queixo apontado para o peito e costelas abaixadas para não hiperextender a lombar.",
+    "photo_url": "/exercise-fallbacks/ex-elevacao-pelvica-barra.webp"
+  },
+  {
+    "id": "ex-elevacao-pelvica-unilateral",
+    "name": "Elevação Pélvica Unilateral no Solo / Banco",
+    "category": "Musculação",
+    "muscle_group": "Glúteos",
+    "secondary_muscles": [
+      "Posteriores de coxa",
+      "Core"
+    ],
+    "equipment": "Halteres",
+    "execution_type": "unilateral",
+    "mechanics": "peso livre",
+    "instructions": "Apoie um pé no solo e a outra perna elevada, empurre o quadril para cima com a perna de apoio.",
+    "technical_notes": "Excelente para ativação isolada e nivelamento de força unilateral do glúteo máximo.",
+    "photo_url": "/exercise-fallbacks/ex-elevacao-pelvica-unilateral.webp"
+  },
+  {
+    "id": "ex-gluteo-caneleira-4-apoios",
+    "name": "Glúteo 4 Apoios com Caneleira no Solo",
+    "category": "Musculação",
+    "muscle_group": "Glúteos",
+    "secondary_muscles": [
+      "Posteriores de coxa"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "unilateral",
+    "mechanics": "peso livre",
+    "instructions": "Em 4 apoios com cotovelos apoiados, eleve o calcanhar em direção ao teto mantendo o joelho a 90 graus.",
+    "technical_notes": "Mantenha a pelve alinhada sem girar o quadril para os lados.",
+    "photo_url": "/exercise-fallbacks/ex-gluteo-caneleira-4-apoios.webp"
+  },
+  {
+    "id": "ex-agachamento-sumo",
+    "name": "Agachamento Sumô com Halter no Step",
+    "category": "Musculação",
+    "muscle_group": "Adutores",
+    "secondary_muscles": [
+      "Glúteos",
+      "Quadríceps"
+    ],
+    "equipment": "Halteres",
+    "execution_type": "bilateral",
+    "mechanics": "peso livre",
+    "instructions": "Pés bem afastados apontando para fora em 45 graus, segure o halter entre as pernas e agache profundo.",
+    "technical_notes": "Os steps aumentam a amplitude de descida sem bater o halter no chão.",
+    "photo_url": "/exercise-fallbacks/ex-agachamento-sumo.webp"
+  },
+  {
+    "id": "ex-abducao-polia-baixa",
+    "name": "Abdução de Quadril na Polia Baixa",
+    "category": "Musculação",
+    "muscle_group": "Abdutores",
+    "secondary_muscles": [
+      "Glúteo Médio",
+      "Tensor da Fáscia Lata"
+    ],
+    "equipment": "Cabo / Polia",
+    "execution_type": "unilateral",
+    "mechanics": "cabo/polia",
+    "instructions": "De lado para a polia com o cabo na perna distal, afaste a perna lateralmente com o pé apontando para frente.",
+    "technical_notes": "Não gire a ponta do pé para fora para manter a ativação no glúteo médio.",
+    "photo_url": "/exercise-fallbacks/ex-abducao-polia-baixa.webp"
+  },
+  {
+    "id": "ex-abducao-solo-elastico",
+    "name": "Abdução de Quadril no Solo com Mini-Band (Clamshell / Ostra)",
+    "category": "Funcional",
+    "muscle_group": "Abdutores",
+    "secondary_muscles": [
+      "Glúteo Médio",
+      "Rotadores Externos"
+    ],
+    "equipment": "Elástico",
+    "execution_type": "unilateral",
+    "mechanics": "elástico",
+    "instructions": "Deitado de lado com joelhos a 90 graus e elástico nas coxas, abra o joelho de cima mantendo pés unidos.",
+    "technical_notes": "Exercício chave para estabilidade do joelho contra o valgo dinâmico.",
+    "photo_url": "/exercise-fallbacks/ex-abducao-solo-elastico.webp"
+  },
+  {
+    "id": "ex-panturrilha-unilateral-halter",
+    "name": "Panturrilha Unilateral em Pé com Halter",
+    "category": "Musculação",
+    "muscle_group": "Panturrilhas",
+    "secondary_muscles": [
+      "Gastrocnêmio",
+      "Sóleo"
+    ],
+    "equipment": "Halteres",
+    "execution_type": "unilateral",
+    "mechanics": "peso livre",
+    "instructions": "Apoie um pé no degrau segurando um halter do mesmo lado e a outra mão em suporte para equilíbrio.",
+    "technical_notes": "Excelente para equalizar força entre as duas panturrilhas.",
+    "photo_url": "/exercise-fallbacks/ex-panturrilha-unilateral-halter.webp"
+  },
+  {
+    "id": "ex-thruster-halteres",
+    "name": "Thruster (Agachamento + Desenvolvimento) com Halteres",
+    "category": "Funcional",
+    "muscle_group": "Corpo inteiro",
+    "secondary_muscles": [
+      "Quadríceps",
+      "Glúteos",
+      "Ombros",
+      "Tríceps"
+    ],
+    "equipment": "Halteres",
+    "execution_type": "bilateral",
+    "mechanics": "composto",
+    "instructions": "Segure os halteres nos ombros, realize um agachamento completo e utilize o impulso da subida para empurrar os pesos acima da cabeça.",
+    "technical_notes": "Transição fluida entre agachamento e desenvolvimento em um único tempo.",
+    "photo_url": "/exercise-fallbacks/ex-thruster-halteres.webp"
+  },
+  {
+    "id": "ex-remo-indoor",
+    "name": "Remo Indoor (Ergômetro)",
+    "category": "Cardiorrespiratório",
+    "muscle_group": "Cardiorrespiratórios",
+    "secondary_muscles": [
+      "Costas",
+      "Pernas",
+      "Bíceps",
+      "Core"
+    ],
+    "equipment": "Máquina",
+    "execution_type": "bilateral",
+    "mechanics": "aeróbico",
+    "instructions": "Inicie pela empurrada das pernas, incline o tronco e finalize puxando com os braços.",
+    "technical_notes": "Recruta mais de 80% da massa muscular do corpo em um único ciclo de remada.",
+    "photo_url": "/exercise-fallbacks/ex-remo-indoor.webp"
+  },
+  {
+    "id": "ex-mobilidade-quadril-9090",
+    "name": "Mobilidade de Quadril 90/90",
+    "category": "Mobilidade",
+    "muscle_group": "Mobilidade",
+    "secondary_muscles": [
+      "Rotadores Internos e Externos do Quadril"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "bilateral",
+    "mechanics": "mobilidade",
+    "instructions": "Sentado no chão com ambas as pernas flexionadas a 90 graus (uma na frente e outra ao lado), alterne os lados girando o quadril.",
+    "technical_notes": "Melhora amplitude de agachamento profundo e previne dores lombares.",
+    "photo_url": "/exercise-fallbacks/ex-mobilidade-quadril-9090.webp"
+  },
+  {
+    "id": "ex-mobilidade-tornozelo-parede",
+    "name": "Mobilidade de Tornozelo contra a Parede (Dorsiflexão)",
+    "category": "Mobilidade",
+    "muscle_group": "Mobilidade",
+    "secondary_muscles": [
+      "Sóleo",
+      "Tendão de Aquiles"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "unilateral",
+    "mechanics": "mobilidade",
+    "instructions": "Pé a alguns centímetros da parede, avance o joelho em direção à parede sem tirar o calcanhar do chão.",
+    "technical_notes": "Dorsiflexão adequada é pré-requisito indispensável para agachamento seguro.",
+    "photo_url": "/exercise-fallbacks/ex-mobilidade-tornozelo-parede.webp"
+  },
+  {
+    "id": "ex-mobilidade-toracica-4apoios",
+    "name": "Rotação Torácica em 4 Apoios",
+    "category": "Mobilidade",
+    "muscle_group": "Mobilidade",
+    "secondary_muscles": [
+      "Coluna Torácica",
+      "Romboides"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "unilateral",
+    "mechanics": "mobilidade",
+    "instructions": "Em 4 apoios com uma mão atrás da cabeça, gire o tronco apontando o cotovelo para o teto e depois para baixo.",
+    "technical_notes": "Libera rigidez da coluna dorsal causada pelo sedentarismo postural.",
+    "photo_url": "/exercise-fallbacks/ex-mobilidade-toracica-4apoios.webp"
+  },
+  {
+    "id": "ex-gato-camelo",
+    "name": "Gato-Camelo (Cat-Cow) Mobilidade da Coluna",
+    "category": "Mobilidade",
+    "muscle_group": "Mobilidade",
+    "secondary_muscles": [
+      "Toda a Coluna Vertebral"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "bilateral",
+    "mechanics": "mobilidade",
+    "instructions": "Em 4 apoios, alterne suavemente entre arquear as costas para cima e empurrar o abdômen para o chão com elevação da cabeça.",
+    "technical_notes": "Mobilização articular suave indicada para aquecimento e alívio de tensões axiais.",
+    "photo_url": "/exercise-fallbacks/ex-gato-camelo.webp"
+  },
+  {
+    "id": "ex-passagem-bacao-elastico",
+    "name": "Passagem de Bastão / Elástico para Ombros (Dislocates)",
+    "category": "Mobilidade",
+    "muscle_group": "Mobilidade",
+    "secondary_muscles": [
+      "Cintura Escapular",
+      "Peitoral"
+    ],
+    "equipment": "Elástico",
+    "execution_type": "bilateral",
+    "mechanics": "mobilidade",
+    "instructions": "Segurando um bastão ou elástico com pegada aberta, passe os braços estendidos da frente para trás do corpo e retorne.",
+    "technical_notes": "Aumenta flexibilidade da cápsula anterior e peitoral sem forçar o manguito.",
+    "photo_url": "/exercise-fallbacks/ex-passagem-bacao-elastico.webp"
+  },
+  {
+    "id": "ex-alongamento-isquiotibiais",
+    "name": "Alongamento Estático de Isquiotibiais (Posteriores)",
+    "category": "Alongamento",
+    "muscle_group": "Alongamentos",
+    "secondary_muscles": [
+      "Posteriores de coxa"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "bilateral",
+    "mechanics": "flexibilidade",
+    "instructions": "Sentado com pernas estendidas à frente, incline o tronco em direção aos pés até sentir tensão confortável nos posteriores, segurando por 30 segundos.",
+    "technical_notes": "Mantenha respiração profunda e evite puxões bruscos.",
+    "photo_url": "/exercise-fallbacks/ex-alongamento-isquiotibiais.webp"
+  },
+  {
+    "id": "ex-alongamento-quadriceps",
+    "name": "Alongamento em Pé de Quadríceps",
+    "category": "Alongamento",
+    "muscle_group": "Alongamentos",
+    "secondary_muscles": [
+      "Quadríceps",
+      "Psoas"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "unilateral",
+    "mechanics": "flexibilidade",
+    "instructions": "Em pé, flexione um joelho segurando o tornozelo atrás e aproxime o calcanhar do glúteo mantendo os joelhos alinhados.",
+    "technical_notes": "Projete levemente a pelve para frente para alongar o reto femoral.",
+    "photo_url": "/exercise-fallbacks/ex-alongamento-quadriceps.webp"
+  },
+  {
+    "id": "ex-alongamento-peitoral-parede",
+    "name": "Alongamento de Peitoral no Batente / Parede",
+    "category": "Alongamento",
+    "muscle_group": "Alongamentos",
+    "secondary_muscles": [
+      "Peitoral",
+      "Bíceps"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "unilateral",
+    "mechanics": "flexibilidade",
+    "instructions": "Apoie o antebraço a 90 graus na parede ou batente e gire o tronco para o lado oposto suavemente.",
+    "technical_notes": "Alivia retração peitoral típica de postura cifótica de escritório.",
+    "photo_url": "/exercise-fallbacks/ex-alongamento-peitoral-parede.webp"
+  },
+  {
+    "id": "ex-alongamento-gluteo-piriforme",
+    "name": "Alongamento de Glúteo e Piriforme Deitado (Figura 4)",
+    "category": "Alongamento",
+    "muscle_group": "Alongamentos",
+    "secondary_muscles": [
+      "Glúteos",
+      "Piriforme"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "unilateral",
+    "mechanics": "flexibilidade",
+    "instructions": "Deitado de barriga para cima, cruze um tornozelo sobre o joelho oposto e puxe a coxa em direção ao peito.",
+    "technical_notes": "Essencial para descompressão do nervo ciático e alívio do piriforme.",
+    "photo_url": "/exercise-fallbacks/ex-alongamento-gluteo-piriforme.webp"
+  },
+  {
+    "id": "ex-alongamento-dorsal-barra",
+    "name": "Alongamento Suspenso de Grande Dorsal na Barra",
+    "category": "Alongamento",
+    "muscle_group": "Alongamentos",
+    "secondary_muscles": [
+      "Grande Dorsal",
+      "Redondo Maior",
+      "Ombros"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "bilateral",
+    "mechanics": "flexibilidade",
+    "instructions": "Segure na barra fixa e relaxe o peso do corpo deixando a gravidade descomprimir as escápulas e a coluna toracolombar.",
+    "technical_notes": "Descompressão espinhal poderosa pós-treino.",
+    "photo_url": "/exercise-fallbacks/ex-alongamento-dorsal-barra.webp"
+  },
+  {
+    "id": "ex-supino-solo-halteres",
+    "name": "Supino no Solo com Halteres (Floor Press)",
+    "category": "Musculação",
+    "muscle_group": "Peitoral",
+    "secondary_muscles": [
+      "Tríceps"
+    ],
+    "equipment": "Halteres",
+    "execution_type": "bilateral",
+    "mechanics": "resistido",
+    "instructions": "Deitado no solo com joelhos dobrados, desça até os braços tocarem suavemente o chão e empurre.",
+    "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições.",
+    "photo_url": "/exercise-fallbacks/ex-supino-solo-halteres.webp"
+  },
+  {
+    "id": "ex-supino-elastico",
+    "name": "Press de Peito com Elástico",
+    "category": "Musculação",
+    "muscle_group": "Peitoral",
+    "secondary_muscles": [
+      "Tríceps",
+      "Ombros"
+    ],
+    "equipment": "Elástico",
+    "execution_type": "bilateral",
+    "mechanics": "resistido",
+    "instructions": "Com elástico fixado atrás na altura do peito, dê um passo à frente e empurre as mãos mantendo tronco estável.",
+    "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições.",
+    "photo_url": "/exercise-fallbacks/ex-supino-elastico.webp"
+  },
+  {
+    "id": "ex-crucifixo-unilateral-cabo",
+    "name": "Crucifixo Unilateral no Cabo",
+    "category": "Musculação",
+    "muscle_group": "Peitoral",
+    "secondary_muscles": [
+      "Abdômen/Core",
+      "Ombros"
+    ],
+    "equipment": "Cabo / Polia",
+    "execution_type": "unilateral",
+    "mechanics": "cabo/polia",
+    "instructions": "Em base afastada lateralmente à polia, conduza um braço à frente do peito e retorne sem girar o tronco.",
+    "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições.",
+    "photo_url": "/exercise-fallbacks/ex-crucifixo-unilateral-cabo.webp"
+  },
+  {
+    "id": "ex-puxada-unilateral",
+    "name": "Puxada Unilateral na Polia Alta",
+    "category": "Musculação",
+    "muscle_group": "Costas",
+    "secondary_muscles": [
+      "Bíceps"
+    ],
+    "equipment": "Cabo / Polia",
+    "execution_type": "unilateral",
+    "mechanics": "cabo/polia",
+    "instructions": "Sentado ou ajoelhado, puxe a manopla acima da cabeça até a lateral do peito sem inclinar o tronco.",
+    "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições.",
+    "photo_url": "/exercise-fallbacks/ex-puxada-unilateral.webp"
+  },
+  {
+    "id": "ex-landmine-press",
+    "name": "Press Unilateral no Landmine",
+    "category": "Musculação",
+    "muscle_group": "Ombros",
+    "secondary_muscles": [
+      "Peitoral",
+      "Tríceps",
+      "Abdômen/Core"
+    ],
+    "equipment": "Barra",
+    "execution_type": "unilateral",
+    "mechanics": "resistido",
+    "instructions": "Em meio-ajoelhado, segure a ponta da barra ancorada junto ao ombro e empurre diagonalmente para cima.",
+    "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições.",
+    "photo_url": "/exercise-fallbacks/ex-landmine-press.webp"
+  },
+  {
+    "id": "ex-rotacao-externa-elastico",
+    "name": "Rotação Externa de Ombro com Elástico",
+    "category": "Musculação",
+    "muscle_group": "Ombros",
+    "secondary_muscles": [
+      "Infraespinal",
+      "Redondo menor"
+    ],
+    "equipment": "Elástico",
+    "execution_type": "bilateral",
+    "mechanics": "resistido",
+    "instructions": "Com cotovelo junto ao tronco a 90 graus, gire o antebraço para fora sem deslocar o braço.",
+    "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições.",
+    "photo_url": "/exercise-fallbacks/ex-rotacao-externa-elastico.webp"
+  },
+  {
+    "id": "ex-rotacao-interna-cabo",
+    "name": "Rotação Interna de Ombro na Polia",
+    "category": "Musculação",
+    "muscle_group": "Ombros",
+    "secondary_muscles": [
+      "Subescapular"
+    ],
+    "equipment": "Cabo / Polia",
+    "execution_type": "bilateral",
+    "mechanics": "cabo/polia",
+    "instructions": "Com cotovelo junto ao tronco a 90 graus, conduza a mão em direção ao abdômen sem girar o tronco.",
+    "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições.",
+    "photo_url": "/exercise-fallbacks/ex-rotacao-interna-cabo.webp"
+  },
+  {
+    "id": "ex-rosca-bayesian",
+    "name": "Rosca Unilateral no Cabo Atrás do Corpo",
+    "category": "Musculação",
+    "muscle_group": "Bíceps",
+    "secondary_muscles": [
+      "Braquial"
+    ],
+    "equipment": "Cabo / Polia",
+    "execution_type": "unilateral",
+    "mechanics": "cabo/polia",
+    "instructions": "De costas à polia baixa, mantenha braço ligeiramente atrás do tronco e flexione o cotovelo.",
+    "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições.",
+    "photo_url": "/exercise-fallbacks/ex-rosca-bayesian.webp"
+  },
+  {
+    "id": "ex-rosca-elastico",
+    "name": "Rosca com Elástico",
+    "category": "Musculação",
+    "muscle_group": "Bíceps",
+    "secondary_muscles": [
+      "Braquial",
+      "Antebraços"
+    ],
+    "equipment": "Elástico",
+    "execution_type": "bilateral",
+    "mechanics": "resistido",
+    "instructions": "Pise no centro do elástico e flexione cotovelos, mantendo braços junto ao corpo e punhos alinhados.",
+    "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições.",
+    "photo_url": "/exercise-fallbacks/ex-rosca-elastico.webp"
+  },
+  {
+    "id": "ex-desvio-radial",
+    "name": "Desvio Radial do Punho com Halter",
+    "category": "Musculação",
+    "muscle_group": "Antebraços",
+    "secondary_muscles": [
+      "Extensores do punho"
+    ],
+    "equipment": "Halteres",
+    "execution_type": "bilateral",
+    "mechanics": "resistido",
+    "instructions": "Com antebraço apoiado e polegar para cima, mova o punho para cima e retorne sem mover cotovelo.",
+    "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições.",
+    "photo_url": "/exercise-fallbacks/ex-desvio-radial.webp"
+  },
+  {
+    "id": "ex-triceps-elastico",
+    "name": "Extensão de Tríceps com Elástico Alto",
+    "category": "Musculação",
+    "muscle_group": "Tríceps",
+    "secondary_muscles": [
+      "Ancôneo"
+    ],
+    "equipment": "Elástico",
+    "execution_type": "bilateral",
+    "mechanics": "resistido",
+    "instructions": "Fixe o elástico acima da cabeça e estenda os cotovelos mantendo braços junto ao tronco.",
+    "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições.",
+    "photo_url": "/exercise-fallbacks/ex-triceps-elastico.webp"
+  },
+  {
+    "id": "ex-pallof-press",
+    "name": "Pallof Press na Polia",
+    "category": "Musculação",
+    "muscle_group": "Abdômen/Core",
+    "secondary_muscles": [
+      "Oblíquos",
+      "Glúteos"
+    ],
+    "equipment": "Cabo / Polia",
+    "execution_type": "bilateral",
+    "mechanics": "cabo/polia",
+    "instructions": "De lado para a polia, segure a manopla junto ao peito e estenda braços resistindo à rotação.",
+    "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições.",
+    "photo_url": "/exercise-fallbacks/ex-pallof-press.webp"
+  },
+  {
+    "id": "ex-woodchop-cabo",
+    "name": "Rotação Diagonal no Cabo (Woodchop)",
+    "category": "Musculação",
+    "muscle_group": "Abdômen/Core",
+    "secondary_muscles": [
+      "Oblíquos",
+      "Ombros"
+    ],
+    "equipment": "Cabo / Polia",
+    "execution_type": "bilateral",
+    "mechanics": "cabo/polia",
+    "instructions": "Em pé lateralmente à polia alta, conduza a manopla em diagonal até o quadril oposto com rotação controlada.",
+    "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições.",
+    "photo_url": "/exercise-fallbacks/ex-woodchop-cabo.webp"
+  },
+  {
+    "id": "ex-bird-dog",
+    "name": "Bird Dog em Quatro Apoios",
+    "category": "Musculação",
+    "muscle_group": "Abdômen/Core",
+    "secondary_muscles": [
+      "Lombar",
+      "Glúteos"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "bilateral",
+    "mechanics": "peso corporal",
+    "instructions": "Em quatro apoios, estenda braço e perna opostos sem girar a pelve; retorne e alterne.",
+    "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições.",
+    "photo_url": "/exercise-fallbacks/ex-bird-dog.webp"
+  },
+  {
+    "id": "ex-hollow-hold",
+    "name": "Hollow Hold",
+    "category": "Musculação",
+    "muscle_group": "Abdômen/Core",
+    "secondary_muscles": [
+      "Flexores do quadril"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "bilateral",
+    "mechanics": "peso corporal",
+    "instructions": "Deitado, eleve ombros e pernas mantendo lombar apoiada; ajuste a extensão das pernas para sustentar a posição.",
+    "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições.",
+    "photo_url": "/exercise-fallbacks/ex-hollow-hold.webp"
+  },
+  {
+    "id": "ex-suitcase-carry",
+    "name": "Caminhada com Carga Unilateral",
+    "category": "Funcional",
+    "muscle_group": "Abdômen/Core",
+    "secondary_muscles": [
+      "Antebraços",
+      "Glúteos"
+    ],
+    "equipment": "Kettlebell",
+    "execution_type": "unilateral",
+    "mechanics": "resistido",
+    "instructions": "Caminhe com kettlebell em uma mão, mantendo tronco vertical e passos controlados; troque o lado.",
+    "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições.",
+    "photo_url": "/exercise-fallbacks/ex-suitcase-carry.webp"
+  },
+  {
+    "id": "ex-stir-pot",
+    "name": "Prancha Circular na Bola",
+    "category": "Musculação",
+    "muscle_group": "Abdômen/Core",
+    "secondary_muscles": [
+      "Ombros"
+    ],
+    "equipment": "Bola Suíça",
+    "execution_type": "bilateral",
+    "mechanics": "resistido",
+    "instructions": "Apoie antebraços na bola e descreva pequenos círculos sem perder o alinhamento da pelve.",
+    "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições.",
+    "photo_url": "/exercise-fallbacks/ex-stir-pot.webp"
+  },
+  {
+    "id": "ex-hip-hinge-bastao",
+    "name": "Dobradiça de Quadril com Bastão",
+    "category": "Musculação",
+    "muscle_group": "Lombar",
+    "secondary_muscles": [
+      "Glúteos",
+      "Posteriores de coxa"
+    ],
+    "equipment": "Bastão",
+    "execution_type": "bilateral",
+    "mechanics": "resistido",
+    "instructions": "Mantenha bastão em contato com cabeça, tórax e sacro; leve quadril para trás e retorne preservando os contatos.",
+    "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições.",
+    "photo_url": "/exercise-fallbacks/ex-hip-hinge-bastao.webp"
+  },
+  {
+    "id": "ex-extensora-unilateral",
+    "name": "Cadeira Extensora Unilateral",
+    "category": "Musculação",
+    "muscle_group": "Quadríceps",
+    "secondary_muscles": [
+      "Reto femoral"
+    ],
+    "equipment": "Máquina",
+    "execution_type": "unilateral",
+    "mechanics": "máquina",
+    "instructions": "Ajuste o eixo ao joelho e estenda uma perna por vez sem levantar a pelve do assento.",
+    "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições.",
+    "photo_url": "/exercise-fallbacks/ex-extensora-unilateral.webp"
+  },
+  {
+    "id": "ex-wall-sit",
+    "name": "Agachamento Isométrico na Parede",
+    "category": "Musculação",
+    "muscle_group": "Quadríceps",
+    "secondary_muscles": [
+      "Glúteos"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "bilateral",
+    "mechanics": "peso corporal",
+    "instructions": "Apoie costas na parede, avance os pés e deslize até a posição escolhida pelo profissional; sustente.",
+    "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições.",
+    "photo_url": "/exercise-fallbacks/ex-wall-sit.webp"
+  },
+  {
+    "id": "ex-flexora-bola",
+    "name": "Flexão de Joelhos na Bola Suíça",
+    "category": "Musculação",
+    "muscle_group": "Posteriores de coxa",
+    "secondary_muscles": [
+      "Glúteos",
+      "Abdômen/Core"
+    ],
+    "equipment": "Bola Suíça",
+    "execution_type": "bilateral",
+    "mechanics": "resistido",
+    "instructions": "Deitado com calcanhares na bola e quadril elevado, flexione joelhos trazendo a bola e retorne.",
+    "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições.",
+    "photo_url": "/exercise-fallbacks/ex-flexora-bola.webp"
+  },
+  {
+    "id": "ex-flexora-deslizante",
+    "name": "Flexão de Joelhos com Discos Deslizantes",
+    "category": "Musculação",
+    "muscle_group": "Posteriores de coxa",
+    "secondary_muscles": [
+      "Glúteos"
+    ],
+    "equipment": "Discos Deslizantes",
+    "execution_type": "bilateral",
+    "mechanics": "resistido",
+    "instructions": "Deitado com calcanhares nos discos, eleve a pelve e deslize os pés para longe e para perto.",
+    "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições.",
+    "photo_url": "/exercise-fallbacks/ex-flexora-deslizante.webp"
+  },
+  {
+    "id": "ex-flexora-elastico",
+    "name": "Flexão de Joelhos com Elástico",
+    "category": "Musculação",
+    "muscle_group": "Posteriores de coxa",
+    "secondary_muscles": [
+      "Gastrocnêmio"
+    ],
+    "equipment": "Elástico",
+    "execution_type": "bilateral",
+    "mechanics": "resistido",
+    "instructions": "De bruços com elástico fixado aos tornozelos, dobre joelhos sem levantar a pelve.",
+    "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições.",
+    "photo_url": "/exercise-fallbacks/ex-flexora-elastico.webp"
+  },
+  {
+    "id": "ex-hip-thrust-maquina",
+    "name": "Elevação Pélvica na Máquina",
+    "category": "Musculação",
+    "muscle_group": "Glúteos",
+    "secondary_muscles": [
+      "Posteriores de coxa"
+    ],
+    "equipment": "Máquina",
+    "execution_type": "bilateral",
+    "mechanics": "máquina",
+    "instructions": "Ajuste o apoio sobre a pelve e os pés na plataforma; estenda o quadril mantendo costelas controladas.",
+    "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições.",
+    "photo_url": "/exercise-fallbacks/ex-hip-thrust-maquina.webp"
+  },
+  {
+    "id": "ex-caminhada-lateral-elastico",
+    "name": "Caminhada Lateral com Miniband",
+    "category": "Musculação",
+    "muscle_group": "Abdutores",
+    "secondary_muscles": [
+      "Glúteos",
+      "Quadríceps"
+    ],
+    "equipment": "Elástico",
+    "execution_type": "bilateral",
+    "mechanics": "resistido",
+    "instructions": "Com miniband acima dos joelhos e leve flexão, dê passos laterais mantendo tensão constante.",
+    "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições.",
+    "photo_url": "/exercise-fallbacks/ex-caminhada-lateral-elastico.webp"
+  },
+  {
+    "id": "ex-clam-shell",
+    "name": "Concha Lateral com Miniband",
+    "category": "Musculação",
+    "muscle_group": "Abdutores",
+    "secondary_muscles": [
+      "Rotadores externos do quadril"
+    ],
+    "equipment": "Elástico",
+    "execution_type": "bilateral",
+    "mechanics": "resistido",
+    "instructions": "De lado com joelhos dobrados e pés juntos, abra o joelho de cima sem girar a pelve.",
+    "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições.",
+    "photo_url": "/exercise-fallbacks/ex-clam-shell.webp"
+  },
+  {
+    "id": "ex-copenhagen-curto",
+    "name": "Prancha Copenhagen com Joelho Apoiado",
+    "category": "Musculação",
+    "muscle_group": "Adutores",
+    "secondary_muscles": [
+      "Oblíquos",
+      "Glúteos"
+    ],
+    "equipment": "Banco",
+    "execution_type": "bilateral",
+    "mechanics": "resistido",
+    "instructions": "Em prancha lateral, apoie o joelho de cima no banco e eleve a pelve mantendo tronco alinhado.",
+    "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições.",
+    "photo_url": "/exercise-fallbacks/ex-copenhagen-curto.webp"
+  },
+  {
+    "id": "ex-tibial-anterior-parede",
+    "name": "Elevação dos Antepés na Parede",
+    "category": "Musculação",
+    "muscle_group": "Panturrilhas",
+    "secondary_muscles": [
+      "Tibial anterior"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "bilateral",
+    "mechanics": "peso corporal",
+    "instructions": "Com costas na parede e calcanhares no chão, eleve as pontas dos pés e retorne.",
+    "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições.",
+    "photo_url": "/exercise-fallbacks/ex-tibial-anterior-parede.webp"
+  },
+  {
+    "id": "ex-along-elevador-escapula",
+    "name": "Alongamento do Elevador da Escápula",
+    "category": "Alongamento",
+    "muscle_group": "Alongamentos",
+    "secondary_muscles": [
+      "Elevador da escápula"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "estático",
+    "mechanics": "flexibilidade",
+    "instructions": "Sentado, gire levemente a cabeça e olhe para a axila oposta, mantendo o ombro relaxado. Região trabalhada: Elevador da escápula.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-along-elevador-escapula.webp"
+  },
+  {
+    "id": "ex-along-cervical-rotacao",
+    "name": "Rotação Cervical Leve Sustentada",
+    "category": "Alongamento",
+    "muscle_group": "Alongamentos",
+    "secondary_muscles": [
+      "Pescoço"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "estático",
+    "mechanics": "flexibilidade",
+    "instructions": "Sentado com tronco imóvel, gire a cabeça lentamente para um lado e mantenha dentro da amplitude confortável. Região trabalhada: Pescoço.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-along-cervical-rotacao.webp"
+  },
+  {
+    "id": "ex-along-biceps-parede",
+    "name": "Alongamento de Bíceps na Parede",
+    "category": "Alongamento",
+    "muscle_group": "Alongamentos",
+    "secondary_muscles": [
+      "Bíceps"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "estático",
+    "mechanics": "flexibilidade",
+    "instructions": "Ao lado da parede, apoie a palma com braço estendido atrás do tronco e gire suavemente para o lado oposto. Região trabalhada: Bíceps.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-along-biceps-parede.webp"
+  },
+  {
+    "id": "ex-along-flexores-punho",
+    "name": "Alongamento de Flexores de Punho",
+    "category": "Alongamento",
+    "muscle_group": "Alongamentos",
+    "secondary_muscles": [
+      "Flexores de punho"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "estático",
+    "mechanics": "flexibilidade",
+    "instructions": "Com braço à frente e palma para cima, use a outra mão para estender suavemente punho e dedos. Região trabalhada: Flexores de punho.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-along-flexores-punho.webp"
+  },
+  {
+    "id": "ex-along-extensores-punho",
+    "name": "Alongamento de Extensores de Punho",
+    "category": "Alongamento",
+    "muscle_group": "Alongamentos",
+    "secondary_muscles": [
+      "Extensores de punho"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "estático",
+    "mechanics": "flexibilidade",
+    "instructions": "Com braço à frente e palma para baixo, flexione suavemente o punho auxiliando com a outra mão. Região trabalhada: Extensores de punho.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-along-extensores-punho.webp"
+  },
+  {
+    "id": "ex-along-peitoral-batente-bilateral",
+    "name": "Alongamento Bilateral de Peitoral no Batente",
+    "category": "Alongamento",
+    "muscle_group": "Alongamentos",
+    "secondary_muscles": [
+      "Peitoral"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "estático",
+    "mechanics": "flexibilidade",
+    "instructions": "Apoie ambos os antebraços no batente e avance o tronco lentamente sem arquear a lombar. Região trabalhada: Peitoral.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-along-peitoral-batente-bilateral.webp"
+  },
+  {
+    "id": "ex-along-abertura-toracica-rolo",
+    "name": "Abertura Torácica Deitado sobre Rolo Longitudinal",
+    "category": "Alongamento",
+    "muscle_group": "Alongamentos",
+    "secondary_muscles": [
+      "Peitoral"
+    ],
+    "equipment": "Rolo",
+    "execution_type": "estático",
+    "mechanics": "flexibilidade",
+    "instructions": "Deite com rolo firme apoiando cabeça e coluna, pés no solo; abra os braços lateralmente e relaxe. Região trabalhada: Peitoral.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-along-abertura-toracica-rolo.webp"
+  },
+  {
+    "id": "ex-along-dorsal-banco",
+    "name": "Alongamento de Grande Dorsal no Banco",
+    "category": "Alongamento",
+    "muscle_group": "Alongamentos",
+    "secondary_muscles": [
+      "Grande dorsal"
+    ],
+    "equipment": "Banco",
+    "execution_type": "estático",
+    "mechanics": "flexibilidade",
+    "instructions": "Ajoelhado diante de banco firme, apoie mãos e leve quadril para trás aproximando o peito do chão. Região trabalhada: Grande dorsal.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-along-dorsal-banco.webp"
+  },
+  {
+    "id": "ex-along-crianca",
+    "name": "Posição da Criança",
+    "category": "Alongamento",
+    "muscle_group": "Alongamentos",
+    "secondary_muscles": [
+      "Costas"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "estático",
+    "mechanics": "flexibilidade",
+    "instructions": "Ajoelhado, leve quadril aos calcanhares e braços à frente; ajuste afastamento dos joelhos ao conforto. Região trabalhada: Costas.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-along-crianca.webp"
+  },
+  {
+    "id": "ex-along-thread-needle",
+    "name": "Alongamento Thread the Needle",
+    "category": "Alongamento",
+    "muscle_group": "Alongamentos",
+    "secondary_muscles": [
+      "Costas"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "estático",
+    "mechanics": "flexibilidade",
+    "instructions": "Em quatro apoios, passe um braço por baixo do outro e apoie suavemente o ombro no solo. Região trabalhada: Costas.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-along-thread-needle.webp"
+  },
+  {
+    "id": "ex-along-flexor-quadril-avanco",
+    "name": "Alongamento de Iliopsoas em Avanço Ajoelhado",
+    "category": "Alongamento",
+    "muscle_group": "Alongamentos",
+    "secondary_muscles": [
+      "Flexores do quadril"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "estático",
+    "mechanics": "flexibilidade",
+    "instructions": "Em meio-ajoelhado, mantenha pelve neutra e desloque o corpo ligeiramente à frente sem arquear a lombar. Região trabalhada: Flexores do quadril.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-along-flexor-quadril-avanco.webp"
+  },
+  {
+    "id": "ex-along-flexor-quadril-banco",
+    "name": "Alongamento de Flexores do Quadril na Borda do Banco",
+    "category": "Alongamento",
+    "muscle_group": "Alongamentos",
+    "secondary_muscles": [
+      "Flexores do quadril"
+    ],
+    "equipment": "Banco",
+    "execution_type": "estático",
+    "mechanics": "flexibilidade",
+    "instructions": "Deitado na borda de banco firme, segure um joelho ao peito e deixe a outra coxa descer de modo controlado. Região trabalhada: Flexores do quadril.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-along-flexor-quadril-banco.webp"
+  },
+  {
+    "id": "ex-along-joelho-peito",
+    "name": "Alongamento com Joelho ao Peito",
+    "category": "Alongamento",
+    "muscle_group": "Alongamentos",
+    "secondary_muscles": [
+      "Glúteos"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "estático",
+    "mechanics": "flexibilidade",
+    "instructions": "Deitado de costas, aproxime uma coxa do tronco segurando atrás do joelho e mantenha a outra perna confortável. Região trabalhada: Glúteos.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-along-joelho-peito.webp"
+  },
+  {
+    "id": "ex-along-quadril-9090-estatico",
+    "name": "Alongamento de Quadril 90/90 Estático",
+    "category": "Alongamento",
+    "muscle_group": "Alongamentos",
+    "secondary_muscles": [
+      "Rotadores do quadril"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "estático",
+    "mechanics": "flexibilidade",
+    "instructions": "Sentado com ambas as pernas dobradas a 90 graus, incline o tronco sobre a perna da frente sem forçar os joelhos. Região trabalhada: Rotadores do quadril.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-along-quadril-9090-estatico.webp"
+  },
+  {
+    "id": "ex-along-posterior-em-pe",
+    "name": "Alongamento de Posteriores em Pé com Apoio",
+    "category": "Alongamento",
+    "muscle_group": "Alongamentos",
+    "secondary_muscles": [
+      "Posteriores de coxa"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "estático",
+    "mechanics": "flexibilidade",
+    "instructions": "Apoie um calcanhar em superfície baixa, mantenha joelho levemente destravado e incline o tronco pelo quadril. Região trabalhada: Posteriores de coxa.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-along-posterior-em-pe.webp"
+  },
+  {
+    "id": "ex-along-posterior-unilateral-sentado",
+    "name": "Alongamento Unilateral de Posteriores Sentado",
+    "category": "Alongamento",
+    "muscle_group": "Alongamentos",
+    "secondary_muscles": [
+      "Posteriores de coxa"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "estático",
+    "mechanics": "flexibilidade",
+    "instructions": "Sentado com uma perna estendida e outra dobrada, incline o tronco sobre a perna estendida. Região trabalhada: Posteriores de coxa.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-along-posterior-unilateral-sentado.webp"
+  },
+  {
+    "id": "ex-along-posterior-faixa",
+    "name": "Alongamento de Posteriores Deitado com Faixa",
+    "category": "Alongamento",
+    "muscle_group": "Alongamentos",
+    "secondary_muscles": [
+      "Posteriores de coxa"
+    ],
+    "equipment": "Elástico",
+    "execution_type": "estático",
+    "mechanics": "flexibilidade",
+    "instructions": "Deitado, passe faixa sob um pé e eleve a perna segurando as pontas, com joelho ligeiramente destravado. Região trabalhada: Posteriores de coxa.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-along-posterior-faixa.webp"
+  },
+  {
+    "id": "ex-along-quadriceps-lateral",
+    "name": "Alongamento de Quadríceps em Decúbito Lateral",
+    "category": "Alongamento",
+    "muscle_group": "Alongamentos",
+    "secondary_muscles": [
+      "Quadríceps"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "estático",
+    "mechanics": "flexibilidade",
+    "instructions": "Deitado de lado, segure o tornozelo de cima e aproxime o calcanhar do glúteo mantendo pelve alinhada. Região trabalhada: Quadríceps.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-along-quadriceps-lateral.webp"
+  },
+  {
+    "id": "ex-along-quadriceps-ajoelhado",
+    "name": "Alongamento de Quadríceps Ajoelhado com Apoio",
+    "category": "Alongamento",
+    "muscle_group": "Alongamentos",
+    "secondary_muscles": [
+      "Quadríceps"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "estático",
+    "mechanics": "flexibilidade",
+    "instructions": "Em meio-ajoelhado com apoio acolchoado, eleve o pé de trás sobre banco baixo e mantenha tronco ereto. Região trabalhada: Quadríceps.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-along-quadriceps-ajoelhado.webp"
+  },
+  {
+    "id": "ex-along-adutores-abertura",
+    "name": "Alongamento de Adutores Sentado em Abertura",
+    "category": "Alongamento",
+    "muscle_group": "Alongamentos",
+    "secondary_muscles": [
+      "Adutores"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "estático",
+    "mechanics": "flexibilidade",
+    "instructions": "Sentado com pernas afastadas, incline o tronco ligeiramente à frente a partir do quadril. Região trabalhada: Adutores.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-along-adutores-abertura.webp"
+  },
+  {
+    "id": "ex-along-soleo-parede",
+    "name": "Alongamento de Sóleo na Parede",
+    "category": "Alongamento",
+    "muscle_group": "Alongamentos",
+    "secondary_muscles": [
+      "Sóleo"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "estático",
+    "mechanics": "flexibilidade",
+    "instructions": "Com mãos na parede e um pé atrás, dobre levemente o joelho posterior sem elevar o calcanhar. Região trabalhada: Sóleo.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-along-soleo-parede.webp"
+  },
+  {
+    "id": "ex-along-panturrilha-degrau",
+    "name": "Alongamento de Panturrilha no Degrau",
+    "category": "Alongamento",
+    "muscle_group": "Alongamentos",
+    "secondary_muscles": [
+      "Panturrilhas"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "estático",
+    "mechanics": "flexibilidade",
+    "instructions": "Segure um apoio firme, coloque antepé no degrau e abaixe o calcanhar lentamente sem rebotes. Região trabalhada: Panturrilhas.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-along-panturrilha-degrau.webp"
+  },
+  {
+    "id": "ex-along-tornozelo-dorsiflexao",
+    "name": "Alongamento de Tornozelo em Dorsiflexão Sustentada",
+    "category": "Alongamento",
+    "muscle_group": "Alongamentos",
+    "secondary_muscles": [
+      "Sóleo"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "estático",
+    "mechanics": "flexibilidade",
+    "instructions": "Em meio-ajoelhado, avance o joelho sobre o pé dianteiro mantendo o calcanhar no solo e sustente. Região trabalhada: Sóleo.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-along-tornozelo-dorsiflexao.webp"
+  },
+  {
+    "id": "ex-along-tronco-flexao",
+    "name": "Alongamento de Tronco com Joelhos ao Peito",
+    "category": "Alongamento",
+    "muscle_group": "Alongamentos",
+    "secondary_muscles": [
+      "Lombar"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "estático",
+    "mechanics": "flexibilidade",
+    "instructions": "Deitado, aproxime ambas as coxas do tronco segurando atrás dos joelhos, sem puxões. Região trabalhada: Lombar.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-along-tronco-flexao.webp"
+  },
+  {
+    "id": "ex-along-rotacao-deitado",
+    "name": "Alongamento em Rotação de Tronco Deitado",
+    "category": "Alongamento",
+    "muscle_group": "Alongamentos",
+    "secondary_muscles": [
+      "Oblíquos"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "estático",
+    "mechanics": "flexibilidade",
+    "instructions": "Deitado de costas com joelhos dobrados, leve-os suavemente para um lado mantendo os ombros apoiados. Região trabalhada: Oblíquos.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-along-rotacao-deitado.webp"
+  },
+  {
+    "id": "ex-along-global-parede",
+    "name": "Alongamento Global com Mãos na Parede",
+    "category": "Alongamento",
+    "muscle_group": "Alongamentos",
+    "secondary_muscles": [
+      "Cadeia posterior"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "estático",
+    "mechanics": "flexibilidade",
+    "instructions": "Apoie mãos na parede, dê passos para trás e incline o tronco pelo quadril mantendo joelhos destravados. Região trabalhada: Cadeia posterior.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-along-global-parede.webp"
+  },
+  {
+    "id": "ex-along-sequencia-pos-treino",
+    "name": "Sequência Global de Alongamentos Pós-Treino",
+    "category": "Alongamento",
+    "muscle_group": "Alongamentos",
+    "secondary_muscles": [
+      "Corpo inteiro"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "estático",
+    "mechanics": "flexibilidade",
+    "instructions": "Em espaço livre, passe de peitoral na parede para flexores do quadril em avanço e panturrilha na parede, ajustando cada posição. Região trabalhada: Corpo inteiro.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-along-sequencia-pos-treino.webp"
+  },
+  {
+    "id": "ex-along-balanco-perna-frontal",
+    "name": "Alongamento Dinâmico com Balanço Frontal de Perna",
+    "category": "Alongamento",
+    "muscle_group": "Alongamentos",
+    "secondary_muscles": [
+      "Posteriores de coxa"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "dinâmico",
+    "mechanics": "flexibilidade",
+    "instructions": "Em pé segurando apoio, balance uma perna à frente e atrás em amplitude progressiva sem jogar o tronco. Região trabalhada: Posteriores de coxa.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-along-balanco-perna-frontal.webp"
+  },
+  {
+    "id": "ex-along-balanco-perna-lateral",
+    "name": "Alongamento Dinâmico com Balanço Lateral de Perna",
+    "category": "Alongamento",
+    "muscle_group": "Alongamentos",
+    "secondary_muscles": [
+      "Adutores"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "dinâmico",
+    "mechanics": "flexibilidade",
+    "instructions": "Segurando apoio firme, balance uma perna lateralmente e cruze-a levemente à frente sem girar a pelve. Região trabalhada: Adutores.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-along-balanco-perna-lateral.webp"
+  },
+  {
+    "id": "ex-along-avanco-braco-alto",
+    "name": "Alongamento Dinâmico em Avanço com Braço Elevado",
+    "category": "Alongamento",
+    "muscle_group": "Alongamentos",
+    "secondary_muscles": [
+      "Flexores do quadril"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "dinâmico",
+    "mechanics": "flexibilidade",
+    "instructions": "Dê um passo em avanço, eleve o braço do lado de trás e retorne à posição inicial alternando lados. Região trabalhada: Flexores do quadril.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-along-avanco-braco-alto.webp"
+  },
+  {
+    "id": "ex-along-calcanhar-gluteo",
+    "name": "Alongamento Dinâmico de Quadríceps em Marcha",
+    "category": "Alongamento",
+    "muscle_group": "Alongamentos",
+    "secondary_muscles": [
+      "Quadríceps"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "dinâmico",
+    "mechanics": "flexibilidade",
+    "instructions": "Caminhe lentamente, dobrando alternadamente os joelhos para aproximar calcanhares dos glúteos. Região trabalhada: Quadríceps.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-along-calcanhar-gluteo.webp"
+  },
+  {
+    "id": "ex-mob-cervical-rotacoes",
+    "name": "Mobilidade Cervical em Rotações",
+    "category": "Mobilidade",
+    "muscle_group": "Mobilidade",
+    "secondary_muscles": [
+      "Pescoço"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "dinâmico",
+    "mechanics": "mobilidade",
+    "instructions": "Sentado ereto, gire a cabeça lentamente de um lado ao outro sem mover o tronco. Região trabalhada: Pescoço.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-mob-cervical-rotacoes.webp"
+  },
+  {
+    "id": "ex-mob-cervical-flexao",
+    "name": "Mobilidade Cervical em Flexão e Extensão",
+    "category": "Mobilidade",
+    "muscle_group": "Mobilidade",
+    "secondary_muscles": [
+      "Pescoço"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "dinâmico",
+    "mechanics": "mobilidade",
+    "instructions": "Sentado, olhe suavemente para baixo e retorne, depois eleve o olhar em pequena amplitude. Região trabalhada: Pescoço.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-mob-cervical-flexao.webp"
+  },
+  {
+    "id": "ex-mob-open-book",
+    "name": "Open Book (Abertura Torácica)",
+    "category": "Mobilidade",
+    "muscle_group": "Mobilidade",
+    "secondary_muscles": [
+      "Coluna torácica"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "dinâmico",
+    "mechanics": "mobilidade",
+    "instructions": "Deitado de lado com joelhos dobrados, abra o braço de cima girando o tórax, mantendo joelhos juntos. Região trabalhada: Coluna torácica.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-mob-open-book.webp"
+  },
+  {
+    "id": "ex-mob-extensao-toracica-rolo",
+    "name": "Extensão Torácica sobre Rolo",
+    "category": "Mobilidade",
+    "muscle_group": "Mobilidade",
+    "secondary_muscles": [
+      "Coluna torácica"
+    ],
+    "equipment": "Rolo",
+    "execution_type": "dinâmico",
+    "mechanics": "mobilidade",
+    "instructions": "Deitado com rolo transversal sob o tórax e mãos apoiando a cabeça, estenda suavemente a região torácica. Região trabalhada: Coluna torácica.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-mob-extensao-toracica-rolo.webp"
+  },
+  {
+    "id": "ex-mob-wall-slides",
+    "name": "Wall Slides (Deslizamento na Parede)",
+    "category": "Mobilidade",
+    "muscle_group": "Mobilidade",
+    "secondary_muscles": [
+      "Ombros"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "dinâmico",
+    "mechanics": "mobilidade",
+    "instructions": "Diante da parede com antebraços apoiados, deslize braços para cima sem elevar as costelas. Região trabalhada: Ombros.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-mob-wall-slides.webp"
+  },
+  {
+    "id": "ex-mob-shoulder-cars",
+    "name": "Shoulder CARs (Círculos Controlados de Ombro)",
+    "category": "Mobilidade",
+    "muscle_group": "Mobilidade",
+    "secondary_muscles": [
+      "Ombros"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "dinâmico",
+    "mechanics": "mobilidade",
+    "instructions": "Em pé, descreva círculo lento com um braço mantendo tronco imóvel e amplitude controlável. Região trabalhada: Ombros.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-mob-shoulder-cars.webp"
+  },
+  {
+    "id": "ex-mob-scapular-cars",
+    "name": "Círculos Controlados de Escápula",
+    "category": "Mobilidade",
+    "muscle_group": "Mobilidade",
+    "secondary_muscles": [
+      "Escápulas"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "dinâmico",
+    "mechanics": "mobilidade",
+    "instructions": "Em pé com braços relaxados, eleve, retraia, abaixe e projete as escápulas em sequência lenta. Região trabalhada: Escápulas.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-mob-scapular-cars.webp"
+  },
+  {
+    "id": "ex-mob-scapular-pushup",
+    "name": "Flexão Escapular em Quatro Apoios",
+    "category": "Mobilidade",
+    "muscle_group": "Mobilidade",
+    "secondary_muscles": [
+      "Serrátil anterior"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "dinâmico",
+    "mechanics": "mobilidade",
+    "instructions": "Em quatro apoios e cotovelos estendidos, aproxime e afaste as escápulas sem dobrar os braços. Região trabalhada: Serrátil anterior.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-mob-scapular-pushup.webp"
+  },
+  {
+    "id": "ex-mob-hip-cars",
+    "name": "Hip CARs (Círculos Controlados de Quadril)",
+    "category": "Mobilidade",
+    "muscle_group": "Mobilidade",
+    "secondary_muscles": [
+      "Quadril"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "dinâmico",
+    "mechanics": "mobilidade",
+    "instructions": "Em quatro apoios, eleve um joelho dobrado, abra lateralmente e leve para trás sem girar a pelve. Região trabalhada: Quadril.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-mob-hip-cars.webp"
+  },
+  {
+    "id": "ex-mob-quadril-rotacao-prono",
+    "name": "Rotações de Quadril em Decúbito Ventral",
+    "category": "Mobilidade",
+    "muscle_group": "Mobilidade",
+    "secondary_muscles": [
+      "Rotadores do quadril"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "dinâmico",
+    "mechanics": "mobilidade",
+    "instructions": "De bruços com joelhos a 90 graus, afaste e aproxime os pés lentamente mantendo pelve apoiada. Região trabalhada: Rotadores do quadril.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-mob-quadril-rotacao-prono.webp"
+  },
+  {
+    "id": "ex-mob-adutor-rockback",
+    "name": "Mobilidade de Adutores em Rock Back",
+    "category": "Mobilidade",
+    "muscle_group": "Mobilidade",
+    "secondary_muscles": [
+      "Adutores"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "dinâmico",
+    "mechanics": "mobilidade",
+    "instructions": "Em quatro apoios, estenda uma perna lateralmente e leve quadril para trás, retornando em movimento lento. Região trabalhada: Adutores.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-mob-adutor-rockback.webp"
+  },
+  {
+    "id": "ex-mob-cossack-mobilidade",
+    "name": "Cossack Squat de Mobilidade com Apoio",
+    "category": "Mobilidade",
+    "muscle_group": "Mobilidade",
+    "secondary_muscles": [
+      "Quadril"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "dinâmico",
+    "mechanics": "mobilidade",
+    "instructions": "Com base ampla e apoio firme, transfira peso lateralmente flexionando um joelho e mantendo o outro alongado. Região trabalhada: Quadril.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-mob-cossack-mobilidade.webp"
+  },
+  {
+    "id": "ex-mob-deep-squat-hold",
+    "name": "Deep Squat Hold com Apoio",
+    "category": "Mobilidade",
+    "muscle_group": "Mobilidade",
+    "secondary_muscles": [
+      "Quadril"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "dinâmico",
+    "mechanics": "mobilidade",
+    "instructions": "Segure apoio firme e desça em agachamento confortável, sustentando com pés apoiados e respiração contínua. Região trabalhada: Quadril.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-mob-deep-squat-hold.webp"
+  },
+  {
+    "id": "ex-mob-worlds-greatest",
+    "name": "World's Greatest Stretch",
+    "category": "Mobilidade",
+    "muscle_group": "Mobilidade",
+    "secondary_muscles": [
+      "Corpo inteiro"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "dinâmico",
+    "mechanics": "mobilidade",
+    "instructions": "Em avanço com mãos no chão, gire um braço para o teto, retorne e estenda suavemente a perna da frente. Região trabalhada: Corpo inteiro.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-mob-worlds-greatest.webp"
+  },
+  {
+    "id": "ex-mob-hip-flexor-mobilization",
+    "name": "Mobilização de Flexores do Quadril",
+    "category": "Mobilidade",
+    "muscle_group": "Mobilidade",
+    "secondary_muscles": [
+      "Flexores do quadril"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "dinâmico",
+    "mechanics": "mobilidade",
+    "instructions": "Em meio-ajoelhado com pelve neutra, avance e recue lentamente o corpo mantendo calcanhar dianteiro apoiado. Região trabalhada: Flexores do quadril.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-mob-hip-flexor-mobilization.webp"
+  },
+  {
+    "id": "ex-mob-tornozelo-circulos",
+    "name": "Círculos de Tornozelo",
+    "category": "Mobilidade",
+    "muscle_group": "Mobilidade",
+    "secondary_muscles": [
+      "Tornozelo"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "dinâmico",
+    "mechanics": "mobilidade",
+    "instructions": "Sentado com um pé suspenso, descreva círculos lentos com o tornozelo nos dois sentidos. Região trabalhada: Tornozelo.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-mob-tornozelo-circulos.webp"
+  },
+  {
+    "id": "ex-mob-joelho-flexao-deslizante",
+    "name": "Flexão e Extensão de Joelho com Deslizamento",
+    "category": "Mobilidade",
+    "muscle_group": "Mobilidade",
+    "secondary_muscles": [
+      "Joelho"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "dinâmico",
+    "mechanics": "mobilidade",
+    "instructions": "Sentado ou deitado, deslize o calcanhar aproximando-o do corpo e estenda a perna sem forçar. Região trabalhada: Joelho.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-mob-joelho-flexao-deslizante.webp"
+  },
+  {
+    "id": "ex-mob-cadeia-posterior-dinamica",
+    "name": "Dobradiça de Quadril Dinâmica sem Carga",
+    "category": "Mobilidade",
+    "muscle_group": "Mobilidade",
+    "secondary_muscles": [
+      "Cadeia posterior"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "dinâmico",
+    "mechanics": "mobilidade",
+    "instructions": "Em pé com joelhos destravados, incline pelo quadril e retorne sem arredondar deliberadamente a lombar. Região trabalhada: Cadeia posterior.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-mob-cadeia-posterior-dinamica.webp"
+  },
+  {
+    "id": "ex-mob-punho-quatro-apoios",
+    "name": "Mobilidade de Punhos em Quatro Apoios",
+    "category": "Mobilidade",
+    "muscle_group": "Mobilidade",
+    "secondary_muscles": [
+      "Punhos"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "dinâmico",
+    "mechanics": "mobilidade",
+    "instructions": "Apoie mãos no solo com dedos à frente e transfira suavemente peso para frente e para trás. Região trabalhada: Punhos.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-mob-punho-quatro-apoios.webp"
+  },
+  {
+    "id": "ex-mob-transicao-ajoelhado-agachamento",
+    "name": "Transição de Meio-Ajoelhado para Agachamento",
+    "category": "Mobilidade",
+    "muscle_group": "Mobilidade",
+    "secondary_muscles": [
+      "Corpo inteiro"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "dinâmico",
+    "mechanics": "mobilidade",
+    "instructions": "Com apoio firme à frente, passe do meio-ajoelhado para agachamento e retorne alternando lados. Região trabalhada: Corpo inteiro.",
+    "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
+    "photo_url": "/exercise-fallbacks/ex-mob-transicao-ajoelhado-agachamento.webp"
+  },
+  {
+    "id": "ex-caminhada-livre",
+    "name": "Caminhada em Solo",
+    "category": "Cardiorrespiratório",
+    "muscle_group": "Cardiorrespiratórios",
+    "secondary_muscles": [
+      "Glúteos",
+      "Panturrilhas"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "bilateral",
+    "mechanics": "peso corporal",
+    "instructions": "Caminhe em superfície regular com passos confortáveis e ritmo definido pelo profissional.",
+    "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições.",
+    "photo_url": "/exercise-fallbacks/ex-caminhada-livre.webp"
+  },
+  {
+    "id": "ex-air-bike",
+    "name": "Bicicleta de Ar (Air Bike)",
+    "category": "Cardiorrespiratório",
+    "muscle_group": "Cardiorrespiratórios",
+    "secondary_muscles": [
+      "Quadríceps",
+      "Ombros"
+    ],
+    "equipment": "Máquina",
+    "execution_type": "bilateral",
+    "mechanics": "máquina",
+    "instructions": "Ajuste o selim e movimente pedais e alças em ritmo coordenado.",
+    "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições.",
+    "photo_url": "/exercise-fallbacks/ex-air-bike.webp"
+  },
+  {
+    "id": "ex-marcha-estacionaria",
+    "name": "Marcha Estacionária",
+    "category": "Cardiorrespiratório",
+    "muscle_group": "Cardiorrespiratórios",
+    "secondary_muscles": [
+      "Quadríceps",
+      "Flexores do quadril"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "bilateral",
+    "mechanics": "peso corporal",
+    "instructions": "Em pé, alterne elevação dos joelhos e movimento dos braços mantendo base estável.",
+    "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições.",
+    "photo_url": "/exercise-fallbacks/ex-marcha-estacionaria.webp"
+  },
+  {
+    "id": "ex-step-jack",
+    "name": "Polichinelo sem Salto (Step Jack)",
+    "category": "Cardiorrespiratório",
+    "muscle_group": "Cardiorrespiratórios",
+    "secondary_muscles": [
+      "Glúteos",
+      "Ombros"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "bilateral",
+    "mechanics": "peso corporal",
+    "instructions": "Dê um passo lateral enquanto eleva os braços; retorne e alterne o lado.",
+    "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições.",
+    "photo_url": "/exercise-fallbacks/ex-step-jack.webp"
+  },
+  {
+    "id": "ex-sled-push",
+    "name": "Empurrada de Trenó",
+    "category": "Funcional",
+    "muscle_group": "Corpo inteiro",
+    "secondary_muscles": [
+      "Quadríceps",
+      "Glúteos",
+      "Panturrilhas"
+    ],
+    "equipment": "Trenó",
+    "execution_type": "bilateral",
+    "mechanics": "resistido",
+    "instructions": "Apoie mãos nas barras do trenó e avance com passos curtos mantendo tronco alinhado.",
+    "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições.",
+    "photo_url": "/exercise-fallbacks/ex-sled-push.webp"
+  },
+  {
+    "id": "ex-aquecimento-marcha-bracos",
+    "name": "Aquecimento com Marcha e Círculos de Braços",
+    "category": "Aquecimento",
+    "muscle_group": "Corpo inteiro",
+    "secondary_muscles": [
+      "Ombros",
+      "Quadríceps"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "bilateral",
+    "mechanics": "peso corporal",
+    "instructions": "Marche no lugar e faça círculos pequenos e progressivos com os braços.",
+    "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições.",
+    "photo_url": "/exercise-fallbacks/ex-aquecimento-marcha-bracos.webp"
+  },
+  {
+    "id": "ex-aquecimento-agachamento-alcance",
+    "name": "Aquecimento com Agachamento e Alcance",
+    "category": "Aquecimento",
+    "muscle_group": "Corpo inteiro",
+    "secondary_muscles": [
+      "Quadríceps",
+      "Ombros"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "bilateral",
+    "mechanics": "peso corporal",
+    "instructions": "Faça agachamento sem carga e, ao levantar, alcance as mãos acima da cabeça sem arquear a lombar.",
+    "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições.",
+    "photo_url": "/exercise-fallbacks/ex-aquecimento-agachamento-alcance.webp"
+  },
+  {
+    "id": "ex-aquecimento-step-toque",
+    "name": "Aquecimento com Passo Lateral e Toque",
+    "category": "Aquecimento",
+    "muscle_group": "Corpo inteiro",
+    "secondary_muscles": [
+      "Glúteos",
+      "Panturrilhas"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "bilateral",
+    "mechanics": "peso corporal",
+    "instructions": "Dê passos laterais alternados aproximando o pé de trás e movendo os braços em ritmo leve.",
+    "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições.",
+    "photo_url": "/exercise-fallbacks/ex-aquecimento-step-toque.webp"
+  },
+  {
+    "id": "ex-spanish-squat",
+    "name": "Agachamento Espanhol (Spanish Squat)",
+    "category": "Musculação",
+    "muscle_group": "Quadríceps",
+    "secondary_muscles": [
+      "Glúteos",
+      "Tendão Patelar"
+    ],
+    "equipment": "Elástico",
+    "execution_type": "bilateral",
+    "mechanics": "peso corporal",
+    "instructions": "Prenda uma faixa elástica pesada em suporte firme e posicione-a atrás dos joelhos. Afaste-se mantendo a fita tensionada, mantenha o tronco ereto e agache empurrando os joelhos firmemente contra o elástico, sustentando a postura vertical.",
+    "technical_notes": "Permite agachamento com tíbias quase verticais, altamente recomendado em protocolos de reabilitação e hipertrofia com sobrecarga articular reduzida.",
+    "photo_url": "/exercise-fallbacks/ex-spanish-squat.webp"
+  },
+  {
+    "id": "ex-hip-thrust-smith",
+    "name": "Elevação Pélvica no Smith (Hip Thrust)",
+    "category": "Musculação",
+    "muscle_group": "Glúteos",
+    "secondary_muscles": [
+      "Posteriores de coxa",
+      "Lombar"
+    ],
+    "equipment": "Smith",
+    "execution_type": "bilateral",
+    "mechanics": "máquina",
+    "instructions": "Apoie a parte superior das costas em um banco firme e posicione a barra acolchoada do Smith sobre a prega do quadril. Com os pés firmes no solo na largura dos ombros, destrave a barra e estenda o quadril até contrair os glúteos ao máximo no topo.",
+    "technical_notes": "Oferece alta estabilidade para progressão de carga com facilidade de travamento e segurança.",
+    "photo_url": "/exercise-fallbacks/ex-hip-thrust-smith.webp"
+  },
+  {
+    "id": "ex-frog-pump",
+    "name": "Elevação de Quadril em Posição de Sapo (Frog Pump)",
+    "category": "Musculação",
+    "muscle_group": "Glúteos",
+    "secondary_muscles": [
+      "Lombar"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "bilateral",
+    "mechanics": "peso corporal",
+    "instructions": "Deitado no solo de costas, una a sola dos pés como na posição de borboleta deixando os joelhos caírem lateralmente. Eleve a pelve contraindo os glúteos no ponto mais alto e retorne sem relaxar a tensão muscular.",
+    "technical_notes": "A rotação externa e abdução aumentam o recrutamento do glúteo máximo e médio com mínima exigência dos isquiotibiais.",
+    "photo_url": "/exercise-fallbacks/ex-frog-pump.webp"
+  },
+  {
+    "id": "ex-tibial-anterior-maquina",
+    "name": "Tibial Anterior na Máquina",
+    "category": "Musculação",
+    "muscle_group": "Panturrilhas",
+    "secondary_muscles": [
+      "Tibial Anterior",
+      "Extensor Longo dos Dedos"
+    ],
+    "equipment": "Máquina",
+    "execution_type": "bilateral",
+    "mechanics": "máquina",
+    "instructions": "Sentado com as pernas estendidas e os calcanhares apoiados, posicione o peito do pé sob as almofadas de resistência. Puxe os dedos e o antepé em direção às canelas (dorsiflexão) e retorne controladamente.",
+    "technical_notes": "Fortalecimento crucial para equilíbrio muscular da perna, desaceleração na corrida e prevenção de canelite.",
+    "photo_url": "/exercise-fallbacks/ex-tibial-anterior-maquina.webp"
+  },
+  {
+    "id": "ex-elevacao-ponta-pe-tibial",
+    "name": "Elevação de Ponta do Pé (Dorsiflexão na Parede)",
+    "category": "Musculação",
+    "muscle_group": "Panturrilhas",
+    "secondary_muscles": [
+      "Tibial Anterior"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "bilateral",
+    "mechanics": "peso corporal",
+    "instructions": "Apoie as costas em uma parede com as pernas estendidas e pés posicionados à frente. Sem retirar os calcanhares do solo, eleve as pontas dos pés o mais alto possível e desça sem encostar completamente os dedos no chão.",
+    "technical_notes": "Exercício acessível sem carga externa para prevenção de canelite e fortalecimento do compartimento anterior.",
+    "photo_url": "/exercise-fallbacks/ex-elevacao-ponta-pe-tibial.webp"
+  },
+  {
+    "id": "ex-prancha-elevacao-perna",
+    "name": "Prancha Frontal com Elevação Alternada de Perna",
+    "category": "Funcional",
+    "muscle_group": "Abdômen/Core",
+    "secondary_muscles": [
+      "Glúteos",
+      "Lombar",
+      "Ombros"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "unilateral",
+    "mechanics": "estabilizacao",
+    "instructions": "Em posição de prancha com antebraços apoiados e corpo alinhado, eleve suavemente uma perna sem rotacionar o quadril nem arquear a lombar. Mantenha por 2 segundos, abaixe e alterne o lado.",
+    "technical_notes": "Desafio anti-extensão e anti-rotação com redução de apoio para 3 pontos mantendo a pelve neutra.",
+    "photo_url": "/exercise-fallbacks/ex-prancha-elevacao-perna.webp"
+  },
+  {
+    "id": "ex-pallof-press-ajoelhado",
+    "name": "Pallof Press Ajoelhado na Polia",
+    "category": "Funcional",
+    "muscle_group": "Abdômen/Core",
+    "secondary_muscles": [
+      "Oblíquos",
+      "Glúteos"
+    ],
+    "equipment": "Cabo / Polia",
+    "execution_type": "bilateral",
+    "mechanics": "estabilizacao",
+    "instructions": "Ajoelhado em posição de meio-ajoelhado ou ajoelhado com ambos os joelhos lateralmente à polia, segure a manopla no centro do peito. Estenda os braços para frente resistindo ao torque rotacional do cabo.",
+    "technical_notes": "A posição ajoelhada elimina compensações do quadril e tornozelos, exigindo foco estrito do core profundo.",
+    "photo_url": "/exercise-fallbacks/ex-pallof-press-ajoelhado.webp"
+  },
+  {
+    "id": "ex-woodchop-reverso-cabo",
+    "name": "Rotação Diagonal Inversa no Cabo (Woodchop Reverso)",
+    "category": "Funcional",
+    "muscle_group": "Abdômen/Core",
+    "secondary_muscles": [
+      "Oblíquos",
+      "Ombros",
+      "Glúteos"
+    ],
+    "equipment": "Cabo / Polia",
+    "execution_type": "unilateral",
+    "mechanics": "cabo/polia",
+    "instructions": "Com a polia regulada no ponto mais baixo, fique de lado e segure a manopla com ambas as mãos. Inicie com leve flexão de quadril e gire o tronco em diagonal ascendente até acima do ombro oposto.",
+    "technical_notes": "Desenvolve transferência de potência rotacional da pelve para o tronco em cadeia cinética fechada.",
+    "photo_url": "/exercise-fallbacks/ex-woodchop-reverso-cabo.webp"
+  },
+  {
+    "id": "ex-kettlebell-deadlift",
+    "name": "Levantamento Terra com Kettlebell",
+    "category": "Funcional",
+    "muscle_group": "Posteriores de coxa",
+    "secondary_muscles": [
+      "Glúteos",
+      "Lombar",
+      "Trapézio"
+    ],
+    "equipment": "Kettlebell",
+    "execution_type": "bilateral",
+    "mechanics": "peso livre",
+    "instructions": "Posicione o kettlebell entre os pés. Faça a dobradiça de quadril mantendo as costas neutras e peito aberto, segure a alça firme e suba estendendo quadril e joelhos de forma sincronizada.",
+    "technical_notes": "Ótima base de aprendizagem da dobradiça de quadril para posterior transição à barra.",
+    "photo_url": "/exercise-fallbacks/ex-kettlebell-deadlift.webp"
+  },
+  {
+    "id": "ex-kettlebell-reverse-lunge",
+    "name": "Avanço Reverso com Kettlebell",
+    "category": "Funcional",
+    "muscle_group": "Quadríceps",
+    "secondary_muscles": [
+      "Glúteos",
+      "Posteriores de coxa"
+    ],
+    "equipment": "Kettlebell",
+    "execution_type": "unilateral",
+    "mechanics": "peso livre",
+    "instructions": "Segurando kettlebells ao lado do corpo ou em posição de rack, dê um passo largo para trás e desça o joelho até quase tocar o chão. Empurre com a perna da frente para retornar à posição inicial.",
+    "technical_notes": "Maior preservação da integridade patelofemoral em relação ao avanço frontal tradicional.",
+    "photo_url": "/exercise-fallbacks/ex-kettlebell-reverse-lunge.webp"
+  },
+  {
+    "id": "ex-mb-rotational-throw",
+    "name": "Arremesso Rotacional com Medicine Ball",
+    "category": "Funcional",
+    "muscle_group": "Abdômen/Core",
+    "secondary_muscles": [
+      "Oblíquos",
+      "Glúteos",
+      "Ombros"
+    ],
+    "equipment": "Medicine Ball",
+    "execution_type": "unilateral",
+    "mechanics": "peso livre",
+    "instructions": "De lado para uma parede resistente, segure a medicine ball com as duas mãos junto ao quadril posterior. Gire o quadril e tronco acelerando a bola contra a parede em movimento contínuo de arremesso.",
+    "technical_notes": "Desenvolvimento essencial de potência rotacional transferida do solo através da pelve.",
+    "photo_url": "/exercise-fallbacks/ex-mb-rotational-throw.webp"
+  },
+  {
+    "id": "ex-trx-row",
+    "name": "Remada Invertida no TRX (Fita de Suspensão)",
+    "category": "Funcional",
+    "muscle_group": "Costas",
+    "secondary_muscles": [
+      "Bíceps",
+      "Romboides",
+      "Core"
+    ],
+    "equipment": "Fita de Suspensão",
+    "execution_type": "bilateral",
+    "mechanics": "peso corporal",
+    "instructions": "Segure as manoplas do TRX com os braços estendidos e corpo inclinado para trás formando uma prancha reta. Puxe o peito em direção às manoplas aduzindo as escápulas e desça de forma controlada.",
+    "technical_notes": "Ajuste a intensidade dando passos para frente (mais fácil) ou para trás (mais desafiador).",
+    "photo_url": "/exercise-fallbacks/ex-trx-row.webp"
+  },
+  {
+    "id": "ex-trx-chest-press",
+    "name": "Flexão / Press de Peito no TRX",
+    "category": "Funcional",
+    "muscle_group": "Peitoral",
+    "secondary_muscles": [
+      "Tríceps",
+      "Ombros",
+      "Abdômen/Core"
+    ],
+    "equipment": "Fita de Suspensão",
+    "execution_type": "bilateral",
+    "mechanics": "peso corporal",
+    "instructions": "De costas para o ponto de ancoragem, segure as manoplas com braços estendidos e corpo inclinado para frente. Flexione os cotovelos descendo o tronco e empurre estendendo os braços com estabilidade.",
+    "technical_notes": "Exige forte coativação do core para evitar hiperextensão lombar durante o movimento.",
+    "photo_url": "/exercise-fallbacks/ex-trx-chest-press.webp"
+  },
+  {
+    "id": "ex-trx-squat",
+    "name": "Agachamento Assistido no TRX",
+    "category": "Funcional",
+    "muscle_group": "Quadríceps",
+    "secondary_muscles": [
+      "Glúteos",
+      "Posteriores de coxa"
+    ],
+    "equipment": "Fita de Suspensão",
+    "execution_type": "bilateral",
+    "mechanics": "peso corporal",
+    "instructions": "Segure levemente as manoplas do TRX à frente do peito. Agache com amplitude completa mantendo os calcanhares no solo e suba com auxílio suave das mãos quando necessário.",
+    "technical_notes": "Excelente para idosos, iniciantes e reabilitação articular de quadril e joelho.",
+    "photo_url": "/exercise-fallbacks/ex-trx-squat.webp"
+  },
+  {
+    "id": "ex-trx-lunge",
+    "name": "Avanço com Fita de Suspensão (TRX Lunge)",
+    "category": "Funcional",
+    "muscle_group": "Quadríceps",
+    "secondary_muscles": [
+      "Glúteos",
+      "Posteriores de coxa"
+    ],
+    "equipment": "Fita de Suspensão",
+    "execution_type": "unilateral",
+    "mechanics": "peso corporal",
+    "instructions": "Com um dos pés preso no estribo do TRX e o outro apoiado à frente, flexione o joelho dianteiro descendo em afundo profundo e estável. Retorne estendendo a perna frontal.",
+    "technical_notes": "Aumenta a instabilidade e recrutamento dos estabilizadores do quadril e tornozelo.",
+    "photo_url": "/exercise-fallbacks/ex-trx-lunge.webp"
+  },
+  {
+    "id": "ex-trx-hamstring-curl",
+    "name": "Flexão de Isquiotibiais no TRX",
+    "category": "Funcional",
+    "muscle_group": "Posteriores de coxa",
+    "secondary_muscles": [
+      "Glúteos",
+      "Core"
+    ],
+    "equipment": "Fita de Suspensão",
+    "execution_type": "bilateral",
+    "mechanics": "peso corporal",
+    "instructions": "Deitado de costas no solo com os calcanhares nos estribos do TRX, eleve o quadril do chão e puxe os calcanhares em direção aos glúteos flexionando os joelhos. Retorne controladamente.",
+    "technical_notes": "Trabalho simultâneo de flexão de joelho e extensão de quadril de alta ativação dos isquiotibiais.",
+    "photo_url": "/exercise-fallbacks/ex-trx-hamstring-curl.webp"
+  },
+  {
+    "id": "ex-pike-push-up",
+    "name": "Flexão em Pique (Pike Push-up)",
+    "category": "Musculação",
+    "muscle_group": "Ombros",
+    "secondary_muscles": [
+      "Tríceps",
+      "Trapézio",
+      "Core"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "bilateral",
+    "mechanics": "peso corporal",
+    "instructions": "Fique na posição de V invertido com as mãos no chão e o quadril elevado apontando para o teto. Desça a cabeça diagonalmente à frente das mãos e empurre o solo retornando à postura em V.",
+    "technical_notes": "Simula o padrão de desenvolvimento vertical utilizando o peso corporal.",
+    "photo_url": "/exercise-fallbacks/ex-pike-push-up.webp"
+  },
+  {
+    "id": "ex-crab-walk",
+    "name": "Caminhada de Caranguejo (Crab Walk)",
+    "category": "Funcional",
+    "muscle_group": "Corpo inteiro",
+    "secondary_muscles": [
+      "Tríceps",
+      "Glúteos",
+      "Ombros",
+      "Core"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "dinâmico",
+    "mechanics": "peso corporal",
+    "instructions": "Sentado no chão, apoie as mãos para trás e os pés à frente, elevando o quadril do solo. Desloque-se para frente e para trás movimentando braço e perna opostos com controle.",
+    "technical_notes": "Excelente trabalho de extensão e mobilidade torácica, ombros posteriores e estabilização de glúteos.",
+    "photo_url": "/exercise-fallbacks/ex-crab-walk.webp"
+  },
+  {
+    "id": "ex-joelho-alto",
+    "name": "Corrida com Joelhos Altos (High Knees)",
+    "category": "Cardiorrespiratório",
+    "muscle_group": "Cardiorrespiratórios",
+    "secondary_muscles": [
+      "Flexores de quadril",
+      "Panturrilhas",
+      "Core"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "dinâmico",
+    "mechanics": "peso corporal",
+    "instructions": "Corra no lugar elevando alternadamente os joelhos até a altura do quadril em ritmo acelerado, mantendo o abdômen contraído e postura ereta.",
+    "technical_notes": "Eleva rapidamente a frequência cardíaca com forte exigência do iliopsoas e reto femoral.",
+    "photo_url": "/exercise-fallbacks/ex-joelho-alto.webp"
+  },
+  {
+    "id": "ex-box-jump",
+    "name": "Salto na Caixa (Box Jump)",
+    "category": "Cardiorrespiratório",
+    "muscle_group": "Quadríceps",
+    "secondary_muscles": [
+      "Glúteos",
+      "Panturrilhas"
+    ],
+    "equipment": "Caixa / Step",
+    "execution_type": "bilateral",
+    "mechanics": "peso corporal",
+    "instructions": "Em frente a uma caixa estável, balance os braços, flexione quadril e joelhos e salte verticalmente aterrissando com ambos os pés firmes sobre a superfície. Fique de pé e desça um pé por vez.",
+    "technical_notes": "Priorize amortecimento suave na aterrissagem em vez de aterrissar com impacto ruidoso.",
+    "photo_url": "/exercise-fallbacks/ex-box-jump.webp"
+  },
+  {
+    "id": "ex-salto-vertical",
+    "name": "Salto Vertical Máximo",
+    "category": "Cardiorrespiratório",
+    "muscle_group": "Quadríceps",
+    "secondary_muscles": [
+      "Glúteos",
+      "Panturrilhas"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "bilateral",
+    "mechanics": "peso corporal",
+    "instructions": "Inicie em pé com pés afastados, faça um rápido contra-movimento flexionando joelhos e quadril enquanto balança os braços para trás e salte verticalmente o mais alto possível.",
+    "technical_notes": "Treina o ciclo alongamento-encurtamento (CAE) e potência pura dos membros inferiores.",
+    "photo_url": "/exercise-fallbacks/ex-salto-vertical.webp"
+  },
+  {
+    "id": "ex-salto-horizontal",
+    "name": "Salto Horizontal em Distância (Broad Jump)",
+    "category": "Cardiorrespiratório",
+    "muscle_group": "Glúteos",
+    "secondary_muscles": [
+      "Quadríceps",
+      "Posteriores de coxa",
+      "Panturrilhas"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "bilateral",
+    "mechanics": "peso corporal",
+    "instructions": "Partindo de pés paralelos, projete o corpo para frente e para cima em salto horizontal estendendo agressivamente o quadril. Aterrisse suavemente com ambos os pés absorvendo a inércia.",
+    "technical_notes": "Foco na extensão tripla simultânea (tornozelo, joelho e quadril) no plano sagital.",
+    "photo_url": "/exercise-fallbacks/ex-salto-horizontal.webp"
+  },
+  {
+    "id": "ex-salto-lateral",
+    "name": "Salto Lateral com Pés Unidos",
+    "category": "Cardiorrespiratório",
+    "muscle_group": "Cardiorrespiratórios",
+    "secondary_muscles": [
+      "Panturrilhas",
+      "Abdutores",
+      "Quadríceps"
+    ],
+    "equipment": "Peso Corporal",
+    "execution_type": "bilateral",
+    "mechanics": "peso corporal",
+    "instructions": "Com os pés juntos, salte continuamente de um lado para o outro sobre uma linha imaginária no solo, mantendo cadência rápida e impacto mínimo.",
+    "technical_notes": "Melhora a agilidade e reatividade neuromuscular nos planos transversal e frontal.",
+    "photo_url": "/exercise-fallbacks/ex-salto-lateral.webp"
+  },
+  {
+    "id": "ex-stair-climber",
+    "name": "Simulador de Escada (Stair Climber)",
+    "category": "Cardiorrespiratório",
+    "muscle_group": "Cardiorrespiratórios",
+    "secondary_muscles": [
+      "Glúteos",
+      "Quadríceps",
+      "Panturrilhas"
+    ],
+    "equipment": "Máquina",
+    "execution_type": "dinâmico",
+    "mechanics": "máquina",
+    "instructions": "Suba os degraus contínuos da máquina mantendo o tronco ereto e o pé inteiro apoiado em cada degrau, sem debruçar excessivamente o peso sobre os corrimões.",
+    "technical_notes": "Treino cardiovascular de alta queima energética com excelente estímulo para glúteos e coxas.",
+    "photo_url": "/exercise-fallbacks/ex-stair-climber.webp"
+  },
+  {
+    "id": "ex-ytw-elastico",
+    "name": "Complexo Y-T-W com Elástico para Ombros",
+    "category": "Mobilidade",
+    "muscle_group": "Mobilidade",
+    "secondary_muscles": [
+      "Trapézio Médio/Inferior",
+      "Manguito Rotador",
+      "Deltoide Posterior"
+    ],
+    "equipment": "Elástico",
+    "execution_type": "bilateral",
+    "mechanics": "mobilidade",
+    "instructions": "Com uma miniband nas mãos ou elástico ancorado, realize elevações em padrão Y (diagonal alta), T (abertura horizontal) e W (cotovelos flexionados e rotação externa) ativando a musculatura escapular.",
+    "technical_notes": "Exercício de excelência para saúde postural, estabilidade do manguito rotador e prevenção de impacto subacromial.",
+    "photo_url": "/exercise-fallbacks/ex-ytw-elastico.webp"
+  }
+]

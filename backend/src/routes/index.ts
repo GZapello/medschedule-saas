@@ -1,3 +1,7 @@
+import { requireSharedPatientScope } from '../middlewares/shared-patient.middleware';
+import { SharedHistoryController } from '../controllers/shared-history.controller';
+import { PatientSharingController } from '../controllers/patient-sharing.controller';
+import { MembershipController } from '../controllers/membership.controller';
 import { mountConsentRoutes, mountPublicConsentRoutes } from './consents.routes';
 import { SystemIntegrityController } from '../controllers/system-integrity.controller';
 import { PersonalPostureAIController } from '../controllers/personal-posture-ai.controller';
@@ -180,6 +184,16 @@ api.use(tenantMiddleware);
 
 // Perfil autenticado & Aceite Legal (Acesso pessoal para qualquer usuário do sistema)
 api.get('/v1/auth/me', AuthController.me);
+api.get('/v1/auth/memberships', MembershipController.list);
+api.post('/v1/auth/active-clinic', MembershipController.remember);
+api.get('/v1/auth/invites/:token', AuthController.validateInvite);
+api.post('/v1/auth/invites/:token/accept', MembershipController.accept);
+api.get('/v1/patient-sharing/sources', PatientSharingController.sources);
+api.get('/v1/patient-sharing/sources/:sourceId/patients', PatientSharingController.patients);
+api.get('/v1/patient-sharing', PatientSharingController.list);
+api.post('/v1/patient-sharing', PatientSharingController.create);
+api.post('/v1/patient-sharing/:id/revoke', PatientSharingController.revoke);
+
 api.post('/v1/auth/accept-legal', AuthController.acceptLegal);
 api.put('/v1/auth/profile/password', AuthController.updateProfilePassword);
 api.put('/v1/auth/profile/email', AuthController.updateProfileEmail);
@@ -233,16 +247,16 @@ api.get('/v1/receipts/:id', requireTenant, ReceiptController.getById);
 api.post('/v1/receipts', requireTenant, requireRole('clinic_admin', 'receptionist'), ReceiptController.create);
 
 // Gestão de Funcionários e Equipe da Clínica
-api.get('/v1/staff', requireTenant, StaffController.listStaff);
-api.post('/v1/staff/invite', requireTenant, requireRole('clinic_admin'), StaffController.invite);
-api.get('/v1/staff/invites', requireTenant, requireRole('clinic_admin'), StaffController.listInvites);
-api.post('/v1/staff/invites', requireTenant, requireRole('clinic_admin'), StaffController.createInvite);
-api.delete('/v1/staff/invites/:id', requireTenant, requireRole('clinic_admin'), StaffController.cancelInvite);
-api.put('/v1/staff/:id/approve', requireTenant, requireRole('clinic_admin'), StaffController.approve);
-api.put('/v1/staff/:id/reject', requireTenant, requireRole('clinic_admin'), StaffController.reject);
-api.put('/v1/staff/:id/permissions', requireTenant, requireRole('clinic_admin'), StaffController.updatePermissions);
-api.put('/v1/staff/:id/toggle-status', requireTenant, requireRole('clinic_admin'), StaffController.toggleStatus);
-api.put('/v1/staff/:id/role-profession', requireTenant, requireRole('clinic_admin'), StaffController.updateRoleProfession);
+api.get('/v1/staff', requireTenant, requirePermissionOrRole('manage_staff', 'clinic_admin'), StaffController.listStaff);
+api.post('/v1/staff/invite', requireTenant, requirePermissionOrRole('manage_staff', 'clinic_admin'), StaffController.invite);
+api.get('/v1/staff/invites', requireTenant, requirePermissionOrRole('manage_staff', 'clinic_admin'), StaffController.listInvites);
+api.post('/v1/staff/invites', requireTenant, requirePermissionOrRole('manage_staff', 'clinic_admin'), StaffController.createInvite);
+api.delete('/v1/staff/invites/:id', requireTenant, requirePermissionOrRole('manage_staff', 'clinic_admin'), StaffController.cancelInvite);
+api.put('/v1/staff/:id/approve', requireTenant, requirePermissionOrRole('manage_staff', 'clinic_admin'), StaffController.approve);
+api.put('/v1/staff/:id/reject', requireTenant, requirePermissionOrRole('manage_staff', 'clinic_admin'), StaffController.reject);
+api.put('/v1/staff/:id/permissions', requireTenant, requirePermissionOrRole('manage_staff', 'clinic_admin'), StaffController.updatePermissions);
+api.put('/v1/staff/:id/toggle-status', requireTenant, requirePermissionOrRole('manage_staff', 'clinic_admin'), StaffController.toggleStatus);
+api.put('/v1/staff/:id/role-profession', requireTenant, requirePermissionOrRole('manage_staff', 'clinic_admin'), StaffController.updateRoleProfession);
 
 // Onboarding Obrigatório pós-cadastro
 api.get('/v1/onboarding/current-state', OnboardingController.getCurrentState);
@@ -310,6 +324,8 @@ api.get('/v1/whatsapp/status', requireTenant, InfobipController.getClientStatus)
 api.get('/v1/slots/available', requireTenant, SlotController.getAvailableSlots);
 
 // Prontuário & Evolução Clínica (Restrito estritamente a Profissionais e Admins Clínicos - LGPD)
+api.get('/v1/shared-history/patient/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SharedHistoryController.list);
+api.get('/v1/shared-history/files/:id', requireTenant, requireRole('clinic_admin', 'professional'), SharedHistoryController.file);
 api.get('/v1/clinical-records/patient/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalController.listByPatient);
 api.get('/v1/clinical-records/:id', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalController.getById);
 api.get('/v1/clinical-records/:id/print', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalController.exportPdfHtml);
@@ -333,195 +349,195 @@ api.delete('/v1/clinical/goals/:id', requireTenant, requireRole('clinic_admin', 
 // ==========================================
 // 8.1 ZEMDAFISIO: PRONTUÁRIO & EVOLUÇÃO FISIOTERAPÊUTICA
 // ==========================================
-api.get('/v1/physiotherapy/assessments/patient/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PhysiotherapyController.listAssessmentsByPatient);
-api.get('/v1/physiotherapy/assessments/:id', requireTenant, requireRole('clinic_admin', 'professional'), PhysiotherapyController.getAssessmentById);
-api.post('/v1/physiotherapy/assessments', requireTenant, requireRole('clinic_admin', 'professional'), PhysiotherapyController.createAssessment);
-api.put('/v1/physiotherapy/assessments/:id', requireTenant, requireRole('clinic_admin', 'professional'), PhysiotherapyController.updateAssessment);
+api.get('/v1/physiotherapy/assessments/patient/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFisio'), PhysiotherapyController.listAssessmentsByPatient);
+api.get('/v1/physiotherapy/assessments/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFisio'), PhysiotherapyController.getAssessmentById);
+api.post('/v1/physiotherapy/assessments', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFisio'), PhysiotherapyController.createAssessment);
+api.put('/v1/physiotherapy/assessments/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFisio'), PhysiotherapyController.updateAssessment);
 
-api.get('/v1/physiotherapy/evolutions/patient/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PhysiotherapyController.listEvolutionsByPatient);
-api.post('/v1/physiotherapy/evolutions', requireTenant, requireRole('clinic_admin', 'professional'), PhysiotherapyController.createEvolution);
-api.put('/v1/physiotherapy/evolutions/:id', requireTenant, requireRole('clinic_admin', 'professional'), PhysiotherapyController.updateEvolution);
-api.post('/v1/physiotherapy/consultations/finish', requireTenant, requireRole('clinic_admin', 'professional'), PhysiotherapyController.finishConsultation);
+api.get('/v1/physiotherapy/evolutions/patient/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFisio'), PhysiotherapyController.listEvolutionsByPatient);
+api.post('/v1/physiotherapy/evolutions', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFisio'), PhysiotherapyController.createEvolution);
+api.put('/v1/physiotherapy/evolutions/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFisio'), PhysiotherapyController.updateEvolution);
+api.post('/v1/physiotherapy/consultations/finish', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFisio'), PhysiotherapyController.finishConsultation);
 
 // 8.2 ZEMDAFISIO × ZEMDA360: AVALIAÇÕES REGIONAIS VISUAIS & COMPARAÇÃO LONGITUDINAL
-api.get('/v1/physiotherapy/regional-evaluations/patient/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PhysiotherapyController.listRegionalEvaluations);
-api.get('/v1/physiotherapy/regional-evaluations/summary/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PhysiotherapyController.getRegionalSummary);
-api.get('/v1/physiotherapy/regional-evaluations/compare/:patientId/:regionId', requireTenant, requireRole('clinic_admin', 'professional'), PhysiotherapyController.getRegionalComparison);
-api.post('/v1/physiotherapy/regional-evaluations', requireTenant, requireRole('clinic_admin', 'professional'), PhysiotherapyController.createRegionalEvaluation);
-api.put('/v1/physiotherapy/regional-evaluations/:id', requireTenant, requireRole('clinic_admin', 'professional'), PhysiotherapyController.createRegionalEvaluation);
-api.delete('/v1/physiotherapy/regional-evaluations/:id', requireTenant, requireRole('clinic_admin', 'professional'), PhysiotherapyController.deleteRegionalEvaluation);
+api.get('/v1/physiotherapy/regional-evaluations/patient/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFisio'), PhysiotherapyController.listRegionalEvaluations);
+api.get('/v1/physiotherapy/regional-evaluations/summary/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFisio'), PhysiotherapyController.getRegionalSummary);
+api.get('/v1/physiotherapy/regional-evaluations/compare/:patientId/:regionId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFisio'), PhysiotherapyController.getRegionalComparison);
+api.post('/v1/physiotherapy/regional-evaluations', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFisio'), PhysiotherapyController.createRegionalEvaluation);
+api.put('/v1/physiotherapy/regional-evaluations/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFisio'), PhysiotherapyController.createRegionalEvaluation);
+api.delete('/v1/physiotherapy/regional-evaluations/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFisio'), PhysiotherapyController.deleteRegionalEvaluation);
 
 // ==========================================
 // MÓDULO CLÍNICO ZEMDAODONTO (ODONTOLOGIA)
 // ==========================================
-api.get('/v1/dentistry/odontograms/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.getOdontogram);
-api.post('/v1/dentistry/odontograms', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.saveOdontogram);
-api.get('/v1/dentistry/teeth/:patientId/history', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.getToothHistory);
+api.get('/v1/dentistry/odontograms/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaOdonto'), DentistryController.getOdontogram);
+api.post('/v1/dentistry/odontograms', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaOdonto'), DentistryController.saveOdontogram);
+api.get('/v1/dentistry/teeth/:patientId/history', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaOdonto'), DentistryController.getToothHistory);
 
-api.get('/v1/dentistry/perio/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.getPerioRecords);
-api.post('/v1/dentistry/perio', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.savePerioRecord);
+api.get('/v1/dentistry/perio/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaOdonto'), DentistryController.getPerioRecords);
+api.post('/v1/dentistry/perio', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaOdonto'), DentistryController.savePerioRecord);
 
-api.get('/v1/dentistry/endo/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.getEndoRecords);
-api.post('/v1/dentistry/endo', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.saveEndoRecord);
+api.get('/v1/dentistry/endo/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaOdonto'), DentistryController.getEndoRecords);
+api.post('/v1/dentistry/endo', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaOdonto'), DentistryController.saveEndoRecord);
 
-api.get('/v1/dentistry/anamnesis/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.getAnamnesis);
-api.post('/v1/dentistry/anamnesis', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.saveAnamnesis);
+api.get('/v1/dentistry/anamnesis/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaOdonto'), DentistryController.getAnamnesis);
+api.post('/v1/dentistry/anamnesis', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaOdonto'), DentistryController.saveAnamnesis);
 
-api.get('/v1/dentistry/treatment-plans/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.listTreatmentPlans);
-api.post('/v1/dentistry/treatment-plans', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.saveTreatmentPlan);
-api.put('/v1/dentistry/treatment-plans/:id/status', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.updateTreatmentPlanStatus);
+api.get('/v1/dentistry/treatment-plans/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaOdonto'), DentistryController.listTreatmentPlans);
+api.post('/v1/dentistry/treatment-plans', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaOdonto'), DentistryController.saveTreatmentPlan);
+api.put('/v1/dentistry/treatment-plans/:id/status', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaOdonto'), DentistryController.updateTreatmentPlanStatus);
 
-api.get('/v1/dentistry/prosthetics/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.listProsthetics);
-api.post('/v1/dentistry/prosthetics', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.saveProsthetic);
-api.put('/v1/dentistry/prosthetics/:id', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.updateProsthetic);
+api.get('/v1/dentistry/prosthetics/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaOdonto'), DentistryController.listProsthetics);
+api.post('/v1/dentistry/prosthetics', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaOdonto'), DentistryController.saveProsthetic);
+api.put('/v1/dentistry/prosthetics/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaOdonto'), DentistryController.updateProsthetic);
 
-api.get('/v1/dentistry/orthodontics/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.getOrtho);
-api.post('/v1/dentistry/orthodontics', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.saveOrtho);
+api.get('/v1/dentistry/orthodontics/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaOdonto'), DentistryController.getOrtho);
+api.post('/v1/dentistry/orthodontics', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaOdonto'), DentistryController.saveOrtho);
 
-api.get('/v1/dentistry/hof/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.listHof);
-api.post('/v1/dentistry/hof', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.saveHof);
+api.get('/v1/dentistry/hof/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaOdonto'), DentistryController.listHof);
+api.post('/v1/dentistry/hof', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaOdonto'), DentistryController.saveHof);
 
 // Itens Novos: Dossiê do Dente, Exames Independentes, Implantes, Fotos Clínicas, Prótese Pendente
-api.get('/v1/dentistry/teeth/:patientId/:toothNumber/dossier', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.getToothDossier);
-api.get('/v1/dentistry/exams/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.listExams);
-api.post('/v1/dentistry/exams', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.saveExam);
-api.get('/v1/dentistry/implants/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.listImplants);
-api.post('/v1/dentistry/implants', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.saveImplant);
-api.get('/v1/dentistry/photos/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.listPhotos);
-api.post('/v1/dentistry/photos', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.savePhoto);
-api.get('/v1/dentistry/prosthetics-lab/pending', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.listPendingProsthetics);
+api.get('/v1/dentistry/teeth/:patientId/:toothNumber/dossier', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaOdonto'), DentistryController.getToothDossier);
+api.get('/v1/dentistry/exams/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaOdonto'), DentistryController.listExams);
+api.post('/v1/dentistry/exams', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaOdonto'), DentistryController.saveExam);
+api.get('/v1/dentistry/implants/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaOdonto'), DentistryController.listImplants);
+api.post('/v1/dentistry/implants', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaOdonto'), DentistryController.saveImplant);
+api.get('/v1/dentistry/photos/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaOdonto'), DentistryController.listPhotos);
+api.post('/v1/dentistry/photos', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaOdonto'), DentistryController.savePhoto);
+api.get('/v1/dentistry/prosthetics-lab/pending', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaOdonto'), DentistryController.listPendingProsthetics);
 
-api.post('/v1/dentistry/consultations/finish', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.finishConsultation);
+api.post('/v1/dentistry/consultations/finish', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaOdonto'), DentistryController.finishConsultation);
 
 // ==========================================
 // MÓDULO CLÍNICO ZEMDANUTRI (NUTRIÇÃO)
 // ==========================================
-api.get('/v1/nutrition/anamnesis/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), NutritionController.getAnamnesis);
-api.post('/v1/nutrition/anamnesis', requireTenant, requireRole('clinic_admin', 'professional'), NutritionController.saveAnamnesis);
+api.get('/v1/nutrition/anamnesis/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaNutri'), NutritionController.getAnamnesis);
+api.post('/v1/nutrition/anamnesis', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaNutri'), NutritionController.saveAnamnesis);
 
-api.get('/v1/nutrition/assessments/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), NutritionController.listAssessments);
-api.post('/v1/nutrition/assessments', requireTenant, requireRole('clinic_admin', 'professional'), NutritionController.saveAssessment);
+api.get('/v1/nutrition/assessments/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaNutri'), NutritionController.listAssessments);
+api.post('/v1/nutrition/assessments', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaNutri'), NutritionController.saveAssessment);
 
-api.get('/v1/nutrition/bioimpedance/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), NutritionController.listBioimpedance);
-api.post('/v1/nutrition/bioimpedance', requireTenant, requireRole('clinic_admin', 'professional'), NutritionController.saveBioimpedance);
+api.get('/v1/nutrition/bioimpedance/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaNutri'), NutritionController.listBioimpedance);
+api.post('/v1/nutrition/bioimpedance', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaNutri'), NutritionController.saveBioimpedance);
 
-api.get('/v1/nutrition/recalls/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), NutritionController.listRecalls);
-api.post('/v1/nutrition/recalls', requireTenant, requireRole('clinic_admin', 'professional'), NutritionController.saveRecall);
+api.get('/v1/nutrition/recalls/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaNutri'), NutritionController.listRecalls);
+api.post('/v1/nutrition/recalls', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaNutri'), NutritionController.saveRecall);
 
-api.get('/v1/nutrition/foods', requireTenant, requireRole('clinic_admin', 'professional'), NutritionController.listFoodDatabase);
-api.post('/v1/nutrition/foods', requireTenant, requireRole('clinic_admin', 'professional'), NutritionController.saveCustomFood);
+api.get('/v1/nutrition/foods', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaNutri'), NutritionController.listFoodDatabase);
+api.post('/v1/nutrition/foods', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaNutri'), NutritionController.saveCustomFood);
 
-api.get('/v1/nutrition/meal-plans/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), NutritionController.listMealPlans);
-api.post('/v1/nutrition/meal-plans', requireTenant, requireRole('clinic_admin', 'professional'), NutritionController.saveMealPlan);
+api.get('/v1/nutrition/meal-plans/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaNutri'), NutritionController.listMealPlans);
+api.post('/v1/nutrition/meal-plans', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaNutri'), NutritionController.saveMealPlan);
 
-api.get('/v1/nutrition/goals/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), NutritionController.listGoals);
-api.post('/v1/nutrition/goals', requireTenant, requireRole('clinic_admin', 'professional'), NutritionController.saveGoal);
-api.put('/v1/nutrition/goals/:id/status', requireTenant, requireRole('clinic_admin', 'professional'), NutritionController.updateGoalStatus);
+api.get('/v1/nutrition/goals/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaNutri'), NutritionController.listGoals);
+api.post('/v1/nutrition/goals', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaNutri'), NutritionController.saveGoal);
+api.put('/v1/nutrition/goals/:id/status', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaNutri'), NutritionController.updateGoalStatus);
 
-api.post('/v1/nutrition/consultations/finish', requireTenant, requireRole('clinic_admin', 'professional'), NutritionController.finishConsultation);
+api.post('/v1/nutrition/consultations/finish', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaNutri'), NutritionController.finishConsultation);
 
 // ==========================================
 // MÓDULO CLÍNICO ZEMDATO (TERAPIA OCUPACIONAL)
 // ==========================================
-api.get('/v1/occupational-therapy/profile/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.getProfile);
-api.post('/v1/occupational-therapy/profile', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.saveProfile);
+api.get('/v1/occupational-therapy/profile/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaTO'), OccupationalTherapyController.getProfile);
+api.post('/v1/occupational-therapy/profile', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaTO'), OccupationalTherapyController.saveProfile);
 
-api.get('/v1/occupational-therapy/avd/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.listAvd);
-api.post('/v1/occupational-therapy/avd', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.saveAvd);
+api.get('/v1/occupational-therapy/avd/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaTO'), OccupationalTherapyController.listAvd);
+api.post('/v1/occupational-therapy/avd', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaTO'), OccupationalTherapyController.saveAvd);
 
-api.get('/v1/occupational-therapy/sensory/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.getSensory);
-api.post('/v1/occupational-therapy/sensory', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.saveSensory);
+api.get('/v1/occupational-therapy/sensory/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaTO'), OccupationalTherapyController.getSensory);
+api.post('/v1/occupational-therapy/sensory', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaTO'), OccupationalTherapyController.saveSensory);
 
-api.get('/v1/occupational-therapy/motor-cognitive/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.getMotorCognitive);
-api.post('/v1/occupational-therapy/motor-cognitive', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.saveMotorCognitive);
+api.get('/v1/occupational-therapy/motor-cognitive/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaTO'), OccupationalTherapyController.getMotorCognitive);
+api.post('/v1/occupational-therapy/motor-cognitive', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaTO'), OccupationalTherapyController.saveMotorCognitive);
 
-api.get('/v1/occupational-therapy/treatment-plans/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.listTreatmentPlans);
-api.post('/v1/occupational-therapy/treatment-plans', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.saveTreatmentPlan);
+api.get('/v1/occupational-therapy/treatment-plans/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaTO'), OccupationalTherapyController.listTreatmentPlans);
+api.post('/v1/occupational-therapy/treatment-plans', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaTO'), OccupationalTherapyController.saveTreatmentPlan);
 
-api.get('/v1/occupational-therapy/assistive-tech/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.listAssistiveTech);
-api.post('/v1/occupational-therapy/assistive-tech', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.saveAssistiveTech);
+api.get('/v1/occupational-therapy/assistive-tech/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaTO'), OccupationalTherapyController.listAssistiveTech);
+api.post('/v1/occupational-therapy/assistive-tech', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaTO'), OccupationalTherapyController.saveAssistiveTech);
 
 // Itens Novos: Análise de Tarefas, Mapa de Rotina, Participação, Programa Casa/Escola, Painel Funcional
-api.get('/v1/occupational-therapy/task-analyses/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.listTaskAnalyses);
-api.post('/v1/occupational-therapy/task-analyses', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.saveTaskAnalysis);
-api.get('/v1/occupational-therapy/routine-map/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.getRoutineMap);
-api.post('/v1/occupational-therapy/routine-map', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.saveRoutineMap);
-api.get('/v1/occupational-therapy/participation/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.getParticipation);
-api.post('/v1/occupational-therapy/participation', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.saveParticipation);
-api.get('/v1/occupational-therapy/home-programs/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.listHomePrograms);
-api.post('/v1/occupational-therapy/home-programs', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.saveHomeProgram);
-api.put('/v1/occupational-therapy/home-programs/:id/status', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.updateHomeProgramStatus);
-api.get('/v1/occupational-therapy/dashboard/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.getFunctionalDashboard);
+api.get('/v1/occupational-therapy/task-analyses/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaTO'), OccupationalTherapyController.listTaskAnalyses);
+api.post('/v1/occupational-therapy/task-analyses', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaTO'), OccupationalTherapyController.saveTaskAnalysis);
+api.get('/v1/occupational-therapy/routine-map/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaTO'), OccupationalTherapyController.getRoutineMap);
+api.post('/v1/occupational-therapy/routine-map', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaTO'), OccupationalTherapyController.saveRoutineMap);
+api.get('/v1/occupational-therapy/participation/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaTO'), OccupationalTherapyController.getParticipation);
+api.post('/v1/occupational-therapy/participation', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaTO'), OccupationalTherapyController.saveParticipation);
+api.get('/v1/occupational-therapy/home-programs/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaTO'), OccupationalTherapyController.listHomePrograms);
+api.post('/v1/occupational-therapy/home-programs', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaTO'), OccupationalTherapyController.saveHomeProgram);
+api.put('/v1/occupational-therapy/home-programs/:id/status', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaTO'), OccupationalTherapyController.updateHomeProgramStatus);
+api.get('/v1/occupational-therapy/dashboard/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaTO'), OccupationalTherapyController.getFunctionalDashboard);
 
-api.post('/v1/occupational-therapy/consultations/finish', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.finishConsultation);
+api.post('/v1/occupational-therapy/consultations/finish', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaTO'), OccupationalTherapyController.finishConsultation);
 
 // ==========================================
 // MÓDULO CLÍNICO ZEMDAFONO (FONOAUDIOLOGIA)
 // ==========================================
-api.get('/v1/speech-therapy/anamnesis/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.getAnamnesis);
-api.post('/v1/speech-therapy/anamnesis', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveAnamnesis);
+api.get('/v1/speech-therapy/anamnesis/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.getAnamnesis);
+api.post('/v1/speech-therapy/anamnesis', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.saveAnamnesis);
 
-api.get('/v1/speech-therapy/language/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.getLanguage);
-api.post('/v1/speech-therapy/language', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveLanguage);
+api.get('/v1/speech-therapy/language/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.getLanguage);
+api.post('/v1/speech-therapy/language', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.saveLanguage);
 
-api.get('/v1/speech-therapy/phonemes/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.getSpeechPhonology);
-api.post('/v1/speech-therapy/phonemes', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveSpeechPhonology);
+api.get('/v1/speech-therapy/phonemes/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.getSpeechPhonology);
+api.post('/v1/speech-therapy/phonemes', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.saveSpeechPhonology);
 
-api.get('/v1/speech-therapy/orofacial/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.getOrofacialMotricity);
-api.post('/v1/speech-therapy/orofacial', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveOrofacialMotricity);
+api.get('/v1/speech-therapy/orofacial/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.getOrofacialMotricity);
+api.post('/v1/speech-therapy/orofacial', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.saveOrofacialMotricity);
 
-api.get('/v1/speech-therapy/voice/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.getVoice);
-api.post('/v1/speech-therapy/voice', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveVoice);
+api.get('/v1/speech-therapy/voice/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.getVoice);
+api.post('/v1/speech-therapy/voice', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.saveVoice);
 
-api.get('/v1/speech-therapy/fluency/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.getFluency);
-api.post('/v1/speech-therapy/fluency', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveFluency);
+api.get('/v1/speech-therapy/fluency/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.getFluency);
+api.post('/v1/speech-therapy/fluency', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.saveFluency);
 
-api.get('/v1/speech-therapy/dysphagia/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.getDysphagia);
-api.post('/v1/speech-therapy/dysphagia', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveDysphagia);
+api.get('/v1/speech-therapy/dysphagia/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.getDysphagia);
+api.post('/v1/speech-therapy/dysphagia', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.saveDysphagia);
 
-api.get('/v1/speech-therapy/audiology/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.listAudiology);
-api.post('/v1/speech-therapy/audiology', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveAudiology);
+api.get('/v1/speech-therapy/audiology/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.listAudiology);
+api.post('/v1/speech-therapy/audiology', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.saveAudiology);
 
-api.get('/v1/speech-therapy/treatment-plans/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.listTreatmentPlans);
-api.post('/v1/speech-therapy/treatment-plans', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveTreatmentPlan);
+api.get('/v1/speech-therapy/treatment-plans/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.listTreatmentPlans);
+api.post('/v1/speech-therapy/treatment-plans', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.saveTreatmentPlan);
 
-api.get('/v1/speech-therapy/complementary-tests/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.listComplementaryTests);
-api.post('/v1/speech-therapy/complementary-tests', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveComplementaryTest);
-api.delete('/v1/speech-therapy/complementary-tests/:id', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.deleteComplementaryTest);
+api.get('/v1/speech-therapy/complementary-tests/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.listComplementaryTests);
+api.post('/v1/speech-therapy/complementary-tests', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.saveComplementaryTest);
+api.delete('/v1/speech-therapy/complementary-tests/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.deleteComplementaryTest);
 
 // Itens Novos: Matriz de Disfagia, Processos Fonológicos, Amostras de Fluência, Análise de Linguagem
-api.get('/v1/speech-therapy/dysphagia-matrix/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.getDysphagiaMatrix);
-api.post('/v1/speech-therapy/dysphagia-matrix', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveDysphagiaMatrix);
-api.get('/v1/speech-therapy/phonological-processes/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.getPhonologicalProcesses);
-api.post('/v1/speech-therapy/phonological-processes', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.savePhonologicalProcesses);
-api.get('/v1/speech-therapy/fluency-samples/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.listFluencySamples);
-api.post('/v1/speech-therapy/fluency-samples', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveFluencySample);
-api.post('/v1/speech-therapy/analyze-language', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.analyzeLanguageSample);
+api.get('/v1/speech-therapy/dysphagia-matrix/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.getDysphagiaMatrix);
+api.post('/v1/speech-therapy/dysphagia-matrix', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.saveDysphagiaMatrix);
+api.get('/v1/speech-therapy/phonological-processes/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.getPhonologicalProcesses);
+api.post('/v1/speech-therapy/phonological-processes', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.savePhonologicalProcesses);
+api.get('/v1/speech-therapy/fluency-samples/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.listFluencySamples);
+api.post('/v1/speech-therapy/fluency-samples', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.saveFluencySample);
+api.post('/v1/speech-therapy/analyze-language', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.analyzeLanguageSample);
 
 // Melhorias Clínicas ZemdaFono (FOIS, IDV-10, Rastreio Leitura/Escrita, ABFW, PAC, Fonologia Longitudinal)
-api.get('/v1/speech-therapy/fois/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.getFoisList);
-api.post('/v1/speech-therapy/fois', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveFois);
+api.get('/v1/speech-therapy/fois/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.getFoisList);
+api.post('/v1/speech-therapy/fois', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.saveFois);
 
-api.get('/v1/speech-therapy/idv10/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.getIdv10List);
-api.post('/v1/speech-therapy/idv10', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveIdv10);
+api.get('/v1/speech-therapy/idv10/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.getIdv10List);
+api.post('/v1/speech-therapy/idv10', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.saveIdv10);
 
-api.get('/v1/speech-therapy/reading-screenings/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.getReadingScreenings);
-api.get('/v1/speech-therapy/reading-screening/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.getReadingScreenings);
-api.post('/v1/speech-therapy/reading-screenings', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveReadingScreening);
-api.post('/v1/speech-therapy/reading-screening', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveReadingScreening);
+api.get('/v1/speech-therapy/reading-screenings/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.getReadingScreenings);
+api.get('/v1/speech-therapy/reading-screening/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.getReadingScreenings);
+api.post('/v1/speech-therapy/reading-screenings', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.saveReadingScreening);
+api.post('/v1/speech-therapy/reading-screening', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.saveReadingScreening);
 
-api.get('/v1/speech-therapy/abfw/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.getAbfwRecords);
-api.post('/v1/speech-therapy/abfw', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveAbfwRecord);
+api.get('/v1/speech-therapy/abfw/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.getAbfwRecords);
+api.post('/v1/speech-therapy/abfw', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.saveAbfwRecord);
 
-api.get('/v1/speech-therapy/auditory-screenings/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.getAuditoryScreenings);
-api.get('/v1/speech-therapy/auditory-screening/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.getAuditoryScreenings);
-api.post('/v1/speech-therapy/auditory-screenings', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveAuditoryScreening);
-api.post('/v1/speech-therapy/auditory-screening', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveAuditoryScreening);
+api.get('/v1/speech-therapy/auditory-screenings/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.getAuditoryScreenings);
+api.get('/v1/speech-therapy/auditory-screening/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.getAuditoryScreenings);
+api.post('/v1/speech-therapy/auditory-screenings', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.saveAuditoryScreening);
+api.post('/v1/speech-therapy/auditory-screening', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.saveAuditoryScreening);
 
-api.get('/v1/speech-therapy/phonemes/history/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.getPhonemesHistory);
-api.get('/v1/speech-therapy/phonemes/:patientId/history', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.getPhonemesHistory);
+api.get('/v1/speech-therapy/phonemes/history/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.getPhonemesHistory);
+api.get('/v1/speech-therapy/phonemes/:patientId/history', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.getPhonemesHistory);
 
-api.post('/v1/speech-therapy/consultations/finish', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.finishConsultation);
+api.post('/v1/speech-therapy/consultations/finish', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaFono'), SpeechTherapyController.finishConsultation);
 
 // ==========================================
 // RASCUNHOS CLÍNICOS UNIVERSAIS (AUTOSAVE EM TODOS OS MÓDULOS)
@@ -533,74 +549,74 @@ api.delete('/v1/clinical/draft/:moduleType/:patientId', requireTenant, requireRo
 // ==========================================
 // MÓDULO ZEMDAPP (PSICOPEDAGOGIA CLÍNICA E INSTITUCIONAL - CBO 2394-25)
 // ==========================================
-api.get('/v1/psychopedagogy/profile/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.getProfile);
-api.post('/v1/psychopedagogy/profile', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.saveProfile);
-api.post('/v1/psychopedagogy/profile/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.saveProfile);
-api.get('/v1/psychopedagogy/assessments/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.listAssessments);
-api.get('/v1/psychopedagogy/assessment/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.listAssessments);
-api.post('/v1/psychopedagogy/assessments', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.saveAssessment);
-api.post('/v1/psychopedagogy/assessment/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.saveAssessment);
-api.get('/v1/psychopedagogy/domains/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.listDomains);
-api.get('/v1/psychopedagogy/learning-domains/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.listDomains);
-api.post('/v1/psychopedagogy/domains', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.saveDomain);
-api.get('/v1/psychopedagogy/sessions/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.listSessions);
-api.post('/v1/psychopedagogy/sessions', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.saveSession);
-api.post('/v1/psychopedagogy/sessions/finish', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.finishSession);
-api.post('/v1/psychopedagogy/sessions/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.saveSession);
-api.post('/v1/psychopedagogy/consultations/finish', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.finishSession);
-api.get('/v1/psychopedagogy/plans/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.listPlans);
-api.get('/v1/psychopedagogy/intervention-plans/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.listPlans);
-api.post('/v1/psychopedagogy/plans', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.savePlan);
-api.post('/v1/psychopedagogy/goals', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.saveGoal);
-api.get('/v1/psychopedagogy/instruments/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.listInstruments);
-api.post('/v1/psychopedagogy/instruments', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.saveInstrument);
-api.post('/v1/psychopedagogy/instruments/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.saveInstrument);
-api.get('/v1/psychopedagogy/school-contacts/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.listSchoolContacts);
-api.post('/v1/psychopedagogy/school-contacts', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.saveSchoolContact);
-api.get('/v1/psychopedagogy/institutional-cases', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.listInstitutionalCases);
-api.post('/v1/psychopedagogy/institutional-cases', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.saveInstitutionalCase);
-api.get('/v1/psychopedagogy/shares/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.listShares);
-api.post('/v1/psychopedagogy/shares', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.createShare);
-api.delete('/v1/psychopedagogy/shares/:id', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.deleteShare);
-api.get('/v1/psychopedagogy/retention-policy', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.getRetentionPolicy);
-api.post('/v1/psychopedagogy/retention-policy', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.saveRetentionPolicy);
+api.get('/v1/psychopedagogy/profile/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPP'), PsychopedagogyController.getProfile);
+api.post('/v1/psychopedagogy/profile', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPP'), PsychopedagogyController.saveProfile);
+api.post('/v1/psychopedagogy/profile/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPP'), PsychopedagogyController.saveProfile);
+api.get('/v1/psychopedagogy/assessments/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPP'), PsychopedagogyController.listAssessments);
+api.get('/v1/psychopedagogy/assessment/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPP'), PsychopedagogyController.listAssessments);
+api.post('/v1/psychopedagogy/assessments', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPP'), PsychopedagogyController.saveAssessment);
+api.post('/v1/psychopedagogy/assessment/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPP'), PsychopedagogyController.saveAssessment);
+api.get('/v1/psychopedagogy/domains/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPP'), PsychopedagogyController.listDomains);
+api.get('/v1/psychopedagogy/learning-domains/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPP'), PsychopedagogyController.listDomains);
+api.post('/v1/psychopedagogy/domains', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPP'), PsychopedagogyController.saveDomain);
+api.get('/v1/psychopedagogy/sessions/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPP'), PsychopedagogyController.listSessions);
+api.post('/v1/psychopedagogy/sessions', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPP'), PsychopedagogyController.saveSession);
+api.post('/v1/psychopedagogy/sessions/finish', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPP'), PsychopedagogyController.finishSession);
+api.post('/v1/psychopedagogy/sessions/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPP'), PsychopedagogyController.saveSession);
+api.post('/v1/psychopedagogy/consultations/finish', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPP'), PsychopedagogyController.finishSession);
+api.get('/v1/psychopedagogy/plans/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPP'), PsychopedagogyController.listPlans);
+api.get('/v1/psychopedagogy/intervention-plans/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPP'), PsychopedagogyController.listPlans);
+api.post('/v1/psychopedagogy/plans', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPP'), PsychopedagogyController.savePlan);
+api.post('/v1/psychopedagogy/goals', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPP'), PsychopedagogyController.saveGoal);
+api.get('/v1/psychopedagogy/instruments/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPP'), PsychopedagogyController.listInstruments);
+api.post('/v1/psychopedagogy/instruments', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPP'), PsychopedagogyController.saveInstrument);
+api.post('/v1/psychopedagogy/instruments/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPP'), PsychopedagogyController.saveInstrument);
+api.get('/v1/psychopedagogy/school-contacts/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPP'), PsychopedagogyController.listSchoolContacts);
+api.post('/v1/psychopedagogy/school-contacts', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPP'), PsychopedagogyController.saveSchoolContact);
+api.get('/v1/psychopedagogy/institutional-cases', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPP'), PsychopedagogyController.listInstitutionalCases);
+api.post('/v1/psychopedagogy/institutional-cases', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPP'), PsychopedagogyController.saveInstitutionalCase);
+api.get('/v1/psychopedagogy/shares/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPP'), PsychopedagogyController.listShares);
+api.post('/v1/psychopedagogy/shares', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPP'), PsychopedagogyController.createShare);
+api.delete('/v1/psychopedagogy/shares/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPP'), PsychopedagogyController.deleteShare);
+api.get('/v1/psychopedagogy/retention-policy', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPP'), PsychopedagogyController.getRetentionPolicy);
+api.post('/v1/psychopedagogy/retention-policy', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPP'), PsychopedagogyController.saveRetentionPolicy);
 
 // ==========================================
 // MÓDULO ZEMDAPSICO (Psicologia Clínica - CFP)
 // ==========================================
-api.get('/v1/psychology/profile/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.getProfile);
-api.get('/v1/psychology/anamnesis/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.getAnamnesis);
-api.post('/v1/psychology/anamnesis', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.saveAnamnesis);
-api.get('/v1/psychology/mental-state/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.getMentalState);
-api.post('/v1/psychology/mental-state', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.saveMentalState);
-api.get('/v1/psychology/risk/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.getRisk);
-api.post('/v1/psychology/risk', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.saveRisk);
-api.get('/v1/psychology/assessments/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.getAssessments);
-api.post('/v1/psychology/assessments', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.saveAssessment);
-api.get('/v1/psychology/instruments/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.getInstruments);
-api.post('/v1/psychology/instruments', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.saveInstrument);
-api.delete('/v1/psychology/instruments/:id', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.deleteInstrument);
-api.get('/v1/psychology/screenings/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.getScreenings);
-api.post('/v1/psychology/screenings', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.saveScreening);
-api.delete('/v1/psychology/screenings/:id', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.deleteScreening);
-api.get('/v1/psychology/sessions/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.getSessions);
-api.post('/v1/psychology/sessions', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.saveSession);
-api.post('/v1/psychology/sessions/:id/seal', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.sealSession);
-api.post('/v1/psychology/sessions/:id/amendments', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.addSessionAmendment);
-api.post('/v1/psychology/consultations/finish', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.finishConsultation);
-api.get('/v1/psychology/goals/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.getGoals);
-api.post('/v1/psychology/goals', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.saveGoal);
-api.put('/v1/psychology/goals/:id', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.updateGoal);
-api.delete('/v1/psychology/goals/:id', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.deleteGoal);
-api.get('/v1/psychology/documents/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.getDocuments);
-api.post('/v1/psychology/documents', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.createDocument);
-api.post('/v1/psychology/documents/:id/delivery', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.registerDocumentDelivery);
-api.get('/v1/psychology/documents/:id/print', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.printDocumentPdf);
-api.post('/v1/psychology/ai-assist', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.aiAssist);
-api.get('/v1/psychology/history/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.getHistory);
-api.get('/v1/psychology/audit-logs/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.getAuditLogs);
-api.get('/v1/psychology/draft/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.getDraft);
-api.post('/v1/psychology/draft', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.saveDraft);
+api.get('/v1/psychology/profile/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPsico'), PsychologyController.getProfile);
+api.get('/v1/psychology/anamnesis/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPsico'), PsychologyController.getAnamnesis);
+api.post('/v1/psychology/anamnesis', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPsico'), PsychologyController.saveAnamnesis);
+api.get('/v1/psychology/mental-state/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPsico'), PsychologyController.getMentalState);
+api.post('/v1/psychology/mental-state', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPsico'), PsychologyController.saveMentalState);
+api.get('/v1/psychology/risk/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPsico'), PsychologyController.getRisk);
+api.post('/v1/psychology/risk', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPsico'), PsychologyController.saveRisk);
+api.get('/v1/psychology/assessments/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPsico'), PsychologyController.getAssessments);
+api.post('/v1/psychology/assessments', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPsico'), PsychologyController.saveAssessment);
+api.get('/v1/psychology/instruments/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPsico'), PsychologyController.getInstruments);
+api.post('/v1/psychology/instruments', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPsico'), PsychologyController.saveInstrument);
+api.delete('/v1/psychology/instruments/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPsico'), PsychologyController.deleteInstrument);
+api.get('/v1/psychology/screenings/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPsico'), PsychologyController.getScreenings);
+api.post('/v1/psychology/screenings', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPsico'), PsychologyController.saveScreening);
+api.delete('/v1/psychology/screenings/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPsico'), PsychologyController.deleteScreening);
+api.get('/v1/psychology/sessions/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPsico'), PsychologyController.getSessions);
+api.post('/v1/psychology/sessions', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPsico'), PsychologyController.saveSession);
+api.post('/v1/psychology/sessions/:id/seal', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPsico'), PsychologyController.sealSession);
+api.post('/v1/psychology/sessions/:id/amendments', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPsico'), PsychologyController.addSessionAmendment);
+api.post('/v1/psychology/consultations/finish', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPsico'), PsychologyController.finishConsultation);
+api.get('/v1/psychology/goals/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPsico'), PsychologyController.getGoals);
+api.post('/v1/psychology/goals', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPsico'), PsychologyController.saveGoal);
+api.put('/v1/psychology/goals/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPsico'), PsychologyController.updateGoal);
+api.delete('/v1/psychology/goals/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPsico'), PsychologyController.deleteGoal);
+api.get('/v1/psychology/documents/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPsico'), PsychologyController.getDocuments);
+api.post('/v1/psychology/documents', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPsico'), PsychologyController.createDocument);
+api.post('/v1/psychology/documents/:id/delivery', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPsico'), PsychologyController.registerDocumentDelivery);
+api.get('/v1/psychology/documents/:id/print', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPsico'), PsychologyController.printDocumentPdf);
+api.post('/v1/psychology/ai-assist', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPsico'), PsychologyController.aiAssist);
+api.get('/v1/psychology/history/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPsico'), PsychologyController.getHistory);
+api.get('/v1/psychology/audit-logs/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPsico'), PsychologyController.getAuditLogs);
+api.get('/v1/psychology/draft/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPsico'), PsychologyController.getDraft);
+api.post('/v1/psychology/draft', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPsico'), PsychologyController.saveDraft);
 
 // ==========================================
 // CENTRAL DE CERTIFICADOS DIGITAIS ICP-BRASIL & ASSINATURA PAdES
@@ -618,108 +634,108 @@ api.get('/v1/digital-signatures/:id', requireTenant, DigitalCertificateControlle
 // ==========================================
 // MÓDULO CLÍNICO ZEMDA360 (MAPA CORPORAL & CANETA CLÍNICA)
 // ==========================================
-api.get('/v1/body-assessments/patient/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), BodyAssessmentController.listByPatient);
-api.get('/v1/body-assessments/appointment/:appointmentId', requireTenant, requireRole('clinic_admin', 'professional'), BodyAssessmentController.getByAppointment);
-api.get('/v1/body-assessments/:id', requireTenant, requireRole('clinic_admin', 'professional'), BodyAssessmentController.getById);
-api.post('/v1/body-assessments', requireTenant, requireRole('clinic_admin', 'professional'), BodyAssessmentController.upsertAssessment);
-api.post('/v1/body-assessments/:id/markers', requireTenant, requireRole('clinic_admin', 'professional'), BodyAssessmentController.saveMarker);
-api.delete('/v1/body-assessments/markers/:markerId', requireTenant, requireRole('clinic_admin', 'professional'), BodyAssessmentController.deleteMarker);
-api.put('/v1/body-assessments/:id/drawings/:view', requireTenant, requireRole('clinic_admin', 'professional'), BodyAssessmentController.saveDrawings);
-api.delete('/v1/body-assessments/:id/drawings/:view', requireTenant, requireRole('clinic_admin', 'professional'), BodyAssessmentController.clearViewDrawings);
-api.get('/v1/body-assessments/patient/:patientId/anthropometry', requireTenant, requireRole('clinic_admin', 'professional'), BodyAssessmentController.listAnthropometryByPatient);
-api.post('/v1/body-assessments/anthropometry', requireTenant, requireRole('clinic_admin', 'professional'), BodyAssessmentController.saveAnthropometry);
-api.get('/v1/body-assessments/patient/:patientId/therapeutic-plans', requireTenant, requireRole('clinic_admin', 'professional'), BodyAssessmentController.listTherapeuticPlansByPatient);
-api.post('/v1/body-assessments/therapeutic-plans', requireTenant, requireRole('clinic_admin', 'professional'), BodyAssessmentController.saveTherapeuticPlan);
+api.get('/v1/body-assessments/patient/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('Zemda360'), BodyAssessmentController.listByPatient);
+api.get('/v1/body-assessments/appointment/:appointmentId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('Zemda360'), BodyAssessmentController.getByAppointment);
+api.get('/v1/body-assessments/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('Zemda360'), BodyAssessmentController.getById);
+api.post('/v1/body-assessments', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('Zemda360'), BodyAssessmentController.upsertAssessment);
+api.post('/v1/body-assessments/:id/markers', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('Zemda360'), BodyAssessmentController.saveMarker);
+api.delete('/v1/body-assessments/markers/:markerId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('Zemda360'), BodyAssessmentController.deleteMarker);
+api.put('/v1/body-assessments/:id/drawings/:view', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('Zemda360'), BodyAssessmentController.saveDrawings);
+api.delete('/v1/body-assessments/:id/drawings/:view', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('Zemda360'), BodyAssessmentController.clearViewDrawings);
+api.get('/v1/body-assessments/patient/:patientId/anthropometry', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('Zemda360'), BodyAssessmentController.listAnthropometryByPatient);
+api.post('/v1/body-assessments/anthropometry', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('Zemda360'), BodyAssessmentController.saveAnthropometry);
+api.get('/v1/body-assessments/patient/:patientId/therapeutic-plans', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('Zemda360'), BodyAssessmentController.listTherapeuticPlansByPatient);
+api.post('/v1/body-assessments/therapeutic-plans', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('Zemda360'), BodyAssessmentController.saveTherapeuticPlan);
 
 // ==========================================
 // MÓDULO ZEMDAPERSONAL (TREINAMENTO & PERSONAL TRAINER)
 // ==========================================
 // Shared clinical resources reuse the Personal engine; no workout/module access is granted.
-api.get('/v1/clinical-assessments/patients/:studentId', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.listAssessments);
-api.get('/v1/clinical-assessments/patients/:studentId/evolution', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.getEvolutionData);
-api.post('/v1/clinical-assessments/preview', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.previewAssessment);
-api.get('/v1/clinical-assessments/:id/report-data', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.assessmentReportData);
-api.get('/v1/clinical-assessments/:id/compare/:compareId', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.compareAssessments);
-api.get('/v1/clinical-assessments/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.getAssessment);
-api.post('/v1/clinical-assessments', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.createAssessment);
-api.put('/v1/clinical-assessments/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.updateAssessment);
-api.delete('/v1/clinical-assessments/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.deleteAssessment);
+api.get('/v1/clinical-assessments/patients/:studentId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.listAssessments);
+api.get('/v1/clinical-assessments/patients/:studentId/evolution', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.getEvolutionData);
+api.post('/v1/clinical-assessments/preview', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.previewAssessment);
+api.get('/v1/clinical-assessments/:id/report-data', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.assessmentReportData);
+api.get('/v1/clinical-assessments/:id/compare/:compareId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.compareAssessments);
+api.get('/v1/clinical-assessments/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.getAssessment);
+api.post('/v1/clinical-assessments', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.createAssessment);
+api.put('/v1/clinical-assessments/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.updateAssessment);
+api.delete('/v1/clinical-assessments/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.deleteAssessment);
 
-api.get('/v1/personal/dashboard', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.getDashboard);
-api.get('/v1/personal/search', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.smartSearch);
+api.get('/v1/personal/dashboard', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.getDashboard);
+api.get('/v1/personal/search', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.smartSearch);
 
 // Alunos
-api.get('/v1/personal/students', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.listStudents);
-api.get('/personal/students', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.listStudents);
-api.get('/v1/personal/students/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.getStudent);
-api.get('/personal/students/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.getStudent);
-api.post('/v1/personal/students', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.createStudent);
-api.post('/personal/students', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.createStudent);
-api.put('/v1/personal/students/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.updateStudent);
-api.put('/personal/students/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.updateStudent);
-api.post('/v1/personal/students/:id/profile', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.upsertProfile);
-api.post('/personal/students/:id/profile', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.upsertProfile);
-api.get('/v1/personal/students/:studentId/attendance', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.getAttendanceStats);
-api.get('/v1/personal/students/:studentId/records', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.getRecords);
+api.get('/v1/personal/students', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.listStudents);
+api.get('/personal/students', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.listStudents);
+api.get('/v1/personal/students/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.getStudent);
+api.get('/personal/students/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.getStudent);
+api.post('/v1/personal/students', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.createStudent);
+api.post('/personal/students', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.createStudent);
+api.put('/v1/personal/students/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.updateStudent);
+api.put('/personal/students/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.updateStudent);
+api.post('/v1/personal/students/:id/profile', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.upsertProfile);
+api.post('/personal/students/:id/profile', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.upsertProfile);
+api.get('/v1/personal/students/:studentId/attendance', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.getAttendanceStats);
+api.get('/v1/personal/students/:studentId/records', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.getRecords);
 api.get('/v1/personal/students/:studentId/access-link', requireTenant, requireRole('clinic_admin', 'professional'), PersonalStudentLinkController.getAccessLink);
 api.post('/v1/personal/students/:studentId/access-link', requireTenant, requireRole('clinic_admin', 'professional'), PersonalStudentLinkController.generateOrGetAccessLink);
 api.post('/v1/personal/students/:studentId/access-link/revoke', requireTenant, requireRole('clinic_admin', 'professional'), PersonalStudentLinkController.revokeAccessLink);
 
 // Protocolos de TAV (Tecido Adiposo Visceral) & Classificação
-api.get('/v1/personal/tav/protocols', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.listTavProtocols);
-api.post('/v1/personal/tav/protocols', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.createTavProtocol);
-api.put('/v1/personal/tav/protocols/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.updateTavProtocol);
-api.delete('/v1/personal/tav/protocols/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.deleteTavProtocol);
-api.post('/v1/personal/tav/classify', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.classifyTav);
+api.get('/v1/personal/tav/protocols', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.listTavProtocols);
+api.post('/v1/personal/tav/protocols', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.createTavProtocol);
+api.put('/v1/personal/tav/protocols/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.updateTavProtocol);
+api.delete('/v1/personal/tav/protocols/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.deleteTavProtocol);
+api.post('/v1/personal/tav/classify', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.classifyTav);
 
 // Avaliações Físicas, Comparativo & Fotos
-api.get('/v1/personal/students/:studentId/assessments', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.listAssessments);
-api.post('/v1/personal/assessments/preview', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.previewAssessment);
-api.get('/v1/personal/assessments/:id/report-data', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.assessmentReportData);
-api.get('/v1/personal/assessments/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.getAssessment);
+api.get('/v1/personal/students/:studentId/assessments', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.listAssessments);
+api.post('/v1/personal/assessments/preview', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.previewAssessment);
+api.get('/v1/personal/assessments/:id/report-data', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.assessmentReportData);
+api.get('/v1/personal/assessments/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.getAssessment);
 api.get('/v1/personal/posture-ai/status', requireTenant, requireRole('clinic_admin', 'professional'), PersonalPostureAIController.status);
 api.post('/v1/personal/posture-ai/analyze', requireTenant, requireRole('clinic_admin', 'professional'), PersonalPostureAIController.analyze);
-api.get('/v1/personal/assessments/:id/compare/:compareId', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.compareAssessments);
-api.post('/v1/personal/assessments', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.createAssessment);
-api.put('/v1/personal/assessments/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.updateAssessment);
-api.delete('/v1/personal/assessments/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.deleteAssessment);
-api.get('/v1/personal/students/:studentId/evolution', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.getEvolutionData);
-api.get('/v1/personal/students/:studentId/photos', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.listPhotos);
-api.post('/v1/personal/photos', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.savePhoto);
-api.delete('/v1/personal/photos/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.deletePhoto);
+api.get('/v1/personal/assessments/:id/compare/:compareId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.compareAssessments);
+api.post('/v1/personal/assessments', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.createAssessment);
+api.put('/v1/personal/assessments/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.updateAssessment);
+api.delete('/v1/personal/assessments/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.deleteAssessment);
+api.get('/v1/personal/students/:studentId/evolution', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.getEvolutionData);
+api.get('/v1/personal/students/:studentId/photos', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.listPhotos);
+api.post('/v1/personal/photos', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.savePhoto);
+api.delete('/v1/personal/photos/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.deletePhoto);
 
 // Exercícios
-api.get('/v1/personal/exercises', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.listExercises);
-api.get('/personal/exercises', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.listExercises);
-api.post('/v1/personal/exercises', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.createExercise);
-api.post('/personal/exercises', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.createExercise);
-api.put('/v1/personal/exercises/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.updateExercise);
-api.put('/personal/exercises/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.updateExercise);
-api.delete('/v1/personal/exercises/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.deleteExercise);
-api.delete('/personal/exercises/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.deleteExercise);
+api.get('/v1/personal/exercises', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.listExercises);
+api.get('/personal/exercises', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.listExercises);
+api.post('/v1/personal/exercises', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.createExercise);
+api.post('/personal/exercises', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.createExercise);
+api.put('/v1/personal/exercises/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.updateExercise);
+api.put('/personal/exercises/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.updateExercise);
+api.delete('/v1/personal/exercises/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.deleteExercise);
+api.delete('/personal/exercises/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.deleteExercise);
 
 // Treinos
-api.get('/v1/personal/workouts', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.listWorkouts);
-api.get('/v1/personal/workouts/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.getWorkout);
-api.post('/v1/personal/workouts', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.createWorkout);
-api.put('/v1/personal/workouts/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.updateWorkout);
-api.delete('/v1/personal/workouts/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.deleteWorkout);
-api.post('/v1/personal/workouts/:id/duplicate', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.duplicateWorkout);
+api.get('/v1/personal/workouts', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.listWorkouts);
+api.get('/v1/personal/workouts/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.getWorkout);
+api.post('/v1/personal/workouts', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.createWorkout);
+api.put('/v1/personal/workouts/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.updateWorkout);
+api.delete('/v1/personal/workouts/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.deleteWorkout);
+api.post('/v1/personal/workouts/:id/duplicate', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.duplicateWorkout);
 
 // Templates / Modelos
-api.get('/v1/personal/templates', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.listTemplates);
-api.post('/v1/personal/templates', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.createTemplate);
-api.post('/v1/personal/templates/:id/apply', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.applyTemplate);
-api.delete('/v1/personal/templates/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.deleteTemplate);
+api.get('/v1/personal/templates', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.listTemplates);
+api.post('/v1/personal/templates', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.createTemplate);
+api.post('/v1/personal/templates/:id/apply', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.applyTemplate);
+api.delete('/v1/personal/templates/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.deleteTemplate);
 
 // Logs & Execução
-api.post('/v1/personal/logs', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.executeWorkoutLog);
-api.get('/v1/personal/logs', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.listLogs);
+api.post('/v1/personal/logs', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.executeWorkoutLog);
+api.get('/v1/personal/logs', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.listLogs);
 
 // Periodização
-api.get('/v1/personal/periodizations', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.listPeriodizations);
-api.post('/v1/personal/periodizations', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.createPeriodization);
-api.put('/v1/personal/periodizations/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.updatePeriodization);
+api.get('/v1/personal/periodizations', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.listPeriodizations);
+api.post('/v1/personal/periodizations', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.createPeriodization);
+api.put('/v1/personal/periodizations/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.updatePeriodization);
 
 // Assistente IA ZemdaPersonal
 api.post('/v1/personal/ai/assistant', requireTenant, requireRole('clinic_admin', 'professional'), PersonalAIController.askAssistant);
@@ -953,11 +969,11 @@ api.put('/v1/capabilities/my-medical-hierarchy', requireTenant, CapabilityContro
 // ==========================================
 // ZEMDAMED — MÓDULO MÉDICO INTEGRADO
 // ==========================================
-api.get('/v1/medical/consultations/patient/:patientId', requireTenant, MedicalController.listConsultationsByPatient);
-api.get('/v1/medical/consultations/:id', requireTenant, MedicalController.getConsultationById);
-api.post('/v1/medical/consultations', requireTenant, MedicalController.createConsultation);
-api.post('/v1/medical/consultations/:id/finish', requireTenant, MedicalController.finishConsultation);
-api.post('/v1/medical/finish-consultation', requireTenant, MedicalController.finishConsultation);
+api.get('/v1/medical/consultations/patient/:patientId', requireTenant, requireSharedPatientScope('ZemdaMed'), MedicalController.listConsultationsByPatient);
+api.get('/v1/medical/consultations/:id', requireTenant, requireSharedPatientScope('ZemdaMed'), MedicalController.getConsultationById);
+api.post('/v1/medical/consultations', requireTenant, requireSharedPatientScope('ZemdaMed'), MedicalController.createConsultation);
+api.post('/v1/medical/consultations/:id/finish', requireTenant, requireSharedPatientScope('ZemdaMed'), MedicalController.finishConsultation);
+api.post('/v1/medical/finish-consultation', requireTenant, requireSharedPatientScope('ZemdaMed'), MedicalController.finishConsultation);
 
 // ==========================================
 // LABORATÓRIO ZEMDA (SUPERADMIN SANDBOX)
@@ -967,38 +983,38 @@ api.post('/v1/sandbox/reset', SandboxController.resetSandbox);
 // ==========================================
 // ZEMDAESTETIC — ESTÉTICA FACIAL, CORPORAL & CAPILAR
 // ==========================================
-api.get('/v1/estetic/config', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.getConfig);
-api.get('/v1/estetic/catalog', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.getCatalog);
-api.post('/v1/estetic/catalog', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.createCatalogItem);
-api.get('/v1/estetic/patient/:patientId/overview', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.getPatientOverview);
-api.get('/v1/estetic/assessments', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.getAssessments);
-api.post('/v1/estetic/assessments', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.createAssessment);
-api.delete('/v1/estetic/assessments/:id', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.deleteAssessment);
-api.get('/v1/estetic/plans', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.getPlans);
-api.post('/v1/estetic/plans', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.createPlan);
-api.put('/v1/estetic/plans/:id', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.updatePlan);
-api.delete('/v1/estetic/plans/:id', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.deletePlan);
-api.get('/v1/estetic/procedures', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.getProcedures);
-api.post('/v1/estetic/procedures', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.createProcedure);
-api.delete('/v1/estetic/procedures/:id', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.deleteProcedure);
-api.get('/v1/estetic/evolutions', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.getEvolutions);
-api.post('/v1/estetic/evolutions', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.createEvolution);
-api.get('/v1/estetic/returns', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.getReturns);
-api.post('/v1/estetic/returns', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.createReturn);
-api.get('/v1/estetic/photos', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.getPhotos);
-api.post('/v1/estetic/photos', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.createPhoto);
-api.delete('/v1/estetic/photos/:id', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.deletePhoto);
-api.get('/v1/estetic/before-after', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.getBeforeAfter);
-api.get('/v1/estetic/history', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.getHistory);
+api.get('/v1/estetic/config', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaEstetic'), EsteticController.getConfig);
+api.get('/v1/estetic/catalog', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaEstetic'), EsteticController.getCatalog);
+api.post('/v1/estetic/catalog', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaEstetic'), EsteticController.createCatalogItem);
+api.get('/v1/estetic/patient/:patientId/overview', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaEstetic'), EsteticController.getPatientOverview);
+api.get('/v1/estetic/assessments', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaEstetic'), EsteticController.getAssessments);
+api.post('/v1/estetic/assessments', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaEstetic'), EsteticController.createAssessment);
+api.delete('/v1/estetic/assessments/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaEstetic'), EsteticController.deleteAssessment);
+api.get('/v1/estetic/plans', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaEstetic'), EsteticController.getPlans);
+api.post('/v1/estetic/plans', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaEstetic'), EsteticController.createPlan);
+api.put('/v1/estetic/plans/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaEstetic'), EsteticController.updatePlan);
+api.delete('/v1/estetic/plans/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaEstetic'), EsteticController.deletePlan);
+api.get('/v1/estetic/procedures', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaEstetic'), EsteticController.getProcedures);
+api.post('/v1/estetic/procedures', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaEstetic'), EsteticController.createProcedure);
+api.delete('/v1/estetic/procedures/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaEstetic'), EsteticController.deleteProcedure);
+api.get('/v1/estetic/evolutions', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaEstetic'), EsteticController.getEvolutions);
+api.post('/v1/estetic/evolutions', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaEstetic'), EsteticController.createEvolution);
+api.get('/v1/estetic/returns', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaEstetic'), EsteticController.getReturns);
+api.post('/v1/estetic/returns', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaEstetic'), EsteticController.createReturn);
+api.get('/v1/estetic/photos', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaEstetic'), EsteticController.getPhotos);
+api.post('/v1/estetic/photos', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaEstetic'), EsteticController.createPhoto);
+api.delete('/v1/estetic/photos/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaEstetic'), EsteticController.deletePhoto);
+api.get('/v1/estetic/before-after', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaEstetic'), EsteticController.getBeforeAfter);
+api.get('/v1/estetic/history', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaEstetic'), EsteticController.getHistory);
 
-api.patch('/v1/estetic/plans/:id/item-status', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.updatePlanItem);
-api.put('/v1/estetic/assessments/:id', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.updateAssessment);
-api.put('/v1/estetic/procedures/:id', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.updateProcedure);
-api.put('/v1/estetic/evolutions/:id', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.updateEvolution);
-api.delete('/v1/estetic/evolutions/:id', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.deleteEvolution);
-api.patch('/v1/estetic/returns/:id', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.updateReturn);
-api.put('/v1/estetic/returns/:id', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.updateReturn);
-api.delete('/v1/estetic/returns/:id', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.deleteReturn);
-api.put('/v1/estetic/photos/:id', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.updatePhoto);
+api.patch('/v1/estetic/plans/:id/item-status', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaEstetic'), EsteticController.updatePlanItem);
+api.put('/v1/estetic/assessments/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaEstetic'), EsteticController.updateAssessment);
+api.put('/v1/estetic/procedures/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaEstetic'), EsteticController.updateProcedure);
+api.put('/v1/estetic/evolutions/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaEstetic'), EsteticController.updateEvolution);
+api.delete('/v1/estetic/evolutions/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaEstetic'), EsteticController.deleteEvolution);
+api.patch('/v1/estetic/returns/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaEstetic'), EsteticController.updateReturn);
+api.put('/v1/estetic/returns/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaEstetic'), EsteticController.updateReturn);
+api.delete('/v1/estetic/returns/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaEstetic'), EsteticController.deleteReturn);
+api.put('/v1/estetic/photos/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaEstetic'), EsteticController.updatePhoto);
 
 export default api;

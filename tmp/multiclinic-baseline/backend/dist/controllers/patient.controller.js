@@ -1,0 +1,321 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.PatientController = void 0;
+const personal_assessment_calculation_service_1 = require("../services/personal-assessment-calculation.service");
+const database_1 = require("../config/database");
+const uuid_1 = require("uuid");
+const audit_middleware_1 = require("../middlewares/audit.middleware");
+const phone_validator_1 = require("../utils/phone-validator");
+// Autorização do responsável informada pelo cliente (camelCase ou snake_case); undefined = não informada.
+function informedAuthorization(g) {
+    const value = g?.authorizationSigned ?? g?.authorization_signed;
+    if (value === undefined || value === null)
+        return undefined;
+    return value === true || value === 1 || value === '1' || value === 'true' ? 1 : 0;
+}
+const digitsOnly = (v) => String(v ?? '').replace(/\D/g, '');
+const normalizedName = (v) => String(v ?? '').trim().toLowerCase();
+// Valores aceitos pelo CHECK de guardians.relationship (schema.sql); outros viram 'other'.
+const GUARDIAN_RELATIONSHIPS = ['mother', 'father', 'legal_guardian', 'tutor', 'other'];
+const validRelationship = (value) => typeof value === 'string' && GUARDIAN_RELATIONSHIPS.includes(value) ? value : 'other';
+class PatientController {
+    static list(req, res) {
+        try {
+            const tenantId = req.tenantId;
+            if (!tenantId) {
+                res.status(400).json({ error: 'Tenant não informado' });
+                return;
+            }
+            const { search, limit } = req.query;
+            let query = `
+        SELECT 
+          p.id, p.tenant_id, p.full_name, p.social_name, p.birth_date, p.cpf, p.gender, p.anthropometric_sex,
+          p.email, p.phone, p.whatsapp, p.city, p.state, p.is_child, p.active, p.created_at,
+          (SELECT COUNT(*) FROM appointments WHERE patient_id = p.id) as total_appointments,
+          (SELECT COUNT(*) FROM records WHERE patient_id = p.id) as total_records
+        FROM patients p
+        WHERE p.tenant_id = ?
+      `;
+            const params = [tenantId];
+            if (search && typeof search === 'string' && search.trim().length > 0) {
+                const raw = search.trim();
+                const term = `%${raw}%`;
+                const digits = raw.replace(/\D/g, '');
+                if (digits.length >= 3) {
+                    const digitsTerm = `%${digits}%`;
+                    query += ` AND (
+            p.full_name LIKE ? OR 
+            p.cpf LIKE ? OR 
+            REPLACE(REPLACE(REPLACE(COALESCE(p.cpf, ''), '.', ''), '-', ''), ' ', '') LIKE ? OR
+            p.phone LIKE ? OR 
+            REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(p.phone, ''), '(', ''), ')', ''), '-', ''), ' ', '') LIKE ? OR
+            p.email LIKE ?
+          )`;
+                    params.push(term, term, digitsTerm, term, digitsTerm, term);
+                }
+                else {
+                    query += ` AND (p.full_name LIKE ? OR p.cpf LIKE ? OR p.phone LIKE ? OR p.email LIKE ?)`;
+                    params.push(term, term, term, term);
+                }
+            }
+            query += ' ORDER BY p.full_name ASC';
+            if (limit && Number(limit) > 0) {
+                query += ' LIMIT ?';
+                params.push(Number(limit));
+            }
+            const stmt = database_1.db.prepare(query);
+            const patients = stmt.all(...params);
+            res.json(patients);
+        }
+        catch (err) {
+            console.error('[PatientController.list] Erro:', err);
+            res.status(500).json({ error: 'Erro ao listar pacientes/clientes' });
+        }
+    }
+    static getById(req, res) {
+        try {
+            const { id } = req.params;
+            const tenantId = req.tenantId;
+            const stmt = database_1.db.prepare(`
+        SELECT 
+          id, tenant_id, full_name, social_name, birth_date, cpf, gender, anthropometric_sex, email, phone, whatsapp,
+          address, city, state, zip_code, photo_url, emergency_contact, emergency_phone,
+          notes_admin, is_child, pet_metadata_json, active, allergies_status,
+          health_insurance_provider, health_insurance_card, health_insurance_plan,
+          created_at, updated_at
+        FROM patients
+        WHERE id = ? AND tenant_id = ?
+      `);
+            const patient = stmt.get(id, tenantId);
+            if (!patient) {
+                const otherTenantCheck = database_1.db.prepare('SELECT tenant_id FROM patients WHERE id = ?').get(id);
+                if (otherTenantCheck && otherTenantCheck.tenant_id !== tenantId) {
+                    res.status(403).json({ error: 'Acesso negado: este paciente pertence a outra clínica', code: 'FORBIDDEN_IDOR' });
+                    return;
+                }
+                res.status(404).json({ error: 'Paciente não encontrado' });
+                return;
+            }
+            // Se for criança ou menor, busca os responsáveis legais
+            let guardians = [];
+            if (patient.is_child) {
+                const grdStmt = database_1.db.prepare(`
+          SELECT id, full_name, relationship, cpf, phone, email, is_primary, authorization_signed
+          FROM guardians
+          WHERE patient_id = ? AND tenant_id = ?
+          ORDER BY is_primary DESC, full_name ASC
+        `);
+                guardians = grdStmt.all(id, tenantId);
+            }
+            // Histórico recente de agendamentos
+            const apptStmt = database_1.db.prepare(`
+        SELECT 
+          a.id, a.appointment_number, a.start_time, a.end_time, a.status, a.modality,
+          p.name as professional_name, s.name as service_name
+        FROM appointments a
+        JOIN professionals p ON p.id = a.professional_id
+        JOIN services s ON s.id = a.service_id
+        WHERE a.patient_id = ? AND a.tenant_id = ?
+        ORDER BY a.start_time DESC
+        LIMIT 10
+      `);
+            const recentAppointments = apptStmt.all(id, tenantId);
+            res.json({
+                patient,
+                guardians,
+                recentAppointments
+            });
+        }
+        catch (err) {
+            console.error('[PatientController.getById] Erro:', err);
+            res.status(500).json({ error: 'Erro ao buscar detalhes do paciente' });
+        }
+    }
+    static create(req, res) {
+        try {
+            const tenantId = req.tenantId;
+            if (!tenantId) {
+                res.status(400).json({ error: 'Tenant não informado' });
+                return;
+            }
+            const { fullName, socialName, birthDate, cpf, gender, email, phone, whatsapp, address, city, state, zipCode, photoUrl, emergencyContact, emergencyPhone, notesAdmin, isChild, petMetadata, guardians } = req.body;
+            const effectiveFullName = String(fullName || req.body.name || '').trim();
+            const rawPhone = String(phone || req.body.telephone || '').trim();
+            if (!effectiveFullName) {
+                res.status(400).json({ error: 'Nome completo é obrigatório' });
+                return;
+            }
+            const phoneValidation = (0, phone_validator_1.validateAndFormatBrazilianPhone)(rawPhone, true);
+            if (!phoneValidation.isValid) {
+                res.status(400).json({ error: phoneValidation.error || 'Telefone brasileiro inválido (verifique o DDD e a quantidade de dígitos)' });
+                return;
+            }
+            const effectivePhone = phoneValidation.formatted;
+            let effectiveWhatsapp = effectivePhone;
+            if (whatsapp && String(whatsapp).trim() !== rawPhone) {
+                const wppVal = (0, phone_validator_1.validateAndFormatBrazilianPhone)(whatsapp, false);
+                if (!wppVal.isValid) {
+                    res.status(400).json({ error: wppVal.error || 'WhatsApp inválido' });
+                    return;
+                }
+                effectiveWhatsapp = wppVal.formatted || effectivePhone;
+            }
+            let effectiveEmergencyPhone = null;
+            if (emergencyPhone) {
+                const emVal = (0, phone_validator_1.validateAndFormatBrazilianPhone)(emergencyPhone, false);
+                if (!emVal.isValid) {
+                    res.status(400).json({ error: emVal.error || 'Telefone de emergência inválido' });
+                    return;
+                }
+                effectiveEmergencyPhone = emVal.formatted || null;
+            }
+            const patientId = 'pat-' + (0, uuid_1.v4)().slice(0, 8);
+            const insertStmt = database_1.db.prepare(`
+        INSERT INTO patients (
+          id, tenant_id, full_name, social_name, birth_date, cpf, gender, email, phone, whatsapp,
+          address, city, state, zip_code, photo_url, emergency_contact, emergency_phone,
+          notes_admin, is_child, pet_metadata_json, active
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+      `);
+            insertStmt.run(patientId, tenantId, effectiveFullName, socialName || null, birthDate || null, cpf || null, gender || req.body.sex || null, email || null, effectivePhone, effectiveWhatsapp, address || null, city || null, state || null, zipCode || null, photoUrl || null, emergencyContact || null, effectiveEmergencyPhone, notesAdmin || null, isChild ? 1 : 0, petMetadata ? JSON.stringify(petMetadata) : null);
+            if (req.body.anthropometric_sex !== undefined)
+                database_1.db.prepare('UPDATE patients SET anthropometric_sex=? WHERE id=? AND tenant_id=?').run((0, personal_assessment_calculation_service_1.referenceSex)({ anthropometric_sex: req.body.anthropometric_sex }).sex, patientId, tenantId);
+            // Cadastra responsáveis legais se fornecidos (para atendimento infantil)
+            if (isChild && Array.isArray(guardians)) {
+                const insertGrd = database_1.db.prepare(`
+          INSERT INTO guardians (id, tenant_id, patient_id, full_name, relationship, cpf, phone, email, is_primary, authorization_signed)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+                for (const g of guardians) {
+                    if (g.fullName && g.phone) {
+                        insertGrd.run('grd-' + (0, uuid_1.v4)().slice(0, 8), tenantId, patientId, g.fullName, g.relationship ? validRelationship(g.relationship) : 'mother', g.cpf || null, g.phone, g.email || null, g.isPrimary ? 1 : 0, informedAuthorization(g) ?? 0);
+                    }
+                }
+            }
+            (0, audit_middleware_1.logAudit)(req, 'CREATE_PATIENT', 'patients', patientId, { fullName, phone, isChild });
+            res.status(201).json({ id: patientId, fullName, message: 'Paciente/Cliente cadastrado com sucesso' });
+        }
+        catch (err) {
+            console.error('[PatientController.create] Erro:', err);
+            res.status(500).json({ error: 'Erro ao cadastrar paciente' });
+        }
+    }
+    static update(req, res) {
+        try {
+            const { id } = req.params;
+            const tenantId = req.tenantId;
+            const { fullName, socialName, birthDate, cpf, gender, email, phone, whatsapp, address, city, state, zipCode, photoUrl, emergencyContact, emergencyPhone, notesAdmin, notes, clinicalNotes, importantAlert, isChild, active, healthInsuranceProvider, healthInsuranceCard, healthInsurancePlan, guardians } = req.body;
+            const effectiveFullName = fullName !== undefined ? (fullName ? String(fullName).trim() : null) : (req.body.name !== undefined ? (req.body.name ? String(req.body.name).trim() : null) : null);
+            const effectivePhoto = photoUrl !== undefined ? photoUrl : (req.body.avatar_url !== undefined ? req.body.avatar_url : null);
+            const effectiveGender = gender !== undefined ? gender : (req.body.sex !== undefined ? req.body.sex : null);
+            let effectivePhoneToUpdate = undefined;
+            if (phone !== undefined) {
+                const pVal = (0, phone_validator_1.validateAndFormatBrazilianPhone)(phone, true);
+                if (!pVal.isValid) {
+                    res.status(400).json({ error: pVal.error || 'Telefone brasileiro inválido' });
+                    return;
+                }
+                effectivePhoneToUpdate = pVal.formatted;
+            }
+            let effectiveWhatsappToUpdate = undefined;
+            if (whatsapp !== undefined) {
+                if (whatsapp) {
+                    const wVal = (0, phone_validator_1.validateAndFormatBrazilianPhone)(whatsapp, false);
+                    if (!wVal.isValid) {
+                        res.status(400).json({ error: wVal.error || 'WhatsApp inválido' });
+                        return;
+                    }
+                    effectiveWhatsappToUpdate = wVal.formatted;
+                }
+                else {
+                    effectiveWhatsappToUpdate = null;
+                }
+            }
+            let effectiveEmergencyPhoneToUpdate = undefined;
+            if (emergencyPhone !== undefined) {
+                if (emergencyPhone) {
+                    const eVal = (0, phone_validator_1.validateAndFormatBrazilianPhone)(emergencyPhone, false);
+                    if (!eVal.isValid) {
+                        res.status(400).json({ error: eVal.error || 'Telefone de emergência inválido' });
+                        return;
+                    }
+                    effectiveEmergencyPhoneToUpdate = eVal.formatted;
+                }
+                else {
+                    effectiveEmergencyPhoneToUpdate = null;
+                }
+            }
+            const updateStmt = database_1.db.prepare(`
+        UPDATE patients SET
+          full_name = COALESCE(?, full_name),
+          social_name = COALESCE(?, social_name),
+          birth_date = COALESCE(?, birth_date),
+          cpf = COALESCE(?, cpf),
+          gender = COALESCE(?, gender),
+          email = COALESCE(?, email),
+          phone = COALESCE(?, phone),
+          whatsapp = COALESCE(?, whatsapp),
+          address = COALESCE(?, address),
+          city = COALESCE(?, city),
+          state = COALESCE(?, state),
+          zip_code = COALESCE(?, zip_code),
+          photo_url = COALESCE(?, photo_url),
+          emergency_contact = COALESCE(?, emergency_contact),
+          emergency_phone = COALESCE(?, emergency_phone),
+          notes_admin = COALESCE(?, notes_admin),
+          notes = COALESCE(?, notes),
+          clinical_notes = COALESCE(?, clinical_notes),
+          important_alert = COALESCE(?, important_alert),
+          is_child = COALESCE(?, is_child),
+          active = COALESCE(?, active),
+          health_insurance_provider = COALESCE(?, health_insurance_provider),
+          health_insurance_card = COALESCE(?, health_insurance_card),
+          health_insurance_plan = COALESCE(?, health_insurance_plan),
+          updated_at = datetime('now')
+        WHERE id = ? AND tenant_id = ?
+      `);
+            updateStmt.run(effectiveFullName || null, socialName || null, birthDate || null, cpf || null, effectiveGender || null, email || null, effectivePhoneToUpdate !== undefined ? effectivePhoneToUpdate : null, effectiveWhatsappToUpdate !== undefined ? effectiveWhatsappToUpdate : null, address || null, city || null, state || null, zipCode || null, effectivePhoto || null, emergencyContact || null, effectiveEmergencyPhoneToUpdate !== undefined ? effectiveEmergencyPhoneToUpdate : null, notesAdmin !== undefined ? notesAdmin : null, notes !== undefined ? notes : null, clinicalNotes !== undefined ? clinicalNotes : null, importantAlert !== undefined ? importantAlert : null, isChild !== undefined ? (isChild ? 1 : 0) : null, active !== undefined ? (active ? 1 : 0) : null, healthInsuranceProvider !== undefined ? healthInsuranceProvider : null, healthInsuranceCard !== undefined ? healthInsuranceCard : null, healthInsurancePlan !== undefined ? healthInsurancePlan : null, id, tenantId);
+            if (req.body.anthropometric_sex !== undefined)
+                database_1.db.prepare('UPDATE patients SET anthropometric_sex=? WHERE id=? AND tenant_id=?').run((0, personal_assessment_calculation_service_1.referenceSex)({ anthropometric_sex: req.body.anthropometric_sex }).sex, id, tenantId);
+            // Atualiza responsáveis se informados
+            if (Array.isArray(guardians)) {
+                // Os responsáveis são regravados; a autorização já registrada de um mesmo responsável
+                // (mesmo id, CPF ou nome) é mantida quando o cliente não informa um novo valor.
+                const previous = database_1.db.prepare('SELECT id, full_name, cpf, relationship, authorization_signed FROM guardians WHERE patient_id = ? AND tenant_id = ?').all(id, tenantId);
+                const reused = new Set();
+                const findPrevious = (g, gName) => {
+                    const available = previous.filter(p => !reused.has(p.id));
+                    const cpfDigits = digitsOnly(g.cpf);
+                    return (g.id && available.find(p => p.id === g.id))
+                        || (cpfDigits && available.find(p => digitsOnly(p.cpf) === cpfDigits))
+                        || available.find(p => normalizedName(p.full_name) === normalizedName(gName));
+                };
+                const insertGrd = database_1.db.prepare(`
+          INSERT INTO guardians (id, tenant_id, patient_id, full_name, relationship, cpf, phone, email, is_primary, authorization_signed)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+                // Atômico: se algum responsável falhar, os anteriores não são perdidos.
+                database_1.db.transaction(() => {
+                    database_1.db.prepare('DELETE FROM guardians WHERE patient_id = ? AND tenant_id = ?').run(id, tenantId);
+                    for (const g of guardians) {
+                        const gName = g.full_name || g.fullName;
+                        if (gName) {
+                            const match = findPrevious(g, gName);
+                            if (match)
+                                reused.add(match.id);
+                            insertGrd.run(match?.id ?? 'grd-' + (0, uuid_1.v4)().slice(0, 8), tenantId, id, gName, g.relationship ? validRelationship(g.relationship) : (match?.relationship ?? 'other'), g.cpf || null, g.phone || null, g.email || null, g.is_primary !== undefined ? (g.is_primary ? 1 : 0) : 1, informedAuthorization(g) ?? match?.authorization_signed ?? 0);
+                        }
+                    }
+                })();
+            }
+            (0, audit_middleware_1.logAudit)(req, 'UPDATE_PATIENT', 'patients', id);
+            res.json({ message: 'Cadastro atualizado com sucesso' });
+        }
+        catch (err) {
+            console.error('[PatientController.update] Erro:', err);
+            res.status(500).json({ error: 'Erro ao atualizar paciente' });
+        }
+    }
+}
+exports.PatientController = PatientController;

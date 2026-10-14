@@ -646,7 +646,7 @@ export class TenantController {
       if (tenant.status === 'banned') { res.status(409).json({ error: 'Remova o banimento antes de alterar o status da clínica.' }); return; }
 
       db.prepare("UPDATE tenants SET status = 'rejected', rejection_reason = ?, updated_at = datetime('now') WHERE id = ?").run(reason || 'Não atende aos critérios da plataforma', id);
-      db.prepare("UPDATE users SET status = 'rejected', updated_at = datetime('now') WHERE tenant_id = ?").run(id);
+      db.prepare("UPDATE users SET status = 'rejected', updated_at = datetime('now') WHERE tenant_id = ? AND NOT EXISTS(SELECT 1 FROM clinic_users other WHERE other.user_id=users.id AND other.tenant_id<>users.tenant_id)").run(id);
       db.prepare("UPDATE clinic_users SET status = 'rejected' WHERE tenant_id = ?").run(id);
 
       logAudit(req, 'ADMIN_REJECT_CLINIC', 'tenants', id, { reason });
@@ -672,7 +672,7 @@ export class TenantController {
       if (tenant.status === 'banned') { res.status(409).json({ error: 'Remova o banimento antes de alterar o status da clínica.' }); return; }
 
       db.prepare("UPDATE tenants SET status = 'blocked', updated_at = datetime('now') WHERE id = ?").run(id);
-      db.prepare("UPDATE users SET status = 'blocked', updated_at = datetime('now') WHERE tenant_id = ?").run(id);
+      db.prepare("UPDATE users SET status = 'blocked', updated_at = datetime('now') WHERE tenant_id = ? AND NOT EXISTS(SELECT 1 FROM clinic_users other WHERE other.user_id=users.id AND other.tenant_id<>users.tenant_id)").run(id);
 
       logAudit(req, 'ADMIN_BLOCK_CLINIC', 'tenants', id);
       res.json({ message: `Clínica "${tenant.name}" bloqueada com sucesso.` });

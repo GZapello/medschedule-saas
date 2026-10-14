@@ -172,7 +172,7 @@ export function getAvailableModulesForProfessional(
         effectiveUserId = directUser.id;
         if (!effectiveTenantId) effectiveTenantId = directUser.tenant_id;
       } else if (prof?.name && effectiveTenantId) {
-        const matched = db.prepare('SELECT id FROM users WHERE tenant_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?)) LIMIT 1').get(effectiveTenantId, prof.name) as any;
+        const matched = db.prepare("SELECT u.id FROM users u JOIN clinic_users cu ON cu.user_id=u.id WHERE cu.tenant_id = ? AND cu.status='active' AND LOWER(TRIM(u.name)) = LOWER(TRIM(?)) LIMIT 1").get(effectiveTenantId, prof.name) as any;
         if (matched?.id) effectiveUserId = matched.id;
       }
     }

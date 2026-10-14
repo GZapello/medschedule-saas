@@ -235,6 +235,9 @@ async function runTests() {
       VALUES (?, ?, 'Secretária Ana', 'ana@sec.com', 'hash', 'receptionist', 'active', ?, ?)
     `).run(staffUserId, createdTenantId, nowIso, nowIso);
 
+    // Membership is authoritative; this fixture is created after startup migration.
+    db.prepare("INSERT INTO clinic_users (id,tenant_id,user_id,role,status) VALUES (?,?,?,'receptionist','active')").run('cu-' + staffUserId, createdTenantId, staffUserId);
+
     const updatePermsRes = await makeRequest('PUT', `/api/v1/staff/${staffUserId}/permissions`, {
       'Authorization': `Bearer ${authToken}`,
       'x-tenant-id': createdTenantId

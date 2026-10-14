@@ -1,0 +1,1411 @@
+import { ensureClinicBookingIdentity } from '../utils/clinic-booking-identity';
+import { resolveBookingTenant } from '../utils/public-booking';
+import { REGISTRATION_PROFESSION_ALIASES } from '../types/registration-professions';
+import { respondBillingError } from './billing.controller';
+import { requireCapacity, pendingBillingManager, BillingService, today, addDays, SOLO_TRIAL_DAYS } from '../services/billing.service';
+import { Request, Response } from 'express';
+import { db, CURRENT_TERMS_VERSION, CURRENT_PRIVACY_VERSION } from '../config/database';
+import { logAudit } from '../middlewares/audit.middleware';
+import { hashPassword, comparePassword } from '../utils/password';
+import { generateToken } from '../utils/jwt';
+import { v4 as uuidv4 } from 'uuid';
+import { globalAudit, purgeClinic, purgeTenantCompletely } from '../services/clinic-control.service';
+import { ensureDefaultClinicService } from '../services/default-service.service';
+import { EmailService } from '../services/email.service';
+import { TrialNotificationService } from '../services/trial-notification.service';
+import { AdminNotificationService } from '../services/admin-notification.service';
+import { CapabilityService } from '../services/capability.service';
+import { MedicalTreeService } from '../services/medical-tree.service';
+import { resolveProfessionModule, resolveCanonicalProfession } from '../utils/profession-module';
+import { REGISTRATION_PROFESSIONS } from '../types/professions';
+import { createDefaultSchedules } from '../utils/schedule-defaults';
+
+
+
+export class TenantController {
+  // 0. Lista pública de clínicas ativas para seleção no cadastro de usuários ("Clínica que deseja integrar")
+  static listPublic(req: Request, res: Response): void {
+    try {
+      const stmt = db.prepare(`
+        SELECT id, name, trade_name, city, state, slug, logo_url, client_term_label
+        FROM tenants
+        WHERE status = 'active' AND COALESCE(registrations_blocked, 0) = 0
+        ORDER BY name ASC
+      `);
+      const clinics = stmt.all();
+      res.json(clinics);
+    } catch (err: any) {
+      if (respondBillingError(res, err)) return;
+      console.error('[TenantController.listPublic] Erro:', err);
+      res.status(500).json({ error: 'Erro ao listar clínicas disponíveis' });
+    }
+  }
+
+  // 1. Cadastro Público de Nova Clínica ("Criar Minha Clínica" - status inicial 'pending')
+  static async registerPublic(req: Request, res: Response): Promise<void> {
+    try {
+      const responsibleName = (req.body.responsibleName || req.body.adminName || req.body.name || '').trim();
+      const email = (req.body.email || req.body.adminEmail || '').trim();
+      const phone = req.body.phone;
+      const password = req.body.password;
+      const clinicName = (req.body.clinicName || (responsibleName ? `Consultório ${responsibleName}` : 'Meu Consultório')).trim();
+      const tradeName = req.body.tradeName;
+      const cnpjCpf = req.body.cnpjCpf;
+      const city = req.body.city;
+      const state = req.body.state;
+      const termsAccepted = req.body.termsAccepted !== undefined ? req.body.termsAccepted : true;
+      const privacyAccepted = req.body.privacyAccepted !== undefined ? req.body.privacyAccepted : true;
+      const marketingAccepted = req.body.marketingAccepted;
+      const marketingOptIn = req.body.marketingOptIn;
+
+      const rawProfession = (req.body.profession || req.body.managerProfession || req.body.professionName || '').trim();
+      const professionIdInput = (req.body.professionId || req.body.managerProfessionId || '').trim();
+
+      let matchedCatalogProf = REGISTRATION_PROFESSIONS.find(p => p.id === professionIdInput);
+      if (!matchedCatalogProf && professionIdInput && REGISTRATION_PROFESSION_ALIASES[professionIdInput]) {
+        matchedCatalogProf = REGISTRATION_PROFESSIONS.find(p => p.id === REGISTRATION_PROFESSION_ALIASES[professionIdInput]);
+      }
+      if (!matchedCatalogProf) {
+        matchedCatalogProf = REGISTRATION_PROFESSIONS.find(
+          p => (p.id === 'prof-dentista' && (professionIdInput === 'prof-dentista' || rawProfession.toLowerCase() === 'dentista')) ||
+               (p.id === 'prof-personal-trainer' && (professionIdInput === 'prof-personal-trainer' || rawProfession.toLowerCase() === 'personal trainer')) ||
+               (p.id === 'prof-outro-saude' && (professionIdInput === 'other_health' || rawProfession.toLowerCase() === 'outra profissão da saúde')) ||
+               p.label.toLowerCase() === rawProfession.toLowerCase()
+        );
+      }
+
+      const resolvedProfId = matchedCatalogProf?.id || (professionIdInput ? professionIdInput : null);
+      const resolvedProfName = rawProfession || matchedCatalogProf?.label || null;
+      const resolvedProfSlug = matchedCatalogProf?.slug || (resolvedProfName ? resolvedProfName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-') : null);
+      const resolvedBoardLabel = req.body.registrationType || req.body.managerRegistrationType || matchedCatalogProf?.boardLabel || 'Registro';
+      const managerPracticeAreas = req.body.managerPracticeAreas || req.body.practiceAreas || null;
+      const managerRegistrationNumber = req.body.managerRegistrationNumber || req.body.registrationNumber || null;
+      const zemdaBodyEnabled = req.body.zemda360Enabled ?? req.body.zemdaBodyEnabled;
+
+      const professionResolution = resolveCanonicalProfession({
+        id: resolvedProfId,
+        name: resolvedProfName,
+        slug: resolvedProfSlug,
+        registrationType: resolvedBoardLabel
+      });
+      const activeModule = professionResolution.commercialModule;
+      const modFlags = professionResolution.flags;
+
+      if (req.body.practiceAreaIds && Array.isArray(req.body.practiceAreaIds) && req.body.practiceAreaIds.length > 0) {
+        const areaValidation = CapabilityService.validatePracticeAreasForProfession(
+          resolvedProfId || resolvedProfName,
+          req.body.practiceAreaIds
+        );
+        if (!areaValidation.valid) {
+          res.status(400).json({ error: areaValidation.error });
+          return;
+        }
+      }
+
+      if (!responsibleName || !email || !password) {
+        res.status(400).json({ error: 'Nome, e-mail e senha são obrigatórios' });
+        return;
+      }
+
+      if (!termsAccepted || !privacyAccepted) {
+        res.status(400).json({ error: 'É obrigatório aceitar os Termos de Uso e a Política de Privacidade' });
+        return;
+      }
+
+      const cleanEmail = email.toLowerCase();
+
+      // Verificação de conta existente para retomada segura do cadastro ou conflito
+      const existingUser = db.prepare('SELECT id, onboarding_status, status FROM users WHERE email = ?').get(cleanEmail) as any;
+      if (existingUser) {
+        const userOnboarding = existingUser.onboarding_status || existingUser.status;
+        if (userOnboarding !== 'active') {
+          res.status(409).json({
+            code: 'ACCOUNT_EXISTS_ONBOARDING_PENDING',
+            error: 'Você já possui uma conta em processo de cadastro. Faça login para continuar de onde parou.',
+            onboardingStatus: existingUser.onboarding_status || 'pending_verification',
+            email: cleanEmail
+          });
+          return;
+        }
+        res.status(409).json({
+          code: 'EMAIL_ALREADY_EXISTS',
+          error: 'Este e-mail já está cadastrado na plataforma'
+        });
+        return;
+      }
+
+      // Validação opcional do token de verificação se fornecido previamente
+      const emailVerificationToken = req.body.emailVerificationToken;
+      let tokenValidation: any = null;
+      if (emailVerificationToken) {
+        tokenValidation = EmailService.verifyVerificationToken(
+          emailVerificationToken,
+          cleanEmail,
+          'clinic_registration'
+        );
+      }
+
+      // Gera slug único a partir do nome da clínica
+      let baseSlug = clinicName
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '');
+
+      if (!baseSlug) baseSlug = 'clinica';
+
+      let slug = baseSlug;
+      let counter = 1;
+      while (db.prepare('SELECT id FROM tenants WHERE slug = ?').get(slug)) {
+        slug = `${baseSlug}-${counter++}`;
+      }
+
+      const tenantId = 'ten-' + uuidv4().slice(0, 8);
+      const userId = 'usr-' + uuidv4().slice(0, 8);
+      const hashedPassword = await hashPassword(password);
+      const identity = String(cnpjCpf || '').replace(/\D/g, '');
+      const banned = db.prepare("SELECT slug, cnpj_cpf, email, responsible_email FROM tenants WHERE status = 'banned'").all();
+      if (banned.some(t => t.slug === baseSlug || (identity && String(t.cnpj_cpf || '').replace(/\D/g, '') === identity) || t.email === cleanEmail || t.responsible_email === cleanEmail)) {
+        res.status(403).json({ error: 'Esta clínica está banida. Somente o Administrador do Sistema pode liberar seu cadastro.' }); return;
+      }
+
+      // Validação de Teste Grátis Solo (7 dias)
+      const startTrial = req.body.startTrial === true || req.body.startTrial === 'true';
+      const planCode = req.body.planCode ? String(req.body.planCode).toUpperCase() : null;
+      const selectedPlan = planCode ? BillingService.plans().find(p => p.code === planCode) : null;
+      if (planCode && !selectedPlan) {
+        res.status(400).json({ error: 'Selecione um plano válido.' }); return;
+      }
+
+      if (startTrial) {
+        if (planCode && planCode !== 'SOLO') {
+          res.status(400).json({ error: 'O teste grátis de 7 dias é exclusivo para o plano Zemda Solo.' });
+          return;
+        }
+
+        const usedEmail = db.prepare('SELECT id FROM trial_history WHERE email = ?').get(cleanEmail);
+        if (usedEmail) {
+          res.status(400).json({ error: 'O teste grátis já foi utilizado para este e-mail. Escolha um plano para assinar.' });
+          return;
+        }
+        if (identity && identity.length >= 11) {
+          const usedDoc = db.prepare('SELECT id FROM trial_history WHERE cnpj_cpf = ?').get(identity);
+          if (usedDoc) {
+            res.status(400).json({ error: 'O teste grátis já foi utilizado para este CPF/CNPJ. Escolha um plano para assinar.' });
+            return;
+          }
+        }
+      }
+
+      const now = new Date();
+      const trialStartedAt = now.toISOString();
+      const trialEndsAt = new Date(now.getTime() + SOLO_TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString();
+      const trialStartDay = today();
+      const trialEndDay = addDays(trialStartDay, SOLO_TRIAL_DAYS);
+      const soloPlan = startTrial ? db.prepare("SELECT id, code, name FROM plans WHERE code = 'SOLO' AND active = 1").get() as any : null;
+      if (startTrial && !soloPlan) {
+        res.status(400).json({ error: 'O plano Solo não está disponível para cadastro.' }); return;
+      }
+      const subId = 'sub-' + uuidv4().slice(0, 8);
+
+      // Preparação dos dados auxiliares antes da transação (obtém IP seguro via req.ip/trust proxy)
+      const ipAddress = (req.ip || req.socket?.remoteAddress || null)?.replace(/^::ffff:/, '') || null;
+      const userAgent = (req.headers['user-agent'] as string) || null;
+      const optInMarketing = (marketingAccepted || marketingOptIn) ? 1 : 0;
+      const initialPermissions = JSON.stringify([]);
+      const verificationId = tokenValidation?.payload?.verificationId;
+
+      let createdProfId: string | null = null;
+      // Execução transacional atômica única: se qualquer etapa falhar, executa rollback integral
+      const executeRegistrationTransaction = db.transaction(() => {
+        // 1. Se veio verificação prévia, consome
+        if (verificationId) {
+          db.prepare(`
+            UPDATE email_verifications
+            SET status = 'consumed', consumed_at = datetime('now')
+            WHERE id = ? AND status = 'verified' AND consumed_at IS NULL
+          `).run(verificationId);
+        }
+
+        // 2. Verificação de unicidade do e-mail dentro da transação para isolamento perfeito
+        const existingUserInTx = db.prepare('SELECT id FROM users WHERE email = ?').get(cleanEmail);
+        if (existingUserInTx) {
+          throw new Error('EMAIL_ALREADY_EXISTS');
+        }
+
+        const initialTenantStatus = 'pending';
+        const initialUserStatus = 'pending';
+        const initialOnboardingStatus = verificationId ? 'pending_plan' : 'pending_verification';
+
+        // 3. Insere o tenant com status PENDENTE e onboarding_status 'pending_verification'
+        db.prepare(`
+          INSERT INTO tenants (
+            id, slug, name, corporate_name, trade_name, cnpj_cpf, email, phone,
+            city, state, responsible_name, responsible_email, responsible_phone,
+            manager_profession, manager_practice_areas,
+            status, onboarding_status, onboarding_completed, onboarding_step, manager_confirmed,
+            terms_accepted, terms_accepted_at, privacy_accepted, privacy_accepted_at,
+            terms_version, privacy_version, plan_id, trial_used, billing_required,
+            created_at, updated_at
+          ) VALUES (
+            ?, ?, ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?,
+            ?, ?,
+            ?, ?, 0, 1, 1,
+            1, datetime('now'), 1, datetime('now'),
+            ?, ?, ?, ?, 1,
+            datetime('now'), datetime('now')
+          )
+        `).run(
+          tenantId,
+          slug,
+          clinicName,
+          clinicName,
+          tradeName || clinicName,
+          cnpjCpf || null,
+          cleanEmail,
+          phone || null,
+          city || null,
+          state || null,
+          responsibleName,
+          cleanEmail,
+          phone || null,
+          resolvedProfName || null,
+          managerPracticeAreas || null,
+          initialTenantStatus,
+          initialOnboardingStatus,
+          CURRENT_TERMS_VERSION,
+          CURRENT_PRIVACY_VERSION,
+          startTrial ? soloPlan?.id : selectedPlan?.id || null,
+          startTrial ? 1 : 0
+        );
+
+        // 4. Insere o usuário gestor com role 'clinic_admin', status 'pending', onboarding_status
+        db.prepare(`
+          INSERT INTO users (
+            id, tenant_id, name, email, password_hash, role, phone, status, onboarding_status, email_verified,
+            profession_id, profession_name, practice_areas, registration_type, registration_number,
+            terms_version_accepted, privacy_version_accepted, terms_accepted_at, privacy_accepted_at,
+            zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled,
+            zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled, zemda_med_enabled, zemda_estetic_enabled,
+            created_at, updated_at
+          ) VALUES (
+            ?, ?, ?, ?, ?, 'clinic_admin', ?, ?, ?, ?,
+            ?, ?, ?, ?, ?,
+            ?, ?, datetime('now'), datetime('now'),
+            ?, ?, ?, ?,
+            ?, ?, ?, ?, ?, ?,
+            datetime('now'), datetime('now')
+          )
+        `).run(
+          userId, tenantId, responsibleName, cleanEmail, hashedPassword, phone || null, initialUserStatus, initialOnboardingStatus, verificationId ? 1 : 0,
+          resolvedProfId, resolvedProfName, managerPracticeAreas || null, resolvedBoardLabel, managerRegistrationNumber || null,
+          CURRENT_TERMS_VERSION, CURRENT_PRIVACY_VERSION,
+          modFlags.zemda_fisio_enabled, modFlags.zemda_odonto_enabled, modFlags.zemda_nutri_enabled, modFlags.zemda_to_enabled,
+          modFlags.zemda_fono_enabled, modFlags.zemda_pp_enabled, modFlags.zemda_psico_enabled, modFlags.zemda_personal_enabled, modFlags.zemda_med_enabled, modFlags.zemda_estetic_enabled || 0
+        );
+
+        // 5. Salva a prova documental do aceite legal na tabela legal_acceptances
+        db.prepare(`
+          INSERT INTO legal_acceptances (
+            id, user_id, clinic_id, terms_version, privacy_version, marketing_opt_in, accepted_at, ip_address, user_agent, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, datetime('now'))
+        `).run(
+          'la-' + uuidv4().slice(0, 8),
+          userId,
+          tenantId,
+          CURRENT_TERMS_VERSION,
+          CURRENT_PRIVACY_VERSION,
+          optInMarketing,
+          ipAddress,
+          userAgent
+        );
+
+        // 6. Associa em clinic_users com a profissão e área clínica do gestor
+        db.prepare(`
+          INSERT INTO clinic_users (
+            id, tenant_id, user_id, role, status, is_manager,
+            profession_id, profession_name, profession_custom, practice_areas, permissions_json,
+            zemda_body_enabled, zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled,
+            zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled, zemda_med_enabled, zemda_estetic_enabled, created_at
+          ) VALUES (
+            ?, ?, ?, 'clinic_admin', ?, 1,
+            ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?, ?, datetime('now')
+          )
+        `).run(
+          'cu-' + uuidv4().slice(0, 8),
+          tenantId,
+          userId,
+          initialUserStatus,
+          resolvedProfId,
+          resolvedProfName,
+          resolvedProfName,
+          managerPracticeAreas || null,
+          initialPermissions,
+          0,
+          modFlags.zemda_fisio_enabled, modFlags.zemda_odonto_enabled, modFlags.zemda_nutri_enabled, modFlags.zemda_to_enabled,
+          modFlags.zemda_fono_enabled, modFlags.zemda_pp_enabled, modFlags.zemda_psico_enabled, modFlags.zemda_personal_enabled, modFlags.zemda_med_enabled, modFlags.zemda_estetic_enabled || 0
+        );
+
+        // 7. Se o gestor também for profissional de saúde clínico, cria o registro em professionals
+        if (resolvedProfName && resolvedProfName !== 'Gestor / Administrador' && !matchedCatalogProf?.administrative) {
+          createdProfId = 'pro-' + uuidv4().slice(0, 8);
+          db.prepare(`
+            INSERT INTO professionals (
+              id, tenant_id, user_id, name, profession_id, profession_name,
+              registration_type, registration_number, practice_areas, bio, active,
+              zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled,
+              zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled, zemda_med_enabled, zemda_estetic_enabled
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).run(
+            createdProfId,
+            tenantId,
+            userId,
+            responsibleName,
+            resolvedProfId,
+            resolvedProfName,
+            resolvedBoardLabel,
+            managerRegistrationNumber || null,
+            managerPracticeAreas || null,
+            managerPracticeAreas || null,
+            modFlags.zemda_fisio_enabled,
+            modFlags.zemda_odonto_enabled,
+            modFlags.zemda_nutri_enabled,
+            modFlags.zemda_to_enabled,
+            modFlags.zemda_fono_enabled,
+            modFlags.zemda_pp_enabled,
+            modFlags.zemda_psico_enabled,
+            modFlags.zemda_personal_enabled,
+            modFlags.zemda_med_enabled
+          );
+
+          createDefaultSchedules(db, tenantId, createdProfId);
+        }
+
+        // 8. Marca cobrança obrigatória
+        db.prepare('UPDATE tenants SET billing_required=1 WHERE id=?').run(tenantId);
+
+        // 9. Criação automática e idempotente do serviço inicial padrão em modo estrito (falhas geram rollback)
+        ensureDefaultClinicService(tenantId, true);
+
+        // 10. Se for Teste Grátis Solo, cria a assinatura TRIAL e o registro em trial_history
+        if (startTrial && soloPlan) {
+          db.prepare(`
+            INSERT INTO subscriptions (
+              id, tenant_id, clinic_id, plan_id, status, current_period_start, current_period_end,
+              managed, is_current, trial_started_at, trial_ends_at, updated_at
+            ) VALUES (?, ?, ?, ?, 'TRIAL', ?, ?, 1, 1, ?, ?, datetime('now'))
+          `).run(subId, tenantId, tenantId, soloPlan.id, trialStartDay, trialEndDay, trialStartedAt, trialEndsAt);
+
+          db.prepare(`
+            INSERT INTO trial_history (
+              id, tenant_id, user_id, subscription_id, email, cnpj_cpf, started_at, ends_at, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')
+          `).run('th-' + uuidv4().slice(0, 8), tenantId, userId, subId, cleanEmail, identity || null, trialStartedAt, trialEndsAt);
+
+          db.prepare(`
+            INSERT INTO subscription_audit (id, clinic_id, subscription_id, user_id, action, previous_status, next_status, details_json)
+            VALUES (?, ?, ?, ?, 'TRIAL_STARTED', NULL, 'TRIAL', ?)
+          `).run(uuidv4(), tenantId, subId, userId, JSON.stringify({ planCode: 'SOLO', trialStartedAt, trialEndsAt }));
+        }
+      });
+
+      try {
+        executeRegistrationTransaction();
+      } catch (txErr: any) {
+        if (txErr.message === 'VERIFICATION_ALREADY_CONSUMED_OR_INVALID') {
+          res.status(400).json({ error: 'Esta verificação de e-mail já foi utilizada ou não é mais válida. Solicite um novo código.' });
+          return;
+        }
+        if (txErr.message === 'EMAIL_ALREADY_EXISTS') {
+          res.status(409).json({ error: 'Este e-mail já está cadastrado na plataforma' });
+          return;
+        }
+        throw txErr;
+      }
+
+      let rawPracticeAreas: string[] = [];
+      if (req.body.practiceAreaIds && Array.isArray(req.body.practiceAreaIds)) {
+        rawPracticeAreas = req.body.practiceAreaIds.filter(Boolean);
+      }
+
+      // Separa áreas médicas de áreas de atuação gerais
+      const medSpecsFromAreas = rawPracticeAreas.filter(a => typeof a === 'string' && a.startsWith('med-spec-'));
+      const medPasFromAreas = rawPracticeAreas.filter(a => typeof a === 'string' && a.startsWith('med-pa-'));
+      let generalPracticeAreas = rawPracticeAreas.filter(a => typeof a === 'string' && !a.startsWith('med-spec-') && !a.startsWith('med-pa-'));
+
+      if (generalPracticeAreas.length === 0 && (professionResolution.automaticPracticeAreaId || professionResolution.inferredAreaId)) {
+        const autoId = professionResolution.automaticPracticeAreaId || professionResolution.inferredAreaId;
+        if (autoId && !autoId.startsWith('med-spec-') && !autoId.startsWith('med-pa-')) {
+          generalPracticeAreas = [autoId];
+        }
+      }
+
+      if (generalPracticeAreas.length > 0) {
+        try {
+          CapabilityService.setUserPracticeAreas(userId, tenantId, generalPracticeAreas);
+        } catch (capErr) {
+          console.warn('[TenantController.registerPublic] Aviso ao gravar áreas de atuação gerais:', capErr);
+        }
+      }
+
+      // Persistência da Árvore Clínica de Medicina (ZemdaMed)
+      if (professionResolution.canonicalId === 'prof-medico' || professionResolution.commercialModule === 'ZemdaMed') {
+        try {
+          let medSpecs: string[] = [];
+          if (req.body.medicalSpecialtyIds && Array.isArray(req.body.medicalSpecialtyIds)) {
+            medSpecs = req.body.medicalSpecialtyIds.filter(Boolean);
+          }
+          if (professionResolution.isSpecificAlias && professionResolution.medicalSpecialtyId) {
+            if (!medSpecs.includes(professionResolution.medicalSpecialtyId)) {
+              medSpecs.push(professionResolution.medicalSpecialtyId);
+            }
+          }
+          // Se nenhuma especialidade médica foi explicitada, verifica se veio nas áreas ou usa padrão
+          if (medSpecs.length === 0) {
+            const specFromAreas = medSpecsFromAreas[0];
+            medSpecs = [specFromAreas || 'med-spec-clinica'];
+          }
+
+          let medPas: string[] = [];
+          if (req.body.medicalPracticeAreaIds && Array.isArray(req.body.medicalPracticeAreaIds)) {
+            medPas = req.body.medicalPracticeAreaIds.filter(Boolean);
+          }
+          for (const pa of medPasFromAreas) {
+            if (!medPas.includes(pa)) medPas.push(pa);
+          }
+
+          MedicalTreeService.setUserMedicalHierarchy(userId, tenantId, medSpecs, medPas);
+        } catch (medErr) {
+          console.warn('[TenantController.registerPublic] Aviso ao gravar hierarquia médica:', medErr);
+        }
+      }
+
+      try {
+        await EmailService.requestVerificationCode(cleanEmail, 'clinic_registration', ipAddress || undefined);
+      } catch (otpErr) {
+        console.warn('[TenantController.registerPublic] Aviso ao enviar código OTP inicial:', otpErr);
+      }
+
+      logAudit(req, 'REGISTER_CLINIC_REQUEST', 'tenants', tenantId, {
+        clinicName,
+        responsibleName,
+        email: cleanEmail,
+        termsVersion: CURRENT_TERMS_VERSION,
+        privacyVersion: CURRENT_PRIVACY_VERSION
+      });
+
+      // Criação automática de sessão autenticada segura
+      const token = generateToken({
+        userId,
+        tenantId,
+        role: 'clinic_admin',
+        email: cleanEmail,
+        name: responsibleName
+      });
+
+      const tenantData = db.prepare(`
+        SELECT 
+          id, slug, name, corporate_name, trade_name, email, phone, logo_url,
+          primary_color, client_term_label, status, onboarding_status, banned_reason, registrations_blocked,
+          onboarding_completed, onboarding_step, manager_confirmed, manager_profession, manager_practice_areas
+        FROM tenants
+        WHERE id = ?
+      `).get(tenantId);
+
+      const userPayload = {
+        id: userId,
+        name: responsibleName,
+        email: cleanEmail,
+        role: 'clinic_admin' as const,
+        status: 'pending' as const,
+        onboardingStatus: verificationId ? 'pending_plan' : 'pending_verification',
+        emailVerified: Boolean(verificationId),
+        phone: phone || null,
+        avatarUrl: null,
+        tenantId: tenantId,
+        needsOnboarding: true,
+        needsLegalAcceptance: false,
+        professionalId: createdProfId,
+        professionId: resolvedProfId,
+        professionName: resolvedProfName,
+        professionSlug: resolvedProfSlug,
+        practiceAreas: managerPracticeAreas || '',
+        registrationType: resolvedBoardLabel,
+        registrationNumber: managerRegistrationNumber || null,
+        termsVersionAccepted: CURRENT_TERMS_VERSION,
+        privacyVersionAccepted: CURRENT_PRIVACY_VERSION,
+        permissions: [],
+        zemda360Enabled: false,
+        zemdaBodyEnabled: false,
+        zemdaFisioEnabled: modFlags.zemda_fisio_enabled === 1,
+        zemdaOdontoEnabled: modFlags.zemda_odonto_enabled === 1,
+        zemdaNutriEnabled: modFlags.zemda_nutri_enabled === 1,
+        zemdaToEnabled: modFlags.zemda_to_enabled === 1,
+        zemdaFonoEnabled: modFlags.zemda_fono_enabled === 1,
+        zemdaPsicoEnabled: modFlags.zemda_psico_enabled === 1,
+        zemdaPPEnabled: modFlags.zemda_pp_enabled === 1,
+        zemdaPersonalEnabled: modFlags.zemda_personal_enabled === 1,
+        zemdaMedEnabled: modFlags.zemda_med_enabled === 1,
+        zemdaEsteticEnabled: modFlags.zemda_estetic_enabled === 1
+      };
+
+      // Disparo automático e não-bloqueante de notificações administrativas ao SuperAdmin
+      void AdminNotificationService.notifyNewUser({
+        userId,
+        name: responsibleName,
+        email: cleanEmail,
+        professionName: resolvedProfName,
+        clinicName,
+        role: 'clinic_admin',
+        createdAt: new Date(),
+        tenantId
+      }).catch(err => console.error('[TenantController.registerPublic] Erro na notificação de novo usuário:', err));
+
+      res.status(201).json({
+        message: 'Conta criada com sucesso! Verifique seu e-mail para continuar.',
+        token,
+        user: userPayload,
+        tenant: tenantData,
+        clinicId: tenantId,
+        slug,
+        status: 'pending',
+        onboardingStatus: userPayload.onboardingStatus,
+        isTrial: startTrial,
+        trialEndsAt: startTrial ? trialEndsAt : null
+      });
+    } catch (err: any) {
+      if (respondBillingError(res, err)) return;
+      console.error('[TenantController.registerPublic] Erro:', err);
+      res.status(500).json({ error: 'Erro ao cadastrar nova clínica' });
+    }
+  }
+
+  // 2. Aprovação de Clínica pelo ADM do SaaS
+  static adminApprove(req: Request, res: Response): void {
+    try {
+      const { id } = req.params;
+      const tenant = db.prepare('SELECT id, name, email, status FROM tenants WHERE id = ?').get(id) as any;
+
+      if (!tenant) {
+        res.status(404).json({ error: 'Clínica não encontrada' });
+        return;
+      }
+
+      if (tenant.status === 'banned') { res.status(409).json({ error: 'Remova o banimento antes de alterar o status da clínica.' }); return; }
+
+      requireCapacity(String(id), (db.prepare("SELECT COUNT(*) n FROM users WHERE tenant_id=? AND status='pending' AND role!='superadmin'").get(id) as any).n);
+      // 1. Atualiza clínica para 'active'
+      db.prepare("UPDATE tenants SET status = 'active', updated_at = datetime('now') WHERE id = ?").run(id);
+
+      // 2. Ativa os usuários associados (incluindo o primeiro gestor)
+      db.prepare("UPDATE users SET status = 'active', updated_at = datetime('now') WHERE tenant_id = ? AND status = 'pending'").run(id);
+      db.prepare("UPDATE clinic_users SET status = 'active', approved_by = ?, approved_at = datetime('now') WHERE tenant_id = ? AND status = 'pending'").run(req.user?.userId || 'admin', id);
+
+      // 3. Inicializa configurações padrão de recibos se ainda não existirem
+      db.prepare(`
+        INSERT OR IGNORE INTO receipt_settings (
+          id, tenant_id, emitter_type, emitter_name, emitter_trade_name, emitter_document,
+          receipt_prefix, next_sequence, is_configured
+        ) VALUES (
+          ?, ?, 'pj', ?, ?, '00.000.000/0001-00', 'REC-', 1, 0
+        )
+      `).run('rec-set-' + id, id, tenant.name, tenant.name);
+
+      // 4. Garante de forma idempotente que a clínica possui o serviço inicial padrão 'Atendimento / Consulta' (R$ 180,00)
+      ensureDefaultClinicService(String(id));
+
+      logAudit(req, 'ADMIN_APPROVE_CLINIC', 'tenants', id, { clinicName: tenant.name });
+
+      res.json({
+        message: `Clínica "${tenant.name}" aprovada com sucesso! O gestor já pode acessar para concluir a configuração inicial.`,
+        status: 'active'
+      });
+    } catch (err: any) {
+      if (respondBillingError(res, err)) return;
+      console.error('[TenantController.adminApprove] Erro:', err);
+      res.status(500).json({ error: 'Erro ao aprovar clínica' });
+    }
+  }
+
+  // 3. Recusa de Cadastro de Clínica pelo ADM do SaaS
+  static adminReject(req: Request, res: Response): void {
+    try {
+      const { id } = req.params;
+      const { reason } = req.body;
+
+      const tenant = db.prepare('SELECT id, name, status FROM tenants WHERE id = ?').get(id) as any;
+      if (!tenant) {
+        res.status(404).json({ error: 'Clínica não encontrada' });
+        return;
+      }
+
+      if (tenant.status === 'banned') { res.status(409).json({ error: 'Remova o banimento antes de alterar o status da clínica.' }); return; }
+
+      db.prepare("UPDATE tenants SET status = 'rejected', rejection_reason = ?, updated_at = datetime('now') WHERE id = ?").run(reason || 'Não atende aos critérios da plataforma', id);
+      db.prepare("UPDATE users SET status = 'rejected', updated_at = datetime('now') WHERE tenant_id = ?").run(id);
+      db.prepare("UPDATE clinic_users SET status = 'rejected' WHERE tenant_id = ?").run(id);
+
+      logAudit(req, 'ADMIN_REJECT_CLINIC', 'tenants', id, { reason });
+
+      res.json({ message: `Cadastro da clínica "${tenant.name}" foi recusado.`, status: 'rejected' });
+    } catch (err: any) {
+      if (respondBillingError(res, err)) return;
+      console.error('[TenantController.adminReject] Erro:', err);
+      res.status(500).json({ error: 'Erro ao recusar clínica' });
+    }
+  }
+
+  // 4. Bloqueio de Clínica pelo ADM do SaaS
+  static adminBlock(req: Request, res: Response): void {
+    try {
+      const { id } = req.params;
+      const tenant = db.prepare('SELECT id, name, status FROM tenants WHERE id = ?').get(id) as any;
+      if (!tenant) {
+        res.status(404).json({ error: 'Clínica não encontrada' });
+        return;
+      }
+
+      if (tenant.status === 'banned') { res.status(409).json({ error: 'Remova o banimento antes de alterar o status da clínica.' }); return; }
+
+      db.prepare("UPDATE tenants SET status = 'blocked', updated_at = datetime('now') WHERE id = ?").run(id);
+      db.prepare("UPDATE users SET status = 'blocked', updated_at = datetime('now') WHERE tenant_id = ?").run(id);
+
+      logAudit(req, 'ADMIN_BLOCK_CLINIC', 'tenants', id);
+      res.json({ message: `Clínica "${tenant.name}" bloqueada com sucesso.` });
+    } catch (err: any) {
+      if (respondBillingError(res, err)) return;
+      console.error('[TenantController.adminBlock] Erro:', err);
+      res.status(500).json({ error: 'Erro ao bloquear clínica' });
+    }
+  }
+
+  // 5. Desbloqueio de Clínica pelo ADM do SaaS
+  static adminUnblock(req: Request, res: Response): void {
+    try {
+      const { id } = req.params;
+      const tenant = db.prepare('SELECT id, name, status FROM tenants WHERE id = ?').get(id) as any;
+      if (!tenant) {
+        res.status(404).json({ error: 'Clínica não encontrada' });
+        return;
+      }
+
+      if (tenant.status === 'banned') { res.status(409).json({ error: 'Remova o banimento antes de alterar o status da clínica.' }); return; }
+
+      db.prepare("UPDATE tenants SET status = 'active', updated_at = datetime('now') WHERE id = ?").run(id);
+      requireCapacity(String(id), (db.prepare("SELECT COUNT(*) n FROM users WHERE tenant_id=? AND status!='active' AND role!='superadmin'").get(id) as any).n);
+      db.prepare("UPDATE users SET status = 'active', updated_at = datetime('now') WHERE tenant_id = ?").run(id);
+
+      logAudit(req, 'ADMIN_UNBLOCK_CLINIC', 'tenants', id);
+      res.json({ message: `Clínica "${tenant.name}" desbloqueada com sucesso.` });
+    } catch (err: any) {
+      if (respondBillingError(res, err)) return;
+      console.error('[TenantController.adminUnblock] Erro:', err);
+      res.status(500).json({ error: 'Erro ao desbloquear clínica' });
+    }
+  }
+
+  // 5.1 Banimento de Clínica pelo ADM do SaaS
+  static adminBan(req: Request, res: Response): void {
+    try {
+      const { id } = req.params;
+      const { reason } = req.body;
+      const adminId = (req as any).user?.userId;
+
+      if (typeof reason !== 'string' || !reason.trim()) {
+        res.status(400).json({ error: 'O motivo do banimento é obrigatório.' });
+        return;
+      }
+
+      const tenant = db.prepare('SELECT id, name FROM tenants WHERE id = ?').get(id) as any;
+      if (!tenant) {
+        res.status(404).json({ error: 'Clínica não encontrada' });
+        return;
+      }
+
+      db.transaction(() => {
+        db.prepare(`UPDATE tenants SET pre_ban_status = CASE WHEN status = 'banned' THEN pre_ban_status ELSE status END,
+          status = 'banned', banned_at = datetime('now'), banned_by = ?, banned_reason = ?,
+          session_version = session_version + 1, updated_at = datetime('now') WHERE id = ?`).run(adminId, reason.trim(), id);
+        globalAudit(adminId, String(id), tenant.name, 'BAN', reason.trim());
+      })();
+      res.json({ message: `Clínica "${tenant.name}" foi banida com sucesso.`, status: 'banned' });
+    } catch (err: any) {
+      if (respondBillingError(res, err)) return;
+      console.error('[TenantController.adminBan] Erro:', err);
+      res.status(500).json({ error: 'Erro ao banir clínica' });
+    }
+  }
+
+  // 5.2 Remoção de Banimento de Clínica pelo ADM do SaaS
+  static adminUnban(req: Request, res: Response): void {
+    try {
+      const { id } = req.params;
+      const tenant = db.prepare('SELECT id, name FROM tenants WHERE id = ?').get(id) as any;
+      if (!tenant) {
+        res.status(404).json({ error: 'Clínica não encontrada' });
+        return;
+      }
+
+      db.transaction(() => {
+        db.prepare(`UPDATE tenants SET status = COALESCE(pre_ban_status, 'active'), pre_ban_status = NULL,
+          banned_at = NULL, banned_by = NULL, banned_reason = NULL, updated_at = datetime('now') WHERE id = ? AND status = 'banned'`).run(id);
+        globalAudit(req.user!.userId, String(id), tenant.name, 'UNBAN', 'Banimento removido');
+      })();
+      res.json({ message: `Banimento da clínica "${tenant.name}" foi removido com sucesso.`, status: 'active' });
+    } catch (err: any) {
+      if (respondBillingError(res, err)) return;
+      console.error('[TenantController.adminUnban] Erro:', err);
+      res.status(500).json({ error: 'Erro ao remover banimento da clínica' });
+    }
+  }
+
+  // 5.3 Bloquear / Liberar Novos Cadastros da Clínica
+  static adminToggleRegistrations(req: Request, res: Response): void {
+    try {
+      const { id } = req.params;
+      const tenant = db.prepare('SELECT id, name, registrations_blocked FROM tenants WHERE id = ?').get(id) as any;
+      if (!tenant) {
+        res.status(404).json({ error: 'Clínica não encontrada' });
+        return;
+      }
+
+      if (typeof req.body.blocked !== 'boolean') { res.status(400).json({ error: 'Informe blocked como booleano.' }); return; }
+      const nextState = req.body.blocked ? 1 : 0;
+      db.prepare("UPDATE tenants SET registrations_blocked = ?, updated_at = datetime('now') WHERE id = ?").run(nextState, id);
+
+      globalAudit(req.user!.userId, String(id), tenant.name, nextState ? 'BLOCK_REGISTRATIONS' : 'ALLOW_REGISTRATIONS', 'Controle de novos cadastros');
+      res.json({
+        message: nextState === 1
+          ? `Novos cadastros foram bloqueados para a clínica "${tenant.name}".`
+          : `Novos cadastros foram liberados para a clínica "${tenant.name}".`,
+        registrations_blocked: nextState
+      });
+    } catch (err: any) {
+      if (respondBillingError(res, err)) return;
+      console.error('[TenantController.adminToggleRegistrations] Erro:', err);
+      res.status(500).json({ error: 'Erro ao alternar bloqueio de cadastros da clínica' });
+    }
+  }
+
+  // 5.4 Exclusão Rápida e DEFINITIVA de uma Clínica (Exclusivo SuperAdmin com validação de senha real)
+  static async adminDeletePermanently(req: Request, res: Response): Promise<void> {
+    try {
+      const { id } = req.params;
+      const { password, confirmation, reason } = req.body;
+      const currentUserId = (req as any).user?.userId;
+
+      if (!currentUserId) {
+        res.status(401).json({ error: 'Usuário não autenticado.' });
+        return;
+      }
+
+      // Valida credenciais do SuperAdmin no banco de dados
+      const adminUser = db.prepare('SELECT id, email, password_hash, role FROM users WHERE id = ?').get(currentUserId) as any;
+      if (!adminUser || adminUser.role !== 'superadmin') {
+        res.status(403).json({ error: 'Acesso negado. Apenas o Administrador do Sistema pode executar esta operação.' });
+        return;
+      }
+
+      // Validação rigorosa da senha atual do administrador
+      const isPasswordValid = await comparePassword(typeof password === 'string' ? password : '', adminUser.password_hash || '');
+      if (!isPasswordValid) {
+        res.status(403).json({ error: 'Senha do Administrador inválida. Nenhuma alteração foi realizada.' });
+        return;
+      }
+      const freshAdmin = db.prepare('SELECT role, status, password_hash FROM users WHERE id = ?').get(currentUserId);
+      if (!freshAdmin || freshAdmin.role !== 'superadmin' || freshAdmin.status !== 'active' || freshAdmin.password_hash !== adminUser.password_hash) {
+        res.status(403).json({ error: 'Reautenticação inválida. Entre novamente.' }); return;
+      }
+
+      // Não permite excluir a clínica vinculada ao próprio SuperAdmin
+      if (adminUser.tenant_id && adminUser.tenant_id === id) {
+        res.status(400).json({ error: 'Operação não permitida: não é possível excluir a clínica associada ao Administrador do Sistema.' });
+        return;
+      }
+
+      // Validação da confirmação por texto explícito e motivo
+      if (typeof reason !== 'string' || !reason.trim()) {
+        res.status(400).json({ error: 'O motivo da exclusão definitiva é obrigatório.' });
+        return;
+      }
+
+      if (confirmation !== 'EXCLUIR') {
+        res.status(400).json({ error: 'Confirmação inválida. Digite exatamente a palavra EXCLUIR para confirmar.' });
+        return;
+      }
+
+      // 1. Tentar cancelar assinatura gerenciada se ativa (não impede a exclusão se offline/sandbox)
+      try {
+        const billing = db.prepare('SELECT managed,status FROM subscriptions WHERE clinic_id=? AND is_current=1').get(id) as any;
+        if (billing?.managed && billing.status !== 'CANCELED') {
+          await BillingService.cancel(String(id), adminUser.id, 'Exclusão administrativa da clínica');
+        }
+      } catch (billingErr) {
+        console.warn('[TenantController.adminDeletePermanently] Aviso ao cancelar assinatura antes do purge:', billingErr);
+      }
+
+      // 2. Executar o PURGE real e completo de todas as tabelas e storage
+      await purgeTenantCompletely(String(id), adminUser.id, reason.trim());
+      res.json({ message: 'Clínica excluída definitivamente', deleted_clinic_id: id });
+    } catch (err: any) {
+      if (respondBillingError(res, err)) return;
+      console.error('[TenantController.adminDeletePermanently] Erro sanitizado:', err?.message || err);
+      let safeMessage = 'Exclusão não concluída. Ocorreu uma falha durante o processo de limpeza.';
+      if (err?.message) {
+        const msg = String(err.message).trim();
+        const isInternalCode = /^[A-Z0-9_]+$/.test(msg) || msg.includes('IMMUTABLE') || msg.includes('SQLITE') || msg.includes('SELECT') || msg.includes('PRAGMA') || msg.includes('sqlite_') || msg.includes('database is locked') || msg.includes('RAISE(');
+        if (!isInternalCode) {
+          safeMessage = msg;
+        }
+      }
+      res.status(500).json({ error: safeMessage });
+    }
+  }
+
+  // 6. Métricas Globais do SaaS para o Dashboard do SuperAdmin
+  static adminMetrics(req: Request, res: Response): void {
+    try {
+      const totalClinics = (db.prepare('SELECT COUNT(*) as c FROM tenants').get() as any).c;
+      const pendingClinics = (db.prepare("SELECT COUNT(*) as c FROM tenants WHERE status = 'pending'").get() as any).c;
+      const activeClinics = (db.prepare("SELECT COUNT(*) as c FROM tenants WHERE status = 'active'").get() as any).c;
+      const blockedClinics = (db.prepare("SELECT COUNT(*) as c FROM tenants WHERE status = 'blocked'").get() as any).c;
+      const bannedClinics = (db.prepare("SELECT COUNT(*) as c FROM tenants WHERE status = 'banned'").get() as any).c;
+      const totalUsers = (db.prepare('SELECT COUNT(*) as c FROM users').get() as any).c;
+      const totalProfessionals = (db.prepare('SELECT COUNT(*) as c FROM professionals WHERE active = 1').get() as any).c;
+      const totalAppointments = (db.prepare('SELECT COUNT(*) as c FROM appointments').get() as any).c;
+      const totalRevenueEstimate = (db.prepare("SELECT SUM(amount) as s FROM payments WHERE status = 'paid'").get() as any)?.s || 0;
+
+      // Últimos logs de auditoria administrativa
+      const recentLogs = db.prepare(`
+        SELECT id, action, clinic_id AS entity_id, clinic_name, reason, reauthenticated, created_at
+        FROM global_clinic_audit
+        ORDER BY created_at DESC
+        LIMIT 10
+      `).all();
+
+      // Alertas do sistema (ex: clínicas pendentes aguardando aprovação)
+      const alerts = [];
+      if (pendingClinics > 0) {
+        alerts.push({
+          type: 'warning',
+          message: `Existem ${pendingClinics} clínica(s) com cadastro pendente aguardando sua aprovação.`
+        });
+      }
+
+      res.json({
+        totalClinics,
+        pendingClinics,
+        activeClinics,
+        blockedClinics,
+        bannedClinics,
+        totalUsers,
+        totalProfessionals,
+        totalAppointments,
+        totalRevenueEstimate,
+        recentLogs,
+        alerts
+      });
+    } catch (err: any) {
+      if (respondBillingError(res, err)) return;
+      console.error('[TenantController.adminMetrics] Erro:', err);
+      res.status(500).json({ error: 'Erro ao calcular métricas do SaaS' });
+    }
+  }
+
+  // 6.1 Resumo Estatístico Agregado de Clínica (Exclusivo SuperAdmin SaaS)
+  static adminTenantSummary(req: Request, res: Response): void {
+    try {
+      const tenantId = req.params.tenantId || req.params.id;
+      if (!tenantId) {
+        res.status(400).json({ error: 'tenantId é obrigatório' });
+        return;
+      }
+
+      const tenant = db.prepare('SELECT id, name, trade_name, status FROM tenants WHERE id = ?').get(tenantId) as any;
+      if (!tenant) {
+        res.status(404).json({ error: 'Clínica não encontrada' });
+        return;
+      }
+
+      const now = new Date();
+      const currentMonthPrefix = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit' }).format(now);
+      const todayDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(now);
+
+      // 1. Usuários e Equipe
+      const userStats = db.prepare(`
+        SELECT 
+          COUNT(*) as total,
+          SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active,
+          SUM(CASE WHEN status != 'active' THEN 1 ELSE 0 END) as inactive,
+          SUM(CASE WHEN role = 'professional' THEN 1 ELSE 0 END) as professionals,
+          SUM(CASE WHEN role IN ('receptionist', 'secretary') THEN 1 ELSE 0 END) as receptionists,
+          SUM(CASE WHEN role IN ('clinic_admin', 'admin') THEN 1 ELSE 0 END) as admins
+        FROM users
+        WHERE tenant_id = ? AND role != 'superadmin' AND role != 'patient'
+      `).get(tenantId) as any;
+
+      const profTableCount = (db.prepare('SELECT COUNT(*) as c FROM professionals WHERE tenant_id = ?').get(tenantId) as any)?.c || 0;
+      const professionalsCount = Math.max(Number(userStats?.professionals || 0), profTableCount);
+
+      // 2. Pacientes
+      const totalPatients = (db.prepare('SELECT COUNT(*) as c FROM patients WHERE tenant_id = ?').get(tenantId) as any)?.c || 0;
+      const attendedUnique = (db.prepare("SELECT COUNT(DISTINCT patient_id) as c FROM appointments WHERE tenant_id = ? AND status = 'completed'").get(tenantId) as any)?.c || 0;
+      const newThisMonth = (db.prepare('SELECT COUNT(*) as c FROM patients WHERE tenant_id = ? AND substr(created_at, 1, 7) = ?').get(tenantId, currentMonthPrefix) as any)?.c || 0;
+
+      // 3. Atendimentos
+      const apptStats = db.prepare(`
+        SELECT
+          COUNT(*) as total,
+          SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
+          SUM(CASE WHEN status IN ('scheduled', 'confirmed') THEN 1 ELSE 0 END) as scheduled,
+          SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as canceled,
+          SUM(CASE WHEN status = 'no_show' THEN 1 ELSE 0 END) as no_show,
+          SUM(CASE WHEN substr(start_time, 1, 7) = ? OR substr(created_at, 1, 7) = ? THEN 1 ELSE 0 END) as this_month,
+          SUM(CASE WHEN substr(start_time, 1, 10) = ? THEN 1 ELSE 0 END) as today
+        FROM appointments
+        WHERE tenant_id = ?
+      `).get(currentMonthPrefix, currentMonthPrefix, todayDateStr, tenantId) as any;
+
+      // 4. Serviços & Operação
+      const servicesCount = (db.prepare('SELECT COUNT(*) as c FROM services WHERE tenant_id = ?').get(tenantId) as any)?.c || 0;
+      const activeSchedulesCount = (db.prepare('SELECT COUNT(DISTINCT professional_id) as c FROM schedules WHERE tenant_id = ? AND is_active = 1').get(tenantId) as any)?.c || 0;
+      let roomsCount = 0;
+      try {
+        roomsCount = (db.prepare('SELECT COUNT(*) as c FROM rooms WHERE tenant_id = ?').get(tenantId) as any)?.c || 0;
+      } catch (_) {}
+
+      // 5. Estoque
+      let totalItems = 0;
+      let lowStock = 0;
+      try {
+        const invStats = db.prepare(`
+          SELECT
+            COUNT(*) as total,
+            SUM(CASE WHEN quantity <= min_stock THEN 1 ELSE 0 END) as low
+          FROM inventory_items
+          WHERE tenant_id = ?
+        `).get(tenantId) as any;
+        totalItems = Number(invStats?.total || 0);
+        lowStock = Number(invStats?.low || 0);
+      } catch (_) {}
+
+      // 6. Documentos e Consentimentos
+      let totalDocs = 0;
+      try {
+        totalDocs = (db.prepare('SELECT COUNT(*) as c FROM documents WHERE tenant_id = ?').get(tenantId) as any)?.c || 0;
+      } catch (_) {}
+
+      let signedConsents = 0;
+      let pendingConsents = 0;
+      try {
+        const consentStats = db.prepare(`
+          SELECT
+            SUM(CASE WHEN status IN ('signed', 'accepted') THEN 1 ELSE 0 END) as signed,
+            SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending
+          FROM patient_consents
+          WHERE tenant_id = ?
+        `).get(tenantId) as any;
+        signedConsents = Number(consentStats?.signed || 0);
+        pendingConsents = Number(consentStats?.pending || 0);
+      } catch (_) {}
+
+      // 7. Financeiro (Valores exclusivamente agregados)
+      let totalRevenue = 0;
+      let currentMonthRevenue = 0;
+      let pendingAmount = 0;
+      try {
+        const finStats = db.prepare(`
+          SELECT
+            COALESCE(SUM(CASE WHEN status = 'paid' THEN amount ELSE 0 END), 0) as total,
+            COALESCE(SUM(CASE WHEN status = 'paid' AND (substr(payment_date, 1, 7) = ? OR substr(created_at, 1, 7) = ?) THEN amount ELSE 0 END), 0) as this_month,
+            COALESCE(SUM(CASE WHEN status IN ('pending', 'partial') THEN amount ELSE 0 END), 0) as pending
+          FROM payments
+          WHERE tenant_id = ?
+        `).get(currentMonthPrefix, currentMonthPrefix, tenantId) as any;
+        totalRevenue = Number(finStats?.total || 0);
+        currentMonthRevenue = Number(finStats?.this_month || 0);
+        pendingAmount = Number(finStats?.pending || 0);
+      } catch (_) {}
+
+      res.json({
+        clinic: {
+          id: tenant.id,
+          name: tenant.name,
+          tradeName: tenant.trade_name || tenant.name,
+          status: tenant.status
+        },
+        users: {
+          total: Number(userStats?.total || 0),
+          active: Number(userStats?.active || 0),
+          inactive: Number(userStats?.inactive || 0),
+          professionals: professionalsCount,
+          receptionists: Number(userStats?.receptionists || 0),
+          admins: Number(userStats?.admins || 0)
+        },
+        patients: {
+          total: totalPatients,
+          attendedUnique: attendedUnique,
+          newThisMonth: newThisMonth
+        },
+        appointments: {
+          total: Number(apptStats?.total || 0),
+          completed: Number(apptStats?.completed || 0),
+          scheduled: Number(apptStats?.scheduled || 0),
+          canceled: Number(apptStats?.canceled || 0),
+          noShow: Number(apptStats?.no_show || 0),
+          thisMonth: Number(apptStats?.this_month || 0),
+          today: Number(apptStats?.today || 0)
+        },
+        services: {
+          total: servicesCount
+        },
+        schedules: {
+          activeProfessionals: activeSchedulesCount
+        },
+        rooms: {
+          total: roomsCount
+        },
+        inventory: {
+          totalItems,
+          lowStock
+        },
+        documents: {
+          total: totalDocs
+        },
+        consents: {
+          signed: signedConsents,
+          pending: pendingConsents
+        },
+        financial: {
+          totalRevenue,
+          currentMonthRevenue,
+          pendingAmount
+        }
+      });
+    } catch (err: any) {
+      console.error('[TenantController.adminTenantSummary] Erro:', err);
+      res.status(500).json({ error: 'Erro ao obter resumo estatístico da clínica' });
+    }
+  }
+
+  // 7. Lista todas as clínicas (com filtros para o SuperAdmin)
+  static listAll(req: Request, res: Response): void {
+    try {
+      const { status, search } = req.query;
+
+      let query = `
+        SELECT 
+          t.id, t.slug, t.name, t.corporate_name, t.trade_name, t.cnpj_cpf, t.email, t.phone, 
+          t.city, t.state, t.logo_url, t.status, t.onboarding_completed, t.manager_confirmed,
+          t.registrations_blocked, t.banned_at, t.banned_by, t.banned_reason,
+          t.responsible_name, t.responsible_email, t.created_at,
+          p.name as plan_name, p.slug as plan_slug,
+          (SELECT COUNT(*) FROM professionals WHERE tenant_id = t.id AND active = 1) as total_professionals,
+          (SELECT COUNT(*) FROM patients WHERE tenant_id = t.id AND active = 1) as total_patients,
+          (SELECT COUNT(*) FROM appointments WHERE tenant_id = t.id) as total_appointments
+        FROM tenants t
+        LEFT JOIN plans p ON p.id = t.plan_id
+        WHERE 1=1
+      `;
+      const params: any[] = [];
+
+      if (status) {
+        query += ' AND t.status = ?';
+        params.push(status);
+      }
+
+      if (search) {
+        query += ' AND (t.name LIKE ? OR t.email LIKE ? OR t.city LIKE ? OR t.responsible_name LIKE ?)';
+        const term = `%${search}%`;
+        params.push(term, term, term, term);
+      }
+
+      query += ' ORDER BY t.created_at DESC';
+
+      const stmt = db.prepare(query);
+      const tenants = stmt.all(...params);
+      const pendingCleanup = db.prepare(`SELECT j.clinic_id AS id, a.clinic_name AS name, 'cleanup_pending' AS status
+        FROM clinic_deletion_jobs j JOIN global_clinic_audit a ON a.clinic_id = j.clinic_id AND a.action = 'DELETE_REQUESTED'`).all();
+      tenants.push(...pendingCleanup);
+      res.json(tenants);
+    } catch (err: any) {
+      if (respondBillingError(res, err)) return;
+      console.error('[TenantController.listAll] Erro:', err);
+      res.status(500).json({ error: 'Erro ao listar clínicas' });
+    }
+  }
+
+  // 8. Dados da clínica atual (autenticada)
+  static getCurrent(req: Request, res: Response): void {
+    try {
+      if (!req.tenantId) {
+        res.status(400).json({ error: 'Nenhum tenant associado' });
+        return;
+      }
+
+      ensureClinicBookingIdentity(db, req.tenantId);
+      const stmt = db.prepare(`
+        SELECT 
+          t.id, t.slug, t.public_booking_enabled, t.public_booking_slug, t.public_booking_sequence, t.name, t.corporate_name, t.trade_name, t.person_type, t.cnpj_cpf,
+          t.municipal_registration, t.state_registration, t.professional_board, t.professional_registry,
+          t.manager_profession, t.manager_practice_areas,
+          t.email, t.phone, t.mobile, t.whatsapp, t.website, t.description,
+          t.address, t.street, t.number, t.complement, t.neighborhood, t.city, t.state, t.zip_code, t.country,
+          t.responsible_name, t.responsible_cpf, t.responsible_email, t.responsible_phone, t.responsible_role,
+          t.logo_url, t.primary_color, t.client_term_label, t.status,
+          t.business_hours_json,
+          t.onboarding_completed, t.onboarding_step, t.manager_confirmed, t.created_at,
+          p.name as plan_name, p.slug as plan_slug, p.features_json
+        FROM tenants t
+        LEFT JOIN plans p ON p.id = t.plan_id
+        WHERE t.id = ?
+      `);
+      const tenant = stmt.get(req.tenantId) as any;
+
+      if (!tenant) {
+        res.status(404).json({ error: 'Clínica não encontrada' });
+        return;
+      }
+
+      // Normalização de logo_url
+      let normalizedLogoUrl = tenant.logo_url;
+      if (normalizedLogoUrl && typeof normalizedLogoUrl === 'string') {
+        normalizedLogoUrl = normalizedLogoUrl.trim();
+        if (!normalizedLogoUrl.startsWith('http://') && !normalizedLogoUrl.startsWith('https://') && !normalizedLogoUrl.startsWith('data:') && !normalizedLogoUrl.startsWith('/')) {
+          normalizedLogoUrl = `/${normalizedLogoUrl}`;
+        }
+      }
+
+      // Configurações adicionais
+      const settingsStmt = db.prepare('SELECT setting_key, setting_value FROM settings WHERE tenant_id = ?');
+      const settingsRows = settingsStmt.all(req.tenantId) as { setting_key: string; setting_value: string }[];
+      const settingsMap: Record<string, string> = {};
+      for (const row of settingsRows) {
+        settingsMap[row.setting_key] = row.setting_value;
+      }
+
+      // Status dos recibos
+      const rec = db.prepare('SELECT is_configured FROM receipt_settings WHERE tenant_id = ?').get(req.tenantId) as any;
+
+      res.json({
+        ...tenant,
+        logo_url: normalizedLogoUrl,
+        settings: settingsMap,
+        receiptsConfigured: rec?.is_configured === 1
+      });
+    } catch (err: any) {
+      if (respondBillingError(res, err)) return;
+      console.error('[TenantController.getCurrent] Erro:', err);
+      res.status(500).json({ error: 'Erro ao consultar dados da clínica' });
+    }
+  }
+
+  // 9. Atualiza dados da clínica atual
+  static updateCurrent(req: Request, res: Response): void {
+    try {
+      if (!req.tenantId) {
+        res.status(400).json({ error: 'Nenhum tenant associado' });
+        return;
+      }
+
+      if (req.body.publicBookingEnabled !== undefined) {
+        if (req.user?.role !== 'clinic_admin') { res.status(403).json({ error: 'Somente o administrador pode configurar agendamento online.' }); return; }
+        if (typeof req.body.publicBookingEnabled !== 'boolean') { res.status(400).json({ error: 'Configuração de agendamento inválida.' }); return; }
+        ensureClinicBookingIdentity(db, req.tenantId);
+        db.prepare('UPDATE tenants SET public_booking_enabled = ?, updated_at = datetime(\'now\') WHERE id = ?').run(req.body.publicBookingEnabled ? 1 : 0, req.tenantId);
+      }
+      const {
+        name, corporateName, tradeName, personType, cnpjCpf, municipalRegistration, stateRegistration,
+        professionalBoard, professionalRegistry, email, phone, mobile, whatsapp, website, description,
+        street, number, complement, neighborhood, city, state, zipCode, country,
+        responsibleName, responsibleCpf, responsibleEmail, responsiblePhone, responsibleRole,
+        logoUrl, logo_url, primaryColor, clientTermLabel, businessHoursJson, businessHours, settings,
+        managerProfession, managerPracticeAreas
+      } = req.body;
+
+      const incomingLogo = logo_url !== undefined ? logo_url : logoUrl;
+      const shouldUpdateLogo = incomingLogo !== undefined ? 1 : 0;
+      const normalizedLogo = incomingLogo ? String(incomingLogo).trim() : null;
+
+      const rawBusinessHours = businessHoursJson 
+        ? (typeof businessHoursJson === 'string' ? businessHoursJson : JSON.stringify(businessHoursJson))
+        : (businessHours ? JSON.stringify(businessHours) : null);
+
+      const fullAddress = street && city ? `${street}, ${number || 'S/N'} - ${neighborhood || ''}, ${city}/${state || ''}` : null;
+
+      const updateStmt = db.prepare(`
+        UPDATE tenants SET
+          name = COALESCE(?, name),
+          corporate_name = COALESCE(?, corporate_name),
+          trade_name = COALESCE(?, trade_name),
+          person_type = COALESCE(?, person_type),
+          cnpj_cpf = COALESCE(?, cnpj_cpf),
+          municipal_registration = COALESCE(?, municipal_registration),
+          state_registration = COALESCE(?, state_registration),
+          professional_board = COALESCE(?, professional_board),
+          professional_registry = COALESCE(?, professional_registry),
+          manager_profession = COALESCE(?, manager_profession),
+          manager_practice_areas = COALESCE(?, manager_practice_areas),
+          email = COALESCE(?, email),
+          phone = COALESCE(?, phone),
+          mobile = COALESCE(?, mobile),
+          whatsapp = COALESCE(?, whatsapp),
+          website = COALESCE(?, website),
+          description = COALESCE(?, description),
+          street = COALESCE(?, street),
+          number = COALESCE(?, number),
+          complement = COALESCE(?, complement),
+          neighborhood = COALESCE(?, neighborhood),
+          city = COALESCE(?, city),
+          state = COALESCE(?, state),
+          zip_code = COALESCE(?, zip_code),
+          country = COALESCE(?, country),
+          address = COALESCE(?, address),
+          responsible_name = COALESCE(?, responsible_name),
+          responsible_cpf = COALESCE(?, responsible_cpf),
+          responsible_email = COALESCE(?, responsible_email),
+          responsible_phone = COALESCE(?, responsible_phone),
+          responsible_role = COALESCE(?, responsible_role),
+          logo_url = CASE WHEN ? = 1 THEN ? ELSE logo_url END,
+          primary_color = COALESCE(?, primary_color),
+          client_term_label = COALESCE(?, client_term_label),
+          business_hours_json = COALESCE(?, business_hours_json),
+          updated_at = datetime('now')
+        WHERE id = ?
+      `);
+
+      updateStmt.run(
+        name || null,
+        corporateName || null,
+        tradeName || null,
+        personType || null,
+        cnpjCpf || null,
+        municipalRegistration || null,
+        stateRegistration || null,
+        professionalBoard || null,
+        professionalRegistry || null,
+        managerProfession || null,
+        managerPracticeAreas || null,
+        email || null,
+        phone || null,
+        mobile || null,
+        whatsapp || null,
+        website || null,
+        description || null,
+        street || null,
+        number || null,
+        complement || null,
+        neighborhood || null,
+        city || null,
+        state || null,
+        zipCode || null,
+        country || null,
+        fullAddress,
+        responsibleName || null,
+        responsibleCpf || null,
+        responsibleEmail || null,
+        responsiblePhone || null,
+        responsibleRole || null,
+        shouldUpdateLogo,
+        normalizedLogo,
+        primaryColor || null,
+        clientTermLabel || null,
+        rawBusinessHours,
+        req.tenantId
+      );
+
+      if (req.user?.userId) {
+        db.prepare(`
+          UPDATE users SET
+            profession_name = COALESCE(?, profession_name),
+            practice_areas = COALESCE(?, practice_areas),
+            registration_type = COALESCE(?, registration_type),
+            registration_number = COALESCE(?, registration_number),
+            updated_at = datetime('now')
+          WHERE id = ? AND tenant_id = ?
+        `).run(
+          managerProfession || null,
+          managerPracticeAreas || null,
+          professionalBoard || null,
+          professionalRegistry || null,
+          req.user.userId,
+          req.tenantId
+        );
+      }
+
+      // Atualiza configurações se enviadas
+      if (settings && typeof settings === 'object') {
+        const upsertSetting = db.prepare(`
+          INSERT INTO settings (id, tenant_id, setting_key, setting_value, updated_at)
+          VALUES (?, ?, ?, ?, datetime('now'))
+          ON CONFLICT(tenant_id, setting_key) DO UPDATE SET
+            setting_value = excluded.setting_value,
+            updated_at = datetime('now')
+        `);
+
+        for (const [key, value] of Object.entries(settings)) {
+          upsertSetting.run(`set-${key}-${req.tenantId}`, req.tenantId, key, String(value));
+        }
+      }
+
+      logAudit(req, 'UPDATE_TENANT_SETTINGS', 'tenants', req.tenantId);
+      const updatedTenant = db.prepare('SELECT logo_url FROM tenants WHERE id = ?').get(req.tenantId) as any;
+      res.json({ message: 'Configurações atualizadas com sucesso', logo_url: updatedTenant?.logo_url });
+    } catch (err: any) {
+      if (respondBillingError(res, err)) return;
+      console.error('[TenantController.updateCurrent] Erro:', err);
+      res.status(500).json({ error: 'Erro ao atualizar dados da clínica' });
+    }
+  }
+
+  // 10. Perfil público da clínica para a landing page e agendamento online (/c/:slug)
+  static getPublicProfile(req: Request, res: Response): void {
+    try {
+      const resolved = resolveBookingTenant(req.params.slug, req.query.bookingSequence);
+      if (!resolved || resolved.public_booking_enabled !== 1) {
+        res.status(404).json({ code: 'BOOKING_UNAVAILABLE', error: 'O agendamento online desta clínica está indisponível no momento.' }); return;
+      }
+      const tenant = db.prepare('SELECT slug, name, trade_name, logo_url, city, state FROM tenants WHERE id = ?').get(resolved.id) as any;
+      // Profissionais ativos da clínica
+      const profStmt = db.prepare(`
+        SELECT 
+          p.id, p.slug, p.name, p.practice_areas, p.photo_url, p.registration_type, p.registration_number, p.bio,
+          spec.id as specialty_id, COALESCE(p.specialty_custom, spec.name) as specialty_name,
+          COALESCE(prof.name, p.profession_name) as profession_name
+        FROM professionals p
+        LEFT JOIN specialties spec ON spec.id = p.specialty_id
+        LEFT JOIN professions prof ON prof.id = p.profession_id
+        WHERE p.tenant_id = ? AND p.active = 1 AND p.public_booking_enabled = 1
+        ORDER BY p.name ASC
+      `);
+      const professionals = profStmt.all(resolved.id);
+
+      const services = db.prepare(`
+        SELECT s.id, s.name, s.description, s.specialty_id, s.modality, spec.name as specialty_name
+        FROM services s LEFT JOIN specialties spec ON spec.id = s.specialty_id
+        WHERE s.tenant_id = ? AND s.active = 1 AND EXISTS (
+          SELECT 1 FROM professionals p WHERE p.tenant_id = s.tenant_id AND p.active = 1 AND p.public_booking_enabled = 1
+          AND (s.professional_id = p.id OR EXISTS (SELECT 1 FROM professional_services ps WHERE ps.service_id = s.id AND ps.professional_id = p.id))
+        ) ORDER BY s.name
+      `).all(resolved.id);
+      const publicProfessionals = (professionals as any[]).map(p => ({ ...p, services: db.prepare(`
+        SELECT s.id, COALESCE(ps.custom_duration, s.duration_minutes) AS duration_minutes, s.modality
+        FROM services s LEFT JOIN professional_services ps ON ps.service_id = s.id AND ps.professional_id = ?
+        WHERE s.tenant_id = ? AND s.active = 1 AND (s.professional_id = ? OR ps.professional_id = ?)
+      `).all(p.id, resolved.id, p.id, p.id) }));
+      res.json({
+        tenant,
+        professionals: publicProfessionals,
+        services
+      });
+    } catch (err: any) {
+      if (respondBillingError(res, err)) return;
+      console.error('[TenantController.getPublicProfile] Erro:', err);
+      res.status(500).json({ error: 'Erro ao carregar página pública da clínica' });
+    }
+  }
+}

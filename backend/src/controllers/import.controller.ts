@@ -1766,13 +1766,16 @@ export class ImportController {
 
           const recId = 'rec-imp-' + uuidv4().slice(0, 10);
           const recTitle = `Atendimento / Evolução (${evolDate})`;
+          const evolTime = (ev.time && String(ev.time).trim() && String(ev.time).trim() !== '09:00' && String(ev.time).trim() !== '00:00')
+            ? String(ev.time).trim()
+            : null;
 
           db.prepare(`
             INSERT INTO records (
-              id, tenant_id, patient_id, professional_id, session_date, title, clinical_evolution, created_by
+              id, tenant_id, patient_id, professional_id, session_date, session_time, title, clinical_evolution, created_by
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-          `).run(recId, tenantId, patientIdToUse, evolProfId, evolDate, recTitle, fullClinicalEvolution, userId);
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).run(recId, tenantId, patientIdToUse, evolProfId, evolDate, evolTime, recTitle, fullClinicalEvolution, userId);
 
           recordsCreated++;
         }

@@ -1,0 +1,748 @@
+backend/src/controllers\ai.controller.ts:75:          const conv = db.prepare('SELECT messages_json, patient_id FROM ai_conversations WHERE id = ? AND tenant_id = ?').get(convId, tenantId) as any;
+backend/src/controllers\ai.controller.ts:78:            conversationPatientId = conv.patient_id || null;
+backend/src/controllers\ai.controller.ts:111:          const patient = db.prepare('SELECT * FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId) as any;
+backend/src/controllers\ai.controller.ts:124:              WHERE r.patient_id = ? AND r.tenant_id = ? ${dateFilter}
+backend/src/controllers\ai.controller.ts:128:            const allergies = db.prepare('SELECT * FROM patient_allergies WHERE patient_id = ? AND tenant_id = ?').all(patientId, tenantId) as any[];
+backend/src/controllers\ai.controller.ts:129:            const medications = db.prepare('SELECT * FROM patient_medications WHERE patient_id = ? AND tenant_id = ?').all(patientId, tenantId) as any[];
+backend/src/controllers\ai.controller.ts:130:            const exams = db.prepare('SELECT * FROM patient_exams WHERE patient_id = ? AND tenant_id = ? ORDER BY exam_date DESC LIMIT 10').all(patientId, tenantId) as any[];
+backend/src/controllers\ai.controller.ts:136:              WHERE a.patient_id = ? AND a.tenant_id = ?
+backend/src/controllers\ai.controller.ts:139:            const anamnesis = db.prepare('SELECT * FROM patient_anamnesis WHERE patient_id = ? AND tenant_id = ? ORDER BY created_at DESC LIMIT 3').all(patientId, tenantId) as any[];
+backend/src/controllers\ai.controller.ts:153:            LEFT JOIN patients p ON p.id = a.patient_id
+backend/src/controllers\ai.controller.ts:160:            if (!patientId && appt.patient_id) {
+backend/src/controllers\ai.controller.ts:161:              patientId = appt.patient_id;
+backend/src/controllers\ai.controller.ts:173:          appointmentContext?.patient_id,
+backend/src/controllers\ai.controller.ts:524:          JOIN patients p ON p.id = a.patient_id
+backend/src/controllers\ai.controller.ts:769:        sql += ' AND patient_id = ?';
+backend/src/controllers\ai.controller.ts:802:          INSERT INTO ai_conversations (id, tenant_id, user_id, patient_id, title, context_scope, messages_json)
+backend/src/controllers\ai.controller.ts:855:        const p = db.prepare('SELECT full_name, birth_date FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId) as any;
+backend/src/controllers\ai.controller.ts:981:        if (!appointment || !hasClinicalAccess(req, appointment.patient_id)) {
+backend/src/controllers\ai.controller.ts:984:        if (appointment.modality !== 'online' || patientId !== appointment.patient_id || professionalId !== appointment.professional_id) {
+backend/src/controllers\ai.controller.ts:1221:          patientRow = db.prepare('SELECT * FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId) as any;
+backend/src/controllers\ai.controller.ts:1333:          patientRow = db.prepare('SELECT * FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId) as any;
+backend/src/controllers\ai.controller.ts:1451:      if (!tenantId || !patientId || !db.prepare('SELECT id FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId)) {
+backend/src/controllers\ai.controller.ts:1454:      if (appointmentId && !db.prepare('SELECT id FROM appointments WHERE id = ? AND tenant_id = ? AND patient_id = ?').get(appointmentId, tenantId, patientId)) {
+backend/src/controllers\ai.controller.ts:1707:      const row = db.prepare('SELECT * FROM patients WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
+backend/src/controllers\appointment.controller.ts:185:          a.id, a.tenant_id, a.appointment_number, a.patient_id, a.professional_id,
+backend/src/controllers\appointment.controller.ts:197:        JOIN patients pat ON pat.id = a.patient_id
+backend/src/controllers\appointment.controller.ts:216:        query += ' AND a.patient_id = ?';
+backend/src/controllers\appointment.controller.ts:262:        JOIN patients pat ON pat.id = a.patient_id
+backend/src/controllers\appointment.controller.ts:385:          SELECT id FROM patients WHERE tenant_id = ? AND (phone = ? OR (email IS NOT NULL AND email = ?))
+backend/src/controllers\appointment.controller.ts:400:              INSERT INTO guardians (id, tenant_id, patient_id, full_name, phone, relationship, is_primary, authorization_signed)
+backend/src/controllers\appointment.controller.ts:469:          AND a.patient_id = ?
+backend/src/controllers\appointment.controller.ts:547:          id, tenant_id, appointment_number, patient_id, professional_id, service_id,
+backend/src/controllers\appointment.controller.ts:589:          INSERT INTO payments (id, tenant_id, appointment_id, patient_id, amount, payment_method, status, notes)
+backend/src/controllers\appointment.controller.ts:595:      const patientData = db.prepare('SELECT full_name, phone, email FROM patients WHERE id = ?').get(resolvedPatientId) as any;
+backend/src/controllers\appointment.controller.ts:598:          INSERT INTO notifications (id, tenant_id, patient_id, professional_id, appointment_id, type, channel, recipient, content, status, scheduled_for)
+backend/src/controllers\appointment.controller.ts:642:      const current = db.prepare('SELECT id, patient_id, status, clinical_module, professional_id, profession_id, service_id FROM appointments WHERE id = ? AND tenant_id = ?').get(id, tenantId) as { patient_id: string; status: string; clinical_module?: string; professional_id?: string; profession_id?: string; service_id?: string } | undefined;
+backend/src/controllers\appointment.controller.ts:654:            !hasClinicalAccess(req, current.patient_id)) {
+backend/src/controllers\appointment.controller.ts:793:      const appt = db.prepare('SELECT patient_id, professional_id, room_id, status FROM appointments WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
+backend/src/controllers\appointment.controller.ts:832:      if (appt.patient_id) {
+backend/src/controllers\appointment.controller.ts:839:            AND a.patient_id = ?
+backend/src/controllers\appointment.controller.ts:843:        `).get(tenantId, appt.patient_id, id, normalizedEndTime, normalizedStartTime) as any;
+backend/src/controllers\appointment.controller.ts:1022:        SELECT a.id, a.tenant_id, a.patient_id, a.professional_id, a.start_time, a.status,
+backend/src/controllers\appointment.controller.ts:1026:        JOIN patients pat ON pat.id = a.patient_id
+backend/src/controllers\appointment.controller.ts:1070:            id, tenant_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\appointment.controller.ts:1077:          appt.patient_id,
+backend/src/controllers\appointment.controller.ts:1121:            id, tenant_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\appointment.controller.ts:1128:          appt.patient_id,
+backend/src/controllers\appointment.controller.ts:1150:          id, tenant_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\appointment.controller.ts:1157:        appt.patient_id,
+backend/src/controllers\body-assessment.controller.ts:73:      const appt = db.prepare('SELECT id, patient_id, professional_id FROM appointments WHERE id = ? AND tenant_id = ?').get(appointmentId, tenantId) as any;
+backend/src/controllers\body-assessment.controller.ts:144:      const patientInTenant = db.prepare('SELECT 1 FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId);
+backend/src/controllers\body-assessment.controller.ts:160:        WHERE ba.patient_id = ? AND ba.tenant_id = ?
+backend/src/controllers\body-assessment.controller.ts:196:        JOIN patients pat ON pat.id = ba.patient_id
+backend/src/controllers\body-assessment.controller.ts:272:      const patientInTenant = db.prepare('SELECT 1 FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId);
+backend/src/controllers\body-assessment.controller.ts:298:      if (existing && (existing.patient_id !== patientId || (String(module).startsWith('estetic:') && existing.module !== module))) {
+backend/src/controllers\body-assessment.controller.ts:304:      if(appointmentId && !db.prepare('SELECT id FROM appointments WHERE id=? AND tenant_id=? AND patient_id=?').get(appointmentId,tenantId,patientId)) {
+backend/src/controllers\body-assessment.controller.ts:336:            id, tenant_id, patient_id, appointment_id, professional_id,
+backend/src/controllers\body-assessment.controller.ts:429:      const assessment = db.prepare('SELECT patient_id FROM body_assessments WHERE id = ? AND tenant_id = ?').get(assessmentId, tenantId) as any;
+backend/src/controllers\body-assessment.controller.ts:490:        SELECT bm.*, ba.patient_id
+backend/src/controllers\body-assessment.controller.ts:560:            id, tenant_id, assessment_id, patient_id, appointment_id,
+backend/src/controllers\body-assessment.controller.ts:565:          drawingId, tenantId, assessmentId, assessment.patient_id,
+backend/src/controllers\body-assessment.controller.ts:617:      const assessment = db.prepare('SELECT patient_id FROM body_assessments WHERE id = ? AND tenant_id = ?').get(assessmentId, tenantId) as any;
+backend/src/controllers\body-assessment.controller.ts:676:      const patientInTenant = db.prepare('SELECT 1 FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId);
+backend/src/controllers\body-assessment.controller.ts:730:          id, tenant_id, patient_id, appointment_id, professional_id,
+backend/src/controllers\body-assessment.controller.ts:792:      const patientInTenant = db.prepare('SELECT 1 FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId);
+backend/src/controllers\body-assessment.controller.ts:804:        WHERE baa.patient_id = ? AND baa.tenant_id = ?
+backend/src/controllers\body-assessment.controller.ts:860:      const patientInTenant = db.prepare('SELECT 1 FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId);
+backend/src/controllers\body-assessment.controller.ts:880:          id, tenant_id, patient_id, appointment_id, professional_id,
+backend/src/controllers\body-assessment.controller.ts:926:      const patientInTenant = db.prepare('SELECT 1 FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId);
+backend/src/controllers\body-assessment.controller.ts:938:        WHERE btp.patient_id = ? AND btp.tenant_id = ?
+backend/src/controllers\budget.controller.ts:20:          b.id, b.tenant_id, b.budget_type, b.budget_number, b.patient_id,
+backend/src/controllers\budget.controller.ts:26:        LEFT JOIN patients p ON p.id = b.patient_id AND p.tenant_id = b.tenant_id
+backend/src/controllers\budget.controller.ts:63:          b.id, b.tenant_id, b.budget_type, b.budget_number, b.patient_id,
+backend/src/controllers\budget.controller.ts:69:        LEFT JOIN patients p ON p.id = b.patient_id AND p.tenant_id = b.tenant_id
+backend/src/controllers\budget.controller.ts:123:      if (patientId && !db.prepare('SELECT id FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId)) {
+backend/src/controllers\budget.controller.ts:155:          id, tenant_id, budget_type, budget_number, patient_id,
+backend/src/controllers\budget.controller.ts:378:        SELECT id, budget_number, budget_type, patient_id, total_amount
+backend/src/controllers\budget.controller.ts:415:        patientId: budget.patient_id,
+backend/src/controllers\cash-register.controller.ts:32:        LEFT JOIN patients pat ON pat.id = p.patient_id
+backend/src/controllers\cash-register.controller.ts:254:        LEFT JOIN patients pat ON pat.id = p.patient_id
+backend/src/controllers\clinical-draft.controller.ts:48:    const patient = db.prepare('SELECT id FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, req.tenantId);
+backend/src/controllers\clinical-draft.controller.ts:58:  const patient = db.prepare('SELECT id FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, req.tenantId);
+backend/src/controllers\clinical-draft.controller.ts:114:          WHERE tenant_id = ? AND patient_id = ? AND module_type = ? AND appointment_id = ?
+backend/src/controllers\clinical-draft.controller.ts:123:          WHERE tenant_id = ? AND patient_id = ? AND module_type = ? AND (appointment_id IS NULL OR appointment_id = '' OR appointment_id = 'none')
+backend/src/controllers\clinical-draft.controller.ts:132:          WHERE tenant_id = ? AND patient_id = ? AND (COALESCE(?, 'none') = 'none' OR appointment_id = ? OR appointment_id IS NULL)
+backend/src/controllers\clinical-draft.controller.ts:140:            patient_id: psicoDraft.patient_id,
+backend/src/controllers\clinical-draft.controller.ts:165:          patientId: draft.patient_id,
+backend/src/controllers\clinical-draft.controller.ts:220:        WHERE tenant_id = ? AND patient_id = ? AND module_type = ? AND COALESCE(appointment_id, 'none') = COALESCE(?, 'none')
+backend/src/controllers\clinical-draft.controller.ts:251:            id, tenant_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\clinical-draft.controller.ts:262:            WHERE tenant_id = ? AND patient_id = ? AND COALESCE(appointment_id, 'none') = COALESCE(?, 'none')
+backend/src/controllers\clinical-draft.controller.ts:273:                id, tenant_id, patient_id, professional_id, appointment_id, draft_data_json, client_updated_at, updated_at, created_at
+backend/src/controllers\clinical-draft.controller.ts:313:          WHERE tenant_id = ? AND patient_id = ? AND module_type = ? AND appointment_id = ?
+backend/src/controllers\clinical-draft.controller.ts:318:          WHERE tenant_id = ? AND patient_id = ? AND module_type = ?
+backend/src/controllers\clinical-draft.controller.ts:325:            db.prepare('DELETE FROM psychology_drafts WHERE tenant_id = ? AND patient_id = ? AND appointment_id = ?').run(tenantId, patientId, appointmentId);
+backend/src/controllers\clinical-draft.controller.ts:327:            db.prepare('DELETE FROM psychology_drafts WHERE tenant_id = ? AND patient_id = ?').run(tenantId, patientId);
+backend/src/controllers\clinical-goals.controller.ts:58:      let sql = 'SELECT g.*, p.name as professional_name FROM clinical_goals g LEFT JOIN professionals p ON p.id = g.professional_id WHERE g.tenant_id = ? AND g.patient_id = ?';
+backend/src/controllers\clinical-goals.controller.ts:161:          id, tenant_id, patient_id, professional_id, module_type,
+backend/src/controllers\clinical-goals.controller.ts:202:      if (!hasClinicalAccess(req, existing.patient_id)) {
+backend/src/controllers\clinical-goals.controller.ts:291:      if (!hasClinicalAccess(req, existing.patient_id)) {
+backend/src/controllers\clinical-reassessment.controller.ts:30:        WHERE r.tenant_id = ? AND r.patient_id = ? AND r.module_type = ? AND r.assessment_type = ?
+backend/src/controllers\clinical-reassessment.controller.ts:111:        WHERE tenant_id = ? AND patient_id = ? AND module_type = ? AND assessment_type = ?
+backend/src/controllers\clinical-reassessment.controller.ts:122:          id, tenant_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\dashboard.controller.ts:38:          a.id, a.patient_id, a.professional_id, a.service_id, a.appointment_number, a.start_time, a.end_time, a.status, a.modality, a.meeting_url, a.clinical_module,
+backend/src/controllers\dashboard.controller.ts:49:        LEFT JOIN patients pat ON pat.id = a.patient_id
+backend/src/controllers\dashboard.controller.ts:82:        FROM patients pat
+backend/src/controllers\dashboard.controller.ts:86:          WHERE a.patient_id=pat.id AND a.tenant_id=pat.tenant_id
+backend/src/controllers\clinical.controller.ts:34:    const patientBelongsToClinic = db.prepare('SELECT 1 FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId);
+backend/src/controllers\clinical.controller.ts:92:    const hasAppt = db.prepare('SELECT 1 FROM appointments WHERE tenant_id = ? AND patient_id = ? AND professional_id = ? LIMIT 1').get(tenantId, patientId, profId);
+backend/src/controllers\clinical.controller.ts:96:    const hasReferral = db.prepare('SELECT 1 FROM patient_referrals WHERE tenant_id = ? AND patient_id = ? AND to_professional_id = ? LIMIT 1').get(tenantId, patientId, profId);
+backend/src/controllers\clinical.controller.ts:100:    const hasRecord = db.prepare('SELECT 1 FROM records WHERE tenant_id = ? AND patient_id = ? AND professional_id = ? LIMIT 1').get(tenantId, patientId, profId);
+backend/src/controllers\clinical.controller.ts:104:    const patientBelongsToClinic = db.prepare('SELECT 1 FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId);
+backend/src/controllers\clinical.controller.ts:136:          r.id, r.tenant_id, r.patient_id, r.appointment_id, r.professional_id,
+backend/src/controllers\clinical.controller.ts:149:        WHERE r.patient_id = ? AND r.tenant_id = ?
+backend/src/controllers\clinical.controller.ts:156:        attachments: db.prepare('SELECT id, title, file_url FROM documents WHERE record_id=? AND tenant_id=? AND patient_id=?').all(record.id, tenantId, patientId)
+backend/src/controllers\clinical.controller.ts:180:        JOIN patients pat ON pat.id = r.patient_id
+backend/src/controllers\clinical.controller.ts:189:      if (!hasClinicalAccess(req, record.patient_id)) {
+backend/src/controllers\clinical.controller.ts:295:          id, tenant_id, patient_id, appointment_id, professional_id,
+backend/src/controllers\clinical.controller.ts:355:      if (!hasClinicalAccess(req, record.patient_id)) {
+backend/src/controllers\clinical.controller.ts:472:        const payloadToHash = `${tenantId}|${record.patient_id}|${record.professional_id}|${record.session_date}|${effectiveTitle}|${effectiveEvolution || ''}|${newSignedAt}|${newSignerRegistration || ''}`;
+backend/src/controllers\clinical.controller.ts:534:      if (!hasClinicalAccess(req, record.patient_id)) {
+backend/src/controllers\clinical.controller.ts:606:        JOIN patients pat ON pat.id = r.patient_id
+backend/src/controllers\clinical.controller.ts:615:      if (!hasClinicalAccess(req, record.patient_id)) {
+backend/src/controllers\clinical.controller.ts:885:      const patient = db.prepare('SELECT id, full_name FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId) as any;
+backend/src/controllers\clinical.controller.ts:937:        LEFT JOIN patients pat ON pat.id = a.patient_id
+backend/src/controllers\clinical.controller.ts:938:        WHERE a.tenant_id = ? AND a.patient_id = ? AND a.status = 'in_progress'
+backend/src/controllers\clinical.controller.ts:964:        LEFT JOIN patients pat ON pat.id = a.patient_id
+backend/src/controllers\clinical.controller.ts:965:        WHERE a.tenant_id = ? AND a.patient_id = ? AND a.status IN ('scheduled', 'confirmed')
+backend/src/controllers\clinical.controller.ts:1015:          id, tenant_id, appointment_number, patient_id, professional_id,
+backend/src/controllers\clinical.controller.ts:1029:        LEFT JOIN patients pat ON pat.id = a.patient_id
+backend/src/controllers\dentistry.controller.ts:140:        WHERE patient_id = ? AND tenant_id = ? 
+backend/src/controllers\dentistry.controller.ts:204:        WHERE patient_id = ? AND tenant_id = ? AND type = ?
+backend/src/controllers\dentistry.controller.ts:219:          INSERT INTO odontograms (id, tenant_id, patient_id, professional_id, appointment_id, type, status_data_json, notes)
+backend/src/controllers\dentistry.controller.ts:227:            id, tenant_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\dentistry.controller.ts:265:        WHERE dtr.patient_id = ? AND dtr.tenant_id = ?
+backend/src/controllers\dentistry.controller.ts:302:        WHERE pr.patient_id = ? AND pr.tenant_id = ?
+backend/src/controllers\dentistry.controller.ts:342:        INSERT INTO dental_periodontal_records (id, tenant_id, patient_id, professional_id, appointment_id, periodontogram_json, notes)
+backend/src/controllers\dentistry.controller.ts:372:        WHERE er.patient_id = ? AND er.tenant_id = ?
+backend/src/controllers\dentistry.controller.ts:414:          id, tenant_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\dentistry.controller.ts:450:        WHERE patient_id = ? AND tenant_id = ?
+backend/src/controllers\dentistry.controller.ts:497:      const existing = db.prepare(`SELECT id FROM dental_anamnesis WHERE patient_id = ? AND tenant_id = ?`).get(patientId, tenantId) as any;
+backend/src/controllers\dentistry.controller.ts:524:            id, tenant_id, patient_id, professional_id,
+backend/src/controllers\dentistry.controller.ts:562:        WHERE dtp.patient_id = ? AND dtp.tenant_id = ?
+backend/src/controllers\dentistry.controller.ts:638:      const patient = db.prepare('SELECT id, full_name FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId) as any;
+backend/src/controllers\dentistry.controller.ts:669:            id, tenant_id, patient_id, professional_id, budget_id, title,
+backend/src/controllers\dentistry.controller.ts:682:            id, tenant_id, budget_type, budget_number, patient_id,
+backend/src/controllers\dentistry.controller.ts:840:          patientId: plan.patient_id,
+backend/src/controllers\dentistry.controller.ts:869:              id, tenant_id, patient_id, amount, method, status, due_date, notes
+backend/src/controllers\dentistry.controller.ts:871:          `).run(payId, tenantId, plan.patient_id, plan.final_value, `Orçamento Odonto: ${plan.title}`);
+backend/src/controllers\dentistry.controller.ts:902:        JOIN patients pat ON pat.id = dpl.patient_id
+backend/src/controllers\dentistry.controller.ts:904:        WHERE dpl.patient_id = ? AND dpl.tenant_id = ?
+backend/src/controllers\dentistry.controller.ts:933:      const patientId = req.body.patientId || req.body.patient_id;
+backend/src/controllers\dentistry.controller.ts:951:      const patient = db.prepare('SELECT id FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId);
+backend/src/controllers\dentistry.controller.ts:972:          id, tenant_id, patient_id, professional_id, lab_name,
+backend/src/controllers\dentistry.controller.ts:1098:            patientId: updated.patient_id,
+backend/src/controllers\dentistry.controller.ts:1137:        WHERE patient_id = ? AND tenant_id = ?
+backend/src/controllers\dentistry.controller.ts:1176:      const existing = db.prepare(`SELECT id FROM dental_orthodontics WHERE patient_id = ? AND tenant_id = ?`).get(patientId, tenantId) as any;
+backend/src/controllers\dentistry.controller.ts:1196:            id, tenant_id, patient_id, professional_id,
+backend/src/controllers\dentistry.controller.ts:1223:        WHERE dh.patient_id = ? AND dh.tenant_id = ?
+backend/src/controllers\dentistry.controller.ts:1268:          id, tenant_id, patient_id, professional_id, procedure_name,
+backend/src/controllers\dentistry.controller.ts:1359:            id, tenant_id, patient_id, appointment_id, professional_id,
+backend/src/controllers\dentistry.controller.ts:1376:          const hasInitial = db.prepare("SELECT id FROM odontograms WHERE patient_id = ? AND tenant_id = ? AND type = 'initial'").get(patientId, tenantId);
+backend/src/controllers\dentistry.controller.ts:1380:              INSERT INTO odontograms (id, tenant_id, patient_id, professional_id, appointment_id, record_id, type, status_data_json, notes)
+backend/src/controllers\dentistry.controller.ts:1386:          const existingOdo = db.prepare('SELECT id FROM odontograms WHERE patient_id = ? AND tenant_id = ? AND type = ?').get(patientId, tenantId, 'current') as any;
+backend/src/controllers\dentistry.controller.ts:1392:              INSERT INTO odontograms (id, tenant_id, patient_id, professional_id, appointment_id, record_id, type, status_data_json)
+backend/src/controllers\dentistry.controller.ts:1400:            INSERT INTO odontograms (id, tenant_id, patient_id, professional_id, appointment_id, record_id, type, status_data_json, notes)
+backend/src/controllers\dentistry.controller.ts:1409:              id, tenant_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\dentistry.controller.ts:1489:        SELECT * FROM odontograms WHERE patient_id = ? AND tenant_id = ? AND type = 'current' ORDER BY created_at DESC LIMIT 1
+backend/src/controllers\dentistry.controller.ts:1493:        SELECT * FROM odontograms WHERE patient_id = ? AND tenant_id = ? AND type = 'initial' ORDER BY created_at ASC LIMIT 1
+backend/src/controllers\dentistry.controller.ts:1518:        WHERE r.patient_id = ? AND r.tenant_id = ? AND r.tooth_number = ?
+backend/src/controllers\dentistry.controller.ts:1527:        WHERE r.patient_id = ? AND r.tenant_id = ? AND r.tooth_number = ?
+backend/src/controllers\dentistry.controller.ts:1536:        WHERE r.patient_id = ? AND r.tenant_id = ?
+backend/src/controllers\dentistry.controller.ts:1552:        WHERE r.patient_id = ? AND r.tenant_id = ? AND (r.tooth_number = ? OR r.tooth_number LIKE ?)
+backend/src/controllers\dentistry.controller.ts:1561:        WHERE r.patient_id = ? AND r.tenant_id = ? AND (r.tooth_region = ? OR r.tooth_region LIKE ?)
+backend/src/controllers\dentistry.controller.ts:1570:        WHERE r.patient_id = ? AND r.tenant_id = ? AND (r.tooth_number = ? OR r.region LIKE ?)
+backend/src/controllers\dentistry.controller.ts:1579:        WHERE r.patient_id = ? AND r.tenant_id = ? AND (r.tooth_number = ? OR r.region LIKE ?)
+backend/src/controllers\dentistry.controller.ts:1705:        WHERE e.patient_id = ? AND e.tenant_id = ?
+backend/src/controllers\dentistry.controller.ts:1740:          id, tenant_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\dentistry.controller.ts:1771:        WHERE i.patient_id = ? AND i.tenant_id = ?
+backend/src/controllers\dentistry.controller.ts:1857:      const patientId = body.patientId || body.patient_id;
+backend/src/controllers\dentistry.controller.ts:1910:          id, tenant_id, patient_id, professional_id, appointment_id, tooth_region,
+backend/src/controllers\dentistry.controller.ts:1978:        WHERE p.patient_id = ? AND p.tenant_id = ?
+backend/src/controllers\dentistry.controller.ts:2015:        WHERE patient_id = ? AND tenant_id = ? AND category = ?
+backend/src/controllers\dentistry.controller.ts:2023:          UPDATE dental_photos SET is_current = 0 WHERE patient_id = ? AND tenant_id = ? AND category = ?
+backend/src/controllers\dentistry.controller.ts:2032:          id, tenant_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\dentistry.controller.ts:2066:        JOIN patients pat ON pat.id = p.patient_id
+backend/src/controllers\documents.controller.ts:27:    if (!req.user || !hasClinicalAccess(req, appt.patient_id) ||
+backend/src/controllers\documents.controller.ts:130:          id, tenant_id, patient_id, appointment_id, professional_id,
+backend/src/controllers\documents.controller.ts:176:        JOIN patients p ON p.id = c.patient_id
+backend/src/controllers\documents.controller.ts:253:          id, tenant_id, patient_id, appointment_id, professional_id,
+backend/src/controllers\documents.controller.ts:299:        JOIN patients p ON p.id = pr.patient_id
+backend/src/controllers\documents.controller.ts:376:          id, tenant_id, patient_id, appointment_id, professional_id,
+backend/src/controllers\documents.controller.ts:422:        JOIN patients p ON p.id = er.patient_id
+backend/src/controllers\documents.controller.ts:532:      if (!req.user || !hasClinicalAccess(req, appt.patient_id) ||
+backend/src/controllers\documents.controller.ts:533:          (req.body.patientId && req.body.patientId !== appt.patient_id) ||
+backend/src/controllers\documents.controller.ts:553:        ZemdaPP: (request: Request) => hasPsychopedagogyAccess(request, appt.patient_id),
+backend/src/controllers\documents.controller.ts:554:        ZemdaPsico: (request: Request) => hasPsychologyAccess(request, appt.patient_id),
+backend/src/controllers\documents.controller.ts:749:          patientId: appt.patient_id,
+backend/src/controllers\documents.controller.ts:769:          const assessment = db.prepare('SELECT * FROM physiotherapy_assessments WHERE appointment_id=? AND tenant_id=? AND patient_id=? ORDER BY created_at DESC LIMIT 1').get(appointmentId, tenantId, appt.patient_id) as any;
+backend/src/controllers\documents.controller.ts:777:            db.prepare('INSERT INTO physiotherapy_assessments (id, tenant_id, patient_id, professional_id, appointment_id, chief_complaint, pain_score, pain_location, pain_characteristics, conducts_exercises, body_map_json, body_map_image, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+backend/src/controllers\documents.controller.ts:778:              .run('pfa-' + uuidv4(), tenantId, appt.patient_id, resolvedProfId, appointmentId, evolution.title || srvName, ...values, req.user?.name);
+backend/src/controllers\documents.controller.ts:805:            appt.patient_id,
+backend/src/controllers\documents.controller.ts:821:            id, tenant_id, patient_id, appointment_id, professional_id,
+backend/src/controllers\documents.controller.ts:830:          recId, tenantId, appt.patient_id, appointmentId, resolvedProfId,
+backend/src/controllers\documents.controller.ts:848:          db.prepare(`UPDATE psychopedagogy_sessions SET is_sealed=1, signature_hash=?, signed_at=?, signed_by_user_id=?, signer_name=?, signer_registration=?, sealed_at=?, updated_at=datetime('now') WHERE id=? AND tenant_id=? AND patient_id=?`)
+backend/src/controllers\documents.controller.ts:849:            .run(signatureHash, signedAt, req.user?.userId, signerName, signerRegistration, sealedAt, evolution.sessionId, tenantId, appt.patient_id);
+backend/src/controllers\documents.controller.ts:854:            id, tenant_id, patient_id, professional_id, appointment_id, session_number,
+backend/src/controllers\documents.controller.ts:860:            sessionId, tenantId, appt.patient_id, resolvedProfId, appointmentId, evolution.sessionNumber || 1,
+backend/src/controllers\documents.controller.ts:868:          db.prepare("DELETE FROM psychology_drafts WHERE tenant_id=? AND patient_id=? AND professional_id=? AND COALESCE(NULLIF(appointment_id,''),'none') IN (?, 'none')")
+backend/src/controllers\documents.controller.ts:869:            .run(tenantId, appt.patient_id, resolvedProfId, appointmentId);
+backend/src/controllers\documents.controller.ts:873:          const attachment = db.prepare('SELECT id, record_id FROM documents WHERE id=? AND patient_id=? AND tenant_id=?').get(attachmentId, appt.patient_id, tenantId) as any;
+backend/src/controllers\documents.controller.ts:888:            const hasInitial = db.prepare("SELECT id FROM odontograms WHERE patient_id = ? AND tenant_id = ? AND type = 'initial'").get(appt.patient_id, tenantId);
+backend/src/controllers\documents.controller.ts:891:                INSERT INTO odontograms (id, tenant_id, patient_id, professional_id, appointment_id, record_id, type, status_data_json, notes)
+backend/src/controllers\documents.controller.ts:893:              `).run('odo-init-' + uuidv4().slice(0, 8), tenantId, appt.patient_id, resolvedProfId, appointmentId, recId, statusJson);
+backend/src/controllers\documents.controller.ts:897:            const existingCurrent = db.prepare("SELECT id FROM odontograms WHERE patient_id = ? AND tenant_id = ? AND type = 'current'").get(appt.patient_id, tenantId) as any;
+backend/src/controllers\documents.controller.ts:902:                INSERT INTO odontograms (id, tenant_id, patient_id, professional_id, appointment_id, record_id, type, status_data_json)
+backend/src/controllers\documents.controller.ts:904:              `).run('odo-' + uuidv4().slice(0, 8), tenantId, appt.patient_id, resolvedProfId, appointmentId, recId, statusJson);
+backend/src/controllers\documents.controller.ts:909:              INSERT INTO odontograms (id, tenant_id, patient_id, professional_id, appointment_id, record_id, type, status_data_json, notes)
+backend/src/controllers\documents.controller.ts:911:            `).run('odo-snap-' + uuidv4().slice(0, 8), tenantId, appt.patient_id, resolvedProfId, appointmentId, recId, statusJson, `Snapshot do atendimento em ${sessionDate}`);
+backend/src/controllers\documents.controller.ts:918:                id, tenant_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\documents.controller.ts:924:                'dtr-' + uuidv4().slice(0, 8), tenantId, appt.patient_id, resolvedProfId, appointmentId,
+backend/src/controllers\documents.controller.ts:938:                id, tenant_id, patient_id, professional_id, appointment_id, record_id,
+backend/src/controllers\documents.controller.ts:943:              'n-ass-' + uuidv4().slice(0, 8), tenantId, appt.patient_id, resolvedProfId, appointmentId, recId,
+backend/src/controllers\documents.controller.ts:960:                  id, tenant_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\documents.controller.ts:964:                'to-avd-' + uuidv4().slice(0, 8), tenantId, appt.patient_id, resolvedProfId, appointmentId,
+backend/src/controllers\documents.controller.ts:976:                  id, tenant_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\documents.controller.ts:980:                'to-sns-' + uuidv4().slice(0, 8), tenantId, appt.patient_id, resolvedProfId, appointmentId,
+backend/src/controllers\documents.controller.ts:999:                  id, tenant_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\documents.controller.ts:1003:                'fon-sph-' + uuidv4().slice(0, 8), tenantId, appt.patient_id, resolvedProfId, appointmentId,
+backend/src/controllers\documents.controller.ts:1015:                  id, tenant_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\documents.controller.ts:1019:                'fon-voc-' + uuidv4().slice(0, 8), tenantId, appt.patient_id, resolvedProfId, appointmentId,
+backend/src/controllers\documents.controller.ts:1045:          certId, tenantId, appt.patient_id, certNum, certificate.certificateType,
+backend/src/controllers\documents.controller.ts:1052:            id, tenant_id, patient_id, appointment_id, professional_id,
+backend/src/controllers\documents.controller.ts:1060:          certId, tenantId, appt.patient_id, appointmentId, resolvedProfId,
+backend/src/controllers\documents.controller.ts:1078:          prescId, tenantId, appt.patient_id, prescNum, prescription.prescriptionType || 'simple',
+backend/src/controllers\documents.controller.ts:1084:            id, tenant_id, patient_id, appointment_id, professional_id,
+backend/src/controllers\documents.controller.ts:1092:          prescId, tenantId, appt.patient_id, appointmentId, resolvedProfId,
+backend/src/controllers\documents.controller.ts:1109:          reqId, tenantId, appt.patient_id, reqNum, examRequest.examsList,
+backend/src/controllers\documents.controller.ts:1115:            id, tenant_id, patient_id, appointment_id, professional_id,
+backend/src/controllers\documents.controller.ts:1123:          reqId, tenantId, appt.patient_id, appointmentId, resolvedProfId,
+backend/src/controllers\documents.controller.ts:1141:            id, tenant_id, appointment_number, patient_id, professional_id, service_id,
+backend/src/controllers\documents.controller.ts:1146:          retApptId, tenantId, apptNum, appt.patient_id, resolvedProfId,
+backend/src/controllers\documents.controller.ts:1214:        db.prepare('INSERT INTO payments (id, tenant_id, appointment_id, patient_id, amount, payment_method, status, payment_date, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+backend/src/controllers\documents.controller.ts:1215:          .run(paymentId, tenantId, appointmentId, appt.patient_id, amount, payment.paymentMethod, payment.status, payment.status === 'paid' ? new Date().toISOString() : null, payment.notes || null);
+backend/src/controllers\documents.controller.ts:1239:        db.prepare('DELETE FROM clinical_drafts WHERE tenant_id = ? AND patient_id = ? AND (appointment_id = ? OR appointment_id IS NULL OR appointment_id = \'\' OR appointment_id = \'none\')')
+backend/src/controllers\documents.controller.ts:1240:          .run(tenantId, appt.patient_id, appointmentId);
+backend/src/controllers\documents.controller.ts:1241:        db.prepare('DELETE FROM psychology_drafts WHERE tenant_id = ? AND patient_id = ? AND (appointment_id = ? OR appointment_id IS NULL OR appointment_id = \'\' OR appointment_id = \'none\')')
+backend/src/controllers\documents.controller.ts:1242:          .run(tenantId, appt.patient_id, appointmentId);
+backend/src/controllers\estetic-records.ts:21:  if (!db.prepare('SELECT id FROM patients WHERE id = ? AND tenant_id = ?').get(id, req.tenantId)) throw new InputError('Paciente não encontrado nesta clínica.', 404, 'patientId');
+backend/src/controllers\estetic-records.ts:30:  patient(req, row.patient_id);
+backend/src/controllers\estetic-records.ts:33:  patient(req, row.patient_id);
+backend/src/controllers\estetic-records.ts:34:  if (row.appointment_id && !db.prepare('SELECT id FROM appointments WHERE id = ? AND tenant_id = ? AND patient_id = ? AND professional_id = ?').get(row.appointment_id, req.tenantId, row.patient_id, row.professional_id)) fail('Atendimento não corresponde ao paciente e profissional.', 'appointmentId');
+backend/src/controllers\estetic-records.ts:37:    const linked = db.prepare(`SELECT * FROM ${table} WHERE id = ? AND tenant_id = ? AND patient_id = ?`).get(row[column], req.tenantId, row.patient_id) as any;
+backend/src/controllers\estetic-records.ts:94:        patientId: row.patient_id,
+backend/src/controllers\estetic-records.ts:112:        patientId: row.patient_id,
+backend/src/controllers\estetic-records.ts:145:  const record = ClinicalRecordService.recordClinicalEvent({ tenantId: req.tenantId!, patientId: row.patient_id, professionalId: row.professional_id, appointmentId: row.appointment_id || null, moduleType: 'ZemdaEstetic', sourceId: row.id, sourceType: `estetic_${kind === 'assessments' ? 'assessment' : kind === 'procedures' ? 'procedure' : kind === 'evolutions' ? 'evolution' : 'return'}`, title: `${title}: ${row.area}`, procedureName: row.procedure_name || title, sessionDate: row.assessment_date || row.date_performed || row.evolution_date || row.actual_date || row.scheduled_date || row.created_at?.slice(0, 10), clinicalEvolution: text || title, moduleData: { ...row, specificData: row.specific_data_json ? JSON.parse(row.specific_data_json) : undefined }, createdBy: req.user?.name || 'Profissional' });
+backend/src/controllers\estetic-records.ts:160:      const rows = db.prepare(`SELECT a.*, p.name AS professional_name FROM ${table} a LEFT JOIN professionals p ON p.id = a.professional_id AND p.tenant_id = a.tenant_id WHERE a.tenant_id = ? AND a.patient_id = ? ORDER BY a.created_at DESC, a.rowid DESC`).all(req.tenantId, id).filter((row: any) => auth.allowedAreas.includes(row.area) && (!area || area === 'TODOS' || row.area === area));
+backend/src/controllers\estetic-records.ts:169:            db.prepare(`UPDATE estetic_${related} SET ${column} = NULL WHERE ${column} = ? AND tenant_id = ? AND patient_id = ?`).run(old.id, req.tenantId, old.patient_id);
+backend/src/controllers\estetic-records.ts:191:        if (duplicate) { rowAccess(req, access, duplicate); if (duplicate.patient_id !== body.patientId || duplicate.area !== body.area) fail('Identificador de envio pertence a outro contexto.'); return { success: true, id: duplicate.id }; }
+backend/src/controllers\estetic-records.ts:197:      const row: any = old ? { ...old } : { id: uuid(), tenant_id: req.tenantId, patient_id: body.patientId, professional_id: prof.id, area: String(body.area || 'FACIAL').toUpperCase(), ...defaults[kind], client_request_id: body.clientRequestId || null };
+backend/src/controllers\estetic-records.ts:198:      if (old && body.patientId && body.patientId !== old.patient_id) fail('Não é permitido mover registros entre pacientes.', 'patientId');
+backend/src/controllers\estetic-records.ts:212:        const duplicate = db.prepare('SELECT id FROM estetic_photos WHERE tenant_id = ? AND patient_id = ? AND area = ? AND photo_type = ? AND view_type = ? AND photo_date = ? AND file_url = ?').get(req.tenantId, row.patient_id, row.area, row.photo_type, row.view_type, row.photo_date, row.file_url) as any;
+backend/src/controllers\estetic-records.ts:255:              patientId: row.patient_id,
+backend/src/controllers\estetic-records.ts:279:      const keys = ['patient_id', 'professional_id', 'area', 'appointment_id', ...Object.values(columns[kind]), ...(kind === 'procedures' ? ['inventory_deducted', 'deducted_quantity'] : [])];
+backend/src/controllers\estetic-records.ts:304:    const list = (kind: Kind) => db.prepare(`SELECT * FROM estetic_${kind} WHERE tenant_id = ? AND patient_id = ? ORDER BY created_at DESC, rowid DESC`).all(req.tenantId, id).filter((row: any) => auth.allowedAreas.includes(row.area) && (!area || area === 'TODOS' || row.area === area)) as any[];
+backend/src/controllers\estetic-records.ts:309:    res.json({ patient: db.prepare('SELECT id, full_name, gender, birth_date, phone FROM patients WHERE id = ? AND tenant_id = ?').get(id, req.tenantId), lastAssessment: assessments[0] || null, lastProcedure: procedures[0] || null, pendingPlans: plans.filter(row => ['PLANEJADO', 'EM_ANDAMENTO'].includes(row.status)), nextReturn: returns[0] || null, upcomingReturns: returns, recentPhotos: list('photos').slice(0, 8), usedAreas: [...new Set([...assessments, ...procedures, ...plans].map(row => row.area))] });
+backend/src/controllers\estetic-records.ts:331:      const request = { ...req, params: { id: existingId }, query: {}, body: { ...body, patientId: appointment.patient_id, appointmentId: appointment.id, area, clientRequestId: `completion:${appointment.id}:${area}:${kind}` } } as unknown as Request;
+backend/src/controllers\estetic-records.ts:341:        const row = db.prepare(`SELECT * FROM estetic_${kind} WHERE id = ? AND tenant_id = ? AND patient_id = ? AND area = ?`).get(id, req.tenantId, appointment.patient_id, area) as any;
+backend/src/controllers\estetic.controller.ts:316:        WHERE tenant_id = ? AND patient_id = ?
+backend/src/controllers\estetic.controller.ts:371:      let astQuery = 'SELECT a.*, p.name as professional_name FROM estetic_assessments a LEFT JOIN professionals p ON p.id = a.professional_id WHERE a.tenant_id = ? AND a.patient_id = ?';
+backend/src/controllers\estetic.controller.ts:392:      let procQuery = 'SELECT pr.*, p.name as professional_name FROM estetic_procedures pr LEFT JOIN professionals p ON p.id = pr.professional_id WHERE pr.tenant_id = ? AND pr.patient_id = ?';
+backend/src/controllers\estetic.controller.ts:414:      let planQuery = 'SELECT pl.*, p.name as professional_name FROM estetic_plans pl LEFT JOIN professionals p ON p.id = pl.professional_id WHERE pl.tenant_id = ? AND pl.patient_id = ?';
+backend/src/controllers\estetic.controller.ts:435:      let evoQuery = 'SELECT ev.*, p.name as professional_name FROM estetic_evolutions ev LEFT JOIN professionals p ON p.id = ev.professional_id WHERE ev.tenant_id = ? AND ev.patient_id = ?';
+backend/src/controllers\estetic.controller.ts:456:      let retQuery = 'SELECT rt.*, p.name as professional_name FROM estetic_returns rt LEFT JOIN professionals p ON p.id = rt.professional_id WHERE rt.tenant_id = ? AND rt.patient_id = ?';
+backend/src/controllers\estetic.controller.ts:477:      let phtQuery = 'SELECT ph.*, p.name as professional_name FROM estetic_photos ph LEFT JOIN professionals p ON p.id = ph.professional_id WHERE ph.tenant_id = ? AND ph.patient_id = ?';
+backend/src/controllers\external-tests.controller.ts:26:      const patient = db.prepare('SELECT id FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId) as any;
+backend/src/controllers\external-tests.controller.ts:44:        WHERE t.patient_id = ? AND t.tenant_id = ?
+backend/src/controllers\external-tests.controller.ts:82:          patientId: r.patient_id,
+backend/src/controllers\external-tests.controller.ts:114:            WHERE c.patient_id = ? AND c.tenant_id = ?
+backend/src/controllers\external-tests.controller.ts:124:                patientId: fr.patient_id,
+backend/src/controllers\external-tests.controller.ts:195:      const patient = db.prepare('SELECT id FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId) as any;
+backend/src/controllers\external-tests.controller.ts:277:            id, tenant_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\external-tests.controller.ts:313:              patient_id = COALESCE(?, patient_id)
+backend/src/controllers\external-tests.controller.ts:340:                id, tenant_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\file.controller.ts:60: * Anexo CLÍNICO = vinculado a um paciente/aluno: tem patient_id real (diferente de
+backend/src/controllers\file.controller.ts:88:export function isClinicalAttachment(file: { patient_id?: string | null; object_key?: string | null }): boolean {
+backend/src/controllers\file.controller.ts:89:  return isRealPatientId(file.patient_id) || isPatientObjectKey(file.object_key);
+backend/src/controllers\file.controller.ts:92:/** patient_id para a trilha de auditoria (coluna ou, na falta dela, o segmento da chave). */
+backend/src/controllers\file.controller.ts:93:function auditPatientId(file: { patient_id?: string | null; object_key?: string | null }): string | null {
+backend/src/controllers\file.controller.ts:94:  if (isRealPatientId(file.patient_id)) return String(file.patient_id);
+backend/src/controllers\file.controller.ts:175:          .prepare('SELECT id FROM patients WHERE id = ? AND tenant_id = ?')
+backend/src/controllers\file.controller.ts:340:          .prepare('SELECT id FROM patients WHERE id = ? AND tenant_id = ?')
+backend/src/controllers\file.controller.ts:458:          .prepare('SELECT id FROM patients WHERE id = ? AND tenant_id = ?')
+backend/src/controllers\file.controller.ts:567:            id, clinic_id, patient_id, appointment_id, assessment_id, exercise_id,
+backend/src/controllers\file.controller.ts:593:              id, clinic_id, patient_id, appointment_id, uploaded_by,
+backend/src/controllers\file.controller.ts:609:        } else if (String(insertErr?.message || '').includes('NOT NULL constraint failed: file_attachments.patient_id')) {
+backend/src/controllers\file.controller.ts:612:              id, clinic_id, patient_id, appointment_id, uploaded_by,
+backend/src/controllers\file.controller.ts:636:          patient_id: auditPatientId({ patient_id: targetPatientId, object_key: objectKey })
+backend/src/controllers\file.controller.ts:672:          patient_id: targetPatientId || undefined,
+backend/src/controllers\file.controller.ts:741:          patient_id: auditPatientId(file)
+backend/src/controllers\file.controller.ts:888:          patient_id: auditPatientId(file || { object_key: targetObjectKey })
+backend/src/controllers\file.controller.ts:927:        SELECT id, clinic_id, patient_id, appointment_id, uploaded_by,
+backend/src/controllers\file.controller.ts:931:        WHERE clinic_id = ? AND patient_id = ?
+backend/src/controllers\file.controller.ts:945:        patient_id: String(patientId),
+backend/src/controllers\import.controller.ts:655:        FROM patients
+backend/src/controllers\import.controller.ts:839:    const existingPatients = db.prepare('SELECT id, full_name, cpf, phone, email FROM patients WHERE tenant_id = ? AND active = 1').all(tenantId) as any[];
+backend/src/controllers\import.controller.ts:1030:                INSERT INTO patient_allergies (id, tenant_id, patient_id, agent, reaction, status, created_by)
+backend/src/controllers\import.controller.ts:1040:                INSERT INTO patient_medications (id, tenant_id, patient_id, name, status, created_by)
+backend/src/controllers\import.controller.ts:1055:                INSERT INTO patient_anamnesis (id, tenant_id, patient_id, professional_id, title, template_type, content_json)
+backend/src/controllers\import.controller.ts:1065:                INSERT INTO records (id, tenant_id, patient_id, professional_id, session_date, title, clinical_evolution, created_by)
+backend/src/controllers\import.controller.ts:1115:                    id, tenant_id, appointment_number, patient_id, professional_id,
+backend/src/controllers\import.controller.ts:1245:      const delPatients = db.prepare('DELETE FROM patients WHERE import_batch_id = ? AND tenant_id = ?').run(batchId, tenantId);
+backend/src/controllers\import.controller.ts:1438:        FROM patients
+backend/src/controllers\import.controller.ts:1512:        FROM patients
+backend/src/controllers\import.controller.ts:1608:        const found = db.prepare('SELECT id FROM patients WHERE id = ? AND tenant_id = ?').get(existingPatientId, tenantId) as any;
+backend/src/controllers\import.controller.ts:1693:            INSERT INTO patient_allergies (id, tenant_id, patient_id, agent, reaction, status, created_by)
+backend/src/controllers\import.controller.ts:1708:            INSERT INTO patient_medications (id, tenant_id, patient_id, name, status, created_by)
+backend/src/controllers\import.controller.ts:1734:            INSERT INTO patient_anamnesis (id, tenant_id, patient_id, professional_id, title, template_type, content_json)
+backend/src/controllers\import.controller.ts:1772:              id, tenant_id, patient_id, professional_id, session_date, title, clinical_evolution, created_by
+backend/src/controllers\import.controller.ts:1793:              id, tenant_id, patient_id, professional_id, session_date, title, clinical_evolution, created_by
+backend/src/controllers\insurance.controller.ts:110:        WHERE pi.patient_id = ? AND pi.tenant_id = ?
+backend/src/controllers\insurance.controller.ts:133:        db.prepare('UPDATE patient_insurances SET is_primary = 0 WHERE patient_id = ? AND tenant_id = ?').run(patientId, tenantId);
+backend/src/controllers\insurance.controller.ts:139:          id, tenant_id, patient_id, insurance_id, card_number,
+backend/src/controllers\insurance.controller.ts:161:      db.prepare('DELETE FROM patient_insurances WHERE id = ? AND patient_id = ? AND tenant_id = ?').run(id, patientId, tenantId);
+backend/src/controllers\medical.controller.ts:88:        WHERE mc.patient_id = ? AND mc.tenant_id = ?
+backend/src/controllers\medical.controller.ts:95:      const records = db.prepare(`SELECT r.*, p.name AS professional_name FROM records r LEFT JOIN professionals p ON p.id = r.professional_id AND p.tenant_id = r.tenant_id WHERE r.patient_id = ? AND r.tenant_id = ? AND r.module_type = 'ZemdaMed' ORDER BY r.created_at DESC`).all(patientId, tenantId) as any[];
+backend/src/controllers\medical.controller.ts:131:          if (!hasClinicalAccess(req, record.patient_id)) { res.status(403).json({ error: 'Acesso clínico restrito' }); return; }
+backend/src/controllers\medical.controller.ts:140:      if (!hasClinicalAccess(req, row.patient_id)) { res.status(403).json({ error: 'Acesso clínico restrito' }); return; }
+backend/src/controllers\medical.controller.ts:179:      if (appointmentId && !db.prepare('SELECT id FROM appointments WHERE id = ? AND tenant_id = ? AND patient_id = ?').get(appointmentId, tenantId, patientId)) {
+backend/src/controllers\medical.controller.ts:202:          id, tenant_id, patient_id, appointment_id, professional_id,
+backend/src/controllers\medical.controller.ts:271:      if (appointmentId && !db.prepare('SELECT id FROM appointments WHERE id = ? AND tenant_id = ? AND patient_id = ?').get(appointmentId, tenantId, patientId)) {
+backend/src/controllers\medical.controller.ts:277:      if (appointmentId && db.prepare('SELECT status FROM appointments WHERE id = ? AND tenant_id = ? AND patient_id = ?').get(appointmentId, tenantId, patientId)?.status === 'completed') {
+backend/src/controllers\medical.controller.ts:290:        profId = db.prepare('SELECT professional_id FROM appointments WHERE id = ? AND tenant_id = ? AND patient_id = ?').get(appointmentId, tenantId, patientId)?.professional_id || profId;
+backend/src/controllers\medical.controller.ts:328:            id, tenant_id, patient_id, appointment_id, professional_id,
+backend/src/controllers\medical.controller.ts:348:          WHERE tenant_id = ? AND patient_id = ? AND module_type = 'medical'
+backend/src/controllers\inventory.controller.ts:309:          m.module_type, m.batch, m.professional_id, m.patient_id, m.appointment_id,
+backend/src/controllers\inventory.controller.ts:317:        LEFT JOIN patients p ON p.id = m.patient_id
+backend/src/controllers\notification.controller.ts:22:        LEFT JOIN patients pat ON pat.id = n.patient_id
+backend/src/controllers\notification.controller.ts:66:        LEFT JOIN patients pat ON pat.id = n.patient_id
+backend/src/controllers\notification.controller.ts:99:          id, tenant_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\nutrition.controller.ts:119:      const row = db.prepare('SELECT * FROM nutrition_anamnesis WHERE patient_id = ? AND tenant_id = ?').get(patientId, tenantId) as any;
+backend/src/controllers\nutrition.controller.ts:156:      const existing = db.prepare('SELECT id FROM nutrition_anamnesis WHERE patient_id = ? AND tenant_id = ?').get(patientId, tenantId) as any;
+backend/src/controllers\nutrition.controller.ts:168:          INSERT INTO nutrition_anamnesis (id, tenant_id, patient_id, professional_id, data_json)
+backend/src/controllers\nutrition.controller.ts:195:        WHERE patient_id = ? AND tenant_id = ? 
+backend/src/controllers\nutrition.controller.ts:247:          id, tenant_id, patient_id, professional_id, appointment_id, record_id,
+backend/src/controllers\nutrition.controller.ts:277:        WHERE patient_id = ? AND tenant_id = ? 
+backend/src/controllers\nutrition.controller.ts:315:          id, tenant_id, patient_id, professional_id, appointment_id, record_id,
+backend/src/controllers\nutrition.controller.ts:344:        WHERE patient_id = ? AND tenant_id = ? 
+backend/src/controllers\nutrition.controller.ts:380:          id, tenant_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\nutrition.controller.ts:489:        WHERE patient_id = ? AND tenant_id = ? 
+backend/src/controllers\nutrition.controller.ts:529:          id, tenant_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\nutrition.controller.ts:557:        WHERE patient_id = ? AND tenant_id = ? 
+backend/src/controllers\nutrition.controller.ts:590:          id, tenant_id, patient_id, professional_id, title, category,
+backend/src/controllers\nutrition.controller.ts:684:            id, tenant_id, patient_id, appointment_id, professional_id,
+backend/src/controllers\nutrition.controller.ts:701:              id, tenant_id, patient_id, professional_id, appointment_id, record_id,
+backend/src/controllers\occupational-therapy.controller.ts:113:      const row = db.prepare('SELECT * FROM to_occupational_profiles WHERE patient_id = ? AND tenant_id = ? ORDER BY created_at DESC LIMIT 1').get(patientId, tenantId) as any;
+backend/src/controllers\occupational-therapy.controller.ts:183:      const existing = db.prepare('SELECT id FROM to_occupational_profiles WHERE patient_id = ? AND tenant_id = ?').get(patientId, tenantId) as any;
+backend/src/controllers\occupational-therapy.controller.ts:201:            id, tenant_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\occupational-therapy.controller.ts:232:        WHERE patient_id = ? AND tenant_id = ? 
+backend/src/controllers\occupational-therapy.controller.ts:277:          id, tenant_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\occupational-therapy.controller.ts:301:      const row = db.prepare('SELECT * FROM to_sensory_assessments WHERE patient_id = ? AND tenant_id = ? ORDER BY created_at DESC LIMIT 1').get(patientId, tenantId) as any;
+backend/src/controllers\occupational-therapy.controller.ts:370:          id, tenant_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\occupational-therapy.controller.ts:397:      const row = db.prepare('SELECT * FROM to_motor_cognitive_assessments WHERE patient_id = ? AND tenant_id = ? ORDER BY created_at DESC LIMIT 1').get(patientId, tenantId) as any;
+backend/src/controllers\occupational-therapy.controller.ts:464:          id, tenant_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\occupational-therapy.controller.ts:490:        WHERE patient_id = ? AND tenant_id = ? 
+backend/src/controllers\occupational-therapy.controller.ts:536:          id, tenant_id, patient_id, professional_id, goals_json, status
+backend/src/controllers\occupational-therapy.controller.ts:558:        WHERE patient_id = ? AND tenant_id = ? 
+backend/src/controllers\occupational-therapy.controller.ts:606:          id, tenant_id, patient_id, professional_id, device_name, adaptation_type,
+backend/src/controllers\occupational-therapy.controller.ts:635:        WHERE patient_id = ? AND tenant_id = ?
+backend/src/controllers\occupational-therapy.controller.ts:671:          id, tenant_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\occupational-therapy.controller.ts:697:        WHERE patient_id = ? AND tenant_id = ?
+backend/src/controllers\occupational-therapy.controller.ts:738:          id, tenant_id, patient_id, professional_id, time_blocks_json, notes
+backend/src/controllers\occupational-therapy.controller.ts:760:        WHERE patient_id = ? AND tenant_id = ?
+backend/src/controllers\occupational-therapy.controller.ts:796:          id, tenant_id, patient_id, professional_id, participation_json, notes
+backend/src/controllers\occupational-therapy.controller.ts:820:        WHERE patient_id = ? AND tenant_id = ? AND module_type = ?
+backend/src/controllers\occupational-therapy.controller.ts:852:          id, tenant_id, patient_id, professional_id, module_type,
+backend/src/controllers\occupational-therapy.controller.ts:901:        WHERE patient_id = ? AND tenant_id = ?
+backend/src/controllers\occupational-therapy.controller.ts:930:        WHERE patient_id = ? AND tenant_id = ? AND module_type = 'to'
+backend/src/controllers\occupational-therapy.controller.ts:939:        WHERE patient_id = ? AND tenant_id = ?
+backend/src/controllers\occupational-therapy.controller.ts:946:        WHERE patient_id = ? AND tenant_id = ? AND status = 'active'
+backend/src/controllers\occupational-therapy.controller.ts:1034:            id, tenant_id, patient_id, appointment_id, professional_id,
+backend/src/controllers\patient-clinical.controller.ts:44:        WHERE a.patient_id = ? AND a.tenant_id = ?
+backend/src/controllers\patient-clinical.controller.ts:76:        WHERE r.patient_id = ? AND r.tenant_id = ?
+backend/src/controllers\patient-clinical.controller.ts:104:        WHERE pa.patient_id = ? AND pa.tenant_id = ?
+backend/src/controllers\patient-clinical.controller.ts:127:        WHERE c.patient_id = ? AND c.tenant_id = ?
+backend/src/controllers\patient-clinical.controller.ts:150:        WHERE pr.patient_id = ? AND pr.tenant_id = ?
+backend/src/controllers\patient-clinical.controller.ts:173:        WHERE er.patient_id = ? AND er.tenant_id = ?
+backend/src/controllers\patient-clinical.controller.ts:196:        WHERE pe.patient_id = ? AND pe.tenant_id = ?
+backend/src/controllers\patient-clinical.controller.ts:222:        WHERE cs.patient_id = ? AND cs.tenant_id = ? AND (?=1 OR cs.template_version_id IS NULL)
+backend/src/controllers\patient-clinical.controller.ts:283:      const patient = db.prepare('SELECT allergies_status FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId) as { allergies_status: string } | undefined;
+backend/src/controllers\patient-clinical.controller.ts:286:        WHERE patient_id = ? AND tenant_id = ?
+backend/src/controllers\patient-clinical.controller.ts:337:        INSERT INTO patient_allergies (id, tenant_id, patient_id, substance, reaction_type, severity, notes, identified_at)
+backend/src/controllers\patient-clinical.controller.ts:369:        WHERE id = ? AND patient_id = ? AND tenant_id = ?
+backend/src/controllers\patient-clinical.controller.ts:385:      db.prepare('DELETE FROM patient_allergies WHERE id = ? AND patient_id = ? AND tenant_id = ?').run(allergyId, patientId, tenantId);
+backend/src/controllers\patient-clinical.controller.ts:387:      const count = (db.prepare('SELECT COUNT(*) as c FROM patient_allergies WHERE patient_id = ? AND tenant_id = ?').get(patientId, tenantId) as any)?.c || 0;
+backend/src/controllers\patient-clinical.controller.ts:408:        WHERE patient_id = ? AND tenant_id = ?
+backend/src/controllers\patient-clinical.controller.ts:433:          id, tenant_id, patient_id, medication_name, dosage, frequency,
+backend/src/controllers\patient-clinical.controller.ts:468:        WHERE id = ? AND patient_id = ? AND tenant_id = ?
+backend/src/controllers\patient-clinical.controller.ts:484:      db.prepare('DELETE FROM patient_medications WHERE id = ? AND patient_id = ? AND tenant_id = ?').run(medicationId, patientId, tenantId);
+backend/src/controllers\patient-clinical.controller.ts:515:        WHERE pa.patient_id = ? AND pa.tenant_id = ?
+backend/src/controllers\patient-clinical.controller.ts:545:        WHERE pa.id = ? AND pa.patient_id = ? AND pa.tenant_id = ?
+backend/src/controllers\patient-clinical.controller.ts:579:        WHERE patient_id = ? AND tenant_id = ?
+backend/src/controllers\patient-clinical.controller.ts:597:          id, tenant_id, patient_id, professional_id, version, title, content_json, questionnaire_answers_json, notes
+backend/src/controllers\patient-clinical.controller.ts:635:        WHERE pe.patient_id = ? AND pe.tenant_id = ?
+backend/src/controllers\patient-clinical.controller.ts:672:          id, tenant_id, patient_id, appointment_id, professional_id,
+backend/src/controllers\patient-clinical.controller.ts:718:        WHERE id = ? AND patient_id = ? AND tenant_id = ?
+backend/src/controllers\patient-clinical.controller.ts:734:      db.prepare('DELETE FROM patient_exams WHERE id = ? AND patient_id = ? AND tenant_id = ?').run(examId, patientId, tenantId);
+backend/src/controllers\patient-clinical.controller.ts:762:        WHERE pc.patient_id = ? AND pc.tenant_id = ?
+backend/src/controllers\patient-clinical.controller.ts:837:          id, tenant_id, patient_id, professional_id, title, consent_type, content_text,
+backend/src/controllers\patient-clinical.controller.ts:901:        'SELECT id, revoked_at, template_version_id FROM patient_consents WHERE id = ? AND patient_id = ? AND tenant_id = ?'
+backend/src/controllers\patient-clinical.controller.ts:923:        WHERE id = ? AND patient_id = ? AND tenant_id = ?
+backend/src/controllers\patient-clinical.controller.ts:948:      const patient = db.prepare('SELECT * FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId) as any;
+backend/src/controllers\patient-clinical.controller.ts:963:        'SELECT * FROM guardians WHERE patient_id = ? AND tenant_id = ?'
+backend/src/controllers\patient-clinical.controller.ts:971:        WHERE a.patient_id = ? AND a.tenant_id = ?
+backend/src/controllers\patient-clinical.controller.ts:979:        WHERE r.patient_id = ? AND r.tenant_id = ?
+backend/src/controllers\patient-clinical.controller.ts:984:        'SELECT * FROM patient_allergies WHERE patient_id = ? AND tenant_id = ?'
+backend/src/controllers\patient-clinical.controller.ts:988:        'SELECT * FROM patient_medications WHERE patient_id = ? AND tenant_id = ?'
+backend/src/controllers\patient-clinical.controller.ts:995:        WHERE an.patient_id = ? AND an.tenant_id = ?
+backend/src/controllers\patient-clinical.controller.ts:1002:        WHERE c.patient_id = ? AND c.tenant_id = ?
+backend/src/controllers\patient-clinical.controller.ts:1009:        WHERE c.patient_id = ? AND c.tenant_id = ?
+backend/src/controllers\patient-clinical.controller.ts:1016:        WHERE c.patient_id = ? AND c.tenant_id = ?
+backend/src/controllers\patient-clinical.controller.ts:1027:        WHERE pe.patient_id = ? AND pe.tenant_id = ?
+backend/src/controllers\patient-clinical.controller.ts:1039:        WHERE pc.patient_id = ? AND pc.tenant_id = ? AND (?=1 OR pc.template_version_id IS NULL)
+backend/src/controllers\patient-clinical.controller.ts:1043:        'SELECT * FROM payments WHERE patient_id = ? AND tenant_id = ?'
+backend/src/controllers\patient-clinical.controller.ts:1047:        'SELECT * FROM receipts WHERE patient_id = ? AND tenant_id = ?'
+backend/src/controllers\patient-clinical.controller.ts:1055:        WHERE patient_id = ? AND clinic_id = ?
+backend/src/controllers\patient-clinical.controller.ts:1060:        'SELECT * FROM physiotherapy_assessments WHERE patient_id = ? AND tenant_id = ?'
+backend/src/controllers\patient-clinical.controller.ts:1064:        'SELECT * FROM nutrition_assessments WHERE patient_id = ? AND tenant_id = ?'
+backend/src/controllers\patient-clinical.controller.ts:1068:        'SELECT * FROM psychology_sessions WHERE patient_id = ? AND tenant_id = ?'
+backend/src/controllers\patient-clinical.controller.ts:1088:          // seguindo o mesmo padrão: SELECT * FROM <tabela> WHERE patient_id = ? AND tenant_id = ?):
+backend/src/controllers\patient.controller.ts:37:          (SELECT COUNT(*) FROM appointments WHERE patient_id = p.id) as total_appointments,
+backend/src/controllers\patient.controller.ts:38:          (SELECT COUNT(*) FROM records WHERE patient_id = p.id) as total_records
+backend/src/controllers\patient.controller.ts:39:        FROM patients p
+backend/src/controllers\patient.controller.ts:93:        FROM patients
+backend/src/controllers\patient.controller.ts:99:        const otherTenantCheck = db.prepare('SELECT tenant_id FROM patients WHERE id = ?').get(id) as { tenant_id: string } | undefined;
+backend/src/controllers\patient.controller.ts:114:          WHERE patient_id = ? AND tenant_id = ?
+backend/src/controllers\patient.controller.ts:128:        WHERE a.patient_id = ? AND a.tenant_id = ?
+backend/src/controllers\patient.controller.ts:231:          INSERT INTO guardians (id, tenant_id, patient_id, full_name, relationship, cpf, phone, email, is_primary, authorization_signed)
+backend/src/controllers\patient.controller.ts:380:          'SELECT id, full_name, cpf, relationship, authorization_signed FROM guardians WHERE patient_id = ? AND tenant_id = ?'
+backend/src/controllers\patient.controller.ts:392:          INSERT INTO guardians (id, tenant_id, patient_id, full_name, relationship, cpf, phone, email, is_primary, authorization_signed)
+backend/src/controllers\patient.controller.ts:397:          db.prepare('DELETE FROM guardians WHERE patient_id = ? AND tenant_id = ?').run(id, tenantId);
+backend/src/controllers\payment.controller.ts:19:          pay.id, pay.tenant_id, pay.appointment_id, pay.patient_id, pay.amount,
+backend/src/controllers\payment.controller.ts:26:        JOIN patients pat ON pat.id = pay.patient_id
+backend/src/controllers\payment.controller.ts:94:        INSERT INTO payments (id, tenant_id, appointment_id, patient_id, amount, payment_method, status, transaction_id, payment_date, notes)
+backend/src/controllers\pending-exam.controller.ts:19:          pe.id, pe.tenant_id, pe.patient_id, pe.professional_id, pe.exam_name,
+backend/src/controllers\pending-exam.controller.ts:26:        JOIN patients p ON p.id = pe.patient_id
+backend/src/controllers\pending-exam.controller.ts:33:        query += ' AND pe.patient_id = ?';
+backend/src/controllers\pending-exam.controller.ts:98:          id, tenant_id, patient_id, professional_id, exam_name,
+backend/src/controllers\pending-exam.controller.ts:181:          pe.id, pe.tenant_id, pe.patient_id, pe.professional_id,
+backend/src/controllers\pending-exam.controller.ts:192:        JOIN patients p ON p.id = pe.patient_id
+backend/src/controllers\personal-ai.controller.ts:29:          studentRow = db.prepare('SELECT * FROM patients WHERE id = ? AND tenant_id = ?').get(studentId, tenantId) as any;
+backend/src/controllers\personal-ai.controller.ts:36:          FROM patients p
+backend/src/controllers\personal-ai.controller.ts:37:          LEFT JOIN personal_student_profiles prof ON prof.patient_id = p.id AND prof.tenant_id = p.tenant_id
+backend/src/controllers\personal-ai.controller.ts:61:            WHERE patient_id = ? AND tenant_id = ?
+backend/src/controllers\personal-ai.controller.ts:70:            WHERE patient_id = ? AND tenant_id = ? AND is_active = 1
+backend/src/controllers\personal-ai.controller.ts:89:            WHERE patient_id = ? AND tenant_id = ?
+backend/src/controllers\personal-ai.controller.ts:99:              WHERE patient_id = ? AND tenant_id = ?
+backend/src/controllers\personal-posture-ai.controller.ts:147:    const patient = req.body?.patient_id;
+backend/src/controllers\personal-posture-ai.controller.ts:150:    if (typeof patient !== 'string' || !db.prepare('SELECT id FROM patients WHERE id=? AND tenant_id=?').get(patient, tenant)) {
+backend/src/controllers\personal-posture-ai.controller.ts:174:      const file = db.prepare("SELECT * FROM file_attachments WHERE id=? AND clinic_id=? AND patient_id=? AND storage_provider='cloudflare_r2'").get(photo.file_id, tenant, patient) as any;
+backend/src/controllers\personal-student-link.controller.ts:123:        FROM patients
+backend/src/controllers\personal-student-link.controller.ts:318:        FROM patients
+backend/src/controllers\personal-student-link.controller.ts:336:        WHERE patient_id = ? AND tenant_id = ? AND is_active = 1
+backend/src/controllers\personal-student-link.controller.ts:362:        WHERE patient_id = ? AND tenant_id = ?
+backend/src/controllers\personal-student-link.controller.ts:368:        WHERE patient_id = ? AND tenant_id = ?
+backend/src/controllers\personal-student-link.controller.ts:463:        WHERE id = ? AND patient_id = ? AND tenant_id = ? AND is_active = 1
+backend/src/controllers\personal-student-link.controller.ts:634:          id, tenant_id, workout_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\personal-student-link.controller.ts:662:          WHERE patient_id = ? AND tenant_id = ? AND id != ?
+backend/src/controllers\personal-student-link.controller.ts:800:        FROM patients
+backend/src/controllers\personal-student-link.controller.ts:817:        WHERE patient_id = ? AND tenant_id = ?
+backend/src/controllers\personal.controller.ts:356:        (id, tenant_id, assessment_id, patient_id, photo_type, photo_url, photo_date, notes, file_id)
+backend/src/controllers\personal.controller.ts:441:      const totalStudents = (db.prepare("SELECT count(*) as count FROM patients WHERE tenant_id = ? AND active >= 0").get(tenantId) as any)?.count || 0;
+backend/src/controllers\personal.controller.ts:442:      const activeStudents = (db.prepare("SELECT count(*) as count FROM patients WHERE tenant_id = ? AND active = 1").get(tenantId) as any)?.count || 0;
+backend/src/controllers\personal.controller.ts:452:        FROM patients p
+backend/src/controllers\personal.controller.ts:453:        LEFT JOIN personal_assessments pa ON pa.patient_id = p.id AND pa.tenant_id = p.tenant_id
+backend/src/controllers\personal.controller.ts:472:               p.id as patient_id, COALESCE(p.full_name, p.social_name) as patient_name, p.phone as patient_phone, p.photo_url as avatar_url
+backend/src/controllers\personal.controller.ts:474:        JOIN patients p ON p.id = a.patient_id AND p.tenant_id = a.tenant_id
+backend/src/controllers\personal.controller.ts:492:        JOIN patients p ON p.id = l.patient_id AND p.tenant_id = l.tenant_id
+backend/src/controllers\personal.controller.ts:546:               (SELECT COUNT(*) FROM personal_workouts w WHERE w.patient_id = p.id AND w.is_active = 1) as active_workouts_count,
+backend/src/controllers\personal.controller.ts:547:               (SELECT MAX(pa.assessment_date) FROM personal_assessments pa WHERE pa.patient_id = p.id) as last_assessment_date,
+backend/src/controllers\personal.controller.ts:548:               (SELECT pa2.body_fat_percentage FROM personal_assessments pa2 WHERE pa2.patient_id = p.id ORDER BY pa2.assessment_date DESC LIMIT 1) as last_fat_pct
+backend/src/controllers\personal.controller.ts:549:        FROM patients p
+backend/src/controllers\personal.controller.ts:550:        LEFT JOIN personal_student_profiles prof ON prof.patient_id = p.id AND prof.tenant_id = p.tenant_id
+backend/src/controllers\personal.controller.ts:586:        FROM patients p
+backend/src/controllers\personal.controller.ts:587:        LEFT JOIN personal_student_profiles prof ON prof.patient_id = p.id AND prof.tenant_id = p.tenant_id
+backend/src/controllers\personal.controller.ts:601:        WHERE w.patient_id = ? AND w.tenant_id = ? AND w.is_active = 1
+backend/src/controllers\personal.controller.ts:617:        WHERE patient_id = ? AND tenant_id = ?
+backend/src/controllers\personal.controller.ts:627:        WHERE l.patient_id = ? AND l.tenant_id = ?
+backend/src/controllers\personal.controller.ts:651:      const { id } = req.params; // patient_id
+backend/src/controllers\personal.controller.ts:657:      const patient = db.prepare('SELECT id FROM patients WHERE id = ? AND tenant_id = ?').get(id, tenantId);
+backend/src/controllers\personal.controller.ts:663:      const existing = db.prepare('SELECT id FROM personal_student_profiles WHERE patient_id = ? AND tenant_id = ?').get(id, tenantId) as any;
+backend/src/controllers\personal.controller.ts:678:            id, tenant_id, patient_id, goal, experience_level, weekly_frequency,
+backend/src/controllers\personal.controller.ts:736:            id, tenant_id, patient_id, goal, experience_level, weekly_frequency,
+backend/src/controllers\personal.controller.ts:790:      const patient = db.prepare('SELECT id FROM patients WHERE id = ? AND tenant_id = ?').get(id, tenantId);
+backend/src/controllers\personal.controller.ts:822:        const existingProfile = db.prepare('SELECT id FROM personal_student_profiles WHERE patient_id = ? AND tenant_id = ?').get(id, tenantId) as any;
+backend/src/controllers\personal.controller.ts:845:              id, tenant_id, patient_id, goal, experience_level, weekly_frequency,
+backend/src/controllers\personal.controller.ts:1080:        WHERE a.patient_id = ? AND a.tenant_id = ?
+backend/src/controllers\personal.controller.ts:1130:    const patient=db.prepare('SELECT * FROM patients WHERE id=? AND tenant_id=?').get(req.body.patient_id,req.tenantId);
+backend/src/controllers\personal.controller.ts:1141:      const student=db.prepare('SELECT p.*,s.goal FROM patients p LEFT JOIN personal_student_profiles s ON s.patient_id=p.id AND s.tenant_id=p.tenant_id WHERE p.id=? AND p.tenant_id=?').get(original.patient_id,tenant);
+backend/src/controllers\personal.controller.ts:1142:      const history=db.prepare('SELECT * FROM personal_assessments WHERE patient_id=? AND tenant_id=? ORDER BY assessment_date,created_at,id').all(original.patient_id,tenant).map((a:any)=>normalizeLegacyAssessmentForReport(a,student).assessment);
+backend/src/controllers\personal.controller.ts:1164:      const patient = db.prepare('SELECT id, birth_date, gender, anthropometric_sex FROM patients WHERE id = ? AND tenant_id = ?').get(b.patient_id, tenantId) as any;
+backend/src/controllers\personal.controller.ts:1188:      validatePosturePhotoAccess(db, tenantId, b.patient_id, postureJson, b.photos);
+backend/src/controllers\personal.controller.ts:1197:          id, tenant_id, patient_id, professional_id, assessment_date,
+backend/src/controllers\personal.controller.ts:1240:        assessmentId, tenantId, b.patient_id, professionalId, assessmentDate,
+backend/src/controllers\personal.controller.ts:1268:        INSERT INTO personal_student_profiles (id, tenant_id, patient_id, height, current_weight, updated_at)
+backend/src/controllers\personal.controller.ts:1270:        ON CONFLICT(tenant_id, patient_id) DO UPDATE SET
+backend/src/controllers\personal.controller.ts:1274:      `).run('psp-' + uuidv4().slice(0, 8), tenantId, b.patient_id, height || null, weight || null);
+backend/src/controllers\personal.controller.ts:1280:        saveAssessmentPhotos(assessmentId, b.patient_id, tenantId, assessmentDate, b.photos);
+backend/src/controllers\personal.controller.ts:1304:          patientId: b.patient_id,
+backend/src/controllers\personal.controller.ts:1337:      logAudit(req, 'CREATE_ASSESSMENT', 'personal_assessments', assessmentId, { patient_id: b.patient_id, bodyFatPct, weight, tavVal });
+backend/src/controllers\personal.controller.ts:1377:      validatePosturePhotoAccess(db, tenantId, existing.patient_id, postureJson, b.photos);
+backend/src/controllers\personal.controller.ts:1380:      const forbidden=new Set(['id','patient_id','tenant_id','professional_id','created_at','updated_at','calculation_version','calculation_metadata_json','profession_id','appointment_id','source_module','anthropometric_sex_at_assessment','age_at_assessment','tav_estimated_value','tav_estimated_unit','tav_estimation_protocol','tav_estimation_reference','tav_estimation_classification']);
+backend/src/controllers\personal.controller.ts:1388:        const patient=db.prepare('SELECT * FROM patients WHERE id=? AND tenant_id=?').get(existing.patient_id,tenantId);
+backend/src/controllers\personal.controller.ts:1416:          saveAssessmentPhotos(String(id), String(existing.patient_id), tenantId, assessmentDate, b.photos);
+backend/src/controllers\personal.controller.ts:1444:            patientId: updatedAssessment.patient_id,
+backend/src/controllers\personal.controller.ts:1512:      const history = postureMode && current ? db.prepare("SELECT id, assessment_date, json_object('version', 1, 'observations', json_extract(posture_json, '$.observations')) AS posture_json FROM personal_assessments WHERE tenant_id = ? AND patient_id = ? AND posture_json IS NOT NULL ORDER BY assessment_date ASC, created_at ASC, id ASC").all(tenantId, current.patient_id) as any[] : [];
+backend/src/controllers\personal.controller.ts:1520:      if (current.patient_id !== previous.patient_id) { res.status(400).json({ error: 'Compare avaliações do mesmo aluno.' }); return; }
+backend/src/controllers\personal.controller.ts:1524:      const reportPatient=db.prepare('SELECT * FROM patients WHERE id=? AND tenant_id=?').get(current.patient_id,tenantId);
+backend/src/controllers\personal.controller.ts:1653:      const patient=db.prepare('SELECT * FROM patients WHERE id=? AND tenant_id=?').get(studentId,tenantId);
+backend/src/controllers\personal.controller.ts:1654:      const history=db.prepare('SELECT * FROM personal_assessments WHERE patient_id=? AND tenant_id=? ORDER BY assessment_date,created_at,id').all(studentId,tenantId).map((a:any)=>normalizeLegacyAssessmentForReport(a,patient || {}).assessment);
+backend/src/controllers\personal.controller.ts:1679:        WHERE p.patient_id = ? AND p.tenant_id = ?
+backend/src/controllers\personal.controller.ts:1697:      const { patient_id, assessment_id, photo_type, photo_date, notes, file_id, fileId } = req.body;
+backend/src/controllers\personal.controller.ts:1700:      if (!patient_id || !photo_type || !effectiveFileId) {
+backend/src/controllers\personal.controller.ts:1701:        res.status(400).json({ error: 'Campos patient_id, photo_type e foto (file_id) são obrigatórios' });
+backend/src/controllers\personal.controller.ts:1707:        INSERT INTO personal_assessment_photos (id, tenant_id, assessment_id, patient_id, photo_type, photo_url, photo_date, notes, file_id)
+backend/src/controllers\personal.controller.ts:1709:      `).run(id, tenantId, assessment_id || null, patient_id, photo_type, photo_date || new Date().toISOString().split('T')[0], notes || null, effectiveFileId);
+backend/src/controllers\personal.controller.ts:1965:        JOIN patients p ON p.id = w.patient_id AND p.tenant_id = w.tenant_id
+backend/src/controllers\personal.controller.ts:1971:        sql += ` AND w.patient_id = ?`;
+backend/src/controllers\personal.controller.ts:1997:        JOIN patients p ON p.id = w.patient_id AND p.tenant_id = w.tenant_id
+backend/src/controllers\personal.controller.ts:2034:      const { patient_id, title, division, structure_type, notes, exercises } = req.body;
+backend/src/controllers\personal.controller.ts:2036:      if (!patient_id || !title) {
+backend/src/controllers\personal.controller.ts:2045:          INSERT INTO personal_workouts (id, tenant_id, patient_id, professional_id, title, division, structure_type, notes, is_active)
+backend/src/controllers\personal.controller.ts:2048:          workoutId, tenantId, patient_id, professionalId, title.trim(),
+backend/src/controllers\personal.controller.ts:2066:          patientId: patient_id,
+backend/src/controllers\personal.controller.ts:2089:      logAudit(req, 'CREATE_WORKOUT', 'personal_workouts', workoutId, { patient_id, title, division });
+backend/src/controllers\personal.controller.ts:2157:      const { target_patient_id, target_division, new_title } = req.body;
+backend/src/controllers\personal.controller.ts:2168:      const destPatientId = target_patient_id || original.patient_id;
+backend/src/controllers\personal.controller.ts:2174:          INSERT INTO personal_workouts (id, tenant_id, patient_id, professional_id, title, division, structure_type, notes, is_active)
+backend/src/controllers\personal.controller.ts:2291:      const { patient_id } = req.body;
+backend/src/controllers\personal.controller.ts:2293:      if (!patient_id) {
+backend/src/controllers\personal.controller.ts:2318:            INSERT INTO personal_workouts (id, tenant_id, patient_id, professional_id, title, division, structure_type, notes, is_active)
+backend/src/controllers\personal.controller.ts:2321:            wId, tenantId, patient_id, professionalId, w.title || 'Treino',
+backend/src/controllers\personal.controller.ts:2373:        workout_id, patient_id, appointment_id, completed_at,
+backend/src/controllers\personal.controller.ts:2377:      if (!patient_id) {
+backend/src/controllers\personal.controller.ts:2387:          id, tenant_id, workout_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\personal.controller.ts:2391:        logId, tenantId, workout_id || null, patient_id, professionalId, appointment_id || null,
+backend/src/controllers\personal.controller.ts:2403:          WHERE patient_id = ? AND tenant_id = ? AND id != ?
+backend/src/controllers\personal.controller.ts:2404:        `).all(patient_id, tenantId, logId) as any[];
+backend/src/controllers\personal.controller.ts:2438:      logAudit(req, 'EXECUTE_WORKOUT_LOG', 'personal_workout_logs', logId, { patient_id, newPRsCount: newPRs.length });
+backend/src/controllers\personal.controller.ts:2462:        JOIN patients p ON p.id = l.patient_id AND p.tenant_id = l.tenant_id
+backend/src/controllers\personal.controller.ts:2469:        sql += ` AND l.patient_id = ?`;
+backend/src/controllers\personal.controller.ts:2503:        WHERE patient_id = ? AND tenant_id = ?
+backend/src/controllers\personal.controller.ts:2555:        JOIN patients pat ON pat.id = p.patient_id AND pat.tenant_id = p.tenant_id
+backend/src/controllers\personal.controller.ts:2560:        sql += ` AND p.patient_id = ?`;
+backend/src/controllers\personal.controller.ts:2589:      const { patient_id, title, phase, start_date, end_date, meso_weeks, target_volume, notes } = req.body;
+backend/src/controllers\personal.controller.ts:2591:      if (!patient_id || !title || !start_date || !end_date) {
+backend/src/controllers\personal.controller.ts:2601:          id, tenant_id, patient_id, professional_id, title, phase,
+backend/src/controllers\personal.controller.ts:2605:        id, tenantId, patient_id, professionalId, title.trim(), phase || 'hypertrophy',
+backend/src/controllers\personal.controller.ts:2671:      const workoutsCount = (db.prepare("SELECT count(*) as count FROM personal_workout_logs WHERE patient_id = ? AND tenant_id = ?").get(studentId, tenantId) as any)?.count || 0;
+backend/src/controllers\personal.controller.ts:2681:        WHERE patient_id = ? AND tenant_id = ?
+backend/src/controllers\personal.controller.ts:2684:      const profile = db.prepare('SELECT weekly_frequency FROM personal_student_profiles WHERE patient_id = ? AND tenant_id = ?').get(studentId, tenantId) as any;
+backend/src/controllers\personal.controller.ts:2691:        WHERE patient_id = ? AND tenant_id = ?
+backend/src/controllers\personal.controller.ts:2732:        FROM patients
+backend/src/controllers\personal.controller.ts:2747:        JOIN patients p ON p.id = w.patient_id AND p.tenant_id = w.tenant_id
+backend/src/controllers\physiotherapy.controller.ts:140:        WHERE pa.patient_id = ? AND pa.tenant_id = ?
+backend/src/controllers\physiotherapy.controller.ts:174:        JOIN patients pat ON pat.id = pa.patient_id
+backend/src/controllers\physiotherapy.controller.ts:184:      if (!hasClinicalAccess(req, assessment.patient_id)) {
+backend/src/controllers\physiotherapy.controller.ts:244:          id, tenant_id, patient_id, professional_id, appointment_id, specialty_id,
+backend/src/controllers\physiotherapy.controller.ts:405:        WHERE pe.patient_id = ? AND pe.tenant_id = ?
+backend/src/controllers\physiotherapy.controller.ts:462:          id, tenant_id, patient_id, professional_id, appointment_id, specialty_id,
+backend/src/controllers\physiotherapy.controller.ts:488:            id, tenant_id, patient_id, appointment_id, professional_id,
+backend/src/controllers\physiotherapy.controller.ts:641:          id, tenant_id, patient_id, professional_id, record_type,
+backend/src/controllers\physiotherapy.controller.ts:689:        WHERE pre.patient_id = ? AND pre.tenant_id = ?
+backend/src/controllers\physiotherapy.controller.ts:748:        WHERE patient_id = ? AND tenant_id = ?
+backend/src/controllers\physiotherapy.controller.ts:759:          WHERE patient_id = ? AND tenant_id = ? AND region_id = ?
+backend/src/controllers\physiotherapy.controller.ts:819:        WHERE pre.patient_id = ? AND pre.tenant_id = ? AND pre.region_id = ?
+backend/src/controllers\physiotherapy.controller.ts:965:      const patientId = req.body.patientId || req.body.patient_id;
+backend/src/controllers\physiotherapy.controller.ts:1017:          SELECT id, patient_id FROM physiotherapy_regional_evaluations
+backend/src/controllers\physiotherapy.controller.ts:1065:          id, tenant_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\physiotherapy.controller.ts:1089:          WHERE patient_id = ? AND tenant_id = ?
+backend/src/controllers\physiotherapy.controller.ts:1144:        SELECT id, patient_id FROM physiotherapy_regional_evaluations
+backend/src/controllers\physiotherapy.controller.ts:1153:      if (!hasClinicalAccess(req, existing.patient_id)) {
+backend/src/controllers\professional.controller.ts:380:        LEFT JOIN patients p ON p.id = a.patient_id
+backend/src/controllers\psychopedagogy.controller.ts:80:      WHERE tenant_id = ? AND patient_id = ? AND shared_with_user_id = ?
+backend/src/controllers\psychopedagogy.controller.ts:127:      let profile = db.prepare('SELECT * FROM psychopedagogy_profiles WHERE patient_id = ? AND tenant_id = ?').get(patientId, tenantId) as any;
+backend/src/controllers\psychopedagogy.controller.ts:132:          patient_id: patientId,
+backend/src/controllers\psychopedagogy.controller.ts:155:      const patientId = String(req.params.patientId || req.body.patientId || req.body.patient_id || '');
+backend/src/controllers\psychopedagogy.controller.ts:176:      const existing = db.prepare('SELECT id FROM psychopedagogy_profiles WHERE patient_id = ? AND tenant_id = ?').get(patientId, tenantId) as any;
+backend/src/controllers\psychopedagogy.controller.ts:194:            id, tenant_id, patient_id, school_name, school_grade, school_shift, school_type,
+backend/src/controllers\psychopedagogy.controller.ts:224:        WHERE patient_id = ? AND tenant_id = ?
+backend/src/controllers\psychopedagogy.controller.ts:253:      const patientId = String(req.params.patientId || req.body.patientId || req.body.patient_id || '');
+backend/src/controllers\psychopedagogy.controller.ts:309:            id, tenant_id, patient_id, professional_id, appointment_id, assessment_date,
+backend/src/controllers\psychopedagogy.controller.ts:351:        WHERE patient_id = ? AND tenant_id = ?
+backend/src/controllers\psychopedagogy.controller.ts:377:      const patientId = String(req.params.patientId || req.body.patientId || req.body.patient_id || '');
+backend/src/controllers\psychopedagogy.controller.ts:427:            id, tenant_id, patient_id, professional_id, appointment_id, session_date,
+backend/src/controllers\psychopedagogy.controller.ts:453:      if (body.sessionId && !db.prepare('SELECT id FROM psychopedagogy_sessions WHERE id=? AND patient_id=? AND tenant_id=?').get(body.sessionId, body.patientId, req.tenantId)) {
+backend/src/controllers\psychopedagogy.controller.ts:463:      const patientId = String(req.body.patientId || req.body.patient_id || req.params.patientId || '');
+backend/src/controllers\psychopedagogy.controller.ts:485:        const appointment = db.prepare('SELECT status FROM appointments WHERE id = ? AND tenant_id = ? AND patient_id = ?').get(appointmentId, tenantId, patientId) as any;
+backend/src/controllers\psychopedagogy.controller.ts:585:          id, tenant_id, patient_id, appointment_id, professional_id, session_date,
+backend/src/controllers\psychopedagogy.controller.ts:664:        WHERE patient_id = ? AND tenant_id = ?
+backend/src/controllers\psychopedagogy.controller.ts:692:          id, tenant_id, patient_id, domain_category, score_or_level, qualitative_description, assessment_date, created_at
+backend/src/controllers\psychopedagogy.controller.ts:717:        WHERE patient_id = ? AND tenant_id = ?
+backend/src/controllers\psychopedagogy.controller.ts:730:      const patientId = String(req.params.patientId || req.body.patientId || req.body.patient_id || '');
+backend/src/controllers\psychopedagogy.controller.ts:760:          id, tenant_id, patient_id, instrument_name, instrument_category, application_date,
+backend/src/controllers\psychopedagogy.controller.ts:789:        WHERE patient_id = ? AND tenant_id = ?
+backend/src/controllers\psychopedagogy.controller.ts:835:            id, tenant_id, patient_id, professional_id, plan_title, start_date, review_date,
+backend/src/controllers\psychopedagogy.controller.ts:874:            id, tenant_id, plan_id, patient_id, goal_description, target_date, status, progress_percentage, created_at, updated_at
+backend/src/controllers\psychopedagogy.controller.ts:900:        WHERE patient_id = ? AND tenant_id = ?
+backend/src/controllers\psychopedagogy.controller.ts:937:          id, tenant_id, patient_id, contact_date, contact_type, school_contact_person,
+backend/src/controllers\psychopedagogy.controller.ts:1031:        WHERE s.patient_id = ? AND s.tenant_id = ?
+backend/src/controllers\psychopedagogy.controller.ts:1058:          id, tenant_id, patient_id, shared_by_user_id, shared_with_user_id, access_level, expires_at, reason, created_at
+backend/src/controllers\psychology.controller.ts:118:        id, tenant_id, patient_id, user_id, user_name, action, target_entity, target_id, details, ip_address
+backend/src/controllers\psychology.controller.ts:140:      const patient = db.prepare('SELECT id, full_name as name, cpf, birth_date, gender, phone, email FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId) as any;
+backend/src/controllers\psychology.controller.ts:146:      const anamnesis = db.prepare('SELECT * FROM psychology_anamnesis WHERE patient_id = ? AND tenant_id = ? ORDER BY created_at DESC LIMIT 1').get(patientId, tenantId) as any;
+backend/src/controllers\psychology.controller.ts:147:      const mentalState = db.prepare('SELECT * FROM psychology_mental_state_exams WHERE patient_id = ? AND tenant_id = ? ORDER BY exam_date DESC, created_at DESC LIMIT 1').get(patientId, tenantId) as any;
+backend/src/controllers\psychology.controller.ts:148:      const latestRisk = db.prepare('SELECT * FROM psychology_risk_assessments WHERE patient_id = ? AND tenant_id = ? ORDER BY assessment_date DESC, created_at DESC LIMIT 1').get(patientId, tenantId) as any;
+backend/src/controllers\psychology.controller.ts:149:      const sessions = db.prepare('SELECT * FROM psychology_sessions WHERE patient_id = ? AND tenant_id = ? ORDER BY session_date DESC, created_at DESC').all(patientId, tenantId) as any[];
+backend/src/controllers\psychology.controller.ts:150:      const goals = db.prepare('SELECT * FROM psychology_goals WHERE patient_id = ? AND tenant_id = ? ORDER BY created_at ASC').all(patientId, tenantId) as any[];
+backend/src/controllers\psychology.controller.ts:151:      const assessments = db.prepare('SELECT * FROM psychology_assessments WHERE patient_id = ? AND tenant_id = ? ORDER BY start_date DESC').all(patientId, tenantId) as any[];
+backend/src/controllers\psychology.controller.ts:152:      const instruments = db.prepare('SELECT * FROM psychology_instruments WHERE patient_id = ? AND tenant_id = ? ORDER BY application_date DESC').all(patientId, tenantId) as any[];
+backend/src/controllers\psychology.controller.ts:153:      const screenings = db.prepare('SELECT * FROM psychology_screenings WHERE patient_id = ? AND tenant_id = ? ORDER BY application_date DESC').all(patientId, tenantId) as any[];
+backend/src/controllers\psychology.controller.ts:154:      const documents = db.prepare('SELECT * FROM psychology_documents WHERE patient_id = ? AND tenant_id = ? ORDER BY created_at DESC').all(patientId, tenantId) as any[];
+backend/src/controllers\psychology.controller.ts:189:      const row = db.prepare('SELECT * FROM psychology_anamnesis WHERE patient_id = ? AND tenant_id = ? ORDER BY created_at DESC LIMIT 1').get(patientId, tenantId);
+backend/src/controllers\psychology.controller.ts:209:      const existing = db.prepare('SELECT id, is_sealed, amendments_json FROM psychology_anamnesis WHERE patient_id = ? AND tenant_id = ? ORDER BY created_at DESC LIMIT 1').get(patientId, tenantId) as any;
+backend/src/controllers\psychology.controller.ts:306:            id, tenant_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\psychology.controller.ts:350:      const row = db.prepare('SELECT * FROM psychology_mental_state_exams WHERE patient_id = ? AND tenant_id = ? ORDER BY exam_date DESC, created_at DESC LIMIT 1').get(patientId, tenantId);
+backend/src/controllers\psychology.controller.ts:375:          id, tenant_id, patient_id, professional_id, appointment_id, exam_date,
+backend/src/controllers\psychology.controller.ts:432:      const row = db.prepare('SELECT * FROM psychology_risk_assessments WHERE patient_id = ? AND tenant_id = ? ORDER BY assessment_date DESC, created_at DESC LIMIT 1').get(patientId, tenantId);
+backend/src/controllers\psychology.controller.ts:457:          id, tenant_id, patient_id, professional_id, appointment_id, assessment_date,
+backend/src/controllers\psychology.controller.ts:509:      const rows = db.prepare('SELECT * FROM psychology_assessments WHERE patient_id = ? AND tenant_id = ? ORDER BY start_date DESC').all(patientId, tenantId);
+backend/src/controllers\psychology.controller.ts:538:          id, tenant_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\psychology.controller.ts:588:      const rows = db.prepare('SELECT * FROM psychology_instruments WHERE patient_id = ? AND tenant_id = ? ORDER BY application_date DESC').all(patientId, tenantId);
+backend/src/controllers\psychology.controller.ts:617:          id, tenant_id, patient_id, assessment_id, instrument_name, version,
+backend/src/controllers\psychology.controller.ts:661:      const inst = db.prepare('SELECT patient_id, instrument_name FROM psychology_instruments WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
+backend/src/controllers\psychology.controller.ts:662:      if (!inst || !hasPsychologyAccess(req, inst.patient_id)) {
+backend/src/controllers\psychology.controller.ts:668:      logPsychologyAudit(req, inst.patient_id, 'delete_instrument', 'psychology_instruments', id, `Exclusão de instrumento: ${inst.instrument_name}`);
+backend/src/controllers\psychology.controller.ts:689:      const rows = db.prepare('SELECT * FROM psychology_screenings WHERE patient_id = ? AND tenant_id = ? ORDER BY application_date DESC').all(patientId, tenantId);
+backend/src/controllers\psychology.controller.ts:718:          id, tenant_id, patient_id, screening_name, version,
+backend/src/controllers\psychology.controller.ts:755:      const scr = db.prepare('SELECT patient_id, screening_name FROM psychology_screenings WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
+backend/src/controllers\psychology.controller.ts:756:      if (!scr || !hasPsychologyAccess(req, scr.patient_id)) {
+backend/src/controllers\psychology.controller.ts:762:      logPsychologyAudit(req, scr.patient_id, 'delete_screening', 'psychology_screenings', id, `Exclusão de triagem: ${scr.screening_name}`);
+backend/src/controllers\psychology.controller.ts:783:      const rows = db.prepare('SELECT * FROM psychology_sessions WHERE patient_id = ? AND tenant_id = ? ORDER BY session_date DESC, created_at DESC').all(patientId, tenantId);
+backend/src/controllers\psychology.controller.ts:819:      const countRow = db.prepare('SELECT COUNT(*) as c FROM psychology_sessions WHERE patient_id = ? AND tenant_id = ?').get(patientId, tenantId) as any;
+backend/src/controllers\psychology.controller.ts:828:          id, tenant_id, patient_id, professional_id, appointment_id, session_number,
+backend/src/controllers\psychology.controller.ts:870:      if (!session || !hasPsychologyAccess(req, session.patient_id)) {
+backend/src/controllers\psychology.controller.ts:888:        session.patient_id,
+backend/src/controllers\psychology.controller.ts:912:      logPsychologyAudit(req, session.patient_id, 'seal_session', 'psychology_sessions', id, `Selamento imutável com hash ${signatureHash.slice(0, 10)}...`);
+backend/src/controllers\psychology.controller.ts:932:      if (!session || !hasPsychologyAccess(req, session.patient_id)) {
+backend/src/controllers\psychology.controller.ts:959:      logPsychologyAudit(req, session.patient_id, 'add_amendment', 'psychology_sessions', id, 'Inclusão de adendo clínico');
+backend/src/controllers\psychology.controller.ts:980:      const rows = db.prepare('SELECT * FROM psychology_goals WHERE patient_id = ? AND tenant_id = ? ORDER BY created_at ASC').all(patientId, tenantId);
+backend/src/controllers\psychology.controller.ts:1009:          id, tenant_id, patient_id, professional_id, title, indicator,
+backend/src/controllers\psychology.controller.ts:1043:      const goal = db.prepare('SELECT patient_id FROM psychology_goals WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
+backend/src/controllers\psychology.controller.ts:1044:      if (!goal || !hasPsychologyAccess(req, goal.patient_id)) {
+backend/src/controllers\psychology.controller.ts:1059:      logPsychologyAudit(req, goal.patient_id, 'update_goal', 'psychology_goals', id, `Atualização da meta para status ${body.status}`);
+backend/src/controllers\psychology.controller.ts:1072:      const goal = db.prepare('SELECT patient_id, title FROM psychology_goals WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
+backend/src/controllers\psychology.controller.ts:1073:      if (!goal || !hasPsychologyAccess(req, goal.patient_id)) {
+backend/src/controllers\psychology.controller.ts:1079:      logPsychologyAudit(req, goal.patient_id, 'delete_goal', 'psychology_goals', id, `Exclusão de meta: ${goal.title}`);
+backend/src/controllers\psychology.controller.ts:1134:        const appointment = db.prepare('SELECT status FROM appointments WHERE id = ? AND tenant_id = ? AND patient_id = ?').get(appointmentId, tenantId, patientId) as any;
+backend/src/controllers\psychology.controller.ts:1213:          id, tenant_id, patient_id, professional_id, appointment_id, session_number,
+backend/src/controllers\psychology.controller.ts:1232:          id, tenant_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\psychology.controller.ts:1274:      db.prepare("DELETE FROM psychology_drafts WHERE tenant_id = ? AND patient_id = ? AND professional_id = ? AND (appointment_id = ? OR appointment_id IS NULL OR appointment_id = '' OR appointment_id = 'none')")
+backend/src/controllers\psychology.controller.ts:1314:      const rows = db.prepare('SELECT * FROM psychology_documents WHERE patient_id = ? AND tenant_id = ? ORDER BY created_at DESC').all(patientId, tenantId);
+backend/src/controllers\psychology.controller.ts:1356:        const assessmentCount = db.prepare('SELECT COUNT(*) as c FROM psychology_assessments WHERE patient_id = ? AND tenant_id = ?').get(patientId, tenantId) as any;
+backend/src/controllers\psychology.controller.ts:1369:          SELECT 1 FROM psychology_assessments WHERE patient_id = ? AND tenant_id = ?
+backend/src/controllers\psychology.controller.ts:1371:          SELECT 1 FROM psychology_mental_state_exams WHERE patient_id = ? AND tenant_id = ?
+backend/src/controllers\psychology.controller.ts:1430:          id, tenant_id, patient_id, professional_id, appointment_id, document_type,
+backend/src/controllers\psychology.controller.ts:1471:      const doc = db.prepare('SELECT patient_id, document_number FROM psychology_documents WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
+backend/src/controllers\psychology.controller.ts:1472:      if (!doc || !hasPsychologyAccess(req, doc.patient_id)) {
+backend/src/controllers\psychology.controller.ts:1492:      logPsychologyAudit(req, doc.patient_id, 'register_delivery', 'psychology_documents', id, `Registro de entrega para ${recipientName} (${deliveryChannel})`);
+backend/src/controllers\psychology.controller.ts:1509:        LEFT JOIN patients p ON p.id = d.patient_id
+backend/src/controllers\psychology.controller.ts:1514:      if (!doc || !hasPsychologyAccess(req, doc.patient_id)) {
+backend/src/controllers\psychology.controller.ts:1519:      logPsychologyAudit(req, doc.patient_id, 'print_document', 'psychology_documents', id, `Visualização/impressão do documento ${doc.document_number}`);
+backend/src/controllers\psychology.controller.ts:1681:        WHERE patient_id = ? AND tenant_id = ?
+backend/src/controllers\psychology.controller.ts:1689:        WHERE patient_id = ? AND tenant_id = ?
+backend/src/controllers\psychology.controller.ts:1696:        WHERE patient_id = ? AND tenant_id = ?
+backend/src/controllers\psychology.controller.ts:1726:      const rows = db.prepare('SELECT * FROM psychology_audit_logs WHERE patient_id = ? AND tenant_id = ? ORDER BY created_at DESC LIMIT 50').all(patientId, tenantId);
+backend/src/controllers\psychology.controller.ts:1753:          WHERE tenant_id = ? AND patient_id = ? AND appointment_id = ?
+backend/src/controllers\psychology.controller.ts:1761:          WHERE tenant_id = ? AND patient_id = ? AND (appointment_id IS NULL OR appointment_id = '')
+backend/src/controllers\psychology.controller.ts:1776:          patientId: draft.patient_id,
+backend/src/controllers\psychology.controller.ts:1777:          patient_id: draft.patient_id,
+backend/src/controllers\psychology.controller.ts:1830:        WHERE tenant_id = ? AND patient_id = ? AND COALESCE(appointment_id, 'none') = COALESCE(?, 'none')
+backend/src/controllers\psychology.controller.ts:1857:            id, tenant_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\receipt.controller.ts:292:          id, tenant_id, receipt_number, sequence_number, payment_id, appointment_id, patient_id,
+backend/src/controllers\referral.controller.ts:53:            id, tenant_id, appointment_number, patient_id, professional_id,
+backend/src/controllers\referral.controller.ts:79:          id, tenant_id, patient_id, from_professional_id, to_professional_id,
+backend/src/controllers\referral.controller.ts:135:        WHERE r.patient_id = ? AND r.tenant_id = ?
+backend/src/controllers\referral.controller.ts:165:        JOIN patients pat ON pat.id = r.patient_id
+backend/src/controllers\report.controller.ts:130:          JOIN patients pat ON pat.id = pay.patient_id
+backend/src/controllers\report.controller.ts:159:        JOIN patients pat ON pat.id = a.patient_id
+backend/src/controllers\report.controller.ts:198:        const patient = db.prepare('SELECT * FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId) as any;
+backend/src/controllers\report.controller.ts:203:          WHERE r.patient_id = ? AND r.tenant_id = ?
+backend/src/controllers\report.controller.ts:207:        const allergies = db.prepare('SELECT * FROM patient_allergies WHERE patient_id = ? AND tenant_id = ?').all(patientId, tenantId) as any[];
+backend/src/controllers\report.controller.ts:208:        const medications = db.prepare('SELECT * FROM patient_medications WHERE patient_id = ? AND tenant_id = ? AND status = "active"').all(patientId, tenantId) as any[];
+backend/src/controllers\report.controller.ts:279:          JOIN patients pat ON pat.id = a.patient_id
+backend/src/controllers\speech-therapy.controller.ts:120:      const row = db.prepare('SELECT * FROM fono_anamnesis WHERE patient_id = ? AND tenant_id = ?').get(patientId, tenantId) as any;
+backend/src/controllers\speech-therapy.controller.ts:155:      const existing = db.prepare('SELECT id FROM fono_anamnesis WHERE patient_id = ? AND tenant_id = ?').get(patientId, tenantId) as any;
+backend/src/controllers\speech-therapy.controller.ts:166:          INSERT INTO fono_anamnesis (id, tenant_id, patient_id, professional_id, data_json)
+backend/src/controllers\speech-therapy.controller.ts:186:      const row = db.prepare('SELECT * FROM fono_language_assessments WHERE patient_id = ? AND tenant_id = ? ORDER BY created_at DESC LIMIT 1').get(patientId, tenantId) as any;
+backend/src/controllers\speech-therapy.controller.ts:249:          id, tenant_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\speech-therapy.controller.ts:275:      const row = db.prepare('SELECT * FROM fono_speech_phonology WHERE patient_id = ? AND tenant_id = ? ORDER BY created_at DESC LIMIT 1').get(patientId, tenantId) as any;
+backend/src/controllers\speech-therapy.controller.ts:327:          id, tenant_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\speech-therapy.controller.ts:353:      const row = db.prepare('SELECT * FROM fono_orofacial_motricity WHERE patient_id = ? AND tenant_id = ? ORDER BY created_at DESC LIMIT 1').get(patientId, tenantId) as any;
+backend/src/controllers\speech-therapy.controller.ts:428:          id, tenant_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\speech-therapy.controller.ts:453:      const rows = db.prepare('SELECT * FROM fono_voice_assessments WHERE patient_id = ? AND tenant_id = ? ORDER BY created_at DESC').all(patientId, tenantId) as any[];
+backend/src/controllers\speech-therapy.controller.ts:533:          id, tenant_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\speech-therapy.controller.ts:559:      const rows = db.prepare('SELECT * FROM fono_fluency_assessments WHERE patient_id = ? AND tenant_id = ? ORDER BY created_at DESC').all(patientId, tenantId) as any[];
+backend/src/controllers\speech-therapy.controller.ts:617:          id, tenant_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\speech-therapy.controller.ts:643:      const rows = db.prepare('SELECT * FROM fono_dysphagia_assessments WHERE patient_id = ? AND tenant_id = ? ORDER BY created_at DESC').all(patientId, tenantId) as any[];
+backend/src/controllers\speech-therapy.controller.ts:708:          id, tenant_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\speech-therapy.controller.ts:736:        WHERE patient_id = ? AND tenant_id = ?
+backend/src/controllers\speech-therapy.controller.ts:777:          id, tenant_id, patient_id, professional_id, trials_json, general_observations
+backend/src/controllers\speech-therapy.controller.ts:799:        WHERE patient_id = ? AND tenant_id = ?
+backend/src/controllers\speech-therapy.controller.ts:840:          id, tenant_id, patient_id, professional_id, processes_json, notes
+backend/src/controllers\speech-therapy.controller.ts:862:        WHERE patient_id = ? AND tenant_id = ?
+backend/src/controllers\speech-therapy.controller.ts:910:          id, tenant_id, patient_id, professional_id, duration_seconds,
+backend/src/controllers\speech-therapy.controller.ts:999:        WHERE r.patient_id = ? AND r.tenant_id = ?
+backend/src/controllers\speech-therapy.controller.ts:1038:        const existing = db.prepare('SELECT id FROM fono_audiology_records WHERE id = ? AND tenant_id = ? AND patient_id = ?').get(recordId, tenantId, patientId) as any;
+backend/src/controllers\speech-therapy.controller.ts:1070:          id, tenant_id, patient_id, professional_id, exam_type, exam_date,
+backend/src/controllers\speech-therapy.controller.ts:1094:      const rows = db.prepare('SELECT * FROM fono_treatment_plans WHERE patient_id = ? AND tenant_id = ? ORDER BY created_at DESC').all(patientId, tenantId) as any[];
+backend/src/controllers\speech-therapy.controller.ts:1131:          id, tenant_id, patient_id, professional_id,
+backend/src/controllers\speech-therapy.controller.ts:1255:            id, tenant_id, patient_id, appointment_id, professional_id,
+backend/src/controllers\speech-therapy.controller.ts:1319:        WHERE c.patient_id = ? AND c.tenant_id = ?
+backend/src/controllers\speech-therapy.controller.ts:1325:        patientId: r.patient_id,
+backend/src/controllers\speech-therapy.controller.ts:1367:        const existing = db.prepare('SELECT id FROM fono_complementary_tests WHERE id = ? AND tenant_id = ? AND patient_id = ?').get(providedId, tenantId, patientId) as any;
+backend/src/controllers\speech-therapy.controller.ts:1401:          id, tenant_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\speech-therapy.controller.ts:1449:        WHERE f.patient_id = ? AND f.tenant_id = ?
+backend/src/controllers\speech-therapy.controller.ts:1463:        patientId: r.patient_id,
+backend/src/controllers\speech-therapy.controller.ts:1489:        patient_id: p2,
+backend/src/controllers\speech-therapy.controller.ts:1544:          id, tenant_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\speech-therapy.controller.ts:1571:        WHERE v.patient_id = ? AND v.tenant_id = ?
+backend/src/controllers\speech-therapy.controller.ts:1577:        patientId: r.patient_id,
+backend/src/controllers\speech-therapy.controller.ts:1605:        patient_id: p2,
+backend/src/controllers\speech-therapy.controller.ts:1636:      if (appointmentId && !db.prepare('SELECT id FROM appointments WHERE id = ? AND tenant_id = ? AND patient_id = ?').get(appointmentId, tenantId, patientId)) { res.status(400).json({ error: 'Agendamento inválido' }); return; }
+backend/src/controllers\speech-therapy.controller.ts:1649:          id, tenant_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\speech-therapy.controller.ts:1682:        WHERE r.patient_id = ? AND r.tenant_id = ?
+backend/src/controllers\speech-therapy.controller.ts:1688:        patientId: r.patient_id,
+backend/src/controllers\speech-therapy.controller.ts:1750:          id, tenant_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\speech-therapy.controller.ts:1789:        WHERE a.patient_id = ? AND a.tenant_id = ?
+backend/src/controllers\speech-therapy.controller.ts:1803:        patientId: r.patient_id,
+backend/src/controllers\speech-therapy.controller.ts:1846:          id, tenant_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\speech-therapy.controller.ts:1876:        WHERE s.patient_id = ? AND s.tenant_id = ?
+backend/src/controllers\speech-therapy.controller.ts:1882:        patientId: r.patient_id,
+backend/src/controllers\speech-therapy.controller.ts:1943:          id, tenant_id, patient_id, professional_id, appointment_id,
+backend/src/controllers\speech-therapy.controller.ts:1979:        WHERE s.patient_id = ? AND s.tenant_id = ?
+backend/src/controllers\speech-therapy.controller.ts:1985:        patientId: r.patient_id,
+backend/src/controllers\tenant.controller.ts:955:      const totalPatients = (db.prepare('SELECT COUNT(*) as c FROM patients WHERE tenant_id = ?').get(tenantId) as any)?.c || 0;
+backend/src/controllers\tenant.controller.ts:956:      const attendedUnique = (db.prepare("SELECT COUNT(DISTINCT patient_id) as c FROM appointments WHERE tenant_id = ? AND status = 'completed'").get(tenantId) as any)?.c || 0;
+backend/src/controllers\tenant.controller.ts:957:      const newThisMonth = (db.prepare('SELECT COUNT(*) as c FROM patients WHERE tenant_id = ? AND substr(created_at, 1, 7) = ?').get(tenantId, currentMonthPrefix) as any)?.c || 0;
+backend/src/controllers\tenant.controller.ts:1108:          (SELECT COUNT(*) FROM patients WHERE tenant_id = t.id AND active = 1) as total_patients,

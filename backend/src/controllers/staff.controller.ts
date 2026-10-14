@@ -13,42 +13,6 @@ import { resolveCanonicalProfession } from '../utils/profession-module';
 import { REGISTRATION_PROFESSION_ALIASES } from '../types/registration-professions';
 import { getDefaultPermissionsForRole, DEFAULT_RECEPTIONIST_PERMISSIONS, DEFAULT_PROFESSIONAL_PERMISSIONS } from '../utils/role-permissions';
 
-/**
- * Purga com segurança colaboradores desativados há mais de 30 dias (Item 3).
- * Preserva prontuários, documentos, registros financeiros e histórico de atendimentos
- * através da anonimização de dados pessoais e desvinculação da clínica.
- */
-function purgeExpiredDeactivatedAccounts(tenantId: string): void {
-  try {
-    const expiredUsers = db.prepare(`
-      SELECT u.id, u.name, u.email
-      FROM users u
-      JOIN clinic_users cu ON cu.user_id = u.id AND cu.tenant_id = ?
-      WHERE (u.status IN ('inactive', 'blocked') OR cu.status IN ('inactive', 'blocked'))
-        AND (
-          (u.scheduled_deletion_at IS NOT NULL AND u.scheduled_deletion_at <= datetime('now'))
-          OR (cu.scheduled_deletion_at IS NOT NULL AND cu.scheduled_deletion_at <= datetime('now'))
-        )
-    `).all(tenantId) as { id: string; name: string; email: string }[];
-
-    for (const exp of expiredUsers) {
-      const anonEmail = `anon_${exp.id}@zemda.internal`;
-      const anonName = '[Colaborador Excluído]';
-      db.prepare(`
-        UPDATE users SET
-          name = ?, email = ?, phone = NULL, avatar_url = NULL,
-          status = 'deleted', updated_at = datetime('now')
-        WHERE id = ?
-      `).run(anonName, anonEmail, exp.id);
-
-      db.prepare("UPDATE professionals SET active = 0 WHERE user_id = ?").run(exp.id);
-      db.prepare("DELETE FROM clinic_users WHERE user_id = ? AND tenant_id = ?").run(exp.id, tenantId);
-    }
-  } catch (err) {
-    console.error('[purgeExpiredDeactivatedAccounts] Erro ao purgar contas expiradas:', err);
-  }
-}
-
 export class StaffController {
   // Lista todos os funcionários e profissionais vinculados à clínica
   static listStaff(req: Request, res: Response): void {
@@ -59,14 +23,13 @@ export class StaffController {
         return;
       }
 
-      // 0. Executa purga de contas desativadas há mais de 30 dias (Item 3)
-      purgeExpiredDeactivatedAccounts(tenantId);
+
 
       // 1. Busca usuários vinculados à clínica via clinic_users
       const usersStmt = db.prepare(`
         SELECT 
-          u.id, u.tenant_id, u.name, u.email, u.role, u.phone, u.avatar_url,
-          COALESCE(cu.status, u.status) as status, u.created_at,
+          u.id, cu.tenant_id, u.tenant_id AS origin_tenant_id, u.name, u.email, cu.role, u.phone, u.avatar_url,
+          COALESCE(cu.status, u.status) as status, cu.created_at,
           COALESCE(cu.deactivated_at, u.deactivated_at) as deactivated_at,
           COALESCE(cu.scheduled_deletion_at, u.scheduled_deletion_at) as scheduled_deletion_at,
           cu.is_manager, cu.permissions_json, cu.approved_at, cu.approved_by,
@@ -88,8 +51,12 @@ export class StaffController {
       `);
       const staffList = usersStmt.all(tenantId, tenantId, tenantId) as any[];
 
-      // Converte permissões em array
+      // Converte permissões em array e calcula dados de compartilhamento/vínculo multi-clínica
       for (const s of staffList) {
+        s.shared_patient_count = db.prepare(`SELECT COUNT(DISTINCT l.patient_id) AS n FROM shared_patient_links l
+          JOIN clinic_data_shares sh ON sh.id=l.share_id WHERE sh.target_tenant_id=? AND sh.authorized_by_user_id=? AND sh.status='ACTIVE'`).get(tenantId,s.id).n;
+        const activeClinics = (db.prepare("SELECT COUNT(*) AS c FROM clinic_users WHERE user_id=? AND status='active'").get(s.id) as any)?.c || 0;
+        s.is_linked = (s.origin_tenant_id !== tenantId) || activeClinics > 1;
         try {
           s.permissions = s.permissions_json ? JSON.parse(s.permissions_json) : [];
         } catch {
@@ -147,17 +114,20 @@ export class StaffController {
       const tenantId = req.tenantId;
       const { id } = req.params;
 
-      const user = db.prepare('SELECT id, tenant_id, name, status FROM users WHERE id = ?').get(id) as any;
+      const user = db.prepare('SELECT id, tenant_id, name, role, status FROM users WHERE id = ?').get(id) as any;
       if (!user) {
         res.status(404).json({ error: 'Funcionário não encontrado' });
         return;
       }
 
-      if (user.tenant_id !== tenantId) {
+      if (!db.prepare('SELECT 1 FROM clinic_users WHERE user_id=? AND tenant_id=?').get(id, tenantId)) {
         res.status(403).json({ error: 'Acesso negado: funcionário não pertence a esta clínica' });
         return;
       }
 
+      if (!['active', 'pending'].includes(user.status)) {
+        res.status(403).json({ error: 'A conta está bloqueada ou inativa. A aprovação local não pode reativar a conta global.' }); return;
+      }
       requireCapacity(tenantId!, 1, String(id));
       const cu = db.prepare("SELECT role, permissions_json, profession_custom, practice_areas FROM clinic_users WHERE user_id = ? AND tenant_id = ?").get(id, tenantId) as any;
       let existingPerms: string[] = [];
@@ -166,7 +136,7 @@ export class StaffController {
       const defaultRolePerms = getDefaultPermissionsForRole(targetRole);
       const mergedPerms = Array.from(new Set([...existingPerms, ...defaultRolePerms]));
 
-      db.prepare("UPDATE users SET status = 'active', updated_at = datetime('now') WHERE id = ?").run(id);
+      db.prepare("UPDATE users SET status = 'active', updated_at = datetime('now') WHERE id = ? AND status = 'pending'").run(id);
       db.prepare(`
         UPDATE clinic_users SET
           status = 'active',
@@ -221,12 +191,12 @@ export class StaffController {
         return;
       }
 
-      if (user.tenant_id !== tenantId) {
+      if (!db.prepare('SELECT 1 FROM clinic_users WHERE user_id=? AND tenant_id=?').get(id, tenantId)) {
         res.status(403).json({ error: 'Acesso negado: funcionário não pertence a esta clínica' });
         return;
       }
 
-      db.prepare("UPDATE users SET status = 'rejected', updated_at = datetime('now') WHERE id = ?").run(id);
+
       db.prepare("UPDATE clinic_users SET status = 'rejected' WHERE user_id = ? AND tenant_id = ?").run(id, tenantId);
       db.prepare("UPDATE professionals SET active = 0 WHERE user_id = ? AND tenant_id = ?").run(id, tenantId);
 
@@ -256,12 +226,12 @@ export class StaffController {
         return;
       }
 
-      if (user.tenant_id !== tenantId) {
+      if (!db.prepare('SELECT 1 FROM clinic_users WHERE user_id=? AND tenant_id=?').get(id, tenantId)) {
         res.status(403).json({ error: 'Acesso negado: usuário não pertence a esta clínica' });
         return;
       }
 
-      const newRole = role || user.role;
+      const newRole = role || db.prepare('SELECT role FROM clinic_users WHERE user_id=? AND tenant_id=?').get(id, tenantId).role;
       if (newRole === 'superadmin' || user.role === 'superadmin') {
         res.status(403).json({ error: 'O Administrador do Sistema não pode ser criado ou alterado pelo controle de funcionários.' }); return;
       }
@@ -293,23 +263,13 @@ export class StaffController {
         }
       }
 
-      // Atualiza usuário
-      db.prepare(`
-        UPDATE users SET
-          role = ?,
-          profession_id = ?,
-          profession_name = ?,
-          practice_areas = ?,
-          updated_at = datetime('now')
-        WHERE id = ?
-      `).run(newRole, canonicalProfId, finalProfName, practiceAreas || null, id);
-
       // Atualiza clinic_users
-      const cuRow = db.prepare('SELECT permissions_json FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(id, tenantId) as any;
+      const cuRow = db.prepare('SELECT permissions_json,role FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(id, tenantId) as any;
       let currentPerms: string[] = [];
       try { currentPerms = cuRow?.permissions_json ? JSON.parse(cuRow.permissions_json) : []; } catch {}
       const roleDefaults = getDefaultPermissionsForRole(newRole);
-      const updatedPerms = Array.from(new Set([...currentPerms, ...roleDefaults]));
+      const preservedPerms = cuRow?.role === newRole ? currentPerms : currentPerms.filter(p => !getDefaultPermissionsForRole(cuRow?.role).includes(p));
+      const updatedPerms = Array.from(new Set([...preservedPerms, ...roleDefaults]));
 
       db.prepare(`
         UPDATE clinic_users SET
@@ -391,7 +351,7 @@ export class StaffController {
       }
 
       const user = db.prepare('SELECT id, tenant_id, name, role, profession_id, profession_name FROM users WHERE id = ?').get(id) as any;
-      if (!user || user.tenant_id !== tenantId) {
+      if (!user || !db.prepare('SELECT 1 FROM clinic_users WHERE user_id=? AND tenant_id=?').get(id, tenantId)) {
         res.status(403).json({ error: 'Acesso negado: usuário não pertence a esta clínica' });
         return;
       }
@@ -412,7 +372,7 @@ export class StaffController {
       const permsJson = JSON.stringify(sanitizedPermissions);
       const zemdaBodyActive = 1; // Universal para profissionais e equipe clínica
       const zemdaPersonalActive = resolution.commercialModule === 'ZemdaPersonal' ? 1 : 0;
-      const userRole = user.role || 'professional';
+      const userRole = db.prepare('SELECT role FROM clinic_users WHERE user_id=? AND tenant_id=?').get(id, tenantId).role;
       db.prepare(`
         INSERT INTO clinic_users (id, tenant_id, user_id, role, status, is_manager, permissions_json, zemda_body_enabled, zemda_personal_enabled)
         VALUES (?, ?, ?, ?, 'active', 0, ?, ?, ?)
@@ -437,46 +397,30 @@ export class StaffController {
       const tenantId = req.tenantId;
       const { id } = req.params;
 
-      const user = db.prepare('SELECT id, tenant_id, name, status FROM users WHERE id = ?').get(id) as any;
-      if (!user || user.tenant_id !== tenantId) {
+      const user = db.prepare('SELECT id, tenant_id, name, role, status FROM users WHERE id = ?').get(id) as any;
+      if (!user || !db.prepare('SELECT 1 FROM clinic_users WHERE user_id=? AND tenant_id=?').get(id, tenantId)) {
         res.status(403).json({ error: 'Acesso negado: usuário não pertence a esta clínica' });
         return;
       }
 
-      const isCurrentlyActive = user.status === 'active';
+      const isCurrentlyActive = db.prepare('SELECT status FROM clinic_users WHERE user_id=? AND tenant_id=?').get(id, tenantId).status === 'active';
       const newStatus = isCurrentlyActive ? 'inactive' : 'active';
       if (newStatus === 'active') requireCapacity(tenantId!, 1, String(id));
 
       if (newStatus === 'inactive') {
         // Bloqueia o acesso imediatamente, registra data e agenda exclusão para +30 dias
-        db.prepare(`
-          UPDATE users SET
-            status = 'inactive',
-            deactivated_at = datetime('now'),
-            scheduled_deletion_at = datetime('now', '+30 days'),
-            updated_at = datetime('now')
-          WHERE id = ?
-        `).run(id);
 
         db.prepare(`
           UPDATE clinic_users SET
             status = 'inactive',
             deactivated_at = datetime('now'),
-            scheduled_deletion_at = datetime('now', '+30 days')
+            scheduled_deletion_at = NULL
           WHERE user_id = ? AND tenant_id = ?
         `).run(id, tenantId);
 
         db.prepare("UPDATE professionals SET active = 0 WHERE user_id = ? AND tenant_id = ?").run(id, tenantId);
       } else {
         // Reativação durante os 30 dias: cancela exclusão automaticamente e restaura acesso
-        db.prepare(`
-          UPDATE users SET
-            status = 'active',
-            deactivated_at = NULL,
-            scheduled_deletion_at = NULL,
-            updated_at = datetime('now')
-          WHERE id = ?
-        `).run(id);
 
         db.prepare(`
           UPDATE clinic_users SET
@@ -491,7 +435,7 @@ export class StaffController {
 
       logAudit(req, 'TOGGLE_STAFF_STATUS', 'users', id, { newStatus });
       res.json({
-        message: newStatus === 'active' ? 'Conta reativada com sucesso' : 'Conta desativada. Exclusão programada para 30 dias.',
+        message: newStatus === 'active' ? 'Conta reativada com sucesso' : 'Vínculo desativado. Conta e histórico preservados.',
         status: newStatus
       });
     } catch (err: any) {

@@ -49,7 +49,9 @@ export class ClinicalRecordService {
 
     const now = new Date();
     const sessionDate = input.sessionDate || now.toISOString().split('T')[0];
-    const sessionTime = input.sessionTime || now.toTimeString().slice(0, 5);
+    const sessionTime = input.sessionTime === undefined
+      ? now.toTimeString().slice(0, 5)
+      : ((input.sessionTime && String(input.sessionTime).trim()) ? String(input.sessionTime).trim() : null);
 
     // Garante que professional_id nunca viole constraint NOT NULL da tabela records
     let effectiveProfId = professionalId || null;

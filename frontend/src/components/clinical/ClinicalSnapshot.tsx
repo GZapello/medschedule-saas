@@ -63,7 +63,16 @@ const ignoredKeys = new Set([
   'source_id', 'sourceId', 'source_type', 'sourceType',
   'is_sealed', 'isSealed', 'saveOnly', 'payment', 'attachmentIds',
   'created_at', 'updated_at', 'sealed_at', 'signature_hash', 'signed_at',
-  'signer_name', 'signer_registration', 'module_type', 'moduleType'
+  'signer_name', 'signer_registration', 'module_type', 'moduleType',
+  'schemaVersion', 'schema_version', 'mapType', 'map_type',
+  'activeLayerKey', 'active_layer_key', 'layers', 'layer',
+  'sexVariant', 'sex_variant', 'selectionViews', 'selection_views',
+  'drawings', 'drawing', 'points', 'point', 'strokeId', 'stroke_id',
+  'toolType', 'tool_type', 'coordinates', 'coordinate',
+  'assessmentId', 'assessment_id', 'updatedBy', 'updated_by',
+  'createdBy', 'created_by', 'updatedAt', 'updated_at', 'createdAt', 'created_at',
+  'legacyNotes', 'legacy_notes', 'markers', 'marker',
+  'selectedRegions', 'selected_regions', 'viewsDrawn', 'views_drawn'
 ]);
 
 function isEmpty(val: any): boolean {
@@ -267,7 +276,9 @@ export function ClinicalSnapshot({ record }: { record: any }) {
     Object.assign(rawData, clinicalData);
   }
   if (technicalData && typeof technicalData === 'object') {
-    Object.assign(rawData, technicalData);
+    if (!technicalData.schemaVersion && !technicalData.layers && !technicalData.activeLayerKey) {
+      Object.assign(rawData, technicalData);
+    }
   }
 
   // Atributos de topo do registro
@@ -278,7 +289,9 @@ export function ClinicalSnapshot({ record }: { record: any }) {
     rawData.conducts = record.conducts;
   }
   if (record.technical_notes && !technicalData && !rawData.technicalNotes && record.module_type !== 'ZemdaMed') {
-    rawData.technicalNotes = record.technical_notes;
+    if (!record.technical_notes.includes('"schemaVersion"') && !record.technical_notes.includes('"strokeId"')) {
+      rawData.technicalNotes = record.technical_notes;
+    }
   }
 
   // 10 Seções Clínicas Padronizadas

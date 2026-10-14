@@ -383,6 +383,17 @@ const AppContent: React.FC = () => {
     return null;
   };
   const [activeInvite, setActiveInvite] = useState<{ clinicSlug?: string; token: string } | null>(getInitialInvite);
+  useEffect(() => {
+    if (!currentUser || activeInvite) return;
+    try {
+      const pending = JSON.parse(sessionStorage.getItem('pending_clinic_invite') || 'null');
+      if (pending && typeof pending.token === 'string' && /^[a-zA-Z0-9_-]{16,256}$/.test(pending.token)) {
+        setActiveInvite(pending);
+        sessionStorage.removeItem('pending_clinic_invite');
+      }
+    } catch { sessionStorage.removeItem('pending_clinic_invite'); }
+  }, [currentUser, activeInvite]);
+
 
   // Roteamento para teste grátis (/teste-gratis/:token ou query params ?teste-gratis=:token / ?trial=:token)
   const getInitialTrialToken = (): string | null => {
@@ -907,22 +918,12 @@ const AppContent: React.FC = () => {
 
   // Se o usuário está acessando link único de convite da clínica (/convite/:clinicSlug/:token ou /convite/:token)
   if (activeInvite) {
-    // Se o usuário já está autenticado, não deve permanecer preso no convite: abre diretamente o dashboard
-    if (currentUser) {
-      setActiveInvite(null);
-      setCurrentView('dashboard');
-      try {
-        sessionStorage.setItem('activeView', 'dashboard');
-      } catch (_) {}
-      window.history.replaceState({}, '', '/dashboard');
-      return null;
-    }
-
     return (
       <InviteRegisterView
         clinicSlug={activeInvite.clinicSlug}
         token={activeInvite.token}
         onBackToLogin={() => {
+          sessionStorage.setItem('pending_clinic_invite', JSON.stringify(activeInvite));
           setActiveInvite(null);
           window.history.pushState(null, '', '/');
           setPublicView('login');

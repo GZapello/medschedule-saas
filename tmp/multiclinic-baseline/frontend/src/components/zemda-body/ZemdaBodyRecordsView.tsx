@@ -1,0 +1,838 @@
+import React, { useState, useEffect } from 'react';
+import { ApiClient } from '../../api/client';
+import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
+import { Patient } from '../../types';
+import { ZemdaBodyModal } from './ZemdaBodyModal';
+import { AnatomicalRecordPreview } from './AnatomicalRecordPreview';
+import { anatomicalLabel as getRegionLabel } from './anatomicalRegions';
+import { PatientSearchSelect } from '../common/PatientSearchSelect';
+import {
+  Activity,
+  User,
+  Calendar,
+  Eye,
+  ShieldCheck,
+  AlertCircle,
+  FileText,
+  Clock,
+  Layers,
+  GitCompare,
+  Plus,
+  CheckSquare,
+  Square,
+  X,
+  ChevronRight,
+  Info,
+  PenTool,
+  MapPin
+} from 'lucide-react';
+
+interface ExtractedAssessmentData {
+  clinicalNote: string;
+  selectedRegions: string[];
+  viewsDrawn: string[];
+  mapTypes?: string;
+  marksCount?: number;
+}
+
+const VIEW_LABELS: Record<string, string> = {
+  front: 'Vista Anterior (Frente)',
+  back: 'Vista Posterior (Costas)',
+  left: 'Vista Lateral Esquerda',
+  right: 'Vista Lateral Direita',
+  head: 'Cabeça / Face',
+  foot: 'Pés / Plantar',
+  dentistry: 'Arcada Dentária',
+  anterior: 'Vista Anterior',
+  posterior: 'Vista Posterior',
+  lateral_left: 'Vista Lateral Esquerda',
+  lateral_right: 'Vista Lateral Direita'
+};
+
+/**
+ * Extrai anotações clínicas reais e estruturas legíveis,
+ * garantindo que nenhum JSON bruto, arrays ou estruturas de coordenadas sejam exibidos.
+ */
+function parseAssessmentNotes(rawNotes?: string | null): ExtractedAssessmentData {
+  const result: ExtractedAssessmentData = {
+    clinicalNote: '',
+    selectedRegions: [],
+    viewsDrawn: []
+  };
+
+  if (!rawNotes || typeof rawNotes !== 'string') return result;
+  const trimmed = rawNotes.trim();
+  if (!trimmed) return result;
+
+  // Se começar com { ou [, tenta fazer parse seguro como objeto
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if(parsed?.schemaVersion===2 && parsed.layers){
+        const layers=Object.values(parsed.layers) as any[];
+        result.clinicalNote=layers.flatMap(l=>[l.clinicalNotes,...(l.marks||[]).map((m:any)=>m.note)]).filter(Boolean).join(' • ');
+        result.selectedRegions=Array.from(new Set(layers.flatMap(l=>l.selectedRegions || [])));
+        result.viewsDrawn=layers.filter(l=>l.drawings?.length).map(l=>l.mapType==='FACE'?`Face · ${l.view}`:l.view);
+        result.mapTypes=Array.from(new Set(layers.map(l=>l.mapType==='FACE'?'Face':'Corpo'))).join(' + ');
+        result.marksCount=layers.reduce((n,l)=>n+(l.marks?.length||0)+(l.selectedRegions?.length||0),0);
+        return result;
+      }
+      if(Array.isArray(parsed)){result.selectedRegions=parsed.filter(x=>typeof x==='string');return result;}
+      if(typeof parsed?.clinicalNotes==='string')result.clinicalNote=parsed.clinicalNotes;
+      if (parsed && typeof parsed === 'object') {
+        // Extração de anotação clínica real se presente em campo aninhado
+        if (typeof parsed.notes === 'string' && parsed.notes.trim()) {
+          const nested = parseAssessmentNotes(parsed.notes);
+          result.clinicalNote = nested.clinicalNote;
+        } else if (typeof parsed.clinicalNote === 'string' && parsed.clinicalNote.trim()) {
+          result.clinicalNote = parsed.clinicalNote.trim();
+        } else if (typeof parsed.observation === 'string' && parsed.observation.trim()) {
+          result.clinicalNote = parsed.observation.trim();
+        }
+
+        // Regiões selecionadas estruturadas
+        if (Array.isArray(parsed.selectedRegions)) {
+          result.selectedRegions = parsed.selectedRegions.filter((r: any) => typeof r === 'string' && r.trim());
+        } else if (Array.isArray(parsed.regions)) {
+          result.selectedRegions = parsed.regions.filter((r: any) => typeof r === 'string' && r.trim());
+        }
+
+        // Vistas com desenhos
+        if (parsed.drawings && typeof parsed.drawings === 'object') {
+          result.viewsDrawn = Array.isArray(parsed.drawings) ? (parsed.drawings.length ? ['all'] : []) : Object.keys(parsed.drawings).filter(v => {
+            const val = parsed.drawings[v];
+            return Array.isArray(val) ? val.length > 0 : Boolean(val);
+          });
+        }
+
+        return result;
+      }
+    } catch {
+      // Se for JSON quebrado ou conter palavras-chave internas de desenho/coordenadas, não exibe como texto
+      if (/["'](?:selectedRegions|drawings|strokeId|points|toolType|coordinates)["']/.test(trimmed)) {
+        return result;
+      }
+    }
+  }
+
+  // Se o texto puro contiver tokens internos de serialização estrutural, suprime como texto clínico
+  if (
+    trimmed.includes('"selectedRegions"') ||
+    trimmed.includes('"strokeId"') ||
+    trimmed.includes('"points"') ||
+    trimmed.includes('"toolType"') ||
+    trimmed.includes('"coordinates"')
+  ) {
+    return result;
+  }
+
+  // Texto clínico normal
+  result.clinicalNote = trimmed;
+  return result;
+}
+
+export const ZemdaBodyRecordsView: React.FC = () => {
+  const { clientTermLabel } = useAuth();
+  const { showToast } = useToast();
+
+  const [selectedPatientId, setSelectedPatientId] = useState<string>('');
+  const [selectedPatient, setSelectedPatient] = useState<any | null>(null);
+  const [assessments, setAssessments] = useState<any[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
+
+  // Modal para visualização ou edição de uma avaliação individual no Canvas
+  const [viewingAssessment, setViewingAssessment] = useState<any | null>(null);
+
+  // Painel lateral de detalhes
+  const [detailsAssessment, setDetailsAssessment] = useState<any | null>(null);
+  const [detailsFullData, setDetailsFullData] = useState<{ markers: any[]; drawings: Record<string, any> } | null>(null);
+  const [loadingDetails, setLoadingDetails] = useState<boolean>(false);
+
+  // Modal para criação de nova avaliação direta
+  const [creatingNew, setCreatingNew] = useState<boolean>(false);
+
+  // Comparação entre duas avaliações
+  const [selectedForCompare, setSelectedForCompare] = useState<string[]>([]);
+  const [comparingData, setComparingData] = useState<{ assessA: any; assessB: any } | null>(null);
+  const [loadingCompare, setLoadingCompare] = useState<boolean>(false);
+
+  // Carrega avaliações do paciente selecionado
+  const fetchAssessments = async (patientId: string) => {
+    try {
+      setLoading(true);
+      const list = await ApiClient.get<any[]>(`/v1/body-assessments/patient/${patientId}`);
+      setAssessments(list || []);
+      setSelectedForCompare([]);
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao buscar mapas corporais', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedPatientId) {
+      if (!selectedPatient || selectedPatient.id !== selectedPatientId) {
+        ApiClient.get<any>(`/v1/patients/${selectedPatientId}`)
+          .then(res => setSelectedPatient(res?.patient || res))
+          .catch(() => {});
+      }
+      fetchAssessments(selectedPatientId);
+    } else {
+      setSelectedPatient(null);
+      setAssessments([]);
+      setSelectedForCompare([]);
+    }
+  }, [selectedPatientId]);
+
+  // Carrega dados completos ao abrir o painel de detalhes
+  useEffect(() => {
+    if (!detailsAssessment) {
+      setDetailsFullData(null);
+      return;
+    }
+    let isMounted = true;
+    setLoadingDetails(true);
+    ApiClient.get<any>(`/v1/body-assessments/${detailsAssessment.id}`)
+      .then(res => {
+        if (isMounted && res) {
+          setDetailsFullData({
+            markers: Array.isArray(res.markers) ? res.markers : [],
+            drawings: res.drawings || {}
+          });
+        }
+      })
+      .catch(() => {
+        if (isMounted) setDetailsFullData({ markers: [], drawings: {} });
+      })
+      .finally(() => {
+        if (isMounted) setLoadingDetails(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [detailsAssessment]);
+
+
+  // Selecionar para comparação
+  const toggleSelectForCompare = (id: string) => {
+    if (selectedForCompare.includes(id)) {
+      setSelectedForCompare(selectedForCompare.filter(x => x !== id));
+    } else {
+      if (selectedForCompare.length >= 2) {
+        setSelectedForCompare([selectedForCompare[1], id]);
+      } else {
+        setSelectedForCompare([...selectedForCompare, id]);
+      }
+    }
+  };
+
+  // Abrir modal de comparação
+  const handleOpenComparison = async () => {
+    if (selectedForCompare.length !== 2) {
+      showToast('Selecione exatamente 2 avaliações para comparar', 'info');
+      return;
+    }
+
+    try {
+      setLoadingCompare(true);
+      const [resA, resB] = await Promise.all([
+        ApiClient.get<any>(`/v1/body-assessments/${selectedForCompare[0]}`),
+        ApiClient.get<any>(`/v1/body-assessments/${selectedForCompare[1]}`)
+      ]);
+
+      setComparingData({
+        assessA: resA,
+        assessB: resB
+      });
+    } catch (err: any) {
+      showToast('Erro ao carregar dados para comparação', 'error');
+    } finally {
+      setLoadingCompare(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header Principal */}
+      <div data-tour="body-records-header" className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-teal-600 to-emerald-500 text-white flex items-center justify-center shadow-lg shadow-teal-500/20">
+            <Activity className="w-6 h-6" />
+          </div>
+          <div>
+            <h2 data-tour="body-records-title" className="text-xl font-bold text-slate-900 tracking-tight">
+              Zemda360 • Mapeamento Visual & Anatômico
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Histórico completo de avaliações corporais, comparações temporais e marcadores anatômicos.
+            </p>
+          </div>
+        </div>
+
+        {/* Seletor de Paciente e Botão de Nova Avaliação */}
+        <div className="flex items-center gap-3 flex-wrap max-w-lg w-full justify-end">
+          <div data-tour="body-patient-select" className="flex items-center gap-2 flex-1 min-w-0 lg:min-w-[280px]">
+            <label className="text-xs font-bold text-slate-500 whitespace-nowrap">
+              {clientTermLabel}:
+            </label>
+            <PatientSearchSelect
+              compact
+              value={selectedPatientId}
+              selectedPatient={selectedPatient}
+              clientTermLabel={clientTermLabel}
+              onChange={(id, pat) => {
+                setSelectedPatientId(id);
+                if (pat) setSelectedPatient(pat);
+                else if (!id) setSelectedPatient(null);
+              }}
+              className="flex-1"
+            />
+          </div>
+
+          <button
+            type="button"
+            data-tour="body-new-assessment"
+            onClick={() => setCreatingNew(true)}
+            disabled={!selectedPatientId}
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-xl shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Nova Avaliação</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Barra de Ação de Comparação quando há seleções */}
+      {selectedForCompare.length > 0 && (
+        <div className="bg-gradient-to-r from-teal-600 to-emerald-600 p-4 rounded-2xl text-white flex items-center justify-between shadow-md animate-in fade-in">
+          <div className="flex items-center gap-3 text-xs font-bold">
+            <GitCompare className="w-5 h-5" />
+            <span>
+              {selectedForCompare.length} de 2 avaliações selecionadas para comparação temporal
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setSelectedForCompare([])}
+              className="px-3 py-1.5 text-xs font-semibold bg-white/20 hover:bg-white/30 rounded-xl transition-colors cursor-pointer"
+            >
+              Limpar seleção
+            </button>
+            <button
+              type="button"
+              onClick={handleOpenComparison}
+              disabled={selectedForCompare.length !== 2 || loadingCompare}
+              className="px-4 py-1.5 text-xs font-bold bg-white text-teal-800 hover:bg-teal-50 rounded-xl shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+            >
+              {loadingCompare ? 'Carregando...' : 'Comparar Avaliações'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Lista de Avaliações Corporais Existentes */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+        <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+          <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+            <span>Histórico de Mapas Corporais Realizados</span>
+            <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+              {assessments.length}
+            </span>
+          </h3>
+          <span className="text-xs text-slate-400">
+            Marque 2 caixas para comparar a evolução entre duas datas
+          </span>
+        </div>
+
+        {loading ? (
+          <div className="p-12 text-center text-xs text-slate-400">
+            Carregando histórico de mapas corporais...
+          </div>
+        ) : assessments.length === 0 ? (
+          <div className="p-12 text-center space-y-2">
+            <Activity className="w-10 h-10 text-slate-300 mx-auto" />
+            <p className="text-sm font-bold text-slate-700">Nenhum mapa corporal registrado</p>
+            <p className="text-xs text-slate-400 max-w-md mx-auto">
+              Nenhuma avaliação corporal foi realizada para este paciente ainda. Clique em <strong>Nova Avaliação</strong> para iniciar um novo registro.
+            </p>
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {assessments.map(item => {
+              const isChecked = selectedForCompare.includes(item.id);
+              const parsedNotes = parseAssessmentNotes(item.notes);
+              const hasDrawings = item.total_views_drawn > 0 || parsedNotes.viewsDrawn.length > 0;
+
+              return (
+                <div
+                  key={item.id}
+                  className={`p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors ${
+                    isChecked ? 'bg-teal-50/50' : 'hover:bg-slate-50/60'
+                  }`}
+                >
+                  <div className="flex items-start sm:items-center gap-3.5 flex-1 min-w-0">
+                    {/* Checkbox de comparação */}
+                    <button
+                      type="button"
+                      onClick={() => toggleSelectForCompare(item.id)}
+                      className="mt-0.5 sm:mt-0 text-teal-600 hover:text-teal-700 cursor-pointer shrink-0"
+                      title="Selecionar para comparação"
+                    >
+                      {isChecked ? (
+                        <CheckSquare className="w-5 h-5" />
+                      ) : (
+                        <Square className="w-5 h-5 text-slate-300 hover:text-slate-400" />
+                      )}
+                    </button>
+
+                    <div className="space-y-1.5 flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                          <Calendar className="w-3.5 h-3.5 text-teal-600" />
+                          {item.assessment_date
+                            ? new Date(item.assessment_date + 'T12:00:00').toLocaleDateString('pt-BR')
+                            : 'Data não informada'}
+                        </span>
+
+                        <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                          Módulo: {item.module || 'Geral'}
+                        </span>
+
+                        <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 capitalize">
+                          Modelo: {item.body_model === 'male' ? 'Masculino' : 'Feminino'}
+                        </span>
+
+                        <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-teal-50 text-teal-800 border border-teal-200">
+                          {parsedNotes.marksCount ?? item.total_markers ?? 0} marcações · {parsedNotes.mapTypes || 'Corpo'}
+                        </span>
+
+                        {hasDrawings && (
+                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
+                            Possui desenhos manuais
+                          </span>
+                        )}
+                      </div>
+
+                      <p className="text-xs text-slate-600 line-clamp-2">
+                        Profissional:{' '}
+                        <strong className="text-slate-800">{item.professional_name || 'Profissional'}</strong>
+                        {parsedNotes.clinicalNote ? (
+                          <span className="text-slate-500 font-normal">
+                            {' '}• Obs: "{parsedNotes.clinicalNote.length > 90 ? parsedNotes.clinicalNote.slice(0, 90) + '...' : parsedNotes.clinicalNote}"
+                          </span>
+                        ) : null}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                    {/* Botão Lateral de Detalhes */}
+                    <button
+                      type="button"
+                      onClick={() => setDetailsAssessment(item)}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
+                    >
+                      <span>Detalhes</span>
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-500" />
+                    </button>
+
+                    {/* Botão de Visualização / Edição no Canvas */}
+                    <button
+                      type="button"
+                      onClick={() => setViewingAssessment(item)}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-xl shadow-xs transition-colors cursor-pointer"
+                    >
+                      <Eye className="w-4 h-4" />
+                      <span>Visualizar / Editar</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Drawer / Painel Lateral de Detalhes à Direita */}
+      {detailsAssessment && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex justify-end animate-in fade-in duration-150 mobile-modal">
+          <div className="bg-white w-full max-w-md h-full shadow-2xl flex flex-col border-l border-slate-200 animate-in slide-in-from-right duration-200">
+            {/* Header do Drawer */}
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between shrink-0 bg-slate-50/70">
+              <div className="space-y-0.5">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-teal-700">
+                  Ficha do Mapa Corporal
+                </span>
+                <h3 className="text-base font-bold text-slate-900">
+                  Detalhes da Avaliação
+                </h3>
+                <p className="text-xs text-slate-500">
+                  {selectedPatient?.full_name} •{' '}
+                  {detailsAssessment.assessment_date
+                    ? new Date(detailsAssessment.assessment_date + 'T12:00:00').toLocaleDateString('pt-BR')
+                    : 'Data não informada'}
+                </p>
+              </div>
+              <button aria-label="Fechar"
+                type="button"
+                onClick={() => setDetailsAssessment(null)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Conteúdo do Drawer */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-5 text-left text-xs">
+              {loadingDetails ? (
+                <div className="p-8 text-center text-slate-400 space-y-2">
+                  <div className="w-6 h-6 border-2 border-teal-600 border-t-transparent rounded-full animate-spin mx-auto" />
+                  <p>Carregando informações da avaliação...</p>
+                </div>
+              ) : (() => {
+                const parsed = parseAssessmentNotes(detailsAssessment.notes);
+                const markersList = detailsFullData?.markers || [];
+                const drawingsObj = detailsFullData?.drawings || {};
+
+                // Agrupa vistas desenhadas
+                const viewsWithDrawings = Array.from(
+                  new Set([
+                    ...Object.keys(drawingsObj).filter(v => Array.isArray(drawingsObj[v]) && drawingsObj[v].length > 0),
+                    ...parsed.viewsDrawn
+                  ])
+                );
+
+                // Agrupa regiões selecionadas/marcadas (sem IDs ou coordenadas técnicas)
+                const regionSet = new Set<string>();
+                parsed.selectedRegions.forEach(r => regionSet.add(r));
+                markersList.forEach(m => {
+                  if (m.body_region) regionSet.add(m.body_region);
+                });
+                const humanRegions = Array.from(regionSet).map(r =>
+                  getRegionLabel(r, detailsAssessment.body_model)
+                ).filter(Boolean);
+
+                return (
+                  <div className="space-y-5">
+                    {/* Bloco 1: Informações Gerais */}
+                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 space-y-2.5">
+                      <h4 className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                        <Info className="w-4 h-4 text-teal-600" />
+                        <span>Informações Gerais</span>
+                      </h4>
+                      <div className="grid grid-cols-2 gap-2 pt-1 text-[11px]">
+                        <div>
+                          <span className="text-slate-400 block">Data</span>
+                          <span className="font-semibold text-slate-800">
+                            {detailsAssessment.assessment_date
+                              ? new Date(detailsAssessment.assessment_date + 'T12:00:00').toLocaleDateString('pt-BR')
+                              : 'Não informada'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block">Módulo Clínico</span>
+                          <span className="font-semibold text-slate-800">
+                            {detailsAssessment.module || 'Geral'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block">Modelo Anatômico</span>
+                          <span className="font-semibold text-slate-800 capitalize">
+                            {detailsAssessment.body_model === 'male' ? 'Masculino' : 'Feminino'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block">Profissional</span>
+                          <span className="font-semibold text-slate-800">
+                            {detailsAssessment.professional_name || 'Profissional'}
+                          </span>
+                          {detailsAssessment.registration_number && (
+                            <span className="text-[10px] text-slate-500 block">
+                              {detailsAssessment.registration_type || 'Registro'}: {detailsAssessment.registration_number}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Bloco 2: Marcadores Clínicos */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                          <MapPin className="w-4 h-4 text-teal-600" />
+                          <span>Marcadores Anatômicos</span>
+                        </h4>
+                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200">
+                          {markersList.length || detailsAssessment.total_markers || 0} marcadores
+                        </span>
+                      </div>
+
+                      {markersList.length > 0 ? (
+                        <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                          {markersList.map((m: any, idx: number) => {
+                            const regionLabel = getRegionLabel(m.body_region, detailsAssessment.body_model);
+                            const markerNote = parseAssessmentNotes(m.notes).clinicalNote;
+                            return (
+                              <div
+                                key={m.id || idx}
+                                className="p-2.5 bg-slate-50 border border-slate-200/80 rounded-xl flex flex-col gap-1 text-[11px]"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <strong className="text-slate-800">{regionLabel}</strong>
+                                  <span className="text-[10px] font-bold text-teal-800 bg-teal-100/70 px-1.5 py-0.5 rounded">
+                                    {m.marker_type || 'Ponto Clínico'}
+                                  </span>
+                                </div>
+                                {(m.severity || m.value) && (
+                                  <span className="text-slate-500">
+                                    Intensidade: <strong>{m.severity || m.value}</strong>
+                                  </span>
+                                )}
+                                {markerNote && (
+                                  <span className="text-slate-600 italic">
+                                    "{markerNote}"
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p className="text-[11px] text-slate-400 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                          Nenhum marcador anatômico detalhado registrado nesta avaliação.
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Bloco 3: Regiões Selecionadas */}
+                    <div className="space-y-2">
+                      <h4 className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                        <Layers className="w-4 h-4 text-teal-600" />
+                        <span>Regiões de Queixa ou Atenção</span>
+                      </h4>
+                      {humanRegions.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          {humanRegions.map((label, i) => (
+                            <span
+                              key={i}
+                              className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-teal-50 text-teal-800 border border-teal-200/70"
+                            >
+                              {label}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-[11px] text-slate-400 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                          Nenhuma região selecionada individualmente.
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Bloco 4: Vistas com Desenhos Manuais */}
+                    <div className="space-y-2">
+                      <h4 className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                        <PenTool className="w-4 h-4 text-teal-600" />
+                        <span>Vistas com Desenhos Manuais</span>
+                      </h4>
+                      {viewsWithDrawings.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          {viewsWithDrawings.map((viewKey, i) => (
+                            <span
+                              key={i}
+                              className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 border border-rose-200"
+                            >
+                              {VIEW_LABELS[viewKey] || viewKey}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-[11px] text-slate-400 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                          Nenhum desenho manual realizado nesta avaliação.
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Bloco 5: Observações Clínicas Reais */}
+                    <div className="space-y-2">
+                      <h4 className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                        <FileText className="w-4 h-4 text-teal-600" />
+                        <span>Observações Clínicas</span>
+                      </h4>
+                      {parsed.clinicalNote ? (
+                        <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl text-[11px] text-slate-700 leading-relaxed whitespace-pre-wrap">
+                          {parsed.clinicalNote}
+                        </div>
+                      ) : (
+                        <p className="text-[11px] text-slate-400 bg-slate-50 p-3 rounded-xl border border-slate-100 italic">
+                          Nenhuma observação clínica adicional registrada.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Rodapé do Drawer com Ações */}
+            <div className="p-4 border-t border-slate-100 bg-slate-50/70 flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setDetailsAssessment(null)}
+                className="flex-1 py-2.5 px-4 text-xs font-bold text-slate-600 hover:bg-slate-200/60 rounded-xl transition-colors cursor-pointer border border-slate-200"
+              >
+                Fechar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const target = detailsAssessment;
+                  setDetailsAssessment(null);
+                  setViewingAssessment(target);
+                }}
+                className="flex-1 py-2.5 px-4 text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-xl shadow-xs transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <Eye className="w-4 h-4" />
+                <span>Abrir no Mapa</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Visualização ou Edição */}
+      {viewingAssessment && (
+        <ZemdaBodyModal
+          isOpen={!!viewingAssessment}
+          onClose={() => {
+            setViewingAssessment(null);
+            if (selectedPatientId) fetchAssessments(selectedPatientId);
+          }}
+          patientId={viewingAssessment.patient_id}
+          patientName={selectedPatient?.full_name}
+          assessmentId={viewingAssessment.id}
+          appointmentId={viewingAssessment.appointment_id}
+          professionalId={viewingAssessment.professional_id}
+          professionalName={viewingAssessment.professional_name}
+          module={viewingAssessment.module}
+          initialBodyModel={viewingAssessment.body_model}
+          readOnly={false}
+        />
+      )}
+
+      {/* Modal de Nova Avaliação */}
+      {creatingNew && selectedPatient && (
+        <ZemdaBodyModal
+          isOpen={creatingNew}
+          onClose={() => {
+            setCreatingNew(false);
+            if (selectedPatientId) fetchAssessments(selectedPatientId);
+          }}
+          patientId={selectedPatient.id}
+          patientName={selectedPatient.full_name}
+          module="general"
+          readOnly={false}
+        />
+      )}
+
+      {/* Modal de Comparação Lado a Lado de Duas Avaliações */}
+      {comparingData && (
+        <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 overflow-y-auto animate-in fade-in mobile-modal">
+          <div className="bg-slate-50 rounded-3xl max-w-7xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
+            {/* Header da Comparação */}
+            <div className="p-4 sm:p-5 bg-white border-b border-slate-200 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center">
+                  <GitCompare className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    Comparação Temporal de Mapas Corporais
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Paciente: <strong>{selectedPatient?.full_name}</strong> • Análise comparativa direta
+                  </p>
+                </div>
+              </div>
+
+              <button aria-label="Fechar"
+                type="button"
+                onClick={() => setComparingData(null)}
+                className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Corpo da Comparação Lado a Lado */}
+            <div className="p-6 overflow-y-auto flex-1 grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Avaliação A */}
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <div>
+                    <span className="text-xs font-bold text-teal-700 bg-teal-50 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                      Avaliação 1
+                    </span>
+                    <h4 className="text-sm font-extrabold text-slate-900 mt-1">
+                      {comparingData.assessA.assessment?.assessment_date
+                        ? new Date(comparingData.assessA.assessment.assessment_date + 'T12:00:00').toLocaleDateString('pt-BR')
+                        : 'Data'}
+                    </h4>
+                  </div>
+                  <span className="text-xs text-slate-500">
+                    Prof.: {comparingData.assessA.assessment?.professional_name || 'Profissional'}
+                  </span>
+                </div>
+
+                <div className="flex justify-center">
+                  <AnatomicalRecordPreview response={comparingData.assessA}/>
+                </div>
+
+                <div className="text-xs text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                  <strong>Anotações / Observações:</strong>
+                  <p className="mt-1 italic">
+                    {parseAssessmentNotes(comparingData.assessA.assessment?.notes).clinicalNote || 'Nenhuma observação registrada.'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Avaliação B */}
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <div>
+                    <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                      Avaliação 2
+                    </span>
+                    <h4 className="text-sm font-extrabold text-slate-900 mt-1">
+                      {comparingData.assessB.assessment?.assessment_date
+                        ? new Date(comparingData.assessB.assessment.assessment_date + 'T12:00:00').toLocaleDateString('pt-BR')
+                        : 'Data'}
+                    </h4>
+                  </div>
+                  <span className="text-xs text-slate-500">
+                    Prof.: {comparingData.assessB.assessment?.professional_name || 'Profissional'}
+                  </span>
+                </div>
+
+                <div className="flex justify-center">
+                  <AnatomicalRecordPreview response={comparingData.assessB}/>
+                </div>
+
+                <div className="text-xs text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                  <strong>Anotações / Observações:</strong>
+                  <p className="mt-1 italic">
+                    {parseAssessmentNotes(comparingData.assessB.assessment?.notes).clinicalNote || 'Nenhuma observação registrada.'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

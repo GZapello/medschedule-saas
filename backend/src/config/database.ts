@@ -1,3 +1,4 @@
+import { migrateMulticlinic } from './multiclinic.migration';
 import { migrateConsents } from './consents.migration';
 import { migratePersonalAssessment, seedPersonalTav } from './personal-assessment.migration';
 import { DatabaseSync } from 'node:sqlite';
@@ -3795,4 +3796,6 @@ function repairLegacyPhotoUrls(rawDb: any): void {
   } catch (err) {
     console.error('[Database] Erro ao executar migrateProfessionalSlugs:', err);
   }
+  migrateMulticlinic(rawDb);
+
 }

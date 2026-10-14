@@ -37,7 +37,7 @@ export function hasPsychologyAccess(req: Request, patientId?: string | string[])
 
   const clinicUser = db.prepare(`
     SELECT cu.role, cu.status as cu_status, cu.is_manager, cu.permissions_json, cu.zemda_psico_enabled,
-           u.status as u_status, u.profession_name, u.practice_areas as u_practice_areas, u.zemda_psico_enabled as u_zemda_psico_enabled
+           u.status as u_status, CASE WHEN u.tenant_id=cu.tenant_id THEN u.profession_name END AS profession_name, CASE WHEN u.tenant_id=cu.tenant_id THEN u.practice_areas END as u_practice_areas, CASE WHEN u.tenant_id=cu.tenant_id THEN u.zemda_psico_enabled END as u_zemda_psico_enabled
     FROM users u
     LEFT JOIN clinic_users cu ON cu.user_id = u.id AND cu.tenant_id = ?
     WHERE u.id = ?

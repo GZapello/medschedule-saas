@@ -1,0 +1,64 @@
+.seo-editorial{max-width:1220px;margin:0 auto;padding:26px 20px 64px;color:#48635d;line-height:1.75;font-family:inherit;--seo-accent:#0f766e;--seo-soft:#eff8f5}
+.seo-editorial *{box-sizing:border-box;min-width:0}
+.seo-editorial h1,.seo-editorial h2,.seo-editorial h3{color:#173d36;letter-spacing:-.025em}
+.seo-editorial h1{font-size:clamp(32px,3.4vw,50px);font-weight:800;line-height:1.13;margin:18px 0 22px}
+.seo-editorial h2{font-size:clamp(23px,2.2vw,30px);font-weight:750;line-height:1.25;margin:0 0 18px}
+.seo-editorial h3{font-size:21px;font-weight:700;line-height:1.35;margin:16px 0 12px}
+.seo-editorial p{margin:12px 0;max-width:72ch}
+.seo-editorial a{color:#0f766e;text-underline-offset:4px}
+.seo-editorial a:hover{text-decoration:underline}
+.seo-editorial :is(a,summary):focus-visible{outline:3px solid #0d9488;outline-offset:5px;border-radius:4px}
+.seo-breadcrumb{display:flex;flex-wrap:wrap;gap:6px 10px;list-style:none;font-size:12px;padding:0;color:#607770}
+.seo-breadcrumb li+li:before{content:'/';margin-right:10px;color:#a4b8b2}
+.seo-breadcrumb a{text-decoration:none}
+.seo-hero{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,.85fr);align-items:center;gap:64px;padding:44px 0 58px}
+.seo-badge{display:inline-flex!important;align-items:center;border:1px solid #d6e8e2;border-radius:999px;background:var(--seo-soft);color:var(--seo-accent);padding:6px 12px;font-size:12px;font-weight:700;margin:0!important}
+.seo-intro{font-size:16px;line-height:1.85}
+.seo-actions{display:flex;flex-wrap:wrap;align-items:center;gap:20px;margin-top:26px}
+.seo-editorial .seo-button{display:inline-flex;align-items:center;justify-content:center;gap:24px;min-height:48px;padding:12px 22px;background:#0f766e;border-radius:12px;color:white;font-size:14px;font-weight:700;text-decoration:none;box-shadow:0 6px 18px #0f766e18}
+.seo-editorial .seo-button:hover{background:#115e59}
+.seo-secondary{font-size:14px;font-weight:650;text-decoration:none}
+.seo-brand-panel{border:1px solid #d9e9e3;border-radius:26px;background:linear-gradient(145deg,#f0f9f5,#fff);padding:32px;box-shadow:0 18px 50px #163d3208}
+.seo-brand-panel img{object-fit:contain;object-position:left;width:150px;height:auto}
+.seo-panel-label{display:block;font-size:12px;margin:14px 0 28px}
+.seo-panel-module{display:flex;align-items:center;gap:12px;font-size:20px;color:var(--seo-accent);margin-bottom:18px}
+.seo-panel-item{display:flex;gap:12px;align-items:center;background:white;border:1px solid #e1ece7;border-radius:12px;padding:14px;margin-top:10px;font-size:13px;color:#36574d}
+.seo-panel-item span{color:var(--seo-accent)}
+.seo-editorial article>section{padding:48px 0;border-top:1px solid #e0ebe6}
+.seo-card-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}
+.seo-feature-card,.seo-article-card{border:1px solid #dce8e2;border-radius:20px;padding:26px;background:#fff;box-shadow:0 5px 20px #173d3604}
+.seo-card-icon{display:inline-flex;padding:12px;border-radius:14px;background:var(--seo-soft);color:var(--seo-accent);margin-bottom:22px}
+.seo-feature-card h2{font-size:21px;line-height:1.35}
+.seo-feature-card p,.seo-article-card p{font-size:14px;line-height:1.85;margin-bottom:0}
+.seo-content-section{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr);gap:48px}
+.seo-product .seo-content-section:nth-of-type(even){background:#f3f9f6;border-radius:20px;padding:36px;border-top:0;margin:8px 0}
+.seo-content-section p:first-child{margin-top:0}
+.seo-inline-links{display:flex;flex-wrap:wrap;gap:8px 14px;font-size:13px;margin-top:24px}
+.seo-inline-links a{text-decoration:underline}
+.seo-faq{display:grid;grid-template-columns:1fr 1.6fr;gap:48px}
+.seo-editorial details{border-bottom:1px solid #dce8e2;padding:18px 0;font-size:14px}
+.seo-editorial summary{cursor:pointer;font-weight:650;color:#23483f;line-height:1.6;padding-right:8px}
+.seo-editorial details p{padding:4px 0;color:#536b62}
+.seo-related-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.seo-related-grid a{display:flex;justify-content:space-between;gap:20px;align-items:center;background:white;border:1px solid #dbe8e2;border-radius:14px;padding:18px;font-size:14px;font-weight:600;text-decoration:none}
+.seo-related-grid a:after{content:'→';color:#0f766e}
+.seo-related-grid a:hover{background:#f0f9f5}
+.seo-editorial article>.seo-cta{background:#eaf6f0;border:1px solid #d4e7dc;border-radius:24px;padding:40px;margin-top:16px}
+.seo-cta h2{margin-top:20px;max-width:28ch}.seo-cta p{max-width:65ch}
+.seo-login{display:inline-block;margin-top:20px;font-size:13px;text-decoration:underline}
+.seo-story>.seo-hero{display:block;max-width:850px;padding-bottom:40px}
+.seo-story .seo-content-section{display:block;max-width:760px;margin:auto;padding:32px 0}
+.seo-story .seo-content-section p{font-size:17px;line-height:1.95}
+.seo-meta{font-size:12px!important;color:#687e75}
+.seo-article-card h3 a{text-decoration:none}.seo-article-card h3 a:hover{text-decoration:underline}
+.seo-product[data-module*='Fono']{--seo-accent:#a34d78;--seo-soft:#fcf0f5}
+.seo-product[data-module*='Psico'],.seo-product[data-module*='PP']{--seo-accent:#7156a0;--seo-soft:#f4f0fb}
+.seo-product[data-module*='Fisio'],.seo-product[data-module*='Odonto']{--seo-accent:#287f9b;--seo-soft:#edf8fc}
+.seo-product[data-module*='Nutri'],.seo-product[data-module*='Personal']{--seo-accent:#347955;--seo-soft:#eef8f0}
+@media(max-width:1024px){.seo-hero{gap:28px;grid-template-columns:1.2fr 1fr}.seo-brand-panel{padding:24px}.seo-card-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.seo-content-section,.seo-faq{gap:28px}.seo-related-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:767px){.seo-editorial{padding:18px 18px 40px}.seo-hero{display:block;padding:24px 0 32px}.seo-hero h1{font-size:32px}.seo-intro{font-size:15px;line-height:1.75}.seo-brand-panel{display:none}.seo-card-grid,.seo-related-grid{grid-template-columns:1fr}.seo-content-section,.seo-faq{display:block}.seo-editorial article>section{padding:30px 0}.seo-product .seo-content-section:nth-of-type(even){padding:24px 20px}.seo-editorial article>.seo-cta{padding:26px 20px}.seo-feature-card,.seo-article-card{padding:24px}.seo-actions{gap:16px}.seo-breadcrumb{font-size:11px}.seo-story .seo-content-section p{font-size:16px}.seo-editorial h1{overflow-wrap:anywhere}}
+.public-plans-page main>section{max-width:1220px;padding-top:32px;padding-bottom:64px}
+.public-plans-page main>section>header{border-radius:24px;background:#f0f8f4;border:1px solid #dce9e1;padding:32px}
+.public-plans-page main h1{color:#173d36;font-size:clamp(30px,3.4vw,48px);letter-spacing:-.035em}
+@media(max-width:767px){.public-plans-page main>section>header{padding:22px}.public-plans-page main>section{padding-top:20px}}
+.seo-brand-panel .seo-product-screenshot{width:100%;height:auto;display:block;border:1px solid #dce8e2;border-radius:10px;margin:18px 0}

@@ -1,0 +1,2758 @@
+import { fieldCapability } from '../shared/clinical-assessments/policy';
+import { authorizeAssessment } from '../shared/clinical-assessments/access';
+import { CapabilityService } from '../services/capability.service';
+import { PREDICTED_TAV_PROTOCOL, normalizeMeasuredTavInput, classifyTav as classifyMeasuredTav, calculateAssessment, normalizeLegacyAssessmentForReport, referenceSex, numberOrNull } from '../services/personal-assessment-calculation.service';
+import { ASSESSMENT_COLUMNS } from '../config/personal-assessment.migration';
+import { exerciseAnimation, getExerciseMaxCompletedLoad } from '../services/exercise-media';
+import { validatePosture, postureSummary, validatePosturePhotoAccess } from '../services/personal-posture.service';
+import { matchesExercise, insertWorkoutExercise, imageAttribution } from '../services/personal-exercise-utils';
+import { Request, Response } from 'express';
+import { db } from '../config/database';
+import { v4 as uuidv4 } from 'uuid';
+import { logAudit } from '../middlewares/audit.middleware';
+import { resolveCanonicalProfession } from '../utils/profession-module';
+import { isPhysiotherapistOrClinicManager } from './physiotherapy.controller';
+import { ClinicalRecordService } from '../services/clinical-record.service';
+import { createDefaultSchedules } from '../utils/schedule-defaults';
+
+/**
+ * Validação estrita de profissão:
+ * O ZemdaPersonal e absolutamente todas as suas funções devem aparecer exclusivamente
+ * para profissionais cuja profissão cadastrada seja Personal Trainer / Educação Física.
+ * Regra: Profissão = Personal Trainer + permissão ativa → liberar ZemdaPersonal
+ *        Outra profissão → não exibir e não permitir acesso (HTTP 403)
+ */
+export function isUserPersonalTrainer(userId: string, tenantId: string): boolean {
+  // 1. Busca no registro do profissional
+  const prof = db.prepare(`
+    SELECT p.id, p.profession_id, p.profession_name, p.practice_areas, p.registration_type,
+           prof.name as prof_name, prof.slug as prof_slug
+    FROM professionals p
+    LEFT JOIN professions prof ON prof.id = p.profession_id
+    WHERE p.user_id = ? AND p.tenant_id = ?
+    ORDER BY p.active DESC, p.id
+    LIMIT 1
+  `).get(userId, tenantId) as any;
+
+  if (prof) {
+    const canonical = resolveCanonicalProfession({
+      id: prof.profession_id,
+      name: prof.prof_name || prof.profession_name,
+      slug: prof.prof_slug,
+      registrationType: prof.registration_type
+    });
+
+    if (canonical.commercialModule === 'ZemdaPersonal') {
+      return true;
+    }
+
+    if (canonical.commercialModule) {
+      return false;
+    }
+
+    const pId = prof.profession_id || '';
+    const pName = (prof.prof_name || prof.profession_name || '').toLowerCase();
+    const pSlug = (prof.prof_slug || '').toLowerCase();
+    const pAreas = (prof.practice_areas || '').toLowerCase();
+    const rType = (prof.registration_type || '').toUpperCase();
+
+    // Rejeição estrita de qualquer outra profissão cadastrada
+    const conflictingProfessions = [
+      'prof-fisioterapeuta', 'prof-fisioterapia', 'prof-dentista', 'prof-odontologia',
+      'prof-nutricionista', 'prof-nutricao', 'prof-terapeuta-ocupacional', 'prof-terapia-ocupacional',
+      'prof-fonoaudiologo', 'prof-fonoaudiologia', 'prof-medico', 'prof-medicina',
+      'prof-pediatra', 'prof-cardiologista', 'prof-dermatologista', 'prof-psicologo',
+      'prof-psicologia', 'prof-psiquiatra', 'prof-enfermeiro', 'prof-enfermagem'
+    ];
+    if (conflictingProfessions.includes(pId)) {
+      return false;
+    }
+
+    if (
+      pId === 'prof-personal-trainer' ||
+      pId === 'prof-educacao-fisica' ||
+      pId === 'personal_trainer' ||
+      rType === 'CREF' ||
+      pName.includes('personal') ||
+      pName.includes('educação física') ||
+      pName.includes('educacao fisica') ||
+      pSlug.includes('personal') ||
+      pSlug.includes('educa') ||
+      pAreas.includes('personal') ||
+      pAreas.includes('musculação') ||
+      pAreas.includes('musculacao') ||
+      pAreas.includes('treinamento')
+    ) {
+      return true;
+    }
+
+    if (pId && !pId.includes('personal') && !pId.includes('educa')) {
+      return false;
+    }
+  }
+
+  // 2. Busca em clinic_users e users
+  const user = db.prepare(`
+    SELECT u.id, u.profession_id, u.profession_name, u.registration_type,
+           cu.profession_custom, cu.practice_areas, cu.zemda_personal_enabled,
+           t.manager_profession, t.manager_practice_areas
+    FROM users u
+    LEFT JOIN clinic_users cu ON cu.user_id = u.id AND cu.tenant_id = ?
+    LEFT JOIN tenants t ON t.id = cu.tenant_id
+    WHERE u.id = ?
+  `).get(tenantId, userId) as any;
+
+  if (user) {
+    if (user.zemda_personal_enabled === 1) return true;
+
+    const userCanonical = resolveCanonicalProfession({
+      id: user.profession_id,
+      name: user.profession_name || user.profession_custom,
+      registrationType: user.registration_type
+    });
+
+    if (userCanonical.commercialModule === 'ZemdaPersonal') {
+      return true;
+    }
+
+    if (userCanonical.commercialModule) {
+      return false;
+    }
+
+    const text = [user.profession_custom, user.practice_areas, user.manager_profession, user.manager_practice_areas].filter(Boolean).join(' ').toLowerCase();
+    const rType = (user.registration_type || '').toUpperCase();
+    if (rType === 'CREF') return true;
+
+    // Conflitos no texto livre
+    if (
+      text.includes('médic') || text.includes('medic') ||
+      text.includes('dentis') || text.includes('odonto') ||
+      text.includes('nutri') || text.includes('fisio') ||
+      text.includes('psicol') || text.includes('fono') ||
+      text.includes('ocupacional')
+    ) {
+      return false;
+    }
+
+    if (text.includes('personal') || text.includes('educação física') || text.includes('educacao fisica')) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+export function hasPersonalAccess(req: Request): boolean {
+  if (!req.user || !req.tenantId) return false;
+  if (req.user.role === 'superadmin') return false;
+
+  const isPT = isUserPersonalTrainer(req.user.userId, req.tenantId);
+
+  // 1. Se o profissional for de Educação Física / Personal Trainer -> ACESSO DIRETO E INTEGRAL
+  if (isPT) {
+    return true;
+  }
+
+  // 2. Se for gestor/administrador da clínica
+  if (req.user.role === 'clinic_admin') {
+    const cu = db.prepare(`
+      SELECT cu.profession_custom, cu.practice_areas, t.manager_profession
+      FROM clinic_users cu
+      LEFT JOIN tenants t ON t.id = cu.tenant_id
+      WHERE cu.user_id = ? AND cu.tenant_id = ?
+    `).get(req.user.userId, req.tenantId) as any;
+    const text = [cu?.profession_custom, cu?.practice_areas, cu?.manager_profession].filter(Boolean).join(' ').toLowerCase();
+    const hasConflict = text.includes('médic') || text.includes('dentis') || text.includes('nutri') || text.includes('fisio') || text.includes('psicol');
+    if (!hasConflict) {
+      return true;
+    }
+  }
+
+  // 3. Se possuir permissão explícita ou flag legada concedida
+  try {
+    const cu = db.prepare('SELECT permissions_json, zemda_personal_enabled FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, req.tenantId) as any;
+    if (cu) {
+      if (cu.zemda_personal_enabled === 1) return true;
+      if (cu.permissions_json) {
+        try {
+          const perms = JSON.parse(cu.permissions_json);
+          if (Array.isArray(perms) && perms.includes('access_zemda_personal')) return true;
+        } catch {}
+      }
+    }
+  } catch (err) {
+    console.error('[hasPersonalAccess] Erro ao checar permissão:', err);
+  }
+
+  return false;
+}
+
+export function hasFullAssessmentAccess(req: Request): boolean {
+  if(!req.user || !req.tenantId || !hasPersonalAccess(req))return false;
+  const context=CapabilityService.computeUserCapabilities(req.user.userId,req.tenantId);
+  return context.professionId==='prof-personal-trainer' || req.user.role==='clinic_admin' && context.professionId==='prof-outro-saude';
+}
+
+export function hasPostureAccess(req: Request): boolean {
+  if (!req.user || !req.tenantId) return false;
+  if (req.user.role === 'superadmin') return false;
+  return hasPersonalAccess(req) || ['professional','clinic_admin'].includes(req.user.role) && ['ANTHROPOMETRY','BODY_COMPOSITION','POSTURE_GAIT','MOBILITY_ASSESSMENT','MUSCLE_STRENGTH','PAIN_ASSESSMENT','FUNCTIONAL_ASSESSMENT','FUNCTIONAL_TESTS','PHOTO_MONITORING'].some(cap=>CapabilityService.hasCapability(req.user!.userId,req.tenantId!,cap));
+}
+
+/**
+ * Obtém o professional_id associado estritamente ao usuário atual, com auto-reparo seguro.
+ * NUNCA retorna o ID de outro profissional da clínica!
+ */
+export function getProfessionalId(req: Request): string {
+  const tenantId = req.tenantId!;
+  const userId = req.user!.userId;
+  const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(userId, tenantId) as any;
+  if (prof) return prof.id;
+
+  // Auto-reparo exclusivo para o usuário atual caso o registro em professionals esteja ausente
+  const user = db.prepare('SELECT id, name, role, registration_type, registration_number, profession_id, profession_name, practice_areas FROM users WHERE id = ?').get(userId) as any;
+  if (user) {
+    const profId = 'pro-' + uuidv4().slice(0, 8);
+    const baseSlug = (user.name || 'personal')
+      .toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '');
+    const finalSlug = `${baseSlug}-${profId.slice(-4)}`;
+
+    const resolution = resolveCanonicalProfession({
+      id: user.profession_id,
+      name: user.profession_name || 'Personal Trainer',
+      registrationType: user.registration_type
+    });
+
+    db.prepare(`
+      INSERT INTO professionals (
+        id, tenant_id, user_id, name, registration_type, registration_number,
+        practice_areas, bio, slug, active, profession_id, profession_name,
+        zemda_personal_enabled, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, datetime('now'), datetime('now'))
+    `).run(
+      profId,
+      tenantId,
+      userId,
+      user.name || 'Personal Trainer',
+      user.registration_type || (resolution.commercialModule === 'ZemdaPersonal' ? 'CREF' : 'Registro'),
+      user.registration_number || null,
+      user.practice_areas || null,
+      user.practice_areas || null,
+      finalSlug,
+      resolution.canonicalId,
+      resolution.canonicalName,
+      resolution.flags.zemda_personal_enabled
+    );
+    createDefaultSchedules(db, tenantId, profId);
+    return profId;
+  }
+
+  throw new Error('Profissional não identificado para este usuário');
+}
+
+function sanitizePhotoUrl(url: any): string | null {
+  if (!url || typeof url !== 'string') return null;
+  const trimmed = url.trim();
+  if (
+    trimmed.startsWith('blob:') ||
+    trimmed.startsWith('data:') ||
+    trimmed.includes('workers.dev') ||
+    trimmed.includes('r2.cloudflarestorage.com')
+  ) {
+    return null;
+  }
+  return trimmed;
+}
+
+function extractFileIdFromPhotoInput(p: any, tenantId: string): string | null {
+  if (!p) return null;
+  let directId = p.file_id || p.fileId || null;
+  if (directId && typeof directId === 'string' && directId.trim()) {
+    const cleanId = directId.trim();
+    try {
+      const attach = db.prepare("SELECT id FROM file_attachments WHERE id = ? AND (clinic_id = ? OR clinic_id = 'global')").get(cleanId, tenantId) as any;
+      if (attach && attach.id) return attach.id;
+    } catch (_) {}
+    return null;
+  }
+  const url = String(p.photo_url || '').trim();
+  if (url.startsWith('att-')) {
+    try {
+      const attach = db.prepare("SELECT id FROM file_attachments WHERE id = ? AND (clinic_id = ? OR clinic_id = 'global')").get(url, tenantId) as any;
+      if (attach && attach.id) return attach.id;
+    } catch (_) {}
+    return null;
+  }
+  let objectKey: string | null = null;
+  if (url.includes('token=')) {
+    try {
+      const match = url.match(/token=([^&]+)/);
+      if (match && match[1]) {
+        const tokenPart = decodeURIComponent(match[1]).split('.')[0];
+        const jsonStr = Buffer.from(tokenPart, 'base64url').toString('utf8');
+        const parsed = JSON.parse(jsonStr);
+        if (parsed && parsed.objectKey) objectKey = parsed.objectKey;
+      }
+    } catch (_) {}
+  } else if (url.includes('clinics/')) {
+    const match = url.match(/clinics\/[^\s?]+/);
+    if (match) objectKey = match[0];
+  }
+
+  if (objectKey) {
+    try {
+      const attach = db.prepare("SELECT id FROM file_attachments WHERE object_key = ? AND (clinic_id = ? OR clinic_id = 'global')").get(objectKey, tenantId) as any;
+      if (attach && attach.id) return attach.id;
+    } catch (_) {}
+  }
+  return null;
+}
+
+/**
+ * ZemdaPersonal never persists a preview URL. File references must point to an
+ * attachment that belongs to the current clinic (or to the global library).
+ */
+function requireAttachmentId(fileId: any, tenantId: string): string | null {
+  if (!fileId || typeof fileId !== 'string') return null;
+  const id = fileId.trim();
+  if (!id) return null;
+  const sanitizedClinicId = (tenantId || '').trim().replace(/[^a-zA-Z0-9_-]/g, '');
+  const attachment = db.prepare(`
+    SELECT id FROM file_attachments
+    WHERE id = ? AND storage_provider = 'cloudflare_r2'
+      AND (clinic_id = ? OR clinic_id = ? OR clinic_id = 'global')
+  `).get(id, tenantId, sanitizedClinicId) as any;
+  return attachment?.id || null;
+}
+
+function requireExerciseAttachment(fileId: any, tenantId: string): string | null {
+  if (!fileId) return null;
+  const valid = requireAttachmentId(fileId, tenantId);
+  if (!valid || !db.prepare("SELECT id FROM file_attachments WHERE id = ? AND category = 'exercises' AND mime_type IN ('image/jpeg','image/png','image/webp')").get(valid)) throw new Error('Anexo de exercício inválido ou inacessível');
+  return valid;
+}
+
+function saveAssessmentPhotos(
+  assessmentId: string,
+  patientId: string,
+  tenantId: string,
+  assessmentDate: string,
+  photos: any[]
+): void {
+  for (const photo of photos) {
+    if (!photo?.photo_type) continue;
+    const fileId = requireAttachmentId(photo.file_id || photo.fileId, tenantId);
+    if (!fileId) continue;
+      const existingPhoto=db.prepare('SELECT id FROM personal_assessment_photos WHERE assessment_id=? AND tenant_id=? AND photo_type=?').get(assessmentId,tenantId,photo.photo_type) as any;
+      if(existingPhoto) {
+        db.prepare(`UPDATE personal_assessment_photos SET file_id=?,photo_url='',notes=COALESCE(?,notes) WHERE id=? AND tenant_id=?`).run(fileId,photo.notes ?? null,existingPhoto.id,tenantId);
+        continue;
+      }
+    db.prepare(`
+      INSERT INTO personal_assessment_photos
+        (id, tenant_id, assessment_id, patient_id, photo_type, photo_url, photo_date, notes, file_id)
+      VALUES (?, ?, ?, ?, ?, '', ?, ?, ?)
+    `).run(
+      'paph-' + uuidv4().slice(0, 8), tenantId, assessmentId, patientId,
+      photo.photo_type, assessmentDate, photo.notes || null, fileId
+    );
+  }
+}
+
+/**
+ * Classificação rigorosa de TAV (Tecido Adiposo Visceral):
+ * - Cada equipamento ou protocolo possui sua tabela e faixas específicas.
+ * - Se nenhum protocolo estiver cadastrado para o método/equipamento:
+ *   retorna obrigatoriamente 'Classificação não disponível para este método.'
+ * - Nunca classifica utilizando tabela de outro equipamento.
+ */
+export function resolveTavClassification(
+  tenantId: string,
+  protocolId?: string,
+  method?: string,
+  equipment?: string,
+  val?: number | null,
+  gender?: string,
+  age?: number
+): { classification: string; protocolId?: string; protocolName?: string; unit?: string; color?: string } {
+  if (val === undefined || val === null || !Number.isFinite(val)) {
+    return { classification: 'Sem valor informado' };
+  }
+
+  let proto: any = null;
+  if (protocolId) {
+    proto = db.prepare(`
+      SELECT * FROM personal_tav_protocols
+      WHERE id = ? AND (tenant_id = ? OR tenant_id = 'global') AND is_active = 1
+    `).get(protocolId, tenantId);
+  }
+
+  if(protocolId && !proto) return {classification:'Classificação não disponível para este método.',color:'#64748B'};
+  if (!proto && equipment) {
+    const eqTrim = equipment.trim();
+    proto = db.prepare(`
+      SELECT * FROM personal_tav_protocols
+      WHERE (tenant_id = ? OR tenant_id = 'global')
+        AND (LOWER(equipment) = LOWER(?) OR LOWER(?) LIKE '%' || LOWER(equipment) || '%')
+        AND is_active = 1
+      ORDER BY CASE WHEN tenant_id = ? THEN 0 ELSE 1 END, created_at ASC
+      LIMIT 1
+    `).get(tenantId, eqTrim, eqTrim, tenantId);
+  }
+
+  // Regra fundamental: Se não há protocolo registrado para o equipamento/método selecionado:
+  if (!proto) {
+    return {
+      classification: 'Classificação não disponível para este método.',
+      protocolId: undefined,
+      protocolName: equipment || method || 'Desconhecido',
+      unit: undefined,
+      color: '#6B7280'
+    };
+  }
+
+  const ranges=db.prepare('SELECT * FROM personal_tav_ranges WHERE protocol_id=? ORDER BY min_value').all(proto.id);
+  const result=classifyMeasuredTav({tav_value:val,tav_unit:proto.unit,tav_equipment:proto.equipment,anthropometric_sex_at_assessment:gender,age_at_assessment:age},{...proto,ranges});
+  return {classification:result.classification,protocolId:proto.id,protocolName:proto.protocol_name,unit:proto.unit,color:result.status==='classified'?'#0D9488':'#64748B'};
+
+}
+
+function assessmentTavContext(a:any,tenantId:string) {
+  if(!a.tav_protocol_id) return undefined;
+  const proto=db.prepare("SELECT * FROM personal_tav_protocols WHERE id=? AND (tenant_id=? OR tenant_id='global') AND is_active=1").get(a.tav_protocol_id,tenantId) as any;
+  return proto ? {...proto,ranges:db.prepare('SELECT * FROM personal_tav_ranges WHERE protocol_id=? ORDER BY min_value').all(proto.id)} : null;
+}
+export class PersonalController {
+
+  // ==========================================
+  // DASHBOARD & OVERVIEW
+  // ==========================================
+  static async getDashboard(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+
+      const totalStudents = (db.prepare("SELECT count(*) as count FROM patients WHERE tenant_id = ? AND active >= 0").get(tenantId) as any)?.count || 0;
+      const activeStudents = (db.prepare("SELECT count(*) as count FROM patients WHERE tenant_id = ? AND active = 1").get(tenantId) as any)?.count || 0;
+      const activeWorkouts = (db.prepare("SELECT count(*) as count FROM personal_workouts WHERE tenant_id = ? AND is_active = 1").get(tenantId) as any)?.count || 0;
+      const monthAssessments = (db.prepare("SELECT count(*) as count FROM personal_assessments WHERE tenant_id = ? AND assessment_date >= date('now', 'start of month')").get(tenantId) as any)?.count || 0;
+      const monthLogs = (db.prepare("SELECT count(*) as count FROM personal_workout_logs WHERE tenant_id = ? AND completed_at >= date('now', 'start of month')").get(tenantId) as any)?.count || 0;
+
+      // Alunos com avaliações pendentes ou vencidas (> 60 dias)
+      const pendingAssessments = db.prepare(`
+        SELECT p.id, COALESCE(p.full_name, p.social_name) as name, p.phone, p.photo_url as avatar_url,
+               MAX(pa.assessment_date) as last_assessment_date,
+               CAST((julianday('now') - julianday(MAX(pa.assessment_date))) AS INTEGER) as days_since_last
+        FROM patients p
+        LEFT JOIN personal_assessments pa ON pa.patient_id = p.id AND pa.tenant_id = p.tenant_id
+        WHERE p.tenant_id = ? AND p.active = 1
+        GROUP BY p.id
+        HAVING last_assessment_date IS NULL OR days_since_last > 60
+        ORDER BY days_since_last DESC NULLS FIRST
+        LIMIT 5
+      `).all(tenantId) as any[];
+
+      // Atendimentos / Aulas de hoje vinculadas a agendamentos (estritamente do profissional logado, salvo clinic_admin)
+      const isClinicAdmin = req.user?.role === 'clinic_admin';
+      let profId: string | null = null;
+      if (!isClinicAdmin) {
+        try {
+          profId = getProfessionalId(req);
+        } catch {}
+      }
+
+      let aptSql = `
+        SELECT a.id, a.professional_id, substr(a.start_time, 1, 10) as date, a.start_time, a.end_time, a.status,
+               p.id as patient_id, COALESCE(p.full_name, p.social_name) as patient_name, p.phone as patient_phone, p.photo_url as avatar_url
+        FROM appointments a
+        JOIN patients p ON p.id = a.patient_id AND p.tenant_id = a.tenant_id
+        WHERE a.tenant_id = ? AND (date(a.start_time) = date('now') OR substr(a.start_time, 1, 10) = date('now'))
+      `;
+      const aptParams: any[] = [tenantId];
+      if (!isClinicAdmin && profId) {
+        aptSql += ` AND a.professional_id = ?`;
+        aptParams.push(profId);
+      }
+      aptSql += ` ORDER BY a.start_time ASC`;
+
+      const todayAppointments = db.prepare(aptSql).all(...aptParams) as any[];
+
+      // Treinos recentes concluídos
+      const recentLogs = db.prepare(`
+        SELECT l.id, l.completed_at, l.duration_minutes, l.rpe, l.feedback_notes,
+               COALESCE(p.full_name, p.social_name) as patient_name, p.photo_url as avatar_url,
+               w.title as workout_title, w.division
+        FROM personal_workout_logs l
+        JOIN patients p ON p.id = l.patient_id AND p.tenant_id = l.tenant_id
+        LEFT JOIN personal_workouts w ON w.id = l.workout_id
+        WHERE l.tenant_id = ?
+        ORDER BY l.completed_at DESC
+        LIMIT 6
+      `).all(tenantId) as any[];
+
+      // Volume muscular semanal médio (séries/semana por grupamento em treinos ativos)
+      const volumeSummary = db.prepare(`
+        SELECT we.muscle_group, SUM(we.sets) as total_sets
+        FROM personal_workout_exercises we
+        JOIN personal_workouts w ON w.id = we.workout_id
+        WHERE we.tenant_id = ? AND w.is_active = 1
+        GROUP BY we.muscle_group
+        ORDER BY total_sets DESC
+      `).all(tenantId) as any[];
+
+      res.json({
+        metrics: {
+          totalStudents,
+          activeStudents,
+          activeWorkouts,
+          monthAssessments,
+          monthLogs
+        },
+        pendingAssessments,
+        todayAppointments,
+        recentLogs,
+        volumeSummary
+      });
+    } catch (err: any) {
+      console.error('[PersonalController.getDashboard] Erro:', err);
+      res.status(500).json({ error: 'Erro ao carregar painel do ZemdaPersonal' });
+    }
+  }
+
+  // ==========================================
+  // ALUNOS / ESTUDANTES
+  // ==========================================
+  static async listStudents(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const q = req.query.q ? String(req.query.q).trim() : '';
+
+      let sql = `
+        SELECT p.id, COALESCE(p.full_name, p.social_name) as name, p.email, p.phone, p.birth_date, p.gender, p.anthropometric_sex,
+               CASE WHEN p.active = 1 THEN 'active' ELSE 'inactive' END as status,
+               p.photo_url as avatar_url, p.created_at,
+               prof.goal, prof.experience_level, prof.weekly_frequency, prof.restrictions,
+               prof.height, prof.current_weight,
+               (SELECT COUNT(*) FROM personal_workouts w WHERE w.patient_id = p.id AND w.is_active = 1) as active_workouts_count,
+               (SELECT MAX(pa.assessment_date) FROM personal_assessments pa WHERE pa.patient_id = p.id) as last_assessment_date,
+               (SELECT pa2.body_fat_percentage FROM personal_assessments pa2 WHERE pa2.patient_id = p.id ORDER BY pa2.assessment_date DESC LIMIT 1) as last_fat_pct
+        FROM patients p
+        LEFT JOIN personal_student_profiles prof ON prof.patient_id = p.id AND prof.tenant_id = p.tenant_id
+        WHERE p.tenant_id = ? AND p.active >= 0
+      `;
+      const params: any[] = [tenantId];
+
+      if (q) {
+        sql += ` AND (p.full_name LIKE ? OR p.email LIKE ? OR p.phone LIKE ? OR p.cpf LIKE ?)`;
+        const wild = `%${q}%`;
+        params.push(wild, wild, wild, wild);
+      }
+
+      sql += ` ORDER BY p.full_name ASC`;
+
+      const students = db.prepare(sql).all(...params) as any[];
+      res.json({ students });
+    } catch (err: any) {
+      console.error('[PersonalController.listStudents] Erro:', err);
+      res.status(500).json({ error: 'Erro ao listar alunos' });
+    }
+  }
+
+  static async getStudent(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const { id } = req.params;
+
+      const student = db.prepare(`
+        SELECT p.id, COALESCE(p.full_name, p.social_name) as name, p.email, p.phone, p.cpf, p.birth_date, p.gender, p.anthropometric_sex, p.address, p.notes_admin as patient_notes,
+               CASE WHEN p.active = 1 THEN 'active' ELSE 'inactive' END as status,
+               p.photo_url as avatar_url, p.created_at,
+               prof.goal, prof.experience_level, prof.weekly_frequency, prof.training_preferences,
+               prof.restrictions, prof.notes as personal_notes, prof.height, prof.current_weight
+        FROM patients p
+        LEFT JOIN personal_student_profiles prof ON prof.patient_id = p.id AND prof.tenant_id = p.tenant_id
+        WHERE p.id = ? AND p.tenant_id = ?
+      `).get(id, tenantId) as any;
+
+      if (!student) {
+        res.status(404).json({ error: 'Aluno não encontrado' });
+        return;
+      }
+
+      // Treinos ativos do aluno
+      const workouts = db.prepare(`
+        SELECT w.*,
+               (SELECT COUNT(*) FROM personal_workout_exercises we WHERE we.workout_id = w.id) as exercises_count
+        FROM personal_workouts w
+        WHERE w.patient_id = ? AND w.tenant_id = ? AND w.is_active = 1
+        ORDER BY w.division ASC
+      `).all(id, tenantId) as any[];
+
+      for (const w of workouts) {
+        w.exercises = db.prepare(`
+          SELECT * FROM personal_workout_exercises
+          WHERE workout_id = ? AND tenant_id = ?
+          ORDER BY order_index ASC
+        `).all(w.id, tenantId) as any[];
+      }
+
+      // Últimas 3 avaliações
+      const recentAssessments = db.prepare(`
+        SELECT id, assessment_date, weight, height, bmi, body_fat_percentage, muscle_mass_kg, lean_mass_kg, fat_mass_kg, protocol
+        FROM personal_assessments
+        WHERE patient_id = ? AND tenant_id = ?
+        ORDER BY assessment_date DESC
+        LIMIT 3
+      `).all(id, tenantId) as any[];
+
+      // Últimos 5 logs de treino
+      const recentLogs = db.prepare(`
+        SELECT l.*, w.title as workout_title, w.division
+        FROM personal_workout_logs l
+        LEFT JOIN personal_workouts w ON w.id = l.workout_id
+        WHERE l.patient_id = ? AND l.tenant_id = ?
+        ORDER BY l.completed_at DESC
+        LIMIT 5
+      `).all(id, tenantId) as any[];
+
+      res.json({
+        student,
+        workouts,
+        recentAssessments,
+        recentLogs
+      });
+    } catch (err: any) {
+      console.error('[PersonalController.getStudent] Erro:', err);
+      res.status(500).json({ error: 'Erro ao obter dados do aluno' });
+    }
+  }
+
+  static async upsertProfile(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const { id } = req.params; // patient_id
+      const {
+        goal, experience_level, weekly_frequency, training_preferences,
+        restrictions, notes, height, current_weight
+      } = req.body;
+
+      const patient = db.prepare('SELECT id FROM patients WHERE id = ? AND tenant_id = ?').get(id, tenantId);
+      if (!patient) {
+        res.status(404).json({ error: 'Aluno não encontrado' });
+        return;
+      }
+
+      const existing = db.prepare('SELECT id FROM personal_student_profiles WHERE patient_id = ? AND tenant_id = ?').get(id, tenantId) as any;
+      if (existing) {
+        db.prepare(`
+          UPDATE personal_student_profiles SET
+            goal = ?, experience_level = ?, weekly_frequency = ?, training_preferences = ?,
+            restrictions = ?, notes = ?, height = ?, current_weight = ?, updated_at = datetime('now')
+          WHERE id = ?
+        `).run(
+          goal || null, experience_level || null, weekly_frequency || 3, training_preferences || null,
+          restrictions || null, notes || null, height || null, current_weight || null, existing.id
+        );
+      } else {
+        const newId = 'psp-' + uuidv4().slice(0, 8);
+        db.prepare(`
+          INSERT INTO personal_student_profiles (
+            id, tenant_id, patient_id, goal, experience_level, weekly_frequency,
+            training_preferences, restrictions, notes, height, current_weight
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          newId, tenantId, id, goal || null, experience_level || null, weekly_frequency || 3,
+          training_preferences || null, restrictions || null, notes || null, height || null, current_weight || null
+        );
+      }
+
+      logAudit(req, 'UPDATE_STUDENT_PROFILE', 'personal_student_profiles', id, { goal, experience_level });
+      res.json({ message: 'Perfil de treinamento salvo com sucesso' });
+    } catch (err: any) {
+      console.error('[PersonalController.upsertProfile] Erro:', err);
+      res.status(500).json({ error: 'Erro ao salvar perfil de treinamento' });
+    }
+  }
+
+  static async createStudent(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const {
+        name, fullName, phone, email, birth_date, birthDate, cpf, gender, avatar_url, photo_url,
+        goal, experience_level, weekly_frequency, restrictions, notes, height, current_weight
+      } = req.body;
+
+      const effectiveName = String(name || fullName || '').trim();
+      if (!effectiveName) {
+        res.status(400).json({ error: 'Nome do aluno é obrigatório' });
+        return;
+      }
+
+      const effectivePhone = String(phone || '').trim() || '(00) 00000-0000';
+      const effectiveEmail = email ? String(email).trim() : null;
+      const effectiveBirth = birth_date || birthDate || null;
+      const effectivePhoto = avatar_url || photo_url || null;
+
+      const patientId = 'pat-' + uuidv4().slice(0, 8);
+
+      const tx = db.transaction(() => {
+        // Insere paciente
+        db.prepare(`
+          INSERT INTO patients (
+            id, tenant_id, full_name, phone, whatsapp, email, birth_date, cpf, gender, photo_url, active, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, datetime('now'), datetime('now'))
+        `).run(
+          patientId, tenantId, effectiveName, effectivePhone, effectivePhone,
+          effectiveEmail, effectiveBirth, cpf || null, gender || null, effectivePhoto
+        );
+
+        if (req.body.anthropometric_sex !== undefined) db.prepare('UPDATE patients SET anthropometric_sex=? WHERE id=? AND tenant_id=?').run(referenceSex({anthropometric_sex:req.body.anthropometric_sex}).sex,patientId,tenantId);
+        // Insere perfil de treinamento
+        const pspId = 'psp-' + uuidv4().slice(0, 8);
+        db.prepare(`
+          INSERT INTO personal_student_profiles (
+            id, tenant_id, patient_id, goal, experience_level, weekly_frequency,
+            restrictions, notes, height, current_weight, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        `).run(
+          pspId, tenantId, patientId,
+          goal || 'Hipertrofia',
+          experience_level || 'iniciante',
+          Number(weekly_frequency) || 3,
+          restrictions || null,
+          notes || null,
+          height ? Number(height) : null,
+          current_weight ? Number(current_weight) : null
+        );
+      });
+
+      tx();
+
+      logAudit(req, 'CREATE_STUDENT', 'patients', patientId, { name: effectiveName });
+
+      res.status(201).json({
+        success: true,
+        id: patientId,
+        student: {
+          id: patientId,
+          name: effectiveName,
+          phone: effectivePhone,
+          email: effectiveEmail,
+          goal: goal || 'Hipertrofia',
+          experience_level: experience_level || 'iniciante',
+          weekly_frequency: Number(weekly_frequency) || 3,
+          restrictions: restrictions || null,
+          status: 'active'
+        },
+        message: 'Aluno cadastrado com sucesso no ZemdaPersonal'
+      });
+    } catch (err: any) {
+      console.error('[PersonalController.createStudent] Erro:', err);
+      res.status(500).json({ error: 'Erro ao cadastrar aluno no ZemdaPersonal' });
+    }
+  }
+
+  static async updateStudent(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const { id } = req.params;
+      const {
+        name, fullName, phone, email, birth_date, birthDate, cpf, gender, avatar_url, photo_url, active, status,
+        goal, experience_level, weekly_frequency, restrictions, notes, height, current_weight
+      } = req.body;
+
+      const patient = db.prepare('SELECT id FROM patients WHERE id = ? AND tenant_id = ?').get(id, tenantId);
+      if (!patient) {
+        res.status(404).json({ error: 'Aluno não encontrado' });
+        return;
+      }
+
+      const effectiveName = (name !== undefined || fullName !== undefined) ? String(name || fullName || '').trim() : null;
+      const photoProvided = avatar_url !== undefined || photo_url !== undefined;
+      const cleanPhoto = photoProvided ? (avatar_url || photo_url || null) : null;
+      const isActive = status !== undefined ? (status === 'active' ? 1 : 0) : (active !== undefined ? (active ? 1 : 0) : null);
+
+      const tx = db.transaction(() => {
+        db.prepare(`
+          UPDATE patients SET
+            full_name = COALESCE(?, full_name),
+            phone = COALESCE(?, phone),
+            email = COALESCE(?, email),
+            birth_date = COALESCE(?, birth_date),
+            cpf = COALESCE(?, cpf),
+            gender = COALESCE(?, gender),
+            photo_url = CASE WHEN ? = 1 THEN ? ELSE photo_url END,
+            active = COALESCE(?, active),
+            updated_at = datetime('now')
+          WHERE id = ? AND tenant_id = ?
+        `).run(
+          effectiveName, phone ? String(phone).trim() : null, email ? String(email).trim() : null,
+          birth_date || birthDate || null, cpf || null, gender || null,
+          photoProvided ? 1 : 0, cleanPhoto,
+          isActive, id, tenantId
+        );
+
+        if (req.body.anthropometric_sex !== undefined) db.prepare('UPDATE patients SET anthropometric_sex=? WHERE id=? AND tenant_id=?').run(referenceSex({anthropometric_sex:req.body.anthropometric_sex}).sex,id,tenantId);
+        const existingProfile = db.prepare('SELECT id FROM personal_student_profiles WHERE patient_id = ? AND tenant_id = ?').get(id, tenantId) as any;
+        if (existingProfile) {
+          db.prepare(`
+            UPDATE personal_student_profiles SET
+              goal = COALESCE(?, goal),
+              experience_level = COALESCE(?, experience_level),
+              weekly_frequency = COALESCE(?, weekly_frequency),
+              restrictions = COALESCE(?, restrictions),
+              notes = COALESCE(?, notes),
+              height = COALESCE(?, height),
+              current_weight = COALESCE(?, current_weight),
+              updated_at = datetime('now')
+            WHERE id = ?
+          `).run(
+            goal || null, experience_level || null, weekly_frequency ? Number(weekly_frequency) : null,
+            restrictions !== undefined ? restrictions : null, notes !== undefined ? notes : null,
+            height ? Number(height) : null, current_weight ? Number(current_weight) : null,
+            existingProfile.id
+          );
+        } else {
+          const pspId = 'psp-' + uuidv4().slice(0, 8);
+          db.prepare(`
+            INSERT INTO personal_student_profiles (
+              id, tenant_id, patient_id, goal, experience_level, weekly_frequency,
+              restrictions, notes, height, current_weight, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+          `).run(
+            pspId, tenantId, id, goal || 'Hipertrofia', experience_level || 'iniciante',
+            Number(weekly_frequency) || 3, restrictions || null, notes || null,
+            height ? Number(height) : null, current_weight ? Number(current_weight) : null
+          );
+        }
+      });
+
+      tx();
+
+      logAudit(req, 'UPDATE_STUDENT', 'patients', id, { name: effectiveName });
+
+      res.json({ success: true, message: 'Dados do aluno atualizados com sucesso' });
+    } catch (err: any) {
+      console.error('[PersonalController.updateStudent] Erro:', err);
+      res.status(500).json({ error: 'Erro ao atualizar dados do aluno' });
+    }
+  }
+
+  // ==========================================
+  // PROTOCOLOS & CLASSIFICAÇÃO DE TAV
+  // ==========================================
+  static async listTavProtocols(req: Request, res: Response): Promise<void> {
+    if (!authorizeAssessment(req,res,hasFullAssessmentAccess(req),'BODY_COMPOSITION')) return;
+    try {
+      if (!hasPostureAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const protocols = db.prepare(`
+        SELECT * FROM personal_tav_protocols
+        WHERE (tenant_id = ? OR tenant_id = 'global') AND is_active = 1
+        ORDER BY CASE WHEN tenant_id = ? THEN 0 ELSE 1 END, equipment ASC, protocol_name ASC
+      `).all(tenantId, tenantId) as any[];
+
+      for (const proto of protocols) {
+        proto.ranges = db.prepare(`
+          SELECT * FROM personal_tav_ranges
+          WHERE protocol_id = ?
+          ORDER BY min_value ASC
+        `).all(proto.id);
+      }
+
+      res.json({ protocols });
+    } catch (err: any) {
+      console.error('[PersonalController.listTavProtocols] Erro:', err);
+      res.status(500).json({ error: 'Erro ao listar protocolos de TAV' });
+    }
+  }
+
+  static async createTavProtocol(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const { method, equipment, protocol_name, unit, source_reference, ranges } = req.body;
+      if (!method || !equipment || !protocol_name) {
+        res.status(400).json({ error: 'Método, equipamento e nome do protocolo são obrigatórios' });
+        return;
+      }
+      const protoId = 'tav-proto-' + uuidv4().slice(0, 8);
+      db.prepare(`
+        INSERT INTO personal_tav_protocols (id, tenant_id, method, equipment, protocol_name, unit, source_reference, is_active, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 1, datetime('now'), datetime('now'))
+      `).run(protoId, tenantId, method, equipment, protocol_name, unit || 'nível', source_reference || null);
+
+      if (Array.isArray(ranges)) {
+        const insRange = db.prepare(`
+          INSERT INTO personal_tav_ranges (id, tenant_id, protocol_id, gender, min_age, max_age, min_value, max_value, classification, color_code, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        `);
+        for (const r of ranges) {
+          insRange.run(
+            'tav-range-' + uuidv4().slice(0, 8),
+            tenantId,
+            protoId,
+            r.gender || 'all',
+            r.min_age !== undefined && r.min_age !== null ? Number(r.min_age) : null,
+            r.max_age !== undefined && r.max_age !== null ? Number(r.max_age) : null,
+            Number(r.min_value) || 0,
+            Number(r.max_value) || 0,
+            r.classification || 'Classificação',
+            r.color_code || '#10B981'
+          );
+        }
+      }
+
+      res.status(201).json({ id: protoId, message: 'Protocolo de TAV criado com sucesso' });
+    } catch (err: any) {
+      console.error('[PersonalController.createTavProtocol] Erro:', err);
+      res.status(500).json({ error: 'Erro ao criar protocolo de TAV' });
+    }
+  }
+
+  static async updateTavProtocol(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const { id } = req.params;
+      const { method, equipment, protocol_name, unit, source_reference, is_active, ranges } = req.body;
+
+      const existing = db.prepare('SELECT id, tenant_id FROM personal_tav_protocols WHERE id = ?').get(id) as any;
+      if (!existing) {
+        res.status(404).json({ error: 'Protocolo TAV não encontrado' });
+        return;
+      }
+      if (existing.tenant_id === 'global' && req.user!.role !== 'superadmin') {
+        res.status(403).json({ error: 'Protocolos de fábrica do sistema não podem ser modificados diretamente' });
+        return;
+      }
+
+      db.prepare(`
+        UPDATE personal_tav_protocols
+        SET method = COALESCE(?, method),
+            equipment = COALESCE(?, equipment),
+            protocol_name = COALESCE(?, protocol_name),
+            unit = COALESCE(?, unit),
+            source_reference = COALESCE(?, source_reference),
+            is_active = COALESCE(?, is_active),
+            updated_at = datetime('now')
+        WHERE id = ? AND tenant_id = ?
+      `).run(method, equipment, protocol_name, unit, source_reference, is_active !== undefined ? (is_active ? 1 : 0) : null, id, tenantId);
+
+      if (Array.isArray(ranges)) {
+        db.prepare('DELETE FROM personal_tav_ranges WHERE protocol_id = ?').run(id);
+        const insRange = db.prepare(`
+          INSERT INTO personal_tav_ranges (id, tenant_id, protocol_id, gender, min_age, max_age, min_value, max_value, classification, color_code, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        `);
+        for (const r of ranges) {
+          insRange.run(
+            'tav-range-' + uuidv4().slice(0, 8),
+            tenantId,
+            id,
+            r.gender || 'all',
+            r.min_age !== undefined && r.min_age !== null ? Number(r.min_age) : null,
+            r.max_age !== undefined && r.max_age !== null ? Number(r.max_age) : null,
+            Number(r.min_value) || 0,
+            Number(r.max_value) || 0,
+            r.classification || 'Classificação',
+            r.color_code || '#10B981'
+          );
+        }
+      }
+
+      res.json({ message: 'Protocolo de TAV atualizado com sucesso' });
+    } catch (err: any) {
+      console.error('[PersonalController.updateTavProtocol] Erro:', err);
+      res.status(500).json({ error: 'Erro ao atualizar protocolo de TAV' });
+    }
+  }
+
+  static async deleteTavProtocol(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const { id } = req.params;
+
+      const existing = db.prepare('SELECT id, tenant_id FROM personal_tav_protocols WHERE id = ?').get(id) as any;
+      if (!existing) {
+        res.status(404).json({ error: 'Protocolo TAV não encontrado' });
+        return;
+      }
+      if (existing.tenant_id === 'global') {
+        res.status(403).json({ error: 'Protocolos de fábrica não podem ser excluídos' });
+        return;
+      }
+
+      db.prepare('DELETE FROM personal_tav_ranges WHERE protocol_id = ?').run(id);
+      db.prepare('DELETE FROM personal_tav_protocols WHERE id = ? AND tenant_id = ?').run(id, tenantId);
+
+      res.json({ message: 'Protocolo TAV excluído com sucesso' });
+    } catch (err: any) {
+      console.error('[PersonalController.deleteTavProtocol] Erro:', err);
+      res.status(500).json({ error: 'Erro ao excluir protocolo TAV' });
+    }
+  }
+
+  static async classifyTav(req: Request, res: Response): Promise<void> {
+    if (!authorizeAssessment(req,res,hasFullAssessmentAccess(req),'BODY_COMPOSITION')) return;
+    try {
+      if (!hasPostureAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const { protocol_id, method, equipment, value, gender, age } = req.body;
+      const result = resolveTavClassification(
+        tenantId,
+        protocol_id,
+        method,
+        equipment,
+        value !== undefined && value !== null && value !== '' ? Number(value) : null,
+        gender,
+        age !== undefined && age !== null ? Number(age) : undefined
+      );
+      res.json(result);
+    } catch (err: any) {
+      console.error('[PersonalController.classifyTav] Erro:', err);
+      res.status(500).json({ error: 'Erro ao classificar TAV' });
+    }
+  }
+
+  // ==========================================
+  // AVALIAÇÕES FÍSICAS & COMPOSIÇÃO CORPORAL
+  // ==========================================
+  static async listAssessments(req: Request, res: Response): Promise<void> {
+    if (!authorizeAssessment(req,res,hasFullAssessmentAccess(req))) return;
+    try {
+      if (!hasPostureAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const { studentId } = req.params;
+
+      const assessments = db.prepare(`
+        SELECT a.*,
+               u.name as professional_name,
+               (SELECT COUNT(*) FROM personal_assessment_photos p WHERE p.assessment_id = a.id) as photos_count
+        FROM personal_assessments a
+        LEFT JOIN professionals pr ON pr.id = a.professional_id
+        LEFT JOIN users u ON u.id = pr.user_id
+        WHERE a.patient_id = ? AND a.tenant_id = ?
+        ORDER BY a.assessment_date DESC
+      `).all(studentId, tenantId) as any[];
+
+      res.json({ assessments: assessments.map((a: any) => { const { posture_json, ...rest } = a; return { ...rest, has_posture: Boolean(posture_json), posture_summary: posture_json ? postureSummary(a) : null }; }) });
+    } catch (err: any) {
+      console.error('[PersonalController.listAssessments] Erro:', err);
+      res.status(500).json({ error: 'Erro ao listar avaliações físicas' });
+    }
+  }
+
+  static async getAssessment(req: Request, res: Response): Promise<void> {
+    if (!authorizeAssessment(req,res,hasFullAssessmentAccess(req))) return;
+    try {
+      if (!hasPostureAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const { id } = req.params;
+
+      const assessment = db.prepare(`
+        SELECT a.*, u.name as professional_name
+        FROM personal_assessments a
+        LEFT JOIN professionals pr ON pr.id = a.professional_id
+        LEFT JOIN users u ON u.id = pr.user_id
+        WHERE a.id = ? AND a.tenant_id = ?
+      `).get(id, tenantId) as any;
+
+      if (!assessment) {
+        res.status(404).json({ error: 'Avaliação física não encontrada' });
+        return;
+      }
+
+      const photos = db.prepare(`
+        SELECT * FROM personal_assessment_photos
+        WHERE assessment_id = ? AND tenant_id = ?
+        ORDER BY photo_type ASC
+      `).all(id, tenantId) as any[];
+
+      res.json({ assessment, photos });
+    } catch (err: any) {
+      console.error('[PersonalController.getAssessment] Erro:', err);
+      res.status(500).json({ error: 'Erro ao obter avaliação física' });
+    }
+  }
+
+  static async previewAssessment(req: Request,res: Response): Promise<void> {
+    if (!authorizeAssessment(req,res,hasFullAssessmentAccess(req))) return;
+    if(!hasPostureAccess(req)) {res.status(403).json({error:'Acesso não autorizado'});return;}
+    const patient=db.prepare('SELECT * FROM patients WHERE id=? AND tenant_id=?').get(req.body.patient_id,req.tenantId);
+    if(!patient){res.status(404).json({error:'Aluno não encontrado'});return;}
+    res.json(calculateAssessment({...req.body,assessment_date:req.body.assessment_date || new Date().toISOString().slice(0,10)},patient,assessmentTavContext(req.body,req.tenantId!)));
+  }
+  static async assessmentReportData(req: Request,res: Response): Promise<void> {
+    if (!authorizeAssessment(req,res,hasFullAssessmentAccess(req))) return;
+    try {
+      if(!hasPostureAccess(req)){res.status(403).json({error:'Acesso não autorizado'});return;}
+      const tenant=req.tenantId;
+      const original=db.prepare('SELECT * FROM personal_assessments WHERE id=? AND tenant_id=?').get(req.params.id,tenant) as any;
+      if(!original){res.status(404).json({error:'Avaliação não encontrada'});return;}
+      const student=db.prepare('SELECT p.*,s.goal FROM patients p LEFT JOIN personal_student_profiles s ON s.patient_id=p.id AND s.tenant_id=p.tenant_id WHERE p.id=? AND p.tenant_id=?').get(original.patient_id,tenant);
+      const history=db.prepare('SELECT * FROM personal_assessments WHERE patient_id=? AND tenant_id=? ORDER BY assessment_date,created_at,id').all(original.patient_id,tenant).map((a:any)=>normalizeLegacyAssessmentForReport(a,student).assessment);
+      const normalized=normalizeLegacyAssessmentForReport(original,student);
+      const index=history.findIndex((a:any)=>a.id===original.id);
+      const professional=db.prepare('SELECT id,name,registration_type,registration_number FROM professionals WHERE id=? AND tenant_id=?').get(original.professional_id,tenant) || db.prepare('SELECT id,name,registration_type,registration_number FROM users WHERE id=? AND tenant_id=?').get(original.professional_id,tenant);
+      const clinic=db.prepare('SELECT id,name,trade_name FROM tenants WHERE id=?').get(tenant);
+      const photos=db.prepare('SELECT * FROM personal_assessment_photos WHERE assessment_id=? AND tenant_id=?').all(original.id,tenant);
+      res.json({original,...normalized,student,professional,clinic,photos,previous_assessment:index>0?history[index-1]:null,evolution_history:history,references:normalized.derived.references});
+    }catch(err){console.error('[Personal report]',err);res.status(500).json({error:'Erro ao carregar relatório'});}
+  }
+
+  static async createAssessment(req: Request, res: Response): Promise<void> {
+    if (!authorizeAssessment(req,res,hasFullAssessmentAccess(req))) return;
+    try {
+      if (!hasPostureAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const professionalId = getProfessionalId(req);
+      const b = normalizeMeasuredTavInput(req.body);
+      const postureJson = b.posture === undefined ? undefined : validatePosture(b.posture);
+
+      const patient = db.prepare('SELECT id, birth_date, gender, anthropometric_sex FROM patients WHERE id = ? AND tenant_id = ?').get(b.patient_id, tenantId) as any;
+      if (!patient) {
+        res.status(404).json({ error: 'Aluno não encontrado' });
+        return;
+      }
+
+      const calculation = calculateAssessment({...b, calculation_version:undefined, anthropometric_sex_at_assessment:undefined,age_at_assessment:undefined,assessment_date:b.assessment_date || new Date().toISOString().slice(0,10)}, patient,assessmentTavContext(b,tenantId));
+      const cv = calculation.values;
+      Object.assign(b, Object.fromEntries(Object.entries(cv).filter(([k])=>k.startsWith('fold_'))));
+      const {bmi,whr,whtr} = cv;
+      const weight = numberOrNull(b.weight), height = numberOrNull(b.height);
+      const bodyFatPct=cv.body_fat_percentage, fatMassKg=cv.fat_mass_kg, leanMassKg=cv.lean_mass_kg, muscleMassKg=cv.muscle_mass_kg;
+      const protocol=b.skinfolds_protocol || b.protocol || 'pollock_7';
+      const [sSub,sTri,sChe,sAxi,sSup,sAbd,sThi,sCal]=['subscapular','triceps','chest','axillary','suprailiac','abdominal','thigh','calf'].map(f=>cv['fold_'+f]);
+      const tavVal=numberOrNull(b.tav_value,true);
+      let tavProtocolId=b.tav_protocol_id || null, tavUnit=calculation.classifications.tav.unit, tavClassification=cv.tav_classification;
+      const numericColumns=(db.prepare('PRAGMA table_info(personal_assessments)').all() as any[]).filter(c=>['REAL','INTEGER'].includes(c.type)).map(c=>c.name);
+      for(const key of numericColumns) if(key in b && key!=='flexibility_wells_cm') b[key]=numberOrNull(b[key],['tav_value','tav_measured_value','glucose_is_fasting','body_fat_percentage','flexibility_wells_cm'].includes(key));
+      // JSON stringified fields
+      const strengthTestsJson = Array.isArray(b.strength_tests) ? JSON.stringify(b.strength_tests) : (b.strength_tests_json || null);
+      const muscularEnduranceTestsJson = Array.isArray(b.muscular_endurance_tests) ? JSON.stringify(b.muscular_endurance_tests) : (b.muscular_endurance_tests_json || null);
+      const flexibilityTestsJson = Array.isArray(b.flexibility_tests) ? JSON.stringify(b.flexibility_tests) : (b.flexibility_tests_json || null);
+      const rawCompositionJson = typeof b.raw_composition_data === 'object' ? JSON.stringify(b.raw_composition_data) : (b.raw_composition_data_json || null);
+
+      validatePosturePhotoAccess(db, tenantId, b.patient_id, postureJson, b.photos);
+
+      const sourceModule = b.source_module || (isPhysiotherapistOrClinicManager(req) && !hasPersonalAccess(req) ? 'ZemdaFisio' : 'ZemdaPersonal');
+      const assessmentId = 'pass-' + uuidv4().slice(0, 8);
+      const assessmentDate = b.assessment_date || new Date().toISOString().split('T')[0];
+
+      db.transaction(()=>{
+      db.prepare(`
+        INSERT INTO personal_assessments (
+          id, tenant_id, patient_id, professional_id, assessment_date,
+          weight, height, bmi, whr, whtr,
+          neck_cm, shoulder_cm, chest_cm,
+          arm_right_relaxed, arm_left_relaxed, arm_right_flexed, arm_left_flexed,
+          forearm_right, forearm_left, wrist_right, wrist_left,
+          waist_cm, abdomen_cm, hip_cm,
+          thigh_right_prox, thigh_left_prox, thigh_right_med, thigh_left_med,
+          thigh_right_dist, thigh_left_dist,
+          calf_right, calf_left,
+          fold_subscapular, fold_triceps, fold_biceps, fold_chest, fold_axillary,
+          fold_suprailiac, fold_abdominal, fold_thigh, fold_calf,
+          skinfolds_protocol,
+          body_fat_percentage, fat_mass_kg, lean_mass_kg, muscle_mass_kg,
+          composition_method, body_water_liters, bmr_kcal, raw_composition_data_json,
+          tav_value, tav_unit, tav_method, tav_equipment, tav_protocol_id, tav_classification, tav_notes,
+          resting_heart_rate_bpm, blood_pressure_systolic, blood_pressure_diastolic,
+          vo2_max, vo2_method_type, vo2_protocol,
+          strength_tests_json, muscular_endurance_tests_json,
+          flexibility_wells_cm, flexibility_tests_json,
+          protocol, source_module, notes
+        ) VALUES (
+          ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?,
+          ?, ?, ?,
+          ?, ?, ?, ?,
+          ?, ?, ?, ?,
+          ?, ?, ?,
+          ?, ?, ?, ?,
+          ?, ?,
+          ?, ?,
+          ?, ?, ?, ?, ?,
+          ?, ?, ?, ?,
+          ?,
+          ?, ?, ?, ?,
+          ?, ?, ?, ?,
+          ?, ?, ?, ?, ?, ?, ?,
+          ?, ?, ?,
+          ?, ?, ?,
+          ?, ?,
+          ?, ?,
+          ?, ?, ?
+        )
+      `).run(
+        assessmentId, tenantId, b.patient_id, professionalId, assessmentDate,
+        weight, height, bmi, whr, whtr,
+        b.neck_cm || null, b.shoulder_cm || null, b.chest_cm || null,
+        b.arm_right_relaxed || null, b.arm_left_relaxed || null, b.arm_right_flexed || null, b.arm_left_flexed || null,
+        b.forearm_right || null, b.forearm_left || null, b.wrist_right || null, b.wrist_left || null,
+        b.waist_cm || null, b.abdomen_cm || null, b.hip_cm || null,
+        b.thigh_right_prox || null, b.thigh_left_prox || null, b.thigh_right_med || null, b.thigh_left_med || null,
+        b.thigh_right_dist || null, b.thigh_left_dist || null,
+        b.calf_right || null, b.calf_left || null,
+        sSub || null, sTri || null, Number(b.fold_biceps) || null, sChe || null, sAxi || null,
+        sSup || null, sAbd || null, sThi || null, sCal || null,
+        b.skinfolds_protocol || null,
+        bodyFatPct, fatMassKg, leanMassKg, muscleMassKg,
+        b.composition_method || 'dobras_cutaneas', b.body_water_liters ? Number(b.body_water_liters) : null, cv.bmr_kcal, rawCompositionJson,
+        tavVal, tavUnit, b.tav_method || null, b.tav_equipment || null, tavProtocolId, tavClassification, b.tav_notes || null,
+        b.resting_heart_rate_bpm ? Number(b.resting_heart_rate_bpm) : null, b.blood_pressure_systolic ? Number(b.blood_pressure_systolic) : null, b.blood_pressure_diastolic ? Number(b.blood_pressure_diastolic) : null,
+        b.vo2_max ? Number(b.vo2_max) : null, b.vo2_method_type || null, b.vo2_protocol || null,
+        strengthTestsJson, muscularEnduranceTestsJson,
+        b.flexibility_wells_cm ? Number(b.flexibility_wells_cm) : null, flexibilityTestsJson,
+        protocol, sourceModule, b.notes || null
+      );
+
+      const extra = Object.fromEntries(Object.keys(ASSESSMENT_COLUMNS).map(k=>[k, cv[k] !== undefined ? cv[k] : b[k] ?? null]));
+      db.prepare(`UPDATE personal_assessments SET ${Object.keys(extra).map(k=>k+' = ?').join(', ')} WHERE id=? AND tenant_id=?`).run(...Object.values(extra),assessmentId,tenantId);
+
+      // Atualiza peso atual e altura no perfil do aluno
+      if (hasPersonalAccess(req)) {
+      db.prepare(`
+        INSERT INTO personal_student_profiles (id, tenant_id, patient_id, height, current_weight, updated_at)
+        VALUES (?, ?, ?, ?, ?, datetime('now'))
+        ON CONFLICT(tenant_id, patient_id) DO UPDATE SET
+          height = COALESCE(excluded.height, personal_student_profiles.height),
+          current_weight = COALESCE(excluded.current_weight, personal_student_profiles.current_weight),
+          updated_at = datetime('now')
+      `).run('psp-' + uuidv4().slice(0, 8), tenantId, b.patient_id, height || null, weight || null);
+      }
+
+      // Only the permanent R2 attachment ID is persisted. The frontend requests
+      // a fresh signed URL from /v1/files/:id/url when it needs to render it.
+      if (Array.isArray(b.photos)) {
+        saveAssessmentPhotos(assessmentId, b.patient_id, tenantId, assessmentDate, b.photos);
+      }
+
+      db.prepare('UPDATE personal_assessments SET appointment_id=?,profession_id=?,assessment_type=?,mobility_json=?,pain_json=?,functional_json=?,gait_json=? WHERE id=? AND tenant_id=?').run(b.appointment_id || null,b.profession_id || null,b.assessment_type || 'clinical',b.mobility_json || null,b.pain_json || null,b.functional_json || null,b.gait_json || null,assessmentId,tenantId);
+      if (postureJson !== undefined) db.prepare('UPDATE personal_assessments SET posture_json = ? WHERE id = ? AND tenant_id = ?').run(postureJson, assessmentId, tenantId);
+      })();
+
+      // Sincroniza com o prontuário universal (records) de forma idempotente
+      try {
+        const evoLines = [
+          'Avaliação Física e Composição Corporal (ZemdaPersonal):',
+          weight ? `Peso: ${weight} kg` : '',
+          height ? `Estatura: ${height} cm` : '',
+          bmi ? `IMC: ${bmi}` : '',
+          bodyFatPct ? `% Gordura: ${bodyFatPct}%` : '',
+          leanMassKg ? `Massa Magra: ${leanMassKg} kg` : '',
+          fatMassKg ? `Massa Gorda: ${fatMassKg} kg` : '',
+          muscleMassKg ? `Massa Muscular: ${muscleMassKg} kg` : '',
+          tavVal ? `TAV: ${tavVal} (${tavClassification || 'Sem classificação'})` : '',
+          b.notes ? `Observações: ${b.notes}` : ''
+        ].filter(Boolean);
+
+        ClinicalRecordService.recordClinicalEvent({
+          tenantId,
+          patientId: b.patient_id,
+          professionalId,
+          moduleType: sourceModule,
+          appointmentId: b.appointment_id || null,
+          sourceId: assessmentId,
+          sourceType: 'personal_assessment',
+          title: 'Avaliação Física e Cineantropometria',
+          procedureName: 'Avaliação Cineantropométrica',
+          sessionDate: assessmentDate,
+          clinicalEvolution: evoLines.join('\n'),
+          technicalNotes: b.notes || null,
+          moduleData: {
+            assessmentId,
+            weight,
+            height,
+            bmi,
+            bodyFatPct,
+            leanMassKg,
+            fatMassKg,
+            muscleMassKg,
+            whr,
+            whtr,
+            tavVal,
+            tavClassification,
+            notes: b.notes
+          },
+          createdBy: req.user?.name || 'Personal Trainer'
+        });
+      } catch (recErr) {
+        console.warn('Aviso ao registrar avaliação física no prontuário:', recErr);
+      }
+
+
+      logAudit(req, 'CREATE_ASSESSMENT', 'personal_assessments', assessmentId, { patient_id: b.patient_id, bodyFatPct, weight, tavVal });
+      res.status(201).json({
+        id: assessmentId,
+        assessment: db.prepare('SELECT * FROM personal_assessments WHERE id=? AND tenant_id=?').get(assessmentId,tenantId),
+        bmi,
+        whr,
+        whtr,
+        body_fat_percentage: bodyFatPct,
+        fat_mass_kg: fatMassKg,
+        lean_mass_kg: leanMassKg,
+        muscle_mass_kg: muscleMassKg,
+        tav_value: tavVal,
+        tav_classification: tavClassification,
+        tav_unit: tavUnit,
+        message: 'Avaliação física salva com sucesso'
+      });
+    } catch (err: any) {
+      console.error('[PersonalController.createAssessment] Erro:', err);
+      res.status(err?.message === 'Dados posturais inválidos' ? 400 : 500).json({ error: 'Erro ao criar avaliação física' });
+    }
+  }
+
+  static async updateAssessment(req: Request, res: Response): Promise<void> {
+    if (!authorizeAssessment(req,res,hasFullAssessmentAccess(req))) return;
+    try {
+      if (!hasPostureAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const { id } = req.params;
+      const b = normalizeMeasuredTavInput(req.body);
+      const postureJson = b.posture === undefined ? undefined : validatePosture(b.posture);
+
+      const existing = db.prepare('SELECT * FROM personal_assessments WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
+      if (!existing) {
+        res.status(404).json({ error: 'Avaliação física não encontrada' });
+        return;
+      }
+
+      validatePosturePhotoAccess(db, tenantId, existing.patient_id, postureJson, b.photos);
+
+      const columns = new Set((db.prepare('PRAGMA table_info(personal_assessments)').all() as any[]).map(c=>c.name));
+      const forbidden=new Set(['id','patient_id','tenant_id','professional_id','created_at','updated_at','calculation_version','calculation_metadata_json','profession_id','appointment_id','source_module','anthropometric_sex_at_assessment','age_at_assessment','tav_estimated_value','tav_estimated_unit','tav_estimation_protocol','tav_estimation_reference','tav_estimation_classification']);
+      const edits:Record<string,any>={};
+      for(const [k,v] of Object.entries(b)) if(columns.has(k) && !forbidden.has(k) && k !== 'posture_json') edits[k]=v;
+      for(const [key,jsonKey] of [['strength_tests','strength_tests_json'],['muscular_endurance_tests','muscular_endurance_tests_json'],['flexibility_tests','flexibility_tests_json'],['raw_composition_data','raw_composition_data_json']]) if(b[key] !== undefined) edits[jsonKey]=JSON.stringify(b[key]);
+      for(const c of db.prepare('PRAGMA table_info(personal_assessments)').all() as any[]) if(c.name in edits && ['REAL','INTEGER'].includes(c.type) && c.name!=='flexibility_wells_cm') edits[c.name]=numberOrNull(edits[c.name],['tav_value','tav_measured_value','glucose_is_fasting','body_fat_percentage'].includes(c.name));
+      for(const key of ['bmi','whr','whtr','fat_mass_kg','lean_mass_kg','vai_value','somatotype_endomorphy','somatotype_mesomorphy','somatotype_ectomorphy','somatochart_x','somatochart_y','skinfold_sum','skinfold_central_sum','skinfold_peripheral_sum']) delete edits[key];
+      const calculationInputs=['neck_cm','tav_value','tav_unit','tav_method','tav_equipment','tav_protocol_id','weight','height','protocol','skinfolds_protocol','composition_method','skinfold_measurements_json','waist_cm','hip_cm','triglycerides_mg_dl','hdl_mg_dl','muscle_mass_kg','body_fat_percentage'];
+      if(existing.calculation_version && (calculationInputs.some(k=>k in edits) || Object.keys(edits).some(k=>k.startsWith('fold_')))) {
+        const patient=db.prepare('SELECT * FROM patients WHERE id=? AND tenant_id=?').get(existing.patient_id,tenantId);
+        const merged={...existing,...edits};
+        if(!('bmr_kcal' in edits) && existing.bmr_method==='mifflin_st_jeor') merged.bmr_kcal=null;
+        const calculated=calculateAssessment(merged,patient,assessmentTavContext(merged,tenantId));
+        // A new equation must not migrate old predictions or reinterpret them on a manual/VAI edit.
+        if(existing.tav_estimation_protocol!==PREDICTED_TAV_PROTOCOL.id || !('waist_cm' in edits)) {
+          for(const key of ['tav_estimated_value','tav_estimated_unit','tav_estimation_protocol','tav_estimation_reference','tav_estimation_classification']) calculated.values[key]=existing[key];
+          let saved:any={};try {saved=JSON.parse(existing.calculation_metadata_json || '{}');}catch {}
+          if(saved.visceralAdiposity?.predictedTav) calculated.visceralAdiposity.predictedTav=saved.visceralAdiposity.predictedTav;
+          if(saved.classifications?.predictedTav) calculated.classifications.predictedTav=saved.classifications.predictedTav;
+          calculated.values.calculation_metadata_json=JSON.stringify({...calculated.metadata,classifications:calculated.classifications,visceralAdiposity:calculated.visceralAdiposity});
+        }
+        Object.assign(edits,Object.fromEntries(Object.entries(calculated.values).filter(([k])=>columns.has(k) && (!fieldCapability(k) || ((req as any).clinicalAssessmentCapabilities || []).includes(fieldCapability(k))))));
+      }
+      if(!existing.calculation_version) for(const k of ['body_fat_percentage','fat_mass_kg','lean_mass_kg','muscle_mass_kg','bmr_kcal','bmi','whr','whtr']) if(edits[k]===null) delete edits[k];
+      db.exec('SAVEPOINT personal_assessment_update');
+      try {
+        if(Object.keys(edits).length) db.prepare(`UPDATE personal_assessments SET ${Object.keys(edits).map(k=>k+'=?').join(',')},updated_at=datetime('now') WHERE id=? AND tenant_id=?`).run(...Object.values(edits),id,tenantId);
+        if (Array.isArray(b.photos)) {
+          // The editor submits its full photo selection, including an empty selection.
+          // Omitted photos leave the saved selection unchanged.
+          const types = b.photos.map((photo: any) => photo.photo_type);
+          if (types.length) {
+            db.prepare(`DELETE FROM personal_assessment_photos WHERE assessment_id=? AND tenant_id=? AND photo_type NOT IN (${types.map(() => '?').join(',')})`).run(id,tenantId,...types);
+          } else {
+            db.prepare('DELETE FROM personal_assessment_photos WHERE assessment_id=? AND tenant_id=?').run(id,tenantId);
+          }
+          const assessmentDate = typeof b.assessment_date === 'string' ? b.assessment_date : existing.assessment_date;
+          saveAssessmentPhotos(String(id), String(existing.patient_id), tenantId, assessmentDate, b.photos);
+        }
+        if (postureJson !== undefined) db.prepare(`UPDATE personal_assessments SET posture_json = ?, assessment_date = COALESCE(?, assessment_date), updated_at = datetime('now') WHERE id = ? AND tenant_id = ?`).run(postureJson, typeof b.assessment_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(b.assessment_date) ? b.assessment_date : null, id, tenantId);
+        db.exec('RELEASE personal_assessment_update');
+      } catch (error) {
+        db.exec('ROLLBACK TO personal_assessment_update');
+        db.exec('RELEASE personal_assessment_update');
+        throw error;
+      }
+
+      logAudit(req, 'UPDATE_ASSESSMENT', 'personal_assessments', id, { photosCount: Array.isArray(b.photos) ? b.photos.length : undefined });
+      
+      const updatedPhotos = db.prepare('SELECT * FROM personal_assessment_photos WHERE assessment_id = ? AND tenant_id = ? ORDER BY photo_type ASC').all(id, tenantId);
+      const updatedAssessment = db.prepare('SELECT * FROM personal_assessments WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
+
+      if (updatedAssessment) {
+        try {
+          const evoLines = [
+            'Avaliação Física e Composição Corporal (ZemdaPersonal):',
+            updatedAssessment.weight ? `Peso: ${updatedAssessment.weight} kg` : '',
+            updatedAssessment.height ? `Estatura: ${updatedAssessment.height} cm` : '',
+            updatedAssessment.bmi ? `IMC: ${updatedAssessment.bmi}` : '',
+            updatedAssessment.body_fat_percentage ? `% Gordura: ${updatedAssessment.body_fat_percentage}%` : '',
+            updatedAssessment.notes ? `Observações: ${updatedAssessment.notes}` : ''
+          ].filter(Boolean);
+
+          ClinicalRecordService.recordClinicalEvent({
+            tenantId,
+            patientId: updatedAssessment.patient_id,
+            professionalId: updatedAssessment.professional_id || null,
+            moduleType: updatedAssessment.source_module || 'ZemdaPersonal',
+            appointmentId: updatedAssessment.appointment_id || null,
+            sourceId: String(id),
+            sourceType: 'personal_assessment',
+            title: 'Avaliação Física e Cineantropometria',
+            procedureName: 'Avaliação Cineantropométrica',
+            sessionDate: updatedAssessment.assessment_date,
+            clinicalEvolution: evoLines.join('\n'),
+            technicalNotes: updatedAssessment.notes || null,
+            moduleData: updatedAssessment,
+            createdBy: req.user?.name || 'Personal Trainer'
+          });
+        } catch (_) {}
+      }
+
+      res.json({
+        message: 'Avaliação física atualizada com sucesso',
+        assessment: updatedAssessment,
+        photos: updatedPhotos
+      });
+    } catch (err: any) {
+      console.error('[PersonalController.updateAssessment] Erro:', err);
+      res.status(err?.message === 'Dados posturais inválidos' ? 400 : 500).json({ error: 'Erro ao atualizar avaliação física' });
+    }
+  }
+
+  static async deleteAssessment(req: Request, res: Response): Promise<void> {
+    if (!authorizeAssessment(req,res,hasFullAssessmentAccess(req))) return;
+    try {
+      if (!hasPostureAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const { id } = req.params;
+
+      db.prepare('DELETE FROM personal_assessment_photos WHERE assessment_id = ? AND tenant_id = ?').run(id, tenantId);
+      const result = db.prepare('DELETE FROM personal_assessments WHERE id = ? AND tenant_id = ?').run(id, tenantId);
+
+      if (result.changes === 0) {
+        res.status(404).json({ error: 'Avaliação não encontrada' });
+        return;
+      }
+
+      logAudit(req, 'DELETE_ASSESSMENT', 'personal_assessments', id);
+      res.json({ message: 'Avaliação excluída com sucesso' });
+    } catch (err: any) {
+      console.error('[PersonalController.deleteAssessment] Erro:', err);
+      res.status(500).json({ error: 'Erro ao excluir avaliação' });
+    }
+  }
+
+  static async compareAssessments(req: Request, res: Response): Promise<void> {
+    if (!authorizeAssessment(req,res,hasFullAssessmentAccess(req))) return;
+    try {
+      if (!hasPostureAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const { id, compareId } = req.params;
+
+      let current = db.prepare('SELECT * FROM personal_assessments WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
+      let previous = db.prepare('SELECT * FROM personal_assessments WHERE id = ? AND tenant_id = ?').get(compareId, tenantId) as any;
+
+      const postureMode = req.query.posture_baseline === '1';
+      const history = postureMode && current ? db.prepare("SELECT id, assessment_date, json_object('version', 1, 'observations', json_extract(posture_json, '$.observations')) AS posture_json FROM personal_assessments WHERE tenant_id = ? AND patient_id = ? AND posture_json IS NOT NULL ORDER BY assessment_date ASC, created_at ASC, id ASC").all(tenantId, current.patient_id) as any[] : [];
+      if (postureMode) previous = history.length ? db.prepare('SELECT * FROM personal_assessments WHERE id = ? AND tenant_id = ?').get(history[0].id, tenantId) : null;
+
+      if (!current || !previous) {
+        res.status(404).json({ error: 'Uma ou ambas as avaliações não foram encontradas' });
+        return;
+      }
+
+      if (current.patient_id !== previous.patient_id) { res.status(400).json({ error: 'Compare avaliações do mesmo aluno.' }); return; }
+      const currentPhotos = db.prepare('SELECT * FROM personal_assessment_photos WHERE assessment_id = ? AND tenant_id = ?').all(id, tenantId);
+      const previousPhotos = db.prepare('SELECT * FROM personal_assessment_photos WHERE assessment_id = ? AND tenant_id = ?').all(previous.id, tenantId);
+
+      const reportPatient=db.prepare('SELECT * FROM patients WHERE id=? AND tenant_id=?').get(current.patient_id,tenantId);
+      current=normalizeLegacyAssessmentForReport(current,reportPatient || {}).assessment;
+      previous=normalizeLegacyAssessmentForReport(previous,reportPatient || {}).assessment;
+      const buildItem = (label: string, field: string, unit: string = 'cm') => {
+        const curVal = current[field] !== null && current[field] !== undefined ? Number(current[field]) : null;
+        const prevVal = previous[field] !== null && previous[field] !== undefined ? Number(previous[field]) : null;
+        let diff: number | null = null;
+        let pctVariation: number | null = null;
+
+        const comparable=field==='tav_value' ? !!current.tav_unit && ['tav_method','tav_equipment','tav_unit','tav_protocol_id'].every(k=>(current[k] ?? null)===(previous[k] ?? null)) : field==='tav_estimated_value' ? !!current.tav_estimated_unit && !!current.tav_estimation_protocol && ['tav_estimated_unit','tav_estimation_protocol'].every(k=>current[k]===previous[k]) : true;
+        if (comparable && curVal !== null && prevVal !== null) {
+          diff = parseFloat((curVal - prevVal).toFixed(2));
+          if (prevVal !== 0) {
+            pctVariation = parseFloat(((diff / Math.abs(prevVal)) * 100).toFixed(2));
+          }
+        }
+
+        return {
+          field,
+          label,
+          unit,
+          previous: prevVal,
+          current: curVal,
+          diff,
+          comparable,
+          pct_variation: pctVariation
+        };
+      };
+
+      const metrics = [
+        buildItem('Peso Corporal', 'weight', 'kg'),
+        buildItem('Estatura', 'height', 'cm'),
+        buildItem('IMC', 'bmi', 'kg/m²'),
+        buildItem('RCQ (Cintura / Quadril)', 'whr', ''),
+        buildItem('RCE (Cintura / Estatura)', 'whtr', ''),
+        buildItem('% Gordura Corporal', 'body_fat_percentage', '%'),
+        buildItem('Massa Gorda', 'fat_mass_kg', 'kg'),
+        buildItem('Massa Magra', 'lean_mass_kg', 'kg'),
+        buildItem('Massa Muscular', 'muscle_mass_kg', 'kg'),
+        buildItem('Água Corporal Total', 'body_water_liters', 'L'),
+        buildItem('Taxa Metabólica Basal (TMB)', 'bmr_kcal', 'kcal'),
+        buildItem('VAI (índice indireto)', 'vai_value', ''),
+        buildItem('Somatório de dobras', 'skinfold_sum', 'mm'),
+        buildItem('TAV medido', 'tav_value', current.tav_unit || previous.tav_unit || ''),
+        buildItem('TAV estimado por equação preditiva', 'tav_estimated_value', current.tav_estimated_unit || previous.tav_estimated_unit || ''),
+        // Circunferências
+        buildItem('Pescoço', 'neck_cm', 'cm'),
+        buildItem('Ombro', 'shoulder_cm', 'cm'),
+        buildItem('Tórax', 'chest_cm', 'cm'),
+        buildItem('Cintura', 'waist_cm', 'cm'),
+        buildItem('Abdômen', 'abdomen_cm', 'cm'),
+        buildItem('Quadril', 'hip_cm', 'cm'),
+        buildItem('Braço Relaxado Dir.', 'arm_right_relaxed', 'cm'),
+        buildItem('Braço Relaxado Esq.', 'arm_left_relaxed', 'cm'),
+        buildItem('Braço Contraído Dir.', 'arm_right_flexed', 'cm'),
+        buildItem('Braço Contraído Esq.', 'arm_left_flexed', 'cm'),
+        buildItem('Antebraço Dir.', 'forearm_right', 'cm'),
+        buildItem('Antebraço Esq.', 'forearm_left', 'cm'),
+        buildItem('Punho Dir.', 'wrist_right', 'cm'),
+        buildItem('Punho Esq.', 'wrist_left', 'cm'),
+        buildItem('Coxa Proximal Dir.', 'thigh_right_prox', 'cm'),
+        buildItem('Coxa Proximal Esq.', 'thigh_left_prox', 'cm'),
+        buildItem('Coxa Medial Dir.', 'thigh_right_med', 'cm'),
+        buildItem('Coxa Medial Esq.', 'thigh_left_med', 'cm'),
+        buildItem('Coxa Distal Dir.', 'thigh_right_dist', 'cm'),
+        buildItem('Coxa Distal Esq.', 'thigh_left_dist', 'cm'),
+        buildItem('Panturrilha Dir.', 'calf_right', 'cm'),
+        buildItem('Panturrilha Esq.', 'calf_left', 'cm'),
+        // Dobras Cutâneas
+        buildItem('Dobra Subescapular', 'fold_subscapular', 'mm'),
+        buildItem('Dobra Tricipital', 'fold_triceps', 'mm'),
+        buildItem('Dobra Bicipital', 'fold_biceps', 'mm'),
+        buildItem('Dobra Peitoral', 'fold_chest', 'mm'),
+        buildItem('Dobra Axilar Média', 'fold_axillary', 'mm'),
+        buildItem('Dobra Suprailíaca', 'fold_suprailiac', 'mm'),
+        buildItem('Dobra da crista ilíaca', 'fold_iliac_crest', 'mm'),
+        buildItem('Dobra supraespinale', 'fold_supraspinale', 'mm'),
+        buildItem('Dobra Abdominal', 'fold_abdominal', 'mm'),
+        buildItem('Dobra da Coxa', 'fold_thigh', 'mm'),
+        buildItem('Dobra da Panturrilha', 'fold_calf', 'mm'),
+        // Cardiovascular & Testes
+        buildItem('FC Repouso', 'resting_heart_rate_bpm', 'bpm'),
+        buildItem('PA Sistólica', 'blood_pressure_systolic', 'mmHg'),
+        buildItem('PA Diastólica', 'blood_pressure_diastolic', 'mmHg'),
+        buildItem('VO₂ Máx', 'vo2_max', 'ml/kg/min'),
+        buildItem('Flexibilidade (Banco de Wells)', 'flexibility_wells_cm', 'cm')
+      ];
+
+      res.json({
+        previous_assessment: previous,
+        current_assessment: current,
+        previous_photos: previousPhotos,
+        current_photos: currentPhotos,
+        metrics,
+        posture_history: postureMode ? history.map(postureSummary) : undefined,
+        tav_comparison: {
+          comparable: metrics.find(m=>m.field==='tav_value')?.comparable,
+          previous: {
+            value: previous.tav_value,
+            unit: previous.tav_unit,
+            method: previous.tav_method,
+            equipment: previous.tav_equipment,
+            classification: previous.tav_classification
+          },
+          current: {
+            value: current.tav_value,
+            unit: current.tav_unit,
+            method: current.tav_method,
+            equipment: current.tav_equipment,
+            classification: current.tav_classification
+          }
+        }
+      });
+    } catch (err: any) {
+      console.error('[PersonalController.compareAssessments] Erro:', err);
+      res.status(500).json({ error: 'Erro ao comparar avaliações físicas' });
+    }
+  }
+
+  static async getEvolutionData(req: Request, res: Response): Promise<void> {
+    if (!authorizeAssessment(req,res,hasFullAssessmentAccess(req))) return;
+    try {
+      if (!hasPostureAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const { studentId } = req.params;
+
+      const patient=db.prepare('SELECT * FROM patients WHERE id=? AND tenant_id=?').get(studentId,tenantId);
+      const history=db.prepare('SELECT * FROM personal_assessments WHERE patient_id=? AND tenant_id=? ORDER BY assessment_date,created_at,id').all(studentId,tenantId).map((a:any)=>normalizeLegacyAssessmentForReport(a,patient || {}).assessment);
+
+      res.json({ history });
+    } catch (err: any) {
+      console.error('[PersonalController.getEvolutionData] Erro:', err);
+      res.status(500).json({ error: 'Erro ao obter dados de evolução' });
+    }
+  }
+
+  // ==========================================
+  // FOTOS ANTES × DEPOIS
+  // ==========================================
+  static async listPhotos(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const { studentId } = req.params;
+
+      const photos = db.prepare(`
+        SELECT p.*, a.weight, a.body_fat_percentage
+        FROM personal_assessment_photos p
+        LEFT JOIN personal_assessments a ON a.id = p.assessment_id
+        WHERE p.patient_id = ? AND p.tenant_id = ?
+        ORDER BY p.photo_date ASC, p.photo_type ASC
+      `).all(studentId, tenantId) as any[];
+
+      res.json({ photos });
+    } catch (err: any) {
+      console.error('[PersonalController.listPhotos] Erro:', err);
+      res.status(500).json({ error: 'Erro ao listar fotos do aluno' });
+    }
+  }
+
+  static async savePhoto(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const { patient_id, assessment_id, photo_type, photo_date, notes, file_id, fileId } = req.body;
+      const effectiveFileId = requireAttachmentId(file_id || fileId, tenantId);
+
+      if (!patient_id || !photo_type || !effectiveFileId) {
+        res.status(400).json({ error: 'Campos patient_id, photo_type e foto (file_id) são obrigatórios' });
+        return;
+      }
+
+      const id = 'paph-' + uuidv4().slice(0, 8);
+      db.prepare(`
+        INSERT INTO personal_assessment_photos (id, tenant_id, assessment_id, patient_id, photo_type, photo_url, photo_date, notes, file_id)
+        VALUES (?, ?, ?, ?, ?, '', ?, ?, ?)
+      `).run(id, tenantId, assessment_id || null, patient_id, photo_type, photo_date || new Date().toISOString().split('T')[0], notes || null, effectiveFileId);
+
+      res.status(201).json({ id, message: 'Foto registrada com sucesso' });
+    } catch (err: any) {
+      console.error('[PersonalController.savePhoto] Erro:', err);
+      res.status(500).json({ error: 'Erro ao registrar foto' });
+    }
+  }
+
+  static async deletePhoto(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const { id } = req.params;
+
+      const result = db.prepare('DELETE FROM personal_assessment_photos WHERE id = ? AND tenant_id = ?').run(id, tenantId);
+      if (result.changes === 0) {
+        res.status(404).json({ error: 'Foto não encontrada' });
+        return;
+      }
+      res.json({ message: 'Foto removida com sucesso' });
+    } catch (err: any) {
+      console.error('[PersonalController.deletePhoto] Erro:', err);
+      res.status(500).json({ error: 'Erro ao remover foto' });
+    }
+  }
+
+  // ==========================================
+  // BIBLIOTECA DE EXERCÍCIOS
+  // ==========================================
+  static async listExercises(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const muscle = req.query.muscle ? String(req.query.muscle).trim() : '';
+      const region = req.query.region || req.query.body_region ? String(req.query.region || req.query.body_region).trim() : '';
+      const equipment = req.query.equipment ? String(req.query.equipment).trim() : '';
+      const category = req.query.category ? String(req.query.category).trim() : '';
+      const level = req.query.level ? String(req.query.level).trim() : '';
+      const q = req.query.q ? String(req.query.q).trim() : '';
+      const includeInactive = req.query.include_inactive === '1' || req.query.include_inactive === 'true' || req.query.all === '1' || req.query.is_active === 'all';
+
+      let sql = `
+        SELECT * FROM personal_exercises
+        WHERE (tenant_id = ? OR tenant_id = 'global')
+          AND NOT (tenant_id = 'global' AND EXISTS (SELECT 1 FROM personal_exercises custom WHERE custom.tenant_id = ? AND custom.source_exercise_id = personal_exercises.id))
+      `;
+      const params: any[] = [tenantId, tenantId];
+
+      if (!includeInactive) {
+        sql += ` AND (is_active = 1 OR is_active IS NULL)`;
+      }
+      sql += ' ORDER BY name ASC';
+      const exercises = (db.prepare(sql).all(...params) as any[]).filter(ex => matchesExercise(ex, { muscle, region, equipment, category, level, q }));
+      for (const ex of exercises) {
+        ex.image_attribution_json = imageAttribution(db, ex.exercise_file_id, ex.photo_url);
+        Object.assign(ex, exerciseAnimation(ex));
+      }
+      res.json({ exercises });
+    } catch (err: any) {
+      console.error('[PersonalController.listExercises] Erro:', err);
+      res.status(500).json({ error: 'Erro ao listar exercícios' });
+    }
+  }
+
+  static async createExercise(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const {
+        name, muscle_group, secondary_muscles_json,
+        body_region, equipment, category, execution_type, mechanics, level,
+        instructions, technical_notes, photo_url, exercise_file_id, is_active
+      } = req.body;
+
+      if (!name || !muscle_group) {
+        res.status(400).json({ error: 'Nome e grupamento muscular são obrigatórios' });
+        return;
+      }
+
+      const id = 'pex-' + uuidv4().slice(0, 8);
+      const effectiveExerciseFileId = requireExerciseAttachment(exercise_file_id, tenantId);
+
+      db.prepare(`
+        INSERT INTO personal_exercises (
+          id, tenant_id, name, muscle_group, secondary_muscles_json,
+          body_region, equipment, category, execution_type, mechanics, level,
+          instructions, technical_notes, photo_url, exercise_file_id, is_custom, is_active, created_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+      `).run(
+        id, tenantId, name.trim(), muscle_group.trim(),
+        secondary_muscles_json ? (typeof secondary_muscles_json === 'string' ? secondary_muscles_json : JSON.stringify(secondary_muscles_json)) : null,
+        body_region || null, equipment || null, category || 'Musculação',
+        execution_type || 'bilateral', mechanics || null, level || 'todos',
+        instructions || null, technical_notes || null, null, effectiveExerciseFileId || null,
+        is_active !== undefined ? (is_active ? 1 : 0) : 1,
+        req.user?.userId || null
+      );
+
+      const exercise = db.prepare('SELECT * FROM personal_exercises WHERE id = ?').get(id) as any;
+      res.status(201).json({ id, exercise, message: 'Exercício cadastrado com sucesso' });
+    } catch (err: any) {
+      console.error('[PersonalController.createExercise] Erro:', err);
+      res.status(String(err?.message).includes('Anexo de exercício') ? 400 : 500).json({ error: 'Erro ao cadastrar exercício' });
+    }
+  }
+
+  static async updateExercise(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const { id } = req.params;
+      const {
+        name, muscle_group, secondary_muscles_json,
+        body_region, equipment, category, execution_type, mechanics, level,
+        instructions, technical_notes, photo_url, exercise_file_id, is_active
+      } = req.body;
+
+      // Verifica se o exercício existe (na clínica ou no global)
+      let existing = db.prepare("SELECT * FROM personal_exercises WHERE id = ? AND (tenant_id = ? OR tenant_id = 'global')").get(id, tenantId) as any;
+      if (!existing) {
+        res.status(404).json({ error: 'Exercício não encontrado' });
+        return;
+      }
+
+      if (existing.tenant_id === 'global') existing = db.prepare('SELECT * FROM personal_exercises WHERE source_exercise_id = ? AND tenant_id = ?').get(id, tenantId) || existing;
+
+      const effectiveExerciseFileId = exercise_file_id !== undefined
+        ? requireExerciseAttachment(exercise_file_id, tenantId)
+        : undefined;
+
+      let targetId = existing.id;
+      if (existing.tenant_id === tenantId) {
+        // Atualiza exercício customizado da própria clínica
+        db.prepare(`
+          UPDATE personal_exercises SET
+            name = COALESCE(?, name),
+            muscle_group = COALESCE(?, muscle_group),
+            secondary_muscles_json = COALESCE(?, secondary_muscles_json),
+            body_region = COALESCE(?, body_region),
+            equipment = COALESCE(?, equipment),
+            category = COALESCE(?, category),
+            execution_type = COALESCE(?, execution_type),
+            mechanics = COALESCE(?, mechanics),
+            level = COALESCE(?, level),
+            instructions = COALESCE(?, instructions),
+            technical_notes = COALESCE(?, technical_notes),
+            photo_url = CASE WHEN ? = 1 THEN ? ELSE photo_url END,
+            exercise_file_id = CASE WHEN ? = 1 THEN ? ELSE exercise_file_id END,
+            is_active = COALESCE(?, is_active),
+            updated_at = datetime('now')
+          WHERE id = ? AND tenant_id = ?
+        `).run(
+          name ? name.trim() : null,
+          muscle_group ? muscle_group.trim() : null,
+          secondary_muscles_json ? (typeof secondary_muscles_json === 'string' ? secondary_muscles_json : JSON.stringify(secondary_muscles_json)) : null,
+          body_region !== undefined ? body_region : null,
+          equipment !== undefined ? equipment : null,
+          category !== undefined ? category : null,
+          execution_type !== undefined ? execution_type : null,
+          mechanics !== undefined ? mechanics : null,
+          level !== undefined ? level : null,
+          instructions !== undefined ? instructions : null,
+          technical_notes !== undefined ? technical_notes : null,
+          exercise_file_id !== undefined ? 1 : 0,
+          null,
+          effectiveExerciseFileId !== undefined ? 1 : 0,
+          effectiveExerciseFileId || null,
+          is_active !== undefined ? (is_active ? 1 : 0) : null,
+          targetId, tenantId
+        );
+      } else {
+        // Se for global, clona para a clínica como custom para preservar isolamento
+        targetId = 'pex-' + uuidv4().slice(0, 8);
+        db.prepare(`
+          INSERT INTO personal_exercises (
+            id, tenant_id, name, muscle_group, secondary_muscles_json,
+            body_region, equipment, category, execution_type, mechanics, level,
+            instructions, technical_notes, photo_url, exercise_file_id, is_custom, is_active, created_by
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+        `).run(
+          targetId, tenantId,
+          name ? name.trim() : existing.name,
+          muscle_group ? muscle_group.trim() : existing.muscle_group,
+          secondary_muscles_json ? (typeof secondary_muscles_json === 'string' ? secondary_muscles_json : JSON.stringify(secondary_muscles_json)) : existing.secondary_muscles_json,
+          body_region !== undefined ? body_region : existing.body_region,
+          equipment !== undefined ? equipment : existing.equipment,
+          category !== undefined ? category : existing.category,
+          execution_type !== undefined ? execution_type : existing.execution_type,
+          mechanics !== undefined ? mechanics : existing.mechanics,
+          level !== undefined ? level : existing.level,
+          instructions !== undefined ? instructions : existing.instructions,
+          technical_notes !== undefined ? technical_notes : existing.technical_notes,
+          exercise_file_id !== undefined ? null : existing.photo_url,
+          effectiveExerciseFileId !== undefined ? (effectiveExerciseFileId || null) : existing.exercise_file_id,
+          is_active !== undefined ? (is_active ? 1 : 0) : 1,
+          req.user?.userId || null
+        );
+      }
+
+      if (existing.tenant_id === 'global') db.prepare('UPDATE personal_exercises SET source_exercise_id = ? WHERE id = ? AND tenant_id = ?').run(id, targetId, tenantId);
+
+      const updatedEx = db.prepare('SELECT * FROM personal_exercises WHERE id = ?').get(targetId) as any;
+      res.json({ message: 'Exercício atualizado com sucesso', exercise: updatedEx, id: targetId });
+    } catch (err: any) {
+      console.error('[PersonalController.updateExercise] Erro:', err);
+      res.status(String(err?.message).includes('Anexo de exercício') ? 400 : 500).json({ error: 'Erro ao atualizar exercício' });
+    }
+  }
+
+  static async deleteExercise(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const { id } = req.params;
+
+      const result = db.prepare("UPDATE personal_exercises SET is_active = 0, updated_at = datetime('now') WHERE id = ? AND tenant_id = ? AND is_custom = 1").run(id, tenantId);
+      if (!result.changes) { res.status(404).json({ error: 'Exercício customizado não encontrado nesta clínica' }); return; }
+      res.json({ message: 'Exercício desativado; histórico preservado.', deactivated: true });
+    } catch (err: any) {
+      console.error('[PersonalController.deleteExercise] Erro:', err);
+      res.status(500).json({ error: 'Erro ao excluir exercício' });
+    }
+  }
+
+  // ==========================================
+  // PRESCRIÇÃO DE TREINOS & DIVISÕES (A-E)
+  // ==========================================
+  static async listWorkouts(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const studentId = req.query.studentId ? String(req.query.studentId) : null;
+
+      let sql = `
+        SELECT w.*, COALESCE(p.full_name, p.social_name) as patient_name,
+               (SELECT COUNT(*) FROM personal_workout_exercises we WHERE we.workout_id = w.id) as exercises_count
+        FROM personal_workouts w
+        JOIN patients p ON p.id = w.patient_id AND p.tenant_id = w.tenant_id
+        WHERE w.tenant_id = ?
+      `;
+      const params: any[] = [tenantId];
+
+      if (studentId) {
+        sql += ` AND w.patient_id = ?`;
+        params.push(studentId);
+      }
+
+      sql += ` ORDER BY w.division ASC, w.created_at DESC`;
+
+      const workouts = db.prepare(sql).all(...params) as any[];
+      res.json({ workouts });
+    } catch (err: any) {
+      console.error('[PersonalController.listWorkouts] Erro:', err);
+      res.status(500).json({ error: 'Erro ao listar treinos' });
+    }
+  }
+
+  static async getWorkout(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const { id } = req.params;
+
+      const workout = db.prepare(`
+        SELECT w.*, COALESCE(p.full_name, p.social_name) as patient_name, p.gender, u.name as professional_name
+        FROM personal_workouts w
+        JOIN patients p ON p.id = w.patient_id AND p.tenant_id = w.tenant_id
+        LEFT JOIN professionals pr ON pr.id = w.professional_id
+        LEFT JOIN users u ON u.id = pr.user_id
+        WHERE w.id = ? AND w.tenant_id = ?
+      `).get(id, tenantId) as any;
+
+      if (!workout) {
+        res.status(404).json({ error: 'Treino não encontrado' });
+        return;
+      }
+
+      const exercises = db.prepare(`
+        SELECT * FROM personal_workout_exercises WHERE workout_id = ? AND tenant_id = ? ORDER BY order_index ASC
+      `).all(id, tenantId) as any[];
+
+      // Agrupa cálculo de volume semanal por grupo muscular desse treino
+      const muscleVolume: Record<string, number> = {};
+      exercises.forEach((ex: any) => {
+        const group = ex.muscle_group || 'Outros';
+        muscleVolume[group] = (muscleVolume[group] || 0) + (Number(ex.sets) || 0);
+      });
+
+      res.json({ workout, exercises, muscleVolume });
+    } catch (err: any) {
+      console.error('[PersonalController.getWorkout] Erro:', err);
+      res.status(500).json({ error: 'Erro ao carregar treino' });
+    }
+  }
+
+  static async createWorkout(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const professionalId = getProfessionalId(req);
+      const { patient_id, title, division, structure_type, notes, exercises } = req.body;
+
+      if (!patient_id || !title) {
+        res.status(400).json({ error: 'Aluno e título do treino são obrigatórios' });
+        return;
+      }
+
+      const workoutId = 'pwk-' + uuidv4().slice(0, 8);
+
+      const transaction = db.transaction(() => {
+        db.prepare(`
+          INSERT INTO personal_workouts (id, tenant_id, patient_id, professional_id, title, division, structure_type, notes, is_active)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+        `).run(
+          workoutId, tenantId, patient_id, professionalId, title.trim(),
+          (division || 'A').toUpperCase(), structure_type || 'ABC', notes || null
+        );
+
+        if (Array.isArray(exercises)) {
+          exercises.forEach((ex: any, idx: number) => insertWorkoutExercise(db, 'pwe-' + uuidv4(), tenantId, workoutId, ex, idx + 1));
+        }
+      });
+
+      transaction();
+
+      try {
+        const exCount = Array.isArray(exercises) ? exercises.length : 0;
+        const exList = Array.isArray(exercises)
+          ? exercises.map((e: any, idx: number) => `${idx + 1}. ${e.custom_name || e.exercise_id} (${e.sets || 3}x${e.reps || '10-12'}${e.load_kg ? `, ${e.load_kg}kg` : ''})`).join('\n')
+          : '';
+        ClinicalRecordService.recordClinicalEvent({
+          tenantId,
+          patientId: patient_id,
+          professionalId: professionalId || null,
+          moduleType: 'ZemdaPersonal',
+          sourceId: workoutId,
+          sourceType: 'personal_workout',
+          title: `Prescrição de Treinamento: ${title.trim()}`,
+          procedureName: 'Prescrição de Treinamento Físico',
+          clinicalEvolution: `Ficha de Treino - Divisão ${(division || 'A').toUpperCase()} (${structure_type || 'ABC'})\n${exCount} exercícios prescritos:\n${exList}`,
+          technicalNotes: notes || null,
+          moduleData: {
+            workoutId,
+            title: title.trim(),
+            division,
+            structure_type,
+            exercises,
+            notes
+          },
+          createdBy: req.user?.name || 'Personal Trainer'
+        });
+      } catch (recErr) {
+        console.warn('Aviso ao registrar treino no prontuário:', recErr);
+      }
+
+      logAudit(req, 'CREATE_WORKOUT', 'personal_workouts', workoutId, { patient_id, title, division });
+      res.status(201).json({ id: workoutId, workout: { id: workoutId }, message: 'Treino criado com sucesso' });
+    } catch (err: any) {
+      console.error('[PersonalController.createWorkout] Erro:', err);
+      res.status(500).json({ error: 'Erro ao criar treino' });
+    }
+  }
+
+  static async updateWorkout(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const { id } = req.params;
+      const { title, division, structure_type, notes, is_active, exercises } = req.body;
+
+      const existing = db.prepare('SELECT id FROM personal_workouts WHERE id = ? AND tenant_id = ?').get(id, tenantId);
+      if (!existing) {
+        res.status(404).json({ error: 'Treino não encontrado' });
+        return;
+      }
+
+      const transaction = db.transaction(() => {
+        db.prepare(`
+          UPDATE personal_workouts SET
+            title = COALESCE(?, title),
+            division = COALESCE(?, division),
+            structure_type = COALESCE(?, structure_type),
+            notes = ?,
+            is_active = COALESCE(?, is_active),
+            updated_at = datetime('now')
+          WHERE id = ? AND tenant_id = ?
+        `).run(
+          title ? title.trim() : null,
+          division ? division.toUpperCase() : null,
+          structure_type || null,
+          notes || null,
+          typeof is_active === 'number' || typeof is_active === 'boolean' ? (is_active ? 1 : 0) : null,
+          id, tenantId
+        );
+
+        if (Array.isArray(exercises)) {
+          db.prepare('DELETE FROM personal_workout_exercises WHERE workout_id = ? AND tenant_id = ?').run(id, tenantId);
+          exercises.forEach((ex: any, idx: number) => insertWorkoutExercise(db, 'pwe-' + uuidv4(), tenantId, String(id), ex, idx + 1));
+        }
+      });
+
+      transaction();
+
+      logAudit(req, 'UPDATE_WORKOUT', 'personal_workouts', id);
+      res.json({ message: 'Treino atualizado com sucesso' });
+    } catch (err: any) {
+      console.error('[PersonalController.updateWorkout] Erro:', err);
+      res.status(500).json({ error: 'Erro ao atualizar treino' });
+    }
+  }
+
+  static async duplicateWorkout(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const professionalId = getProfessionalId(req);
+      const { id } = req.params;
+      const { target_patient_id, target_division, new_title } = req.body;
+
+      const original = db.prepare('SELECT * FROM personal_workouts WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
+      if (!original) {
+        res.status(404).json({ error: 'Treino original não encontrado' });
+        return;
+      }
+
+      const origExercises = db.prepare('SELECT * FROM personal_workout_exercises WHERE workout_id = ? AND tenant_id = ? ORDER BY order_index ASC').all(id, tenantId) as any[];
+
+      const newWorkoutId = 'pwk-' + uuidv4().slice(0, 8);
+      const destPatientId = target_patient_id || original.patient_id;
+      const destDivision = (target_division || original.division).toUpperCase();
+      const destTitle = new_title || `${original.title} (Cópia)`;
+
+      const transaction = db.transaction(() => {
+        db.prepare(`
+          INSERT INTO personal_workouts (id, tenant_id, patient_id, professional_id, title, division, structure_type, notes, is_active)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+        `).run(
+          newWorkoutId, tenantId, destPatientId, professionalId, destTitle, destDivision, original.structure_type, original.notes
+        );
+
+        origExercises.forEach((ex: any) => insertWorkoutExercise(db, 'pwe-' + uuidv4(), tenantId, newWorkoutId, ex, ex.order_index, true));
+
+      });
+
+      transaction();
+
+      res.status(201).json({ id: newWorkoutId, message: 'Treino duplicado com sucesso' });
+    } catch (err: any) {
+      console.error('[PersonalController.duplicateWorkout] Erro:', err);
+      res.status(500).json({ error: 'Erro ao duplicar treino' });
+    }
+  }
+
+  static async deleteWorkout(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const { id } = req.params;
+
+      db.prepare('DELETE FROM personal_workout_exercises WHERE workout_id = ? AND tenant_id = ?').run(id, tenantId);
+      const result = db.prepare('DELETE FROM personal_workouts WHERE id = ? AND tenant_id = ?').run(id, tenantId);
+
+      if (result.changes === 0) {
+        res.status(404).json({ error: 'Treino não encontrado' });
+        return;
+      }
+
+      logAudit(req, 'DELETE_WORKOUT', 'personal_workouts', id);
+      res.json({ message: 'Treino excluído com sucesso' });
+    } catch (err: any) {
+      console.error('[PersonalController.deleteWorkout] Erro:', err);
+      res.status(500).json({ error: 'Erro ao excluir treino' });
+    }
+  }
+
+  // ==========================================
+  // MODELOS DE TREINO (TEMPLATES)
+  // ==========================================
+  static async listTemplates(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const templates = db.prepare(`
+        SELECT t.*, u.name as professional_name
+        FROM personal_workout_templates t
+        LEFT JOIN professionals pr ON pr.id = t.professional_id
+        LEFT JOIN users u ON u.id = pr.user_id
+        WHERE t.tenant_id = ?
+        ORDER BY t.created_at DESC
+      `).all(tenantId) as any[];
+
+      templates.forEach((t: any) => {
+        try {
+          t.workouts = JSON.parse(t.workouts_json);
+        } catch {
+          t.workouts = [];
+        }
+      });
+
+      res.json({ templates });
+    } catch (err: any) {
+      console.error('[PersonalController.listTemplates] Erro:', err);
+      res.status(500).json({ error: 'Erro ao listar modelos de treino' });
+    }
+  }
+
+  static async createTemplate(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const professionalId = getProfessionalId(req);
+      const { title, structure_type, description, workouts } = req.body;
+
+      if (!title || !workouts) {
+        res.status(400).json({ error: 'Título e estrutura de treinos são obrigatórios' });
+        return;
+      }
+
+      const id = 'ptpl-' + uuidv4().slice(0, 8);
+      const workoutsJson = typeof workouts === 'string' ? workouts : JSON.stringify(workouts);
+
+      db.prepare(`
+        INSERT INTO personal_workout_templates (id, tenant_id, professional_id, title, structure_type, description, workouts_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(id, tenantId, professionalId, title.trim(), structure_type || 'ABC', description || null, workoutsJson);
+
+      res.status(201).json({ id, message: 'Modelo de treino salvo com sucesso' });
+    } catch (err: any) {
+      console.error('[PersonalController.createTemplate] Erro:', err);
+      res.status(500).json({ error: 'Erro ao salvar modelo' });
+    }
+  }
+
+  static async applyTemplate(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const professionalId = getProfessionalId(req);
+      const { id } = req.params; // template id
+      const { patient_id } = req.body;
+
+      if (!patient_id) {
+        res.status(400).json({ error: 'Aluno de destino é obrigatório' });
+        return;
+      }
+
+      const tpl = db.prepare('SELECT * FROM personal_workout_templates WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
+      if (!tpl) {
+        res.status(404).json({ error: 'Modelo não encontrado' });
+        return;
+      }
+
+      const parsedWorkouts = JSON.parse(tpl.workouts_json);
+      if (!Array.isArray(parsedWorkouts)) {
+        res.status(400).json({ error: 'Estrutura do modelo inválida' });
+        return;
+      }
+
+      const createdIds: string[] = [];
+
+      const transaction = db.transaction(() => {
+        for (const w of parsedWorkouts) {
+          const wId = 'pwk-' + uuidv4().slice(0, 8);
+          createdIds.push(wId);
+
+          db.prepare(`
+            INSERT INTO personal_workouts (id, tenant_id, patient_id, professional_id, title, division, structure_type, notes, is_active)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+          `).run(
+            wId, tenantId, patient_id, professionalId, w.title || 'Treino',
+            (w.division || 'A').toUpperCase(), tpl.structure_type, w.notes || null
+          );
+
+          if (Array.isArray(w.exercises)) {
+            w.exercises.forEach((ex: any, idx: number) => insertWorkoutExercise(db, 'pwe-' + uuidv4(), tenantId, wId, ex, idx + 1));
+          }
+        }
+      });
+
+      transaction();
+
+      res.status(201).json({ createdWorkoutIds: createdIds, message: `${createdIds.length} divisões de treino aplicadas ao aluno com sucesso` });
+    } catch (err: any) {
+      console.error('[PersonalController.applyTemplate] Erro:', err);
+      res.status(500).json({ error: 'Erro ao aplicar modelo ao aluno' });
+    }
+  }
+
+  static async deleteTemplate(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const { id } = req.params;
+
+      const result = db.prepare('DELETE FROM personal_workout_templates WHERE id = ? AND tenant_id = ?').run(id, tenantId);
+      if (result.changes === 0) {
+        res.status(404).json({ error: 'Modelo não encontrado' });
+        return;
+      }
+      res.json({ message: 'Modelo excluído com sucesso' });
+    } catch (err: any) {
+      console.error('[PersonalController.deleteTemplate] Erro:', err);
+      res.status(500).json({ error: 'Erro ao excluir modelo' });
+    }
+  }
+
+  // ==========================================
+  // EXECUÇÃO & HISTÓRICO DE TREINOS (LOGS & PRS)
+  // ==========================================
+  static async executeWorkoutLog(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const professionalId = getProfessionalId(req);
+      const {
+        workout_id, patient_id, appointment_id, completed_at,
+        duration_minutes, rpe, feedback_notes, exercises_performed
+      } = req.body;
+
+      if (!patient_id) {
+        res.status(400).json({ error: 'Identificação do aluno obrigatória' });
+        return;
+      }
+
+      const logId = 'pwl-' + uuidv4().slice(0, 8);
+      const detailsJson = exercises_performed ? (typeof exercises_performed === 'string' ? exercises_performed : JSON.stringify(exercises_performed)) : null;
+
+      db.prepare(`
+        INSERT INTO personal_workout_logs (
+          id, tenant_id, workout_id, patient_id, professional_id, appointment_id,
+          completed_at, duration_minutes, rpe, feedback_notes, log_details_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        logId, tenantId, workout_id || null, patient_id, professionalId, appointment_id || null,
+        completed_at || new Date().toISOString(), duration_minutes ? Number(duration_minutes) : null,
+        rpe ? Number(rpe) : null, feedback_notes || null, detailsJson
+      );
+
+      // Verificação de Recordes Pessoais (PRs - carga máxima superada)
+      const newPRs: Array<{ exercise_name: string; previous_max: number; new_pr: number }> = [];
+
+      if (Array.isArray(exercises_performed)) {
+        // Busca histórico prévio de cargas do aluno
+        const priorLogs = db.prepare(`
+          SELECT log_details_json FROM personal_workout_logs
+          WHERE patient_id = ? AND tenant_id = ? AND id != ?
+        `).all(patient_id, tenantId, logId) as any[];
+
+        const bestPriorLoads: Record<string, number> = {};
+        priorLogs.forEach((pl: any) => {
+          try {
+            const exList = JSON.parse(pl.log_details_json);
+            if (Array.isArray(exList)) {
+              exList.forEach((e: any) => {
+                const name = (e.name || '').trim().toLowerCase();
+                const load = Number(e.load_kg || e.load || 0);
+                if (load > (bestPriorLoads[name] || 0)) {
+                  bestPriorLoads[name] = load;
+                }
+              });
+            }
+          } catch {}
+        });
+
+        exercises_performed.forEach((ex: any) => {
+          const name = (ex.name || '').trim();
+          const key = name.toLowerCase();
+          const currentLoad = Number(ex.load_kg || ex.load || 0);
+          const prevBest = bestPriorLoads[key] || 0;
+
+          if (currentLoad > 0 && currentLoad > prevBest) {
+            newPRs.push({
+              exercise_name: name,
+              previous_max: prevBest,
+              new_pr: currentLoad
+            });
+          }
+        });
+      }
+
+      logAudit(req, 'EXECUTE_WORKOUT_LOG', 'personal_workout_logs', logId, { patient_id, newPRsCount: newPRs.length });
+      res.status(201).json({
+        id: logId,
+        newPRs,
+        message: 'Execução de treino registrada com sucesso'
+      });
+    } catch (err: any) {
+      console.error('[PersonalController.executeWorkoutLog] Erro:', err);
+      res.status(500).json({ error: 'Erro ao registrar execução de treino' });
+    }
+  }
+
+  static async listLogs(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const studentId = req.query.studentId ? String(req.query.studentId) : null;
+
+      let sql = `
+        SELECT l.*, COALESCE(p.full_name, p.social_name) as patient_name, p.photo_url as avatar_url, w.title as workout_title, w.division
+        FROM personal_workout_logs l
+        JOIN patients p ON p.id = l.patient_id AND p.tenant_id = l.tenant_id
+        LEFT JOIN personal_workouts w ON w.id = l.workout_id
+        WHERE l.tenant_id = ?
+      `;
+      const params: any[] = [tenantId];
+
+      if (studentId) {
+        sql += ` AND l.patient_id = ?`;
+        params.push(studentId);
+      }
+
+      sql += ` ORDER BY l.completed_at DESC LIMIT 50`;
+
+      const logs = db.prepare(sql).all(...params) as any[];
+      logs.forEach((l: any) => {
+        try {
+          l.exercises_performed = JSON.parse(l.log_details_json);
+        } catch {
+          l.exercises_performed = [];
+        }
+      });
+
+      res.json({ logs });
+    } catch (err: any) {
+      console.error('[PersonalController.listLogs] Erro:', err);
+      res.status(500).json({ error: 'Erro ao listar histórico de execuções' });
+    }
+  }
+
+  static async getRecords(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const { studentId } = req.params;
+
+      const logs = db.prepare(`
+        SELECT completed_at, log_details_json
+        FROM personal_workout_logs
+        WHERE patient_id = ? AND tenant_id = ?
+        ORDER BY completed_at ASC
+      `).all(studentId, tenantId) as any[];
+
+      const recordsMap: Record<string, { exercise_name: string; max_load: number; date: string; reps?: string }> = {};
+
+      logs.forEach((l: any) => {
+        try {
+          const exList = JSON.parse(l.log_details_json);
+          if (Array.isArray(exList)) {
+            exList.forEach((e: any) => {
+              const name = (e.name || '').trim();
+              if (!name) return;
+              const load = getExerciseMaxCompletedLoad(e);
+              if (load > 0) {
+
+                if (!recordsMap[name] || load > recordsMap[name].max_load) {
+                  recordsMap[name] = {
+                    exercise_name: name,
+                    max_load: load,
+                    date: l.completed_at,
+                    reps: e.reps ? String(e.reps) : undefined
+                  };
+                }
+              }
+            });
+          }
+        } catch {}
+      });
+
+      res.json({ records: Object.values(recordsMap) });
+    } catch (err: any) {
+      console.error('[PersonalController.getRecords] Erro:', err);
+      res.status(500).json({ error: 'Erro ao carregar recordes pessoais' });
+    }
+  }
+
+  // ==========================================
+  // PERIODIZAÇÃO
+  // ==========================================
+  static async listPeriodizations(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const studentId = req.query.studentId ? String(req.query.studentId) : null;
+
+      let sql = `
+        SELECT p.*, COALESCE(pat.full_name, pat.social_name) as patient_name
+        FROM personal_periodizations p
+        JOIN patients pat ON pat.id = p.patient_id AND pat.tenant_id = p.tenant_id
+        WHERE p.tenant_id = ?
+      `;
+      const params: any[] = [tenantId];
+      if (studentId) {
+        sql += ` AND p.patient_id = ?`;
+        params.push(studentId);
+      }
+      sql += ` ORDER BY p.start_date DESC`;
+
+      const periodizations = db.prepare(sql).all(...params) as any[];
+      periodizations.forEach((item: any) => {
+        try {
+          item.target_volume = JSON.parse(item.target_volume_json);
+        } catch {
+          item.target_volume = null;
+        }
+      });
+
+      res.json({ periodizations });
+    } catch (err: any) {
+      console.error('[PersonalController.listPeriodizations] Erro:', err);
+      res.status(500).json({ error: 'Erro ao listar periodizações' });
+    }
+  }
+
+  static async createPeriodization(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const professionalId = getProfessionalId(req);
+      const { patient_id, title, phase, start_date, end_date, meso_weeks, target_volume, notes } = req.body;
+
+      if (!patient_id || !title || !start_date || !end_date) {
+        res.status(400).json({ error: 'Aluno, título e datas inicial e final são obrigatórios' });
+        return;
+      }
+
+      const id = 'pper-' + uuidv4().slice(0, 8);
+      const targetVolumeJson = target_volume ? (typeof target_volume === 'string' ? target_volume : JSON.stringify(target_volume)) : null;
+
+      db.prepare(`
+        INSERT INTO personal_periodizations (
+          id, tenant_id, patient_id, professional_id, title, phase,
+          start_date, end_date, meso_weeks, target_volume_json, notes, status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')
+      `).run(
+        id, tenantId, patient_id, professionalId, title.trim(), phase || 'hypertrophy',
+        start_date, end_date, meso_weeks ? Number(meso_weeks) : 4, targetVolumeJson, notes || null
+      );
+
+      res.status(201).json({ id, message: 'Periodização criada com sucesso' });
+    } catch (err: any) {
+      console.error('[PersonalController.createPeriodization] Erro:', err);
+      res.status(500).json({ error: 'Erro ao criar periodização' });
+    }
+  }
+
+  static async updatePeriodization(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const { id } = req.params;
+      const { title, phase, start_date, end_date, meso_weeks, target_volume, notes, status } = req.body;
+
+      const targetVolumeJson = target_volume ? (typeof target_volume === 'string' ? target_volume : JSON.stringify(target_volume)) : null;
+
+      const result = db.prepare(`
+        UPDATE personal_periodizations SET
+          title = COALESCE(?, title),
+          phase = COALESCE(?, phase),
+          start_date = COALESCE(?, start_date),
+          end_date = COALESCE(?, end_date),
+          meso_weeks = COALESCE(?, meso_weeks),
+          target_volume_json = COALESCE(?, target_volume_json),
+          notes = ?,
+          status = COALESCE(?, status),
+          updated_at = datetime('now')
+        WHERE id = ? AND tenant_id = ?
+      `).run(
+        title ? title.trim() : null, phase || null, start_date || null, end_date || null,
+        meso_weeks ? Number(meso_weeks) : null, targetVolumeJson, notes || null,
+        status || null, id, tenantId
+      );
+
+      if (result.changes === 0) {
+        res.status(404).json({ error: 'Periodização não encontrada' });
+        return;
+      }
+
+      res.json({ message: 'Periodização atualizada com sucesso' });
+    } catch (err: any) {
+      console.error('[PersonalController.updatePeriodization] Erro:', err);
+      res.status(500).json({ error: 'Erro ao atualizar periodização' });
+    }
+  }
+
+  // ==========================================
+  // FREQUÊNCIA & AGENDA DE AULAS
+  // ==========================================
+  static async getAttendanceStats(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const studentId = req.params.studentId;
+
+      // Execuções de treinos registradas
+      const workoutsCount = (db.prepare("SELECT count(*) as count FROM personal_workout_logs WHERE patient_id = ? AND tenant_id = ?").get(studentId, tenantId) as any)?.count || 0;
+
+      // Agendamentos de aulas e taxa de presença
+      const apptStats = db.prepare(`
+        SELECT
+          COUNT(*) as total_scheduled,
+          SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_count,
+          SUM(CASE WHEN status = 'canceled' THEN 1 ELSE 0 END) as canceled_count,
+          SUM(CASE WHEN status = 'no_show' THEN 1 ELSE 0 END) as no_show_count
+        FROM appointments
+        WHERE patient_id = ? AND tenant_id = ?
+      `).get(studentId, tenantId) as any;
+
+      const profile = db.prepare('SELECT weekly_frequency FROM personal_student_profiles WHERE patient_id = ? AND tenant_id = ?').get(studentId, tenantId) as any;
+      const targetWeekly = profile?.weekly_frequency || 3;
+
+      // Frequência real nas últimas 4 semanas
+      const lastMonthWorkouts = (db.prepare(`
+        SELECT count(*) as count
+        FROM personal_workout_logs
+        WHERE patient_id = ? AND tenant_id = ?
+          AND completed_at >= date('now', '-28 days')
+      `).get(studentId, tenantId) as any)?.count || 0;
+
+      const weeklyAvg = parseFloat((lastMonthWorkouts / 4).toFixed(1));
+      const adherencePct = Math.min(100, Math.round((weeklyAvg / targetWeekly) * 100));
+
+      res.json({
+        totalWorkoutsCompleted: workoutsCount,
+        lastMonthWorkouts,
+        targetWeeklyFrequency: targetWeekly,
+        currentWeeklyAvg: weeklyAvg,
+        adherencePercentage: adherencePct,
+        appointments: apptStats || { total_scheduled: 0, completed_count: 0, canceled_count: 0, no_show_count: 0 }
+      });
+    } catch (err: any) {
+      console.error('[PersonalController.getAttendanceStats] Erro:', err);
+      res.status(500).json({ error: 'Erro ao calcular frequência do aluno' });
+    }
+  }
+
+  // ==========================================
+  // BUSCA RÁPIDA (SMART SEARCH)
+  // ==========================================
+  static async smartSearch(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const q = req.query.q ? String(req.query.q).trim() : '';
+
+      if (!q || q.length < 2) {
+        res.json({ students: [], exercises: [], workouts: [] });
+        return;
+      }
+
+      const wild = `%${q}%`;
+      const students = db.prepare(`
+        SELECT id, COALESCE(full_name, social_name) as name, phone, email, photo_url as avatar_url
+        FROM patients
+        WHERE tenant_id = ? AND active = 1 AND (full_name LIKE ? OR phone LIKE ? OR cpf LIKE ?)
+        LIMIT 6
+      `).all(tenantId, wild, wild, wild);
+
+      const exercises = db.prepare(`
+        SELECT id, name, muscle_group, photo_url
+        FROM personal_exercises
+        WHERE (tenant_id = ? OR tenant_id = 'global') AND (LOWER(name) LIKE LOWER(?) OR LOWER(muscle_group) LIKE LOWER(?))
+        LIMIT 6
+      `).all(tenantId, wild, wild);
+
+      const workouts = db.prepare(`
+        SELECT w.id, w.title, w.division, COALESCE(p.full_name, p.social_name) as patient_name
+        FROM personal_workouts w
+        JOIN patients p ON p.id = w.patient_id AND p.tenant_id = w.tenant_id
+        WHERE w.tenant_id = ? AND (w.title LIKE ? OR p.full_name LIKE ?)
+        LIMIT 6
+      `).all(tenantId, wild, wild);
+
+      res.json({ students, exercises, workouts });
+    } catch (err: any) {
+      console.error('[PersonalController.smartSearch] Erro:', err);
+      res.status(500).json({ error: 'Erro na busca rápida' });
+    }
+  }
+}

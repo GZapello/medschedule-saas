@@ -36,18 +36,31 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
 
   const account = db.prepare('SELECT id, role, status, tenant_id, session_version, onboarding_status FROM users WHERE id = ?').get(payload.userId) as any;
   const isOnboarding = Boolean(account && account.onboarding_status && account.onboarding_status !== 'active');
-  if (!account || (account.status !== 'active' && !pendingBillingManager(account) && !isOnboarding) || account.role !== payload.role ||
+  if (!account || ['blocked','inactive','rejected'].includes(account.status) || (account.status !== 'active' && !pendingBillingManager(account) && !isOnboarding) || (account.role === 'superadmin') !== (payload.role === 'superadmin') ||
     (payload.userSessionVersion || 0) !== (account.session_version || 0)) {
     res.status(401).json({ error: 'Sessão inválida. Entre novamente.' }); return;
   }
   if (payload.role !== 'superadmin') {
-    const tenant = db.prepare('SELECT status, session_version, onboarding_status FROM tenants WHERE id = ?').get(payload.tenantId) as any;
-    const membership = db.prepare('SELECT status FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(payload.userId, payload.tenantId) as any;
+    const requested = req.headers['x-tenant-id'];
+    if (requested !== undefined && (typeof requested !== 'string' || !requested.trim())) {
+      res.status(403).json({error: 'Clínica inválida'}); return;
+    }
+    const selectedTenant = requested || payload.tenantId;
+    const tenant = db.prepare('SELECT status, session_version, onboarding_status FROM tenants WHERE id = ?').get(selectedTenant) as any;
+    // Idempotent compatibility backfill for legacy accounts provisioned after bootstrap.
+    // Existing inactive/rejected memberships are never changed or recreated.
+    if (selectedTenant === account.tenant_id && tenant && !db.prepare('SELECT 1 FROM clinic_users WHERE user_id=? LIMIT 1').get(account.id)) {
+      db.prepare(`INSERT INTO clinic_users(id,tenant_id,user_id,role,status,is_manager) VALUES(?,?,?,?,?,?)`)
+        .run('legacy-'+account.id,selectedTenant,account.id,account.role,account.status,account.role==='clinic_admin'?1:0);
+    }
+    const membership = db.prepare('SELECT status, role FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(payload.userId, selectedTenant) as any;
     const isTenantOnboarding = Boolean((tenant && tenant.onboarding_status && tenant.onboarding_status !== 'active') || isOnboarding);
-    if (!tenant || (tenant.status !== 'active' && !(tenant.status === 'pending' && (pendingBillingManager(account) || isTenantOnboarding))) || (payload.sessionVersion || 0) !== tenant.session_version ||
-      (membership ? (membership.status !== 'active' && !pendingBillingManager(account) && !isTenantOnboarding) : account.tenant_id !== payload.tenantId)) {
+    if (!tenant || (tenant.status !== 'active' && !(tenant.status === 'pending' && (pendingBillingManager(account) || isTenantOnboarding))) || (selectedTenant === payload.tenantId && (payload.sessionVersion || 0) !== tenant.session_version) ||
+      (!membership || (membership.status !== 'active' && !(selectedTenant === account.tenant_id && (pendingBillingManager(account) || isTenantOnboarding))))) {
       res.status(403).json({ error: 'Acesso à clínica bloqueado ou sessão invalidada.' }); return;
     }
+    payload.tenantId = selectedTenant;
+    payload.role = membership.role;
   }
   req.user = payload;
   if (payload.tenantId) {

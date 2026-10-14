@@ -1,3 +1,4 @@
+import { clinicalPatientIdentity } from '../middlewares/shared-patient.middleware';
 import { fieldCapability } from '../shared/clinical-assessments/policy';
 import { authorizeAssessment } from '../shared/clinical-assessments/access';
 import { CapabilityService } from '../services/capability.service';
@@ -1127,7 +1128,7 @@ export class PersonalController {
   static async previewAssessment(req: Request,res: Response): Promise<void> {
     if (!authorizeAssessment(req,res,hasFullAssessmentAccess(req))) return;
     if(!hasPostureAccess(req)) {res.status(403).json({error:'Acesso não autorizado'});return;}
-    const patient=db.prepare('SELECT * FROM patients WHERE id=? AND tenant_id=?').get(req.body.patient_id,req.tenantId);
+    const patient=clinicalPatientIdentity(req, String(req.body.patient_id), 'ZemdaPersonal');
     if(!patient){res.status(404).json({error:'Aluno não encontrado'});return;}
     res.json(calculateAssessment({...req.body,assessment_date:req.body.assessment_date || new Date().toISOString().slice(0,10)},patient,assessmentTavContext(req.body,req.tenantId!)));
   }
@@ -1161,7 +1162,7 @@ export class PersonalController {
       const b = normalizeMeasuredTavInput(req.body);
       const postureJson = b.posture === undefined ? undefined : validatePosture(b.posture);
 
-      const patient = db.prepare('SELECT id, birth_date, gender, anthropometric_sex FROM patients WHERE id = ? AND tenant_id = ?').get(b.patient_id, tenantId) as any;
+      const patient = clinicalPatientIdentity(req, String(b.patient_id), 'ZemdaPersonal') as any;
       if (!patient) {
         res.status(404).json({ error: 'Aluno não encontrado' });
         return;

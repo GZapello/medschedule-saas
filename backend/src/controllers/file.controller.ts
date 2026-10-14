@@ -1,3 +1,4 @@
+import { clinicalPatientIdentity } from '../middlewares/shared-patient.middleware';
 import { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
@@ -171,9 +172,7 @@ export class FileController {
 
       // Validação de acesso ao paciente pela clínica autenticada (se for anexo de paciente/aluno)
       if (!isClinicOrExerciseAsset && patientId) {
-        const patient = db
-          .prepare('SELECT id FROM patients WHERE id = ? AND tenant_id = ?')
-          .get(patientId, tenantId) as any;
+        const patient = clinicalPatientIdentity(req, String(patientId), req.body.moduleType || req.body.module_type || 'general') as any;
 
         if (!patient) {
           res.status(404).json({
@@ -336,9 +335,7 @@ export class FileController {
 
       // Validação de acesso ao paciente pela clínica autenticada (se for anexo de paciente)
       if (!isClinicOrExerciseAsset && patientId) {
-        const patient = db
-          .prepare('SELECT id FROM patients WHERE id = ? AND tenant_id = ?')
-          .get(patientId, tenantId) as any;
+        const patient = clinicalPatientIdentity(req, String(patientId), req.body.moduleType || req.body.module_type || 'general') as any;
 
         if (!patient) {
           res.status(404).json({
@@ -454,9 +451,7 @@ export class FileController {
         }
 
         // Validação de acesso ao paciente
-        const patient = db
-          .prepare('SELECT id FROM patients WHERE id = ? AND tenant_id = ?')
-          .get(patientId, tenantId) as any;
+        const patient = clinicalPatientIdentity(req, String(patientId), req.body.moduleType || req.body.module_type || 'general') as any;
 
         if (!patient) {
           res.status(404).json({

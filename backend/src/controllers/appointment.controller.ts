@@ -1,3 +1,4 @@
+import { canAccessPatient } from '../services/patient-sharing.service';
 import { resolveBookingTenant, publicBookingProfessional, professionalBookingService, validBookingDate } from '../utils/public-booking';
 import { calculateAvailableSlots } from '../utils/slot-calculator';
 import { hasClinicalAccess } from './clinical.controller';
@@ -407,6 +408,11 @@ export class AppointmentController {
       if (!resolvedPatientId) {
         res.status(400).json({ error: 'Paciente não identificado' });
         return;
+      }
+
+      const ownsPatient = db.prepare('SELECT 1 FROM patients WHERE id=? AND tenant_id=?').get(resolvedPatientId,tenantId);
+      if (!ownsPatient && (!req.user || !canAccessPatient(req.user.userId,tenantId,resolvedPatientId,'appointments'))) {
+        res.status(403).json({error:'Paciente não autorizado para agendamento nesta clínica.'}); return;
       }
 
       const normalizedStartTime = String(startTime).trim().replace(' ', 'T');

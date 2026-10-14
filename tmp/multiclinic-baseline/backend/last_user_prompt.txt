@@ -1,0 +1,265 @@
+<USER_REQUEST>
+ATUALIZAÇÃO ZEMDA — IMPLEMENTAR SOMENTE AS CORREÇÕES ABAIXO
+
+Antes de alterar, verificar a implementação atual e reutilizar componentes/rotas existentes. Não remover nem quebrar funcionalidades que já funcionam.
+
+==================================================
+1. ESCALA DE TRABALHO / AGENDAMENTOS
+==================================================
+
+Corrigir completamente a dependência de confirmação manual da escala.
+
+- Ao cadastrar ou alterar a escala de trabalho do profissional, ela deve ficar automaticamente confirmada/ativa.
+- Não exigir etapa manual de “confirmar escala” para permitir agendamentos.
+- Horários ativos da escala devem ficar imediatamente disponíveis na Agenda Interativa.
+- Manter bloqueios, intervalos, conflitos e consultas já existentes.
+- Não criar horários fora da escala.
+- Testar criação de profissional → escala → agendamento sem confirmação manual adicional.
+
+==================================================
+2. ZEMDAPP NO INÍCIO DO ATENDIMENTO
+==================================================
+
+Ao iniciar atendimento de profissional da área Psicopedagogia/ZemdaPP, atualmente não aparece acesso ao ZemdaPP.
+
+Corrigir o QuickConsultation/Prontuário para mostrar:
+
+[ Abrir ZemdaPP ]
+
+quando:
+- profissão = Psicopedagogia/Psicopedagogo
+OU
+- isZemdaPP = true
+OU
+- módulo do agendamento = ZemdaPP.
+
+O botão deve abrir `psychopedagogy-workspace` mantendo:
+- patientId
+- appointmentId
+- profissional
+- atendimento atual
+
+Fluxo:
+Agenda → Iniciar Atendimento → Prontuário → Abrir ZemdaPP.
+
+==================================================
+3. ZEMDABODY — ACESSO UNIVERSAL
+==================================================
+
+ZemdaBody deve estar disponível para TODAS as áreas profissionais, mediante permissão/liberação do gerente da clínica.
+
+Exemplos:
+- Fonoaudiologia
+- Psicologia
+- Psicopedagogia
+- Terapia Ocupacional
+- Nutrição
+- Fisioterapia
+- Personal Trainer
+- Odontologia
+- Medicina
+- demais profissões cadastradas
+
+IMPORTANTE:
+- ZemdaBody NÃO é profissão.
+- ZemdaBody é um módulo complementar universal.
+- Não associar ZemdaBody somente à Medicina.
+- Não restringir ZemdaBody por profissão.
+- O gerente/admin da clínica deve poder liberar ou bloquear ZemdaBody por usuário/profissional.
+- Usuário autorizado deve visualizar botão/acesso ao ZemdaBody dentro do atendimento, independentemente da profissão.
+- Manter as regras atuais de permissão e segurança.
+
+==================================================
+4. VISUALIZAÇÃO RÁPIDA DE PRONTUÁRIOS
+==================================================
+
+Adicionar em TODOS os módulos profissionais um botão visível no cabeçalho:
+
+[ Ver Prontuários Anteriores ]
+
+Adicionar em:
+- ZemdaFono
+- ZemdaOdonto
+- ZemdaTO
+- ZemdaFisio
+- ZemdaNutri
+- ZemdaPsico
+- ZemdaPP
+- ZemdaPersonal quando aplicável
+
+Ao clicar:
+- abrir modal/drawer rápido;
+- mostrar prontuários/evoluções anteriores do paciente selecionado;
+- ordenar do mais recente para o mais antigo;
+- mostrar data, profissional, módulo, título e evolução;
+- permitir abrir/imprimir registro;
+- mostrar assinatura/selamento quando houver;
+- não permitir edição destrutiva pelo visualizador.
+
+Reutilizar `/v1/clinical-records/patient/:patientId` e componentes existentes sempre que possível.
+
+==================================================
+5. ZEMDAPersonal — CORREÇÃO TOTAL DAS FOTOS
+==================================================
+
+CORRIGIR DEFINITIVAMENTE o sistema de fotos do ZemdaPersonal.
+
+Hoje o upload pode ocorrer, porém as imagens ainda não aparecem corretamente depois.
+
+Usar obrigatoriamente a arquitetura segura existente:
+
+Browser
+→ upload-ticket
+→ Cloudflare Worker
+→ R2 privado
+→ /files/complete
+→ salvar FILE ID
+→ SecureFileImage busca URL temporária
+
+REGRAS:
+
+- Nunca persistir `blob:`.
+- Nunca usar URL temporária assinada como fonte permanente.
+- Nunca depender diretamente de `r2.cloudflarestorage.com`.
+- Banco deve guardar `file_id`.
+- Sempre renderizar foto usando `SecureFileImage`.
+- Ao recarregar/F5, a foto deve continuar aparecendo.
+- Corrigir fotos antigas quando existir `file_id` válido.
+- Se houver file_id, ele sempre tem prioridade sobre photo_url.
+
+Revisar principalmente:
+- PersonalAssessmentModal
+- FileImageUploader
+- SecureFileImage
+- EvolutionPhotoField
+- backend file.controller
+- persistência das avaliações físicas.
+
+Nas avaliações físicas manter fotos:
+- Frente
+- Costas
+- Lado Direito
+- Lado Esquerdo
+
+Permitir:
+- Visualizar
+- Substituir
+- Remover enquanto não finalizado
+- Atualizar foto em reavaliação
+- Histórico das fotos anteriores
+
+Não destruir fotos históricas finalizadas.
+
+==================================================
+6. FOTOS DOS EXERCÍCIOS / TREINOS ZEMDAPersonal
+==================================================
+
+Adicionar suporte completo de imagem aos exercícios e treinos.
+
+Cada exercício poderá ter:
+- file_id da imagem principal;
+- nome;
+- descrição;
+- grupo muscular;
+- séries;
+- repetições;
+- carga;
+- intervalo;
+- observações.
+
+No cadastro/edição de exercício:
+[ Adicionar Foto ]
+[ Trocar Foto ]
+[ Remover Foto ]
+
+A imagem deve usar o MESMO sistema R2 seguro e SecureFileImage.
+
+Ao montar o treino:
+- exibir miniatura da foto do exercício;
+- exibir foto no treino do aluno;
+- exibir foto ao visualizar o exercício;
+- incluir foto no PDF do treino quando tecnicamente possível.
+
+Fotos cadastradas na biblioteca de exercícios devem poder ser reutilizadas em diferentes treinos SEM duplicar arquivo no R2.
+
+Persistir FILE ID, não URL temporária.
+
+==================================================
+7. CADASTRO DA CLÍNICA
+==================================================
+
+Na tela “Criar Minha Clínica”, manter as profissões normalmente:
+
+- Psicopedagogia → ZemdaPP
+- Fonoaudiologia → ZemdaFono
+- Psicologia → ZemdaPsico
+- Terapia Ocupacional → ZemdaTO
+- Nutrição → ZemdaNutri
+- Fisioterapia → ZemdaFisio
+- Personal Trainer → ZemdaPersonal
+- Odontologia/Dentista → ZemdaOdonto
+- Medicina / Médico
+- Gestão Administrativa
+- Outro profissional da saúde
+
+NÃO colocar “→ ZemdaBody” apenas ao lado de Medicina.
+
+Em vez disso, adicionar abaixo da seleção de profissão uma informação geral:
+
+“ZemdaBody está disponível para todas as áreas profissionais, conforme liberação do gerenciador da clínica.”
+
+Opcionalmente adicionar checkbox/configuração:
+
+[ ] Liberar ZemdaBody para este profissional
+
+ou manter essa liberação no gerenciamento de acessos já existente.
+
+==================================================
+8. INTEGRAÇÃO DOS MÓDULOS
+==================================================
+
+Todos os módulos devem manter o padrão:
+
+Iniciar Atendimento
+→ Prontuário
+→ botão para abrir módulo profissional
+→ botão ZemdaBody quando autorizado
+→ voltar ao prontuário sem perder patientId/appointmentId.
+
+Exemplos:
+- Abrir ZemdaFono
+- Abrir ZemdaOdonto
+- Abrir ZemdaTO
+- Abrir ZemdaFisio
+- Abrir ZemdaNutri
+- Abrir ZemdaPsico
+- Abrir ZemdaPP
+- Abrir ZemdaPersonal
+- Abrir ZemdaBody quando autorizado
+
+==================================================
+9. TESTES OBRIGATÓRIOS
+==================================================
+
+Testar antes de finalizar:
+
+1. Criar/alterar escala e agendar imediatamente sem confirmação manual.
+2. Psicopedagogo inicia atendimento e visualiza “Abrir ZemdaPP”.
+3. PatientId e appointmentId permanecem ao entrar/sair do ZemdaPP.
+4. Todos os módulos mostram “Ver Prontuários Anteriores”.
+5. Histórico abre somente dados do paciente correto e do tenant correto.
+6. Upload de foto ZemdaPersonal funciona.
+7. Após F5 a imagem continua aparecendo.
+8. Reavaliação mantém fotos antigas no histórico.
+9. Fotos de exercícios aparecem na biblioteca, treino e visualização.
+10. Nenhuma imagem salva `blob:` ou URL R2 temporária como dado permanente.
+11. ZemdaBody pode ser liberado para qualquer profissão.
+12. Profissional autorizado visualiza ZemdaBody independentemente da área.
+13. Profissional sem permissão NÃO visualiza ZemdaBody.
+14. Build frontend/backend sem erros.
+
+NÃO ALTERAR outras funcionalidades fora deste pedido.
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-09-19T13:28:24-03:00.
+</ADDITIONAL_METADATA>

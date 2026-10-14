@@ -308,7 +308,7 @@ export class CapabilityService {
   public static computeUserCapabilities(userId: string, tenantId: string): ComputedUserCapabilities {
     // 1. Busca dados do usuário, profissional, vínculo de clínica e tenant
     const userRow = db.prepare(`
-      SELECT u.id, u.name as u_name, u.email as u_email, u.role,
+      SELECT u.id, u.tenant_id AS legacy_tenant_id, u.name as u_name, u.email as u_email, COALESCE(cu.role, u.role) as role,
              u.profession_id as u_prof_id, u.profession_name as u_prof_name,
              u.zemda_fono_enabled as u_fono, u.zemda_med_enabled as u_med,
              u.zemda_fisio_enabled as u_fisio, u.zemda_odonto_enabled as u_odonto,
@@ -342,6 +342,11 @@ export class CapabilityService {
       LEFT JOIN tenants t ON t.id = ?
       WHERE u.id = ?
     `).get(tenantId, tenantId, tenantId, userId) as any;
+
+    // Global flags are legacy hints, never permissions for a different clinic.
+    if (userRow && userRow.legacy_tenant_id !== tenantId) {
+      for (const key of Object.keys(userRow)) if (key.startsWith('u_')) userRow[key] = null;
+    }
 
     // 1.1 Detecção de Fonoaudiologia (REGRA OBRIGATÓRIA):
     // Todo perfil com zemda_fono_enabled, fonoaudiólogo(a), clinic_admin em clínica fonoaudiológica,

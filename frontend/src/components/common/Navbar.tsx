@@ -1,5 +1,6 @@
 import React from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { ClinicSwitcher } from './ClinicSwitcher';
 import {
   LogOut,
   Shield,
@@ -80,6 +81,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, onNavigate }) =
       </div>
 
       <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+        <ClinicSwitcher compact />
         {/* Botão de retorno ao Painel Global para SuperAdmin */}
         {isSuperAdmin && !isSandboxSession && (
           <button

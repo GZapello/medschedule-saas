@@ -1,3 +1,4 @@
+import { InvitePatientSharing } from './InvitePatientSharing';
 import React, { useState, useEffect, useRef } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -44,6 +45,9 @@ interface ValidInviteData {
   };
   role: string;
   expiresAt: string;
+  inviterName?: string;
+  permissions?: string[];
+  alreadyMember?: boolean;
 }
 
 interface PracticeArea {
@@ -69,7 +73,7 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
   onBackToLogin,
   onSuccess
 }) => {
-  const { loginWithToken } = useAuth();
+  const { loginWithToken, currentUser, switchTenant } = useAuth();
   const { showToast } = useToast();
 
   const [loadingInvite, setLoadingInvite] = useState(true);
@@ -118,6 +122,7 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
   // Submissão final
   const [submitting, setSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [acceptedTenant, setAcceptedTenant] = useState<string | null>(null);
 
   // Carrega catálogo de profissões dinâmico
   useEffect(() => {
@@ -154,13 +159,13 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
   // Valida o link do convite
   useEffect(() => {
     validateToken();
-  }, [token]);
+  }, [token, currentUser?.id]);
 
   const validateToken = async () => {
     try {
       setLoadingInvite(true);
       setInviteError(null);
-      const res = await ApiClient.get<ValidInviteData>('/v1/public/invites/' + token);
+      const res = await ApiClient.get<ValidInviteData>((currentUser ? '/v1/auth/invites/' : '/v1/public/invites/') + token);
       if (res && res.valid) {
         setInviteData(res);
         if (ADMINISTRATIVE_ROLES.includes(res.role)) {
@@ -520,6 +525,11 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
         }
       }, 700);
     } catch (err: any) {
+      if (err.code === 'INVITE_LOGIN_REQUIRED' || String(err.message).includes('já possui uma conta Zemda')) {
+        showToast('Esta pessoa já possui conta Zemda. Entre com seu e-mail e senha para aceitar o convite.', 'info');
+        onBackToLogin();
+        return;
+      }
       const errMsg = err.message || 'Erro ao concluir cadastro por convite';
       showToast(errMsg, 'error');
     } finally {
@@ -592,7 +602,121 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
     );
   }
 
-  // 3. Estado de Sucesso Imediato
+  if (acceptedTenant && inviteData) return <InvitePatientSharing targetId={acceptedTenant} targetName={inviteData.tenant.name} onFinish={()=>switchTenant(acceptedTenant)} />;
+
+  if (currentUser && inviteData) {
+    return (
+      <div className="min-h-screen bg-[#fafbfc] text-slate-800 flex flex-col items-center justify-center p-4 sm:p-6 relative overflow-hidden font-sans">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[450px] bg-gradient-to-b from-teal-100/60 via-emerald-50/30 to-transparent blur-3xl -z-10 pointer-events-none" />
+
+        <div className="w-full max-w-lg space-y-6">
+          <div className="text-center space-y-2 select-none">
+            <div className="flex items-center justify-center mb-1">
+              <img src="/brand/zemda-logo.png" alt="Zemda" className="h-12 sm:h-14 w-auto object-contain drop-shadow-xs" />
+            </div>
+            <p className="text-xs text-teal-700 font-bold uppercase tracking-widest">Saúde e Gestão em Harmonia</p>
+          </div>
+
+          <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-xl shadow-teal-900/5 border border-slate-200/80 space-y-5">
+            <div className="flex items-center gap-4 p-4 rounded-2xl bg-teal-50/60 border border-teal-100/80">
+              {inviteData.tenant.logoUrl ? (
+                <img src={inviteData.tenant.logoUrl} alt={inviteData.tenant.name} className="w-12 h-12 rounded-xl object-contain bg-white border border-slate-200 shrink-0" />
+              ) : (
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-teal-600 to-emerald-500 text-white font-black text-xl flex items-center justify-center shrink-0 shadow-xs">
+                  {inviteData.tenant.name.charAt(0)}
+                </div>
+              )}
+              <div className="min-w-0">
+                <span className="text-[10px] font-bold text-teal-700 uppercase tracking-wider block">Convite de Equipe</span>
+                <h2 className="text-base font-bold text-slate-900 leading-tight truncate">{inviteData.tenant.name}</h2>
+                {inviteData.inviterName && (
+                  <p className="text-xs text-slate-500 mt-0.5 truncate">Enviado por: {inviteData.inviterName}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl text-xs space-y-2">
+              <div className="flex justify-between items-center text-slate-600">
+                <span>Conta conectada:</span>
+                <span className="font-semibold text-slate-800 truncate max-w-[200px]">{currentUser.email}</span>
+              </div>
+              <div className="flex justify-between items-center text-slate-600">
+                <span>Função atribuída:</span>
+                <span className="font-semibold text-teal-800 bg-teal-100/70 px-2 py-0.5 rounded-full text-[11px]">
+                  {inviteData.role === 'professional' ? 'Profissional Clínico' : inviteData.role === 'clinic_admin' ? 'Administrador' : inviteData.role}
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Sua conta global, outras clínicas vinculadas e prontuários permanecerão totalmente preservados. Este aceite adiciona seu acesso profissional à nova clínica.
+            </p>
+
+            {inviteData.permissions && inviteData.permissions.length > 0 && (
+              <details className="text-xs text-slate-600 bg-slate-50/50 p-3 rounded-xl border border-slate-200/60">
+                <summary className="font-semibold text-slate-700 cursor-pointer">Permissões previstas de acesso ({inviteData.permissions.length})</summary>
+                <ul className="mt-2 space-y-1 pl-4 list-disc text-slate-500 max-h-32 overflow-y-auto">
+                  {inviteData.permissions.map(p => <li key={p}>{p.replace(/_/g, ' ')}</li>)}
+                </ul>
+              </details>
+            )}
+
+            {inviteData.alreadyMember ? (
+              <div className="space-y-3 pt-2">
+                <div className="p-3 bg-teal-50 border border-teal-200 rounded-xl text-xs text-teal-800 font-medium">
+                  Sua conta já está vinculada a esta clínica.
+                </div>
+                <button
+                  type="button"
+                  onClick={() => switchTenant(inviteData.tenant.id)}
+                  className="w-full py-3.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-bold text-sm shadow-md shadow-teal-700/10 transition-all cursor-pointer"
+                >
+                  Acessar a clínica agora
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                disabled={submitting}
+                className="w-full py-3.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white rounded-xl font-bold text-sm shadow-md shadow-teal-700/15 transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+                onClick={async () => {
+                  setSubmitting(true);
+                  try {
+                    const result = await ApiClient.post<{tenantId:string; message:string}>('/v1/auth/invites/' + encodeURIComponent(token) + '/accept', {});
+                    showToast(result.message, 'success');
+                    sessionStorage.removeItem('pending_clinic_invite');
+                    setAcceptedTenant(result.tenantId);
+                    setSubmitting(false);
+                  } catch (error: any) {
+                    showToast(error.message || 'Não foi possível aceitar o convite.', 'error');
+                    setSubmitting(false);
+                  }
+                }}
+              >
+                {submitting ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Vinculando perfil...</span>
+                  </>
+                ) : (
+                  <span>Confirmar e aceitar vínculo</span>
+                )}
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => window.location.assign('/dashboard')}
+              className="w-full text-center text-xs text-slate-400 hover:text-slate-600 font-medium transition-colors cursor-pointer"
+            >
+              Cancelar e voltar ao painel
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (isSuccess) {
     return (
       <div className="min-h-screen bg-[#fafbfc] text-slate-800 flex flex-col items-center justify-center p-4 sm:p-6 relative overflow-hidden font-sans">
@@ -705,6 +829,23 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
                 </span>
               </div>
             </div>
+          </div>
+
+          {/* Opção para quem já possui conta Zemda */}
+          <div className="p-4 bg-teal-50/60 border-b border-teal-100/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+            <div className="space-y-0.5">
+              <p className="font-bold text-slate-800">Já possui uma conta no Zemda?</p>
+              <p className="text-slate-600 leading-relaxed">
+                Faça login para vincular seu perfil existente à clínica <strong>{inviteData.tenant.name}</strong> sem precisar recriar seus dados.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onBackToLogin}
+              className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl shadow-xs transition-all shrink-0 cursor-pointer"
+            >
+              Fazer Login e Vincular
+            </button>
           </div>
 
           {/* Barra de Progresso */}

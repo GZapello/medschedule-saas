@@ -1,0 +1,3798 @@
+import { migrateConsents } from './consents.migration';
+import { migratePersonalAssessment, seedPersonalTav } from './personal-assessment.migration';
+import { DatabaseSync } from 'node:sqlite';
+import path from 'path';
+import fs from 'fs';
+import { runSeed } from './seed';
+import { migrateBilling } from './billing-migration';
+import { migrateConsultations } from './consultation-migration';
+import { migrateLongitudinalClinical } from './longitudinal-clinical.migration';
+import { migratePersonalStudentLinks } from './personal-student-links.migration';
+import { seedExerciseLibrary } from './exercise-library.seed';
+import { seedNutritionFoodDatabase } from './nutrition-foods.seed';
+import { migrateRemoveOutOfScopeProfessions } from './remove-out-of-scope-professions.migration';
+import { migrateModularArchitecture } from './modular-architecture.migration';
+import { migrateMedicalTree } from './medical-tree.migration';
+import { migrateEstetic } from './estetic.migration';
+import { migrateProfessionsNormalization } from './professions-normalization.migration';
+import { migrateProfessionalSlugs, migrateClinicBooking } from './slug-migration';
+import { dbPath } from './db-path';
+import { backfillMissingDefaultSchedules } from '../utils/schedule-defaults';
+
+const dbDir = path.dirname(dbPath);
+if (!fs.existsSync(dbDir)) {
+  fs.mkdirSync(dbDir, { recursive: true });
+}
+const rawDb = new DatabaseSync(dbPath);
+
+export const CURRENT_TERMS_VERSION = '2026.1';
+export const CURRENT_PRIVACY_VERSION = '2026.1';
+
+
+// Configurações de alta performance e integridade referencial
+rawDb.exec('PRAGMA journal_mode = WAL;');
+rawDb.exec('PRAGMA foreign_keys = ON;');
+
+export interface ISafeStatement {
+  run(...params: any[]): { changes: number; lastInsertRowid: number | bigint };
+  get(...params: any[]): any;
+  all(...params: any[]): any[];
+}
+
+class SafeDatabase {
+  exec(sql: string): void {
+    rawDb.exec(sql);
+  }
+
+  prepare(sql: string): ISafeStatement {
+    const stmt = rawDb.prepare(sql);
+    return {
+      run: (...params: any[]) => {
+        const safeParams = params.map(p => (p === undefined ? null : p));
+        return (stmt as any).run(...safeParams);
+      },
+      get: (...params: any[]) => {
+        const safeParams = params.map(p => (p === undefined ? null : p));
+        return (stmt as any).get(...safeParams);
+      },
+      all: (...params: any[]) => {
+        const safeParams = params.map(p => (p === undefined ? null : p));
+        return (stmt as any).all(...safeParams);
+      }
+    };
+  }
+
+  /**
+   * Transação SÍNCRONA: BEGIN IMMEDIATE → fn() → COMMIT (ou ROLLBACK se fn lançar).
+   * O callback NÃO pode ser async nem retornar Promise: tudo que roda depois do
+   * primeiro await ficaria fora da transação (sem rollback). Faça o trabalho
+   * assíncrono (ex.: hash de senha) antes de chamar a transação.
+   */
+  transaction<T extends (...args: any[]) => any>(fn: T): T {
+    return ((...args: any[]) => {
+      rawDb.exec('BEGIN IMMEDIATE;');
+      try {
+        const result = fn(...args);
+        if (result && typeof (result as any).then === 'function') {
+          // Evita unhandled rejection da Promise descartada; o erro real é o abaixo.
+          Promise.resolve(result).catch(() => {});
+          throw new Error(
+            'db.transaction recebeu um callback assíncrono (retornou Promise). ' +
+            'O callback deve ser síncrono; faça os awaits antes de abrir a transação.'
+          );
+        }
+        rawDb.exec('COMMIT;');
+        return result;
+      } catch (error) {
+        try {
+          rawDb.exec('ROLLBACK;');
+        } catch (_) {}
+        throw error;
+      }
+    }) as T;
+  }
+}
+
+export const db = new SafeDatabase();
+
+function cleanupObsoleteResources(db: DatabaseSync): void {
+  try {
+    db.exec(`
+      DROP TABLE IF EXISTS aac_cards;
+      DROP TABLE IF EXISTS aac_pages;
+      DROP TABLE IF EXISTS aac_boards;
+      DROP TABLE IF EXISTS fono_aac_records;
+
+      DELETE FROM profession_capabilities WHERE capability_id IN ('AAC_COMMUNICATION', 'AAC_BOARD_USE', 'AAC_BOARD_MANAGE');
+      DELETE FROM practice_area_capabilities WHERE capability_id IN ('AAC_COMMUNICATION', 'AAC_BOARD_USE', 'AAC_BOARD_MANAGE');
+      DELETE FROM user_optional_capabilities WHERE capability_id IN ('AAC_COMMUNICATION', 'AAC_BOARD_USE', 'AAC_BOARD_MANAGE');
+      DELETE FROM medical_specialty_capabilities WHERE capability_id IN ('AAC_COMMUNICATION', 'AAC_BOARD_USE', 'AAC_BOARD_MANAGE');
+      DELETE FROM plan_capabilities WHERE capability_id IN ('AAC_COMMUNICATION', 'AAC_BOARD_USE', 'AAC_BOARD_MANAGE');
+      DELETE FROM capabilities WHERE id IN ('AAC_COMMUNICATION', 'AAC_BOARD_USE', 'AAC_BOARD_MANAGE');
+      DELETE FROM practice_areas WHERE id IN ('pa-fono-comunicacao', 'pa-to-comunicacao');
+    `);
+  } catch (err) {
+    console.error('[Database] Erro ao limpar tabelas e capacidades obsoletas:', err);
+  }
+
+  try {
+    db.exec('ALTER TABLE fono_language_assessments DROP COLUMN aac_details;');
+  } catch (_) {
+    // Coluna pode não existir ou versão do SQLite pode não suportar drop column
+  }
+}
+
+export function initializeDatabase(): void {
+  // Migrações prévias seguras para tabelas existentes
+  try {
+    rawDb.exec("ALTER TABLE email_verifications ADD COLUMN ip_address TEXT;");
+  } catch (_) {}
+  try {
+    rawDb.exec("ALTER TABLE services ADD COLUMN professional_id TEXT REFERENCES professionals(id);");
+  } catch (_) {}
+  try {
+    rawDb.exec("ALTER TABLE users ADD COLUMN google_sub TEXT;");
+  } catch (_) {}
+  try {
+    rawDb.exec("ALTER TABLE users ADD COLUMN auth_provider TEXT DEFAULT 'local';");
+  } catch (_) {}
+
+  let schemaPath = path.resolve(__dirname, 'schema.sql');
+  if (!fs.existsSync(schemaPath)) {
+    schemaPath = path.resolve(__dirname, '../../src/config/schema.sql');
+  }
+  if (fs.existsSync(schemaPath)) {
+    // Legacy databases may lack columns or contain duplicate booking identities.
+    // Create this index only in the guarded migration, after columns and repairs.
+    const schemaSql = fs.readFileSync(schemaPath, 'utf8').replace(/CREATE UNIQUE INDEX IF NOT EXISTS idx_clinic_booking_identity[^;]*;/, '');
+    rawDb.exec(schemaSql);
+  } else {
+    console.warn('[Database] Arquivo schema.sql não encontrado em', schemaPath);
+  }
+
+  // Executa seed básico de categorias se necessário para evitar falhas de FK nas migrações
+  try {
+    const catCount = (rawDb.prepare("SELECT count(*) as total FROM categories").get() as any)?.total || 0;
+    if (catCount === 0) {
+      runSeed(rawDb);
+    }
+  } catch (_) {}
+
+  // Migrações dinâmicas para adicionar colunas em tabelas existentes
+  try {
+    const tableColumns = (table: string): string[] => {
+      try {
+        const info = rawDb.prepare(`PRAGMA table_info(${table})`).all() as any[];
+        return info.map(c => c.name);
+      } catch {
+        return [];
+      }
+    };
+
+    const addColIfMissing = (table: string, col: string, typeDef: string) => {
+      const cols = tableColumns(table);
+      if (cols.length > 0 && !cols.includes(col)) {
+        try {
+          rawDb.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${typeDef};`);
+        } catch (e) {
+          console.warn(`[Migration] Coluna ${col} na tabela ${table} não pôde ser adicionada:`, e);
+        }
+      }
+    };
+
+    addColIfMissing('tenants', 'public_booking_enabled', 'INTEGER NOT NULL DEFAULT 0');
+    addColIfMissing('tenants', 'public_booking_slug', 'TEXT');
+    addColIfMissing('tenants', 'public_booking_sequence', 'INTEGER');
+
+    // Colunas em tenants
+    addColIfMissing('tenants', 'corporate_name', 'TEXT');
+    addColIfMissing('tenants', 'trade_name', 'TEXT');
+    addColIfMissing('tenants', 'person_type', "TEXT DEFAULT 'pj'");
+    addColIfMissing('tenants', 'municipal_registration', 'TEXT');
+    addColIfMissing('tenants', 'state_registration', 'TEXT');
+    addColIfMissing('tenants', 'professional_board', 'TEXT');
+    addColIfMissing('tenants', 'professional_registry', 'TEXT');
+    addColIfMissing('tenants', 'responsible_name', 'TEXT');
+    addColIfMissing('tenants', 'responsible_cpf', 'TEXT');
+    addColIfMissing('tenants', 'responsible_email', 'TEXT');
+    addColIfMissing('tenants', 'responsible_phone', 'TEXT');
+    addColIfMissing('tenants', 'responsible_role', 'TEXT');
+    addColIfMissing('tenants', 'onboarding_completed', 'INTEGER DEFAULT 0');
+    addColIfMissing('tenants', 'onboarding_step', 'INTEGER DEFAULT 1');
+    addColIfMissing('tenants', 'manager_confirmed', 'INTEGER DEFAULT 0');
+    addColIfMissing('tenants', 'terms_accepted', 'INTEGER DEFAULT 1');
+    addColIfMissing('tenants', 'terms_accepted_at', 'TEXT');
+    addColIfMissing('tenants', 'privacy_accepted', 'INTEGER DEFAULT 1');
+    addColIfMissing('tenants', 'privacy_accepted_at', 'TEXT');
+    addColIfMissing('tenants', 'terms_version', 'TEXT');
+    addColIfMissing('tenants', 'privacy_version', 'TEXT');
+    addColIfMissing('tenants', 'rejection_reason', 'TEXT');
+    addColIfMissing('tenants', 'street', 'TEXT');
+    addColIfMissing('tenants', 'number', 'TEXT');
+    addColIfMissing('tenants', 'complement', 'TEXT');
+    addColIfMissing('tenants', 'neighborhood', 'TEXT');
+    addColIfMissing('tenants', 'country', "TEXT DEFAULT 'Brasil'");
+    addColIfMissing('tenants', 'mobile', 'TEXT');
+    addColIfMissing('tenants', 'whatsapp', 'TEXT');
+    addColIfMissing('tenants', 'website', 'TEXT');
+    addColIfMissing('tenants', 'description', 'TEXT');
+    addColIfMissing('tenants', 'trial_used', 'INTEGER NOT NULL DEFAULT 0');
+    addColIfMissing('tenants', 'onboarding_status', "TEXT DEFAULT 'active'");
+
+    // Tabela e índices de Aceite Legal (Termos de Uso e Política de Privacidade / LGPD)
+    try {
+      rawDb.exec(`
+        CREATE TABLE IF NOT EXISTS legal_acceptances (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          clinic_id TEXT NOT NULL,
+          terms_version TEXT NOT NULL,
+          privacy_version TEXT NOT NULL,
+          marketing_opt_in INTEGER DEFAULT 0,
+          accepted_at TEXT NOT NULL DEFAULT (datetime('now')),
+          ip_address TEXT,
+          user_agent TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_legal_acceptances_user ON legal_acceptances (user_id);
+        CREATE INDEX IF NOT EXISTS idx_legal_acceptances_clinic ON legal_acceptances (clinic_id);
+      `);
+    } catch (e) {
+      console.warn('[Migration] Erro ao criar tabela legal_acceptances:', e);
+    }
+    addColIfMissing('legal_acceptances', 'marketing_opt_in', 'INTEGER DEFAULT 0');
+
+    // Tabela e índices de Verificação de E-mail Obrigatória (OTP de 6 dígitos)
+    try {
+      rawDb.exec(`
+        CREATE TABLE IF NOT EXISTS email_verifications (
+          id TEXT PRIMARY KEY,
+          email TEXT NOT NULL,
+          purpose TEXT NOT NULL,
+          code_hash TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending',
+          attempts INTEGER NOT NULL DEFAULT 0,
+          resend_count INTEGER NOT NULL DEFAULT 0,
+          expires_at TEXT NOT NULL,
+          verified_at TEXT,
+          consumed_at TEXT,
+          last_sent_at TEXT,
+          ip_address TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_email_verif_email_purpose ON email_verifications(email, purpose);
+        CREATE INDEX IF NOT EXISTS idx_email_verif_status ON email_verifications(status);
+        CREATE INDEX IF NOT EXISTS idx_email_verif_ip_created ON email_verifications(ip_address, created_at);
+      `);
+    } catch (e) {
+      console.warn('[Migration] Erro ao criar tabela email_verifications:', e);
+    }
+
+    // Tabela de controle de profissões globais excluídas (impede reaparecimento por seed/restart)
+    try {
+      rawDb.exec(`
+        CREATE TABLE IF NOT EXISTS deleted_global_professions (
+          id TEXT PRIMARY KEY,
+          slug TEXT,
+          name TEXT,
+          deleted_at TEXT NOT NULL DEFAULT (datetime('now')),
+          deleted_by TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_deleted_global_professions_slug ON deleted_global_professions(slug);
+      `);
+    } catch (e) {
+      console.warn('[Migration] Erro ao criar tabela deleted_global_professions:', e);
+    }
+
+    // Coluna de plano no teste grátis (SOLO, TEAM, CLINIC)
+    addColIfMissing('free_trials', 'plan', "TEXT NOT NULL DEFAULT 'SOLO'");
+    addColIfMissing('email_verifications', 'ip_address', 'TEXT');
+
+    // Tabela da Infraestrutura Central do WhatsApp Business Cloud API (SaaS SuperAdmin)
+    try {
+      rawDb.exec(`
+        CREATE TABLE IF NOT EXISTS whatsapp_cloud_system_integrations (
+          id TEXT PRIMARY KEY,
+          waba_id TEXT NOT NULL,
+          phone_number_id TEXT NOT NULL,
+          business_id TEXT,
+          phone_number TEXT,
+          display_phone_number TEXT,
+          coexistence_mode INTEGER NOT NULL DEFAULT 1,
+          status TEXT NOT NULL DEFAULT 'connected' CHECK(status IN ('connected', 'disconnected', 'pending', 'error')),
+          encrypted_access_token TEXT,
+          token_expires_at TEXT,
+          connected_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+          created_by TEXT
+        );
+      `);
+    } catch (e) {
+      console.warn('[Migration] Erro ao criar tabela whatsapp_cloud_system_integrations:', e);
+    }
+
+    // Controle Administrativo Global (Banimento e Bloqueio de Cadastros)
+    addColIfMissing('tenants', 'registrations_blocked', 'INTEGER DEFAULT 0');
+    addColIfMissing('tenants', 'banned_at', 'TEXT');
+    addColIfMissing('tenants', 'banned_by', 'TEXT');
+    addColIfMissing('tenants', 'banned_reason', 'TEXT');
+
+    // Novas colunas para profissão estruturada e atendimentos/áreas de atuação livres
+    addColIfMissing('clinic_users', 'profession_custom', 'TEXT');
+    addColIfMissing('clinic_users', 'practice_areas', 'TEXT');
+    addColIfMissing('professionals', 'practice_areas', 'TEXT');
+    addColIfMissing('professionals', 'specialty_custom', 'TEXT');
+
+    // Colunas de Mapa Corporal de Dor e Área de Atuação do Gestor
+    addColIfMissing('physiotherapy_assessments', 'body_map_json', 'TEXT');
+    addColIfMissing('physiotherapy_assessments', 'body_map_image', 'TEXT');
+    addColIfMissing('users', 'profession_id', 'TEXT');
+    addColIfMissing('users', 'profession_name', 'TEXT');
+    addColIfMissing('users', 'practice_areas', 'TEXT');
+    addColIfMissing('users', 'registration_type', 'TEXT');
+    addColIfMissing('users', 'registration_number', 'TEXT');
+    addColIfMissing('users', 'terms_version_accepted', 'TEXT');
+    addColIfMissing('users', 'privacy_version_accepted', 'TEXT');
+    addColIfMissing('users', 'terms_accepted_at', 'TEXT');
+    addColIfMissing('users', 'privacy_accepted_at', 'TEXT');
+    addColIfMissing('clinic_users', 'zemda_body_enabled', 'INTEGER DEFAULT 0');
+    addColIfMissing('tenants', 'manager_profession', 'TEXT');
+    addColIfMissing('tenants', 'manager_practice_areas', 'TEXT');
+    // Versão de sessão por usuário: incrementada quando o próprio usuário troca a senha,
+    // invalidando tokens JWT emitidos antes da troca sem afetar outros usuários da clínica.
+    addColIfMissing('users', 'session_version', 'INTEGER NOT NULL DEFAULT 0');
+    addColIfMissing('users', 'onboarding_status', "TEXT DEFAULT 'active'");
+    addColIfMissing('users', 'email_verified', 'INTEGER DEFAULT 0');
+    addColIfMissing('users', 'email_verified_at', 'TEXT');
+    addColIfMissing('users', 'google_sub', 'TEXT');
+    addColIfMissing('users', 'auth_provider', "TEXT DEFAULT 'local'");
+
+    // Índice UNIQUE seguro para google_sub (não derruba o startup se falhar)
+    try {
+      rawDb.exec(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_sub
+        ON users (google_sub);
+      `);
+    } catch (e) {
+      console.warn('[Migration] Erro ao criar índice idx_users_google_sub:', e);
+    }
+
+    // Colunas em agendamentos para convênio, encaminhamento e cancelamento detalhado
+    addColIfMissing('appointments', 'meeting_url', 'TEXT');
+    addColIfMissing('appointments', 'insurance_id', 'TEXT');
+    addColIfMissing('appointments', 'referred_from_appointment_id', 'TEXT');
+    addColIfMissing('appointments', 'referred_by_professional_id', 'TEXT');
+    addColIfMissing('appointments', 'referral_reason', 'TEXT');
+    addColIfMissing('appointments', 'cancellation_reason_category', 'TEXT');
+    addColIfMissing('appointments', 'cancelled_by', 'TEXT');
+    addColIfMissing('appointments', 'clinical_module', 'TEXT');
+    addColIfMissing('appointments', 'profession_id', 'TEXT');
+
+    // Colunas em pagamentos para vínculo com caixa
+    addColIfMissing('payments', 'cash_register_id', 'TEXT');
+
+    // Colunas em pacientes para status explícito de alergias e sexo canônico
+    addColIfMissing('patients', 'allergies_status', "TEXT DEFAULT 'not_informed'");
+    addColIfMissing('patients', 'gender', 'TEXT');
+
+    // Coluna opcional de CID em exames a receber
+    addColIfMissing('pending_exams', 'cid_code', 'TEXT');
+
+    // Colunas de suporte a Anamnese estruturada e unificada
+    addColIfMissing('patient_anamnesis', 'questionnaire_answers_json', 'TEXT');
+    addColIfMissing('patient_anamnesis', 'notes', 'TEXT');
+    if (tableColumns('patient_anamnesis').length > 0) {
+      try {
+        rawDb.exec(`
+          UPDATE patient_anamnesis
+          SET questionnaire_answers_json = content_json
+          WHERE (questionnaire_answers_json IS NULL OR questionnaire_answers_json = '')
+            AND content_json IS NOT NULL;
+        `);
+      } catch (e) {
+        console.warn('[Migration] Erro ao sincronizar patient_anamnesis:', e);
+      }
+    }
+
+    // Desativação e exclusão agendada em 30 dias (Item 3)
+    addColIfMissing('users', 'deactivated_at', 'DATETIME');
+    addColIfMissing('users', 'scheduled_deletion_at', 'DATETIME');
+    addColIfMissing('clinic_users', 'deactivated_at', 'DATETIME');
+    addColIfMissing('clinic_users', 'scheduled_deletion_at', 'DATETIME');
+
+    // Convênio no cadastro do paciente (Item 4)
+    addColIfMissing('patients', 'health_insurance_provider', 'TEXT');
+    addColIfMissing('patients', 'health_insurance_card', 'TEXT');
+    addColIfMissing('patients', 'health_insurance_plan', 'TEXT');
+
+    // Liberação explícita do ZemdaFisio no profissional (Item 9)
+    addColIfMissing('professionals', 'zemda_fisio_enabled', 'INTEGER DEFAULT 0');
+    addColIfMissing('clinic_users', 'zemda_fisio_enabled', 'INTEGER DEFAULT 0');
+    addColIfMissing('users', 'zemda_fisio_enabled', 'INTEGER DEFAULT 0');
+
+    // Liberação explícita do ZemdaOdonto no profissional
+    addColIfMissing('professionals', 'zemda_odonto_enabled', 'INTEGER DEFAULT 0');
+    addColIfMissing('clinic_users', 'zemda_odonto_enabled', 'INTEGER DEFAULT 0');
+    addColIfMissing('users', 'zemda_odonto_enabled', 'INTEGER DEFAULT 0');
+
+    // Liberação explícita de ZemdaNutri, ZemdaTO e ZemdaFono no profissional e na equipe
+    addColIfMissing('professionals', 'zemda_nutri_enabled', 'INTEGER DEFAULT 0');
+    addColIfMissing('clinic_users', 'zemda_nutri_enabled', 'INTEGER DEFAULT 0');
+    addColIfMissing('users', 'zemda_nutri_enabled', 'INTEGER DEFAULT 0');
+
+    addColIfMissing('professionals', 'zemda_to_enabled', 'INTEGER DEFAULT 0');
+    addColIfMissing('clinic_users', 'zemda_to_enabled', 'INTEGER DEFAULT 0');
+    addColIfMissing('users', 'zemda_to_enabled', 'INTEGER DEFAULT 0');
+
+    addColIfMissing('professionals', 'zemda_fono_enabled', 'INTEGER DEFAULT 0');
+    addColIfMissing('clinic_users', 'zemda_fono_enabled', 'INTEGER DEFAULT 0');
+    addColIfMissing('users', 'zemda_fono_enabled', 'INTEGER DEFAULT 0');
+
+    // Módulo ZemdaPP (Psicopedagogia Clínica e Institucional)
+    addColIfMissing('professionals', 'zemda_pp_enabled', 'INTEGER DEFAULT 0');
+    addColIfMissing('clinic_users', 'zemda_pp_enabled', 'INTEGER DEFAULT 0');
+    addColIfMissing('users', 'zemda_pp_enabled', 'INTEGER DEFAULT 0');
+
+    // Módulo ZemdaPsico (Psicologia Clínica)
+    addColIfMissing('professionals', 'zemda_psico_enabled', 'INTEGER DEFAULT 0');
+    addColIfMissing('clinic_users', 'zemda_psico_enabled', 'INTEGER DEFAULT 0');
+    addColIfMissing('users', 'zemda_psico_enabled', 'INTEGER DEFAULT 0');
+
+    // Módulo ZemdaPersonal (Personal Trainer / Educação Física)
+    addColIfMissing('professionals', 'zemda_personal_enabled', 'INTEGER DEFAULT 0');
+    addColIfMissing('users', 'zemda_personal_enabled', 'INTEGER DEFAULT 0');
+    addColIfMissing('clinic_users', 'zemda_personal_enabled', 'INTEGER DEFAULT 0');
+
+    // Sincronização de profissão em clinic_users e professionals
+    addColIfMissing('professionals', 'profession_name', 'TEXT');
+    addColIfMissing('clinic_users', 'profession_id', 'TEXT');
+    addColIfMissing('clinic_users', 'profession_name', 'TEXT');
+
+    // Alteração de profissão única durante o ciclo de vida da conta
+    addColIfMissing('professionals', 'profession_change_used', 'INTEGER DEFAULT 0');
+    addColIfMissing('professionals', 'profession_changed_at', 'TEXT');
+
+    // Vínculos específicos de anexos para avaliações, exercícios e testes externos
+    addColIfMissing('file_attachments', 'assessment_id', 'TEXT');
+    addColIfMissing('file_attachments', 'exercise_id', 'TEXT');
+    addColIfMissing('file_attachments', 'professional_id', 'TEXT');
+    addColIfMissing('file_attachments', 'module_type', 'TEXT');
+    addColIfMissing('file_attachments', 'test_id', 'TEXT');
+
+    // Assinatura eletrônica e selamento imutável de prontuários e documentos
+    addColIfMissing('records', 'signature_hash', 'TEXT');
+    addColIfMissing('records', 'signed_at', 'TEXT');
+    addColIfMissing('records', 'signed_by_user_id', 'TEXT');
+    addColIfMissing('records', 'signer_name', 'TEXT');
+    addColIfMissing('records', 'signer_registration', 'TEXT');
+    addColIfMissing('records', 'sealed_at', 'TEXT');
+    addColIfMissing('records', 'amendments_json', 'TEXT');
+
+    addColIfMissing('clinical_certificates', 'signature_hash', 'TEXT');
+    addColIfMissing('clinical_certificates', 'signed_at', 'TEXT');
+    addColIfMissing('clinical_certificates', 'signed_by_name', 'TEXT');
+    addColIfMissing('clinical_certificates', 'signed_by_registration', 'TEXT');
+    addColIfMissing('clinical_certificates', 'is_sealed', 'INTEGER DEFAULT 0');
+
+    addColIfMissing('clinical_prescriptions', 'signature_hash', 'TEXT');
+    addColIfMissing('clinical_prescriptions', 'signed_at', 'TEXT');
+    addColIfMissing('clinical_prescriptions', 'signed_by_name', 'TEXT');
+    addColIfMissing('clinical_prescriptions', 'signed_by_registration', 'TEXT');
+    addColIfMissing('clinical_prescriptions', 'is_sealed', 'INTEGER DEFAULT 0');
+
+    addColIfMissing('clinical_exam_requests', 'signature_hash', 'TEXT');
+    addColIfMissing('clinical_exam_requests', 'signed_at', 'TEXT');
+    addColIfMissing('clinical_exam_requests', 'signed_by_name', 'TEXT');
+    addColIfMissing('clinical_exam_requests', 'signed_by_registration', 'TEXT');
+    addColIfMissing('clinical_exam_requests', 'is_sealed', 'INTEGER DEFAULT 0');
+
+    // Catálogo de Serviços por Profissional
+    addColIfMissing('services', 'professional_id', 'TEXT REFERENCES professionals(id)');
+    try {
+      rawDb.exec(`
+        UPDATE services 
+        SET professional_id = (
+          SELECT ps.professional_id 
+          FROM professional_services ps 
+          WHERE ps.service_id = services.id 
+          LIMIT 1
+        )
+        WHERE professional_id IS NULL 
+          AND EXISTS (SELECT 1 FROM professional_services ps WHERE ps.service_id = services.id);
+
+        UPDATE services
+        SET professional_id = (
+          SELECT p.id 
+          FROM professionals p 
+          WHERE p.tenant_id = services.tenant_id 
+          ORDER BY p.active DESC, p.created_at ASC 
+          LIMIT 1
+        )
+        WHERE professional_id IS NULL;
+      `);
+    } catch (migErr) {
+      console.warn('[Migration] Aviso ao vincular serviços aos profissionais existentes:', migErr);
+    }
+
+    // Lembrete de retorno/contato por serviço
+    addColIfMissing('services', 'reminder_enabled', 'INTEGER NOT NULL DEFAULT 0');
+    addColIfMissing('services', 'reminder_value', 'INTEGER');
+    addColIfMissing('services', 'reminder_unit', "TEXT DEFAULT 'DAYS'");
+    addColIfMissing('services', 'clinical_module', 'TEXT');
+
+    try {
+      rawDb.exec(`
+        CREATE TABLE IF NOT EXISTS service_reminders (
+          id TEXT PRIMARY KEY,
+          clinic_id TEXT NOT NULL,
+          professional_id TEXT NOT NULL,
+          patient_id TEXT NOT NULL,
+          service_id TEXT NOT NULL,
+          appointment_id TEXT,
+          due_at TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'PENDENTE' CHECK(status IN ('PENDENTE', 'CONCLUÍDO', 'ADIADO')),
+          completed_at TEXT,
+          postponed_to TEXT,
+          notes TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+          FOREIGN KEY (clinic_id) REFERENCES tenants(id) ON DELETE CASCADE,
+          FOREIGN KEY (professional_id) REFERENCES professionals(id) ON DELETE CASCADE,
+          FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+          FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE,
+          FOREIGN KEY (appointment_id) REFERENCES appointments(id) ON DELETE SET NULL
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_service_reminders_appt_unique ON service_reminders(appointment_id, service_id) WHERE appointment_id IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS idx_service_reminders_clinic_prof ON service_reminders(clinic_id, professional_id, status);
+        CREATE INDEX IF NOT EXISTS idx_service_reminders_due_at ON service_reminders(clinic_id, due_at);
+      `);
+    } catch (sremErr) {
+      console.warn('[Migration] Aviso ao criar tabela service_reminders:', sremErr);
+    }
+
+    // Consentimento de telessaúde por profissão e metadados
+    addColIfMissing('patient_consents', 'modality', "TEXT DEFAULT 'telehealth'");
+    addColIfMissing('patient_consents', 'profession_id', 'TEXT');
+    addColIfMissing('patient_consents', 'profession_name', 'TEXT');
+    addColIfMissing('patient_consents', 'ip_address', 'TEXT');
+    addColIfMissing('patient_consents', 'user_agent', 'TEXT');
+    addColIfMissing('patient_consents', 'metadata_json', 'TEXT');
+    addColIfMissing('patient_consents', 'signature_hash', 'TEXT');
+
+    // ZemdaFono: encaminhado por, quebra de coarticulação e metas estruturadas
+    addColIfMissing('fono_speech_phonology', 'referred_by', 'TEXT');
+    addColIfMissing('fono_speech_phonology', 'coarticulation_breakdown', 'TEXT');
+    addColIfMissing('fono_treatment_plans', 'referred_by', 'TEXT');
+    addColIfMissing('fono_treatment_plans', 'goals_structured_json', 'TEXT');
+    addColIfMissing('fono_audiology_records', 'referred_by', 'TEXT');
+
+    // Tabela de Testes Complementares Personalizados ZemdaFono
+    try {
+      rawDb.exec(`
+        CREATE TABLE IF NOT EXISTS fono_complementary_tests (
+          id TEXT PRIMARY KEY,
+          tenant_id TEXT NOT NULL,
+          patient_id TEXT NOT NULL,
+          professional_id TEXT,
+          appointment_id TEXT,
+          test_name TEXT NOT NULL,
+          test_date TEXT NOT NULL,
+          score_or_result TEXT,
+          referred_by TEXT,
+          findings_notes TEXT,
+          attachment_url TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+          FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+          FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_fono_comp_tests ON fono_complementary_tests (patient_id, tenant_id);
+      `);
+    } catch (e) {
+      console.warn('[Migration] Erro ao criar fono_complementary_tests:', e);
+    }
+
+    // Tabela Universal de Testes Externos e Instrumentos Avaliativos (ZemdaPsico, ZemdaFono, ZemdaTO, etc.)
+    try {
+      rawDb.exec(`
+        CREATE TABLE IF NOT EXISTS clinical_external_tests (
+          id TEXT PRIMARY KEY,
+          tenant_id TEXT NOT NULL,
+          patient_id TEXT NOT NULL,
+          professional_id TEXT,
+          appointment_id TEXT,
+          module_type TEXT NOT NULL,
+          category TEXT NOT NULL DEFAULT 'Teste/Instrumento Externo',
+          test_name TEXT NOT NULL,
+          test_date TEXT NOT NULL,
+          professional_name TEXT,
+          referred_by TEXT,
+          result_summary TEXT,
+          notes TEXT,
+          file_id TEXT,
+          file_url TEXT,
+          file_name TEXT,
+          file_type TEXT,
+          file_size INTEGER,
+          is_sealed INTEGER NOT NULL DEFAULT 0,
+          created_by TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+          FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+          FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_clinical_ext_tests_pat_mod ON clinical_external_tests (tenant_id, patient_id, module_type);
+        CREATE INDEX IF NOT EXISTS idx_clinical_ext_tests_file ON clinical_external_tests (file_id);
+      `);
+    } catch (e) {
+      console.warn('[Migration] Erro ao criar clinical_external_tests:', e);
+    }
+
+    // Tabela de Avaliações Regionais Fisioterapêuticas Integradas ao Zemda360
+    try {
+      rawDb.exec(`
+        CREATE TABLE IF NOT EXISTS physiotherapy_regional_evaluations (
+          id TEXT PRIMARY KEY,
+          tenant_id TEXT NOT NULL,
+          patient_id TEXT NOT NULL,
+          professional_id TEXT NOT NULL,
+          appointment_id TEXT,
+          region_id TEXT NOT NULL,
+          region_label TEXT NOT NULL,
+          side TEXT NOT NULL DEFAULT 'midline',
+          evaluation_date TEXT NOT NULL DEFAULT (date('now')),
+          pain_json TEXT,
+          adm_json TEXT,
+          strength_json TEXT,
+          tests_json TEXT,
+          palpation_json TEXT,
+          edema_json TEXT,
+          functional_scales_json TEXT,
+          plan_link_json TEXT,
+          notes TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+          FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+          FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+          FOREIGN KEY (professional_id) REFERENCES professionals(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_physio_reg_patient_region ON physiotherapy_regional_evaluations (tenant_id, patient_id, region_id, evaluation_date);
+        CREATE INDEX IF NOT EXISTS idx_physio_reg_appt ON physiotherapy_regional_evaluations (tenant_id, appointment_id);
+      `);
+    } catch (e) {
+      console.warn('[Migration] Erro ao criar physiotherapy_regional_evaluations:', e);
+    }
+
+
+
+    // Suporte a snapshots de odontograma vinculados a prontuários
+    addColIfMissing('odontograms', 'record_id', 'TEXT');
+
+    // Padronização de datas nos agendamentos para conformidade ISO e precisão matemática de slots
+    try {
+      rawDb.exec(`
+        UPDATE appointments SET start_time = REPLACE(start_time, ' ', 'T') WHERE start_time LIKE '% %';
+        UPDATE appointments SET end_time = REPLACE(end_time, ' ', 'T') WHERE end_time LIKE '% %';
+      `);
+    } catch (e) {}
+
+    // Criação da tabela de convites de funcionários por link seguro (Itens 14 a 20)
+    rawDb.exec(`
+      CREATE TABLE IF NOT EXISTS clinic_invites (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        created_by TEXT NOT NULL,
+        token TEXT NOT NULL UNIQUE,
+        role TEXT NOT NULL DEFAULT 'professional',
+        expires_at TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'used', 'expired', 'cancelled')),
+        max_uses INTEGER NOT NULL DEFAULT 1,
+        used_count INTEGER NOT NULL DEFAULT 0,
+        used_at TEXT,
+        used_by TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_clinic_invites_token ON clinic_invites (token);
+      CREATE INDEX IF NOT EXISTS idx_clinic_invites_tenant ON clinic_invites (tenant_id, status);
+
+      -- Tabela de Testes Grátis gerados pelo SuperAdmin
+      CREATE TABLE IF NOT EXISTS free_trials (
+        id TEXT PRIMARY KEY,
+        token TEXT NOT NULL UNIQUE,
+        target_name TEXT NOT NULL,
+        target_email TEXT,
+        duration_days INTEGER NOT NULL,
+        duration_label TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'active', 'used', 'expired', 'revoked')),
+        created_by TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        link_expires_at TEXT NOT NULL,
+        activated_at TEXT,
+        trial_end_at TEXT,
+        tenant_id TEXT,
+        user_id TEXT,
+        notes TEXT,
+        revoked_at TEXT,
+        revoked_by TEXT,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_free_trials_token ON free_trials(token);
+      CREATE INDEX IF NOT EXISTS idx_free_trials_status ON free_trials(status);
+    `);
+
+    // Criação das novas tabelas clínicas, de convênios, documentos e caixa
+    rawDb.exec(`
+      CREATE TABLE IF NOT EXISTS patient_allergies (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        agent TEXT NOT NULL,
+        reaction TEXT,
+        severity TEXT DEFAULT 'moderate',
+        notes TEXT,
+        status TEXT DEFAULT 'active',
+        is_no_known_allergies INTEGER DEFAULT 0,
+        created_by TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_allergies_patient ON patient_allergies (tenant_id, patient_id);
+
+      CREATE TABLE IF NOT EXISTS patient_medications (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        dosage TEXT,
+        frequency TEXT,
+        route TEXT,
+        start_date TEXT,
+        end_date TEXT,
+        status TEXT DEFAULT 'active',
+        notes TEXT,
+        professional_name TEXT,
+        created_by TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_medications_patient ON patient_medications (tenant_id, patient_id, status);
+
+      CREATE TABLE IF NOT EXISTS clinic_insurances (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        code TEXT,
+        notes TEXT,
+        active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_clinic_insurances ON clinic_insurances (tenant_id, active);
+
+      CREATE TABLE IF NOT EXISTS patient_insurances (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        insurance_id TEXT NOT NULL,
+        plan_name TEXT,
+        card_number TEXT,
+        validity_date TEXT,
+        notes TEXT,
+        active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+        FOREIGN KEY (insurance_id) REFERENCES clinic_insurances(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_patient_insurances ON patient_insurances (tenant_id, patient_id);
+
+      CREATE TABLE IF NOT EXISTS patient_anamnesis (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        template_type TEXT DEFAULT 'geral',
+        content_json TEXT NOT NULL,
+        questionnaire_answers_json TEXT,
+        notes TEXT,
+        version INTEGER NOT NULL DEFAULT 1,
+        previous_version_id TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+        FOREIGN KEY (professional_id) REFERENCES professionals(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_anamnesis_patient ON patient_anamnesis (tenant_id, patient_id, version);
+
+      CREATE TABLE IF NOT EXISTS clinical_certificates (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT NOT NULL,
+        appointment_id TEXT,
+        certificate_number TEXT NOT NULL,
+        days_rest INTEGER DEFAULT 0,
+        cid TEXT,
+        content_text TEXT NOT NULL,
+        certificate_type TEXT DEFAULT 'rest',
+        days_off INTEGER DEFAULT 1,
+        start_date TEXT,
+        cid_code TEXT,
+        notes TEXT,
+        signature_hash TEXT,
+        signed_at TEXT,
+        signed_by_name TEXT,
+        signed_by_registration TEXT,
+        is_sealed INTEGER DEFAULT 0,
+        issued_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_at TEXT DEFAULT (datetime('now')),
+        created_by TEXT,
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+        FOREIGN KEY (professional_id) REFERENCES professionals(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_certificates_patient ON clinical_certificates (tenant_id, patient_id);
+
+      CREATE TABLE IF NOT EXISTS clinical_prescriptions (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT NOT NULL,
+        appointment_id TEXT,
+        prescription_number TEXT NOT NULL,
+        items_json TEXT NOT NULL,
+        instructions TEXT,
+        prescription_type TEXT DEFAULT 'simple',
+        content TEXT,
+        signature_hash TEXT,
+        signed_at TEXT,
+        signed_by_name TEXT,
+        signed_by_registration TEXT,
+        is_sealed INTEGER DEFAULT 0,
+        issued_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_at TEXT DEFAULT (datetime('now')),
+        created_by TEXT,
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+        FOREIGN KEY (professional_id) REFERENCES professionals(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_prescriptions_patient ON clinical_prescriptions (tenant_id, patient_id);
+
+      CREATE TABLE IF NOT EXISTS clinical_exam_requests (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT NOT NULL,
+        appointment_id TEXT,
+        request_number TEXT NOT NULL,
+        exams_list_json TEXT NOT NULL,
+        clinical_justification TEXT,
+        notes TEXT,
+        exams_list TEXT,
+        clinical_indication TEXT,
+        cid_code TEXT,
+        signature_hash TEXT,
+        signed_at TEXT,
+        signed_by_name TEXT,
+        signed_by_registration TEXT,
+        is_sealed INTEGER DEFAULT 0,
+        issued_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_at TEXT DEFAULT (datetime('now')),
+        created_by TEXT,
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+        FOREIGN KEY (professional_id) REFERENCES professionals(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_exam_requests_patient ON clinical_exam_requests (tenant_id, patient_id);
+
+      CREATE TABLE IF NOT EXISTS patient_exams (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        title TEXT NOT NULL,
+        exam_type TEXT DEFAULT 'laboratorial',
+        exam_date TEXT,
+        file_url TEXT,
+        file_type TEXT,
+        file_size INTEGER,
+        notes TEXT,
+        ai_extracted_summary TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_patient_exams ON patient_exams (tenant_id, patient_id);
+
+      CREATE TABLE IF NOT EXISTS cash_registers (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        opened_at TEXT NOT NULL DEFAULT (datetime('now')),
+        closed_at TEXT,
+        initial_balance REAL NOT NULL DEFAULT 0.0,
+        closing_balance_expected REAL,
+        closing_balance_actual REAL,
+        difference REAL,
+        status TEXT NOT NULL DEFAULT 'open',
+        notes_open TEXT,
+        notes_close TEXT,
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_cash_registers ON cash_registers (tenant_id, status);
+
+      CREATE TABLE IF NOT EXISTS patient_consents (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        consent_type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        version TEXT DEFAULT '1.0',
+        content_text TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'accepted',
+        accepted_by_name TEXT,
+        accepted_at TEXT,
+        revoked_at TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_patient_consents ON patient_consents (tenant_id, patient_id);
+
+      CREATE TABLE IF NOT EXISTS clinic_document_templates (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        template_type TEXT NOT NULL,
+        header_text TEXT,
+        footer_text TEXT,
+        show_logo INTEGER DEFAULT 1,
+        show_clinic_address INTEGER DEFAULT 1,
+        show_registry INTEGER DEFAULT 1,
+        custom_notes TEXT,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        UNIQUE(tenant_id, template_type)
+      );
+
+      CREATE TABLE IF NOT EXISTS import_batches (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        file_name TEXT NOT NULL,
+        file_type TEXT NOT NULL,
+        total_records INTEGER NOT NULL DEFAULT 0,
+        imported_count INTEGER NOT NULL DEFAULT 0,
+        updated_count INTEGER NOT NULL DEFAULT 0,
+        skipped_count INTEGER NOT NULL DEFAULT 0,
+        error_count INTEGER NOT NULL DEFAULT 0,
+        errors_json TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_import_batches ON import_batches (tenant_id, created_at);
+
+      CREATE TABLE IF NOT EXISTS ai_conversations (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        patient_id TEXT,
+        title TEXT NOT NULL,
+        context_scope TEXT DEFAULT 'general',
+        messages_json TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_ai_conversations ON ai_conversations (tenant_id, user_id);
+
+      CREATE TABLE IF NOT EXISTS patient_referrals (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        from_professional_id TEXT NOT NULL,
+        to_professional_id TEXT NOT NULL,
+        service_id TEXT,
+        origin_appointment_id TEXT,
+        target_appointment_id TEXT,
+        reason TEXT NOT NULL,
+        notes TEXT,
+        priority TEXT NOT NULL DEFAULT 'normal' CHECK(priority IN ('normal', 'routine', 'high', 'urgent')),
+        status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'scheduled', 'completed', 'cancelled')),
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+        FOREIGN KEY (from_professional_id) REFERENCES professionals(id),
+        FOREIGN KEY (to_professional_id) REFERENCES professionals(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_referrals_patient ON patient_referrals (tenant_id, patient_id);
+      CREATE INDEX IF NOT EXISTS idx_referrals_to_prof ON patient_referrals (tenant_id, to_professional_id, status);
+    `);
+
+    // Migrações de colunas para garantir compatibilidade total de documentos clínicos
+    addColIfMissing('clinical_certificates', 'certificate_type', "TEXT DEFAULT 'rest'");
+    addColIfMissing('clinical_certificates', 'days_off', "INTEGER DEFAULT 1");
+    addColIfMissing('clinical_certificates', 'start_date', "TEXT");
+    addColIfMissing('clinical_certificates', 'cid_code', "TEXT");
+    addColIfMissing('clinical_certificates', 'notes', "TEXT");
+    addColIfMissing('clinical_certificates', 'signature_hash', 'TEXT');
+    addColIfMissing('clinical_certificates', 'signed_at', 'TEXT');
+    addColIfMissing('clinical_certificates', 'signed_by_name', 'TEXT');
+    addColIfMissing('clinical_certificates', 'signed_by_registration', 'TEXT');
+    addColIfMissing('clinical_certificates', 'is_sealed', 'INTEGER DEFAULT 0');
+    addColIfMissing('clinical_certificates', 'created_at', "TEXT DEFAULT (datetime('now'))");
+
+    addColIfMissing('clinical_prescriptions', 'prescription_type', "TEXT DEFAULT 'simple'");
+    addColIfMissing('clinical_prescriptions', 'content', "TEXT");
+    addColIfMissing('clinical_prescriptions', 'signature_hash', 'TEXT');
+    addColIfMissing('clinical_prescriptions', 'signed_at', 'TEXT');
+    addColIfMissing('clinical_prescriptions', 'signed_by_name', 'TEXT');
+    addColIfMissing('clinical_prescriptions', 'signed_by_registration', 'TEXT');
+    addColIfMissing('clinical_prescriptions', 'is_sealed', 'INTEGER DEFAULT 0');
+    addColIfMissing('clinical_prescriptions', 'created_at', "TEXT DEFAULT (datetime('now'))");
+
+    addColIfMissing('clinical_exam_requests', 'exams_list', "TEXT");
+    addColIfMissing('clinical_exam_requests', 'clinical_indication', "TEXT");
+    addColIfMissing('clinical_exam_requests', 'signature_hash', 'TEXT');
+    addColIfMissing('clinical_exam_requests', 'signed_at', 'TEXT');
+    addColIfMissing('clinical_exam_requests', 'signed_by_name', 'TEXT');
+    addColIfMissing('clinical_exam_requests', 'signed_by_registration', 'TEXT');
+    addColIfMissing('clinical_exam_requests', 'is_sealed', 'INTEGER DEFAULT 0');
+    addColIfMissing('clinical_exam_requests', 'created_at', "TEXT DEFAULT (datetime('now'))");
+
+    // Migração de patient_consents: as chamadas de addColIfMissing feitas antes de a tabela
+    // ser criada (mais acima neste arquivo) eram no-ops (tableColumns retornava [] e a
+    // condição `cols.length > 0` nunca era satisfeita), então essas colunas nunca existiam
+    // de fato e o INSERT em createConsent falhava. Reaplicadas aqui, após a criação da tabela.
+    addColIfMissing('patient_consents', 'professional_id', 'TEXT');
+    addColIfMissing('patient_consents', 'signature_data_url', 'TEXT');
+    addColIfMissing('patient_consents', 'signed_by_cpf', 'TEXT');
+    addColIfMissing('patient_consents', 'modality', "TEXT DEFAULT 'telehealth'");
+    addColIfMissing('patient_consents', 'profession_id', 'TEXT');
+    addColIfMissing('patient_consents', 'profession_name', 'TEXT');
+    addColIfMissing('patient_consents', 'ip_address', 'TEXT');
+    addColIfMissing('patient_consents', 'user_agent', 'TEXT');
+    addColIfMissing('patient_consents', 'metadata_json', 'TEXT');
+    addColIfMissing('patient_consents', 'signature_hash', 'TEXT');
+    // LGPD art. 8º §5º: revogação de consentimento (item 2.5 do checklist). Nunca apagamos a
+    // linha — só marcamos revoked_at/revoked_by, preservando o rastro de que o consentimento
+    // existiu e foi revogado.
+    addColIfMissing('patient_consents', 'revoked_by', 'TEXT');
+
+    addColIfMissing('patients', 'import_batch_id', 'TEXT');
+    addColIfMissing('patients', 'communication_preferences_json', "TEXT DEFAULT '{\"email\":true,\"sms\":true,\"whatsapp\":true}'");
+    addColIfMissing('appointments', 'import_batch_id', 'TEXT');
+
+    addColIfMissing('records', 'created_by', 'TEXT');
+    addColIfMissing('records', 'updated_by', 'TEXT');
+    addColIfMissing('records', 'edit_history_json', 'TEXT');
+    addColIfMissing('records', 'session_time', 'TEXT');
+    addColIfMissing('records', 'procedure_name', 'TEXT');
+    addColIfMissing('records', 'conducts', 'TEXT');
+    addColIfMissing('records', 'clinical_data_json', 'TEXT');
+    addColIfMissing('records', 'module_type', 'TEXT');
+    addColIfMissing('records', 'module_data_json', 'TEXT');
+    addColIfMissing('records', 'source_id', 'TEXT');
+    addColIfMissing('records', 'source_type', 'TEXT');
+    addColIfMissing('dental_treatment_plans', 'budget_id', 'TEXT');
+    try {
+      rawDb.exec("CREATE INDEX IF NOT EXISTS idx_records_source ON records (tenant_id, patient_id, source_id);");
+      rawDb.exec("CREATE INDEX IF NOT EXISTS idx_treatment_plans_budget ON dental_treatment_plans (tenant_id, budget_id);");
+    } catch (_) {}
+
+    addColIfMissing('notifications', 'retry_count', 'INTEGER DEFAULT 0');
+    addColIfMissing('notifications', 'last_error', 'TEXT');
+    addColIfMissing('notifications', 'delivery_status', "TEXT DEFAULT 'pending'");
+    addColIfMissing('notifications', 'idempotency_key', 'TEXT');
+    addColIfMissing('notifications', 'sent_by_user_id', 'TEXT');
+    addColIfMissing('notifications', 'sent_by_name', 'TEXT');
+    addColIfMissing('notifications', 'mode', "TEXT DEFAULT 'auto'");
+    addColIfMissing('notifications', 'external_message_id', 'TEXT');
+
+    // Novas colunas solicitadas para horários da clínica, CID em exames, sexo do profissional e convênios
+    addColIfMissing('tenants', 'business_hours_json', 'TEXT');
+    addColIfMissing('clinical_exam_requests', 'cid_code', 'TEXT');
+    addColIfMissing('professionals', 'gender', "TEXT DEFAULT 'M'");
+    addColIfMissing('clinic_insurances', 'plan_name', 'TEXT');
+    addColIfMissing('clinic_insurances', 'card_number', 'TEXT');
+    addColIfMissing('clinic_insurances', 'validity_date', 'TEXT');
+    addColIfMissing('clinic_insurances', 'ans_code', 'TEXT');
+    addColIfMissing('clinic_insurances', 'phone', 'TEXT');
+    addColIfMissing('clinic_insurances', 'email', 'TEXT');
+
+    // Migração de constraints da tabela notifications para permitir reminder_1h sem restrição
+    const notifTableInfo = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'notifications'").get() as any;
+    if (notifTableInfo?.sql && notifTableInfo.sql.includes("CHECK(type IN ('confirmation', 'reminder_24h', 'reminder_2h'")) {
+      db.exec(`
+        PRAGMA foreign_keys = OFF;
+        CREATE TABLE notifications_migrated (
+          id TEXT PRIMARY KEY,
+          tenant_id TEXT NOT NULL,
+          patient_id TEXT,
+          professional_id TEXT,
+          appointment_id TEXT,
+          type TEXT NOT NULL,
+          channel TEXT NOT NULL DEFAULT 'whatsapp',
+          recipient TEXT NOT NULL,
+          content TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending',
+          scheduled_for TEXT NOT NULL,
+          sent_at TEXT,
+          retry_count INTEGER DEFAULT 0,
+          last_error TEXT,
+          delivery_status TEXT DEFAULT 'pending',
+          idempotency_key TEXT,
+          sent_by_user_id TEXT,
+          sent_by_name TEXT,
+          mode TEXT DEFAULT 'auto',
+          external_message_id TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        INSERT INTO notifications_migrated (id, tenant_id, patient_id, professional_id, appointment_id, type, channel, recipient, content, status, scheduled_for, sent_at, created_at, retry_count, last_error, delivery_status, idempotency_key, sent_by_user_id, sent_by_name, mode, external_message_id)
+        SELECT id, tenant_id, patient_id, professional_id, appointment_id, type, channel, recipient, content, status, scheduled_for, sent_at, created_at, retry_count, last_error, delivery_status, idempotency_key, sent_by_user_id, sent_by_name, mode, external_message_id FROM notifications;
+        DROP TABLE notifications;
+        ALTER TABLE notifications_migrated RENAME TO notifications;
+        CREATE INDEX IF NOT EXISTS idx_notifications_queue ON notifications (status, scheduled_for);
+        PRAGMA foreign_keys = ON;
+      `);
+    }
+
+    // Tabela de Persistência de Onboarding / Guia Interativo por Usuário
+    rawDb.exec(`
+      CREATE TABLE IF NOT EXISTS user_onboarding (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL UNIQUE,
+        tenant_id TEXT,
+        onboarding_status TEXT NOT NULL DEFAULT 'pending' CHECK(onboarding_status IN ('pending', 'in_progress', 'completed', 'skipped', 'dismissed')),
+        onboarding_started_at TEXT,
+        onboarding_completed_at TEXT,
+        onboarding_last_step INTEGER NOT NULL DEFAULT 1,
+        onboarding_version TEXT NOT NULL DEFAULT 'v1.1',
+        onboarding_dismissed INTEGER NOT NULL DEFAULT 0,
+        module_tours_completed TEXT NOT NULL DEFAULT '[]',
+        whats_new_dismissed TEXT NOT NULL DEFAULT '[]',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_user_onboarding_user ON user_onboarding (user_id);
+      CREATE INDEX IF NOT EXISTS idx_user_onboarding_tenant ON user_onboarding (tenant_id);
+    `);
+
+    // Stable resume identifiers belong only to the demonstration tour.
+    const tourColumns = (rawDb.prepare('PRAGMA table_info(user_onboarding)').all() as { name: string }[]).map(column => column.name);
+    if (!tourColumns.includes('onboarding_tour_id')) rawDb.exec('ALTER TABLE user_onboarding ADD COLUMN onboarding_tour_id TEXT');
+    if (!tourColumns.includes('onboarding_step_id')) rawDb.exec('ALTER TABLE user_onboarding ADD COLUMN onboarding_step_id TEXT');
+
+    // Tabela de Notificações Administrativas do Sistema ao SuperAdmin
+    rawDb.exec(`
+      CREATE TABLE IF NOT EXISTS admin_notification_logs (
+        id TEXT PRIMARY KEY,
+        notification_type TEXT NOT NULL CHECK(notification_type IN ('NEW_USER', 'TRIAL_STARTED', 'SUPPORT_TICKET_CREATED')),
+        recipient TEXT NOT NULL,
+        related_entity_id TEXT NOT NULL,
+        status TEXT NOT NULL CHECK(status IN ('PENDING', 'SENT', 'FAILED', 'SKIPPED_SANDBOX', 'SKIPPED_DUPLICATE', 'SKIPPED_NO_PROVIDER')),
+        provider_message_id TEXT,
+        error TEXT,
+        sent_at TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_admin_notif_unique 
+        ON admin_notification_logs (notification_type, related_entity_id);
+      CREATE INDEX IF NOT EXISTS idx_admin_notif_type_created 
+        ON admin_notification_logs (notification_type, created_at);
+    `);
+
+    // Assegura que a lista detalhada de profissões de saúde e administração exista no banco
+    const allDetailedProfessions = [
+      // Saúde
+      { id: 'prof-fonoaudiologia', cat_id: 'cat-fono', name: 'Fonoaudiologia', slug: 'fonoaudiologia', reg_label: 'CRFa', reg_req: 1 },
+      { id: 'prof-psicologia', cat_id: 'cat-mental', name: 'Psicologia', slug: 'psicologia', reg_label: 'CRP', reg_req: 1 },
+      { id: 'prof-medicina', cat_id: 'cat-med', name: 'Medicina', slug: 'medicina', reg_label: 'CRM', reg_req: 1 },
+      { id: 'prof-odontologia', cat_id: 'cat-odonto', name: 'Odontologia', slug: 'odontologia', reg_label: 'CRO', reg_req: 1 },
+      { id: 'prof-enfermagem', cat_id: 'cat-enfermagem', name: 'Enfermagem', slug: 'enfermagem', reg_label: 'COREN', reg_req: 1 },
+      { id: 'prof-tec-enfermagem', cat_id: 'cat-enfermagem', name: 'Técnico de Enfermagem', slug: 'tecnico-enfermagem', reg_label: 'COREN', reg_req: 1 },
+      { id: 'prof-fisioterapia', cat_id: 'cat-reab', name: 'Fisioterapia', slug: 'fisioterapia', reg_label: 'CREFITO', reg_req: 1 },
+      { id: 'prof-terapia-ocupacional', cat_id: 'cat-reab', name: 'Terapia Ocupacional', slug: 'terapia-ocupacional', reg_label: 'CREFITO', reg_req: 1 },
+      { id: 'prof-nutricao', cat_id: 'cat-nutri', name: 'Nutrição', slug: 'nutricao', reg_label: 'CRN', reg_req: 1 },
+      { id: 'prof-psicopedagogia', cat_id: 'cat-mental', name: 'Psicopedagogia', slug: 'psicopedagogia', reg_label: 'ABPp', reg_req: 0 },
+      { id: 'prof-educacao-fisica', cat_id: 'cat-esporte', name: 'Educação Física', slug: 'educacao-fisica', reg_label: 'CREF', reg_req: 1 },
+      { id: 'prof-servico-social', cat_id: 'cat-outros', name: 'Serviço Social', slug: 'servico-social', reg_label: 'CRESS', reg_req: 1 },
+      { id: 'prof-farmacia', cat_id: 'cat-med', name: 'Farmácia', slug: 'farmacia', reg_label: 'CRF', reg_req: 1 },
+      { id: 'prof-biomedicina', cat_id: 'cat-med', name: 'Biomedicina', slug: 'biomedicina', reg_label: 'CRBM', reg_req: 1 },
+      { id: 'prof-musicoterapia', cat_id: 'cat-integrativa', name: 'Musicoterapia', slug: 'musicoterapia', reg_label: 'UBAM', reg_req: 0 },
+      { id: 'prof-arteterapia', cat_id: 'cat-integrativa', name: 'Arteterapia', slug: 'arteterapia', reg_label: 'UBAAT', reg_req: 0 },
+      { id: 'prof-podologia', cat_id: 'cat-beleza', name: 'Podologia', slug: 'podologia', reg_label: 'Registro', reg_req: 0 },
+      { id: 'prof-acupuntura', cat_id: 'cat-integrativa', name: 'Acupuntura', slug: 'acupuntura', reg_label: 'Registro', reg_req: 0 },
+      { id: 'prof-outro-saude', cat_id: 'cat-outros', name: 'Outro profissional da saúde', slug: 'outro-saude', reg_label: 'Registro', reg_req: 0 },
+      // Gestão e Administração
+      { id: 'prof-gestor', cat_id: 'cat-outros', name: 'Gestor da Clínica', slug: 'gestor-clinica', reg_label: null, reg_req: 0 },
+      { id: 'prof-administrador', cat_id: 'cat-outros', name: 'Administrador', slug: 'administrador', reg_label: 'CRA', reg_req: 0 },
+      { id: 'prof-recepcionista', cat_id: 'cat-outros', name: 'Recepcionista', slug: 'recepcionista', reg_label: null, reg_req: 0 },
+      { id: 'prof-secretaria', cat_id: 'cat-outros', name: 'Secretário(a)', slug: 'secretaria', reg_label: null, reg_req: 0 },
+      { id: 'prof-auxiliar-adm', cat_id: 'cat-outros', name: 'Auxiliar Administrativo', slug: 'auxiliar-administrativo', reg_label: null, reg_req: 0 },
+      { id: 'prof-financeiro', cat_id: 'cat-outros', name: 'Financeiro', slug: 'financeiro', reg_label: null, reg_req: 0 },
+      { id: 'prof-rh', cat_id: 'cat-outros', name: 'Recursos Humanos', slug: 'recursos-humanos', reg_label: null, reg_req: 0 },
+      { id: 'prof-coord-clinica', cat_id: 'cat-outros', name: 'Coordenação Clínica', slug: 'coordenacao-clinica', reg_label: null, reg_req: 0 },
+      { id: 'prof-direcao-tecnica', cat_id: 'cat-outros', name: 'Direção Técnica', slug: 'direcao-tecnica', reg_label: null, reg_req: 0 },
+      { id: 'prof-outro', cat_id: 'cat-outros', name: 'Outro', slug: 'outro', reg_label: null, reg_req: 0 }
+    ];
+
+    const deletedGlobalProfessions = new Set(
+      rawDb.prepare('SELECT id FROM deleted_global_professions').all().map((r: any) => r.id)
+    );
+
+    const insertProfStmt = rawDb.prepare(`
+      INSERT OR IGNORE INTO professions (id, category_id, name, slug, registration_board_label, registration_required)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+
+    for (const p of allDetailedProfessions) {
+      if (deletedGlobalProfessions.has(p.id)) continue;
+      insertProfStmt.run(p.id, p.cat_id, p.name, p.slug, p.reg_label, p.reg_req);
+    }
+
+    // Lista abrangente de especialidades por profissão de saúde
+    const allDetailedSpecialties = [
+      // Fonoaudiologia
+      { id: 'spec-fono-audiologia', prof_id: 'prof-fonoaudiologo', name: 'Audiologia Clínica', slug: 'audiologia-clinica', color: '#0ea5e9' },
+      { id: 'spec-fono-disfagia', prof_id: 'prof-fonoaudiologo', name: 'Disfagia e Deglutição', slug: 'disfagia-degluticao', color: '#06b6d4' },
+      { id: 'spec-fono-educacional', prof_id: 'prof-fonoaudiologo', name: 'Fonoaudiologia Educacional', slug: 'fonoaudiologia-educacional', color: '#14b8a6' },
+      { id: 'spec-fono-hospitalar', prof_id: 'prof-fonoaudiologo', name: 'Fonoaudiologia Hospitalar', slug: 'fonoaudiologia-hospitalar', color: '#0284c7' },
+      { id: 'spec-fono-linguagem', prof_id: 'prof-fonoaudiologo', name: 'Fonoaudiologia Infantil e Linguagem', slug: 'fono-linguagem', color: '#10b981' },
+      { id: 'spec-fono-neurofuncional', prof_id: 'prof-fonoaudiologo', name: 'Fonoaudiologia Neurofuncional', slug: 'fono-neurofuncional', color: '#6366f1' },
+      { id: 'spec-fono-motricidade', prof_id: 'prof-fonoaudiologo', name: 'Motricidade Orofacial', slug: 'motricidade-orofacial', color: '#8b5cf6' },
+      { id: 'spec-fono-voz', prof_id: 'prof-fonoaudiologo', name: 'Voz e Comunicação Profissional', slug: 'fono-voz', color: '#a855f7' },
+      // Psicologia
+      { id: 'spec-psi-clinica', prof_id: 'prof-psicologo', name: 'Psicologia Clínica do Adulto', slug: 'psicologia-clinica-adulto', color: '#6366f1' },
+      { id: 'spec-psi-infantil', prof_id: 'prof-psicologo', name: 'Psicologia Infantil / Ludoterapia', slug: 'psicologia-infantil', color: '#ec4899' },
+      { id: 'spec-psi-tcc', prof_id: 'prof-psicologo', name: 'Terapia Cognitivo-Comportamental (TCC)', slug: 'tcc', color: '#0ea5e9' },
+      { id: 'spec-psi-neuropsi', prof_id: 'prof-psicologo', name: 'Neuropsicologia Clínica', slug: 'neuropsicologia-clinica', color: '#8b5cf6' },
+      { id: 'spec-psi-psicanalise', prof_id: 'prof-psicologo', name: 'Psicanálise', slug: 'psicanalise', color: '#3b82f6' },
+      { id: 'spec-psi-casal', prof_id: 'prof-psicologo', name: 'Terapia Familiar e de Casal', slug: 'terapia-casal-familia', color: '#f43f5e' },
+      { id: 'spec-psi-hospitalar', prof_id: 'prof-psicologo', name: 'Psicologia Hospitalar e da Saúde', slug: 'psicologia-hospitalar', color: '#10b981' },
+      { id: 'spec-psi-avaliacao', prof_id: 'prof-psicologo', name: 'Avaliação Psicológica e Psicodiagnóstico', slug: 'avaliacao-psicologica', color: '#f59e0b' },
+      { id: 'spec-psi-social', prof_id: 'prof-psicologo', name: 'Psicologia Social e Comunitária', slug: 'psicologia-social', color: '#64748b' },
+      // 16 Especialidades Oficiais da Fisioterapia (Regulamentadas pelo COFFITO)
+      { id: 'spec-fisio-acupuntura', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia em Acupuntura', slug: 'fisioterapia-acupuntura', color: '#0ea5e9' },
+      { id: 'spec-fisio-respiratoria', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia Respiratória', slug: 'fisioterapia-respiratoria', color: '#06b6d4' },
+      { id: 'spec-fisio-neuro', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia Neurofuncional', slug: 'fisioterapia-neurofuncional', color: '#6366f1' },
+      { id: 'spec-fisio-osteopatia', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia em Osteopatia', slug: 'fisioterapia-osteopatia', color: '#d97706' },
+      { id: 'spec-fisio-quiropraxia', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia em Quiropraxia', slug: 'fisioterapia-quiropraxia', color: '#059669' },
+      { id: 'spec-fisio-ortopedia', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia Traumato-Ortopédica', slug: 'fisioterapia-traumato-ortopedica', color: '#10b981' },
+      { id: 'spec-fisio-esportiva', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia Esportiva', slug: 'fisioterapia-esportiva', color: '#f97316' },
+      { id: 'spec-fisio-trabalho', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia do Trabalho', slug: 'fisioterapia-trabalho', color: '#64748b' },
+      { id: 'spec-fisio-dermato', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia Dermatofuncional', slug: 'fisioterapia-dermatofuncional', color: '#f43f5e' },
+      { id: 'spec-fisio-mulher', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia em Saúde da Mulher', slug: 'fisioterapia-saude-mulher', color: '#ec4899' },
+      { id: 'spec-fisio-oncologia', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia em Oncologia', slug: 'fisioterapia-oncologia', color: '#8b5cf6' },
+      { id: 'spec-fisio-uti', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia em Terapia Intensiva', slug: 'fisioterapia-terapia-intensiva', color: '#ef4444' },
+      { id: 'spec-fisio-aquatica', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia Aquática', slug: 'fisioterapia-aquatica', color: '#0284c7' },
+      { id: 'spec-fisio-cardiovascular', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia Cardiovascular', slug: 'fisioterapia-cardiovascular', color: '#e11d48' },
+      { id: 'spec-fisio-gerontologia', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia em Gerontologia', slug: 'fisioterapia-gerontologia', color: '#78716c' },
+      { id: 'spec-fisio-reumatologia', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia em Reumatologia', slug: 'fisioterapia-reumatologia', color: '#f59e0b' },
+      // Medicina
+      { id: 'spec-med-geral', prof_id: 'prof-medico', name: 'Clínica Médica / Medicina Geral', slug: 'clinica-medica', color: '#3b82f6' },
+      { id: 'spec-med-cardio', prof_id: 'prof-medico', name: 'Cardiologia', slug: 'cardiologia', color: '#ef4444' },
+      { id: 'spec-med-dermato', prof_id: 'prof-medico', name: 'Dermatologia', slug: 'dermatologia', color: '#f43f5e' },
+      { id: 'spec-med-pediatria', prof_id: 'prof-medico', name: 'Pediatria', slug: 'pediatria', color: '#ec4899' },
+      { id: 'spec-med-ginecologia', prof_id: 'prof-medico', name: 'Ginecologia e Obstetrícia', slug: 'ginecologia-obstetricia', color: '#a855f7' },
+      { id: 'spec-med-ortopedia', prof_id: 'prof-medico', name: 'Ortopedia e Traumatologia', slug: 'ortopedia-traumatologia', color: '#10b981' },
+      { id: 'spec-med-neurologia', prof_id: 'prof-medico', name: 'Neurologia', slug: 'neurologia', color: '#6366f1' },
+      { id: 'spec-med-endocrino', prof_id: 'prof-medico', name: 'Endocrinologia e Metabologia', slug: 'endocrinologia', color: '#f59e0b' },
+      { id: 'spec-med-oftalmo', prof_id: 'prof-medico', name: 'Oftalmologia', slug: 'oftalmologia', color: '#0ea5e9' },
+      { id: 'spec-med-otorrino', prof_id: 'prof-medico', name: 'Otorrinolaringologia', slug: 'otorrinolaringologia', color: '#14b8a6' },
+      { id: 'spec-med-gastro', prof_id: 'prof-medico', name: 'Gastroenterologia', slug: 'gastroenterologia', color: '#eab308' },
+      { id: 'spec-med-geriatria', prof_id: 'prof-medico', name: 'Geriatria', slug: 'geriatria', color: '#64748b' },
+      { id: 'spec-med-urologia', prof_id: 'prof-medico', name: 'Urologia', slug: 'urologia', color: '#0284c7' },
+      { id: 'spec-med-psiquiatria', prof_id: 'prof-medico', name: 'Psiquiatria Clínica', slug: 'psiquiatria-clinica', color: '#8b5cf6' },
+      // Odontologia
+      { id: 'spec-odonto-geral', prof_id: 'prof-dentista', name: 'Clínica Geral Odontológica', slug: 'odontologia-geral', color: '#3b82f6' },
+      { id: 'spec-odonto-orto', prof_id: 'prof-dentista', name: 'Ortodontia e Ortopedia Facial', slug: 'ortodontia', color: '#0ea5e9' },
+      { id: 'spec-odonto-pediatria', prof_id: 'prof-dentista', name: 'Odontopediatria', slug: 'odontopediatria', color: '#ec4899' },
+      { id: 'spec-odonto-implante', prof_id: 'prof-dentista', name: 'Implantodontia', slug: 'implantodontia', color: '#10b981' },
+      { id: 'spec-odonto-endo', prof_id: 'prof-dentista', name: 'Endodontia (Canal)', slug: 'endodontia', color: '#f59e0b' },
+      { id: 'spec-odonto-perio', prof_id: 'prof-dentista', name: 'Periodontia', slug: 'periodontia', color: '#059669' },
+      { id: 'spec-odonto-hof', prof_id: 'prof-dentista', name: 'Harmonização Orofacial (HOF)', slug: 'harmonizacao-orofacial', color: '#a855f7' },
+      { id: 'spec-odonto-buco', prof_id: 'prof-dentista', name: 'Cirurgia e Traumatologia Bucomaxilofacial', slug: 'bucomaxilofacial', color: '#ef4444' },
+      { id: 'spec-odonto-protese', prof_id: 'prof-dentista', name: 'Prótese Dentária', slug: 'protese-dentaria', color: '#64748b' },
+      // Nutrição
+      { id: 'spec-nutri-clinica', prof_id: 'prof-nutricionista', name: 'Nutrição Clínica e Funcional', slug: 'nutricao-clinica', color: '#84cc16' },
+      { id: 'spec-nutri-esportiva', prof_id: 'prof-nutricionista', name: 'Nutrição Esportiva', slug: 'nutricao-esportiva', color: '#f97316' },
+      { id: 'spec-nutri-pediatrica', prof_id: 'prof-nutricionista', name: 'Nutrição Materno-Infantil e Pediátrica', slug: 'nutricao-pediatrica', color: '#ec4899' },
+      { id: 'spec-nutri-comportamental', prof_id: 'prof-nutricionista', name: 'Nutrição Comportamental e Transtornos', slug: 'nutricao-comportamental', color: '#6366f1' },
+      { id: 'spec-nutri-emagrecimento', prof_id: 'prof-nutricionista', name: 'Emagrecimento e Doenças Crônicas', slug: 'nutricao-emagrecimento', color: '#10b981' },
+      { id: 'spec-nutri-hospitalar', prof_id: 'prof-nutricionista', name: 'Nutrição Hospitalar e Enteral', slug: 'nutricao-hospitalar', color: '#06b6d4' },
+      // Terapia Ocupacional
+      { id: 'spec-to-integracao', prof_id: 'prof-terapeuta-ocupacional', name: 'Integração Sensorial de Ayres', slug: 'to-integracao-sensorial', color: '#f59e0b' },
+      { id: 'spec-to-pediatria', prof_id: 'prof-terapeuta-ocupacional', name: 'Terapia Ocupacional Pediátrica e Escolar', slug: 'to-pediatrica', color: '#ec4899' },
+      { id: 'spec-to-reab-fisica', prof_id: 'prof-terapeuta-ocupacional', name: 'Reabilitação Física e Membros Superiores', slug: 'to-reab-fisica', color: '#10b981' },
+      { id: 'spec-to-neurofuncional', prof_id: 'prof-terapeuta-ocupacional', name: 'Reabilitação Cognitiva e Neurofuncional', slug: 'to-neurofuncional', color: '#6366f1' },
+      { id: 'spec-to-saude-mental', prof_id: 'prof-terapeuta-ocupacional', name: 'Saúde Mental e Psiquiatria Ocupacional', slug: 'to-saude-mental', color: '#8b5cf6' },
+      { id: 'spec-to-geronto', prof_id: 'prof-terapeuta-ocupacional', name: 'Gerontologia e Envelhecimento Ativo', slug: 'to-gerontologia', color: '#64748b' },
+      // Enfermagem
+      { id: 'spec-enf-geral', prof_id: 'prof-enfermeiro', name: 'Enfermagem Geral e Triagem', slug: 'enfermagem-geral', color: '#0ea5e9' },
+      { id: 'spec-enf-estoma', prof_id: 'prof-enfermeiro', name: 'Enfermagem em Estomaterapia e Feridas', slug: 'enfermagem-estomaterapia', color: '#10b981' },
+      { id: 'spec-enf-pediatrica', prof_id: 'prof-enfermeiro', name: 'Enfermagem Pediátrica e Neonatal', slug: 'enfermagem-pediatrica', color: '#ec4899' },
+      { id: 'spec-enf-obstetrica', prof_id: 'prof-enfermeiro', name: 'Enfermagem Obstétrica e Ginecológica', slug: 'enfermagem-obstetrica', color: '#a855f7' },
+      { id: 'spec-enf-familia', prof_id: 'prof-enfermeiro', name: 'Enfermagem em Saúde da Família', slug: 'enfermagem-saude-familia', color: '#14b8a6' },
+      { id: 'spec-enf-estetica', prof_id: 'prof-enfermeiro', name: 'Enfermagem Estética', slug: 'enfermagem-estetica', color: '#f43f5e' },
+      // Psiquiatria
+      { id: 'spec-psiq-geral', prof_id: 'prof-psiquiatra', name: 'Psiquiatria Geral e Transtornos de Ansiedade', slug: 'psiquiatria-geral', color: '#8b5cf6' },
+      { id: 'spec-psiq-infantil', prof_id: 'prof-psiquiatra', name: 'Psiquiatria da Infância e Adolescência', slug: 'psiquiatria-infantil', color: '#a855f7' },
+      { id: 'spec-psiq-adicao', prof_id: 'prof-psiquiatra', name: 'Dependência Química e Adições', slug: 'psiquiatria-dependencia', color: '#ef4444' },
+      { id: 'spec-psiq-idoso', prof_id: 'prof-psiquiatra', name: 'Psicogeriatria e Demências', slug: 'psicogeriatria', color: '#64748b' }
+    ];
+
+    const insertSpecStmt = rawDb.prepare(`
+      INSERT OR IGNORE INTO specialties (id, profession_id, name, slug, color)
+      VALUES (?, ?, ?, ?, ?)
+    `);
+
+    for (const s of allDetailedSpecialties) {
+      if (deletedGlobalProfessions.has(s.prof_id)) continue;
+      insertSpecStmt.run(s.id, s.prof_id, s.name, s.slug, s.color);
+    }
+
+    // Assegura que o tenant inicial "Espaço Viver Bem" esteja ativo e com onboarding concluído
+    rawDb.exec(`
+      UPDATE tenants SET
+        onboarding_completed = 1,
+        manager_confirmed = 1,
+        status = 'active',
+        corporate_name = COALESCE(corporate_name, name),
+        trade_name = COALESCE(trade_name, name),
+        responsible_name = COALESCE(responsible_name, 'Dra. Camila Santos'),
+        responsible_email = COALESCE(responsible_email, 'diretoria@viverbem.com'),
+        responsible_phone = COALESCE(responsible_phone, '(11) 3344-5566')
+      WHERE slug = 'clinica-viver-bem' AND status = 'active';
+    `);
+
+    // Inicializa configuração de recibos padrão para tenants ativos se inexistente
+    rawDb.exec(`
+      INSERT OR IGNORE INTO receipt_settings (
+        id, tenant_id, emitter_type, emitter_name, emitter_trade_name, emitter_document,
+        emitter_board_name, emitter_registry_number, emitter_registry_state,
+        emitter_street, emitter_number, emitter_neighborhood, emitter_city, emitter_state, emitter_zip_code,
+        emitter_phone, emitter_email, receipt_prefix, next_sequence, is_configured
+      )
+      SELECT 
+        'rec-set-' || id, id, 'pj', name, COALESCE(trade_name, name), COALESCE(cnpj_cpf, '12.345.678/0001-90'),
+        'CRM', '123456', 'SP',
+        'Av. Paulista', '1000, Conjunto 501', 'Bela Vista', 'São Paulo', 'SP', '01310-100',
+        phone, email, 'REC-', 1, 1
+      FROM tenants
+      WHERE status = 'active';
+    `);
+
+    // =========================================================================
+    // NOVAS MIGRAÇÕES INCREMENTAIS: 8 MÓDULOS (Página Pública, Suporte, Exames,
+    // Estoque, Orçamentos, Folha/Comissões, Escala)
+    // =========================================================================
+    
+    // 1. Colunas em professionals para página pública e remuneração
+    addColIfMissing('professionals', 'slug', 'TEXT');
+    addColIfMissing('professionals', 'public_booking_enabled', 'INTEGER DEFAULT 1');
+    addColIfMissing('professionals', 'remuneration_type', "TEXT DEFAULT 'commission'");
+    addColIfMissing('professionals', 'commission_percentage', 'REAL DEFAULT 0');
+    addColIfMissing('professionals', 'fixed_salary', 'REAL DEFAULT 0');
+    addColIfMissing('professionals', 'payment_day', 'INTEGER DEFAULT 5');
+
+    // Gera slugs únicos para profissionais existentes que estejam com slug nulo
+    try {
+      const profsWithoutSlug = rawDb.prepare("SELECT id, name FROM professionals WHERE slug IS NULL OR slug = ''").all() as { id: string; name: string }[];
+      const updateSlugStmt = rawDb.prepare("UPDATE professionals SET slug = ? WHERE id = ?");
+      for (const p of profsWithoutSlug) {
+        const baseSlug = (p.name || 'profissional')
+          .toLowerCase()
+          .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/(^-|-$)/g, '');
+        const finalSlug = `${baseSlug}-${p.id.slice(-4)}`;
+        updateSlugStmt.run(finalSlug, p.id);
+      }
+    } catch (slugErr) {
+      console.warn('[Migration] Aviso ao gerar slugs de profissionais:', slugErr);
+    }
+
+    // 2. Central de Chamados & Suporte
+    rawDb.exec(`
+      CREATE TABLE IF NOT EXISTS support_tickets (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT,
+        user_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        category TEXT NOT NULL DEFAULT 'duvida',
+        description TEXT NOT NULL,
+        priority TEXT NOT NULL DEFAULT 'medium' CHECK(priority IN ('low', 'medium', 'high', 'urgent')),
+        attachments_json TEXT,
+        app_version TEXT,
+        platform TEXT,
+        status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'analyzing', 'in_progress', 'resolved', 'closed')),
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_support_tickets_tenant ON support_tickets (tenant_id, status);
+      CREATE INDEX IF NOT EXISTS idx_support_tickets_user ON support_tickets (user_id, status);
+
+      CREATE TABLE IF NOT EXISTS support_ticket_messages (
+        id TEXT PRIMARY KEY,
+        ticket_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        message TEXT NOT NULL,
+        attachments_json TEXT,
+        is_internal INTEGER DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (ticket_id) REFERENCES support_tickets(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_ticket_messages ON support_ticket_messages (ticket_id, created_at);
+    `);
+
+    // 3. Exames a Receber
+    rawDb.exec(`
+      CREATE TABLE IF NOT EXISTS pending_exams (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        exam_name TEXT NOT NULL,
+        request_date TEXT NOT NULL,
+        expected_date TEXT,
+        received_date TEXT,
+        status TEXT NOT NULL DEFAULT 'waiting' CHECK(status IN ('waiting', 'received', 'delayed', 'cancelled')),
+        notes TEXT,
+        cid_code TEXT,
+        created_by TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+        FOREIGN KEY (professional_id) REFERENCES professionals(id) ON DELETE SET NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_pending_exams_status ON pending_exams (tenant_id, status);
+      CREATE INDEX IF NOT EXISTS idx_pending_exams_patient ON pending_exams (tenant_id, patient_id);
+    `);
+
+    // 4. Estoque de Insumos e Produtos & Movimentações
+    rawDb.exec(`
+      CREATE TABLE IF NOT EXISTS inventory_items (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        category TEXT,
+        product_type TEXT,
+        brand TEXT,
+        presentation TEXT DEFAULT 'unidade',
+        volume_ml REAL,
+        quantity REAL NOT NULL DEFAULT 0,
+        unit TEXT NOT NULL DEFAULT 'un',
+        batch_number TEXT,
+        expiration_date TEXT,
+        unit_cost REAL DEFAULT 0,
+        supplier TEXT,
+        min_stock REAL DEFAULT 5,
+        notes TEXT,
+        active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_inventory_items_tenant ON inventory_items (tenant_id, active);
+
+      CREATE TABLE IF NOT EXISTS inventory_movements (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        item_id TEXT NOT NULL,
+        movement_type TEXT NOT NULL CHECK(movement_type IN ('in', 'out', 'adjustment')),
+        quantity REAL NOT NULL,
+        previous_quantity REAL NOT NULL,
+        new_quantity REAL NOT NULL,
+        reason TEXT,
+        document_reference TEXT,
+        user_id TEXT,
+        professional_id TEXT,
+        patient_id TEXT,
+        appointment_id TEXT,
+        module_type TEXT,
+        source_type TEXT,
+        source_id TEXT,
+        batch TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (item_id) REFERENCES inventory_items(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_inventory_movements ON inventory_movements (tenant_id, item_id, created_at);
+    `);
+
+    // 5. Orçamentos (Pacientes e Fornecedores)
+    rawDb.exec(`
+      CREATE TABLE IF NOT EXISTS budgets (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        budget_type TEXT NOT NULL CHECK(budget_type IN ('patient', 'supplier')),
+        budget_number TEXT NOT NULL,
+        patient_id TEXT,
+        supplier_name TEXT,
+        supplier_contact TEXT,
+        discount REAL DEFAULT 0,
+        total_amount REAL NOT NULL DEFAULT 0,
+        validity_date TEXT,
+        delivery_deadline TEXT,
+        status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft', 'sent', 'approved', 'rejected', 'expired')),
+        notes TEXT,
+        converted_to_inventory INTEGER DEFAULT 0,
+        created_by TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_budgets_tenant_type ON budgets (tenant_id, budget_type, status);
+
+      CREATE TABLE IF NOT EXISTS budget_items (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        budget_id TEXT NOT NULL,
+        item_type TEXT DEFAULT 'service',
+        reference_id TEXT,
+        description TEXT NOT NULL,
+        quantity REAL NOT NULL DEFAULT 1,
+        unit_price REAL NOT NULL DEFAULT 0,
+        total_price REAL NOT NULL DEFAULT 0,
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (budget_id) REFERENCES budgets(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_budget_items ON budget_items (budget_id);
+    `);
+
+    // 6. Pagamentos, Comissões e Salários dos Profissionais
+    rawDb.exec(`
+      CREATE TABLE IF NOT EXISTS professional_payrolls (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        professional_id TEXT NOT NULL,
+        period_month TEXT NOT NULL,
+        remuneration_type TEXT NOT NULL DEFAULT 'commission',
+        appointments_count INTEGER DEFAULT 0,
+        produced_amount REAL DEFAULT 0,
+        commission_percentage REAL DEFAULT 0,
+        commission_amount REAL DEFAULT 0,
+        fixed_salary REAL DEFAULT 0,
+        adjustments REAL DEFAULT 0,
+        adjustment_notes TEXT,
+        total_payable REAL NOT NULL DEFAULT 0,
+        due_date TEXT,
+        paid_date TEXT,
+        status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'paid', 'delayed')),
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (professional_id) REFERENCES professionals(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_payrolls_month ON professional_payrolls (tenant_id, period_month, status);
+      CREATE INDEX IF NOT EXISTS idx_payrolls_prof ON professional_payrolls (tenant_id, professional_id);
+    `);
+
+    // 7. Prontuário Fisioterapêutico Modular (ZemdaFisio: Avaliações e Evoluções)
+    rawDb.exec(`
+      CREATE TABLE IF NOT EXISTS physiotherapy_assessments (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT NOT NULL,
+        appointment_id TEXT,
+        specialty_id TEXT,
+        chief_complaint TEXT,
+        hpi TEXT,
+        past_medical_history TEXT,
+        medical_diagnosis TEXT,
+        physio_diagnosis TEXT,
+        pain_score INTEGER DEFAULT 0,
+        pain_location TEXT,
+        pain_characteristics TEXT,
+        inspection_palpation TEXT,
+        range_of_motion TEXT,
+        muscle_strength TEXT,
+        posture_balance TEXT,
+        gait_mobility TEXT,
+        functional_limitations TEXT,
+        specific_tests TEXT,
+        short_term_goals TEXT,
+        long_term_goals TEXT,
+        treatment_plan TEXT,
+        conducts_exercises TEXT,
+        body_map_json TEXT,
+        body_map_image TEXT,
+        guidelines TEXT,
+        is_sealed INTEGER NOT NULL DEFAULT 0,
+        created_by TEXT,
+        updated_by TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+        FOREIGN KEY (professional_id) REFERENCES professionals(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_physio_assess_patient ON physiotherapy_assessments (tenant_id, patient_id, created_at);
+      CREATE INDEX IF NOT EXISTS idx_physio_assess_prof ON physiotherapy_assessments (tenant_id, professional_id);
+
+      CREATE TABLE IF NOT EXISTS physiotherapy_evolutions (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT NOT NULL,
+        appointment_id TEXT,
+        specialty_id TEXT,
+        session_date TEXT NOT NULL,
+        session_time TEXT,
+        patient_condition TEXT,
+        procedures_performed TEXT,
+        exercises_performed TEXT,
+        techniques_used TEXT,
+        clinical_evolution TEXT NOT NULL,
+        treatment_response TEXT,
+        complications TEXT,
+        guidelines TEXT,
+        next_session_plan TEXT,
+        notes TEXT,
+        is_sealed INTEGER NOT NULL DEFAULT 0,
+        created_by TEXT,
+        updated_by TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+        FOREIGN KEY (professional_id) REFERENCES professionals(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_physio_evol_patient ON physiotherapy_evolutions (tenant_id, patient_id, session_date);
+      CREATE INDEX IF NOT EXISTS idx_physio_evol_prof ON physiotherapy_evolutions (tenant_id, professional_id);
+
+      -- 7.1 Avaliações Regionais Fisioterapêuticas Integradas ao Zemda360
+      CREATE TABLE IF NOT EXISTS physiotherapy_regional_evaluations (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT NOT NULL,
+        appointment_id TEXT,
+        region_id TEXT NOT NULL,
+        region_label TEXT NOT NULL,
+        side TEXT NOT NULL DEFAULT 'midline',
+        evaluation_date TEXT NOT NULL DEFAULT (date('now')),
+        pain_json TEXT,
+        adm_json TEXT,
+        strength_json TEXT,
+        tests_json TEXT,
+        palpation_json TEXT,
+        edema_json TEXT,
+        functional_scales_json TEXT,
+        plan_link_json TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+        FOREIGN KEY (professional_id) REFERENCES professionals(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_physio_reg_patient_region ON physiotherapy_regional_evaluations (tenant_id, patient_id, region_id, evaluation_date);
+      CREATE INDEX IF NOT EXISTS idx_physio_reg_appt ON physiotherapy_regional_evaluations (tenant_id, appointment_id);
+
+      -- 8. Links Únicos e Seguros de Convite da Clínica (Itens 14 a 23)
+      CREATE TABLE IF NOT EXISTS clinic_invites (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        created_by TEXT NOT NULL,
+        token TEXT NOT NULL UNIQUE,
+        role TEXT NOT NULL DEFAULT 'professional',
+        expires_at TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'used', 'expired', 'cancelled')),
+        max_uses INTEGER NOT NULL DEFAULT 1,
+        used_count INTEGER NOT NULL DEFAULT 0,
+        used_at TEXT,
+        used_by TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (used_by) REFERENCES users(id) ON DELETE SET NULL
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_clinic_invites_token ON clinic_invites (token);
+      CREATE INDEX IF NOT EXISTS idx_clinic_invites_tenant_status ON clinic_invites (tenant_id, status);
+
+      -- =========================================================================
+      -- 9. MÓDULO CLÍNICO ZEMDAODONTO (ODONTOLOGIA)
+      -- =========================================================================
+      
+      -- Odontograma Geral (Inicial, Atual e Históricos com todos os 32 dentes e faces)
+      CREATE TABLE IF NOT EXISTS odontograms (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        record_id TEXT,
+        type TEXT NOT NULL DEFAULT 'current',
+        status_data_json TEXT NOT NULL,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_odontograms_patient ON odontograms (tenant_id, patient_id, type);
+
+      -- Histórico detalhado por dente e face
+      CREATE TABLE IF NOT EXISTS dental_tooth_records (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        tooth_number INTEGER NOT NULL,
+        face TEXT DEFAULT 'whole',
+        condition TEXT NOT NULL,
+        previous_condition TEXT,
+        procedure_name TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_tooth_records_patient ON dental_tooth_records (tenant_id, patient_id, tooth_number);
+
+      -- Periodontia (PERIO)
+      CREATE TABLE IF NOT EXISTS dental_periodontal_records (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        periodontogram_json TEXT NOT NULL,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_perio_patient ON dental_periodontal_records (tenant_id, patient_id, created_at);
+
+      -- Endodontia (ENDO)
+      CREATE TABLE IF NOT EXISTS dental_endodontic_records (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        tooth_number INTEGER NOT NULL,
+        pulpar_diagnosis TEXT,
+        periapical_diagnosis TEXT,
+        canals_count INTEGER DEFAULT 1,
+        working_length TEXT,
+        instrumentation TEXT,
+        irrigation TEXT,
+        intracanal_medication TEXT,
+        obturation TEXT,
+        material TEXT,
+        sessions_count INTEGER DEFAULT 1,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_endo_patient ON dental_endodontic_records (tenant_id, patient_id, tooth_number);
+
+      -- Anamnese Odontológica
+      CREATE TABLE IF NOT EXISTS dental_anamnesis (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL UNIQUE,
+        professional_id TEXT,
+        systemic_diseases_json TEXT,
+        habits_json TEXT,
+        allergies_json TEXT,
+        current_medications TEXT,
+        previous_surgeries TEXT,
+        anesthesia_history TEXT,
+        custom_fields_json TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_anamnesis_patient ON dental_anamnesis (tenant_id, patient_id);
+
+      -- Plano de Tratamento e Orçamento Integrado
+      CREATE TABLE IF NOT EXISTS dental_treatment_plans (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        budget_id TEXT,
+        title TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'planned',
+        total_value REAL DEFAULT 0,
+        discount_value REAL DEFAULT 0,
+        final_value REAL DEFAULT 0,
+        items_json TEXT NOT NULL,
+        payment_terms TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_treatment_plans_patient ON dental_treatment_plans (tenant_id, patient_id);
+      CREATE INDEX IF NOT EXISTS idx_treatment_plans_budget ON dental_treatment_plans (tenant_id, budget_id);
+
+      -- Laboratório de Prótese
+      CREATE TABLE IF NOT EXISTS dental_prosthetics_lab (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        lab_name TEXT NOT NULL,
+        work_type TEXT NOT NULL,
+        tooth_number TEXT,
+        shade_color TEXT,
+        material TEXT,
+        sent_date TEXT,
+        expected_date TEXT,
+        received_date TEXT,
+        cost_value REAL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'sent_to_lab',
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_prosthetics_patient ON dental_prosthetics_lab (tenant_id, patient_id);
+
+      -- Ortodontia
+      CREATE TABLE IF NOT EXISTS dental_orthodontics (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appliance_type TEXT,
+        installation_date TEXT,
+        forecast_months INTEGER,
+        monthly_evolutions_json TEXT,
+        status TEXT NOT NULL DEFAULT 'active',
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_orthodontics_patient ON dental_orthodontics (tenant_id, patient_id);
+
+      -- Harmonização Orofacial (HOF)
+      CREATE TABLE IF NOT EXISTS dental_hof (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        procedure_name TEXT NOT NULL,
+        facial_region TEXT,
+        product_brand TEXT,
+        lot_number TEXT,
+        units_quantity TEXT,
+        expiry_date TEXT,
+        application_points_json TEXT,
+        before_after_images_json TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_hof_patient ON dental_hof (tenant_id, patient_id);
+
+      -- =========================================================================
+      -- 10. MÓDULO CLÍNICO ZEMDANUTRI (NUTRIÇÃO)
+      -- =========================================================================
+      CREATE TABLE IF NOT EXISTS nutrition_assessments (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        record_id TEXT,
+        assessment_date TEXT NOT NULL,
+        weight REAL,
+        height REAL,
+        bmi REAL,
+        waist_circ REAL,
+        abdominal_circ REAL,
+        hip_circ REAL,
+        arm_circ REAL,
+        calf_circ REAL,
+        neck_circ REAL,
+        thigh_circ REAL,
+        custom_measures_json TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_nutri_assess_patient ON nutrition_assessments (tenant_id, patient_id, assessment_date);
+
+      CREATE TABLE IF NOT EXISTS nutrition_bioimpedance (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        record_id TEXT,
+        assessment_date TEXT NOT NULL,
+        weight REAL,
+        muscle_mass REAL,
+        fat_mass REAL,
+        fat_percentage REAL,
+        visceral_fat REAL,
+        body_water REAL,
+        bone_mass REAL,
+        bmr REAL,
+        bioimpedance_data_json TEXT,
+        attachment_url TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_nutri_bio_patient ON nutrition_bioimpedance (tenant_id, patient_id);
+
+      CREATE TABLE IF NOT EXISTS nutrition_calculations (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        calculation_date TEXT NOT NULL,
+        bmi REAL,
+        eer REAL,
+        bmr REAL,
+        protein_grams REAL,
+        carbs_grams REAL,
+        fats_grams REAL,
+        water_ml REAL,
+        is_manual_override INTEGER DEFAULT 0,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS nutrition_recalls (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        recall_type TEXT NOT NULL DEFAULT '24h',
+        meals_json TEXT NOT NULL,
+        water_intake_ml REAL,
+        observations TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_nutri_recalls_patient ON nutrition_recalls (tenant_id, patient_id);
+
+      CREATE TABLE IF NOT EXISTS nutrition_food_database (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT,
+        name TEXT NOT NULL,
+        category TEXT NOT NULL,
+        portion_size REAL DEFAULT 100,
+        portion_unit TEXT DEFAULT 'g',
+        energy_kcal REAL DEFAULT 0,
+        protein_g REAL DEFAULT 0,
+        carbs_g REAL DEFAULT 0,
+        fat_g REAL DEFAULT 0,
+        fiber_g REAL DEFAULT 0,
+        sodium_mg REAL DEFAULT 0,
+        is_clinic_custom INTEGER DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE IF NOT EXISTS nutrition_meal_plans (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        title TEXT NOT NULL,
+        meals_json TEXT NOT NULL,
+        total_calories REAL,
+        total_protein REAL,
+        total_carbs REAL,
+        total_fat REAL,
+        guidelines TEXT,
+        is_active INTEGER DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_nutri_meal_plans_patient ON nutrition_meal_plans (tenant_id, patient_id);
+
+      CREATE TABLE IF NOT EXISTS nutrition_goals (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        title TEXT NOT NULL,
+        category TEXT NOT NULL,
+        target_value TEXT,
+        current_value TEXT,
+        deadline TEXT,
+        status TEXT NOT NULL DEFAULT 'planned' CHECK(status IN ('planned', 'in_progress', 'partially_reached', 'reached', 'suspended')),
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_nutri_goals_patient ON nutrition_goals (tenant_id, patient_id);
+
+      CREATE TABLE IF NOT EXISTS nutrition_anamnesis (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL UNIQUE,
+        professional_id TEXT,
+        data_json TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+
+      -- =========================================================================
+      -- 11. MÓDULO CLÍNICO ZEMDATO (TERAPIA OCUPACIONAL)
+      -- =========================================================================
+      CREATE TABLE IF NOT EXISTS to_occupational_profiles (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        routine TEXT,
+        roles TEXT,
+        interests TEXT,
+        habits TEXT,
+        meaningful_activities TEXT,
+        family_context TEXT,
+        school_context TEXT,
+        work_context TEXT,
+        community_context TEXT,
+        physical_env TEXT,
+        social_env TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_to_profile_patient ON to_occupational_profiles (tenant_id, patient_id);
+
+      CREATE TABLE IF NOT EXISTS to_avd_assessments (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        assessment_type TEXT NOT NULL DEFAULT 'avd',
+        scores_json TEXT NOT NULL,
+        overall_level TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_to_avd_patient ON to_avd_assessments (tenant_id, patient_id);
+
+      CREATE TABLE IF NOT EXISTS to_sensory_assessments (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        tactile TEXT,
+        auditory TEXT,
+        visual TEXT,
+        vestibular TEXT,
+        proprioceptive TEXT,
+        gustatory TEXT,
+        olfactory TEXT,
+        interoceptive TEXT,
+        notes_json TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_to_sensory_patient ON to_sensory_assessments (tenant_id, patient_id);
+
+      CREATE TABLE IF NOT EXISTS to_motor_cognitive_assessments (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        motor_json TEXT,
+        cognitive_json TEXT,
+        child_dev_json TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS to_treatment_plans (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        goals_json TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'planned' CHECK(status IN ('planned', 'in_progress', 'partially_reached', 'reached', 'reassess')),
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_to_plans_patient ON to_treatment_plans (tenant_id, patient_id);
+
+      CREATE TABLE IF NOT EXISTS to_assistive_tech (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        device_name TEXT NOT NULL,
+        adaptation_type TEXT,
+        orthosis_type TEXT,
+        resource_details TEXT,
+        photo_url TEXT,
+        indication TEXT,
+        training_notes TEXT,
+        status TEXT NOT NULL DEFAULT 'active',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_to_assistive_patient ON to_assistive_tech (tenant_id, patient_id);
+
+      -- =========================================================================
+      -- 12. MÓDULO CLÍNICO ZEMDAFONO (FONOAUDIOLOGIA)
+      -- =========================================================================
+      CREATE TABLE IF NOT EXISTS fono_anamnesis (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL UNIQUE,
+        professional_id TEXT,
+        data_json TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS fono_language_assessments (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        comprehension TEXT,
+        expression TEXT,
+        vocabulary TEXT,
+        semantics TEXT,
+        morphosyntax TEXT,
+        pragmatics TEXT,
+        narrative TEXT,
+        functional_comm TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_fono_lang_patient ON fono_language_assessments (tenant_id, patient_id);
+
+      CREATE TABLE IF NOT EXISTS fono_speech_phonology (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        phonemes_json TEXT NOT NULL,
+        phonological_processes TEXT,
+        intelligibility TEXT,
+        articulation_notes TEXT,
+        spontaneous_speech TEXT,
+        repetition TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_fono_speech_patient ON fono_speech_phonology (tenant_id, patient_id);
+
+      CREATE TABLE IF NOT EXISTS fono_orofacial_motricity (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        structures_json TEXT,
+        mobility TEXT,
+        force TEXT,
+        tonus TEXT,
+        breathing TEXT,
+        chewing TEXT,
+        swallowing TEXT,
+        speech_motor TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_fono_mo_patient ON fono_orofacial_motricity (tenant_id, patient_id);
+
+      CREATE TABLE IF NOT EXISTS fono_voice_assessments (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        vocal_quality TEXT,
+        pitch TEXT,
+        loudness TEXT,
+        resonance TEXT,
+        vocal_attack TEXT,
+        pneumophono_coordination TEXT,
+        audio_url TEXT,
+        symptoms TEXT,
+        habits TEXT,
+        professional_use TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_fono_voice_patient ON fono_voice_assessments (tenant_id, patient_id);
+
+      CREATE TABLE IF NOT EXISTS fono_fluency_assessments (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        disfluency_types TEXT,
+        frequency TEXT,
+        tension TEXT,
+        blocks TEXT,
+        prolongations TEXT,
+        repetitions TEXT,
+        associated_behaviors TEXT,
+        impact TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS fono_dysphagia_assessments (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        food_consistency TEXT,
+        utensil TEXT,
+        posture TEXT,
+        lip_closure TEXT,
+        chewing TEXT,
+        oral_transit TEXT,
+        clinical_signs TEXT,
+        cough_choke TEXT,
+        wet_voice TEXT,
+        feeding_time TEXT,
+        recommendations TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS fono_audiology_records (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        exam_type TEXT NOT NULL,
+        exam_date TEXT NOT NULL,
+        results_json TEXT,
+        attachment_url TEXT,
+        notes TEXT,
+        referred_by TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS fono_learning_assessments (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        reading TEXT,
+        writing TEXT,
+        phonological_awareness TEXT,
+        memory TEXT,
+        attention TEXT,
+        comprehension TEXT,
+        text_production TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS fono_treatment_plans (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        short_term_goals_json TEXT,
+        medium_term_goals_json TEXT,
+        long_term_goals_json TEXT,
+        status TEXT NOT NULL DEFAULT 'planned' CHECK(status IN ('planned', 'in_progress', 'partially_reached', 'reached', 'reassess')),
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_fono_plans_patient ON fono_treatment_plans (tenant_id, patient_id);
+
+      -- =========================================================================
+      -- 13. MÓDULO CLÍNICO ZEMDABODY (MAPA CORPORAL & CANETA CLÍNICA)
+      -- =========================================================================
+      CREATE TABLE IF NOT EXISTS body_assessments (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        appointment_id TEXT,
+        professional_id TEXT NOT NULL,
+        profession_id TEXT,
+        module TEXT NOT NULL DEFAULT 'general',
+        body_model TEXT NOT NULL DEFAULT 'female' CHECK(body_model IN ('female', 'male')),
+        assessment_date TEXT NOT NULL,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+        FOREIGN KEY (professional_id) REFERENCES professionals(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_body_assess_patient ON body_assessments (tenant_id, patient_id, assessment_date);
+      CREATE INDEX IF NOT EXISTS idx_body_assess_appt ON body_assessments (tenant_id, appointment_id);
+
+      CREATE TABLE IF NOT EXISTS body_markers (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        assessment_id TEXT NOT NULL,
+        body_region TEXT NOT NULL,
+        side TEXT NOT NULL DEFAULT 'midline' CHECK(side IN ('right', 'left', 'midline')),
+        view TEXT NOT NULL CHECK(view IN ('front', 'back', 'left', 'right')),
+        marker_type TEXT NOT NULL,
+        value TEXT,
+        severity TEXT,
+        notes TEXT,
+        coordinates TEXT,
+        details_json TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (assessment_id) REFERENCES body_assessments(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_body_markers_assess ON body_markers (tenant_id, assessment_id);
+      CREATE INDEX IF NOT EXISTS idx_body_markers_region ON body_markers (assessment_id, body_region, view);
+
+      CREATE TABLE IF NOT EXISTS body_drawings (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        assessment_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        appointment_id TEXT,
+        professional_id TEXT NOT NULL,
+        module TEXT NOT NULL DEFAULT 'general',
+        body_model TEXT NOT NULL DEFAULT 'female' CHECK(body_model IN ('female', 'male')),
+        view TEXT NOT NULL CHECK(view IN ('front', 'back', 'left', 'right')),
+        strokes_json TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (assessment_id) REFERENCES body_assessments(id) ON DELETE CASCADE
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_body_drawings_assess_view ON body_drawings (assessment_id, view);
+      CREATE INDEX IF NOT EXISTS idx_body_drawings_appt ON body_drawings (tenant_id, appointment_id);
+
+      CREATE TABLE IF NOT EXISTS body_drawing_strokes (
+        id TEXT PRIMARY KEY,
+        drawing_id TEXT NOT NULL,
+        assessment_id TEXT NOT NULL,
+        tool_type TEXT NOT NULL DEFAULT 'pen' CHECK(tool_type IN ('pen', 'highlighter')),
+        color TEXT NOT NULL,
+        stroke_width REAL NOT NULL,
+        opacity REAL NOT NULL DEFAULT 1.0,
+        points TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (drawing_id) REFERENCES body_drawings(id) ON DELETE CASCADE,
+        FOREIGN KEY (assessment_id) REFERENCES body_assessments(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_body_strokes_drawing ON body_drawing_strokes (drawing_id);
+
+      -- Tabelas complementares do ZemdaBody: Avaliação Antropométrica e Plano Terapêutico
+      CREATE TABLE IF NOT EXISTS body_anthropometric_assessments (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        appointment_id TEXT,
+        professional_id TEXT NOT NULL,
+        assessment_date TEXT NOT NULL,
+        weight REAL,
+        height REAL,
+        waist_circumference REAL,
+        abdomen_circumference REAL,
+        hip_circumference REAL,
+        body_fat_percentage REAL,
+        fat_mass_kg REAL,
+        muscle_mass_kg REAL,
+        visceral_fat TEXT,
+        bmi REAL,
+        whr REAL,
+        whtr REAL,
+        body_measures_json TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+        FOREIGN KEY (professional_id) REFERENCES professionals(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_anthropometric_patient ON body_anthropometric_assessments (tenant_id, patient_id, assessment_date);
+
+      CREATE TABLE IF NOT EXISTS body_therapeutic_plans (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        appointment_id TEXT,
+        professional_id TEXT NOT NULL,
+        assessment_date TEXT NOT NULL,
+        items_json TEXT NOT NULL,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+        FOREIGN KEY (professional_id) REFERENCES professionals(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_therapeutic_patient ON body_therapeutic_plans (tenant_id, patient_id, assessment_date);
+
+      -- =========================================================================
+      -- 14. MÓDULO ZEMDAPERSONAL (TREINAMENTO, PERIODIZAÇÃO E AVALIAÇÃO FÍSICA)
+      -- =========================================================================
+      CREATE TABLE IF NOT EXISTS personal_student_profiles (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        goal TEXT,
+        experience_level TEXT,
+        weekly_frequency INTEGER DEFAULT 3,
+        training_preferences TEXT,
+        restrictions TEXT,
+        notes TEXT,
+        height REAL,
+        current_weight REAL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+        UNIQUE(tenant_id, patient_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_personal_profile_patient ON personal_student_profiles (tenant_id, patient_id);
+
+      CREATE TABLE IF NOT EXISTS personal_assessments (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT NOT NULL,
+        assessment_date TEXT NOT NULL,
+        weight REAL,
+        height REAL,
+        bmi REAL,
+        whr REAL,
+        whtr REAL,
+        neck_cm REAL,
+        shoulder_cm REAL,
+        chest_cm REAL,
+        arm_right_relaxed REAL,
+        arm_left_relaxed REAL,
+        arm_right_flexed REAL,
+        arm_left_flexed REAL,
+        forearm_right REAL,
+        forearm_left REAL,
+        wrist_right REAL,
+        wrist_left REAL,
+        waist_cm REAL,
+        abdomen_cm REAL,
+        hip_cm REAL,
+        thigh_right_prox REAL,
+        thigh_left_prox REAL,
+        thigh_right_med REAL,
+        thigh_left_med REAL,
+        calf_right REAL,
+        calf_left REAL,
+        fold_subscapular REAL,
+        fold_triceps REAL,
+        fold_chest REAL,
+        fold_axillary REAL,
+        fold_suprailiac REAL,
+        fold_abdominal REAL,
+        fold_thigh REAL,
+        fold_calf REAL,
+        body_fat_percentage REAL,
+        fat_mass_kg REAL,
+        lean_mass_kg REAL,
+        muscle_mass_kg REAL,
+        protocol TEXT DEFAULT 'pollock_7',
+        source_module TEXT DEFAULT 'ZemdaPersonal',
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+        FOREIGN KEY (professional_id) REFERENCES professionals(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_personal_assess_patient ON personal_assessments (tenant_id, patient_id, assessment_date);
+
+      CREATE TABLE IF NOT EXISTS personal_assessment_photos (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        assessment_id TEXT,
+        patient_id TEXT NOT NULL,
+        photo_type TEXT NOT NULL CHECK(photo_type IN ('front', 'back', 'right', 'left')),
+        photo_url TEXT NOT NULL,
+        photo_date TEXT NOT NULL,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_personal_photos_patient ON personal_assessment_photos (tenant_id, patient_id, photo_date);
+
+      CREATE TABLE IF NOT EXISTS personal_exercises (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        muscle_group TEXT NOT NULL,
+        secondary_muscles_json TEXT,
+        body_region TEXT,
+        equipment TEXT,
+        category TEXT DEFAULT 'Musculação',
+        execution_type TEXT DEFAULT 'bilateral',
+        mechanics TEXT,
+        level TEXT DEFAULT 'todos',
+        instructions TEXT,
+        technical_notes TEXT,
+        photo_url TEXT,
+        exercise_file_id TEXT,
+        is_custom INTEGER DEFAULT 0,
+        is_active INTEGER DEFAULT 1,
+        created_by TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_personal_exercises_muscle ON personal_exercises (tenant_id, muscle_group);
+      CREATE INDEX IF NOT EXISTS idx_personal_exercises_equipment ON personal_exercises (tenant_id, equipment);
+      CREATE INDEX IF NOT EXISTS idx_personal_exercises_category ON personal_exercises (tenant_id, category);
+      CREATE INDEX IF NOT EXISTS idx_personal_exercises_active ON personal_exercises (tenant_id, is_active);
+
+      CREATE TABLE IF NOT EXISTS personal_workouts (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        division TEXT NOT NULL DEFAULT 'A',
+        structure_type TEXT DEFAULT 'ABC',
+        version INTEGER DEFAULT 1,
+        is_active INTEGER DEFAULT 1,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+        FOREIGN KEY (professional_id) REFERENCES professionals(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_personal_workouts_patient ON personal_workouts (tenant_id, patient_id, is_active);
+
+      CREATE TABLE IF NOT EXISTS personal_workout_exercises (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        workout_id TEXT NOT NULL,
+        exercise_id TEXT,
+        order_index INTEGER NOT NULL DEFAULT 0,
+        name TEXT NOT NULL,
+        muscle_group TEXT NOT NULL,
+        sets INTEGER NOT NULL DEFAULT 3,
+        reps TEXT NOT NULL DEFAULT '10-12',
+        load_kg REAL,
+        tempo TEXT,
+        rest_seconds INTEGER DEFAULT 60,
+        cadence TEXT,
+        rpe REAL,
+        rir REAL,
+        technique TEXT DEFAULT 'Direta',
+        technique_custom TEXT,
+        notes TEXT,
+        photo_url TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (workout_id) REFERENCES personal_workouts(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_personal_we_workout ON personal_workout_exercises (tenant_id, workout_id, order_index);
+
+      CREATE TABLE IF NOT EXISTS personal_workout_logs (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        workout_id TEXT,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        completed_at TEXT NOT NULL,
+        duration_minutes INTEGER,
+        rpe REAL,
+        feedback_notes TEXT,
+        log_details_json TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_personal_logs_patient ON personal_workout_logs (tenant_id, patient_id, completed_at);
+
+      CREATE TABLE IF NOT EXISTS personal_workout_templates (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        professional_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        structure_type TEXT NOT NULL,
+        description TEXT,
+        workouts_json TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (professional_id) REFERENCES professionals(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS personal_periodizations (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        phase TEXT NOT NULL DEFAULT 'hypertrophy',
+        start_date TEXT NOT NULL,
+        end_date TEXT NOT NULL,
+        meso_weeks INTEGER DEFAULT 4,
+        target_volume_json TEXT,
+        notes TEXT,
+        status TEXT DEFAULT 'active',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+        FOREIGN KEY (professional_id) REFERENCES professionals(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_personal_period_patient ON personal_periodizations (tenant_id, patient_id, status);
+
+      CREATE TABLE IF NOT EXISTS personal_tav_protocols (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        method TEXT NOT NULL,
+        equipment TEXT NOT NULL,
+        protocol_name TEXT NOT NULL,
+        unit TEXT NOT NULL DEFAULT 'nível',
+        source_reference TEXT,
+        is_active INTEGER DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_personal_tav_tenant ON personal_tav_protocols (tenant_id, is_active);
+
+      CREATE TABLE IF NOT EXISTS personal_tav_ranges (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        protocol_id TEXT NOT NULL,
+        gender TEXT DEFAULT 'all',
+        min_age INTEGER,
+        max_age INTEGER,
+        min_value REAL NOT NULL,
+        max_value REAL NOT NULL,
+        classification TEXT NOT NULL,
+        color_code TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (protocol_id) REFERENCES personal_tav_protocols(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_personal_tav_ranges_proto ON personal_tav_ranges (protocol_id);
+    `);
+    addColIfMissing('odontograms', 'record_id', 'TEXT');
+    addColIfMissing('clinic_users', 'zemda_personal_enabled', 'INTEGER DEFAULT 0');
+    addColIfMissing('patients', 'gender', "TEXT DEFAULT 'm'");
+
+    // Expansão da Avaliação Física Completa do ZemdaPersonal
+    addColIfMissing('personal_assessments', 'thigh_right_dist', 'REAL');
+    addColIfMissing('personal_assessments', 'thigh_left_dist', 'REAL');
+    addColIfMissing('personal_assessments', 'fold_biceps', 'REAL');
+    addColIfMissing('personal_assessments', 'skinfolds_protocol', 'TEXT');
+    addColIfMissing('personal_assessments', 'composition_method', 'TEXT');
+    addColIfMissing('personal_assessments', 'body_water_liters', 'REAL');
+    addColIfMissing('personal_assessments', 'bmr_kcal', 'REAL');
+    addColIfMissing('personal_assessments', 'raw_composition_data_json', 'TEXT');
+    addColIfMissing('personal_assessments', 'tav_value', 'REAL');
+    addColIfMissing('personal_assessments', 'tav_unit', 'TEXT');
+    addColIfMissing('personal_assessments', 'tav_method', 'TEXT');
+    addColIfMissing('personal_assessments', 'tav_equipment', 'TEXT');
+    addColIfMissing('personal_assessments', 'tav_protocol_id', 'TEXT');
+    addColIfMissing('personal_assessments', 'tav_classification', 'TEXT');
+    addColIfMissing('personal_assessments', 'tav_notes', 'TEXT');
+    addColIfMissing('personal_assessments', 'resting_heart_rate_bpm', 'INTEGER');
+    addColIfMissing('personal_assessments', 'blood_pressure_systolic', 'INTEGER');
+    addColIfMissing('personal_assessments', 'blood_pressure_diastolic', 'INTEGER');
+    addColIfMissing('personal_assessments', 'vo2_max', 'REAL');
+    addColIfMissing('personal_assessments', 'vo2_method_type', 'TEXT');
+    addColIfMissing('personal_assessments', 'vo2_protocol', 'TEXT');
+    addColIfMissing('personal_assessments', 'strength_tests_json', 'TEXT');
+    addColIfMissing('personal_assessments', 'muscular_endurance_tests_json', 'TEXT');
+    addColIfMissing('personal_assessments', 'flexibility_wells_cm', 'REAL');
+    addColIfMissing('personal_assessments', 'flexibility_tests_json', 'TEXT');
+
+    // Migrações para rastreabilidade clínica central no estoque de insumos e movimentações
+    addColIfMissing('inventory_movements', 'professional_id', 'TEXT');
+    addColIfMissing('inventory_movements', 'patient_id', 'TEXT');
+    addColIfMissing('inventory_movements', 'appointment_id', 'TEXT');
+    addColIfMissing('inventory_movements', 'module_type', 'TEXT');
+    addColIfMissing('inventory_movements', 'source_type', 'TEXT');
+    addColIfMissing('inventory_movements', 'source_id', 'TEXT');
+    addColIfMissing('inventory_movements', 'batch', 'TEXT');
+
+    try {
+      rawDb.exec(`
+        CREATE INDEX IF NOT EXISTS idx_inventory_movements_source ON inventory_movements (tenant_id, source_type, source_id);
+        CREATE INDEX IF NOT EXISTS idx_inventory_movements_appt ON inventory_movements (tenant_id, appointment_id);
+        CREATE INDEX IF NOT EXISTS idx_inventory_movements_patient ON inventory_movements (tenant_id, patient_id);
+      `);
+    } catch (_) {}
+  } catch (migErr) {
+    console.warn('[Database] Aviso nas migrações dinâmicas:', migErr);
+  }
+
+  migratePersonalAssessment(rawDb);
+
+
+
+  // Garante tenant global para integridade referencial de anexos de biblioteca
+  try {
+    rawDb.exec(`
+      INSERT OR IGNORE INTO tenants (id, slug, name, trade_name, email, status)
+      VALUES ('global', 'global', 'Zemda Sistema Global', 'Zemda Global', 'sistema@zemda.com.br', 'active');
+    `);
+  } catch (_) {}
+
+  const postureColumns = rawDb.prepare('PRAGMA table_info(personal_assessments)').all().map((c: any) => c.name);
+  if (!postureColumns.includes('posture_json')) rawDb.exec('ALTER TABLE personal_assessments ADD COLUMN posture_json TEXT');
+  if (!postureColumns.includes('source_module')) rawDb.exec("ALTER TABLE personal_assessments ADD COLUMN source_module TEXT DEFAULT 'ZemdaPersonal'");
+
+  // Fallback artwork is shipped locally. R2 imports are explicit maintenance operations.
+  for (const [column, definition] of Object.entries({
+    instructions: 'TEXT', category: 'TEXT', duration_seconds: 'REAL', side: 'TEXT', snapshot_version: 'INTEGER', image_attribution_json: 'TEXT'
+  })) {
+    const columns = rawDb.prepare('PRAGMA table_info(personal_workout_exercises)').all().map((c: any) => c.name);
+    if (!columns.includes(column)) rawDb.exec(`ALTER TABLE personal_workout_exercises ADD COLUMN ${column} ${definition}`);
+  }
+
+  seedPersonalTav(rawDb);
+
+
+  migrateConsultations(rawDb);
+
+  // SQLite requires a table rebuild to extend an existing CHECK constraint.
+  const tenantSql = rawDb.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'tenants'").get() as { sql: string };
+  if (!tenantSql.sql.includes("'banned'")) {
+    const indexes = rawDb.prepare("SELECT sql FROM sqlite_master WHERE tbl_name = 'tenants' AND type IN ('index', 'trigger') AND sql IS NOT NULL").all() as { sql: string }[];
+    const replacement = tenantSql.sql.replace(/CREATE TABLE\s+(?:IF NOT EXISTS\s+)?["`\[]?tenants["`\]]?/i, 'CREATE TABLE tenants_control_migration')
+      .replace(/CHECK\s*\(\s*status\s+IN\s*\(([^)]+)\)\s*\)/i, "CHECK(status IN ($1, 'banned'))");
+    rawDb.exec('PRAGMA foreign_keys = OFF');
+    try {
+      db.transaction(() => {
+        rawDb.exec(replacement);
+        rawDb.exec('INSERT INTO tenants_control_migration SELECT * FROM tenants');
+        rawDb.exec('DROP TABLE tenants');
+        rawDb.exec('ALTER TABLE tenants_control_migration RENAME TO tenants');
+        for (const index of indexes) rawDb.exec(index.sql);
+        if (rawDb.prepare('PRAGMA foreign_key_check').all().length) throw new Error('Integridade inválida na migração administrativa');
+      })();
+    } finally { rawDb.exec('PRAGMA foreign_keys = ON'); }
+  }
+  // Administrative controls must be available before accepting requests.
+  if (!rawDb.prepare('PRAGMA table_info(tenants)').all().some((c: any) => c.name === 'session_version')) {
+    rawDb.exec('ALTER TABLE tenants ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0');
+  }
+  if (!rawDb.prepare('PRAGMA table_info(tenants)').all().some((c: any) => c.name === 'pre_ban_status')) {
+    rawDb.exec('ALTER TABLE tenants ADD COLUMN pre_ban_status TEXT');
+  }
+  rawDb.exec(`
+    CREATE TABLE IF NOT EXISTS global_clinic_audit (
+      id TEXT PRIMARY KEY, clinic_id TEXT NOT NULL, clinic_name TEXT NOT NULL,
+      admin_id TEXT NOT NULL, action TEXT NOT NULL, reason TEXT NOT NULL,
+      reauthenticated INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS clinic_deletion_jobs (
+      clinic_id TEXT PRIMARY KEY, files_json TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS file_attachments (
+      id TEXT PRIMARY KEY,
+      clinic_id TEXT NOT NULL,
+      patient_id TEXT,
+      appointment_id TEXT,
+      assessment_id TEXT,
+      exercise_id TEXT,
+      professional_id TEXT,
+      module_type TEXT,
+      test_id TEXT,
+      uploaded_by TEXT NOT NULL,
+      storage_provider TEXT NOT NULL DEFAULT 'cloudflare_r2',
+      object_key TEXT NOT NULL,
+      original_filename TEXT NOT NULL,
+      mime_type TEXT NOT NULL,
+      file_size INTEGER NOT NULL,
+      category TEXT NOT NULL DEFAULT 'general',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (clinic_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_file_attachments_clinic_patient ON file_attachments(clinic_id, patient_id);
+    CREATE INDEX IF NOT EXISTS idx_file_attachments_clinic_id ON file_attachments(clinic_id, id);
+    CREATE INDEX IF NOT EXISTS idx_file_attachments_category ON file_attachments(category);
+    CREATE INDEX IF NOT EXISTS idx_file_attachments_test_id ON file_attachments(test_id);
+  `);
+
+  try {
+    const attachCols = rawDb.prepare('PRAGMA table_info(file_attachments)').all().map((c: any) => c.name);
+    if (!attachCols.includes('assessment_id')) {
+      rawDb.exec('ALTER TABLE file_attachments ADD COLUMN assessment_id TEXT');
+    }
+    if (!attachCols.includes('exercise_id')) {
+      rawDb.exec('ALTER TABLE file_attachments ADD COLUMN exercise_id TEXT');
+    }
+    if (!attachCols.includes('professional_id')) {
+      rawDb.exec('ALTER TABLE file_attachments ADD COLUMN professional_id TEXT');
+    }
+    if (!attachCols.includes('module_type')) {
+      rawDb.exec('ALTER TABLE file_attachments ADD COLUMN module_type TEXT');
+    }
+    if (!attachCols.includes('test_id')) {
+      rawDb.exec('ALTER TABLE file_attachments ADD COLUMN test_id TEXT');
+    }
+  } catch (_) {}
+
+  try {
+    const photoCols = rawDb.prepare('PRAGMA table_info(personal_assessment_photos)').all().map((c: any) => c.name);
+    if (!photoCols.includes('file_id')) {
+      rawDb.exec('ALTER TABLE personal_assessment_photos ADD COLUMN file_id TEXT');
+    }
+  } catch (_) {}
+
+  try {
+    const weCols = rawDb.prepare('PRAGMA table_info(personal_workout_exercises)').all().map((c: any) => c.name);
+    if (!weCols.includes('exercise_file_id')) {
+      rawDb.exec('ALTER TABLE personal_workout_exercises ADD COLUMN exercise_file_id TEXT');
+    }
+  } catch (_) {}
+
+  // Executa seed caso não existam categorias cadastradas
+  try {
+    const checkStmt = db.prepare("SELECT count(*) as total FROM categories");
+    const result = checkStmt.get() as { total: number };
+    if (!result || result.total === 0) {
+      console.log('[Database] Executando Seed inicial de taxonomia e dados...');
+      runSeed(rawDb);
+      console.log('[Database] Seed concluído com sucesso.');
+    }
+  } catch (err) {
+    console.error('[Database] Erro ao inicializar banco de dados:', err);
+  }
+  migrateBilling(rawDb);
+  migrateLongitudinalClinical(rawDb);
+  migratePersonalStudentLinks(rawDb);
+  migrateConsents(rawDb);
+  seedExerciseLibrary(rawDb);
+  seedNutritionFoodDatabase(rawDb);
+  migrateClinicBooking(rawDb);
+  repairLegacyPhotoUrls(rawDb);
+  migrateClinicalInventoryUsageCapability(rawDb);
+  backfillMissingDefaultSchedules(rawDb);
+}
+
+function migrateClinicalInventoryUsageCapability(rawDb: any): void {
+  try {
+    rawDb.prepare(`
+      INSERT OR IGNORE INTO capabilities (id, category, name, description, active)
+      VALUES ('CLINICAL_INVENTORY_USAGE', 'CLINICAL', 'Consumo de Insumos Clínicos', 'Pode registrar consumo clínico de produtos/insumos do estoque da clínica', 1)
+    `).run();
+
+    rawDb.prepare(`
+      INSERT OR IGNORE INTO profession_capabilities (profession_id, capability_id, rule)
+      VALUES ('prof-dentista', 'CLINICAL_INVENTORY_USAGE', 'DEFAULT')
+    `).run();
+
+    rawDb.prepare(`
+      INSERT OR IGNORE INTO profession_capabilities (profession_id, capability_id, rule)
+      VALUES ('prof-esteticista', 'CLINICAL_INVENTORY_USAGE', 'DEFAULT')
+    `).run();
+  } catch (e) {
+    console.warn('[Migration] Aviso ao semear capability CLINICAL_INVENTORY_USAGE:', e);
+  }
+}
+
+function repairLegacyPhotoUrls(rawDb: any): void {
+  try {
+    // 1. Repara personal_assessment_photos onde file_id é NULL ou photo_url contém worker/r2/blob
+    const brokenPhotos = rawDb.prepare(`
+      SELECT id, tenant_id, photo_url, file_id 
+      FROM personal_assessment_photos 
+      WHERE file_id IS NULL OR photo_url LIKE '%workers.dev%' OR photo_url LIKE '%r2.cloudflarestorage.com%' OR photo_url LIKE 'blob:%'
+    `).all() as any[];
+
+    for (const p of brokenPhotos) {
+      let recoveredFileId = p.file_id || null;
+      let objectKey: string | null = null;
+      const url = String(p.photo_url || '').trim();
+
+      if (!recoveredFileId && url) {
+        if (url.startsWith('att-')) {
+          recoveredFileId = url;
+        } else if (url.includes('token=')) {
+          try {
+            const tokenMatch = url.match(/token=([^&]+)/);
+            if (tokenMatch && tokenMatch[1]) {
+              const tokenPart = decodeURIComponent(tokenMatch[1]).split('.')[0];
+              const jsonStr = Buffer.from(tokenPart, 'base64url').toString('utf8');
+              const parsed = JSON.parse(jsonStr);
+              if (parsed && parsed.objectKey) {
+                objectKey = parsed.objectKey;
+              }
+            }
+          } catch (_) {}
+        } else if (url.includes('clinics/')) {
+          const match = url.match(/clinics\/[^\s?]+/);
+          if (match) objectKey = match[0];
+        }
+
+        if (objectKey) {
+          const attach = rawDb.prepare('SELECT id FROM file_attachments WHERE object_key = ?').get(objectKey) as any;
+          if (attach && attach.id) {
+            recoveredFileId = attach.id;
+          }
+        }
+      }
+
+      const isUnsafeUrl = url.includes('workers.dev') || url.includes('r2.cloudflarestorage.com') || url.startsWith('blob:');
+      if (recoveredFileId || isUnsafeUrl) {
+        rawDb.prepare(`
+          UPDATE personal_assessment_photos 
+          SET file_id = COALESCE(?, file_id),
+              photo_url = CASE WHEN ? = 1 THEN '' ELSE photo_url END
+          WHERE id = ?
+        `).run(recoveredFileId || null, isUnsafeUrl ? 1 : 0, p.id);
+      }
+    }
+
+    // Exercise URLs are not repaired destructively on startup. The explicit read-only
+    // audit reports legacy URLs/references for operator review.
+
+    // Existing assessment-photo migration remains unchanged. Exercise images and
+    // workout snapshots are intentionally excluded from this legacy cleanup.
+    rawDb.prepare("UPDATE personal_assessment_photos SET photo_url = '' WHERE photo_url IS NOT NULL").run();
+    // Preserve stable exercise assets and immutable workout snapshots.
+
+  } catch (repairErr) {
+    console.warn('[Database] Aviso ao executar repairLegacyPhotoUrls:', repairErr);
+  }
+
+  // ============================================================================
+  // TABELAS: CERTIFICADOS DIGITAIS ICP-BRASIL E ASSINATURA PAdES
+  // ============================================================================
+  rawDb.exec(`
+    CREATE TABLE IF NOT EXISTS digital_certificates (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      holder_type TEXT NOT NULL CHECK(holder_type IN ('professional', 'patient')),
+      holder_id TEXT NOT NULL,
+      certificate_type TEXT NOT NULL CHECK(certificate_type IN ('A1', 'A3', 'remote')),
+      serial_number TEXT NOT NULL,
+      subject_name TEXT NOT NULL,
+      subject_cpf_cnpj TEXT NOT NULL,
+      issuer TEXT NOT NULL,
+      valid_from TEXT NOT NULL,
+      valid_until TEXT NOT NULL,
+      fingerprint_sha256 TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      provider_reference TEXT,
+      status TEXT NOT NULL CHECK(status IN ('valid', 'expired', 'revoked', 'pending')) DEFAULT 'valid',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      last_validated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_digital_certificates_holder ON digital_certificates(tenant_id, holder_type, holder_id);
+
+    CREATE TABLE IF NOT EXISTS digital_signatures (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      document_id TEXT NOT NULL,
+      document_type TEXT NOT NULL,
+      certificate_id TEXT NOT NULL,
+      file_id TEXT,
+      signed_file_id TEXT,
+      sha256_hash TEXT NOT NULL,
+      signature_format TEXT NOT NULL DEFAULT 'PAdES',
+      verification_token TEXT UNIQUE NOT NULL,
+      validation_result_json TEXT,
+      signed_at TEXT NOT NULL DEFAULT (datetime('now')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (certificate_id) REFERENCES digital_certificates(id) ON DELETE RESTRICT
+    );
+    CREATE INDEX IF NOT EXISTS idx_digital_signatures_doc ON digital_signatures(tenant_id, document_type, document_id);
+    CREATE INDEX IF NOT EXISTS idx_digital_signatures_token ON digital_signatures(verification_token);
+  `);
+
+  // Migrações seguras para campos explícitos de certificados e assinaturas
+  try { rawDb.exec("ALTER TABLE digital_certificates ADD COLUMN professional_id TEXT;"); } catch (_) {}
+  try { rawDb.exec("ALTER TABLE digital_certificates ADD COLUMN certificate_serial TEXT;"); } catch (_) {}
+  try { rawDb.exec("ALTER TABLE digital_signatures ADD COLUMN professional_id TEXT;"); } catch (_) {}
+
+  // ============================================================================
+  // TABELAS: MÓDULO ZEMDAPP (PSICOPEDAGOGIA CLÍNICA E INSTITUCIONAL - CBO 2394-25)
+  // ============================================================================
+  rawDb.exec(`
+    CREATE TABLE IF NOT EXISTS psychopedagogy_profiles (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      school_name TEXT,
+      school_grade TEXT,
+      school_shift TEXT,
+      school_type TEXT,
+      teacher_name TEXT,
+      coordinator_name TEXT,
+      pedagogical_complaint TEXT,
+      referral_source TEXT,
+      special_needs_notes TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_pp_profiles_patient ON psychopedagogy_profiles(tenant_id, patient_id);
+
+    CREATE TABLE IF NOT EXISTS psychopedagogy_assessments (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      professional_id TEXT,
+      appointment_id TEXT,
+      assessment_date TEXT NOT NULL DEFAULT (date('now')),
+      mode TEXT NOT NULL DEFAULT 'clinical' CHECK(mode IN ('clinical', 'institutional')),
+      pedagogical_contract TEXT,
+      initial_goals_json TEXT,
+      reading_analysis_json TEXT,
+      writing_analysis_json TEXT,
+      math_analysis_json TEXT,
+      cognitive_processes_json TEXT,
+      school_work_analysis_json TEXT,
+      institutional_climate_json TEXT,
+      pedagogical_mediation_json TEXT,
+      status TEXT NOT NULL DEFAULT 'in_progress',
+      is_sealed INTEGER NOT NULL DEFAULT 0,
+      signature_hash TEXT,
+      signed_at TEXT,
+      signed_by_user_id TEXT,
+      signer_name TEXT,
+      signer_registration TEXT,
+      sealed_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_pp_assessments_patient ON psychopedagogy_assessments(tenant_id, patient_id);
+
+    CREATE TABLE IF NOT EXISTS psychopedagogy_sessions (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      professional_id TEXT,
+      appointment_id TEXT,
+      session_date TEXT NOT NULL DEFAULT (date('now')),
+      session_number INTEGER,
+      objectives TEXT,
+      pedagogical_resources TEXT,
+      activities_performed TEXT,
+      student_engagement TEXT,
+      observations TEXT,
+      home_guidelines TEXT,
+      next_session_plan TEXT,
+      is_sealed INTEGER NOT NULL DEFAULT 0,
+      signature_hash TEXT,
+      signed_at TEXT,
+      signed_by_user_id TEXT,
+      signer_name TEXT,
+      signer_registration TEXT,
+      sealed_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_pp_sessions_patient ON psychopedagogy_sessions(tenant_id, patient_id);
+
+    CREATE TABLE IF NOT EXISTS psychopedagogy_learning_domains (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      domain_category TEXT NOT NULL,
+      score_or_level TEXT,
+      qualitative_description TEXT,
+      assessment_date TEXT NOT NULL DEFAULT (date('now')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_pp_domains_patient ON psychopedagogy_learning_domains(tenant_id, patient_id);
+
+    CREATE TABLE IF NOT EXISTS psychopedagogy_instruments (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      instrument_name TEXT NOT NULL,
+      instrument_category TEXT NOT NULL,
+      application_date TEXT NOT NULL DEFAULT (date('now')),
+      raw_score TEXT,
+      percentile_or_result TEXT,
+      observations TEXT,
+      is_psychological_privative INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_pp_instruments_patient ON psychopedagogy_instruments(tenant_id, patient_id);
+
+    CREATE TABLE IF NOT EXISTS psychopedagogy_intervention_plans (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      professional_id TEXT,
+      plan_title TEXT NOT NULL,
+      start_date TEXT NOT NULL DEFAULT (date('now')),
+      review_date TEXT,
+      general_objective TEXT,
+      methodological_approach TEXT,
+      status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'completed', 'revised', 'cancelled')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_pp_plans_patient ON psychopedagogy_intervention_plans(tenant_id, patient_id);
+
+    CREATE TABLE IF NOT EXISTS psychopedagogy_goals (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      plan_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      goal_description TEXT NOT NULL,
+      target_date TEXT,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'in_progress', 'achieved', 'revised')),
+      progress_percentage INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (plan_id) REFERENCES psychopedagogy_intervention_plans(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_pp_goals_plan ON psychopedagogy_goals(plan_id);
+
+    CREATE TABLE IF NOT EXISTS psychopedagogy_school_contacts (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      contact_date TEXT NOT NULL DEFAULT (date('now')),
+      contact_type TEXT NOT NULL DEFAULT 'school_visit',
+      school_contact_person TEXT NOT NULL,
+      school_contact_role TEXT,
+      discussion_summary TEXT,
+      agreed_adaptations TEXT,
+      next_contact_date TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_pp_school_contacts ON psychopedagogy_school_contacts(tenant_id, patient_id);
+
+    CREATE TABLE IF NOT EXISTS psychopedagogy_institutional_cases (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      institution_name TEXT NOT NULL,
+      institution_type TEXT,
+      project_title TEXT NOT NULL,
+      target_audience TEXT,
+      assessment_scope TEXT,
+      actions_plan TEXT,
+      results_summary TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_pp_institutional_cases ON psychopedagogy_institutional_cases(tenant_id);
+
+    CREATE TABLE IF NOT EXISTS psychopedagogy_shares (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      shared_by_user_id TEXT NOT NULL,
+      shared_with_user_id TEXT NOT NULL,
+      access_level TEXT NOT NULL DEFAULT 'read' CHECK(access_level IN ('read', 'write')),
+      expires_at TEXT,
+      reason TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_pp_shares ON psychopedagogy_shares(tenant_id, patient_id, shared_with_user_id);
+
+    CREATE TABLE IF NOT EXISTS psychopedagogy_retention_policies (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL UNIQUE,
+      retention_years INTEGER NOT NULL DEFAULT 5,
+      auto_archive INTEGER NOT NULL DEFAULT 1,
+      notify_before_archive_days INTEGER NOT NULL DEFAULT 30,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    );
+
+    -- ============================================================================
+    -- MÓDULO ZEMDAPSICO (Psicologia Clínica - CFP)
+    -- ============================================================================
+
+    CREATE TABLE IF NOT EXISTS psychology_anamnesis (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      professional_id TEXT,
+      appointment_id TEXT,
+      identification_demand TEXT,
+      main_complaint TEXT,
+      demand_history TEXT,
+      psych_psychiatric_history TEXT,
+      medical_history TEXT,
+      current_medications TEXT,
+      sleep_patterns TEXT,
+      eating_habits TEXT,
+      physical_activity TEXT,
+      substance_use TEXT,
+      family_context TEXT,
+      developmental_history TEXT,
+      marital_relationship_context TEXT,
+      academic_educational_context TEXT,
+      professional_work_context TEXT,
+      social_context TEXT,
+      support_network TEXT,
+      protective_factors TEXT,
+      vulnerability_factors TEXT,
+      significant_life_events TEXT,
+      previous_treatments TEXT,
+      treatment_goals TEXT,
+      theoretical_approach TEXT,
+      clinical_observations TEXT,
+      is_sealed INTEGER NOT NULL DEFAULT 0,
+      sealed_at TEXT,
+      signature_hash TEXT,
+      amendments_json TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      created_by TEXT,
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_psico_anamnesis_patient ON psychology_anamnesis(tenant_id, patient_id);
+
+    CREATE TABLE IF NOT EXISTS psychology_mental_state_exams (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      professional_id TEXT,
+      appointment_id TEXT,
+      exam_date TEXT NOT NULL DEFAULT (date('now')),
+      appearance TEXT,
+      attitude_behavior TEXT,
+      consciousness_level TEXT,
+      orientation TEXT,
+      attention TEXT,
+      memory TEXT,
+      language_speech TEXT,
+      psychomotor TEXT,
+      mood TEXT,
+      affect TEXT,
+      thought_process TEXT,
+      sensory_perception TEXT,
+      cognitive_functions TEXT,
+      critical_judgment TEXT,
+      insight TEXT,
+      impulse_control TEXT,
+      current_risk TEXT,
+      observations TEXT,
+      is_sealed INTEGER NOT NULL DEFAULT 0,
+      sealed_at TEXT,
+      signature_hash TEXT,
+      amendments_json TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      created_by TEXT,
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_psico_eem_patient ON psychology_mental_state_exams(tenant_id, patient_id);
+
+    CREATE TABLE IF NOT EXISTS psychology_risk_assessments (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      professional_id TEXT,
+      appointment_id TEXT,
+      assessment_date TEXT NOT NULL DEFAULT (date('now')),
+      suicidal_ideation TEXT,
+      self_harm TEXT,
+      planning TEXT,
+      intent_level TEXT,
+      means_access TEXT,
+      history_previous_attempts TEXT,
+      precipitating_factors TEXT,
+      protective_factors TEXT,
+      support_network_actionable TEXT,
+      conduct_adopted TEXT,
+      referral_destination TEXT,
+      safety_plan TEXT,
+      reassessment_schedule TEXT,
+      clinician_summary TEXT,
+      is_sealed INTEGER NOT NULL DEFAULT 0,
+      sealed_at TEXT,
+      signature_hash TEXT,
+      amendments_json TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      created_by TEXT,
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_psico_risk_patient ON psychology_risk_assessments(tenant_id, patient_id);
+
+    CREATE TABLE IF NOT EXISTS psychology_assessments (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      professional_id TEXT,
+      appointment_id TEXT,
+      assessment_title TEXT NOT NULL,
+      purpose TEXT NOT NULL,
+      demand_description TEXT,
+      start_date TEXT NOT NULL DEFAULT (date('now')),
+      completion_date TEXT,
+      status TEXT NOT NULL DEFAULT 'in_progress' CHECK(status IN ('in_progress', 'completed', 'suspended')),
+      fundamental_sources_json TEXT,
+      complementary_sources_json TEXT,
+      clinical_integration_analysis TEXT,
+      conclusion_synthesis TEXT,
+      is_sealed INTEGER NOT NULL DEFAULT 0,
+      sealed_at TEXT,
+      signature_hash TEXT,
+      amendments_json TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      created_by TEXT,
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_psico_assessments_patient ON psychology_assessments(tenant_id, patient_id);
+
+    CREATE TABLE IF NOT EXISTS psychology_instruments (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      assessment_id TEXT,
+      instrument_name TEXT NOT NULL,
+      version TEXT,
+      publisher TEXT,
+      purpose TEXT,
+      application_date TEXT NOT NULL DEFAULT (date('now')),
+      modality TEXT NOT NULL DEFAULT 'presencial',
+      satepsi_status TEXT NOT NULL DEFAULT 'pendente',
+      satepsi_verified_at TEXT,
+      professional_synthesis TEXT,
+      observations TEXT,
+      responsible_psychologist TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      created_by TEXT,
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_psico_instruments_patient ON psychology_instruments(tenant_id, patient_id);
+
+    CREATE TABLE IF NOT EXISTS psychology_screenings (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      screening_name TEXT NOT NULL,
+      version TEXT,
+      bibliographic_reference TEXT,
+      target_population TEXT,
+      purpose TEXT,
+      license_notes TEXT,
+      application_date TEXT NOT NULL DEFAULT (date('now')),
+      score_raw TEXT,
+      classification TEXT,
+      clinical_notes TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      created_by TEXT,
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_psico_screenings_patient ON psychology_screenings(tenant_id, patient_id);
+
+    CREATE TABLE IF NOT EXISTS psychology_sessions (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      professional_id TEXT,
+      appointment_id TEXT,
+      session_number INTEGER,
+      session_date TEXT NOT NULL DEFAULT (date('now')),
+      modality TEXT NOT NULL DEFAULT 'presencial',
+      tdic_info_json TEXT,
+      current_demand TEXT,
+      relevant_themes TEXT,
+      interventions_used TEXT,
+      patient_response TEXT,
+      clinical_evolution TEXT NOT NULL,
+      conduct_plan TEXT,
+      referrals TEXT,
+      next_session_plan TEXT,
+      session_risk_notes TEXT,
+      is_sealed INTEGER NOT NULL DEFAULT 0,
+      signature_hash TEXT,
+      signed_at TEXT,
+      signed_by_name TEXT,
+      signed_by_registration TEXT,
+      sealed_at TEXT,
+      amendments_json TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      created_by TEXT,
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_psico_sessions_patient ON psychology_sessions(tenant_id, patient_id);
+
+    CREATE TABLE IF NOT EXISTS psychology_goals (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      professional_id TEXT,
+      title TEXT NOT NULL,
+      indicator TEXT,
+      target_period TEXT,
+      strategy TEXT,
+      status TEXT NOT NULL DEFAULT 'a_iniciar' CHECK(status IN ('a_iniciar', 'em_andamento', 'alcancado', 'revisado', 'cancelado')),
+      review_date TEXT,
+      completion_reason TEXT,
+      notes TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      created_by TEXT,
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_psico_goals_patient ON psychology_goals(tenant_id, patient_id);
+
+    CREATE TABLE IF NOT EXISTS psychology_documents (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      professional_id TEXT NOT NULL,
+      appointment_id TEXT,
+      document_type TEXT NOT NULL,
+      document_number TEXT NOT NULL,
+      purpose TEXT NOT NULL,
+      requester_name TEXT NOT NULL,
+      content_json TEXT NOT NULL,
+      rendered_text TEXT NOT NULL,
+      version INTEGER NOT NULL DEFAULT 1,
+      is_sealed INTEGER NOT NULL DEFAULT 1,
+      sealed_at TEXT NOT NULL DEFAULT (datetime('now')),
+      signature_hash TEXT NOT NULL,
+      signed_by_name TEXT NOT NULL,
+      signed_by_registration TEXT NOT NULL,
+      delivery_receipt_json TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      created_by TEXT,
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_psico_docs_patient ON psychology_documents(tenant_id, patient_id);
+
+    CREATE TABLE IF NOT EXISTS psychology_audit_logs (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      user_name TEXT,
+      action TEXT NOT NULL,
+      target_entity TEXT NOT NULL,
+      target_id TEXT,
+      details TEXT,
+      ip_address TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_psico_audit ON psychology_audit_logs(tenant_id, patient_id, created_at);
+
+    CREATE TABLE IF NOT EXISTS psychology_retention_policies (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL UNIQUE,
+      retention_years INTEGER NOT NULL DEFAULT 5,
+      health_record_retention_years INTEGER NOT NULL DEFAULT 20,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS psychology_drafts (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      professional_id TEXT,
+      appointment_id TEXT,
+      draft_data_json TEXT NOT NULL,
+      client_updated_at TEXT,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_psico_drafts_unique ON psychology_drafts(tenant_id, patient_id, COALESCE(appointment_id, 'none'));
+
+    -- Infraestrutura Universal de Autosave e Rascunhos Clínicos
+    CREATE TABLE IF NOT EXISTS clinical_drafts (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      professional_id TEXT,
+      appointment_id TEXT,
+      module_type TEXT NOT NULL,
+      draft_data_json TEXT NOT NULL,
+      client_updated_at TEXT,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_clinical_drafts_unique 
+      ON clinical_drafts(tenant_id, patient_id, module_type, COALESCE(appointment_id, 'none'));
+
+    -- ZemdaFono: FOIS - Functional Oral Intake Scale
+    CREATE TABLE IF NOT EXISTS fono_fois_assessments (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      professional_id TEXT,
+      appointment_id TEXT,
+      version TEXT NOT NULL DEFAULT 'adult',
+      assessment_date TEXT NOT NULL,
+      level INTEGER NOT NULL,
+      notes TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_fono_fois_patient ON fono_fois_assessments(tenant_id, patient_id, assessment_date);
+
+    -- ZemdaFono: IDV-10 - Índice de Desvantagem Vocal
+    CREATE TABLE IF NOT EXISTS fono_idv10_assessments (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      professional_id TEXT,
+      appointment_id TEXT,
+      assessment_date TEXT NOT NULL,
+      answers_json TEXT NOT NULL,
+      total_score INTEGER NOT NULL,
+      notes TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_fono_idv10_patient ON fono_idv10_assessments(tenant_id, patient_id, assessment_date);
+
+    -- ZemdaFono: Rastreio de Leitura, Escrita e Indicadores de Dislexia
+    CREATE TABLE IF NOT EXISTS fono_reading_screenings (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      professional_id TEXT,
+      appointment_id TEXT,
+      screening_date TEXT NOT NULL,
+      referral_reason TEXT,
+      school_history TEXT,
+      family_history TEXT,
+      reading_notes TEXT,
+      writing_notes TEXT,
+      phonological_awareness TEXT,
+      phonological_memory TEXT,
+      rapid_naming TEXT,
+      grapheme_phoneme TEXT,
+      fluency_accuracy TEXT,
+      comprehension TEXT,
+      observed_errors TEXT,
+      clinical_notes TEXT,
+      external_instruments TEXT,
+      professional_conclusion TEXT,
+      classification TEXT NOT NULL,
+      conduct TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_fono_reading_patient ON fono_reading_screenings(tenant_id, patient_id, screening_date);
+
+    -- ZemdaFono: ABFW - Registro de Resultados Informados
+    CREATE TABLE IF NOT EXISTS fono_abfw_records (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      professional_id TEXT,
+      appointment_id TEXT,
+      record_date TEXT NOT NULL,
+      version TEXT NOT NULL DEFAULT 'ABFW-Revisado',
+      domain TEXT NOT NULL,
+      scores_data_json TEXT NOT NULL,
+      notes TEXT,
+      conclusion TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_fono_abfw_patient ON fono_abfw_records(tenant_id, patient_id, domain, record_date);
+
+    -- ZemdaFono: Triagem do Processamento Auditivo (PAC)
+    CREATE TABLE IF NOT EXISTS fono_auditory_screenings (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      professional_id TEXT,
+      appointment_id TEXT,
+      screening_date TEXT NOT NULL,
+      speech_in_noise TEXT,
+      follow_commands TEXT,
+      localization TEXT,
+      figure_ground TEXT,
+      auditory_closure TEXT,
+      temporal_ordering TEXT,
+      temporal_resolution TEXT,
+      binaural_integration TEXT,
+      auditory_memory TEXT,
+      otitis_history TEXT,
+      school_performance TEXT,
+      family_complaints TEXT,
+      clinical_notes TEXT,
+      external_instruments TEXT,
+      conduct TEXT,
+      classification TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_fono_auditory_patient ON fono_auditory_screenings(tenant_id, patient_id, screening_date);
+  `);
+
+  try {
+    migrateRemoveOutOfScopeProfessions(rawDb);
+  } catch (err) {
+    console.error('[Database] Erro ao executar migrateRemoveOutOfScopeProfessions:', err);
+  }
+
+  try {
+    migrateModularArchitecture(rawDb);
+  } catch (err) {
+    console.error('[Database] Erro ao executar migrateModularArchitecture:', err);
+  }
+
+  try {
+    migrateMedicalTree(rawDb);
+    const medicalColumns = rawDb.prepare('PRAGMA table_info(medical_consultations)').all() as { name: string }[];
+    if (!medicalColumns.some(column => column.name === 'specialty_notes_json')) {
+      rawDb.exec('ALTER TABLE medical_consultations ADD COLUMN specialty_notes_json TEXT');
+    }
+  } catch (err) {
+    console.error('[Database] Erro ao executar migrateMedicalTree:', err);
+  }
+
+  try {
+    migrateEstetic(rawDb);
+  } catch (err) {
+    console.error('[Database] Erro ao executar migrateEstetic:', err);
+  }
+
+  try {
+    migrateProfessionsNormalization(rawDb);
+  } catch (err) {
+    console.error('[Database] Erro ao executar migrateProfessionsNormalization:', err);
+  }
+
+  try {
+    cleanupObsoleteResources(rawDb);
+  } catch (err) {
+    console.error('[Database] Erro ao executar cleanupObsoleteResources:', err);
+  }
+
+  try {
+    rawDb.exec(`
+      UPDATE dental_prosthetics_lab
+      SET status = 'sent_to_lab'
+      WHERE status = 'requested' OR status IS NULL;
+    `);
+  } catch (err) {
+    console.error('[Database] Erro ao migrar status de próteses:', err);
+  }
+
+  try {
+    migrateProfessionalSlugs(rawDb);
+  } catch (err) {
+    console.error('[Database] Erro ao executar migrateProfessionalSlugs:', err);
+  }
+}

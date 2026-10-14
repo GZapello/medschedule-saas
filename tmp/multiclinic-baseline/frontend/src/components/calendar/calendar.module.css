@@ -1,0 +1,408 @@
+/* Estilo do Calendário Multivisualização (Dia, Semana, Mês) */
+.calendarContainer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  background: #ffffff;
+  border-radius: 1rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+}
+
+/* Barra de Ferramentas Superior e Controles */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem;
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.navGroup {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.todayBtn {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  color: #334155;
+  font-weight: 600;
+  padding: 0.5rem 0.85rem;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+  min-height: 38px;
+  transition: all 0.15s;
+}
+
+.todayBtn:hover {
+  background: #e2e8f0;
+}
+
+.iconBtn {
+  background: transparent;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.5rem;
+  padding: 0.45rem;
+  cursor: pointer;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 38px;
+  min-height: 38px;
+  transition: all 0.15s;
+}
+
+.iconBtn:hover {
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+.currentPeriodTitle {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+  text-transform: capitalize;
+}
+
+/* Seletor de Tipo de Visualização */
+.viewSwitcher {
+  display: flex;
+  background: #f1f5f9;
+  padding: 0.25rem;
+  border-radius: 0.625rem;
+  border: 1px solid #e2e8f0;
+}
+
+.viewBtn {
+  border: none;
+  background: transparent;
+  padding: 0.45rem 0.85rem;
+  border-radius: 0.45rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.viewBtnActive {
+  background: #ffffff;
+  color: #2563eb;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* Filtros por Especialidade e Botão Primário */
+.filterAndActionGroup {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.specialtySelect {
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid #cbd5e1;
+  font-size: 0.875rem;
+  color: #1e293b;
+  background: #ffffff;
+  min-height: 38px;
+}
+
+.newAppointmentBtn {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: #2563eb;
+  color: #ffffff;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.5rem 1rem;
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+  min-height: 38px;
+  transition: background 0.15s;
+}
+
+.newAppointmentBtn:hover {
+  background: #1d4ed8;
+}
+
+/* Banner de Detecção de Conflitos Ativos */
+.conflictBanner {
+  background: #fef2f2;
+  border-bottom: 1px solid #fee2e2;
+  padding: 0.75rem 1.5rem;
+  color: #b91c1c;
+  font-size: 0.875rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 500;
+}
+
+/* ==================================================================== */
+/* VISÃO DIÁRIA (DAY VIEW)                                             */
+/* ==================================================================== */
+.dayViewContainer {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  max-height: 720px;
+}
+
+.dayHourRow {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  border-bottom: 1px solid #f1f5f9;
+  min-height: 70px;
+  position: relative;
+}
+
+.dayHourLabel {
+  padding: 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #94a3b8;
+  text-align: right;
+  border-right: 1px solid #f1f5f9;
+  user-select: none;
+}
+
+.dayHourContent {
+  padding: 0.35rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.dayHourContent:hover {
+  background: #f8fafc;
+}
+
+/* Card de Agendamento */
+.appointmentCard {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-left: 4px solid #2563eb;
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.85rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.appointmentCard:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.appointmentCardConflict {
+  border-left-color: #ef4444 !important;
+  background-color: #fff5f5 !important;
+  box-shadow: 0 0 0 1px #f87171;
+}
+
+.cardPatientName {
+  font-weight: 700;
+  font-size: 0.925rem;
+  color: #0f172a;
+}
+
+.cardMeta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: #64748b;
+  margin-top: 0.2rem;
+}
+
+.statusPill {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.2rem 0.5rem;
+  border-radius: 9999px;
+  text-transform: capitalize;
+}
+
+/* ==================================================================== */
+/* VISÃO SEMANAL (WEEK VIEW) COM SCROLL HORIZONTAL MOBILE-FIRST         */
+/* ==================================================================== */
+.weekViewWrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  width: 100%;
+}
+
+.weekViewGrid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(170px, 1fr));
+  min-width: 800px; /* Garante que as colunas não fiquem esmagadas no mobile */
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.weekDayColumn {
+  border-right: 1px solid #f1f5f9;
+  min-height: 520px;
+  display: flex;
+  flex-direction: column;
+}
+
+.weekDayHeader {
+  padding: 0.75rem 0.5rem;
+  text-align: center;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.weekDayName {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+.weekDayNumber {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin-top: 0.15rem;
+}
+
+.weekDayToday {
+  background: #eff6ff;
+}
+
+.weekDayToday .weekDayNumber {
+  color: #2563eb;
+}
+
+.weekDayBody {
+  padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  flex: 1;
+  background: #ffffff;
+}
+
+/* ==================================================================== */
+/* VISÃO MENSAL (MONTH VIEW)                                            */
+/* ==================================================================== */
+.monthViewGrid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  width: 100%;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.monthHeaderCell {
+  padding: 0.65rem;
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #64748b;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  border-right: 1px solid #f1f5f9;
+  text-transform: uppercase;
+}
+
+.monthDayCell {
+  min-height: 95px;
+  border-right: 1px solid #f1f5f9;
+  border-bottom: 1px solid #f1f5f9;
+  padding: 0.4rem;
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.monthDayCell:hover {
+  background: #f8fafc;
+}
+
+.monthDayCellOtherMonth {
+  background: #fafafa;
+  opacity: 0.5;
+}
+
+.monthDayCellToday {
+  background: #eff6ff;
+}
+
+.monthDayNumber {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #334155;
+  margin-bottom: 0.35rem;
+}
+
+.monthDayCellToday .monthDayNumber {
+  color: #2563eb;
+}
+
+.monthEventPill {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.15rem 0.35rem;
+  border-radius: 0.25rem;
+  margin-bottom: 0.2rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #ffffff;
+  background: #2563eb;
+}
+
+/* Responsividade Mobile */
+@media (max-width: 768px) {
+  .toolbar {
+    padding: 1rem;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .navGroup,
+  .filterAndActionGroup {
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .viewSwitcher {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .viewBtn {
+    flex: 1;
+    text-align: center;
+  }
+
+  .dayHourRow {
+    grid-template-columns: 60px 1fr;
+  }
+
+  .monthDayCell {
+    min-height: 65px;
+    padding: 0.2rem;
+  }
+}

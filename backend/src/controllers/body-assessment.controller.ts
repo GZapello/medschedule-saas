@@ -1,3 +1,4 @@
+import { clinicalPatientIdentity } from '../middlewares/shared-patient.middleware';
 import { Request, Response } from 'express';
 import { getEsteticAccess } from './estetic.controller';
 import { db } from '../config/database';
@@ -141,7 +142,7 @@ export class BodyAssessmentController {
         return;
       }
 
-      const patientInTenant = db.prepare('SELECT 1 FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId);
+      const patientInTenant = clinicalPatientIdentity(req, String(patientId), 'Zemda360');
       if (!patientInTenant) {
         res.status(404).json({ error: 'Paciente não encontrado nesta clínica' });
         return;
@@ -269,7 +270,7 @@ export class BodyAssessmentController {
         return;
       }
 
-      const patientInTenant = db.prepare('SELECT 1 FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId);
+      const patientInTenant = clinicalPatientIdentity(req, String(patientId), 'Zemda360');
       if (!patientInTenant) {
         res.status(404).json({ error: 'Paciente não encontrado nesta clínica' });
         return;
@@ -673,7 +674,7 @@ export class BodyAssessmentController {
         return;
       }
 
-      const patientInTenant = db.prepare('SELECT 1 FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId);
+      const patientInTenant = clinicalPatientIdentity(req, String(patientId), 'Zemda360');
       if (!patientInTenant) {
         res.status(404).json({ error: 'Paciente não encontrado nesta clínica' });
         return;
@@ -789,7 +790,7 @@ export class BodyAssessmentController {
         return;
       }
 
-      const patientInTenant = db.prepare('SELECT 1 FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId);
+      const patientInTenant = clinicalPatientIdentity(req, String(patientId), 'Zemda360');
       if (!patientInTenant) {
         res.status(404).json({ error: 'Paciente não encontrado nesta clínica' });
         return;
@@ -857,7 +858,7 @@ export class BodyAssessmentController {
         return;
       }
 
-      const patientInTenant = db.prepare('SELECT 1 FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId);
+      const patientInTenant = clinicalPatientIdentity(req, String(patientId), 'Zemda360');
       if (!patientInTenant) {
         res.status(404).json({ error: 'Paciente não encontrado nesta clínica' });
         return;
@@ -923,7 +924,7 @@ export class BodyAssessmentController {
         return;
       }
 
-      const patientInTenant = db.prepare('SELECT 1 FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId);
+      const patientInTenant = clinicalPatientIdentity(req, String(patientId), 'Zemda360');
       if (!patientInTenant) {
         res.status(404).json({ error: 'Paciente não encontrado nesta clínica' });
         return;

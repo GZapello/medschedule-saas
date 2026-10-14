@@ -28,7 +28,7 @@ export function isMedicalProfessionalOrClinicManager(req: Request): boolean {
 
   // Fallback seguro: verifica se o usuário ou o profissional vinculado é médico ou possui ZemdaMed habilitado
   const user = db.prepare(`
-    SELECT u.profession_id, u.profession_name, u.zemda_med_enabled,
+    SELECT CASE WHEN u.tenant_id=cu.tenant_id THEN u.profession_id END AS profession_id, CASE WHEN u.tenant_id=cu.tenant_id THEN u.profession_name END AS profession_name, CASE WHEN u.tenant_id=cu.tenant_id THEN u.zemda_med_enabled END AS zemda_med_enabled,
            p.profession_id as p_prof_id, pr.slug as p_slug, pr.name as p_name,
            cu.profession_custom, cu.zemda_med_enabled as cu_zemda_med_enabled
     FROM users u

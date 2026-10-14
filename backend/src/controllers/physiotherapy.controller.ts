@@ -29,7 +29,7 @@ export function isPhysiotherapistOrClinicManager(req: Request): boolean {
   const clinicUser = db.prepare(`
     SELECT cu.role, cu.status as cu_status, cu.is_manager, cu.permissions_json, cu.profession_custom,
            cu.practice_areas as cu_practice_areas, cu.zemda_fisio_enabled,
-           u.status as u_status, u.profession_name, u.practice_areas as u_practice_areas, u.zemda_fisio_enabled as u_zemda_fisio_enabled
+           u.status as u_status, CASE WHEN u.tenant_id=cu.tenant_id THEN u.profession_name END AS profession_name, CASE WHEN u.tenant_id=cu.tenant_id THEN u.practice_areas END as u_practice_areas, CASE WHEN u.tenant_id=cu.tenant_id THEN u.zemda_fisio_enabled END as u_zemda_fisio_enabled
     FROM users u
     LEFT JOIN clinic_users cu ON cu.user_id = u.id AND cu.tenant_id = ?
     WHERE u.id = ?

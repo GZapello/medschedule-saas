@@ -1,3 +1,4 @@
+import { clinicalPatientIdentity } from '../middlewares/shared-patient.middleware';
 import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
@@ -32,7 +33,7 @@ export function isDentistOrClinicManager(req: Request): boolean {
   const clinicUser = db.prepare(`
     SELECT cu.role, cu.status as cu_status, cu.is_manager, cu.permissions_json, cu.profession_custom,
            cu.practice_areas as cu_practice_areas, cu.zemda_odonto_enabled,
-           u.status as u_status, u.profession_name, u.practice_areas as u_practice_areas, u.zemda_odonto_enabled as u_zemda_odonto_enabled
+           u.status as u_status, CASE WHEN u.tenant_id=cu.tenant_id THEN u.profession_name END AS profession_name, CASE WHEN u.tenant_id=cu.tenant_id THEN u.practice_areas END as u_practice_areas, CASE WHEN u.tenant_id=cu.tenant_id THEN u.zemda_odonto_enabled END as u_zemda_odonto_enabled
     FROM users u
     LEFT JOIN clinic_users cu ON cu.user_id = u.id AND cu.tenant_id = ?
     WHERE u.id = ?
@@ -635,7 +636,7 @@ export class DentistryController {
       }
 
       // Validação de existência do paciente no tenant
-      const patient = db.prepare('SELECT id, full_name FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId) as any;
+      const patient = clinicalPatientIdentity(req, String(patientId), 'ZemdaOdonto') as any;
       if (!patient) {
         res.status(404).json({ error: 'Paciente não encontrado' });
         return;
@@ -948,7 +949,7 @@ export class DentistryController {
         return;
       }
 
-      const patient = db.prepare('SELECT id FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId);
+      const patient = clinicalPatientIdentity(req, String(patientId), 'ZemdaOdonto');
       if (!patient) {
         res.status(404).json({ error: 'Paciente não encontrado' });
         return;

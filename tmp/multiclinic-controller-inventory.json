@@ -1,0 +1,242 @@
+[
+  {
+    "Controller": "ai.controller.ts",
+    "Tables": "ai_conversations, appointments, audit_logs, patient_allergies, patient_anamnesis, patient_exams, patient_medications, patients, payments, professionals, records, services, tenants"
+  },
+  {
+    "Controller": "appointment.controller.ts",
+    "Tables": "appointment_status_history, appointments, blocked_times, guardians, notifications, patients, payments, professionals, records, rooms, schedules, services, tenants, users"
+  },
+  {
+    "Controller": "audit.controller.ts",
+    "Tables": "audit_logs, users"
+  },
+  {
+    "Controller": "auth.controller.ts",
+    "Tables": "clinic_invites, clinic_users, free_trials, legal_acceptances, plans, practice_areas, professionals, professions, specialties, subscription_audit, subscriptions, tenants, trial_history, users"
+  },
+  {
+    "Controller": "billing.controller.ts",
+    "Tables": "asaas_webhook_events, billing_customers, billing_integration_status, clinic_users, plans, SET, subscriptions, tenants"
+  },
+  {
+    "Controller": "body-assessment.controller.ts",
+    "Tables": "appointments, body_anthropometric_assessments, body_assessments, body_drawing_strokes, body_drawings, body_markers, body_therapeutic_plans, clinic_users, patients, professionals, SET"
+  },
+  {
+    "Controller": "budget.controller.ts",
+    "Tables": "budget_items, budgets, dental_treatment_plans, inventory_items, inventory_movements, patients, tenants"
+  },
+  {
+    "Controller": "capability.controller.ts",
+    "Tables": "clinic_users, professionals, users"
+  },
+  {
+    "Controller": "cash-register.controller.ts",
+    "Tables": "cash_registers, patients, payments"
+  },
+  {
+    "Controller": "clinical-draft.controller.ts",
+    "Tables": "clinical_drafts, patients, professionals, psychology_drafts, sandbox_test_sessions"
+  },
+  {
+    "Controller": "clinical-goals.controller.ts",
+    "Tables": "clinical_goals, professionals"
+  },
+  {
+    "Controller": "clinical-inventory.controller.ts",
+    "Tables": ""
+  },
+  {
+    "Controller": "clinical-reassessment.controller.ts",
+    "Tables": "clinical_reassessments, professionals"
+  },
+  {
+    "Controller": "clinical.controller.ts",
+    "Tables": "appointments, clinic_users, documents, patient_referrals, patients, professionals, professions, records, services, tenants, users"
+  },
+  {
+    "Controller": "dashboard.controller.ts",
+    "Tables": "appointments, clinical_certificates, clinical_exam_requests, clinical_prescriptions, patients, payments, professionals, records, rooms, services"
+  },
+  {
+    "Controller": "dentistry.controller.ts",
+    "Tables": "appointments, budget_items, budgets, clinic_users, dental_anamnesis, dental_endodontic_records, dental_exams, dental_hof, dental_implants, dental_orthodontics, dental_periodontal_records, dental_photos, dental_prosthetics_lab, dental_tooth_records, dental_treatment_plans, inventory_items, odontograms, patients, payments, professionals, professions, records, services, tenants, users"
+  },
+  {
+    "Controller": "digital-certificate.controller.ts",
+    "Tables": "digital_certificates, digital_signatures, professionals"
+  },
+  {
+    "Controller": "documents.controller.ts",
+    "Tables": "appointment_status_history, appointments, clinic_document_templates, clinical_certificates, clinical_drafts, clinical_exam_requests, clinical_prescriptions, consultation_completions, dental_tooth_records, documents, fono_speech_phonology, fono_voice_assessments, nutrition_assessments, odontograms, patients, payments, physiotherapy_assessments, professionals, professions, psychology_drafts, psychology_sessions, psychopedagogy_sessions, records, services, SET, specialties, tenants, to_avd_assessments, to_sensory_assessments"
+  },
+  {
+    "Controller": "email-verification.controller.ts",
+    "Tables": ""
+  },
+  {
+    "Controller": "estetic-records.ts",
+    "Tables": "appointments, estetic_, estetic_photos, estetic_plans, estetic_procedures, inventory_items, patients, professionals, records"
+  },
+  {
+    "Controller": "estetic.controller.ts",
+    "Tables": "clinic_users, estetic_assessments, estetic_evolutions, estetic_photos, estetic_plans, estetic_procedure_catalog, estetic_procedures, estetic_returns, inventory_items, professionals, sandbox_test_sessions"
+  },
+  {
+    "Controller": "external-tests.controller.ts",
+    "Tables": "appointments, clinical_external_tests, file_attachments, fono_complementary_tests, patients, professionals"
+  },
+  {
+    "Controller": "file.controller.ts",
+    "Tables": "appointments, file_attachments, patients"
+  },
+  {
+    "Controller": "free-trial.controller.ts",
+    "Tables": "clinic_users, free_trials, legal_acceptances, plans, professionals, professions, subscription_audit, subscriptions, tenants, trial_history, users"
+  },
+  {
+    "Controller": "import.controller.ts",
+    "Tables": "appointments, import_batches, patient_allergies, patient_anamnesis, patient_medications, patients, professionals, records, services, tenants, users"
+  },
+  {
+    "Controller": "infobip.controller.ts",
+    "Tables": ""
+  },
+  {
+    "Controller": "insurance.controller.ts",
+    "Tables": "appointments, clinic_insurances, patient_insurances"
+  },
+  {
+    "Controller": "integrations.controller.ts",
+    "Tables": ""
+  },
+  {
+    "Controller": "inventory.controller.ts",
+    "Tables": "inventory_items, inventory_movements, patients, professionals, users"
+  },
+  {
+    "Controller": "medical.controller.ts",
+    "Tables": "appointments, clinic_users, clinical_drafts, medical_consultations, professionals, professions, records, users"
+  },
+  {
+    "Controller": "notification.controller.ts",
+    "Tables": "appointments, notifications, patients, professionals, services"
+  },
+  {
+    "Controller": "nutrition.controller.ts",
+    "Tables": "appointments, clinic_users, nutrition_anamnesis, nutrition_assessments, nutrition_bioimpedance, nutrition_food_database, nutrition_goals, nutrition_meal_plans, nutrition_recalls, professionals, professions, records, tenants, users"
+  },
+  {
+    "Controller": "occupational-therapy.controller.ts",
+    "Tables": "appointments, clinic_users, clinical_goals, clinical_home_programs, professionals, professions, records, tenants, to_assistive_tech, to_avd_assessments, to_motor_cognitive_assessments, to_occupational_participation, to_occupational_profiles, to_routine_maps, to_sensory_assessments, to_task_analyses, to_treatment_plans, users"
+  },
+  {
+    "Controller": "onboarding.controller.ts",
+    "Tables": "clinic_users, plans, professionals, receipt_settings, services, SET, subscription_audit, subscriptions, tenants, trial_history, user_onboarding, users"
+  },
+  {
+    "Controller": "patient-clinical.controller.ts",
+    "Tables": "appointments, clinic_insurances, clinical_certificates, clinical_exam_requests, clinical_prescriptions, consent_invalidations, consent_signatures, file_attachments, guardians, nutrition_assessments, patient_allergies, patient_anamnesis, patient_consents, patient_exams, patient_medications, patients, payments, physiotherapy_assessments, professionals, professions, psychology_sessions, receipts, records, services"
+  },
+  {
+    "Controller": "patient.controller.ts",
+    "Tables": "appointments, guardians, patients, professionals, records, services"
+  },
+  {
+    "Controller": "payment.controller.ts",
+    "Tables": "appointments, patients, payments, professionals, services"
+  },
+  {
+    "Controller": "payroll.controller.ts",
+    "Tables": "appointments, professional_payrolls, professionals, services, specialties"
+  },
+  {
+    "Controller": "pending-exam.controller.ts",
+    "Tables": "clinic_document_templates, patients, pending_exams, professionals, specialties, tenants"
+  },
+  {
+    "Controller": "personal-ai.controller.ts",
+    "Tables": "body_assessments, patients, personal_assessments, personal_student_profiles, personal_workout_exercises, personal_workout_logs, personal_workouts"
+  },
+  {
+    "Controller": "personal-posture-ai.controller.ts",
+    "Tables": "file_attachments, patients"
+  },
+  {
+    "Controller": "personal-student-link.controller.ts",
+    "Tables": "patients, personal_student_access_links, personal_student_sessions, personal_workout_exercises, personal_workout_logs, personal_workouts, tenants"
+  },
+  {
+    "Controller": "personal.controller.ts",
+    "Tables": "appointments, clinic_users, file_attachments, patients, personal_assessment_photos, personal_assessments, personal_exercises, personal_periodizations, personal_student_profiles, personal_tav_protocols, personal_tav_ranges, personal_workout_exercises, personal_workout_logs, personal_workout_templates, personal_workouts, professionals, professions, SET, tenants, users"
+  },
+  {
+    "Controller": "physiotherapy.controller.ts",
+    "Tables": "body_assessments, body_markers, clinic_users, patients, physiotherapy_assessments, physiotherapy_evolutions, physiotherapy_regional_evaluations, professionals, professions, records, specialties, tenants, users"
+  },
+  {
+    "Controller": "professional.controller.ts",
+    "Tables": "appointments, blocked_times, clinic_users, patients, professional_services, professionals, professions, schedules, seguro, services, specialties, tenants, users"
+  },
+  {
+    "Controller": "psychology.controller.ts",
+    "Tables": "appointments, clinic_users, consultation_completions, patients, professionals, professions, psychology_anamnesis, psychology_assessments, psychology_audit_logs, psychology_documents, psychology_drafts, psychology_goals, psychology_instruments, psychology_mental_state_exams, psychology_risk_assessments, psychology_screenings, psychology_sessions, records, SET, tenants, users"
+  },
+  {
+    "Controller": "psychopedagogy.controller.ts",
+    "Tables": "appointments, clinic_users, professionals, professions, psychopedagogy_assessments, psychopedagogy_goals, psychopedagogy_institutional_cases, psychopedagogy_instruments, psychopedagogy_intervention_plans, psychopedagogy_learning_domains, psychopedagogy_profiles, psychopedagogy_retention_policies, psychopedagogy_school_contacts, psychopedagogy_sessions, psychopedagogy_shares, records, tenants, users"
+  },
+  {
+    "Controller": "receipt.controller.ts",
+    "Tables": "receipt_settings, receipts, SET, tenants"
+  },
+  {
+    "Controller": "referral.controller.ts",
+    "Tables": "appointments, patient_referrals, patients, professionals, services"
+  },
+  {
+    "Controller": "report.controller.ts",
+    "Tables": "appointments, patient_allergies, patient_medications, patients, payments, professionals, records, services, tenants"
+  },
+  {
+    "Controller": "sandbox.controller.ts",
+    "Tables": ""
+  },
+  {
+    "Controller": "service-reminder.controller.ts",
+    "Tables": "professionals"
+  },
+  {
+    "Controller": "service.controller.ts",
+    "Tables": "appointments, patient_referrals, payments, professional_services, professionals, professions, receipts, records, rooms, se, services, specialties, sqlite_master"
+  },
+  {
+    "Controller": "slot.controller.ts",
+    "Tables": ""
+  },
+  {
+    "Controller": "speech-therapy.controller.ts",
+    "Tables": "appointments, clinic_users, fono_abfw_records, fono_anamnesis, fono_audiology_records, fono_auditory_screenings, fono_complementary_tests, fono_dysphagia_assessments, fono_dysphagia_matrix, fono_fluency_assessments, fono_fluency_samples, fono_fois_assessments, fono_idv, fono_language_assessments, fono_orofacial_motricity, fono_phonological_processes, fono_reading_screenings, fono_speech_phonology, fono_treatment_plans, fono_voice_assessments, professionals, professions, records, tenants, users"
+  },
+  {
+    "Controller": "staff.controller.ts",
+    "Tables": "clinic_invites, clinic_users, invites, professionals, professions, SET, specialties, tenants, users"
+  },
+  {
+    "Controller": "support.controller.ts",
+    "Tables": "support_ticket_messages, support_tickets, tenants, users"
+  },
+  {
+    "Controller": "system-integrity.controller.ts",
+    "Tables": ""
+  },
+  {
+    "Controller": "taxonomy.controller.ts",
+    "Tables": "audit_logs, categories, deleted_global_professions, practice_area_capabilities, practice_areas, profession_capabilities, professionals, professions, specialties, tenants, user_practice_areas, users"
+  },
+  {
+    "Controller": "tenant.controller.ts",
+    "Tables": "appointments, clinic_deletion_jobs, clinic_users, documents, email_verifications, global_clinic_audit, inventory_items, legal_acceptances, patient_consents, patients, payments, plans, professional_services, professionals, professions, receipt_settings, rooms, schedules, services, SET, settings, specialties, subscription_audit, subscriptions, tenants, trial_history, users"
+  }
+]

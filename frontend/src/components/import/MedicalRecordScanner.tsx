@@ -461,7 +461,16 @@ export const MedicalRecordScanner: React.FC<MedicalRecordScannerProps> = ({
         throw new Error(resp?.error || 'Não foi possível extrair os dados clínicos.');
       }
 
-      setExtractedData(resp.extractedData);
+      const cleanedExtractedData = {
+        ...resp.extractedData,
+        evolutions: Array.isArray(resp.extractedData.evolutions)
+          ? resp.extractedData.evolutions.map((ev: any) => ({
+              ...ev,
+              time: ev.time && String(ev.time).trim() !== '09:00' && String(ev.time).trim() !== '00:00' ? String(ev.time).trim() : ''
+            }))
+          : []
+      };
+      setExtractedData(cleanedExtractedData);
       setMatchedPatient(resp.matchedPatient || null);
       setIsDuplicateDetected(Boolean(resp.isDuplicate));
       setPatientResolutionAction(resp.isDuplicate ? 'link_existing' : 'create_new');
@@ -599,7 +608,7 @@ export const MedicalRecordScanner: React.FC<MedicalRecordScannerProps> = ({
     if (!extractedData) return;
     const newEv: ExtractedEvolutionItem = {
       date: new Date().toISOString().slice(0, 10),
-      time: '09:00',
+      time: '',
       professional: '',
       evolution: '',
       conduct: '',
@@ -1641,7 +1650,7 @@ export const MedicalRecordScanner: React.FC<MedicalRecordScannerProps> = ({
                           </button>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                           <div>
                             <label className="block text-[10px] font-bold text-slate-500 mb-0.5">
                               Data da Consulta
@@ -1651,6 +1660,18 @@ export const MedicalRecordScanner: React.FC<MedicalRecordScannerProps> = ({
                               value={ev.date}
                               onChange={e => updateEvolutionItem(evIdx, { date: e.target.value })}
                               placeholder="AAAA-MM-DD"
+                              className="w-full text-xs px-2.5 py-1.5 border rounded-lg bg-white border-slate-300 focus:border-teal-500 focus:outline-none"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-500 mb-0.5">
+                              Horário (opcional)
+                            </label>
+                            <input
+                              type="time"
+                              value={ev.time || ''}
+                              onChange={e => updateEvolutionItem(evIdx, { time: e.target.value })}
                               className="w-full text-xs px-2.5 py-1.5 border rounded-lg bg-white border-slate-300 focus:border-teal-500 focus:outline-none"
                             />
                           </div>

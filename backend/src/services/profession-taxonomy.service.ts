@@ -163,7 +163,7 @@ export class ProfessionTaxonomyService {
           zemda_personal_enabled = ?,
           zemda_med_enabled = ?,
           updated_at = datetime('now')
-        WHERE id = ?
+        WHERE id = ? AND (SELECT COUNT(*) FROM clinic_users cu WHERE cu.user_id=users.id)<=1
       `).run(
         resolution.canonicalId,
         resolution.canonicalName,

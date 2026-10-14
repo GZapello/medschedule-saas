@@ -1,0 +1,3456 @@
+import { ResponsiveTable } from '../common/ResponsiveTable';
+import { ClinicalFinishButton } from '../clinical/ClinicalFinishButton';
+import { ClinicalInventorySelector } from '../clinical/ClinicalInventorySelector';
+import { resolveConsultationAppointment } from '../clinical/resolveConsultationAppointment';
+import { ClinicalAssessmentsPanel } from '../../shared/clinical-assessments/ClinicalAssessmentsPanel';
+import { useClinicalFormReset } from '../../hooks/useClinicalFormReset';
+import { useClinicalAutosave } from '../../hooks/useClinicalAutosave';
+import { ClinicalAutosaveIndicator } from '../clinical/ClinicalAutosaveIndicator';
+import { ClinicalDraftRecoveryModal } from '../clinical/ClinicalDraftRecoveryModal';
+import { FinishConsultationModal } from '../clinical/FinishConsultationModal';
+import { ClinicalBooleanSelect } from '../clinical/ClinicalBooleanSelect';
+import { ClinicalModuleEmptyState } from '../clinical/ClinicalModuleEmptyState';
+import { useHorizontalTabScroll, HorizontalTabNav } from '../../hooks/useHorizontalTabScroll';
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
+import {
+  Sparkles,
+  Activity,
+  Calendar,
+  Camera,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  Clock,
+  Eye,
+  FileText,
+  Layers,
+  Plus,
+  Save,
+  Search,
+  Trash2,
+  Upload,
+  User,
+  AlertCircle,
+  AlertTriangle,
+  ShieldCheck,
+  Check,
+  RotateCcw,
+  ArrowRight,
+  ArrowLeftRight,
+  Sliders,
+  Scissors,
+  Package,
+  Maximize2,
+  X,
+  RefreshCw,
+  Filter,
+  ExternalLink,
+  Lock,
+  ChevronUp,
+  Image as ImageIcon,
+  Loader2
+} from 'lucide-react';
+import { ApiClient } from '../../api/client';
+import { esteticPayload, loadEsteticPatient } from './estetic-api';
+import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
+import { PatientSearchSelect, PatientSearchResult } from '../common/PatientSearchSelect';
+import { ProfessionalModuleHeader } from '../common/ProfessionalModuleHeader';
+import { ZemdaBodyModal } from '../zemda-body/ZemdaBodyModal';
+import { ZemdaBodyWorkspace } from '../zemda-body/ZemdaBodyWorkspace';
+
+export type EsteticArea = 'FACIAL' | 'CORPORAL' | 'CAPILAR';
+
+const assessmentLabels: Record<string, string> = { fitzpatrick: 'Fototipo', glogau: 'Glogau', dynamicLines: 'Linhas dinâmicas', staticLines: 'Linhas estáticas', flaccidityRegions: 'Regiões com flacidez', volumeLossRegions: 'Perda de volume', targetRegions: 'Regiões avaliadas', bodyAlterationType: 'Alteração corporal', celluliteGrade: 'Grau de celulite', stretchMarks: 'Estrias', circumferences: 'Circunferências', habits: 'Hábitos', physicalActivity: 'Atividade física', waterIntake: 'Ingestão de água', smoking: 'Tabagismo', hairLossPattern: 'Padrão de queda', hairLossScale: 'Escala de queda', scalpCondition: 'Couro cabeludo', oiliness: 'Oleosidade', flaking: 'Descamação', erythema: 'Eritema', sensitivity: 'Sensibilidade', pullTest: 'Teste de tração', fiberDensity: 'Densidade dos fios', familyHistory: 'Histórico familiar', previousTreatments: 'Tratamentos anteriores', contraindications: 'Contraindicações', allergies: 'Alergias', currentMedications: 'Medicações', clinicalConduct: 'Conduta', observations: 'Observações', cintura: 'Cintura', abdomen: 'Abdômen', quadril: 'Quadril', coxaDir: 'Coxa direita', coxaEsq: 'Coxa esquerda', bracoDir: 'Braço direito', bracoEsq: 'Braço esquerdo' };
+const formatAssessmentValue = (value: any): string => Array.isArray(value) ? value.join(', ') : typeof value === 'object' ? Object.entries(value).filter(([, entry]) => entry !== '' && entry != null).map(([key, entry]) => `${assessmentLabels[key] || key}: ${formatAssessmentValue(entry)}`).join(' • ') : String(value);
+
+interface ZemdaEsteticWorkspaceProps {
+  initialPatientId?: string;
+  initialAppointmentId?: string;
+  onSelectPatient?: (patientId: string) => void;
+  onFinishConsultation?: () => void;
+}
+
+export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
+  initialPatientId,
+  initialAppointmentId,
+  onSelectPatient,
+  onFinishConsultation
+}) => {
+  const { currentUser, isClinicAdmin, isSuperAdmin, isDentist, practiceAreaIds } = useAuth();
+  const { showToast } = useToast();
+
+  // Configuração e permissões do módulo
+  const [allowedAreas, setAllowedAreas] = useState<EsteticArea[]>(['FACIAL']);
+  const [activeArea, setActiveArea] = useState<EsteticArea>('FACIAL');
+  const [isAreaDropdownOpen, setIsAreaDropdownOpen] = useState(false);
+  const [catalog, setCatalog] = useState<any[]>([]);
+  const [inventoryItems, setInventoryItems] = useState<any[]>([]);
+
+  // Paciente selecionado
+  const [selectedPatientId, setSelectedPatientId] = useState<string>(initialPatientId || '');
+  const [selectedPatient, setSelectedPatient] = useState<PatientSearchResult | null>(null);
+
+  const [directEncounter, setDirectEncounter] = useState<{ patientId: string; id: string } | null>(null);
+  const encounterId = initialAppointmentId || (directEncounter?.patientId === selectedPatientId ? directEncounter.id : undefined);
+
+  // Navegação por abas
+  const [activeTab, setActiveTab] = useState<
+    | 'overview'
+    | 'assessment'
+    | 'photos'
+    | 'planning'
+    | 'procedures'
+    | 'zemda360'
+    | 'evolutions'
+    | 'returns'
+    | 'before_after'
+    | 'history'
+  >('overview');
+
+  const tabScroll = useHorizontalTabScroll(activeTab);
+  const { tabScrollProps } = tabScroll;
+
+  // Estados de dados do paciente
+  const [loadingOverview, setLoadingOverview] = useState(false);
+  const [overviewData, setOverviewData] = useState<any>(null);
+
+  const [assessments, setAssessments] = useState<any[]>([]);
+  const [plans, setPlans] = useState<any[]>([]);
+  const [procedures, setProcedures] = useState<any[]>([]);
+  const [evolutions, setEvolutions] = useState<any[]>([]);
+  const [returnsList, setReturnsList] = useState<any[]>([]);
+  const [photos, setPhotos] = useState<any[]>([]);
+  const [beforeAfterPairs, setBeforeAfterPairs] = useState<any[]>([]);
+  const [timeline, setTimeline] = useState<any[]>([]);
+
+  // Modais de ações rápidas
+  const [isNewPlanModalOpen, setIsNewPlanModalOpen] = useState(false);
+  const [isNewProcedureModalOpen, setIsNewProcedureModalOpen] = useState(false);
+  const [isNewPhotoModalOpen, setIsNewPhotoModalOpen] = useState(false);
+  const [isNewEvolutionModalOpen, setIsNewEvolutionModalOpen] = useState(false);
+  const [isNewReturnModalOpen, setIsNewReturnModalOpen] = useState(false);
+  const [isZemda360ModalOpen, setIsZemda360ModalOpen] = useState(false);
+  const [lightboxPhoto, setLightboxPhoto] = useState<any | null>(null);
+
+  // Formulário de Nova Avaliação
+  const [assessmentForm, setAssessmentForm] = useState({
+    assessmentDate: new Date().toISOString().slice(0, 10),
+    complaint: '',
+    expectations: '',
+    // Facial
+    fitzpatrick: '',
+    glogau: '',
+    dynamicLines: [] as string[],
+    staticLines: [] as string[],
+    flaccidityRegions: [] as string[],
+    volumeLossRegions: [] as string[],
+    // Corporal
+    targetRegions: [] as string[],
+    bodyAlterationType: '',
+    celluliteGrade: '',
+    stretchMarks: '',
+    circumferences: { cintura: '', abdomen: '', quadril: '', coxaDir: '', coxaEsq: '', bracoDir: '', bracoEsq: '' },
+    habits: { physicalActivity: '', waterIntake: '', smoking: '' },
+    // Capilar
+    hairLossPattern: '',
+    hairLossScale: '',
+    scalpCondition: { oiliness: '', flaking: '', erythema: '', sensitivity: '' },
+    pullTest: '',
+    fiberDensity: '',
+    familyHistory: '',
+    // Geral
+    previousTreatments: '',
+    contraindications: '',
+    allergies: '',
+    currentMedications: '',
+    clinicalConduct: '',
+    observations: ''
+  });
+  const [isSavingAssessment, setIsSavingAssessment] = useState(false);
+  const [comparisonIds, setComparisonIds] = useState<string[]>([]);
+  const [showComparison, setShowComparison] = useState(false);
+  const [selectedAssessmentDetail, setSelectedAssessmentDetail] = useState<any | null>(null);
+
+interface EsteticPlanItemForm {
+  id?: string;
+  procedure_name: string;
+  target_region: string;
+  sessions_planned: number | '';
+  sessions_completed?: number;
+  recommended_interval_days: number | '';
+  priority: string;
+  status?: string;
+}
+
+  // Formulário de Novo Plano
+  const [planForm, setPlanForm] = useState<{
+    title: string;
+    area: EsteticArea;
+    objectives: string;
+    notes: string;
+    items: EsteticPlanItemForm[];
+  }>({
+    title: '',
+    area: 'FACIAL' as EsteticArea,
+    objectives: '',
+    notes: '',
+    items: [
+      {
+        procedure_name: '',
+        target_region: '',
+        sessions_planned: '',
+        recommended_interval_days: '',
+        priority: '',
+        status: 'PLANEJADO'
+      }
+    ]
+  });
+
+  // Formulário de Novo Procedimento
+  const [procedureForm, setProcedureForm] = useState({
+    procedure_name: '',
+    area: 'FACIAL' as EsteticArea,
+    target_region: '',
+    date_performed: new Date().toISOString().slice(0, 10),
+    product_applied: '',
+    lot_number: '',
+    expiry_date: '',
+    quantity: '',
+    unit: 'ml',
+    technique_notes: '',
+    adverse_reactions: '',
+    post_instructions: '',
+    deduct_inventory: false,
+    inventory_item_id: '',
+    plan_id: '',
+    plan_item_id: '',
+    without_product: false
+  });
+
+  // Formulário de Nova Foto
+  const [photoForm, setPhotoForm] = useState({
+    photo_url: '',
+    photo_type: 'ANTES' as 'ANTES' | 'DEPOIS' | 'ACOMPANHAMENTO' | 'RETORNO',
+    view_angle: 'FRONTAL',
+    area: 'FACIAL' as EsteticArea,
+    taken_at: new Date().toISOString().slice(0, 10),
+    notes: ''
+  });
+
+  // Formulário de Nova Evolução
+  const [evolutionForm, setEvolutionForm] = useState({
+    evolution_date: new Date().toISOString().slice(0, 10),
+    area: 'FACIAL' as EsteticArea,
+    biological_response: '',
+    patient_feedback: '',
+    conduct: '',
+    procedure_id: ''
+  });
+
+  // Formulário de Novo Retorno
+  const [returnForm, setReturnForm] = useState({
+    scheduled_date: new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10),
+    actual_date: '',
+    area: 'FACIAL' as EsteticArea,
+    procedure_id: '',
+    status: 'AGENDADO' as 'AGENDADO' | 'COMPARECEU' | 'RETOQUE_REALIZADO' | 'ALTA_CICLO' | 'CANCELADO',
+    evaluation_notes: '',
+    touchup_required: undefined as boolean | undefined,
+    touchup_description: ''
+  });
+
+  const isCurrentPatientContext = useClinicalFormReset(selectedPatientId + ':' + (initialAppointmentId || ''), [
+    [assessmentForm, setAssessmentForm],
+    [planForm, setPlanForm],
+    [procedureForm, setProcedureForm],
+    [evolutionForm, setEvolutionForm],
+    [returnForm, setReturnForm],
+    [photoForm, setPhotoForm],
+  ]);
+
+  const currentArea = useRef(activeArea); currentArea.current = activeArea;
+  const isCurrentClinicalContext = () => isCurrentPatientContext() && currentArea.current === activeArea;
+  const [finishAppointment, setFinishAppointment] = useState<any>(null);
+  const defaults = useRef(structuredClone({ assessmentForm, planForm, procedureForm, evolutionForm, returnForm, photoForm }));
+  const [areaDrafts, setAreaDrafts] = useState<Record<string, any>>({});
+  const [recordIds, setRecordIds] = useState<Record<string, Record<string, string>>>({});
+  const [sessionRecordIds, setSessionRecordIds] = useState<Record<string, Record<string, string[]>>>({});
+  const forms = { assessmentForm, planForm, procedureForm, evolutionForm, returnForm, photoForm };
+  const clinicalPayload = { ...forms, activeArea, recordIds, sessionRecordIds, areas: { ...areaDrafts, [activeArea]: forms } };
+  const restoreForms = (draft: any, area: EsteticArea) => {
+    const value = { ...structuredClone(defaults.current), ...draft };
+    setAssessmentForm(value.assessmentForm);
+    setPlanForm({ ...value.planForm, area }); setProcedureForm({ ...value.procedureForm, area });
+    setEvolutionForm({ ...value.evolutionForm, area }); setReturnForm({ ...value.returnForm, area }); setPhotoForm({ ...value.photoForm, area });
+  };
+  const [editing, setEditing] = useState<{ kind: string; id: string } | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ kind: string; id: string; row?: any } | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [invalidField, setInvalidField] = useState('');
+  const [savingRecord, setSavingRecord] = useState(false);
+  const saveBusy = useRef(false);
+  const requestIds = useRef<Record<string, string>>({});
+  const mapSave = useRef<(() => Promise<boolean>) | null>(null);
+  const closeRecordModals = () => { setIsNewPlanModalOpen(false); setIsNewProcedureModalOpen(false); setIsNewEvolutionModalOpen(false); setIsNewReturnModalOpen(false); setIsNewPhotoModalOpen(false); setLightboxPhoto(null); setSelectedAssessmentDetail(null); setIsZemda360ModalOpen(false); setEditing(null); setPendingDelete(null); };
+  useLayoutEffect(() => { setComparisonIds([]); setShowComparison(false); setAreaDrafts({}); setRecordIds({}); setSessionRecordIds({}); requestIds.current = {}; closeRecordModals(); restoreForms({}, activeArea); mapSave.current = null; }, [selectedPatientId, initialAppointmentId]);
+  const changeArea = async (area: EsteticArea) => {
+    if (saveBusy.current || (activeTab === 'zemda360' && mapSave.current && !await mapSave.current())) return;
+    setAreaDrafts(previous => ({ ...previous, [activeArea]: forms }));
+    restoreForms(areaDrafts[area] || {}, area);
+    setComparisonIds([]); setShowComparison(false); closeRecordModals(); requestIds.current = {}; setActiveArea(area);
+  };
+  const autosave = useClinicalAutosave({
+    moduleType: 'ZemdaEstetic', patientId: selectedPatientId, appointmentId: encounterId,
+    payload: clinicalPayload,
+    onRestoreDraft: draft => {
+      const area = ['FACIAL', 'CORPORAL', 'CAPILAR'].includes(draft.activeArea) ? draft.activeArea as EsteticArea : activeArea;
+      setRecordIds(draft.recordIds || {}); setSessionRecordIds(draft.sessionRecordIds || {});
+      setAreaDrafts(draft.areas || {}); setActiveArea(area);
+      restoreForms(draft.areas?.[area] || draft, area);
+    }
+  });
+  const changeTab = async (tab: typeof activeTab) => {
+    if (saveBusy.current || (activeTab === 'zemda360' && mapSave.current && !await mapSave.current())) return;
+    setActiveTab(tab);
+  };
+  const saveRecord = async (kind: string, body: any) => {
+    if (saveBusy.current) throw new Error('Aguarde o registro em andamento.');
+    saveBusy.current = true; setSavingRecord(true); setInvalidField('');
+    const update = editing?.kind === kind ? editing.id : kind === 'assessments' ? recordIds[activeArea]?.assessments : undefined;
+    requestIds.current[kind] ||= crypto.randomUUID();
+    try {
+      const payload = esteticPayload(kind, { ...body, clientRequestId: requestIds.current[kind] });
+      const result = update ? await ApiClient.put<any>(`/v1/estetic/${kind}/${update}`, payload) : await ApiClient.post<any>(`/v1/estetic/${kind}`, payload);
+      if (isCurrentClinicalContext()) {
+        setRecordIds(previous => ({ ...previous, [activeArea]: { ...previous[activeArea], [kind]: result.id } }));
+        setSessionRecordIds(previous => ({ ...previous, [activeArea]: { ...previous[activeArea], [kind]: [...new Set([...(previous[activeArea]?.[kind] || []), result.id])] } }));
+        setEditing(null); delete requestIds.current[kind];
+      }
+      return result;
+    } catch (error: any) { if (isCurrentClinicalContext()) setInvalidField(error.field || ''); throw error; } finally { saveBusy.current = false; setSavingRecord(false); }
+  };
+  const editRecord = (kind: string, row: any) => {
+    setEditing({ kind, id: row.id });
+    setRecordIds(previous => ({ ...previous, [activeArea]: { ...previous[activeArea], [kind]: row.id } }));
+    const merge = (base: any) => Object.fromEntries(Object.entries(base).map(([key, value]) => [key, row[key] == null ? value : key === 'quantity' ? String(row[key]) : row[key]]));
+    if (kind === 'assessments') { setAssessmentForm({ ...defaults.current.assessmentForm, ...row.specificData, complaint: row.complaint || '', expectations: row.expectations || '', assessmentDate: row.assessment_date || new Date().toISOString().slice(0, 10) }); setActiveTab('assessment'); }
+    if (kind === 'plans') { setPlanForm(merge(defaults.current.planForm) as any); setIsNewPlanModalOpen(true); }
+    if (kind === 'procedures') {
+      const merged = merge(defaults.current.procedureForm);
+      merged.inventory_item_id = row.product_id || row.inventory_item_id || '';
+      merged.product_applied = row.product_name || row.product_applied || '';
+      merged.lot_number = row.batch_lot || row.lot_number || '';
+      merged.expiry_date = row.expiry_date ? row.expiry_date.slice(0, 10) : '';
+      merged.without_product = !merged.inventory_item_id && !merged.product_applied;
+      setProcedureForm(merged as any);
+      setIsNewProcedureModalOpen(true);
+    }
+    if (kind === 'evolutions') { setEvolutionForm(merge(defaults.current.evolutionForm) as any); setIsNewEvolutionModalOpen(true); }
+    if (kind === 'returns') { setReturnForm({ ...merge(defaults.current.returnForm), touchup_required: row.touchup_required == null ? undefined : Boolean(row.touchup_required) } as any); setIsNewReturnModalOpen(true); }
+    if (kind === 'photos') { setPhotoForm(merge(defaults.current.photoForm) as any); setIsNewPhotoModalOpen(true); }
+  };
+  const cancelEdit = () => {
+    if (!editing) return;
+    const initial = structuredClone(defaults.current);
+    if (editing.kind === 'assessments') setAssessmentForm(initial.assessmentForm);
+    if (editing.kind === 'plans') setPlanForm({ ...initial.planForm, area: activeArea });
+    if (editing.kind === 'procedures') setProcedureForm({ ...initial.procedureForm, area: activeArea });
+    if (editing.kind === 'evolutions') setEvolutionForm({ ...initial.evolutionForm, area: activeArea });
+    if (editing.kind === 'returns') setReturnForm({ ...initial.returnForm, area: activeArea });
+    if (editing.kind === 'photos') setPhotoForm({ ...initial.photoForm, area: activeArea });
+    setEditing(null); setInvalidField('');
+  };
+  const recordActions = (kind: string, row: any) => <div className="flex gap-2 text-xs" data-testid={`record-actions-${row.id}`}><button type="button" className="px-2 py-1 rounded-lg border bg-white" onClick={() => editRecord(kind, row)}>Editar</button><button type="button" className="px-2 py-1 rounded-lg border bg-white text-red-700" onClick={() => { setDeleteError(null); setPendingDelete({ kind, id: row.id, row }); }}>Excluir</button>{kind === 'returns' && row.status === 'AGENDADO' && <button type="button" className="px-2 py-1 rounded-lg border bg-white" onClick={async () => { try { await ApiClient.patch(`/v1/estetic/returns/${row.id}`, { status: 'CANCELADO' }); if (isCurrentClinicalContext()) await await refreshInventory();
+      loadPatientData(selectedPatientId, activeArea); } catch (error: any) { showToast(error.message, 'error'); } }}>Cancelar retorno</button>}</div>;
+  useEffect(() => { setFinishAppointment(null); }, [selectedPatientId, initialAppointmentId]);
+  const [appointmentCompleted, setAppointmentCompleted] = useState(false);
+  const openingFinish = useRef(false);
+  const directAppointmentId = useRef<string>();
+  useEffect(() => { setAppointmentCompleted(false); directAppointmentId.current = undefined; }, [initialAppointmentId, selectedPatientId]);
+  useEffect(() => {
+    if (!selectedPatientId || initialAppointmentId) return;
+    let cancelled = false;
+    resolveConsultationAppointment({ patientId: selectedPatientId, moduleType: 'ZemdaEstetic' }).then(id => {
+      if (cancelled) return;
+      directAppointmentId.current = id; setDirectEncounter({ patientId: selectedPatientId, id });
+      window.dispatchEvent(new CustomEvent('zemda-appointment-updated'));
+    }).catch((error: any) => { if (!cancelled) showToast(error.message || 'Não foi possível abrir o contexto do atendimento.', 'error'); });
+    return () => { cancelled = true; };
+  }, [selectedPatientId, initialAppointmentId]);
+  const requestFinish = async () => {
+    if (!selectedPatientId) { showToast('Selecione um paciente para finalizar o atendimento.', 'info'); return; }
+    if (appointmentCompleted || openingFinish.current || saveBusy.current) return;
+    openingFinish.current = true;
+    try {
+      let appointmentId = encounterId || directAppointmentId.current;
+      if (!appointmentId) {
+        appointmentId = await resolveConsultationAppointment({ patientId: selectedPatientId, moduleType: 'ZemdaEstetic' });
+        if (!isCurrentClinicalContext()) return;
+        directAppointmentId.current = appointmentId;
+        window.dispatchEvent(new CustomEvent('zemda-appointment-updated'));
+      }
+      if (mapSave.current && !await mapSave.current()) throw new Error('Salve o mapa antes de finalizar.');
+      await autosave.forceSaveDraft();
+      const { appointment } = await ApiClient.get<any>(`/v1/appointments/${appointmentId}`);
+      if (!isCurrentClinicalContext()) return;
+      if (appointment.status === 'completed') { setAppointmentCompleted(true); showToast('Este atendimento já foi finalizado.', 'info'); return; }
+      if (isCurrentClinicalContext() && appointment.patient_id === selectedPatientId) setFinishAppointment(appointment);
+    } catch (error: any) { showToast(error.message || 'Erro ao abrir finalização.', 'error'); }
+    finally { openingFinish.current = false; }
+  };
+
+  // Carrega configurações do ZemdaEstetic
+  useEffect(() => {
+    async function loadConfig() {
+      try {
+        const res = await ApiClient.get<any>('/v1/estetic/config');
+        if (res.allowedAreas && res.allowedAreas.length > 0) {
+          setAllowedAreas(res.allowedAreas);
+          if (!res.allowedAreas.includes(activeArea)) {
+            setActiveArea(res.allowedAreas[0]);
+          }
+        }
+        if (res.catalog) setCatalog(res.catalog);
+        if (res.inventory) setInventoryItems(res.inventory);
+      } catch (err: any) {
+        console.error('Erro ao carregar configurações do ZemdaEstetic:', err);
+      }
+    }
+    loadConfig();
+  }, []);
+
+  // Atualiza saldo de estoque imediatamente
+  const refreshInventory = async () => {
+    try {
+      const res = await ApiClient.get<any>('/v1/estetic/config');
+      if (res?.inventory) {
+        setInventoryItems(res.inventory);
+      }
+    } catch (err) {
+      console.warn('[ZemdaEstetic] Falha ao atualizar estoque:', err);
+    }
+  };
+
+  // Remove procedimento recomendado do planejamento com validação de rastreabilidade
+  const handleRemovePlanItem = (idx: number) => {
+    const item = planForm.items[idx];
+    const hasExecution = Boolean(
+      item?.id && (
+        procedures.some(p => p.plan_item_id === item.id) ||
+        (item.sessions_completed !== undefined && Number(item.sessions_completed) > 0) ||
+        item.status === 'REALIZADO'
+      )
+    );
+
+    if (hasExecution) {
+      showToast(
+        'Este procedimento já possui execução registrada e não pode ser removido do histórico. Você pode cancelá-lo no planejamento.',
+        'info'
+      );
+      return;
+    }
+
+    const nextItems = planForm.items.filter((_, i) => i !== idx);
+    if (nextItems.length === 0) {
+      nextItems.push({
+        procedure_name: '',
+        target_region: '',
+        sessions_planned: '' as number | '',
+        recommended_interval_days: '' as number | '',
+        priority: '',
+        status: 'PLANEJADO'
+      });
+    }
+    setPlanForm({ ...planForm, items: nextItems });
+  };
+
+  // Sincroniza área nos formulários quando a área ativa mudar
+  useEffect(() => {
+    setPlanForm(prev => ({ ...prev, area: activeArea }));
+    setProcedureForm(prev => ({ ...prev, area: activeArea }));
+    setPhotoForm(prev => ({ ...prev, area: activeArea }));
+    setEvolutionForm(prev => ({ ...prev, area: activeArea }));
+    setReturnForm(prev => ({ ...prev, area: activeArea }));
+  }, [activeArea]);
+
+  const dataRequest = useRef(0);
+  const [dataError, setDataError] = useState('');
+  useEffect(() => { setSelectedPatientId(initialPatientId || ''); }, [initialPatientId]);
+
+  // Carrega dados completos do paciente quando mudar paciente ou área
+  const loadPatientData = async (patientId: string, area: EsteticArea) => {
+    if (!patientId || !isCurrentClinicalContext()) return;
+    const request = ++dataRequest.current;
+    setLoadingOverview(true);
+    try {
+      const [data, config] = await Promise.all([loadEsteticPatient(patientId, area), ApiClient.get<any>('/v1/estetic/config')]);
+      if (!isCurrentClinicalContext() || request !== dataRequest.current) return;
+      setInventoryItems(config.inventory || []);
+      setOverviewData(data.overview);
+      setAssessments(data.assessments);
+      setPlans(data.plans);
+      setProcedures(data.procedures);
+      setEvolutions(data.evolutions);
+      setReturnsList(data.returns);
+      setPhotos(data.photos);
+      setBeforeAfterPairs(data.pairs);
+      setTimeline(data.timeline);
+      setDataError('');
+    } catch (err) {
+      if (request === dataRequest.current) { setDataError('Não foi possível carregar os registros. Tente novamente.'); showToast((err as Error).message || 'Erro ao carregar registros.', 'error'); }
+    } finally {
+      if (request === dataRequest.current) setLoadingOverview(false);
+    }
+  };
+
+  useEffect(() => {
+    ++dataRequest.current;
+    setOverviewData(null); setAssessments([]); setPlans([]); setProcedures([]); setEvolutions([]); setReturnsList([]); setPhotos([]); setBeforeAfterPairs([]); setTimeline([]); setSelectedPatient(null);
+    if (selectedPatientId) {
+      loadPatientData(selectedPatientId, activeArea);
+    }
+  }, [selectedPatientId, activeArea]);
+
+  const handleSelectPatient = async (patientId: string, patient?: PatientSearchResult | null) => {
+    if (saveBusy.current || (activeTab === 'zemda360' && mapSave.current && !await mapSave.current())) return;
+    setSelectedPatientId(patientId);
+    setSelectedPatient(patient || null);
+    if (onSelectPatient) onSelectPatient(patientId);
+  };
+
+  // Salvar Avaliação
+  const handleSaveAssessment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPatientId) {
+      showToast('Selecione um paciente para registrar a avaliação.', 'info');
+      return;
+    }
+    setIsSavingAssessment(true);
+    try {
+      const areaData = activeArea === 'FACIAL' ? {
+        fitzpatrick: assessmentForm.fitzpatrick,
+        glogau: assessmentForm.glogau,
+        dynamicLines: assessmentForm.dynamicLines,
+        staticLines: assessmentForm.staticLines,
+        flaccidityRegions: assessmentForm.flaccidityRegions,
+        volumeLossRegions: assessmentForm.volumeLossRegions
+      } : activeArea === 'CORPORAL' ? {
+        targetRegions: assessmentForm.targetRegions,
+        bodyAlterationType: assessmentForm.bodyAlterationType,
+        celluliteGrade: assessmentForm.celluliteGrade,
+        stretchMarks: assessmentForm.stretchMarks,
+        circumferences: assessmentForm.circumferences,
+        habits: assessmentForm.habits
+      } : {
+        hairLossPattern: assessmentForm.hairLossPattern,
+        hairLossScale: assessmentForm.hairLossScale,
+        scalpCondition: assessmentForm.scalpCondition,
+        pullTest: assessmentForm.pullTest,
+        fiberDensity: assessmentForm.fiberDensity,
+        familyHistory: assessmentForm.familyHistory
+      };
+
+      const savedAssessment = await saveRecord('assessments', {
+        patient_id: selectedPatientId,
+        appointmentId: encounterId || directAppointmentId.current,
+        area: activeArea,
+        assessmentDate: assessmentForm.assessmentDate,
+        complaint: assessmentForm.complaint,
+        expectations: assessmentForm.expectations,
+        phototype: assessmentForm.fitzpatrick,
+        skin_type: activeArea === 'FACIAL' ? `Fototipo ${assessmentForm.fitzpatrick} • Glogau ${assessmentForm.glogau}` : undefined,
+        specificData: { ...assessmentForm, ...areaData },
+        previous_treatments: assessmentForm.previousTreatments,
+        contraindications: assessmentForm.contraindications,
+        allergies: assessmentForm.allergies,
+        current_medications: assessmentForm.currentMedications,
+        clinical_conduct: assessmentForm.clinicalConduct,
+        observations: assessmentForm.observations
+      });
+      if (!isCurrentClinicalContext()) return;
+
+      setEditing({ kind: 'assessments', id: savedAssessment.id });
+      showToast(`Avaliação estética (${activeArea}) salva com sucesso!`, 'success');
+      loadPatientData(selectedPatientId, activeArea);
+      // Limpa ou preserva campos conforme conveniência
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao salvar avaliação estética.', 'error');
+    } finally {
+      setIsSavingAssessment(false);
+    }
+  };
+
+  // Salvar Plano
+  const handleSavePlan = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPatientId) return;
+    try {
+      await saveRecord('plans', {
+        patient_id: selectedPatientId,
+        appointmentId: encounterId || directAppointmentId.current,
+        area: planForm.area,
+        title: planForm.title || `Planejamento ${planForm.area} - ${new Date().toLocaleDateString('pt-BR')}`,
+        objectives: planForm.objectives,
+        notes: planForm.notes,
+        items: planForm.items.filter(i => i.procedure_name.trim().length > 0)
+      });
+      if (!isCurrentClinicalContext()) return;
+      showToast('Plano de tratamento cadastrado com sucesso!', 'success');
+      setIsNewPlanModalOpen(false);
+      setPlanForm({
+        title: '',
+        area: activeArea,
+        objectives: '',
+        notes: '',
+        items: [{ procedure_name: '', target_region: '', sessions_planned: '' as number | '', recommended_interval_days: '' as number | '', priority: '' }]
+      });
+      loadPatientData(selectedPatientId, activeArea);
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao criar plano.', 'error');
+    }
+  };
+
+  // Atualizar Status do Item de Plano
+  const handleUpdatePlanItemStatus = async (planId: string, itemId: string, status: string) => {
+    try {
+      await ApiClient.patch(`/v1/estetic/plans/${planId}/item-status`, { item_id: itemId, status });
+      showToast('Status do item atualizado.', 'success');
+      loadPatientData(selectedPatientId, activeArea);
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao atualizar item do plano.', 'error');
+    }
+  };
+
+  // Salvar Procedimento
+  const handleSaveProcedure = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPatientId) return;
+    try {
+      await saveRecord('procedures', {
+        patient_id: selectedPatientId,
+        appointmentId: encounterId || directAppointmentId.current,
+        procedure_name: procedureForm.procedure_name,
+        area: procedureForm.area,
+        target_region: procedureForm.target_region,
+        date_performed: procedureForm.date_performed,
+        product_applied: procedureForm.without_product ? undefined : procedureForm.product_applied,
+        product_name: procedureForm.without_product ? undefined : procedureForm.product_applied,
+        productName: procedureForm.without_product ? undefined : procedureForm.product_applied,
+        lot_number: procedureForm.without_product ? undefined : procedureForm.lot_number,
+        batchLot: procedureForm.without_product ? undefined : procedureForm.lot_number,
+        expiry_date: procedureForm.without_product ? undefined : procedureForm.expiry_date,
+        expiryDate: procedureForm.without_product ? undefined : procedureForm.expiry_date,
+        quantity: procedureForm.without_product || procedureForm.quantity === '' ? undefined : Number(String(procedureForm.quantity).replace(',', '.')),
+        unit: procedureForm.without_product ? undefined : procedureForm.unit,
+        technique_notes: procedureForm.technique_notes,
+        adverse_reactions: procedureForm.adverse_reactions,
+        post_instructions: procedureForm.post_instructions,
+        withoutProduct: procedureForm.without_product,
+        without_product: procedureForm.without_product,
+        deduct_inventory: !procedureForm.without_product && Boolean(procedureForm.inventory_item_id),
+        deductInventory: !procedureForm.without_product && Boolean(procedureForm.inventory_item_id),
+        inventory_item_id: procedureForm.without_product ? undefined : (procedureForm.inventory_item_id || undefined),
+        productId: procedureForm.without_product ? undefined : (procedureForm.inventory_item_id || undefined),
+        product_id: procedureForm.without_product ? undefined : (procedureForm.inventory_item_id || undefined),
+        plan_id: procedureForm.plan_id || undefined,
+        plan_item_id: procedureForm.plan_item_id || undefined
+      });
+      if (!isCurrentClinicalContext()) return;
+
+      showToast('Procedimento estético registrado com sucesso!', 'success');
+      setIsNewProcedureModalOpen(false);
+      setProcedureForm({
+        procedure_name: '',
+        area: activeArea,
+        target_region: '',
+        date_performed: new Date().toISOString().slice(0, 10),
+        product_applied: '',
+        lot_number: '',
+        expiry_date: '',
+        quantity: '',
+        unit: 'ml',
+        technique_notes: '',
+        adverse_reactions: '',
+        post_instructions: '',
+        deduct_inventory: false,
+        inventory_item_id: '',
+        plan_id: '',
+        plan_item_id: '',
+        without_product: false
+      });
+      loadPatientData(selectedPatientId, activeArea);
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao registrar procedimento.', 'error');
+    }
+  };
+
+  // Salvar Foto
+  const handleSavePhoto = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPatientId || !photoForm.photo_url) {
+      showToast('Informe a foto (URL ou arquivo).', 'info');
+      return;
+    }
+    try {
+      await saveRecord('photos', {
+        patient_id: selectedPatientId,
+        appointmentId: encounterId || directAppointmentId.current,
+        photo_url: photoForm.photo_url,
+        photo_type: photoForm.photo_type,
+        view_angle: photoForm.view_angle,
+        area: photoForm.area,
+        taken_at: photoForm.taken_at,
+        notes: photoForm.notes
+      });
+      if (!isCurrentClinicalContext()) return;
+      showToast('Fotografia clínica anexada com sucesso!', 'success');
+      setIsNewPhotoModalOpen(false);
+      setPhotoForm({
+        photo_url: '',
+        photo_type: 'ANTES',
+        view_angle: 'FRONTAL',
+        area: activeArea,
+        taken_at: new Date().toISOString().slice(0, 10),
+        notes: ''
+      });
+      loadPatientData(selectedPatientId, activeArea);
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao salvar fotografia.', 'error');
+    }
+  };
+
+  // Upload local de imagem simulado/base64
+  const handlePhotoFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) { showToast('Selecione uma imagem PNG, JPEG ou WebP de até 5 MB.', 'error'); return; }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      if (isCurrentClinicalContext() && event.target?.result) {
+        setPhotoForm(prev => ({ ...prev, photo_url: event.target!.result as string }));
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Salvar Evolução
+  const handleSaveEvolution = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPatientId) return;
+    try {
+      await saveRecord('evolutions', {
+        patient_id: selectedPatientId,
+        appointmentId: encounterId || directAppointmentId.current,
+        area: evolutionForm.area,
+        evolution_date: evolutionForm.evolution_date,
+        biological_response: evolutionForm.biological_response,
+        patient_feedback: evolutionForm.patient_feedback,
+        conduct: evolutionForm.conduct,
+        procedure_id: evolutionForm.procedure_id || undefined
+      });
+      if (!isCurrentClinicalContext()) return;
+      showToast('Evolução clínica registrada!', 'success');
+      setIsNewEvolutionModalOpen(false);
+      setEvolutionForm({
+        evolution_date: new Date().toISOString().slice(0, 10),
+        area: activeArea,
+        biological_response: '',
+        patient_feedback: '',
+        conduct: '',
+        procedure_id: ''
+      });
+      loadPatientData(selectedPatientId, activeArea);
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao salvar evolução.', 'error');
+    }
+  };
+
+  // Salvar Retorno
+  const handleSaveReturn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPatientId) return;
+    try {
+      await saveRecord('returns', {
+        patient_id: selectedPatientId,
+        appointmentId: encounterId || directAppointmentId.current,
+        area: returnForm.area,
+        procedure_id: returnForm.procedure_id || undefined,
+        scheduled_date: returnForm.scheduled_date,
+        actual_date: returnForm.actual_date || undefined,
+        status: returnForm.status,
+        evaluation_notes: returnForm.evaluation_notes,
+        touchup_required: returnForm.touchup_required === undefined ? undefined : returnForm.touchup_required ? 1 : 0,
+        touchup_description: returnForm.touchup_description
+      });
+      if (!isCurrentClinicalContext()) return;
+      showToast('Retorno estético agendado/registrado!', 'success');
+      setIsNewReturnModalOpen(false);
+      setReturnForm({
+        scheduled_date: new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10),
+        actual_date: '',
+        area: activeArea,
+        procedure_id: '',
+        status: 'AGENDADO',
+        evaluation_notes: '',
+        touchup_required: undefined,
+        touchup_description: ''
+      });
+      loadPatientData(selectedPatientId, activeArea);
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao salvar retorno.', 'error');
+    }
+  };
+
+  // Alternar checkbox nos campos de avaliação
+  const toggleArrayItem = (field: 'dynamicLines' | 'staticLines' | 'flaccidityRegions' | 'volumeLossRegions' | 'targetRegions', item: string) => {
+    setAssessmentForm(prev => {
+      const current = prev[field];
+      const next = current.includes(item) ? current.filter(x => x !== item) : [...current, item];
+      return { ...prev, [field]: next };
+    });
+  };
+
+  // Procedimentos filtrados do catálogo para a área ativa
+  const catalogForActiveArea = useMemo(() => {
+    return catalog.filter(c => {
+      if (!c.applicable_areas_json) return true;
+      try {
+        const areas = JSON.parse(c.applicable_areas_json);
+        return Array.isArray(areas) ? areas.includes(activeArea) : true;
+      } catch {
+        return true;
+      }
+    });
+  }, [catalog, activeArea]);
+
+  // Cores do tema por área ativa
+  const areaTheme = {
+    FACIAL: {
+      badge: 'bg-rose-100 text-rose-800 border-rose-200',
+      activeTab: 'bg-rose-600 text-white shadow-sm',
+      accentText: 'text-rose-600',
+      gradient: 'from-rose-500 to-pink-600',
+      shadow: 'shadow-rose-500/20',
+      title: 'Estética Facial',
+      mapType: 'FACE' as const
+    },
+    CORPORAL: {
+      badge: 'bg-teal-100 text-teal-800 border-teal-200',
+      activeTab: 'bg-teal-600 text-white shadow-sm',
+      accentText: 'text-teal-600',
+      gradient: 'from-teal-500 to-emerald-600',
+      shadow: 'shadow-teal-500/20',
+      title: 'Estética Corporal',
+      mapType: 'BODY' as const
+    },
+    CAPILAR: {
+      badge: 'bg-amber-100 text-amber-800 border-amber-200',
+      activeTab: 'bg-amber-600 text-white shadow-sm',
+      accentText: 'text-amber-600',
+      gradient: 'from-amber-500 to-orange-600',
+      shadow: 'shadow-amber-500/20',
+      title: 'Estética Capilar',
+      mapType: 'FACE' as const
+    }
+  }[activeArea];
+
+  return (
+    <div className="flex flex-col min-h-screen bg-slate-50" data-testid="zemda-estetic-workspace">
+      {encounterId && <ClinicalAssessmentsPanel patientId={selectedPatientId} patient={selectedPatient} appointmentId={encounterId} sourceModule="ZemdaEstetic"/>}
+      <ClinicalDraftRecoveryModal isOpen={autosave.conflictModalOpen} moduleName="ZemdaEstetic"
+        onClose={() => autosave.resolveConflict('local')} onSelectVersion={autosave.resolveConflict} />
+      {finishAppointment && <FinishConsultationModal appointment={finishAppointment}
+        clinicalData={{ moduleType: 'ZemdaEstetic', moduleData: clinicalPayload,
+          clinicalEvolution: evolutionForm.biological_response, technicalNotes: assessmentForm.observations }}
+        onClose={() => setFinishAppointment(null)}
+        onCompleted={() => { setAppointmentCompleted(true); void autosave.clearDraft(); }}
+        onFinished={() => { setFinishAppointment(null); onFinishConsultation?.(); }} />}
+      {showComparison && <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 mobile-modal"><div role="dialog" aria-label="Comparação de avaliações" className="bg-white rounded-2xl p-5 max-h-[85vh] overflow-auto w-full max-w-3xl"><button type="button" className="mb-3 border rounded-lg p-2" onClick={() => setShowComparison(false)}>Fechar comparação</button><ResponsiveTable className="w-full text-xs"><thead><tr><th>Campo</th>{comparisonIds.map(id => <th key={id}>{assessments.find(row => row.id === id)?.assessment_date}</th>)}</tr></thead><tbody>{Object.keys(defaults.current.assessmentForm).filter(key => key !== 'assessmentDate').map(key => <tr key={key}><th className="text-left border p-2">{assessmentLabels[key] || ({ complaint: 'Queixa principal', expectations: 'Expectativas' } as Record<string,string>)[key] || key}</th>{comparisonIds.map(id => <td key={id} className="border p-2">{formatAssessmentValue(assessments.find(row => row.id === id)?.specificData?.[key] ?? '') || 'Não informado'}</td>)}</tr>)}</tbody></ResponsiveTable></div></div>}
+      {pendingDelete && (() => {
+        const { kind, id } = pendingDelete;
+        const targetRow = pendingDelete.row || (() => {
+          if (kind === 'assessments') return assessments.find(r => r.id === id);
+          if (kind === 'plans') return plans.find(r => r.id === id);
+          if (kind === 'procedures') return procedures.find(r => r.id === id);
+          if (kind === 'evolutions') return evolutions.find(r => r.id === id);
+          if (kind === 'returns') return returnsList.find(r => r.id === id);
+          if (kind === 'photos') return photos.find(r => r.id === id);
+          return null;
+        })();
+
+        const titles: Record<string, string> = {
+          assessments: 'Excluir avaliação?',
+          plans: 'Excluir plano de tratamento?',
+          procedures: 'Excluir procedimento?',
+          evolutions: 'Excluir evolução?',
+          returns: 'Excluir retorno?',
+          photos: 'Excluir fotografia?'
+        };
+
+        const subtitles: Record<string, string> = {
+          assessments: 'Tem certeza que deseja excluir esta avaliação clínica?',
+          plans: 'Tem certeza que deseja excluir este plano de tratamento?',
+          procedures: 'Tem certeza que deseja excluir este procedimento realizado?',
+          evolutions: 'Tem certeza que deseja excluir esta evolução clínica?',
+          returns: 'Tem certeza que deseja excluir este retorno?',
+          photos: 'Tem certeza que deseja excluir esta fotografia clínica?'
+        };
+
+        const buttonLabels: Record<string, string> = {
+          assessments: 'Excluir avaliação',
+          plans: 'Excluir plano de tratamento',
+          procedures: 'Excluir procedimento',
+          evolutions: 'Excluir evolução',
+          returns: 'Excluir retorno',
+          photos: 'Excluir fotografia'
+        };
+
+        const title = titles[kind] || 'Excluir registro?';
+        const subtitle = subtitles[kind] || 'Tem certeza que deseja excluir este registro?';
+        const buttonLabel = buttonLabels[kind] || 'Excluir registro';
+        const hasInventoryDeduction = kind === 'procedures' && Boolean(targetRow?.inventory_deducted);
+        const deductedQty = targetRow?.deducted_quantity || targetRow?.quantity || 1;
+        const deductedUnit = targetRow?.unit || 'un';
+
+        return (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={title}
+            className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150 mobile-modal"
+          >
+            <div className="bg-white rounded-2xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-slate-200 space-y-4">
+              <div className="flex items-start gap-3.5">
+                <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-base font-bold text-slate-900 leading-snug">
+                    {title}
+                  </h3>
+                  <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                    {subtitle}
+                  </p>
+                </div>
+              </div>
+
+              {hasInventoryDeduction && (
+                <div className="bg-amber-50 border border-amber-200 text-amber-900 p-3 rounded-xl text-xs space-y-1">
+                  <div className="flex items-center gap-1.5 font-bold text-amber-800">
+                    <Package className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>Devolução de estoque automática</span>
+                  </div>
+                  <p className="leading-relaxed">
+                    Este procedimento realizou baixa de estoque. Ao confirmar, <strong>{deductedQty} {deductedUnit}</strong> do produto serão devolvidos automaticamente ao estoque.
+                  </p>
+                </div>
+              )}
+
+              <div className="text-[11px] text-slate-500 bg-slate-50 border border-slate-200/70 p-2.5 rounded-xl leading-relaxed">
+                ℹ️ O registro será removido desta área, mas a trilha clínica será preservada quando aplicável.
+              </div>
+
+              {deleteError && (
+                <div className="bg-rose-50 border border-rose-200 text-rose-800 p-3 rounded-xl text-xs flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <strong className="block font-bold">Não foi possível excluir:</strong>
+                    <p className="mt-0.5">{deleteError}</p>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  disabled={savingRecord}
+                  onClick={() => { setPendingDelete(null); setDeleteError(null); }}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={savingRecord}
+                  onClick={async () => {
+                    setSavingRecord(true);
+                    setDeleteError(null);
+                    try {
+                      await ApiClient.delete(`/v1/estetic/${kind}/${id}`);
+                      if (isCurrentClinicalContext()) {
+                        if (kind === 'assessments' && recordIds[activeArea]?.assessments === id) {
+                          setAssessmentForm(structuredClone(defaults.current.assessmentForm));
+                          setEditing(null);
+                        }
+                        setRecordIds(previous => ({
+                          ...previous,
+                          [activeArea]: Object.fromEntries(
+                            Object.entries(previous[activeArea] || {}).filter(([, rowId]) => rowId !== id)
+                          )
+                        }));
+                        setPendingDelete(null);
+                        await Promise.all([refreshInventory(), loadPatientData(selectedPatientId, activeArea)]);
+                        showToast('Registro excluído com sucesso.', 'success');
+                      }
+                    } catch (error: any) {
+                      const msg = error.message || 'Erro ao excluir registro.';
+                      setDeleteError(msg);
+                      showToast(msg, 'error');
+                    } finally {
+                      setSavingRecord(false);
+                    }
+                  }}
+                  className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-50 rounded-xl shadow-xs transition-colors cursor-pointer"
+                >
+                  {savingRecord ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Excluindo...</span>
+                    </>
+                  ) : (
+                    <span>{buttonLabel}</span>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+      {dataError && <div role="alert" className="m-4 p-3 rounded-xl bg-red-50 text-red-800">{dataError} <button type="button" onClick={() => loadPatientData(selectedPatientId, activeArea)}>Tentar novamente</button></div>}
+      {/* 1. CABEÇALHO PROFISSIONAL COM SELETOR DE ÁREA E BUSCA DE PACIENTE (LINHA 1) */}
+      <ProfessionalModuleHeader
+        icon={Sparkles}
+        iconGradient={areaTheme.gradient}
+        iconShadow={areaTheme.shadow}
+        title="ZemdaEstetic"
+        badgeLabel={areaTheme.title}
+        badgeVariant={areaTheme.badge}
+        secondaryBadge={
+          isDentist ? (
+            <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200 flex items-center gap-1">
+              <ShieldCheck className="w-3 h-3" /> HOF Integrado
+            </span>
+          ) : undefined
+        }
+        description="Avaliação estruturada por área, rastreabilidade de produtos, fotos clínicas e motor anatômico Zemda360."
+      >
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+          {/* SELETOR DE ÁREA DE ATUAÇÃO (FACIAL, CORPORAL, CAPILAR) */}
+          <div className="relative">
+            <button
+              type="button"
+              data-tour="estetic-area-selector"
+              onClick={() => setIsAreaDropdownOpen(!isAreaDropdownOpen)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 text-xs font-bold transition-all shadow-xs cursor-pointer"
+            >
+              <span>Área: <strong>{areaTheme.title}</strong></span>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
+            </button>
+
+            {isAreaDropdownOpen && (
+              <div className="absolute right-0 mt-1 w-56 bg-white rounded-2xl shadow-xl border border-slate-200 py-1.5 z-30 animate-in fade-in zoom-in-95 duration-150">
+                <div className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  Áreas Clínicas Disponíveis
+                </div>
+                {(['FACIAL', 'CORPORAL', 'CAPILAR'] as EsteticArea[]).map((area) => {
+                  const isAllowed = allowedAreas.includes(area) || isSuperAdmin;
+                  const label = area === 'FACIAL' ? 'Estética Facial' : area === 'CORPORAL' ? 'Estética Corporal' : 'Estética Capilar';
+                  return (
+                    <button
+                      key={area}
+                      type="button"
+                      disabled={!isAllowed}
+                      onClick={() => {
+                        if (isAllowed) {
+                          changeArea(area);
+                          setIsAreaDropdownOpen(false);
+                        }
+                      }}
+                      className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between transition-colors ${
+                        activeArea === area
+                          ? 'bg-slate-100 font-extrabold text-slate-900'
+                          : isAllowed
+                          ? 'text-slate-700 hover:bg-slate-50 cursor-pointer'
+                          : 'text-slate-300 bg-slate-50/50 cursor-not-allowed'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full ${
+                          area === 'FACIAL' ? 'bg-rose-500' : area === 'CORPORAL' ? 'bg-teal-500' : 'bg-amber-500'
+                        }`} />
+                        <span>{label}</span>
+                      </div>
+                      {!isAllowed && (
+                        <span className="flex items-center gap-1 text-[10px] text-slate-400 font-medium">
+                          <Lock className="w-3 h-3" /> Bloqueado
+                        </span>
+                      )}
+                      {activeArea === area && <Check className="w-3.5 h-3.5 text-emerald-600" />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="w-64 sm:w-72 lg:w-80" data-tour="estetic-patient-select">
+            <PatientSearchSelect
+              value={selectedPatientId}
+              selectedPatient={selectedPatient}
+              onChange={handleSelectPatient}
+              placeholder="Buscar paciente para atendimento estético..."
+              compact
+            />
+          </div>
+        </div>
+      </ProfessionalModuleHeader>
+
+      {/* 2. FAIXA HORIZONTAL DO ATENDIMENTO (LINHA 2 — SOMENTE SE PACIENTE ESTIVER SELECIONADO) */}
+      {Boolean(selectedPatientId) && (
+        <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-2.5 shrink-0 shadow-2xs">
+          <div className="max-w-7xl mx-auto flex items-center gap-2.5 sm:gap-3 flex-wrap">
+            {/* Paciente selecionado com chip visual com "X" para desmarcar */}
+            <div className="inline-flex items-center gap-2 bg-slate-100 hover:bg-slate-200/70 border border-slate-200 rounded-xl px-2.5 py-1 transition-colors shrink-0">
+              <div className="w-6 h-6 rounded-lg bg-white border border-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center shrink-0">
+                <User className="w-3.5 h-3.5" />
+              </div>
+              <span className="font-bold text-xs text-slate-900 truncate max-w-[160px] sm:max-w-[240px]">
+                {overviewData?.patient?.full_name || selectedPatient?.full_name || selectedPatient?.name || 'Paciente Selecionado'}
+              </span>
+              {(overviewData?.patient?.birth_date || selectedPatient?.birth_date) && (
+                <span className="text-[10px] text-slate-500 hidden sm:inline">
+                  ({new Date(overviewData?.patient?.birth_date || selectedPatient?.birth_date!).toLocaleDateString('pt-BR')})
+                </span>
+              )}
+              {!initialAppointmentId && (
+                <button
+                  type="button"
+                  onClick={() => handleSelectPatient('')}
+                  className="p-0.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
+                  title="Desmarcar paciente"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Autosave */}
+            <ClinicalAutosaveIndicator status={autosave.autosaveStatus} lastSavedTime={autosave.lastSavedTime} />
+
+            {/* Ferramentas e Ações Rápidas */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('assessment')}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-bold shadow-xs cursor-pointer whitespace-nowrap"
+            >
+              <Plus className="w-3.5 h-3.5 text-rose-600" />
+              <span>Nova Avaliação</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsNewPhotoModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-bold shadow-xs cursor-pointer whitespace-nowrap"
+            >
+              <Camera className="w-3.5 h-3.5 text-sky-600" />
+              <span>Fotografias</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsNewProcedureModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs cursor-pointer transition-colors whitespace-nowrap"
+            >
+              <Scissors className="w-3.5 h-3.5" />
+              <span>Procedimento</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={async () => { if (!mapSave.current || await mapSave.current()) setIsZemda360ModalOpen(true); }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold shadow-xs cursor-pointer transition-colors whitespace-nowrap"
+            >
+              <Activity className="w-3.5 h-3.5" />
+              <span>Zemda360</span>
+            </button>
+
+            {/* Finalizar Atendimento */}
+            {!appointmentCompleted && (
+              <ClinicalFinishButton onClick={requestFinish} disabled={savingRecord} />
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 3. MENU HORIZONTAL DE ABAS CLÍNICAS (LINHA 3) */}
+      <div className="bg-white border-b border-slate-200 shrink-0 sticky top-0 z-10 shadow-2xs">
+        <HorizontalTabNav scroll={tabScroll}>
+          <div {...tabScrollProps} className={`${tabScrollProps.className} max-w-7xl mx-auto flex items-center gap-1 py-2`}>
+            {[
+              { id: 'overview', label: 'Visão Geral', icon: Layers },
+              { id: 'assessment', label: 'Avaliação Estética', icon: FileText },
+              { id: 'photos', label: `Fotos (${photos.length})`, icon: Camera },
+              { id: 'planning', label: `Planejamento (${plans.length})`, icon: Calendar },
+              { id: 'procedures', label: `Procedimentos (${procedures.length})`, icon: Scissors },
+              { id: 'zemda360', label: 'Zemda360', icon: Activity },
+              { id: 'evolutions', label: `Evoluções (${evolutions.length})`, icon: CheckCircle2 },
+              { id: 'returns', label: `Retornos (${returnsList.length})`, icon: Clock },
+              { id: 'before_after', label: 'Antes × Depois', icon: ArrowLeftRight },
+              { id: 'history', label: 'Histórico Completo', icon: RefreshCw }
+            ].map(tab => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  data-active={isActive ? 'true' : 'false'}
+                  data-tour={`tab-${tab.id}`}
+                  onClick={() => changeTab(tab.id as any)}
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                    isActive
+                      ? areaTheme.activeTab
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </HorizontalTabNav>
+      </div>
+
+      {/* 4. CONTEÚDO PRINCIPAL DO WORKSPACE */}
+      <div className="flex-1 p-4 md:p-6 overflow-y-auto">
+        <div className="max-w-7xl mx-auto">
+          {!selectedPatientId ? (
+            <ClinicalModuleEmptyState
+              icon={Sparkles}
+              title={`Selecione um paciente para iniciar o atendimento no ZemdaEstetic (${areaTheme.title})`}
+              description="Escolha um paciente na busca superior para iniciar a avaliação estética, planejar tratamentos, registrar procedimentos com rastreabilidade de lote e acessar o Zemda360."
+              colorVariant={activeArea === 'FACIAL' ? 'rose' : activeArea === 'CORPORAL' ? 'teal' : 'amber'}
+            />
+          ) : (
+            <>
+              {/* ABA 1: VISÃO GERAL (OVERVIEW) */}
+              {activeTab === 'overview' && (
+                <div className="space-y-6 animate-in fade-in duration-150">
+                  {/* Cards de Métricas */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+                      <div className="text-xs font-semibold text-slate-500 mb-1">Avaliações ({activeArea})</div>
+                      <div className="text-2xl font-black text-slate-800">{overviewData?.metrics?.totalAssessments || 0}</div>
+                    </div>
+                    <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+                      <div className="text-xs font-semibold text-slate-500 mb-1">Planos Ativos</div>
+                      <div className="text-2xl font-black text-sky-600">{overviewData?.metrics?.activePlans || 0}</div>
+                    </div>
+                    <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+                      <div className="text-xs font-semibold text-slate-500 mb-1">Procedimentos Realizados</div>
+                      <div className="text-2xl font-black text-emerald-600">{overviewData?.metrics?.totalProcedures || 0}</div>
+                    </div>
+                    <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+                      <div className="text-xs font-semibold text-slate-500 mb-1">Fotos Documentadas</div>
+                      <div className="text-2xl font-black text-rose-600">{overviewData?.metrics?.totalPhotos || 0}</div>
+                    </div>
+                  </div>
+
+                  {/* 2 Colunas de Destaques Clínicos */}
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Coluna 1 & 2: Última Avaliação & Último Procedimento */}
+                    <div className="lg:col-span-2 space-y-6">
+                      {/* Última Avaliação */}
+                      <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs">
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-2">
+                            <FileText className="w-5 h-5 text-rose-600" />
+                            <h3 className="text-base font-bold text-slate-800">Última Avaliação Estética</h3>
+                          </div>
+                          {overviewData?.lastAssessment && (
+                            <span className="text-xs text-slate-500">
+                              {new Date(overviewData.lastAssessment.created_at).toLocaleDateString('pt-BR')}
+                            </span>
+                          )}
+                        </div>
+
+                        {overviewData?.lastAssessment ? (
+                          <div className="space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-200/80">
+                            <div>
+                              <span className="text-xs font-bold text-slate-500 uppercase">Queixa Principal:</span>
+                              <p className="text-sm text-slate-800 font-medium mt-0.5">
+                                {overviewData.lastAssessment.complaint || 'Não especificada.'}
+                              </p>
+                            </div>
+                            {overviewData.lastAssessment.expectations && (
+                              <div>
+                                <span className="text-xs font-bold text-slate-500 uppercase">Expectativa do Paciente:</span>
+                                <p className="text-sm text-slate-700 mt-0.5">{overviewData.lastAssessment.expectations}</p>
+                              </div>
+                            )}
+                            <div className="flex items-center gap-2 pt-2">
+                              {overviewData.lastAssessment.phototype && (
+                                <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-700">
+                                  Fototipo: {overviewData.lastAssessment.phototype}
+                                </span>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => changeTab('assessment')}
+                                className="text-xs font-bold text-rose-600 hover:text-rose-700 ml-auto cursor-pointer"
+                              >
+                                Ver Detalhes Completos →
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-center py-8 text-slate-500 text-sm">
+                            Nenhuma avaliação registrada ainda para este paciente nesta área.
+                            <div className="mt-3">
+                              <button
+                                type="button"
+                                onClick={() => changeTab('assessment')}
+                                className="px-4 py-2 bg-rose-600 text-white rounded-xl text-xs font-bold hover:bg-rose-700 transition-colors cursor-pointer"
+                              >
+                                Iniciar Avaliação Estética
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Último Procedimento Realizado */}
+                      <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs">
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-2">
+                            <Scissors className="w-5 h-5 text-emerald-600" />
+                            <h3 className="text-base font-bold text-slate-800">Último Procedimento Realizado</h3>
+                          </div>
+                          {overviewData?.lastProcedure && (
+                            <span className="text-xs text-slate-500">
+                              {new Date(overviewData.lastProcedure.date_performed).toLocaleDateString('pt-BR')}
+                            </span>
+                          )}
+                        </div>
+
+                        {overviewData?.lastProcedure ? (
+                          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <h4 className="font-bold text-slate-900 text-sm">{overviewData.lastProcedure.procedure_name}</h4>
+                              <span className="text-xs font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                                {overviewData.lastProcedure.quantity} {overviewData.lastProcedure.unit}
+                              </span>
+                            </div>
+                            <div className="text-xs text-slate-600">
+                              <strong>Região:</strong> {overviewData.lastProcedure.target_region || 'Geral'}
+                              {overviewData.lastProcedure.product_applied && (
+                                <span className="ml-3"><strong>Produto:</strong> {overviewData.lastProcedure.product_applied}</span>
+                              )}
+                            </div>
+                            {overviewData.lastProcedure.lot_number && (
+                              <div className="text-xs text-slate-500 font-mono">
+                                <strong>Lote:</strong> {overviewData.lastProcedure.lot_number}
+                                {overviewData.lastProcedure.expiry_date && ` • Val: ${overviewData.lastProcedure.expiry_date}`}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-center py-6 text-slate-500 text-sm">
+                            Nenhum procedimento registrado ainda.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Coluna 3: Próximo Retorno & Fotografias Recentes */}
+                    <div className="space-y-6">
+                      {/* Próximo Retorno */}
+                      <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs">
+                        <div className="flex items-center gap-2 mb-3">
+                          <Clock className="w-5 h-5 text-amber-600" />
+                          <h3 className="text-base font-bold text-slate-800">Próximo Retorno</h3>
+                        </div>
+
+                        {overviewData?.nextReturn ? (
+                          <div className="bg-amber-50/60 p-4 rounded-2xl border border-amber-200/80 space-y-2">
+                            <div className="text-xs font-bold text-amber-900">
+                              Data prevista: {new Date(overviewData.nextReturn.scheduled_date).toLocaleDateString('pt-BR')}
+                            </div>
+                            <div className="text-xs text-slate-600">
+                              Status: <span className="font-bold uppercase">{overviewData.nextReturn.status}</span>
+                            </div>
+                            {overviewData.nextReturn.touchup_required === 1 && (
+                              <div className="text-xs text-rose-700 font-bold bg-rose-50 p-2 rounded-lg border border-rose-200">
+                                Retoque previsto
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-xs text-slate-500 py-3">
+                            Nenhum retorno agendado no momento.
+                            <div className="mt-2">
+                              <button
+                                type="button"
+                                onClick={() => setIsNewReturnModalOpen(true)}
+                                className="text-xs font-bold text-teal-600 hover:text-teal-700 cursor-pointer"
+                              >
+                                + Agendar Retorno Clínico
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Fotos Recentes */}
+                      <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <Camera className="w-5 h-5 text-sky-600" />
+                            <h3 className="text-base font-bold text-slate-800">Fotos Recentes</h3>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => changeTab('photos')}
+                            className="text-xs font-bold text-sky-600 hover:text-sky-700 cursor-pointer"
+                          >
+                            Ver Todas
+                          </button>
+                        </div>
+
+                        {overviewData?.recentPhotos && overviewData.recentPhotos.length > 0 ? (
+                          <div className="grid grid-cols-3 gap-2">
+                            {overviewData.recentPhotos.slice(0, 6).map((ph: any) => (
+                              <div
+                                key={ph.id}
+                                onClick={() => setLightboxPhoto(ph)}
+                                className="aspect-square bg-slate-100 rounded-xl overflow-hidden relative cursor-pointer group border border-slate-200"
+                              >
+                                <img src={ph.photo_url} alt="Foto Clínica" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                                <span className="absolute bottom-1 right-1 text-[9px] font-bold px-1 rounded bg-black/60 text-white">
+                                  {ph.photo_type}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-center py-6 text-slate-500 text-xs">
+                            Nenhuma fotografia anexada.
+                            <div className="mt-2">
+                              <button
+                                type="button"
+                                onClick={() => setIsNewPhotoModalOpen(true)}
+                                className="text-xs font-bold text-sky-600 hover:text-sky-700 cursor-pointer"
+                              >
+                                + Anexar Foto
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ABA 2: AVALIAÇÃO ESTÉTICA (ADAPTÁVEL À ÁREA ATIVA) */}
+              {activeTab === 'assessment' && (
+                <div className="space-y-6 animate-in fade-in duration-150">
+                  <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xs">
+                    <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-100">
+                      <div>
+                        <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                          <FileText className={`w-5 h-5 ${areaTheme.accentText}`} />
+                          Avaliação Clínica Estruturada • {areaTheme.title}
+                        </h2>
+                        <p className="text-xs text-slate-500 mt-1">
+                          Documentação profissional minuciosa adaptada para {areaTheme.title.toLowerCase()}.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {assessments.length > 0 && (
+                          <span className="text-xs font-bold px-3 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                            {assessments.length} avaliações anteriores
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <form onSubmit={handleSaveAssessment} className="space-y-6">
+                      <div className="flex gap-3 items-center"><label className="text-xs font-bold">Data da avaliação<input aria-label="Data da avaliação" type="date" required value={assessmentForm.assessmentDate} onChange={event => setAssessmentForm({ ...assessmentForm, assessmentDate: event.target.value })} className="ml-2 p-2 border rounded-xl" /></label><button type="button" className="text-xs font-bold p-2 border rounded-xl" onClick={() => { setAssessmentForm(structuredClone(defaults.current.assessmentForm)); setEditing(null); setRecordIds(previous => ({ ...previous, [activeArea]: Object.fromEntries(Object.entries(previous[activeArea] || {}).filter(([kind]) => kind !== 'assessments')) })); }}>Nova avaliação</button></div>
+
+                      {/* Queixa Principal e Expectativa */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1 uppercase">
+                            Queixa Principal do Paciente *
+                          </label>
+                          <textarea
+                            rows={3}
+                            value={assessmentForm.complaint}
+                            onChange={e => setAssessmentForm({ ...assessmentForm, complaint: e.target.value })}
+                            placeholder="Descreva detalhadamente a queixa estética apresentada pelo paciente..."
+                            className="w-full text-xs p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1 uppercase">
+                            Expectativas &amp; Objetivos Almejados
+                          </label>
+                          <textarea
+                            rows={3}
+                            value={assessmentForm.expectations}
+                            onChange={e => setAssessmentForm({ ...assessmentForm, expectations: e.target.value })}
+                            placeholder="O que o paciente espera alcançar com os tratamentos propostos..."
+                            className="w-full text-xs p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      {/* CAMPOS ESPECÍFICOS POR ÁREA */}
+                      {activeArea === 'FACIAL' && (
+                        <div className="space-y-6 bg-rose-50/40 p-6 rounded-2xl border border-rose-100">
+                          <h3 className="text-sm font-extrabold text-rose-900 uppercase tracking-wider">
+                            Parâmetros Clínicos Faciais
+                          </h3>
+
+                          {/* Fototipo e Escala de Glogau */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-xs font-bold text-slate-700 mb-1">Fototipo de Fitzpatrick</label>
+                              <select
+                                value={assessmentForm.fitzpatrick}
+                                onChange={e => setAssessmentForm({ ...assessmentForm, fitzpatrick: e.target.value })}
+                                className="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-white"
+                              ><option value="">Não avaliado</option>
+                                <option value="I">Fototipo I - Pele muito clara, queima sempre, nunca bronzeia</option>
+                                <option value="II">Fototipo II - Pele clara, queima facilmente, bronzeia pouco</option>
+                                <option value="III">Fototipo III - Pele média clara, queima moderadamente, bronzeia gradual</option>
+                                <option value="IV">Fototipo IV - Pele moderadamente escura, queima pouco, bronzeia bem</option>
+                                <option value="V">Fototipo V - Pele escura, raramente queima, bronzeia intensamente</option>
+                                <option value="VI">Fototipo VI - Pele negra, nunca queima, totalmente pigmentada</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold text-slate-700 mb-1">Grau de Fotoenvelhecimento (Glogau)</label>
+                              <select
+                                value={assessmentForm.glogau}
+                                onChange={e => setAssessmentForm({ ...assessmentForm, glogau: e.target.value })}
+                                className="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-white"
+                              ><option value="">Não avaliado</option>
+                                <option value="I">Grau I (Leve) - Sem rugas estáticas, alterações pigmentares mínimas</option>
+                                <option value="II">Grau II (Moderado) - Rugas em movimento, lentigos senis precoces</option>
+                                <option value="III">Grau III (Avançado) - Rugas estáticas presentes em repouso, discromias</option>
+                                <option value="IV">Grau IV (Grave) - Rugas em toda a face, atrofia cutânea generalizada</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          {/* Rugas Dinâmicas */}
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-2">
+                              Linhas Dinâmicas &amp; Expressão
+                            </label>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                              {[
+                                'Fronte (Testa)',
+                                'Glabela (Bravo)',
+                                'Periorbicular (Pés de galinha)',
+                                'Perioral (Código de barras)',
+                                'Bunny Lines (Nariz)',
+                                'Mentoniano (Casca de laranja)'
+                              ].map(item => (
+                                <label key={item} className="flex items-center gap-2 p-2 bg-white rounded-xl border border-slate-200 text-xs font-medium cursor-pointer hover:bg-slate-50">
+                                  <input
+                                    type="checkbox"
+                                    checked={assessmentForm.dynamicLines.includes(item)}
+                                    onChange={() => toggleArrayItem('dynamicLines', item)}
+                                    className="rounded text-rose-600 focus:ring-rose-500"
+                                  />
+                                  <span>{item}</span>
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Rugas Estáticas e Sulcos */}
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-2">
+                              Linhas Estáticas, Sulcos &amp; Perda de Volume
+                            </label>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                              {[
+                                'Sulco Nasogeniano (Bigode chinês)',
+                                'Linhas de Marionete',
+                                'Sulco Nasojugal (Olheiras)',
+                                'Perda de Volume Malar',
+                                'Contorno Mandibular Indefinido',
+                                'Retrognatismo / Mento retraído',
+                                'Ptose Labial / Perda de contorno'
+                              ].map(item => (
+                                <label key={item} className="flex items-center gap-2 p-2 bg-white rounded-xl border border-slate-200 text-xs font-medium cursor-pointer hover:bg-slate-50">
+                                  <input
+                                    type="checkbox"
+                                    checked={assessmentForm.staticLines.includes(item)}
+                                    onChange={() => toggleArrayItem('staticLines', item)}
+                                    className="rounded text-rose-600 focus:ring-rose-500"
+                                  />
+                                  <span>{item}</span>
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {activeArea === 'CORPORAL' && (
+                        <div className="space-y-6 bg-teal-50/40 p-6 rounded-2xl border border-teal-100">
+                          <h3 className="text-sm font-extrabold text-teal-900 uppercase tracking-wider">
+                            Parâmetros Clínicos Corporais
+                          </h3>
+
+                          {/* Regiões Alvo */}
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-2">
+                              Regiões Anatômicas Alvo
+                            </label>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                              {['Abdômen Superior', 'Abdômen Inferior', 'Flancos', 'Glúteos', 'Culotes', 'Coxas Face Interna', 'Coxas Face Posterior', 'Braços / Tríceps', 'Costas / Subescapular'].map(reg => (
+                                <label key={reg} className="flex items-center gap-2 p-2 bg-white rounded-xl border border-slate-200 text-xs font-medium cursor-pointer hover:bg-slate-50">
+                                  <input
+                                    type="checkbox"
+                                    checked={assessmentForm.targetRegions.includes(reg)}
+                                    onChange={() => toggleArrayItem('targetRegions', reg)}
+                                    className="rounded text-teal-600 focus:ring-teal-500"
+                                  />
+                                  <span>{reg}</span>
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Tipo de Alteração e Celulite */}
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div>
+                              <label className="block text-xs font-bold text-slate-700 mb-1">Alteração Predominante</label>
+                              <select
+                                value={assessmentForm.bodyAlterationType}
+                                onChange={e => setAssessmentForm({ ...assessmentForm, bodyAlterationType: e.target.value })}
+                                className="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-white"
+                              ><option value="">Não avaliado</option>
+                                <option value="GORDURA_LOCALIZADA">Gordura Localizada</option>
+                                <option value="FLACIDEZ_TISSULAR">Flacidez Tissular (Cutânea)</option>
+                                <option value="FLACIDEZ_MUSCULAR">Flacidez Muscular</option>
+                                <option value="GORDURA_E_FLACIDEZ">Gordura Localizada + Flacidez</option>
+                                <option value="FIBROEDEMA_GELOIDE">Celulite / FEG Predominante</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold text-slate-700 mb-1">Grau de Celulite (FEG)</label>
+                              <select
+                                value={assessmentForm.celluliteGrade}
+                                onChange={e => setAssessmentForm({ ...assessmentForm, celluliteGrade: e.target.value })}
+                                className="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-white"
+                              ><option value="">Não avaliado</option>
+                                <option value="GRAU_0">Grau 0 - Ausente</option>
+                                <option value="GRAU_I">Grau I - Visível apenas à compressão</option>
+                                <option value="GRAU_II">Grau II - Visível em pé, sem palpação</option>
+                                <option value="GRAU_III">Grau III - Pele tipo casca de laranja constante</option>
+                                <option value="GRAU_IV">Grau IV - Nódulos fibróticos dolorosos e depressões</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold text-slate-700 mb-1">Estrias</label>
+                              <select
+                                value={assessmentForm.stretchMarks}
+                                onChange={e => setAssessmentForm({ ...assessmentForm, stretchMarks: e.target.value })}
+                                className="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-white"
+                              ><option value="">Não avaliado</option>
+                                <option value="NENHUMA">Ausentes</option>
+                                <option value="RUBRAS">Rubras (Recentes / Inflamatórias)</option>
+                                <option value="ALBAS">Albas (Antigas / Atróficas)</option>
+                                <option value="MISTAS">Mistas (Rubras e Albas)</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          {/* Medidas e Circunferências (cm) */}
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-2">
+                              Medidas e Circunferências Básicas (cm)
+                            </label>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-white p-4 rounded-xl border border-slate-200">
+                              <div>
+                                <span className="text-[11px] text-slate-500 font-bold block mb-1">Cintura</span>
+                                <input
+                                  type="text"
+                                  placeholder="cm"
+                                  value={assessmentForm.circumferences.cintura}
+                                  onChange={e => setAssessmentForm({
+                                    ...assessmentForm,
+                                    circumferences: { ...assessmentForm.circumferences, cintura: e.target.value }
+                                  })}
+                                  className="w-full text-xs p-2 rounded-lg border border-slate-200"
+                                />
+                              </div>
+                              <div>
+                                <span className="text-[11px] text-slate-500 font-bold block mb-1">Abdômen</span>
+                                <input
+                                  type="text"
+                                  placeholder="cm"
+                                  value={assessmentForm.circumferences.abdomen}
+                                  onChange={e => setAssessmentForm({
+                                    ...assessmentForm,
+                                    circumferences: { ...assessmentForm.circumferences, abdomen: e.target.value }
+                                  })}
+                                  className="w-full text-xs p-2 rounded-lg border border-slate-200"
+                                />
+                              </div>
+                              <div>
+                                <span className="text-[11px] text-slate-500 font-bold block mb-1">Quadril</span>
+                                <input
+                                  type="text"
+                                  placeholder="cm"
+                                  value={assessmentForm.circumferences.quadril}
+                                  onChange={e => setAssessmentForm({
+                                    ...assessmentForm,
+                                    circumferences: { ...assessmentForm.circumferences, quadril: e.target.value }
+                                  })}
+                                  className="w-full text-xs p-2 rounded-lg border border-slate-200"
+                                />
+                              </div>
+                              <div>
+                                <span className="text-[11px] text-slate-500 font-bold block mb-1">Coxa Dir / Esq</span>
+                                <div className="flex gap-1">
+                                  <input
+                                    type="text"
+                                    placeholder="D"
+                                    value={assessmentForm.circumferences.coxaDir}
+                                    onChange={e => setAssessmentForm({
+                                      ...assessmentForm,
+                                      circumferences: { ...assessmentForm.circumferences, coxaDir: e.target.value }
+                                    })}
+                                    className="w-1/2 text-xs p-2 rounded-lg border border-slate-200"
+                                  />
+                                  <input
+                                    type="text"
+                                    placeholder="E"
+                                    value={assessmentForm.circumferences.coxaEsq}
+                                    onChange={e => setAssessmentForm({
+                                      ...assessmentForm,
+                                      circumferences: { ...assessmentForm.circumferences, coxaEsq: e.target.value }
+                                    })}
+                                    className="w-1/2 text-xs p-2 rounded-lg border border-slate-200"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {activeArea === 'CAPILAR' && (
+                        <div className="space-y-6 bg-amber-50/40 p-6 rounded-2xl border border-amber-100">
+                          <h3 className="text-sm font-extrabold text-amber-900 uppercase tracking-wider">
+                            Parâmetros Clínicos Capilares
+                          </h3>
+
+                          {/* Padrão e Classificação */}
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div>
+                              <label className="block text-xs font-bold text-slate-700 mb-1">Padrão de Queda</label>
+                              <select
+                                value={assessmentForm.hairLossPattern}
+                                onChange={e => setAssessmentForm({ ...assessmentForm, hairLossPattern: e.target.value })}
+                                className="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-white"
+                              ><option value="">Não avaliado</option>
+                                <option value="DIFUSA">Difusa (Eflúvio Telógeno)</option>
+                                <option value="ANDROGENETICA_MASCULINA">Androgenética Masculina (Frontal/Vértex)</option>
+                                <option value="ANDROGENETICA_FEMININA">Androgenética Feminina (Linha Média)</option>
+                                <option value="AREATA">Em Placas (Alopecia Areata)</option>
+                                <option value="CICATRICIAL">Cicatricial / Inflamatória</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold text-slate-700 mb-1">Escala Norwood / Ludwig</label>
+                              <select
+                                value={assessmentForm.hairLossScale}
+                                onChange={e => setAssessmentForm({ ...assessmentForm, hairLossScale: e.target.value })}
+                                className="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-white"
+                              ><option value="">Não avaliado</option>
+                                <option value="NORWOOD_I">Norwood I - Linha anterior preservada</option>
+                                <option value="NORWOOD_II">Norwood II - Recesso frontotemporal leve</option>
+                                <option value="NORWOOD_III">Norwood III - Entradas profundas e/ou vértex</option>
+                                <option value="NORWOOD_IV">Norwood IV - Rarefação acentuada frontal e vértex</option>
+                                <option value="LUDWIG_I">Ludwig I (Feminino) - Rarefação leve na coroa</option>
+                                <option value="LUDWIG_II">Ludwig II (Feminino) - Rarefação moderada</option>
+                                <option value="LUDWIG_III">Ludwig III (Feminino) - Rarefação severa</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold text-slate-700 mb-1">Teste de Tração (Pull Test)</label>
+                              <select
+                                value={assessmentForm.pullTest}
+                                onChange={e => setAssessmentForm({ ...assessmentForm, pullTest: e.target.value })}
+                                className="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-white"
+                              ><option value="">Não avaliado</option>
+                                <option value="NEGATIVO">Negativo (Fisiológico &lt; 3 fios)</option>
+                                <option value="POSITIVO_LEVE">Positivo Leve (3 a 5 fios)</option>
+                                <option value="POSITIVO_ACENTUADO">Positivo Acentuado (&gt; 5 fios anágenos/telógenos)</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          {/* Couro Cabeludo e Fibras */}
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-white p-4 rounded-xl border border-slate-200">
+                            <div>
+                              <span className="text-[11px] text-slate-500 font-bold block mb-1">Oleosidade</span>
+                              <select
+                                value={assessmentForm.scalpCondition.oiliness}
+                                onChange={e => setAssessmentForm({
+                                  ...assessmentForm,
+                                  scalpCondition: { ...assessmentForm.scalpCondition, oiliness: e.target.value }
+                                })}
+                                className="w-full text-xs p-2 rounded-lg border border-slate-200 bg-white"
+                              ><option value="">Não avaliado</option>
+                                <option value="NORMAL">Normal</option>
+                                <option value="AUMENTADA">Seborréia Leve/Mod</option>
+                                <option value="EXCESSIVA">Seborréia Intensa</option>
+                                <option value="REDUZIDA">Couro Seco</option>
+                              </select>
+                            </div>
+                            <div>
+                              <span className="text-[11px] text-slate-500 font-bold block mb-1">Descamação / Caspa</span>
+                              <select
+                                value={assessmentForm.scalpCondition.flaking}
+                                onChange={e => setAssessmentForm({
+                                  ...assessmentForm,
+                                  scalpCondition: { ...assessmentForm.scalpCondition, flaking: e.target.value }
+                                })}
+                                className="w-full text-xs p-2 rounded-lg border border-slate-200 bg-white"
+                              ><option value="">Não avaliado</option>
+                                <option value="AUSENTE">Ausente</option>
+                                <option value="FINA_SECA">Pitiríase Seca</option>
+                                <option value="ADERENTE">Dermatite Seborreica</option>
+                              </select>
+                            </div>
+                            <div>
+                              <span className="text-[11px] text-slate-500 font-bold block mb-1">Miniaturização</span>
+                              <select
+                                value={assessmentForm.fiberDensity}
+                                onChange={e => setAssessmentForm({ ...assessmentForm, fiberDensity: e.target.value })}
+                                className="w-full text-xs p-2 rounded-lg border border-slate-200 bg-white"
+                              ><option value="">Não avaliado</option>
+                                <option value="AUSENTE">Fios com calibre uniforme</option>
+                                <option value="MODERADA">Miniaturização moderada (&gt;20%)</option>
+                                <option value="SEVERA">Miniaturização acentuada (&gt;50%)</option>
+                              </select>
+                            </div>
+                            <div>
+                              <span className="text-[11px] text-slate-500 font-bold block mb-1">Histórico Familiar</span>
+                              <input
+                                type="text"
+                                placeholder="Pai, Mãe, Avós..."
+                                value={assessmentForm.familyHistory}
+                                onChange={e => setAssessmentForm({ ...assessmentForm, familyHistory: e.target.value })}
+                                className="w-full text-xs p-2 rounded-lg border border-slate-200"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Histórico, Alergias e Conduta */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1 uppercase">
+                            Histórico Estético &amp; Procedimentos Prévios
+                          </label>
+                          <textarea
+                            rows={3}
+                            value={assessmentForm.previousTreatments}
+                            onChange={e => setAssessmentForm({ ...assessmentForm, previousTreatments: e.target.value })}
+                            placeholder="Toxina, preenchimentos, bioestimuladores, fios, cirurgias prévias ou reações anteriores..."
+                            className="w-full text-xs p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1 uppercase">
+                            Alergias, Medicações &amp; Contraindicações
+                          </label>
+                          <textarea
+                            rows={3}
+                            value={assessmentForm.allergies}
+                            onChange={e => setAssessmentForm({ ...assessmentForm, allergies: e.target.value })}
+                            placeholder="Alergia a anestésicos, colágeno, anticoagulantes, gestação, lactação, doenças autoimunes..."
+                            className="w-full text-xs p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1 uppercase">
+                          Conduta Profissional &amp; Recomendações
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={assessmentForm.clinicalConduct}
+                          onChange={e => setAssessmentForm({ ...assessmentForm, clinicalConduct: e.target.value })}
+                          placeholder="Conduta clínica planejada, protocolo de preparo prévio, orientações domiciliares..."
+                          className="w-full text-xs p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                        />
+                      </div>
+
+                      {/* Botão de Salvar Avaliação */}
+                      <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+                        <div className="text-xs text-slate-500 flex items-center gap-1.5">
+                          <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                          <span>Registro clínico de responsabilidade profissional estrita.</span>
+                        </div>
+                        <button
+                          type="submit" disabled={savingRecord || isSavingAssessment}
+                          className={`px-6 py-2.5 rounded-xl text-white text-xs font-bold shadow-md cursor-pointer transition-colors flex items-center gap-2 ${
+                            activeArea === 'FACIAL'
+                              ? 'bg-rose-600 hover:bg-rose-700'
+                              : activeArea === 'CORPORAL'
+                              ? 'bg-teal-600 hover:bg-teal-700'
+                              : 'bg-amber-600 hover:bg-amber-700'
+                          }`}
+                        >
+                          <Save className="w-4 h-4" />
+                          <span>{isSavingAssessment ? 'Salvando...' : 'Salvar Avaliação'}</span>
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+
+                  {/* Lista de Avaliações Anteriores */}
+                  {assessments.length > 0 && (
+                    <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs">
+                      <h3 className="text-sm font-bold text-slate-900 mb-4">
+                        Histórico de Avaliações do Paciente ({activeArea})
+                      </h3>
+                      <button type="button" disabled={comparisonIds.length !== 2} className="text-xs font-bold p-2 border rounded-xl mb-3" onClick={() => setShowComparison(true)}>Comparar avaliações selecionadas</button>
+                      <div className="space-y-3">
+                        {assessments.map(ass => (
+                          <div
+                            key={ass.id}
+                            className="p-4 rounded-2xl border border-slate-200 bg-slate-50 flex items-center justify-between"
+                          >
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-slate-800">
+                                  {new Date(ass.created_at).toLocaleDateString('pt-BR')}
+                                </span>
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${areaTheme.badge}`}>
+                                  {ass.area}
+                                </span>
+                                {ass.phototype && (
+                                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600">
+                                    Fototipo {ass.phototype}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-slate-600 mt-1 line-clamp-1">
+                                <strong>Queixa:</strong> {ass.complaint}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedAssessmentDetail(ass)}
+                              className="px-3 py-1.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-100 cursor-pointer"
+                            >
+                              Ver Ficha
+                            </button>
+                            {recordActions('assessments', ass)}
+                            <label className="text-xs flex gap-1"><input type="checkbox" aria-label={`Comparar avaliação ${ass.assessment_date}`} checked={comparisonIds.includes(ass.id)} onChange={event => setComparisonIds(previous => event.target.checked ? [...previous.slice(-1), ass.id] : previous.filter(id => id !== ass.id))} />Comparar</label>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ABA 3: FOTOGRAFIAS CLÍNICAS */}
+              {activeTab === 'photos' && (
+                <div className="space-y-6 animate-in fade-in duration-150">
+                  <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                      <div>
+                        <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                          <Camera className="w-5 h-5 text-sky-600" />
+                          Documentação Fotográfica Clínica
+                        </h2>
+                        <p className="text-xs text-slate-500 mt-1">
+                          Galeria padronizada por paciente, área e ângulo anatômico para acompanhamento visual.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => changeTab('before_after')}
+                          className="px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <ArrowLeftRight className="w-3.5 h-3.5" />
+                          <span>Antes × Depois</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsNewPhotoModalOpen(true)}
+                          className="px-4 py-2 rounded-xl text-xs font-bold bg-sky-600 text-white hover:bg-sky-700 shadow-md transition-colors flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>Anexar Nova Foto</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {photos.length === 0 ? (
+                      <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                        <Camera className="w-10 h-10 text-slate-400 mx-auto mb-2" />
+                        <p className="text-sm font-semibold text-slate-600">Nenhuma fotografia anexada ainda.</p>
+                        <p className="text-xs text-slate-400 max-w-sm mx-auto mt-1">
+                          Adicione fotos em ângulos padronizados (Frontal, Perfil D/E, 45°) para documentar a evolução estética.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setIsNewPhotoModalOpen(true)}
+                          className="mt-4 px-4 py-2 bg-sky-600 text-white text-xs font-bold rounded-xl hover:bg-sky-700 cursor-pointer"
+                        >
+                          + Anexar Primeira Foto
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                        {photos.map(ph => (
+                          <div
+                            key={ph.id}
+                            className="bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden flex flex-col group hover:shadow-md transition-all"
+                          >
+                            <div
+                              onClick={() => setLightboxPhoto(ph)}
+                              className="aspect-square bg-slate-200 relative cursor-pointer overflow-hidden"
+                            >
+                              <img
+                                src={ph.photo_url}
+                                alt={ph.view_angle}
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                              />
+                              <span className={`absolute top-2 left-2 text-[10px] font-extrabold px-2 py-0.5 rounded-md shadow-xs ${
+                                ph.photo_type === 'ANTES'
+                                  ? 'bg-amber-500 text-white'
+                                  : ph.photo_type === 'DEPOIS'
+                                  ? 'bg-emerald-600 text-white'
+                                  : 'bg-sky-600 text-white'
+                              }`}>
+                                {ph.photo_type}
+                              </span>
+                              <span className="absolute bottom-2 right-2 text-[9px] font-bold px-1.5 py-0.5 rounded bg-black/70 text-white">
+                                {ph.view_angle}
+                              </span>
+                            </div>
+                            <div className="p-3 text-xs flex-1 flex flex-col justify-between">
+                              <div>
+                                <div className="text-[11px] text-slate-400 font-mono">
+                                  {new Date(ph.taken_at).toLocaleDateString('pt-BR')}
+                                </div>
+                                {ph.notes && <p className="text-slate-600 text-xs mt-1 line-clamp-2">{ph.notes}</p>}
+                              </div>
+                              <div className="mt-2 pt-2 border-t border-slate-200/60 flex items-center justify-between">
+                                <span className="text-[10px] font-bold uppercase text-slate-500">{ph.area}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setLightboxPhoto(ph)}
+                                  className="text-[11px] font-bold text-sky-600 hover:text-sky-700 cursor-pointer"
+                                >
+                                  Ampliar
+                                </button>
+                                {recordActions('photos', ph)}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* ABA 4: PLANEJAMENTO (TREATMENT PLANNING) */}
+              {activeTab === 'planning' && (
+                <div className="space-y-6 animate-in fade-in duration-150">
+                  <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                      <div>
+                        <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                          <Calendar className="w-5 h-5 text-sky-600" />
+                          Planos de Tratamento Estético
+                        </h2>
+                        <p className="text-xs text-slate-500 mt-1">
+                          Cronograma de procedimentos, sessões estimadas e intervalos recomendados.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsNewPlanModalOpen(true)}
+                        className="px-4 py-2 rounded-xl text-xs font-bold bg-sky-600 text-white hover:bg-sky-700 shadow-md transition-colors flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>Criar Novo Plano</span>
+                      </button>
+                    </div>
+
+                    {plans.length === 0 ? (
+                      <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                        <Calendar className="w-10 h-10 text-slate-400 mx-auto mb-2" />
+                        <p className="text-sm font-semibold text-slate-600">Nenhum plano de tratamento cadastrado.</p>
+                        <p className="text-xs text-slate-400 max-w-sm mx-auto mt-1">
+                          Organize os procedimentos recomendados, sessões e intervalos em um planejamento estruturado.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setIsNewPlanModalOpen(true)}
+                          className="mt-4 px-4 py-2 bg-sky-600 text-white text-xs font-bold rounded-xl hover:bg-sky-700 cursor-pointer"
+                        >
+                          + Criar Primeiro Plano
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-6">
+                        {plans.map(plan => {
+                          const items = plan.items || [];
+                          const completedCount = items.filter((i: any) => i.status === 'REALIZADO').length;
+                          const progress = items.length > 0 ? Math.round((completedCount / items.length) * 100) : 0;
+
+                          return (
+                            <div key={plan.id} className="bg-slate-50 p-6 rounded-2xl border border-slate-200">
+                              {recordActions('plans', plan)}
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <h3 className="font-bold text-slate-900 text-base">{plan.title}</h3>
+                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${areaTheme.badge}`}>
+                                      {plan.area}
+                                    </span>
+                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                      plan.status === 'CONCLUIDO'
+                                        ? 'bg-emerald-100 text-emerald-800'
+                                        : 'bg-sky-100 text-sky-800'
+                                    }`}>
+                                      {plan.status}
+                                    </span>
+                                  </div>
+                                  {plan.objectives && (
+                                    <p className="text-xs text-slate-600 mt-1">{plan.objectives}</p>
+                                  )}
+                                </div>
+                                <div className="text-xs font-bold text-slate-600 flex items-center gap-2">
+                                  <span>Progresso: {completedCount}/{items.length} ({progress}%)</span>
+                                </div>
+                              </div>
+
+                              {/* Barra de Progresso */}
+                              <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden mb-4">
+                                <div
+                                  className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                                  style={{ width: `${progress}%` }}
+                                />
+                              </div>
+
+                              {/* Tabela de Itens do Plano */}
+                              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                                <div className="divide-y divide-slate-100">
+                                  {items.map((item: any) => (
+                                    <div key={item.id} className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                                      <div>
+                                        <div className="flex items-center gap-2">
+                                          <span className="font-bold text-slate-800">{item.procedure_name}</span>
+                                          {item.target_region && (
+                                            <span className="text-slate-500 font-medium">({item.target_region})</span>
+                                          )}
+                                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase ${
+                                            item.priority === 'ALTA'
+                                              ? 'bg-rose-100 text-rose-700'
+                                              : 'bg-slate-100 text-slate-600'
+                                          }`}>
+                                            Prioridade {item.priority}
+                                          </span>
+                                        </div>
+                                        <div className="text-[11px] text-slate-500 mt-0.5">
+                                          Sessões: <strong>{item.sessions_completed || 0}/{item.sessions_planned}</strong>
+                                          {item.recommended_interval_days && ` • Intervalo: ${item.recommended_interval_days} dias`}
+                                        </div>
+                                      </div>
+
+                                      <div className="flex items-center gap-2">
+                                        {/* Status seletor rápido */}
+                                        <select
+                                          value={item.status}
+                                          onChange={e => handleUpdatePlanItemStatus(plan.id, item.id, e.target.value)}
+                                          className={`text-xs font-bold px-2.5 py-1 rounded-lg border cursor-pointer ${
+                                            item.status === 'REALIZADO'
+                                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                              : item.status === 'EM_ANDAMENTO'
+                                              ? 'bg-sky-50 text-sky-700 border-sky-200'
+                                              : 'bg-amber-50 text-amber-700 border-amber-200'
+                                          }`}
+                                        ><option value="">Selecione / não avaliado</option>
+                                          <option value="PLANEJADO">Planejado</option>
+                                          <option value="EM_ANDAMENTO">Em Andamento</option>
+                                          <option value="REALIZADO">Realizado</option>
+                                          <option value="CANCELADO">Cancelado</option>
+                                        </select>
+
+                                        {item.status !== 'REALIZADO' && (
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setProcedureForm(prev => ({
+                                                ...prev,
+                                                procedure_name: item.procedure_name,
+                                                target_region: item.target_region || '',
+                                                area: plan.area,
+                                                plan_id: plan.id,
+                                                plan_item_id: item.id
+                                              }));
+                                              setIsNewProcedureModalOpen(true);
+                                            }}
+                                            className="px-2.5 py-1 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors cursor-pointer"
+                                          >
+                                            Registrar Execução
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* ABA 5: PROCEDIMENTOS CLÍNICOS REALIZADOS */}
+              {activeTab === 'procedures' && (
+                <div className="space-y-6 animate-in fade-in duration-150">
+                  <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                      <div>
+                        <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                          <Scissors className="w-5 h-5 text-emerald-600" />
+                          Procedimentos Clínicos Realizados
+                        </h2>
+                        <p className="text-xs text-slate-500 mt-1">
+                          Registro rastreável com lote, validade, substância aplicada e baixa de estoque.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsNewProcedureModalOpen(true)}
+                        className="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 shadow-md transition-colors flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>Registrar Novo Procedimento</span>
+                      </button>
+                    </div>
+
+                    {procedures.length === 0 ? (
+                      <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                        <Scissors className="w-10 h-10 text-slate-400 mx-auto mb-2" />
+                        <p className="text-sm font-semibold text-slate-600">Nenhum procedimento registrado ainda.</p>
+                        <p className="text-xs text-slate-400 max-w-sm mx-auto mt-1">
+                          Registre aplicações de toxina, preenchedores, bioestimuladores, peelings ou mesoterapia com controle de lote.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setIsNewProcedureModalOpen(true)}
+                          className="mt-4 px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 cursor-pointer"
+                        >
+                          + Registrar Procedimento
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {procedures.map(proc => (
+                          <div
+                            key={proc.id}
+                            className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4"
+                          >
+                            {recordActions('procedures', proc)}
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-extrabold text-slate-900 text-sm">{proc.procedure_name}</span>
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${areaTheme.badge}`}>
+                                  {proc.area}
+                                </span>
+                                {proc.target_region && (
+                                  <span className="text-xs font-semibold text-slate-600 bg-white px-2 py-0.5 rounded-md border border-slate-200">
+                                    {proc.target_region}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-xs text-slate-600 flex items-center gap-3 flex-wrap">
+                                <span>Data: <strong>{new Date(proc.date_performed).toLocaleDateString('pt-BR')}</strong></span>
+                                {proc.product_applied && (
+                                  <span>Produto: <strong>{proc.product_applied}</strong></span>
+                                )}
+                                <span>Dose: <strong>{proc.quantity} {proc.unit}</strong></span>
+                              </div>
+                              {(proc.lot_number || proc.expiry_date) && (
+                                <div className="text-xs text-slate-500 font-mono flex items-center gap-3">
+                                  {proc.lot_number && <span>Lote: <strong>{proc.lot_number}</strong></span>}
+                                  {proc.expiry_date && <span>Validade: <strong>{proc.expiry_date}</strong></span>}
+                                </div>
+                              )}
+                              {proc.post_instructions && (
+                                <p className="text-[11px] text-slate-500 mt-1 italic">
+                                  Orientações: {proc.post_instructions}
+                                </p>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setReturnForm(prev => ({
+                                    ...prev,
+                                    procedure_id: proc.id,
+                                    area: proc.area
+                                  }));
+                                  setIsNewReturnModalOpen(true);
+                                }}
+                                className="px-3 py-1.5 text-xs font-bold text-teal-700 bg-white hover:bg-teal-50 border border-slate-200 rounded-xl transition-colors cursor-pointer"
+                              >
+                                Agendar Retorno
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* ABA 6: ZEMDA360 (MAPEAMENTO ANATÔMICO INTEGRADO) */}
+              {activeTab === 'zemda360' && !isZemda360ModalOpen && (
+                <div className="space-y-6 animate-in fade-in duration-150">
+                  <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                          <Activity className="w-5 h-5 text-teal-600" />
+                          Zemda360 • Mapeamento Anatômico ({areaTheme.title})
+                        </h2>
+                        <p className="text-xs text-slate-500 mt-1">
+                          Motor anatômico integrado: marcações de pontos, desenho em camadas e registro vetorial direto.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={async () => { if (!mapSave.current || await mapSave.current()) setIsZemda360ModalOpen(true); }}
+                        className="px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Maximize2 className="w-4 h-4" />
+                        <span>Abrir em Tela Cheia</span>
+                      </button>
+                    </div>
+
+                    {/* Canvas do Zemda360 embutido */}
+                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                      <ZemdaBodyWorkspace
+                        key={`${selectedPatientId}:${activeArea}`}
+                        patientId={selectedPatientId}
+                        initialMapType={areaTheme.mapType}
+                        module={`estetic:${activeArea}`}
+                        appointmentId={encounterId || directAppointmentId.current}
+                        registerSave={save => { mapSave.current = save; }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ABA 7: EVOLUÇÕES CLÍNICAS */}
+              {activeTab === 'evolutions' && (
+                <div className="space-y-6 animate-in fade-in duration-150">
+                  <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                      <div>
+                        <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                          <CheckCircle2 className="w-5 h-5 text-sky-600" />
+                          Evoluções Clínicas do Tratamento
+                        </h2>
+                        <p className="text-xs text-slate-500 mt-1">
+                          Registro de resposta tecidual, acomodação de produtos, queixas e orientações adotadas.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsNewEvolutionModalOpen(true)}
+                        className="px-4 py-2 rounded-xl text-xs font-bold bg-sky-600 text-white hover:bg-sky-700 shadow-md transition-colors flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>Nova Evolução</span>
+                      </button>
+                    </div>
+
+                    {evolutions.length === 0 ? (
+                      <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                        <CheckCircle2 className="w-10 h-10 text-slate-400 mx-auto mb-2" />
+                        <p className="text-sm font-semibold text-slate-600">Nenhuma evolução registrada.</p>
+                        <p className="text-xs text-slate-400 max-w-sm mx-auto mt-1">
+                          Documente a resposta biológica, resolução de edema e satisfação do paciente entre as sessões.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setIsNewEvolutionModalOpen(true)}
+                          className="mt-4 px-4 py-2 bg-sky-600 text-white text-xs font-bold rounded-xl hover:bg-sky-700 cursor-pointer"
+                        >
+                          + Registrar Primeira Evolução
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {evolutions.map(ev => (
+                          <div key={ev.id} className="bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-3">
+                            {recordActions('evolutions', ev)}
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-slate-900 text-sm">
+                                  {new Date(ev.evolution_date).toLocaleDateString('pt-BR')}
+                                </span>
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${areaTheme.badge}`}>
+                                  {ev.area}
+                                </span>
+                              </div>
+                              <span className="text-xs text-slate-500 font-medium">
+                                Profissional: {ev.professional_name || 'Profissional da Clínica'}
+                              </span>
+                            </div>
+
+                            {ev.biological_response && (
+                              <div>
+                                <span className="text-xs font-bold text-slate-500 uppercase">Resposta Biológica / Tecidual:</span>
+                                <p className="text-xs text-slate-800 mt-0.5 font-medium">{ev.biological_response}</p>
+                              </div>
+                            )}
+
+                            {ev.patient_feedback && (
+                              <div>
+                                <span className="text-xs font-bold text-slate-500 uppercase">Relato do Paciente:</span>
+                                <p className="text-xs text-slate-700 mt-0.5">{ev.patient_feedback}</p>
+                              </div>
+                            )}
+
+                            {ev.conduct && (
+                              <div>
+                                <span className="text-xs font-bold text-slate-500 uppercase">Conduta Profissional Adotada:</span>
+                                <p className="text-xs text-slate-700 mt-0.5">{ev.conduct}</p>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* ABA 8: RETORNOS CLÍNICOS */}
+              {activeTab === 'returns' && (
+                <div className="space-y-6 animate-in fade-in duration-150">
+                  <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                      <div>
+                        <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                          <Clock className="w-5 h-5 text-amber-600" />
+                          Acompanhamento de Retornos &amp; Retoques
+                        </h2>
+                        <p className="text-xs text-slate-500 mt-1">
+                          Controle de retornos pós-procedimento (15, 30 ou 60 dias) e necessidade de retoques.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsNewReturnModalOpen(true)}
+                        className="px-4 py-2 rounded-xl text-xs font-bold bg-amber-600 text-white hover:bg-amber-700 shadow-md transition-colors flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>Agendar Retorno</span>
+                      </button>
+                    </div>
+
+                    {returnsList.length === 0 ? (
+                      <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                        <Clock className="w-10 h-10 text-slate-400 mx-auto mb-2" />
+                        <p className="text-sm font-semibold text-slate-600">Nenhum retorno agendado ou registrado.</p>
+                        <p className="text-xs text-slate-400 max-w-sm mx-auto mt-1">
+                          Agende o retorno de 15 dias para reavaliação de toxina ou acompanhamento pós-bioestimulador.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setIsNewReturnModalOpen(true)}
+                          className="mt-4 px-4 py-2 bg-amber-600 text-white text-xs font-bold rounded-xl hover:bg-amber-700 cursor-pointer"
+                        >
+                          + Agendar Retorno
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {returnsList.map(ret => (
+                          <div
+                            key={ret.id}
+                            className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs"
+                          >
+                            {recordActions('returns', ret)}
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-slate-900">
+                                  Previsto: {new Date(ret.scheduled_date).toLocaleDateString('pt-BR')}
+                                </span>
+                                {ret.actual_date && (
+                                  <span className="text-slate-500">
+                                    (Realizado: {new Date(ret.actual_date).toLocaleDateString('pt-BR')})
+                                  </span>
+                                )}
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${areaTheme.badge}`}>
+                                  {ret.area}
+                                </span>
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                  ret.status === 'COMPARECEU'
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : ret.status === 'RETOQUE_REALIZADO'
+                                    ? 'bg-rose-100 text-rose-800'
+                                    : 'bg-amber-100 text-amber-800'
+                                }`}>
+                                  {ret.status}
+                                </span>
+                              </div>
+                              {ret.evaluation_notes && (
+                                <p className="text-slate-700 mt-1">{ret.evaluation_notes}</p>
+                              )}
+                              {ret.touchup_required === 1 && (
+                                <div className="text-rose-700 font-bold bg-rose-50 p-2 rounded-lg border border-rose-200 mt-1">
+                                  Retoque realizado / necessário: {ret.touchup_description || 'Detalhes do retoque'}
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              {ret.status === 'AGENDADO' && (
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    try {
+                                      await ApiClient.patch(`/v1/estetic/returns/${ret.id}`, {
+                                        status: 'COMPARECEU',
+                                        actualDate: new Date().toISOString().slice(0, 10)
+                                      });
+                                      showToast('Presença confirmada!', 'success');
+                                      loadPatientData(selectedPatientId, activeArea);
+                                    } catch (err: any) {
+                                      showToast(err.message, 'error');
+                                    }
+                                  }}
+                                  className="px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl cursor-pointer"
+                                >
+                                  Confirmar Comparecimento
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* ABA 9: ANTES × DEPOIS (COMPARADOR VISUAL) */}
+              {activeTab === 'before_after' && (
+                <div className="space-y-6 animate-in fade-in duration-150">
+                  <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs">
+                    <div className="flex items-center justify-between mb-6">
+                      <div>
+                        <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                          <ArrowLeftRight className="w-5 h-5 text-indigo-600" />
+                          Comparador Visual • Antes × Depois
+                        </h2>
+                        <p className="text-xs text-slate-500 mt-1">
+                          Comparação lado a lado com pareamento automático pelo mesmo ângulo de vista e área.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsNewPhotoModalOpen(true)}
+                        className="px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 shadow-md transition-colors cursor-pointer"
+                      >
+                        + Anexar Fotos
+                      </button>
+                    </div>
+
+                    {beforeAfterPairs.length === 0 ? (
+                      <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                        <ArrowLeftRight className="w-10 h-10 text-slate-400 mx-auto mb-2" />
+                        <p className="text-sm font-semibold text-slate-600">Nenhum par Antes × Depois identificado.</p>
+                        <p className="text-xs text-slate-400 max-w-sm mx-auto mt-1">
+                          Anexe pelo menos uma foto com tipo <strong>ANTES</strong> e outra com tipo <strong>DEPOIS</strong> sob o mesmo ângulo de vista (ex: Frontal) para visualizar a comparação.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-8">
+                        {beforeAfterPairs.map((pair, idx) => (
+                          <div key={idx} className="bg-slate-50 p-6 rounded-3xl border border-slate-200 space-y-4">
+                            <div className="flex items-center justify-between border-b border-slate-200/80 pb-3">
+                              <div className="flex items-center gap-2">
+                                <span className="font-extrabold text-slate-900 text-sm">
+                                  Ângulo: {pair.view_angle}
+                                </span>
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${areaTheme.badge}`}>
+                                  {pair.area}
+                                </span>
+                              </div>
+                              <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-200">
+                                Pareamento Clínico
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              {/* Foto ANTES */}
+                              <div className="bg-white p-3 rounded-2xl border border-slate-200 space-y-2">
+                                <div className="flex items-center justify-between text-xs">
+                                  <span className="font-extrabold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-md border border-amber-200 uppercase">
+                                    Antes
+                                  </span>
+                                  <span className="text-slate-400 font-mono text-[11px]">
+                                    {new Date(pair.before.taken_at).toLocaleDateString('pt-BR')}
+                                  </span>
+                                </div>
+                                <div
+                                  onClick={() => setLightboxPhoto(pair.before)}
+                                  className="aspect-square bg-slate-100 rounded-xl overflow-hidden cursor-pointer"
+                                >
+                                  <img
+                                    src={pair.before.photo_url}
+                                    alt="Foto Antes"
+                                    className="w-full h-full object-cover hover:scale-105 transition-transform"
+                                  />
+                                </div>
+                                {pair.before.notes && (
+                                  <p className="text-[11px] text-slate-500 italic line-clamp-1">{pair.before.notes}</p>
+                                )}
+                              </div>
+
+                              {/* Foto DEPOIS */}
+                              <div className="bg-white p-3 rounded-2xl border border-slate-200 space-y-2">
+                                <div className="flex items-center justify-between text-xs">
+                                  <span className="font-extrabold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-md border border-emerald-200 uppercase">
+                                    Depois
+                                  </span>
+                                  <span className="text-slate-400 font-mono text-[11px]">
+                                    {new Date(pair.after.taken_at).toLocaleDateString('pt-BR')}
+                                  </span>
+                                </div>
+                                <div
+                                  onClick={() => setLightboxPhoto(pair.after)}
+                                  className="aspect-square bg-slate-100 rounded-xl overflow-hidden cursor-pointer"
+                                >
+                                  <img
+                                    src={pair.after.photo_url}
+                                    alt="Foto Depois"
+                                    className="w-full h-full object-cover hover:scale-105 transition-transform"
+                                  />
+                                </div>
+                                {pair.after.notes && (
+                                  <p className="text-[11px] text-slate-500 italic line-clamp-1">{pair.after.notes}</p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* ABA 10: HISTÓRICO LONGITUDINAL (TIMELINE) */}
+              {activeTab === 'history' && (
+                <div className="space-y-6 animate-in fade-in duration-150">
+                  <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs">
+                    <div className="flex items-center justify-between mb-6">
+                      <div>
+                        <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                          <RefreshCw className="w-5 h-5 text-slate-700" />
+                          Linha do Tempo Longitudinal
+                        </h2>
+                        <p className="text-xs text-slate-500 mt-1">
+                          Histórico consolidado cronológico de todos os atos clínicos estéticos.
+                        </p>
+                      </div>
+                    </div>
+
+                    {timeline.length === 0 ? (
+                      <div className="text-center py-12 text-slate-500 text-sm">
+                        Nenhum registro encontrado no histórico.
+                      </div>
+                    ) : (
+                      <div className="relative pl-6 space-y-6 before:content-[''] before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200">
+                        {timeline.map((event, idx) => (
+                          <div key={idx} className="relative flex items-start gap-4">
+                            <div className="absolute -left-6 top-1.5 w-5 h-5 rounded-full bg-white border-2 border-slate-400 flex items-center justify-center">
+                              <span className="w-2 h-2 rounded-full bg-slate-600" />
+                            </div>
+                            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 w-full space-y-1">
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="font-extrabold uppercase text-slate-700">
+                                  {event.event_type.replace('_', ' ')}
+                                </span>
+                                <span className="text-slate-400 font-mono">
+                                  {new Date(event.event_date).toLocaleDateString('pt-BR')}
+                                </span>
+                              </div>
+                              <h4 className="text-sm font-bold text-slate-900">{event.title}</h4>
+                              {event.description && (
+                                <p className="text-xs text-slate-600">{event.description}</p>
+                              )}
+                              {event.badge && (
+                                <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600 mt-1">
+                                  {event.badge}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* 5. MODAIS DE AÇÕES */}
+
+      {/* Modal: Novo Plano de Tratamento */}
+      {isNewPlanModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs mobile-modal">
+          <div role="dialog" aria-label="Planejamento estético" className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 space-y-4 animate-in zoom-in-95">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="font-bold text-slate-900 text-base">Novo Plano de Tratamento Estético</h3>
+              <button aria-label="Fechar" onClick={() => { cancelEdit(); setIsNewPlanModalOpen(false); }} className="p-1 text-slate-400 hover:text-slate-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePlan} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Título do Planejamento *</label>
+                <input
+                  type="text"
+                  value={planForm.title}
+                      aria-label="Título" name="title" aria-invalid={invalidField === 'title'} style={{ borderColor: invalidField === 'title' ? '#dc2626' : undefined }}
+                  onChange={e => setPlanForm({ ...planForm, title: e.target.value })}
+                  placeholder="Ex: Protocolo de Harmonização Facial 2026"
+                  className="w-full p-2.5 rounded-xl border border-slate-200"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Objetivos Clínicos</label>
+                <textarea
+                  rows={2}
+                  value={planForm.objectives}
+                      aria-label="Objetivos" name="objectives" aria-invalid={invalidField === 'objectives'} style={{ borderColor: invalidField === 'objectives' ? '#dc2626' : undefined }}
+                  onChange={e => setPlanForm({ ...planForm, objectives: e.target.value })}
+                  placeholder="Defina os objetivos principais deste tratamento..."
+                  className="w-full p-2.5 rounded-xl border border-slate-200"
+                />
+              </div>
+
+              {/* Itens do Plano */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-slate-700">Procedimentos Recomendados</label>
+                  <button
+                    type="button"
+                    onClick={() => setPlanForm({
+                      ...planForm,
+                      items: [...planForm.items, { procedure_name: '', target_region: '', sessions_planned: '' as number | '', recommended_interval_days: '' as number | '', priority: '' }]
+                    })}
+                    className="text-sky-600 font-bold hover:text-sky-700"
+                  >
+                    + Adicionar Procedimento
+                  </button>
+                </div>
+
+                {planForm.items.map((it, idx) => (
+                  <div key={idx} className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2 relative">
+                    <div className="flex items-center justify-between pb-1 border-b border-slate-200/60">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">
+                          Procedimento {idx + 1}
+                        </span>
+                        {it.status === 'CANCELADO' && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">
+                            CANCELADO
+                          </span>
+                        )}
+                        {it.status === 'REALIZADO' && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                            REALIZADO
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        {it.id && it.status !== 'CANCELADO' && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const next = [...planForm.items];
+                              next[idx] = { ...next[idx], status: 'CANCELADO' };
+                              setPlanForm({ ...planForm, items: next });
+                            }}
+                            className="text-[11px] text-slate-500 hover:text-amber-700 font-medium px-1.5 py-0.5 rounded hover:bg-amber-50 cursor-pointer"
+                            title="Cancelar este procedimento no planejamento"
+                          >
+                            Cancelar no plano
+                          </button>
+                        )}
+                        {it.id && it.status === 'CANCELADO' && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const next = [...planForm.items];
+                              next[idx] = { ...next[idx], status: 'PLANEJADO' };
+                              setPlanForm({ ...planForm, items: next });
+                            }}
+                            className="text-[11px] text-teal-700 hover:text-teal-900 font-semibold px-1.5 py-0.5 rounded hover:bg-teal-50 cursor-pointer"
+                            title="Reativar procedimento no planejamento"
+                          >
+                            Reativar
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleRemovePlanItem(idx)}
+                          className="text-slate-400 hover:text-rose-600 p-1 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer flex items-center gap-1 text-[11px] font-medium"
+                          title="Remover procedimento"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">Remover</span>
+                        </button>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <span className="font-semibold text-slate-600 block mb-1">Procedimento</span>
+                        <input
+                          type="text"
+                          value={it.procedure_name}
+                          onChange={e => {
+                            const next = [...planForm.items];
+                            next[idx].procedure_name = e.target.value;
+                            setPlanForm({ ...planForm, items: next });
+                          }}
+                          placeholder="Ex: Toxina Botulínica"
+                          className="w-full p-2 rounded-lg border border-slate-200 bg-white"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <span className="font-semibold text-slate-600 block mb-1">Região Anatômica</span>
+                        <input
+                          type="text"
+                          value={it.target_region}
+                          onChange={e => {
+                            const next = [...planForm.items];
+                            next[idx].target_region = e.target.value;
+                            setPlanForm({ ...planForm, items: next });
+                          }}
+                          placeholder="Ex: Terço Superior"
+                          className="w-full p-2 rounded-lg border border-slate-200 bg-white"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <span className="text-[10px] text-slate-500 font-bold block mb-1">Sessões</span>
+                        <input
+                          type="number"
+                          min="1"
+                          value={it.sessions_planned}
+                          onChange={e => {
+                            const next = [...planForm.items];
+                            next[idx].sessions_planned = e.target.value === '' ? '' : Number(e.target.value);
+                            setPlanForm({ ...planForm, items: next });
+                          }}
+                          className="w-full p-2 rounded-lg border border-slate-200 bg-white"
+                        />
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-500 font-bold block mb-1">Intervalo (dias)</span>
+                        <input
+                          type="number"
+                          min="1"
+                          value={it.recommended_interval_days}
+                          onChange={e => {
+                            const next = [...planForm.items];
+                            next[idx].recommended_interval_days = e.target.value === '' ? '' : Number(e.target.value);
+                            setPlanForm({ ...planForm, items: next });
+                          }}
+                          className="w-full p-2 rounded-lg border border-slate-200 bg-white"
+                        />
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-500 font-bold block mb-1">Prioridade</span>
+                        <select
+                          value={it.priority}
+                          onChange={e => {
+                            const next = [...planForm.items];
+                            next[idx].priority = e.target.value;
+                            setPlanForm({ ...planForm, items: next });
+                          }}
+                          className="w-full p-2 rounded-lg border border-slate-200 bg-white"
+                        ><option value="">Não avaliado</option>
+                          <option value="ALTA">Alta</option>
+                          <option value="MEDIA">Média</option>
+                          <option value="BAIXA">Baixa</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t">
+                <button
+                  type="button"
+                  onClick={() => { cancelEdit(); setIsNewPlanModalOpen(false); }}
+                  className="px-4 py-2 rounded-xl text-slate-600 bg-slate-100 hover:bg-slate-200 font-bold"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit" disabled={savingRecord}
+                  className="px-4 py-2 rounded-xl bg-sky-600 text-white font-bold hover:bg-sky-700 shadow-md"
+                >
+                  Salvar Planejamento
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Registrar Procedimento Realizado */}
+      {isNewProcedureModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs mobile-modal">
+          <div role="dialog" aria-label="Procedimento estético" className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 space-y-4 animate-in zoom-in-95">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="font-bold text-slate-900 text-base">Registrar Procedimento Estético Realizado</h3>
+              <button aria-label="Fechar" onClick={() => { cancelEdit(); setIsNewProcedureModalOpen(false); }} className="p-1 text-slate-400 hover:text-slate-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveProcedure} className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-1">
+                  <label className="block font-bold text-slate-700 mb-1">Procedimento *</label>
+                  <input
+                    type="text"
+                    value={procedureForm.procedure_name}
+                    aria-label="Procedimento" name="procedure_name" aria-invalid={invalidField === 'procedure_name'} style={{ borderColor: invalidField === 'procedure_name' ? '#dc2626' : undefined }}
+                    onChange={e => setProcedureForm({ ...procedureForm, procedure_name: e.target.value })}
+                    placeholder="Ex: Toxina Botulínica, Preenchimento Malar..."
+                    className="w-full p-2.5 rounded-xl border border-slate-200"
+                    required
+                  />
+                </div>
+                <div className="sm:col-span-1">
+                  <label className="block font-bold text-slate-700 mb-1">Região Anatômica *</label>
+                  <input
+                    type="text"
+                    value={procedureForm.target_region}
+                    aria-label="Região anatômica" name="target_region" aria-invalid={invalidField === 'region'} style={{ borderColor: invalidField === 'region' ? '#dc2626' : undefined }}
+                    onChange={e => setProcedureForm({ ...procedureForm, target_region: e.target.value })}
+                    placeholder="Ex: Fronte e Glabela, Malar D/E..."
+                    className="w-full p-2.5 rounded-xl border border-slate-200"
+                    required
+                  />
+                </div>
+                <div className="sm:col-span-1">
+                  <label className="block font-bold text-slate-700 mb-1">Data Realização *</label>
+                  <input
+                    type="date"
+                    value={procedureForm.date_performed}
+                    aria-label="Data de realização" name="date_performed" aria-invalid={invalidField === 'date_performed'} style={{ borderColor: invalidField === 'date_performed' ? '#dc2626' : undefined }}
+                    onChange={e => setProcedureForm({ ...procedureForm, date_performed: e.target.value })}
+                    className="w-full p-2.5 rounded-xl border border-slate-200 bg-white font-mono"
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Seletor Central de Estoque com Rastreabilidade e Opção Sem Produto */}
+              <ClinicalInventorySelector
+                value={{
+                  productId: procedureForm.inventory_item_id || null,
+                  productName: procedureForm.product_applied || '',
+                  brand: '',
+                  batchLot: procedureForm.lot_number || '',
+                  expiryDate: procedureForm.expiry_date || '',
+                  quantity: procedureForm.quantity === '' ? '' : Number(procedureForm.quantity),
+                  unit: procedureForm.unit || 'un',
+                  withoutProduct: Boolean(procedureForm.without_product)
+                }}
+                onChange={sel => {
+                  setProcedureForm(prev => ({
+                    ...prev,
+                    inventory_item_id: sel.productId || '',
+                    product_applied: sel.productName || '',
+                    lot_number: sel.batchLot || '',
+                    expiry_date: sel.expiryDate || '',
+                    quantity: sel.quantity === '' ? '' : String(sel.quantity),
+                    unit: sel.unit || 'un',
+                    deduct_inventory: !sel.withoutProduct && Boolean(sel.productId),
+                    without_product: sel.withoutProduct
+                  }));
+                }}
+                required={true}
+              />
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Orientações Pós-Procedimento Fornecidas</label>
+                <textarea
+                  rows={2}
+                  value={procedureForm.post_instructions}
+                      aria-label="Orientações pós-procedimento" name="post_instructions" aria-invalid={invalidField === 'post_instructions'} style={{ borderColor: invalidField === 'post_instructions' ? '#dc2626' : undefined }}
+                  onChange={e => setProcedureForm({ ...procedureForm, post_instructions: e.target.value })}
+                  className="w-full p-2.5 rounded-xl border border-slate-200"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3"><label className="font-bold text-slate-700">Técnica e conduta<textarea aria-label="Técnica e conduta" rows={2} value={procedureForm.technique_notes} onChange={event => setProcedureForm({ ...procedureForm, technique_notes: event.target.value })} className="w-full p-2 border rounded-xl" /></label><label className="font-bold text-slate-700">Intercorrências<textarea aria-label="Intercorrências" rows={2} value={procedureForm.adverse_reactions} onChange={event => setProcedureForm({ ...procedureForm, adverse_reactions: event.target.value })} className="w-full p-2 border rounded-xl" /></label></div>
+              <div className="flex items-center justify-end gap-2 pt-3 border-t">
+                <button
+                  type="button"
+                  onClick={() => { cancelEdit(); setIsNewProcedureModalOpen(false); }}
+                  className="px-4 py-2 rounded-xl text-slate-600 bg-slate-100 hover:bg-slate-200 font-bold"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit" disabled={savingRecord}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 shadow-md"
+                >
+                  Registrar Procedimento
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Anexar Foto Clínica */}
+      {isNewPhotoModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs mobile-modal">
+          <div role="dialog" aria-label="Fotografia clínica" className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-md p-6 space-y-4 animate-in zoom-in-95">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="font-bold text-slate-900 text-base">Anexar Fotografia Clínica</h3>
+              <button aria-label="Fechar" onClick={() => { cancelEdit(); setIsNewPhotoModalOpen(false); }} className="p-1 text-slate-400 hover:text-slate-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePhoto} className="space-y-3 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Selecione o Arquivo</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handlePhotoFileUpload}
+                  className="w-full p-2 rounded-xl border border-slate-200 text-slate-600"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Ou Cole a URL da Imagem</label>
+                <input
+                  type="url"
+                  value={photoForm.photo_url}
+                      aria-label="URL da fotografia" name="photo_url" aria-invalid={invalidField === 'file_url'} style={{ borderColor: invalidField === 'file_url' ? '#dc2626' : undefined }}
+                  onChange={e => setPhotoForm({ ...photoForm, photo_url: e.target.value })}
+                  placeholder="https://exemplo.com/foto.jpg"
+                  className="w-full p-2.5 rounded-xl border border-slate-200"
+                />
+              </div>
+
+              {photoForm.photo_url && (
+                <div className="aspect-video bg-slate-100 rounded-xl overflow-hidden border border-slate-200">
+                  <img src={photoForm.photo_url} alt="Pré-visualização" className="w-full h-full object-cover" />
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Tipo de Foto</label>
+                  <select
+                    value={photoForm.photo_type}
+                      aria-label="Tipo de fotografia" name="photo_type" aria-invalid={invalidField === 'photo_type'} style={{ borderColor: invalidField === 'photo_type' ? '#dc2626' : undefined }}
+                    onChange={e => setPhotoForm({ ...photoForm, photo_type: e.target.value as any })}
+                    className="w-full p-2 rounded-lg border border-slate-200 bg-white"
+                  >
+                    <option value="ANTES">Antes</option>
+                    <option value="DEPOIS">Depois</option>
+                    <option value="ACOMPANHAMENTO">Acompanhamento</option>
+                    <option value="RETORNO">Retorno</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Ângulo / Vista</label>
+                  <select
+                    value={photoForm.view_angle}
+                      aria-label="Ângulo" name="view_angle" aria-invalid={invalidField === 'view_type'} style={{ borderColor: invalidField === 'view_type' ? '#dc2626' : undefined }}
+                    onChange={e => setPhotoForm({ ...photoForm, view_angle: e.target.value })}
+                    className="w-full p-2 rounded-lg border border-slate-200 bg-white"
+                  >
+                    <option value="FRONTAL">Frontal</option>
+                    <option value="PERFIL_D">Perfil Direito</option>
+                    <option value="PERFIL_E">Perfil Esquerdo</option>
+                    <option value="OBLIQUO_45_D">Oblíquo 45° Direito</option>
+                    <option value="OBLIQUO_45_E">Oblíquo 45° Esquerdo</option>
+                    <option value="VERTICE">Vértice / Topo</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Observações da Foto</label>
+                <input
+                  type="text"
+                  value={photoForm.notes}
+                      aria-label="Observações" name="notes" aria-invalid={invalidField === 'notes'} style={{ borderColor: invalidField === 'notes' ? '#dc2626' : undefined }}
+                  onChange={e => setPhotoForm({ ...photoForm, notes: e.target.value })}
+                  placeholder="Ex: Foto 15 dias pós-toxina..."
+                  className="w-full p-2 rounded-lg border border-slate-200"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t">
+                <button
+                  type="button"
+                  onClick={() => { cancelEdit(); setIsNewPhotoModalOpen(false); }}
+                  className="px-4 py-2 rounded-xl text-slate-600 bg-slate-100 hover:bg-slate-200 font-bold"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit" disabled={savingRecord}
+                  className="px-4 py-2 rounded-xl bg-sky-600 text-white font-bold hover:bg-sky-700 shadow-md"
+                >
+                  Salvar Foto
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Nova Evolução */}
+      {isNewEvolutionModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs mobile-modal">
+          <div role="dialog" aria-label="Evolução estética" className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg p-6 space-y-4 animate-in zoom-in-95">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="font-bold text-slate-900 text-base">Registrar Evolução Clínica</h3>
+              <button aria-label="Fechar" onClick={() => { cancelEdit(); setIsNewEvolutionModalOpen(false); }} className="p-1 text-slate-400 hover:text-slate-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEvolution} className="space-y-3 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Data da Evolução</label>
+                <input
+                  type="date"
+                  value={evolutionForm.evolution_date}
+                      aria-label="Data da evolução" name="evolution_date" aria-invalid={invalidField === 'evolution_date'} style={{ borderColor: invalidField === 'evolution_date' ? '#dc2626' : undefined }}
+                  onChange={e => setEvolutionForm({ ...evolutionForm, evolution_date: e.target.value })}
+                  className="w-full p-2 rounded-lg border border-slate-200 bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Resposta Biológica / Tecidual *</label>
+                <textarea
+                  rows={2}
+                  value={evolutionForm.biological_response}
+                      aria-label="Resposta biológica" name="biological_response" aria-invalid={invalidField === 'evolution_text'} style={{ borderColor: invalidField === 'evolution_text' ? '#dc2626' : undefined }}
+                  onChange={e => setEvolutionForm({ ...evolutionForm, biological_response: e.target.value })}
+                  placeholder="Acomodação do produto, redução de edema, cicatrização..."
+                  className="w-full p-2.5 rounded-xl border border-slate-200"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Relato / Feedback do Paciente</label>
+                <textarea
+                  rows={2}
+                  value={evolutionForm.patient_feedback}
+                      aria-label="Relato do paciente" name="patient_feedback" aria-invalid={invalidField === 'observed_response'} style={{ borderColor: invalidField === 'observed_response' ? '#dc2626' : undefined }}
+                  onChange={e => setEvolutionForm({ ...evolutionForm, patient_feedback: e.target.value })}
+                  placeholder="Sensações relatadas, nível de satisfação, queixas..."
+                  className="w-full p-2.5 rounded-xl border border-slate-200"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Conduta Profissional Adotada</label>
+                <textarea
+                  rows={2}
+                  value={evolutionForm.conduct}
+                      aria-label="Conduta" name="conduct" aria-invalid={invalidField === 'conduct'} style={{ borderColor: invalidField === 'conduct' ? '#dc2626' : undefined }}
+                  onChange={e => setEvolutionForm({ ...evolutionForm, conduct: e.target.value })}
+                  placeholder="Orientações prestadas, prescrição tópica ou conduta clínica..."
+                  className="w-full p-2.5 rounded-xl border border-slate-200"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t">
+                <button
+                  type="button"
+                  onClick={() => { cancelEdit(); setIsNewEvolutionModalOpen(false); }}
+                  className="px-4 py-2 rounded-xl text-slate-600 bg-slate-100 hover:bg-slate-200 font-bold"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit" disabled={savingRecord}
+                  className="px-4 py-2 rounded-xl bg-sky-600 text-white font-bold hover:bg-sky-700 shadow-md"
+                >
+                  Salvar Evolução
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Agendar / Registrar Retorno */}
+      {isNewReturnModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs mobile-modal">
+          <div role="dialog" aria-label="Retorno estético" className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg p-6 space-y-4 animate-in zoom-in-95">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="font-bold text-slate-900 text-base">Agendar / Registrar Retorno Clínico</h3>
+              <button aria-label="Fechar" onClick={() => { cancelEdit(); setIsNewReturnModalOpen(false); }} className="p-1 text-slate-400 hover:text-slate-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveReturn} className="space-y-3 text-xs">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Data Prevista *</label>
+                  <input
+                    type="date"
+                    value={returnForm.scheduled_date}
+                      aria-label="Data prevista" name="scheduled_date" aria-invalid={invalidField === 'scheduled_date'} style={{ borderColor: invalidField === 'scheduled_date' ? '#dc2626' : undefined }}
+                    onChange={e => setReturnForm({ ...returnForm, scheduled_date: e.target.value })}
+                    className="w-full p-2 rounded-lg border border-slate-200 bg-white"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Status</label>
+                  <select
+                    value={returnForm.status}
+                      aria-label="Status" name="status" aria-invalid={invalidField === 'status'} style={{ borderColor: invalidField === 'status' ? '#dc2626' : undefined }}
+                    onChange={e => setReturnForm({ ...returnForm, status: e.target.value as any, actual_date: ['AGENDADO', 'CANCELADO'].includes(e.target.value) ? returnForm.actual_date : returnForm.actual_date || new Date().toISOString().slice(0, 10) })}
+                    className="w-full p-2 rounded-lg border border-slate-200 bg-white"
+                  ><option value="">Não avaliado</option>
+                    <option value="AGENDADO">Agendado</option>
+                    <option value="COMPARECEU">Compareceu</option>
+                    <option value="RETOQUE_REALIZADO">Retoque Realizado</option>
+                    <option value="ALTA_CICLO">Alta do Ciclo</option>
+                    <option value="CANCELADO">Cancelado</option>
+                  </select>
+                </div>
+              </div>
+
+              {returnForm.status !== 'AGENDADO' && returnForm.status !== 'CANCELADO' && <label className="block font-bold text-slate-700">Data do comparecimento<input aria-label="Data do comparecimento" type="date" value={returnForm.actual_date} onChange={event => setReturnForm({ ...returnForm, actual_date: event.target.value })} className="block w-full p-2 rounded-lg border border-slate-200" /></label>}
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Avaliação do Resultado no Retorno</label>
+                <textarea
+                  rows={2}
+                  value={returnForm.evaluation_notes}
+                      aria-label="Avaliação do retorno" name="evaluation_notes" aria-invalid={invalidField === 'return_assessment'} style={{ borderColor: invalidField === 'return_assessment' ? '#dc2626' : undefined }}
+                  onChange={e => setReturnForm({ ...returnForm, evaluation_notes: e.target.value })}
+                  placeholder="Avaliação da simetria, acomodação e resposta estética..."
+                  className="w-full p-2.5 rounded-xl border border-slate-200"
+                />
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-700">
+                  <ClinicalBooleanSelect value={returnForm.touchup_required}
+                    onChange={value => setReturnForm({ ...returnForm, touchup_required: value })} />
+                  <span>Retoque necessário ou realizado?</span>
+                </label>
+
+                {returnForm.touchup_required && (
+                  <input
+                    type="text"
+                    value={returnForm.touchup_description}
+                      aria-label="Descrição do retoque" name="touchup_description" aria-invalid={invalidField === 'touchup_description'} style={{ borderColor: invalidField === 'touchup_description' ? '#dc2626' : undefined }}
+                    onChange={e => setReturnForm({ ...returnForm, touchup_description: e.target.value })}
+                    placeholder="Descreva o retoque (ex: 2U fronte esquerda)..."
+                    className="w-full p-2 rounded-lg border border-slate-200 bg-white text-xs"
+                  />
+                )}
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t">
+                <button
+                  type="button"
+                  onClick={() => { cancelEdit(); setIsNewReturnModalOpen(false); }}
+                  className="px-4 py-2 rounded-xl text-slate-600 bg-slate-100 hover:bg-slate-200 font-bold"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit" disabled={savingRecord}
+                  className="px-4 py-2 rounded-xl bg-amber-600 text-white font-bold hover:bg-amber-700 shadow-md"
+                >
+                  Salvar Retorno
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Zemda360 em Tela Cheia */}
+      <ZemdaBodyModal
+        isOpen={isZemda360ModalOpen}
+        onClose={() => setIsZemda360ModalOpen(false)}
+        patientId={selectedPatientId}
+        patientName={overviewData?.patient?.full_name}
+        module={`estetic:${activeArea}`}
+        appointmentId={encounterId || directAppointmentId.current}
+        initialMapType={areaTheme.mapType}
+      />
+
+      {/* Lightbox de Foto */}
+      {lightboxPhoto && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs mobile-modal"
+          onClick={() => setLightboxPhoto(null)}
+        >
+          <div
+            className="bg-white rounded-3xl overflow-hidden max-w-3xl w-full p-4 space-y-3"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b pb-2">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-slate-800 text-sm">
+                  {lightboxPhoto.view_angle} • {lightboxPhoto.photo_type}
+                </span>
+                <span className="text-xs text-slate-400 font-mono">
+                  {new Date(lightboxPhoto.taken_at).toLocaleDateString('pt-BR')}
+                </span>
+              </div>
+              <button aria-label="Fechar" onClick={() => setLightboxPhoto(null)} className="p-1 text-slate-400 hover:text-slate-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="max-h-[70vh] flex items-center justify-center bg-black/5 rounded-2xl overflow-hidden">
+              <img src={lightboxPhoto.photo_url} alt="Foto Ampliada" className="max-h-[68vh] object-contain" />
+            </div>
+            {lightboxPhoto.notes && (
+              <p className="text-xs text-slate-600">{lightboxPhoto.notes}</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Detalhes da Avaliação Anterior */}
+      {selectedAssessmentDetail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs mobile-modal">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-xl max-h-[85vh] overflow-y-auto p-6 space-y-4 animate-in zoom-in-95">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div>
+                <h3 className="font-bold text-slate-900 text-base">Ficha de Avaliação Estética</h3>
+                <span className="text-xs text-slate-400 font-mono">
+                  {new Date(selectedAssessmentDetail.created_at).toLocaleDateString('pt-BR')} • {selectedAssessmentDetail.area}
+                </span>
+              </div>
+              <button aria-label="Fechar" onClick={() => setSelectedAssessmentDetail(null)} className="p-1 text-slate-400 hover:text-slate-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              {Object.entries(selectedAssessmentDetail.specificData || {}).filter(([key, value]) => !['complaint','expectations'].includes(key) && value != null && value !== '' && (!Array.isArray(value) || value.length)).map(([key, value]) => <div key={key}><span className="font-bold text-slate-500">{assessmentLabels[key] || key}</span><p className="whitespace-pre-wrap">{formatAssessmentValue(value)}</p></div>)}
+              <div>
+                <span className="font-bold text-slate-500 uppercase">Queixa Principal:</span>
+                <p className="text-slate-900 font-medium mt-0.5">{selectedAssessmentDetail.complaint}</p>
+              </div>
+
+              {selectedAssessmentDetail.expectations && (
+                <div>
+                  <span className="font-bold text-slate-500 uppercase">Expectativas:</span>
+                  <p className="text-slate-800 mt-0.5">{selectedAssessmentDetail.expectations}</p>
+                </div>
+              )}
+
+              {selectedAssessmentDetail.phototype && (
+                <div>
+                  <span className="font-bold text-slate-500 uppercase">Fototipo:</span>
+                  <p className="text-slate-800 mt-0.5">Fototipo {selectedAssessmentDetail.phototype}</p>
+                </div>
+              )}
+
+              {selectedAssessmentDetail.previous_treatments && (
+                <div>
+                  <span className="font-bold text-slate-500 uppercase">Tratamentos Anteriores:</span>
+                  <p className="text-slate-800 mt-0.5">{selectedAssessmentDetail.previous_treatments}</p>
+                </div>
+              )}
+
+              {selectedAssessmentDetail.clinical_conduct && (
+                <div>
+                  <span className="font-bold text-slate-500 uppercase">Conduta Registrada:</span>
+                  <p className="text-slate-800 mt-0.5">{selectedAssessmentDetail.clinical_conduct}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end pt-3 border-t">
+              <button
+                type="button"
+                onClick={() => setSelectedAssessmentDetail(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

@@ -1,0 +1,180 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+// Precisa ser o primeiro import: vários módulos leem variáveis de ambiente ao serem carregados (ex.: JWT_SECRET).
+require("dotenv/config");
+const publicSite_1 = require("./seo/publicSite");
+const express_1 = __importDefault(require("express"));
+const cors_1 = __importDefault(require("cors"));
+const helmet_1 = __importDefault(require("helmet"));
+const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
+const billing_webhook_service_1 = require("./services/billing-webhook.service");
+const database_1 = require("./config/database");
+const error_monitor_service_1 = require("./services/error-monitor.service");
+const routes_1 = __importDefault(require("./routes"));
+const path_1 = __importDefault(require("path"));
+const fs_1 = __importDefault(require("fs"));
+error_monitor_service_1.ErrorMonitor.installProcessHandlers();
+if (process.env.NODE_ENV === 'production' && !process.env.ZEMDA_FILES_SIGNING_SECRET) {
+    console.error('[FATAL] ZEMDA_FILES_SIGNING_SECRET é obrigatório em ambiente de produção para assinar tokens do Cloudflare Worker!');
+    throw new Error('ZEMDA_FILES_SIGNING_SECRET não configurado em ambiente de produção');
+}
+const app = (0, express_1.default)();
+const PORT = process.env.PORT || 4000;
+// Configuração segura de proxy reverso (Railway / Edge)
+// Permite que req.ip obtenha o IP real do cliente sem confiar em cabeçalhos forjados diretamente
+app.set('trust proxy', 1);
+// Registra respostas 5xx e alerta os colaboradores por e-mail (ver docs/MONITORAMENTO.md)
+app.use(error_monitor_service_1.ErrorMonitor.requestMiddleware);
+// Cabeçalhos de segurança HTTP padrão (CSP desabilitado: a API serve JSON e o SPA já define o seu próprio)
+app.use((0, helmet_1.default)({ contentSecurityPolicy: false, crossOriginResourcePolicy: false, crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' }, referrerPolicy: { policy: 'strict-origin-when-cross-origin' } }));
+// Lista de origens de navegador autorizadas a chamar a API (apps nativos/Electron não enviam Origin e não são afetados)
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'https://zemda.com.br,https://www.zemda.com.br,http://localhost:5173,http://localhost:4000')
+    .split(',')
+    .map(o => o.trim())
+    .filter(Boolean);
+// Configurações de Middleware
+app.use((0, cors_1.default)({
+    origin(origin, callback) {
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+        }
+        else {
+            callback(new Error(`Origem não autorizada pela política de CORS: ${origin}`));
+        }
+    },
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-ID', 'X-Requested-With', 'Accept']
+}));
+// Limite geral de requisições por IP, protegendo a API contra abuso e força bruta
+const apiLimiter = (0, express_rate_limit_1.default)({
+    windowMs: 15 * 60 * 1000,
+    limit: 600,
+    standardHeaders: true,
+    legacyHeaders: false
+});
+app.use(['/api', '/v1'], apiLimiter);
+// Limite mais rígido para rotas sensíveis de autenticação
+const authLimiter = (0, express_rate_limit_1.default)({
+    windowMs: 15 * 60 * 1000,
+    limit: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, error: 'Muitas tentativas. Tente novamente em alguns minutos.', code: 'RATE_LIMITED' }
+});
+app.use(['/api/v1/auth/login', '/v1/auth/login', '/api/v1/auth/register', '/v1/auth/register', '/api/v1/auth/reset-password', '/v1/auth/reset-password', '/api/v1/public/auth/reset-password'], authLimiter);
+app.use(express_1.default.json({ limit: '50mb' }));
+app.use(express_1.default.urlencoded({ extended: true, limit: '50mb' }));
+// Logger estruturado para monitoramento de rotas de API com medição de latência
+app.use((req, res, next) => {
+    if (req.url.startsWith('/api') || req.url.startsWith('/v1')) {
+        const startTime = Date.now();
+        res.on('finish', () => {
+            const duration = Date.now() - startTime;
+            const tenant = req.headers['x-tenant-id'] || '-';
+            const status = res.statusCode;
+            // Sem query string: ela pode conter o JWT (?token=) e outros dados que não devem ir para o log.
+            const logPath = (req.originalUrl || req.url).split('?')[0];
+            if (status >= 400) {
+                console.warn(`[API ${req.method}] ${logPath} -> Status ${status} (${duration}ms) | Tenant: ${tenant}`);
+            }
+            else if (req.method !== 'GET') {
+                console.log(`[API ${req.method}] ${logPath} -> Status ${status} (${duration}ms) | Tenant: ${tenant}`);
+            }
+        });
+    }
+    next();
+});
+// Inicializa tabelas e seeds do banco de dados relacional
+(0, database_1.initializeDatabase)();
+billing_webhook_service_1.BillingWebhookService.start();
+// Inicia o motor de segundo plano para lembretes automáticos (Zemda Notifications API)
+const notification_service_1 = require("./services/notification.service");
+notification_service_1.NotificationService.startBackgroundWorker(30000);
+// Backups periódicos do banco (ativos por padrão em produção; ver docs/BACKUP.md)
+const backup_service_1 = require("./services/backup.service");
+(0, backup_service_1.startBackupScheduler)((err) => error_monitor_service_1.ErrorMonitor.captureException(err, { source: 'backup' }));
+// Redirecionamento canônico de www.zemda.com.br para https://zemda.com.br
+app.use((req, res, next) => {
+    const host = req.headers.host || '';
+    if (host.startsWith('www.zemda.com.br')) {
+        return res.redirect(301, `https://zemda.com.br${req.url}`);
+    }
+    next();
+});
+// Reescreve requisições que chegam em /v1/... para /api/v1/... para compatibilidade total entre web, mobile e desktop
+app.use((req, res, next) => {
+    if (req.url.startsWith('/v1/')) {
+        req.url = `/api${req.url}`;
+    }
+    next();
+});
+// Endpoints públicos de Health Check (sempre retornam JSON 200 sem autenticação)
+const healthHandler = (req, res) => {
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.status(200).json({
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        service: 'Zemda-API-Core',
+        version: '1.1.2',
+        cloud: 'production'
+    });
+};
+app.get('/api/health', healthHandler);
+app.get('/health', healthHandler);
+app.get('/api/v1/health', healthHandler);
+app.get('/v1/health', healthHandler);
+// Registra as rotas da API em /api
+app.use('/api', routes_1.default);
+// Middleware universal de 404 para chamadas de API: NUNCA retorna HTML, SEMPRE JSON
+app.all(['/api', '/api/*', '/v1', '/v1/*'], (req, res) => {
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.status(404).json({
+        success: false,
+        error: `Endpoint ${req.method} ${req.originalUrl || req.url} não encontrado na API Zemda.`,
+        code: 'ROUTE_NOT_FOUND'
+    });
+});
+// Links antigos /downloads/<arquivo> já divulgados continuam funcionando, redirecionando para os instaladores atuais
+app.get('/downloads/:file', (req, res) => {
+    const file = req.params.file.toLowerCase();
+    if (file.endsWith('.apk'))
+        return res.redirect(301, '/api/v1/public/download-android');
+    if (file.endsWith('.exe'))
+        return res.redirect(301, '/api/v1/public/download-windows');
+    res.status(404).json({ success: false, error: 'Arquivo não encontrado.', code: 'ROUTE_NOT_FOUND' });
+});
+// Servir uploads de imagens e mídias
+const uploadsDir = path_1.default.resolve(__dirname, '../public/uploads');
+if (!fs_1.default.existsSync(uploadsDir)) {
+    fs_1.default.mkdirSync(uploadsDir, { recursive: true });
+}
+app.use('/uploads', express_1.default.static(uploadsDir));
+const possibleFrontendDistPaths = [
+    process.env.FRONTEND_DIST_PATH,
+    path_1.default.resolve(__dirname, '../../frontend/dist'),
+    path_1.default.resolve(__dirname, '../public/dist'),
+    path_1.default.resolve(process.cwd(), 'frontend/dist'),
+    path_1.default.resolve(process.cwd(), 'dist/frontend'),
+    path_1.default.resolve(process.cwd(), 'public')
+].filter((p) => Boolean(p && fs_1.default.existsSync(p)));
+(0, publicSite_1.registerPublicSite)(app, possibleFrontendDistPaths[0]);
+// Middleware de tratamento centralizado de erros
+app.use((err, req, res, next) => {
+    console.error('[Unhandled Error]', err);
+    const status = err.status || 500;
+    if (status >= 500)
+        error_monitor_service_1.ErrorMonitor.captureRequestError(err, req, res);
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.status(status).json({
+        success: false,
+        error: err.message || 'Ocorreu um erro interno no servidor',
+        code: err.code || 'INTERNAL_SERVER_ERROR'
+    });
+});
+app.listen(PORT, () => {
+    console.log(`[SaaS Core API] Servidor rodando com sucesso na porta ${PORT}`);
+    console.log(`[SaaS Core API] Rotas ativas em http://localhost:${PORT}/api/v1`);
+});

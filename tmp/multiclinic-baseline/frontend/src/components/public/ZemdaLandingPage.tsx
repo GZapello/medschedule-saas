@@ -1,0 +1,202 @@
+import { LANDING_HERO, LANDING_HERO_TITLE_LINES } from '../../../../backend/src/seo/landingContent';
+import React, { useEffect } from 'react';
+import { Activity, Apple, ArrowDown, ArrowRight, Brain, CalendarDays, Check, CheckCheck, ChevronDown, CloudUpload, Crosshair, DollarSign, Dumbbell, FileText, Files, GraduationCap, Heart, Layers3, LockKeyhole, Mic, ShieldCheck, Smile, Sparkles, Stethoscope, Users, type LucideIcon } from 'lucide-react';
+import { PublicHeader } from './PublicHeader';
+import { PublicFooter } from './PublicFooter';
+import { RevealSection, RevealItem } from './RevealOnScroll';
+import { LANDING_MODULES, LANDING_PLANS, LANDING_STEPS, LANDING_LAYERS, LANDING_FAQS, moduleHref } from '../../../../backend/src/seo/landingContent';
+import { LandingProductDemo } from './LandingProductDemo';
+import './zemda-landing.css';
+
+interface ZemdaLandingPageProps {
+  onLogin: () => void;
+  onRegisterClinic: (plan?: string, isTrial?: boolean) => void;
+  onRegisterUser?: () => void;
+  onOpenPublicBooking?: () => void;
+  onNavigateSeoPage?: (slug: string) => void;
+}
+const results: { impact: string; title: string; description: string; icon: LucideIcon }[] = [
+  { impact: '+80%', title: 'Mais organização da rotina', description: 'Agenda, pacientes e informações reunidos em um só lugar.', icon: CalendarDays },
+  { impact: '+70%', title: 'Mais produtividade', description: 'Menos tempo procurando informações e alternando entre processos.', icon: Activity },
+  { impact: '-60%', title: 'Menos tarefas manuais', description: 'Centralização e automação para reduzir retrabalho.', icon: Layers3 },
+  { impact: '+75%', title: 'Mais controle financeiro', description: 'Mais visibilidade sobre receitas, despesas, orçamentos e pendências.', icon: DollarSign },
+  { impact: '-40%', title: 'Menos esquecimentos', description: 'Agenda, confirmações e acompanhamento mais organizados.', icon: CheckCheck },
+  { impact: '+65%', title: 'Mais agilidade nos prontuários', description: 'Registros e evoluções concentrados em um único fluxo.', icon: FileText },
+  { impact: '+70%', title: 'Mais organização da equipe', description: 'Agenda, profissionais e processos centralizados.', icon: Users },
+  { impact: '+80%', title: 'Mais controle da jornada do paciente', description: 'Informações e histórico acompanhados em um único ambiente.', icon: Heart }
+];
+const ResultsCarousel = () => (
+  <div className="zl-results-viewport" tabIndex={0} role="region" aria-label="Potencial de impacto na rotina">
+    <div className="zl-results-track">
+      {[false, true].map(copy => <div key={String(copy)} className="zl-results-group" aria-hidden={copy || undefined}>
+        {results.map(({ impact, title, description, icon: Icon }) => <article key={title} className="zl-result-card">
+          <div className="zl-result-top"><strong className="zl-result-impact">{impact}</strong><span className="zl-result-icon"><Icon size={16} strokeWidth={1.7} aria-hidden="true" /></span></div>
+          <h3>{title}</h3><p>{description}</p>
+        </article>)}
+      </div>)}
+    </div>
+  </div>
+);
+const moduleIcons: Record<string, LucideIcon> = {
+  med: Stethoscope,
+  estetic: Sparkles,
+  fono: Mic,
+  psico: Brain,
+  odonto: Smile,
+  nutri: Apple,
+  fisio: Activity,
+  to: Heart,
+  personal: Dumbbell,
+  pp: GraduationCap
+};
+const Bullets = ({ items }: { items: string[] }) => <ul className="zl-bullets">{items.map(item => <li key={item}><Check aria-hidden="true" size={16} /><span>{item}</span></li>)}</ul>;
+const Heading = ({ label, title, children }: { label: string; title: string; children?: React.ReactNode }) => <div className="zl-heading"><span className="zl-eyebrow">{label}</span><h2>{title}</h2>{children && <p>{children}</p>}</div>;
+
+export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({ onLogin, onRegisterClinic, onNavigateSeoPage }) => {
+  // Preserve direct links from SEO pages and the old public landing anchors.
+  useEffect(() => {
+    const scrollToHash = () => {
+      const id = window.location.hash.slice(1);
+      if (id) requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView());
+    };
+    scrollToHash();
+    window.addEventListener('hashchange', scrollToHash);
+    return () => window.removeEventListener('hashchange', scrollToHash);
+  }, []);
+  const navigateModule = (event: React.MouseEvent<HTMLAnchorElement>, module: typeof LANDING_MODULES[number]) => {
+    if (module.slug) {
+      if (onNavigateSeoPage && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey && event.button === 0) {
+        event.preventDefault();
+        onNavigateSeoPage(module.slug);
+      }
+      return;
+    }
+    window.dispatchEvent(new CustomEvent('select-landing-specialty', { detail: module.id }));
+  };
+
+  return <div className="zemda-landing">
+    <a className="zl-skip" href="#conteudo">Ir para o conteúdo</a>
+    <PublicHeader onLogin={onLogin} onRegisterClinic={onRegisterClinic} />
+    <main id="conteudo">
+      <section id="inicio" className="zl-hero">
+        <div className="zl-container">
+          <RevealItem autoAnimate distancePx={14} durationMs={650}>
+            <div className="zl-hero-top">
+              <div className="zl-hero-badges">
+                <span className="zl-pill"><span />Ecossistema de Saúde &amp; Gestão</span>
+                <span className="zl-hero-badge"><Sparkles size={13} /> 7 dias grátis</span>
+              </div>
+              <span className="zl-hero-note">Médicos, consultórios individuais, equipes e clínicas multiprofissionais.</span>
+            </div>
+            <div className="zl-hero-grid">
+              <div className="zl-hero-text">
+                <h1>{LANDING_HERO_TITLE_LINES[0]}<br />{' '}<span>{LANDING_HERO_TITLE_LINES[1]}</span></h1>
+                <div className="zl-hero-copy">
+                  <p>{LANDING_HERO.description}</p>
+                  <div className="zl-actions">
+                    <button className="zl-button" onClick={() => onRegisterClinic('SOLO', true)}>
+                      Testar grátis por 7 dias <ArrowRight size={17} />
+                    </button>
+                    <a className="zl-link" href="#profissoes">Conhecer os módulos <ArrowDown size={16} /></a>
+                  </div>
+                  <div className="zl-hero-trial-copy">
+                    <p className="zl-hero-trial-highlight">Faça sua conta em 2 minutos. Teste o Zemda grátis por 7 dias.</p>
+                    <p className="zl-hero-trial-sub">Sem compromisso.</p>
+                  </div>
+                  <p className="zl-small">Feito para profissionais da saúde, consultórios, equipes e clínicas multiprofissionais.</p>
+                </div>
+              </div>
+              <LandingProductDemo />
+            </div>
+          </RevealItem>
+        </div>
+      </section>
+
+      <RevealSection id="como-funciona" className="zl-section"><div className="zl-container">
+        <RevealItem distancePx={16} durationMs={550}><Heading label="Como o Zemda funciona" title="Comece individualmente ou com sua equipe." /></RevealItem>
+        <div className="zl-steps">{LANDING_STEPS.map((step, index) => <RevealItem key={step.title} distancePx={18} delayMs={index * 80} durationMs={600}><article><span className="zl-step-number">0{index + 1}</span><h3>{step.title}</h3><p>{step.description}</p></article></RevealItem>)}</div>
+        <RevealItem distancePx={16} delayMs={120} durationMs={550}><div className="zl-rule"><Users size={22} /><p><strong>Escolha o plano pelo número de acessos que você precisa.</strong><br />A profissão define quais ferramentas clínicas cada profissional acessa, respeitando suas permissões.</p></div></RevealItem>
+      </div></RevealSection>
+
+      <RevealSection id="resultados" className="zl-section zl-results"><div className="zl-container">
+        <RevealItem distancePx={16} durationMs={550}>
+          <Heading label="Potencial de impacto na rotina" title="Resultados que o Zemda ajuda você a conquistar">Transforme sua rotina com mais organização, agilidade e controle em um só lugar.</Heading>
+        </RevealItem>
+        <ResultsCarousel />
+      </div></RevealSection>
+
+      <RevealSection id="profissoes" className="zl-section zl-tinted"><div className="zl-container">
+        <RevealItem distancePx={16} durationMs={550}><Heading label="Ecossistema profissional" title="Ferramentas específicas para sua profissão.">Avalie, registre e acompanhe cada atendimento com os recursos da sua área.</Heading></RevealItem>
+        <RevealItem distancePx={18} delayMs={100} durationMs={600}><article id="zemda360" className="zl-body"><span className="zl-body-symbol"><Crosshair size={48} strokeWidth={1.3} /></span><div><span className="zl-eyebrow">Módulo transversal</span><h3>Zemda360</h3><p>Mapeamento anatômico visual integrado ao atendimento. Um recurso compartilhado entre a medicina e as especialidades multiprofissionais para registro corporal e facial, marcações com caneta e borracha e histórico de avaliações.</p></div><div className="zl-body-tags"><span>Mapeamento anatômico visual</span><span>Mapeamento corporal e facial</span><span>Marcações e histórico</span></div></article></RevealItem>
+        <div className="zl-modules">{LANDING_MODULES.map((module, index) => { const Icon = moduleIcons[module.id] || Stethoscope; return <React.Fragment key={module.id}><RevealItem distancePx={18} delayMs={(index % 4) * 60} durationMs={600} className="zl-full-height"><article id={`modulo-${module.id}`} className={`zl-module zl-module-${module.id}`}><span className="zl-module-icon"><Icon size={23} /></span><p className="zl-profession">{module.profession}</p><h3>{module.name}</h3><Bullets items={module.features} /><a href={moduleHref(module)} onClick={event => navigateModule(event, module)} className="zl-module-link" aria-label={`Conhecer módulo ${module.name}`}>Conhecer módulo <ArrowRight size={16} /></a></article></RevealItem></React.Fragment>; })}</div>
+        <aside className="zl-care-editorial">
+          <div className="zl-care-copy"><span className="zl-eyebrow">Tecnologia a serviço do cuidado</span><h3>Feito para quem cuida.</h3><p>Da rotina clínica à gestão, o Zemda acompanha cada profissional.</p></div>
+        </aside>
+      </div></RevealSection>
+
+      <RevealSection id="funcionalidades" className="zl-section"><div className="zl-container">
+        <RevealItem distancePx={16} durationMs={550}><Heading label="Uma base única" title="Gestão, atendimento e especialidade.">Organize sua prática, acompanhe seus pacientes e acesse as ferramentas da sua profissão.</Heading></RevealItem>
+        <div className="zl-layers">{LANDING_LAYERS.map((layer, i) => <RevealItem key={layer.title} distancePx={18} delayMs={i * 80} durationMs={600} className="zl-full-height"><article><h3>{layer.title}</h3><p>{layer.description}</p><div className="zl-tags">{layer.items.map(item => <span key={item}>{item}</span>)}</div></article></RevealItem>)}</div>
+      </div></RevealSection>
+
+      <RevealSection id="agenda" className="zl-section zl-tinted"><div className="zl-container zl-split">
+        <RevealItem distancePx={18} durationMs={600}><div><Heading label="Agenda & comunicação" title="Organize o dia. Acompanhe cada atendimento.">Organize sua agenda individual ou os horários da equipe com a Agenda Interativa e a Agenda de Hoje.</Heading><Bullets items={['Agendamento online e página própria do profissional', 'Status de atendimento, faltas e cancelamentos', 'Lembrete manual pelo WhatsApp', 'Lembretes automáticos quando configurados']} /><p className="zl-small">Integração com WhatsApp disponível conforme configuração.</p><a href="/agenda-online" className="zl-link">Conhecer a agenda <ArrowRight size={16} /></a></div></RevealItem>
+        <RevealItem distancePx={20} delayMs={100} durationMs={650}><div className="zl-flow-card"><span className="zl-eyebrow">Uma jornada conectada</span>{[{ icon: CalendarDays, title: 'Agendar', text: 'Horários, profissionais e serviços.' }, { icon: FileText, title: 'Atender', text: 'Prontuário e ferramentas da especialidade.' }, { icon: CheckCheck, title: 'Acompanhar', text: 'Status, registros e continuidade do cuidado.' }].map((step, i) => <div className="zl-flow-step" key={step.title}><span><step.icon size={22} /></span><div><small>0{i + 1}</small><h3>{step.title}</h3><p>{step.text}</p></div></div>)}</div></RevealItem>
+      </div></RevealSection>
+
+      <RevealSection id="autosave" className="zl-section"><div className="zl-container zl-split">
+        <RevealItem distancePx={20} durationMs={650}><div className="zl-save-card"><CloudUpload size={38} strokeWidth={1.4} /><span className="zl-eyebrow">Continuidade do atendimento</span><h3>Registrar.<br />Salvar.<br /><span>Retomar.</span></h3><div className="zl-save-line"><span /><p>Rascunho → recuperação → finalização</p></div><p>Recursos disponíveis em Psicologia e Fonoaudiologia.</p></div></RevealItem>
+        <RevealItem distancePx={18} delayMs={100} durationMs={600}><div><Heading label="Autosave & histórico" title="Atendimento sem perder o contexto.">Salvamento automático e recuperação de rascunhos ajudam você a retomar o atendimento quando algo interrompe a rotina.</Heading><Bullets items={['Salvamento automático nos módulos compatíveis', 'Recuperação após queda de internet, quando houver rascunho salvo', 'Histórico e prontuários anteriores acessíveis conforme permissões', 'Revisão e finalização do atendimento']} /><p className="zl-note">Projetado para reduzir o risco de perda de dados durante o atendimento. Confira o indicador de salvamento: a recuperação depende do rascunho disponível no navegador ou no servidor.</p></div></RevealItem>
+      </div></RevealSection>
+
+      <RevealSection id="documentos" className="zl-section zl-tinted"><div className="zl-container zl-split">
+        <RevealItem distancePx={18} durationMs={600}><div><Heading label="Documentos & prontuário" title="Documentos e prontuário no mesmo fluxo.">Prontuário eletrônico, documentos e anexos relacionados ao paciente e ao atendimento, com histórico, registro de autoria e auditoria.</Heading><Bullets items={['Atestados, receituários e pedidos de exames', 'Documentos profissionais conforme a área de atuação', 'Emissão em formato A4', 'Anexos, exames e histórico de atendimento']} /><a href="/prontuario" className="zl-link">Conhecer o prontuário <ArrowRight size={16} /></a></div></RevealItem>
+        <RevealItem distancePx={20} delayMs={100} durationMs={650}><div className="zl-document-map"><div className="zl-document-root"><Users size={24} /><strong>Paciente</strong><span>Histórico de atendimento</span></div><div className="zl-document-branches"><div><FileText size={26} /><strong>Prontuário</strong><span>Evolução e registros</span></div><div><Files size={26} /><strong>Documentos</strong><span>Emissão e anexos</span></div></div><p>Informações conectadas, acessos definidos por permissões.</p></div></RevealItem>
+      </div></RevealSection>
+
+      <RevealSection id="gestao" className="zl-section"><div className="zl-container">
+        <RevealItem distancePx={16} durationMs={550}><div className="zl-section-inline"><Heading label="Gestão & financeiro" title="Controle sua rotina e suas finanças.">Receitas, despesas, serviços e relatórios para quem atende sozinho ou gerencia uma equipe.</Heading><a href="/gestao-financeira" className="zl-link">Conhecer a gestão <ArrowRight size={16} /></a></div></RevealItem>
+        <div className="zl-management">{[{ icon: DollarSign, title: 'Financeiro', items: ['Receitas, despesas e caixa', 'Comissões e relatórios'] }, { icon: Users, title: 'Equipe', items: ['Usuários e permissões', 'Profissões e serviços'] }, { icon: Layers3, title: 'Operação', items: ['Pacientes e agenda', 'Estoque e insumos'] }].map((item, i) => <RevealItem key={item.title} distancePx={18} delayMs={i * 80} durationMs={600} className="zl-full-height"><article><item.icon size={25} /><h3>{item.title}</h3><Bullets items={item.items} /></article></RevealItem>)}</div>
+      </div></RevealSection>
+
+      <RevealSection id="ia" className="zl-section zl-ai-section"><div className="zl-container"><RevealItem distancePx={18} durationMs={600}><div className="zl-ai"><span className="zl-icon"><Sparkles size={27} /></span><div><span className="zl-eyebrow">Inteligência artificial com responsabilidade</span><h2>IA como apoio, não como substituição profissional.</h2><p>Estruturação de texto, apoio à evolução, ditado, organização, sugestões e relatórios assistidos nos fluxos disponíveis.</p><p className="zl-note">Todo conteúdo clínico gerado ou estruturado por IA exige revisão e responsabilidade do profissional.</p></div></div></RevealItem></div></RevealSection>
+
+      <RevealSection id="seguranca" className="zl-section"><div className="zl-container zl-split">
+        <RevealItem distancePx={18} durationMs={600}><div><Heading label="Segurança & privacidade" title="Cada acesso tem um papel. Cada registro, uma autoria.">Controles de acesso e rastreabilidade para apoiar a proteção dos dados na rotina multiprofissional.</Heading><a href="/privacidade" className="zl-link">Privacidade e LGPD <ArrowRight size={16} /></a></div></RevealItem>
+        <div className="zl-security">{[{ icon: Users, title: 'Controle por usuário', text: 'Acessos individuais e permissões por perfil.' }, { icon: LockKeyhole, title: 'Isolamento por clínica', text: 'Acesso vinculado à clínica e às permissões do usuário.' }, { icon: ShieldCheck, title: 'Acesso clínico restrito', text: 'Ferramentas e registros conforme profissão e autorização.' }, { icon: FileText, title: 'Trilha de auditoria', text: 'Registro de autoria e ações para rastreabilidade.' }].map((item, i) => <RevealItem key={item.title} distancePx={18} delayMs={i * 60} durationMs={550}><article><item.icon size={21} /><h3>{item.title}</h3><p>{item.text}</p></article></RevealItem>)}</div>
+      </div></RevealSection>
+
+      <RevealSection id="planos" className="zl-section zl-tinted"><div className="zl-container">
+        <RevealItem distancePx={16} durationMs={550}>
+          <Heading label="Plataforma Integrada" title="Uma experiência completa para a sua prática profissional.">
+            Do consultório individual à equipe multiprofissional: todas as ferramentas essenciais em um único ambiente integrado, inteligente e seguro.
+          </Heading>
+        </RevealItem>
+        <RevealItem distancePx={18} delayMs={60} durationMs={600}>
+          <div className="zl-plan zl-plan-featured" style={{ maxWidth: '860px', margin: '0 auto', textAlign: 'center' }}>
+            <span className="zl-eyebrow">Zemda</span>
+            <h3 style={{ fontSize: '1.75rem', marginBottom: '0.75rem' }}>Tudo o que sua rotina precisa</h3>
+            <p style={{ maxWidth: '640px', margin: '0 auto 1.5rem', color: '#475569', fontSize: '0.95rem', lineHeight: '1.6' }}>
+              Prontuário eletrônico especializado para cada área da saúde, agenda inteligente, mapeamento anatômico Zemda360, gestão financeira, emissão de documentos e suporte dedicado.
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem', textAlign: 'left', marginBottom: '2rem' }}>
+              <Bullets items={['Prontuário especializado por profissão', 'Agenda com confirmações automáticas', 'Mapeamento anatômico interativo Zemda360']} />
+              <Bullets items={['Controle financeiro e relatórios', 'Prescrições, atestados e laudos', 'Segurança total e conformidade com LGPD']} />
+            </div>
+            <button
+              onClick={() => onRegisterClinic()}
+              className="zl-button"
+              style={{ margin: '0 auto', padding: '0.9rem 2.2rem', fontSize: '1rem' }}
+            >
+              COMEÇAR AGORA <ArrowRight size={18} />
+            </button>
+          </div>
+        </RevealItem>
+      </div></RevealSection>
+
+      <RevealSection id="faq" className="zl-section"><div className="zl-container zl-faq-layout"><RevealItem distancePx={16} durationMs={550}><Heading label="Dúvidas frequentes" title="Antes de começar." /></RevealItem><RevealItem distancePx={18} delayMs={80} durationMs={600}><div className="zl-faq">{LANDING_FAQS.map(item => <details key={item.question}><summary>{item.question}<ChevronDown size={19} /></summary><p>{item.answer}</p></details>)}</div></RevealItem></div></RevealSection>
+      <section className="zl-final"><div className="zl-container"><RevealItem distancePx={20} durationMs={600}><span className="zl-eyebrow">Seu próximo atendimento começa aqui</span><h2>Sua gestão e seus atendimentos.<br />Em uma única plataforma.</h2><p>Organize sua rotina e sua equipe com ferramentas especializadas para cada profissão.</p><div className="zl-actions"><button className="zl-button" onClick={() => onRegisterClinic()}>COMEÇAR AGORA <ArrowRight size={17} /></button></div></RevealItem></div></section>
+    </main>
+    <PublicFooter onLogin={onLogin} onRegisterClinic={() => onRegisterClinic()} onNavigateSeoPage={onNavigateSeoPage} />
+  </div>;
+};

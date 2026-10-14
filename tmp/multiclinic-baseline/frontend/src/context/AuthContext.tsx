@@ -1,0 +1,645 @@
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { User, Tenant } from '../types';
+import { ApiClient } from '../api/client';
+
+interface AuthContextType {
+  currentUser: User | null;
+  currentTenant: Tenant | null;
+  token: string | null;
+  loading: boolean;
+  login: (email: string, password: string) => Promise<{ user: User; tenant: Tenant | null }>;
+  loginWithToken: (token: string, user: User, tenant?: Tenant | null) => void;
+  logout: () => void;
+  switchTenant: (tenantId: string) => Promise<void>;
+  refreshTenant: () => Promise<void>;
+  reloadSession: () => Promise<void>;
+  isSuperAdmin: boolean;
+  isClinicAdmin: boolean;
+  isProfessional: boolean;
+  isReceptionist: boolean;
+  canAccessConsents: boolean;
+  isPatient: boolean;
+  isPhysiotherapist: boolean;
+  isZemdaFisio: boolean;
+  isDentist: boolean;
+  isZemdaOdonto: boolean;
+  isNutritionist: boolean;
+  isZemdaNutri: boolean;
+  isOccupationalTherapist: boolean;
+  isZemdaTO: boolean;
+  isSpeechTherapist: boolean;
+  isZemdaFono: boolean;
+  isPsychologist: boolean;
+  isZemdaPsico: boolean;
+  isPsychopedagogue: boolean;
+  isZemdaPP: boolean;
+  isPersonalTrainer: boolean;
+  isZemdaPersonal: boolean;
+  isDoctor: boolean;
+  isZemdaMed: boolean;
+  isEsthetician: boolean;
+  isZemdaEstetic: boolean;
+  isZemda360: boolean;
+  isZemdaBody: boolean;
+  commercialModule: string | null;
+  clinicalWorkspace: string | null;
+  taxonomyCategory?: string;
+  canonicalProfessionId?: string | null;
+  canonicalProfessionName?: string | null;
+  capabilities: string[];
+  practiceAreaIds: string[];
+  selectedOptionalCapabilities: string[];
+  hasCapability: (capabilityId: string) => boolean;
+  hasPermission: (permissionId: string) => boolean;
+  isSandboxSession: boolean;
+  startSandboxSession: (sessionData: { token: string; user: User; tenant: Tenant; capabilities: any }) => void;
+  exitSandboxSession: () => void | Promise<void>;
+  userPermissions: string[];
+  clientTermLabel: string;
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentTenant, setCurrentTenant] = useState<Tenant | null>(null);
+  const [token, setToken] = useState<string | null>(localStorage.getItem('auth_token'));
+  const [loading, setLoading] = useState<boolean>(true);
+
+  // Carrega usuário ao inicializar se já houver token salvo
+  useEffect(() => {
+    async function loadSession() {
+      const savedToken = localStorage.getItem('auth_token');
+      if (!savedToken) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const data = await ApiClient.get<{ user: User; tenant: Tenant | null }>('/v1/auth/me');
+        setCurrentUser(data.user);
+        if (data.tenant) {
+          setCurrentTenant(data.tenant);
+          localStorage.setItem('active_tenant_id', data.tenant.id);
+        }
+      } catch (err) {
+        console.error('Sessão expirada:', err);
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('active_tenant_id');
+        setToken(null);
+        setCurrentUser(null);
+        setCurrentTenant(null);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadSession();
+  }, []);
+
+  const login = async (email: string, password: string) => {
+    const data = await ApiClient.post<{ token: string; user: User; tenant: Tenant | null }>('/v1/auth/login', {
+      email,
+      password
+    });
+
+    localStorage.setItem('auth_token', data.token);
+    setToken(data.token);
+    setCurrentUser(data.user);
+
+    if (data.tenant) {
+      localStorage.setItem('active_tenant_id', data.tenant.id);
+      setCurrentTenant(data.tenant);
+    } else if (data.user.tenantId) {
+      localStorage.setItem('active_tenant_id', data.user.tenantId);
+    }
+
+    return { user: data.user, tenant: data.tenant };
+  };
+
+  const loginWithToken = (authToken: string, userData: User, tenantData?: Tenant | null) => {
+    localStorage.setItem('auth_token', authToken);
+    setToken(authToken);
+    setCurrentUser(userData);
+
+    if (tenantData) {
+      localStorage.setItem('active_tenant_id', tenantData.id);
+      setCurrentTenant(tenantData);
+    } else if (userData.tenantId) {
+      localStorage.setItem('active_tenant_id', userData.tenantId);
+    }
+  };
+
+  const logout = () => {
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('active_tenant_id');
+    localStorage.removeItem('sandbox_backup_token');
+    localStorage.removeItem('sandbox_backup_tenant');
+    try {
+      sessionStorage.removeItem('activeView');
+      sessionStorage.removeItem('zemda-billing-return-home');
+    } catch (_) {}
+    setToken(null);
+    setCurrentUser(null);
+    setCurrentTenant(null);
+
+    // Substitui a URL no histórico sem empilhar nova entrada (evita voltar para páginas protegidas pelo botão Voltar)
+    try {
+      window.history.replaceState(null, '', '/login');
+    } catch (_) {}
+
+    window.dispatchEvent(new CustomEvent('zemda-auth-state', { detail: { action: 'logout' } }));
+  };
+
+  const startSandboxSession = (sessionData: { token: string; user: User; tenant: Tenant; capabilities: any }) => {
+    const originalToken = localStorage.getItem('auth_token') || token;
+    const originalTenant = localStorage.getItem('active_tenant_id') || currentTenant?.id || '';
+    if (originalToken && !localStorage.getItem('sandbox_backup_token')) {
+      localStorage.setItem('sandbox_backup_token', originalToken);
+      sessionStorage.setItem('sandbox_backup_token', originalToken);
+      if (originalTenant) {
+        localStorage.setItem('sandbox_backup_tenant', originalTenant);
+        sessionStorage.setItem('sandbox_backup_tenant', originalTenant);
+      }
+    }
+    if (currentUser && !localStorage.getItem('sandbox_backup_user')) {
+      const userJson = JSON.stringify(currentUser);
+      localStorage.setItem('sandbox_backup_user', userJson);
+      sessionStorage.setItem('sandbox_backup_user', userJson);
+    }
+
+    loginWithToken(sessionData.token, sessionData.user, sessionData.tenant);
+  };
+
+  const exitSandboxSession = async () => {
+    const backupToken = localStorage.getItem('sandbox_backup_token') || sessionStorage.getItem('sandbox_backup_token');
+    const backupTenant = localStorage.getItem('sandbox_backup_tenant') || sessionStorage.getItem('sandbox_backup_tenant');
+    const backupUserStr = localStorage.getItem('sandbox_backup_user') || sessionStorage.getItem('sandbox_backup_user');
+
+    localStorage.removeItem('sandbox_backup_token');
+    sessionStorage.removeItem('sandbox_backup_token');
+    localStorage.removeItem('sandbox_backup_tenant');
+    sessionStorage.removeItem('sandbox_backup_tenant');
+    localStorage.removeItem('sandbox_backup_user');
+    sessionStorage.removeItem('sandbox_backup_user');
+    localStorage.removeItem('active_tenant_id');
+    setCurrentTenant(null);
+
+    // 1. Restaura o usuário SuperAdmin no estado síncrono imediatamente
+    let restoredUser: User | null = null;
+    if (backupUserStr) {
+      try {
+        restoredUser = JSON.parse(backupUserStr);
+      } catch (_) {}
+    }
+
+    if (restoredUser) {
+      setCurrentUser(restoredUser);
+    } else {
+      // Se não havia backupUser salvo, restaura papel superadmin para evitar telas indevidas
+      setCurrentUser((prev: any) => prev ? { ...prev, role: 'superadmin', tenantId: null } : {
+        id: 'superadmin',
+        name: 'Administrador',
+        email: 'admin@zemda.com.br',
+        role: 'superadmin',
+        status: 'active'
+      } as any);
+    }
+
+    try {
+      sessionStorage.setItem('activeView', 'superadmin');
+    } catch (_) {}
+
+    // 2. Restaura o token do SuperAdmin no localStorage e no state
+    if (backupToken) {
+      localStorage.setItem('auth_token', backupToken);
+      if (backupTenant && !backupTenant.startsWith('sbx-tenant-')) {
+        localStorage.setItem('active_tenant_id', backupTenant);
+      }
+      setToken(backupToken);
+    }
+
+    // 3. Atualiza rota e emite eventos de retorno ao painel SuperAdmin
+    try {
+      window.history.pushState({ view: 'superadmin' }, '', '/superadmin');
+    } catch (_) {}
+
+    window.dispatchEvent(new CustomEvent('zemda-exit-sandbox'));
+    window.dispatchEvent(new CustomEvent('zemda-navigate', { detail: { view: 'superadmin', force: true } }));
+
+    // 4. Sincroniza sessão em segundo plano se o token estiver presente
+    if (backupToken || localStorage.getItem('auth_token')) {
+      try {
+        await reloadSession();
+      } catch (e) {
+        console.warn('Sincronização em segundo plano após sair do Sandbox:', e);
+      }
+    }
+  };
+
+  const switchTenant = async (tenantId: string) => {
+    localStorage.setItem('active_tenant_id', tenantId);
+    try {
+      const tenantData = await ApiClient.get<Tenant>('/v1/tenants/current');
+      setCurrentTenant(tenantData);
+    } catch (err) {
+      console.error('Erro ao alternar tenant:', err);
+    }
+  };
+
+  const refreshTenant = async () => {
+    try {
+      const tenantData = await ApiClient.get<Tenant>('/v1/tenants/current');
+      if (tenantData) {
+        setCurrentTenant(tenantData);
+        if (tenantData.id) {
+          localStorage.setItem('active_tenant_id', tenantData.id);
+        }
+      }
+    } catch (err) {
+      console.error('Erro ao recarregar clínica:', err);
+    }
+  };
+
+  const reloadSession = async () => {
+    try {
+      const data = await ApiClient.get<{ user: User; tenant: Tenant | null }>('/v1/auth/me');
+      setCurrentUser(data.user);
+      if (data.tenant && !data.tenant.id.startsWith('sbx-tenant-')) {
+        setCurrentTenant(data.tenant);
+        localStorage.setItem('active_tenant_id', data.tenant.id);
+      } else {
+        setCurrentTenant(null);
+        localStorage.removeItem('active_tenant_id');
+      }
+    } catch (err) {
+      console.error('Erro ao recarregar sessão:', err);
+    }
+  };
+
+  useEffect(() => {
+    const refreshSession = () => { if (localStorage.getItem('auth_token')) void reloadSession(); };
+    const handleClinicUpdated = (e: any) => {
+      if (e?.detail?.logo_url !== undefined) {
+        setCurrentTenant(prev => prev ? { ...prev, logo_url: e.detail.logo_url } : prev);
+      }
+      void refreshTenant();
+    };
+
+    window.addEventListener('focus', refreshSession);
+    window.addEventListener('zemda-profession-changed', refreshSession);
+    window.addEventListener('zemda-clinic-updated', handleClinicUpdated);
+    return () => {
+      window.removeEventListener('focus', refreshSession);
+      window.removeEventListener('zemda-profession-changed', refreshSession);
+      window.removeEventListener('zemda-clinic-updated', handleClinicUpdated);
+    };
+  }, []);
+
+  const isSuperAdmin = currentUser?.role === 'superadmin';
+  const isClinicAdmin = currentUser?.role === 'clinic_admin' || isSuperAdmin;
+  const isProfessional = currentUser?.role === 'professional';
+  const isReceptionist = currentUser?.role === 'receptionist';
+  const canAccessConsents = Boolean(isClinicAdmin || isProfessional || isReceptionist);
+  const isPatient = currentUser?.role === 'patient';
+  const isEligibleStaff = !isPatient && !isSuperAdmin && (isClinicAdmin || isProfessional);
+
+  const profId = ((currentUser as any)?.professionId || '').toLowerCase();
+  const profSlug = (currentUser?.professionSlug || '').toLowerCase();
+  const profName = (currentUser?.professionName || '').toLowerCase();
+  const regType = ((currentUser as any)?.registrationType || '').toUpperCase();
+
+  const combinedProf = `${profId} ${profName} ${profSlug}`.toLowerCase();
+
+  // Resolução do módulo primário ativo baseado prioritariamente na fonte única do backend
+  let activeModule:
+    | 'ZemdaFono'
+    | 'ZemdaTO'
+    | 'ZemdaNutri'
+    | 'ZemdaPsico'
+    | 'ZemdaPP'
+    | 'ZemdaFisio'
+    | 'ZemdaOdonto'
+    | 'ZemdaPersonal'
+    | 'ZemdaMed'
+    | 'ZemdaEstetic'
+    | null = (currentUser?.commercialModule as any) || null;
+
+  // Fallback retroativo para sessões legadas sem commercialModule populado
+  if (!activeModule) {
+    if (
+      profId === 'prof-psicopedagogo' ||
+      profId === 'prof-psicopedagogia' ||
+      profSlug === 'psicopedagogo' ||
+      profSlug === 'psicopedagogia' ||
+      combinedProf.includes('psicopedag') ||
+      regType === 'ABPP'
+    ) {
+      activeModule = 'ZemdaPP';
+    } else if (
+      profId === 'prof-psicologo' ||
+      profId === 'prof-psicologia' ||
+      profId === 'prof-neuropsicologo' ||
+      profId === 'prof-psicanalista' ||
+      profId === 'prof-terapeuta-familiar' ||
+      profSlug === 'psicologo' ||
+      profSlug === 'psicologia' ||
+      profSlug === 'neuropsicologo' ||
+      profSlug === 'psicanalista' ||
+      combinedProf.includes('psicólog') ||
+      combinedProf.includes('psicolog') ||
+      combinedProf.includes('neuropsicól') ||
+      combinedProf.includes('neuropsicol') ||
+      combinedProf.includes('psicanal') ||
+      regType === 'CRP'
+    ) {
+      activeModule = 'ZemdaPsico';
+    } else if (
+      profId === 'prof-fonoaudiologo' ||
+      profId === 'prof-fonoaudiologia' ||
+      profSlug === 'fonoaudiologo' ||
+      profSlug === 'fonoaudiologia' ||
+      combinedProf.includes('fono') ||
+      regType === 'CRFA'
+    ) {
+      activeModule = 'ZemdaFono';
+    } else if (
+      profId === 'prof-terapeuta-ocupacional' ||
+      profId === 'prof-terapia-ocupacional' ||
+      profSlug === 'terapeuta-ocupacional' ||
+      profSlug === 'terapia-ocupacional' ||
+      combinedProf.includes('ocupacional') ||
+      combinedProf.includes('terapia ocupacional') ||
+      combinedProf.includes('terapeuta ocupacional')
+    ) {
+      activeModule = 'ZemdaTO';
+    } else if (
+      profId === 'prof-nutricionista' ||
+      profId === 'prof-nutricao' ||
+      profSlug === 'nutricionista' ||
+      profSlug === 'nutricao' ||
+      combinedProf.includes('nutri') ||
+      regType === 'CRN'
+    ) {
+      activeModule = 'ZemdaNutri';
+    } else if (
+      profId === 'prof-fisioterapeuta' ||
+      profId === 'prof-fisioterapia' ||
+      profSlug === 'fisioterapeuta' ||
+      profSlug === 'fisioterapia' ||
+      combinedProf.includes('fisio') ||
+      combinedProf.includes('physio')
+    ) {
+      activeModule = 'ZemdaFisio';
+    } else if (
+      profId === 'prof-dentista' ||
+      profId === 'prof-cirurgiao-dentista' ||
+      profId === 'prof-odontologia' ||
+      profSlug === 'dentista' ||
+      profSlug === 'cirurgiao-dentista' ||
+      profSlug === 'odontologia' ||
+      combinedProf.includes('odonto') ||
+      combinedProf.includes('dentis') ||
+      combinedProf.includes('cirurgi') ||
+      regType === 'CRO'
+    ) {
+      activeModule = 'ZemdaOdonto';
+    } else if (
+      profId === 'prof-personal-trainer' ||
+      profId === 'prof-educacao-fisica' ||
+      profId === 'prof-educador-fisico' ||
+      profId === 'personal_trainer' ||
+      profSlug === 'personal-trainer' ||
+      profSlug === 'educacao-fisica' ||
+      combinedProf.includes('personal') ||
+      combinedProf.includes('educação física') ||
+      combinedProf.includes('educacao fisica') ||
+      combinedProf.includes('educador físico') ||
+      combinedProf.includes('educador fisico') ||
+      combinedProf.includes('treinamento físico') ||
+      combinedProf.includes('musculação') ||
+      combinedProf.includes('musculacao') ||
+      regType === 'CREF'
+    ) {
+      activeModule = 'ZemdaPersonal';
+    } else if (
+      profId === 'prof-medico' ||
+      profId === 'prof-medicina' ||
+      profId === 'prof-cardiologista' ||
+      profId === 'prof-dermatologista' ||
+      profId === 'prof-pediatra' ||
+      profId === 'prof-psiquiatra' ||
+      profId === 'prof-neurologista' ||
+      profId === 'prof-geriatra' ||
+      profId === 'prof-ortopedista' ||
+      profId === 'prof-endocrinologista' ||
+      profId === 'prof-reumatologista' ||
+      profSlug === 'medico' ||
+      profSlug === 'medicina' ||
+      profSlug === 'cardiologista' ||
+      profSlug === 'dermatologista' ||
+      profSlug === 'pediatra' ||
+      profSlug === 'psiquiatra' ||
+      profSlug === 'neurologista' ||
+      profSlug === 'geriatra' ||
+      profSlug === 'ortopedista' ||
+      profSlug === 'endocrinologista' ||
+      profSlug === 'reumatologista' ||
+      combinedProf.includes('médic') ||
+      combinedProf.includes('medic') ||
+      regType === 'CRM'
+    ) {
+      activeModule = 'ZemdaMed';
+    } else if (
+      profId === 'prof-esteticista' ||
+      profSlug === 'esteticista' ||
+      combinedProf.includes('estetic') ||
+      combinedProf.includes('estétic')
+    ) {
+      activeModule = 'ZemdaEstetic';
+    }
+  }
+
+  const rawPermissions = (currentUser as any)?.permissions || [];
+  const isEligibleForImport = Boolean(
+    isClinicAdmin ||
+    isProfessional ||
+    isReceptionist ||
+    (currentUser?.role as string) === 'secretary'
+  );
+  const userPermissions = Array.from(new Set([
+    ...rawPermissions,
+    ...(isEligibleForImport ? ['can_import_data'] : [])
+  ]));
+
+  // Módulos com estrita exclusividade mútua (apenas o módulo correspondente à profissão atual fica ativo)
+  const isPhysiotherapist = isEligibleStaff && (activeModule ? activeModule === 'ZemdaFisio' : Boolean(currentUser?.zemdaFisioEnabled));
+  const isZemdaFisio = isPhysiotherapist;
+
+  const isDentist = isEligibleStaff && (activeModule ? activeModule === 'ZemdaOdonto' : Boolean(currentUser?.zemdaOdontoEnabled));
+  const isZemdaOdonto = isDentist;
+
+  const isNutritionist = isEligibleStaff && (activeModule ? activeModule === 'ZemdaNutri' : Boolean(currentUser?.zemdaNutriEnabled));
+  const isZemdaNutri = isNutritionist;
+
+  const isOccupationalTherapist = isEligibleStaff && (activeModule ? activeModule === 'ZemdaTO' : Boolean(currentUser?.zemdaToEnabled));
+  const isZemdaTO = isOccupationalTherapist;
+
+  const isSpeechTherapist = isEligibleStaff && (activeModule ? activeModule === 'ZemdaFono' : Boolean(currentUser?.zemdaFonoEnabled));
+  const isZemdaFono = isSpeechTherapist;
+
+  const isPsychologist = isEligibleStaff && (activeModule ? activeModule === 'ZemdaPsico' : Boolean((currentUser as any)?.zemdaPsicoEnabled));
+  const isZemdaPsico = isPsychologist;
+
+  const isPsychopedagogue = isEligibleStaff && (activeModule ? activeModule === 'ZemdaPP' : Boolean(currentUser?.zemdaPPEnabled));
+  const isZemdaPP = isPsychopedagogue;
+
+  const isPersonalTrainer = isEligibleStaff && (activeModule ? activeModule === 'ZemdaPersonal' : (
+    currentUser?.commercialModule === 'ZemdaPersonal' ||
+    Boolean((currentUser as any)?.zemdaPersonalEnabled) ||
+    Boolean((currentUser as any)?.zemda_personal_enabled)
+  ));
+  const isZemdaPersonal = isPersonalTrainer;
+
+  // ZemdaMed: Vertical médica integral
+  const isDoctor = isEligibleStaff && (activeModule ? activeModule === 'ZemdaMed' : (
+    currentUser?.commercialModule === 'ZemdaMed' ||
+    Boolean(currentUser?.zemdaMedEnabled)
+  ));
+  const isZemdaMed = isDoctor;
+
+  // ZemdaEstetic: Vertical de Estética (Facial, Corporal, Capilar)
+  // Dentistas preservam ZemdaOdonto e obtêm acesso duplo estritamente via área de atuação (HOF) ou permissão
+  const capabilities = currentUser?.capabilities || [];
+  const practiceAreaIds = currentUser?.practiceAreaIds || [];
+  const selectedOptionalCapabilities = currentUser?.selectedOptionalCapabilities || [];
+
+  const isEsthetician = isEligibleStaff && (
+    activeModule === 'ZemdaEstetic' ||
+    profId === 'prof-esteticista' ||
+    profSlug === 'esteticista' ||
+    combinedProf.includes('estetic') ||
+    combinedProf.includes('estétic')
+  );
+
+  const isZemdaEstetic = isEligibleStaff && (
+    activeModule === 'ZemdaEstetic' ||
+    isEsthetician ||
+    Boolean((currentUser as any)?.zemdaEsteticEnabled) ||
+    Boolean((currentUser as any)?.zemda_estetic_enabled) ||
+    userPermissions.includes('access_zemda_estetic') ||
+    (isDentist && (
+      practiceAreaIds.includes('pa-odonto-estetica') ||
+      Boolean((currentUser as any)?.zemdaEsteticEnabled) ||
+      Boolean((currentUser as any)?.zemda_estetic_enabled) ||
+      userPermissions.includes('access_zemda_estetic')
+    )) ||
+    practiceAreaIds.some(pa => [
+      'pa-estet-facial',
+      'pa-estet-corporal',
+      'pa-estet-capilar',
+      'pa-odonto-estetica',
+      'pa-biomed-estetica',
+      'pa-farm-estetica'
+    ].includes(pa)) ||
+    capabilities.some(c => c.startsWith('ESTETIC_'))
+  );
+
+  // Zemda360 (legado: ZemdaBody): Módulo transversal automático para TODOS os profissionais clínicos e gestores ativos da clínica
+  const isZemda360 = isEligibleStaff;
+  const isZemdaBody = isZemda360;
+
+  const commercialModule = activeModule || currentUser?.commercialModule || null;
+
+  const isSandboxSession = Boolean(
+    currentUser?.tenantId?.startsWith('sbx-tenant-') ||
+    currentTenant?.id?.startsWith('sbx-tenant-') ||
+    localStorage.getItem('sandbox_backup_token')
+  );
+
+  const hasCapability = (capId: string): boolean => {
+    if (isSuperAdmin && !isSandboxSession) return true;
+    return capabilities.includes(capId);
+  };
+
+  const hasPermission = (permId: string): boolean => {
+    if (isSuperAdmin && !isSandboxSession) return true;
+    if (isClinicAdmin) return true;
+    if (permId === 'can_import_data' && isEligibleForImport) return true;
+    return userPermissions.includes(permId);
+  };
+
+  const clientTermLabel = (isPersonalTrainer || isZemdaPersonal || commercialModule === 'ZemdaPersonal')
+    ? 'Aluno'
+    : 'Paciente';
+
+  return (
+    <AuthContext.Provider
+      value={{
+        currentUser,
+        currentTenant,
+        token,
+        loading,
+        login,
+        loginWithToken,
+        logout,
+        switchTenant,
+        refreshTenant,
+        reloadSession,
+        isSuperAdmin,
+        isClinicAdmin,
+        isProfessional,
+        isReceptionist,
+        canAccessConsents,
+        isPatient,
+        isPhysiotherapist,
+        isZemdaFisio,
+        isDentist,
+        isZemdaOdonto,
+        isNutritionist,
+        isZemdaNutri,
+        isOccupationalTherapist,
+        isZemdaTO,
+        isSpeechTherapist,
+        isZemdaFono,
+        isPsychologist,
+        isZemdaPsico,
+        isPsychopedagogue,
+        isZemdaPP,
+        isPersonalTrainer,
+        isZemdaPersonal,
+        isDoctor,
+        isZemdaMed,
+        isEsthetician,
+        isZemdaEstetic,
+        isZemda360,
+        isZemdaBody,
+        commercialModule,
+        clinicalWorkspace: currentUser?.clinicalWorkspace ?? null,
+        taxonomyCategory: currentUser?.taxonomyCategory,
+        canonicalProfessionId: currentUser?.canonicalProfessionId || currentUser?.professionId || null,
+        canonicalProfessionName: currentUser?.canonicalProfessionName || currentUser?.professionName || null,
+        capabilities,
+        practiceAreaIds,
+        selectedOptionalCapabilities,
+        hasCapability,
+        hasPermission,
+        isSandboxSession,
+        startSandboxSession,
+        exitSandboxSession,
+        userPermissions,
+        clientTermLabel
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth deve ser utilizado dentro de um AuthProvider');
+  }
+  return context;
+}

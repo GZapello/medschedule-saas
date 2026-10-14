@@ -1,3 +1,4 @@
+import { ClinicSwitcher } from './ClinicSwitcher';
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -393,6 +394,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           })}
         </div>
 
+        <ClinicSwitcher />
         {/* Footer info */}
         <div className="p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-slate-100 text-[11px] text-slate-400 bg-slate-50/40 flex items-center justify-between">
           <span>Ambiente Seguro • LGPD</span>

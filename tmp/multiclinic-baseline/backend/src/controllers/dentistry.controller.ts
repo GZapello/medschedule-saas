@@ -1,0 +1,2084 @@
+import { Request, Response } from 'express';
+import { db } from '../config/database';
+import { v4 as uuidv4 } from 'uuid';
+import { logAudit } from '../middlewares/audit.middleware';
+import { hasClinicalAccess } from './clinical.controller';
+import { DocumentsController } from './documents.controller';
+import { ClinicalRecordService } from '../services/clinical-record.service';
+import { ServiceReminderService } from '../services/service-reminder.service';
+import { ClinicalInventoryService } from '../services/clinical-inventory.service';
+
+/**
+ * Validação de acesso exclusivo para Odontologia (ZemdaOdonto)
+ * Bloqueio REAL no backend:
+ * 1. O usuário deve pertencer à profissão / área de atuação de Odontologia (prof-dentista, prof-odontologia, etc.)
+ * 2. O acesso deve ser explicitamente liberado pelo gestor da clínica (permissão access_zemda_odonto ou flag zemda_odonto_enabled)
+ * 3. SuperAdmin, Recepção, Financeiro e outras profissões: BLOQUEADOS (403)
+ * 4. Gerente que também é Cirurgião-Dentista: PERMITIDO desde que habilitado
+ */
+export function isDentistOrClinicManager(req: Request): boolean {
+  if (!req.user || !req.tenantId) return false;
+
+  // 1. Administrador Global / Sistema NUNCA pode acessar prontuários e fichas clínicas do ZemdaOdonto
+  if (req.user.role === 'superadmin') return false;
+
+  // 2. Cargos estritamente não-clínicos são bloqueados
+  const roleStr = req.user.role as string;
+  if (roleStr === 'receptionist' || roleStr === 'financial' || roleStr === 'secretary' || roleStr === 'assistant') {
+    return false;
+  }
+
+  // 3. Busca vínculo do usuário na clínica
+  const clinicUser = db.prepare(`
+    SELECT cu.role, cu.status as cu_status, cu.is_manager, cu.permissions_json, cu.profession_custom,
+           cu.practice_areas as cu_practice_areas, cu.zemda_odonto_enabled,
+           u.status as u_status, u.profession_name, u.practice_areas as u_practice_areas, u.zemda_odonto_enabled as u_zemda_odonto_enabled
+    FROM users u
+    LEFT JOIN clinic_users cu ON cu.user_id = u.id AND cu.tenant_id = ?
+    WHERE u.id = ?
+  `).get(req.tenantId, req.user.userId) as any;
+
+  if (clinicUser?.u_status === 'inactive' || clinicUser?.u_status === 'blocked' || clinicUser?.cu_status === 'inactive' || clinicUser?.cu_status === 'blocked') {
+    return false;
+  }
+
+  // Busca dados de tenant para profissão do gestor
+  const tenant = db.prepare('SELECT manager_profession, manager_practice_areas FROM tenants WHERE id = ?').get(req.tenantId) as any;
+
+  // Busca dados de professional se houver
+  const prof = db.prepare(`
+    SELECT p.id, p.profession_id, p.practice_areas, p.specialty_custom, p.zemda_odonto_enabled,
+           prof.slug as profession_slug, prof.name as profession_name
+    FROM professionals p
+    LEFT JOIN professions prof ON prof.id = p.profession_id
+    WHERE p.user_id = ? AND p.tenant_id = ?
+  `).get(req.user.userId, req.tenantId) as any;
+
+  // 4. Critério 1: Profissão / Área clínica deve ser Odontologia / Dentista
+  const combinedProfessionText = [
+    prof?.profession_id,
+    prof?.profession_slug,
+    prof?.profession_name,
+    prof?.practice_areas,
+    prof?.specialty_custom,
+    clinicUser?.profession_custom,
+    clinicUser?.cu_practice_areas,
+    clinicUser?.profession_name,
+    clinicUser?.u_practice_areas,
+    req.user.role === 'clinic_admin' ? tenant?.manager_profession : null,
+    req.user.role === 'clinic_admin' ? tenant?.manager_practice_areas : null
+  ].filter(Boolean).join(' ').toLowerCase();
+
+  const isOdontoArea =
+    prof?.profession_id === 'prof-dentista' ||
+    prof?.profession_id === 'prof-odontologia' ||
+    combinedProfessionText.includes('odonto') ||
+    combinedProfessionText.includes('dentis') ||
+    combinedProfessionText.includes('cro');
+
+  if (!isOdontoArea) {
+    return false; // Não é da área de Odontologia -> BLOQUEADO (403)
+  }
+
+  // 5. Critério 2: Liberação explícita pelo gestor da clínica (ou é o próprio gerente atuando em odontologia)
+  let perms: string[] = [];
+  try {
+    if (clinicUser?.permissions_json) {
+      perms = JSON.parse(clinicUser.permissions_json);
+    }
+  } catch {}
+
+  const isManager = req.user.role === 'clinic_admin' || clinicUser?.is_manager === 1 || clinicUser?.role === 'clinic_admin';
+  const isProfessional = req.user.role === 'professional';
+
+  const isAuthorizedByManager =
+    (isProfessional && isOdontoArea) ||
+    (isManager && isOdontoArea) ||
+    perms.includes('access_zemda_odonto') ||
+    Number(prof?.zemda_odonto_enabled) === 1 ||
+    Number(clinicUser?.zemda_odonto_enabled) === 1 ||
+    Number(clinicUser?.u_zemda_odonto_enabled) === 1;
+
+  return isAuthorizedByManager;
+}
+
+export class DentistryController {
+  // =========================================================================
+  // 1. ODONTOGRAMA (INICIAL, ATUAL E HISTÓRICO)
+  // =========================================================================
+
+  static getOdontogram(req: Request, res: Response): void {
+    try {
+      const patientId = String(req.params.patientId);
+      const tenantId = req.tenantId;
+
+      if (!req.user || !tenantId) {
+        res.status(401).json({ error: 'Não autorizado' });
+        return;
+      }
+
+      if (!isDentistOrClinicManager(req)) {
+        res.status(403).json({
+          error: 'Acesso restrito: este recurso é exclusivo para profissionais de Odontologia e administração da clínica.',
+          code: 'DENTISTRY_RESTRICTED'
+        });
+        return;
+      }
+
+      if (!hasClinicalAccess(req, patientId)) {
+        res.status(403).json({
+          error: 'Acesso clínico restrito: profissional sem vínculo assistencial com o paciente (Sigilo LGPD).',
+          code: 'CLINICAL_PRIVACY_RESTRICTION'
+        });
+        return;
+      }
+
+      const recordIdQuery = req.query.recordId ? String(req.query.recordId) : null;
+
+      const rows = db.prepare(`
+        SELECT * FROM odontograms 
+        WHERE patient_id = ? AND tenant_id = ? 
+        ORDER BY created_at DESC
+      `).all(patientId, tenantId) as any[];
+
+      const initial = rows.find(r => r.type === 'initial') || null;
+      let current = rows.find(r => r.type === 'current') || rows[0] || null;
+
+      if (recordIdQuery) {
+        const snap = rows.find(r => r.record_id === recordIdQuery || r.appointment_id === recordIdQuery);
+        if (snap) {
+          current = snap;
+        }
+      }
+
+      const snapshots = rows
+        .filter(r => r.type === 'consultation_snapshot')
+        .map(r => ({
+          ...r,
+          status_data: JSON.parse(r.status_data_json || '{}')
+        }));
+
+      logAudit(req, 'GET_ODONTOGRAM', 'odontograms', patientId);
+      res.json({
+        initial: initial ? { ...initial, status_data: JSON.parse(initial.status_data_json || '{}') } : null,
+        current: current ? { ...current, status_data: JSON.parse(current.status_data_json || '{}') } : null,
+        snapshots,
+        all: rows.map(r => ({ ...r, status_data: JSON.parse(r.status_data_json || '{}') }))
+      });
+    } catch (err: any) {
+      console.error('[DentistryController.getOdontogram] Erro:', err);
+      res.status(500).json({ error: 'Erro ao buscar odontograma' });
+    }
+  }
+
+  static saveOdontogram(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      if (!isDentistOrClinicManager(req)) {
+        res.status(403).json({
+          error: 'Acesso restrito: somente cirurgiões-dentistas autorizados podem alterar o odontograma.',
+          code: 'DENTISTRY_RESTRICTED'
+        });
+        return;
+      }
+
+      const { patientId, appointmentId, type = 'current', statusData, notes, toothChanges } = req.body;
+
+      if (!patientId || !statusData) {
+        res.status(400).json({ error: 'patientId e statusData são obrigatórios' });
+        return;
+      }
+
+      let profId: string | null = null;
+      if (req.user?.role === 'professional') {
+        const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
+        if (prof) profId = prof.id;
+      } else if (req.body.professionalId) {
+        profId = req.body.professionalId;
+      }
+
+      const statusDataJson = typeof statusData === 'string' ? statusData : JSON.stringify(statusData);
+
+      const existing = db.prepare(`
+        SELECT id FROM odontograms 
+        WHERE patient_id = ? AND tenant_id = ? AND type = ?
+        LIMIT 1
+      `).get(patientId, tenantId, type) as any;
+
+      let odontoId = existing?.id;
+
+      if (existing) {
+        db.prepare(`
+          UPDATE odontograms 
+          SET status_data_json = ?, notes = COALESCE(?, notes), updated_at = datetime('now'), professional_id = COALESCE(?, professional_id)
+          WHERE id = ? AND tenant_id = ?
+        `).run(statusDataJson, notes || null, profId || null, existing.id, tenantId);
+      } else {
+        odontoId = 'odo-' + uuidv4().slice(0, 8);
+        db.prepare(`
+          INSERT INTO odontograms (id, tenant_id, patient_id, professional_id, appointment_id, type, status_data_json, notes)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(odontoId, tenantId, patientId, profId, appointmentId || null, type, statusDataJson, notes || null);
+      }
+
+      if (Array.isArray(toothChanges) && toothChanges.length > 0) {
+        const insertToothStmt = db.prepare(`
+          INSERT INTO dental_tooth_records (
+            id, tenant_id, patient_id, professional_id, appointment_id,
+            tooth_number, face, condition, previous_condition, procedure_name, notes
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+
+        for (const change of toothChanges) {
+          const recId = 'dtr-' + uuidv4().slice(0, 8);
+          insertToothStmt.run(
+            recId, tenantId, patientId, profId, appointmentId || null,
+            change.toothNumber, change.face || 'whole', change.condition,
+            change.previousCondition || null, change.procedureName || null, change.notes || null
+          );
+        }
+      }
+
+      logAudit(req, 'SAVE_ODONTOGRAM', 'odontograms', odontoId, { patientId, type });
+      res.json({ id: odontoId, message: 'Odontograma salvo com sucesso' });
+    } catch (err: any) {
+      console.error('[DentistryController.saveOdontogram] Erro:', err);
+      res.status(500).json({ error: 'Erro ao salvar odontograma' });
+    }
+  }
+
+  static getToothHistory(req: Request, res: Response): void {
+    try {
+      const patientId = String(req.params.patientId);
+      const toothNumber = req.query.toothNumber ? Number(req.query.toothNumber) : null;
+      const tenantId = req.tenantId;
+
+      if (!isDentistOrClinicManager(req)) {
+        res.status(403).json({ error: 'Acesso restrito', code: 'DENTISTRY_RESTRICTED' });
+        return;
+      }
+
+      let query = `
+        SELECT dtr.*, p.name as professional_name
+        FROM dental_tooth_records dtr
+        LEFT JOIN professionals p ON p.id = dtr.professional_id
+        WHERE dtr.patient_id = ? AND dtr.tenant_id = ?
+      `;
+      const params: any[] = [patientId, tenantId];
+
+      if (toothNumber) {
+        query += ` AND dtr.tooth_number = ?`;
+        params.push(toothNumber);
+      }
+
+      query += ` ORDER BY dtr.created_at DESC`;
+
+      const rows = db.prepare(query).all(...params);
+      res.json(rows);
+    } catch (err: any) {
+      console.error('[DentistryController.getToothHistory] Erro:', err);
+      res.status(500).json({ error: 'Erro ao buscar histórico do dente' });
+    }
+  }
+
+  // =========================================================================
+  // 2. PERIODONTIA (PERIO)
+  // =========================================================================
+
+  static getPerioRecords(req: Request, res: Response): void {
+    try {
+      const patientId = String(req.params.patientId);
+      const tenantId = req.tenantId;
+
+      if (!isDentistOrClinicManager(req)) {
+        res.status(403).json({ error: 'Acesso restrito', code: 'DENTISTRY_RESTRICTED' });
+        return;
+      }
+
+      const rows = db.prepare(`
+        SELECT pr.*, p.name as professional_name
+        FROM dental_periodontal_records pr
+        LEFT JOIN professionals p ON p.id = pr.professional_id
+        WHERE pr.patient_id = ? AND pr.tenant_id = ?
+        ORDER BY pr.created_at DESC
+      `).all(patientId, tenantId) as any[];
+
+      res.json(rows.map(r => ({
+        ...r,
+        periodontogram: JSON.parse(r.periodontogram_json || '{}')
+      })));
+    } catch (err: any) {
+      console.error('[DentistryController.getPerioRecords] Erro:', err);
+      res.status(500).json({ error: 'Erro ao buscar periodontograma' });
+    }
+  }
+
+  static savePerioRecord(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      if (!isDentistOrClinicManager(req)) {
+        res.status(403).json({ error: 'Acesso restrito', code: 'DENTISTRY_RESTRICTED' });
+        return;
+      }
+
+      const { patientId, appointmentId, periodontogram, notes } = req.body;
+      if (!patientId || !periodontogram) {
+        res.status(400).json({ error: 'patientId e periodontogram são obrigatórios' });
+        return;
+      }
+
+      let profId: string | null = null;
+      if (req.user?.role === 'professional') {
+        const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
+        if (prof) profId = prof.id;
+      } else if (req.body.professionalId) {
+        profId = req.body.professionalId;
+      }
+
+      const id = 'perio-' + uuidv4().slice(0, 8);
+      const perioJson = typeof periodontogram === 'string' ? periodontogram : JSON.stringify(periodontogram);
+
+      db.prepare(`
+        INSERT INTO dental_periodontal_records (id, tenant_id, patient_id, professional_id, appointment_id, periodontogram_json, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(id, tenantId, patientId, profId, appointmentId || null, perioJson, notes || null);
+
+      logAudit(req, 'SAVE_PERIO_RECORD', 'dental_periodontal_records', id, { patientId });
+      res.status(201).json({ id, message: 'Ficha periodontal salva com sucesso' });
+    } catch (err: any) {
+      console.error('[DentistryController.savePerioRecord] Erro:', err);
+      res.status(500).json({ error: 'Erro ao salvar ficha periodontal' });
+    }
+  }
+
+  // =========================================================================
+  // 3. ENDODONTIA (ENDO)
+  // =========================================================================
+
+  static getEndoRecords(req: Request, res: Response): void {
+    try {
+      const patientId = String(req.params.patientId);
+      const tenantId = req.tenantId;
+
+      if (!isDentistOrClinicManager(req)) {
+        res.status(403).json({ error: 'Acesso restrito', code: 'DENTISTRY_RESTRICTED' });
+        return;
+      }
+
+      const rows = db.prepare(`
+        SELECT er.*, p.name as professional_name
+        FROM dental_endodontic_records er
+        LEFT JOIN professionals p ON p.id = er.professional_id
+        WHERE er.patient_id = ? AND er.tenant_id = ?
+        ORDER BY er.created_at DESC
+      `).all(patientId, tenantId);
+
+      res.json(rows);
+    } catch (err: any) {
+      console.error('[DentistryController.getEndoRecords] Erro:', err);
+      res.status(500).json({ error: 'Erro ao buscar registros endodônticos' });
+    }
+  }
+
+  static saveEndoRecord(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      if (!isDentistOrClinicManager(req)) {
+        res.status(403).json({ error: 'Acesso restrito', code: 'DENTISTRY_RESTRICTED' });
+        return;
+      }
+
+      const {
+        patientId, appointmentId, toothNumber, pulparDiagnosis, periapicalDiagnosis,
+        canalsCount, workingLength, instrumentation, irrigation, intracanalMedication,
+        obturation, material, sessionsCount, notes
+      } = req.body;
+
+      if (!patientId || !toothNumber) {
+        res.status(400).json({ error: 'patientId e toothNumber são obrigatórios' });
+        return;
+      }
+
+      let profId: string | null = null;
+      if (req.user?.role === 'professional') {
+        const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
+        if (prof) profId = prof.id;
+      } else if (req.body.professionalId) {
+        profId = req.body.professionalId;
+      }
+
+      const id = 'endo-' + uuidv4().slice(0, 8);
+
+      db.prepare(`
+        INSERT INTO dental_endodontic_records (
+          id, tenant_id, patient_id, professional_id, appointment_id,
+          tooth_number, pulpar_diagnosis, periapical_diagnosis, canals_count,
+          working_length, instrumentation, irrigation, intracanal_medication,
+          obturation, material, sessions_count, notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        id, tenantId, patientId, profId, appointmentId || null,
+        Number(toothNumber), pulparDiagnosis || null, periapicalDiagnosis || null, Number(canalsCount || 1),
+        workingLength || null, instrumentation || null, irrigation || null, intracanalMedication || null,
+        obturation || null, material || null, Number(sessionsCount || 1), notes || null
+      );
+
+      logAudit(req, 'SAVE_ENDO_RECORD', 'dental_endodontic_records', id, { patientId, toothNumber });
+      res.status(201).json({ id, message: 'Registro endodôntico salvo com sucesso' });
+    } catch (err: any) {
+      console.error('[DentistryController.saveEndoRecord] Erro:', err);
+      res.status(500).json({ error: 'Erro ao salvar registro endodôntico' });
+    }
+  }
+
+  // =========================================================================
+  // 4. ANAMNESE ODONTOLÓGICA
+  // =========================================================================
+
+  static getAnamnesis(req: Request, res: Response): void {
+    try {
+      const patientId = String(req.params.patientId);
+      const tenantId = req.tenantId;
+
+      if (!isDentistOrClinicManager(req)) {
+        res.status(403).json({ error: 'Acesso restrito', code: 'DENTISTRY_RESTRICTED' });
+        return;
+      }
+
+      const record = db.prepare(`
+        SELECT * FROM dental_anamnesis 
+        WHERE patient_id = ? AND tenant_id = ?
+        LIMIT 1
+      `).get(patientId, tenantId) as any;
+
+      if (!record) {
+        res.json(null);
+        return;
+      }
+
+      res.json({
+        ...record,
+        systemic_diseases: JSON.parse(record.systemic_diseases_json || '[]'),
+        habits: JSON.parse(record.habits_json || '[]'),
+        allergies: JSON.parse(record.allergies_json || '[]'),
+        custom_fields: JSON.parse(record.custom_fields_json || '{}')
+      });
+    } catch (err: any) {
+      console.error('[DentistryController.getAnamnesis] Erro:', err);
+      res.status(500).json({ error: 'Erro ao buscar anamnese odontológica' });
+    }
+  }
+
+  static saveAnamnesis(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      if (!isDentistOrClinicManager(req)) {
+        res.status(403).json({ error: 'Acesso restrito', code: 'DENTISTRY_RESTRICTED' });
+        return;
+      }
+
+      const {
+        patientId, systemicDiseases, habits, allergies,
+        currentMedications, previousSurgeries, anesthesiaHistory,
+        customFields, notes
+      } = req.body;
+
+      if (!patientId) {
+        res.status(400).json({ error: 'patientId é obrigatório' });
+        return;
+      }
+
+      let profId: string | null = null;
+      if (req.user?.role === 'professional') {
+        const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
+        if (prof) profId = prof.id;
+      }
+
+      const existing = db.prepare(`SELECT id FROM dental_anamnesis WHERE patient_id = ? AND tenant_id = ?`).get(patientId, tenantId) as any;
+
+      const sysJson = JSON.stringify(systemicDiseases || []);
+      const habJson = JSON.stringify(habits || []);
+      const allJson = JSON.stringify(allergies || []);
+      const custJson = JSON.stringify(customFields || {});
+
+      if (existing) {
+        db.prepare(`
+          UPDATE dental_anamnesis SET
+            systemic_diseases_json = ?, habits_json = ?, allergies_json = ?,
+            current_medications = ?, previous_surgeries = ?, anesthesia_history = ?,
+            custom_fields_json = ?, notes = ?, professional_id = COALESCE(?, professional_id),
+            updated_at = datetime('now')
+          WHERE id = ? AND tenant_id = ?
+        `).run(
+          sysJson, habJson, allJson,
+          currentMedications || null, previousSurgeries || null, anesthesiaHistory || null,
+          custJson, notes || null, profId || null,
+          existing.id, tenantId
+        );
+        logAudit(req, 'UPDATE_ANAMNESIS', 'dental_anamnesis', existing.id, { patientId });
+        res.json({ id: existing.id, message: 'Anamnese atualizada com sucesso' });
+      } else {
+        const id = 'ana-' + uuidv4().slice(0, 8);
+        db.prepare(`
+          INSERT INTO dental_anamnesis (
+            id, tenant_id, patient_id, professional_id,
+            systemic_diseases_json, habits_json, allergies_json,
+            current_medications, previous_surgeries, anesthesia_history,
+            custom_fields_json, notes
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          id, tenantId, patientId, profId,
+          sysJson, habJson, allJson,
+          currentMedications || null, previousSurgeries || null, anesthesiaHistory || null,
+          custJson, notes || null
+        );
+        logAudit(req, 'CREATE_ANAMNESIS', 'dental_anamnesis', id, { patientId });
+        res.status(201).json({ id, message: 'Anamnese registrada com sucesso' });
+      }
+    } catch (err: any) {
+      console.error('[DentistryController.saveAnamnesis] Erro:', err);
+      res.status(500).json({ error: 'Erro ao salvar anamnese' });
+    }
+  }
+
+  // =========================================================================
+  // 5. PLANO DE TRATAMENTO E ORÇAMENTO
+  // =========================================================================
+
+  static listTreatmentPlans(req: Request, res: Response): void {
+    try {
+      const patientId = String(req.params.patientId);
+      const tenantId = req.tenantId;
+
+      if (!isDentistOrClinicManager(req)) {
+        res.status(403).json({ error: 'Acesso restrito', code: 'DENTISTRY_RESTRICTED' });
+        return;
+      }
+
+      const rows = db.prepare(`
+        SELECT dtp.*, p.name as professional_name
+        FROM dental_treatment_plans dtp
+        LEFT JOIN professionals p ON p.id = dtp.professional_id
+        WHERE dtp.patient_id = ? AND dtp.tenant_id = ?
+        ORDER BY dtp.created_at DESC
+      `).all(patientId, tenantId) as any[];
+
+      res.json(rows.map(r => ({
+        ...r,
+        items: JSON.parse(r.items_json || '[]')
+      })));
+    } catch (err: any) {
+      console.error('[DentistryController.listTreatmentPlans] Erro:', err);
+      res.status(500).json({ error: 'Erro ao listar planos de tratamento' });
+    }
+  }
+
+  static saveTreatmentPlan(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      if (!tenantId) {
+        res.status(400).json({ error: 'Tenant não informado' });
+        return;
+      }
+      if (!isDentistOrClinicManager(req)) {
+        res.status(403).json({ error: 'Acesso restrito', code: 'DENTISTRY_RESTRICTED' });
+        return;
+      }
+
+      const {
+        patientId, title, items, totalValue, discountValue,
+        finalValue, paymentTerms, notes, status = 'planned'
+      } = req.body;
+
+      if (!patientId) {
+        res.status(400).json({ error: 'Paciente é obrigatório' });
+        return;
+      }
+      if (!title || !title.trim()) {
+        res.status(400).json({ error: 'Título do plano de tratamento é obrigatório' });
+        return;
+      }
+      if (!Array.isArray(items) || items.length === 0) {
+        res.status(400).json({ error: 'O plano deve conter pelo menos um item (procedimento ou produto/insumo)' });
+        return;
+      }
+
+      // Validação dos produtos/insumos de estoque recebidos
+      for (const item of items) {
+        const isProduct = (item.itemType || item.item_type) === 'product' || Boolean(item.productId);
+        if (isProduct) {
+          if (!item.productId) {
+            res.status(400).json({ error: 'Identificador do produto/insumo é obrigatório' });
+            return;
+          }
+
+          const productRow = db.prepare(`
+            SELECT id, name, unit, active, tenant_id
+            FROM inventory_items
+            WHERE id = ? AND tenant_id = ?
+          `).get(item.productId, tenantId) as any;
+
+          if (!productRow) {
+            res.status(400).json({
+              error: `Produto/insumo "${item.productName || item.productId}" não encontrado no estoque da clínica`
+            });
+            return;
+          }
+
+          if (!productRow.active || productRow.active === 0) {
+            res.status(400).json({
+              error: `Produto/insumo "${productRow.name}" está inativo no estoque da clínica`
+            });
+            return;
+          }
+        }
+      }
+
+      // Validação de existência do paciente no tenant
+      const patient = db.prepare('SELECT id, full_name FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId) as any;
+      if (!patient) {
+        res.status(404).json({ error: 'Paciente não encontrado' });
+        return;
+      }
+
+      let profId: string | null = null;
+      if (req.user?.role === 'professional') {
+        const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
+        if (prof) profId = prof.id;
+      } else if (req.body.professionalId) {
+        profId = req.body.professionalId;
+      }
+
+      const id = 'dtp-' + uuidv4().slice(0, 8);
+      const budId = 'bdg-' + uuidv4().slice(0, 8);
+      const year = new Date().getFullYear();
+      const countRow = db.prepare("SELECT count(*) as count FROM budgets WHERE tenant_id = ?").get(tenantId) as { count: number };
+      const budgetNumber = `ORC-${year}-${String((countRow?.count || 0) + 1).padStart(4, '0')}`;
+
+      const numTotal = Math.max(0, Number(totalValue || 0));
+      const numDiscount = Math.max(0, Number(discountValue || 0));
+      const numFinal = Math.max(0, Number(finalValue !== undefined && finalValue !== null ? finalValue : (numTotal - numDiscount)));
+      const itemsJson = JSON.stringify(items);
+      const budgetStatus = (status === 'approved') ? 'approved' : 'draft';
+
+      // Execução em transação atômica síncrona
+      const saveTx = db.transaction(() => {
+        // 1. Salva o plano odontológico
+        db.prepare(`
+          INSERT INTO dental_treatment_plans (
+            id, tenant_id, patient_id, professional_id, budget_id, title,
+            status, total_value, discount_value, final_value,
+            items_json, payment_terms, notes
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          id, tenantId, patientId, profId, budId, title.trim(),
+          status, numTotal, numDiscount, numFinal,
+          itemsJson, paymentTerms || null, notes || null
+        );
+
+        // 2. Cria orçamento correspondente em budgets (compatível com Gestão -> Orçamentos)
+        db.prepare(`
+          INSERT INTO budgets (
+            id, tenant_id, budget_type, budget_number, patient_id,
+            supplier_name, supplier_contact, discount, total_amount,
+            validity_date, delivery_deadline, status, notes,
+            converted_to_inventory, created_by, created_at, updated_at
+          ) VALUES (?, ?, 'patient', ?, ?, NULL, NULL, ?, ?, NULL, NULL, ?, ?, 0, ?, datetime('now'), datetime('now'))
+        `).run(
+          budId, tenantId, budgetNumber, patientId,
+          numDiscount, numFinal, budgetStatus, notes || null,
+          req.user?.name || 'Cirurgião-Dentista'
+        );
+
+        // 3. Mapeia cada item (serviço ou produto) para budget_items com detalhes clínicos
+        const insertItemStmt = db.prepare(`
+          INSERT INTO budget_items (
+            id, tenant_id, budget_id, item_type, reference_id, description, quantity, unit_price, total_price
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+
+        for (const item of items) {
+          const isProduct = (item.itemType || item.item_type) === 'product' || Boolean(item.productId);
+          if (isProduct) {
+            const qty = Math.max(0.001, Number(item.quantity) || 1);
+            const unitPrice = Math.max(0, Number(item.unitPrice !== undefined ? item.unitPrice : (item.value || 0)));
+            const totalPrice = item.totalPrice !== undefined ? Number(item.totalPrice) : Math.round(qty * unitPrice * 100) / 100;
+            const description = item.productName || item.description || 'Produto de Estoque';
+
+            insertItemStmt.run(
+              'bdi-' + uuidv4().slice(0, 8),
+              tenantId,
+              budId,
+              'product',
+              item.productId,
+              description,
+              qty,
+              unitPrice,
+              totalPrice
+            );
+          } else {
+            const toothPart = item.tooth && item.tooth !== 'Geral' ? ` - Dente ${item.tooth}` : '';
+            const facePart = item.face && item.face !== 'Geral' ? ` (${item.face})` : '';
+            const description = `${item.procedure || item.description || 'Procedimento'}${toothPart}${facePart}`;
+            const qty = Math.max(1, Number(item.quantity) || 1);
+            const itemVal = Math.max(0, Number(item.value !== undefined ? item.value : (item.unitPrice || 0)));
+            const totalPrice = item.totalPrice !== undefined ? Number(item.totalPrice) : (qty * itemVal);
+
+            insertItemStmt.run(
+              'bdi-' + uuidv4().slice(0, 8),
+              tenantId,
+              budId,
+              'service',
+              id,
+              description,
+              qty,
+              itemVal,
+              totalPrice
+            );
+          }
+        }
+
+        // 4. Gera prontuário universal em records de forma estruturada e idempotente
+        const evolutionText = ClinicalRecordService.formatDentalTreatmentPlanEvolution(
+          title.trim(), items, numTotal, numDiscount, numFinal, paymentTerms
+        );
+        const procedureNames = items
+          .filter((i: any) => (i.itemType || i.item_type || 'service') !== 'product' && !i.productId)
+          .map((i: any) => i.procedure || i.description)
+          .filter(Boolean)
+          .join(', ');
+
+        ClinicalRecordService.recordClinicalEvent({
+          tenantId,
+          patientId: String(patientId),
+          professionalId: profId,
+          moduleType: 'ZemdaOdonto',
+          sourceId: id,
+          sourceType: 'dental_treatment_plan',
+          title: `Plano de Tratamento / Orçamento: ${title.trim()}`,
+          procedureName: procedureNames || 'Tratamento Odontológico',
+          clinicalEvolution: evolutionText,
+          technicalNotes: notes || null,
+          moduleData: {
+            title: title.trim(),
+            items,
+            totalValue: numTotal,
+            discountValue: numDiscount,
+            finalValue: numFinal,
+            paymentTerms,
+            notes,
+            status,
+            budgetId: budId,
+            budgetNumber
+          },
+          createdBy: req.user?.name || 'Cirurgião-Dentista'
+        });
+      });
+
+      saveTx();
+
+      logAudit(req, 'CREATE_TREATMENT_PLAN', 'dental_treatment_plans', id, { patientId, title, budgetId: budId, budgetNumber });
+      res.status(201).json({
+        id,
+        budgetId: budId,
+        budgetNumber,
+        message: 'Plano de tratamento e orçamento salvos com sucesso'
+      });
+    } catch (err: any) {
+      console.error('[DentistryController.saveTreatmentPlan] Erro:', err);
+      res.status(500).json({ error: 'Erro ao salvar plano de tratamento' });
+    }
+  }
+
+  static updateTreatmentPlanStatus(req: Request, res: Response): void {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+      const tenantId = req.tenantId;
+      if (!tenantId) {
+        res.status(400).json({ error: 'Tenant não informado' });
+        return;
+      }
+
+      if (!isDentistOrClinicManager(req)) {
+        res.status(403).json({ error: 'Acesso restrito', code: 'DENTISTRY_RESTRICTED' });
+        return;
+      }
+
+      const plan = db.prepare('SELECT * FROM dental_treatment_plans WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
+      if (!plan) {
+        res.status(404).json({ error: 'Plano de tratamento não encontrado' });
+        return;
+      }
+
+      db.prepare(`
+        UPDATE dental_treatment_plans 
+        SET status = ?, updated_at = datetime('now')
+        WHERE id = ? AND tenant_id = ?
+      `).run(status, id, tenantId);
+
+      // Sincroniza status no orçamento geral correspondente
+      if (plan.budget_id) {
+        const budgetStatus = status === 'approved' ? 'approved' : (status === 'canceled' ? 'rejected' : 'draft');
+        db.prepare(`
+          UPDATE budgets 
+          SET status = ?, updated_at = datetime('now')
+          WHERE id = ? AND tenant_id = ?
+        `).run(budgetStatus, plan.budget_id, tenantId);
+      }
+
+      // Atualiza prontuário universal
+      try {
+        const items = JSON.parse(plan.items_json || '[]');
+        const statusLabel = status === 'approved' ? 'Aprovado' : status === 'in_progress' ? 'Em Andamento' : status === 'completed' ? 'Concluído' : status === 'canceled' ? 'Cancelado' : 'Planejado';
+        const evolutionText = ClinicalRecordService.formatDentalTreatmentPlanEvolution(
+          plan.title, items, plan.total_value, plan.discount_value, plan.final_value, plan.payment_terms
+        ) + `\n\nStatus Atual: ${statusLabel}`;
+
+        ClinicalRecordService.recordClinicalEvent({
+          tenantId,
+          patientId: plan.patient_id,
+          professionalId: plan.professional_id,
+          moduleType: 'ZemdaOdonto',
+          sourceId: String(id),
+          sourceType: 'dental_treatment_plan',
+          title: `Plano de Tratamento / Orçamento: ${plan.title}`,
+          clinicalEvolution: evolutionText,
+          technicalNotes: plan.notes || null,
+          moduleData: {
+            title: plan.title,
+            items,
+            totalValue: plan.total_value,
+            discountValue: plan.discount_value,
+            finalValue: plan.final_value,
+            paymentTerms: plan.payment_terms,
+            notes: plan.notes,
+            status,
+            budgetId: plan.budget_id
+          },
+          createdBy: req.user?.name || 'Cirurgião-Dentista'
+        });
+      } catch (_) {}
+
+      // Se aprovado, pode registrar contas a receber
+      if (status === 'approved' && req.body.generateFinancialRecord) {
+        try {
+          const payId = 'pay-' + uuidv4().slice(0, 8);
+          db.prepare(`
+            INSERT INTO payments (
+              id, tenant_id, patient_id, amount, method, status, due_date, notes
+            ) VALUES (?, ?, ?, ?, 'credit_card', 'pending', date('now'), ?)
+          `).run(payId, tenantId, plan.patient_id, plan.final_value, `Orçamento Odonto: ${plan.title}`);
+        } catch (payErr) {
+          console.warn('Aviso ao gerar registro financeiro:', payErr);
+        }
+      }
+
+      logAudit(req, 'UPDATE_TREATMENT_PLAN_STATUS', 'dental_treatment_plans', id, { status });
+      res.json({ message: 'Status do plano atualizado com sucesso' });
+    } catch (err: any) {
+      console.error('[DentistryController.updateTreatmentPlanStatus] Erro:', err);
+      res.status(500).json({ error: 'Erro ao atualizar status do plano de tratamento' });
+    }
+  }
+
+  // =========================================================================
+  // 6. LABORATÓRIO DE PRÓTESE
+  // =========================================================================
+
+  static listProsthetics(req: Request, res: Response): void {
+    try {
+      const patientId = String(req.params.patientId);
+      const tenantId = req.tenantId;
+
+      if (!isDentistOrClinicManager(req)) {
+        res.status(403).json({ error: 'Acesso restrito', code: 'DENTISTRY_RESTRICTED' });
+        return;
+      }
+
+      const rows = db.prepare(`
+        SELECT dpl.*, p.name as professional_name, pat.full_name as patient_name
+        FROM dental_prosthetics_lab dpl
+        JOIN patients pat ON pat.id = dpl.patient_id
+        LEFT JOIN professionals p ON p.id = dpl.professional_id
+        WHERE dpl.patient_id = ? AND dpl.tenant_id = ?
+        ORDER BY dpl.created_at DESC
+      `).all(patientId, tenantId) as any[];
+
+      const today = new Date().toISOString().split('T')[0];
+      const result = rows.map(r => ({
+        ...r,
+        isOverdue: (r.status !== 'installed' && r.status !== 'canceled' && r.expected_date) ? r.expected_date < today : false
+      }));
+
+      res.json(result);
+    } catch (err: any) {
+      console.error('[DentistryController.listProsthetics] Erro:', err);
+      res.status(500).json({ error: 'Erro ao listar próteses' });
+    }
+  }
+
+  static saveProsthetic(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      if (!tenantId) {
+        res.status(400).json({ error: 'Tenant não informado' });
+        return;
+      }
+      if (!isDentistOrClinicManager(req)) {
+        res.status(403).json({ error: 'Acesso restrito', code: 'DENTISTRY_RESTRICTED' });
+        return;
+      }
+
+      const patientId = req.body.patientId || req.body.patient_id;
+      const labName = req.body.labName || req.body.lab_name;
+      const workType = req.body.workType || req.body.work_type;
+      const toothNumber = req.body.toothNumber || req.body.tooth_number;
+      const shadeColor = req.body.shadeColor || req.body.shade_color || req.body.vita_shade;
+      const material = req.body.material;
+      const sentDate = req.body.sentDate || req.body.sent_date;
+      const expectedDate = req.body.expectedDate || req.body.expected_date || req.body.delivery_date;
+      const receivedDate = req.body.receivedDate || req.body.received_date;
+      const costValue = req.body.costValue ?? req.body.cost_value ?? req.body.cost;
+      const rawStatus = req.body.status;
+      const notes = req.body.notes;
+
+      if (!patientId || !labName || !workType) {
+        res.status(400).json({ error: 'patientId, labName e workType são obrigatórios' });
+        return;
+      }
+
+      const patient = db.prepare('SELECT id FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId);
+      if (!patient) {
+        res.status(404).json({ error: 'Paciente não encontrado' });
+        return;
+      }
+
+      const validStatuses = ['sent_to_lab', 'in_production', 'delivered_to_clinic', 'tested_adjusted', 'installed', 'canceled'];
+      const status = (!rawStatus || rawStatus === 'requested' || !validStatuses.includes(rawStatus))
+        ? 'sent_to_lab'
+        : rawStatus;
+
+      let profId: string | null = null;
+      if (req.user?.role === 'professional') {
+        const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
+        if (prof) profId = prof.id;
+      }
+
+      const id = 'lab-' + uuidv4().slice(0, 8);
+
+      db.prepare(`
+        INSERT INTO dental_prosthetics_lab (
+          id, tenant_id, patient_id, professional_id, lab_name,
+          work_type, tooth_number, shade_color, material, sent_date,
+          expected_date, received_date, cost_value, status, notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        id, tenantId, patientId, profId, String(labName).trim(),
+        String(workType).trim(), toothNumber || null, shadeColor || null, material || null, sentDate || null,
+        expectedDate || null, receivedDate || null, Number(costValue || 0), status, notes || null
+      );
+
+      // Sincroniza com prontuário universal
+      try {
+        const evolutionText = ClinicalRecordService.formatDentalProstheticEvolution(
+          String(workType).trim(), String(labName).trim(), toothNumber, shadeColor, material, expectedDate, Number(costValue || 0), status
+        );
+        ClinicalRecordService.recordClinicalEvent({
+          tenantId,
+          patientId: String(patientId),
+          professionalId: profId,
+          moduleType: 'ZemdaOdonto',
+          sourceId: id,
+          sourceType: 'dental_prosthetics_lab',
+          title: `Laboratório de Prótese: ${String(workType).trim()}`,
+          procedureName: String(workType).trim(),
+          clinicalEvolution: evolutionText,
+          technicalNotes: notes || null,
+          moduleData: {
+            id,
+            labName: String(labName).trim(),
+            workType: String(workType).trim(),
+            toothNumber,
+            shadeColor,
+            material,
+            sentDate,
+            expectedDate,
+            receivedDate,
+            costValue: Number(costValue || 0),
+            status,
+            notes
+          },
+          createdBy: req.user?.name || 'Cirurgião-Dentista'
+        });
+      } catch (err) {
+        console.warn('Aviso ao registrar prótese no prontuário universal:', err);
+      }
+
+      const created = db.prepare('SELECT * FROM dental_prosthetics_lab WHERE id = ? AND tenant_id = ?').get(id, tenantId);
+      logAudit(req, 'CREATE_PROSTHETIC', 'dental_prosthetics_lab', id, { patientId, workType, labName, status });
+      res.status(201).json({ id, message: 'Trabalho de prótese registrado com sucesso', prosthetic: created });
+    } catch (err: any) {
+      console.error('[DentistryController.saveProsthetic] Erro:', err);
+      res.status(500).json({ error: 'Erro ao registrar trabalho de laboratório' });
+    }
+  }
+
+  static updateProsthetic(req: Request, res: Response): void {
+    try {
+      const id = String(req.params.id);
+      const tenantId = req.tenantId;
+      if (!tenantId) {
+        res.status(400).json({ error: 'Tenant não informado' });
+        return;
+      }
+
+      if (!isDentistOrClinicManager(req)) {
+        res.status(403).json({ error: 'Acesso restrito', code: 'DENTISTRY_RESTRICTED' });
+        return;
+      }
+
+      const existing = db.prepare('SELECT * FROM dental_prosthetics_lab WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
+      if (!existing) {
+        res.status(404).json({ error: 'Trabalho de prótese não encontrado' });
+        return;
+      }
+
+      const {
+        status, receivedDate, expectedDate, costValue, notes,
+        sentDate, material, shadeColor, toothNumber, workType, labName
+      } = req.body;
+      const validStatuses = ['sent_to_lab', 'in_production', 'delivered_to_clinic', 'tested_adjusted', 'installed', 'canceled'];
+
+      if (status !== undefined && status !== null && !validStatuses.includes(status)) {
+        res.status(400).json({ error: `Status inválido. Valores permitidos: ${validStatuses.join(', ')}` });
+        return;
+      }
+
+      db.prepare(`
+        UPDATE dental_prosthetics_lab SET
+          status = COALESCE(?, status),
+          received_date = COALESCE(?, received_date),
+          expected_date = COALESCE(?, expected_date),
+          sent_date = COALESCE(?, sent_date),
+          cost_value = COALESCE(?, cost_value),
+          tooth_number = COALESCE(?, tooth_number),
+          shade_color = COALESCE(?, shade_color),
+          material = COALESCE(?, material),
+          lab_name = COALESCE(?, lab_name),
+          work_type = COALESCE(?, work_type),
+          notes = COALESCE(?, notes),
+          updated_at = datetime('now')
+        WHERE id = ? AND tenant_id = ?
+      `).run(
+        status || null,
+        receivedDate || null,
+        expectedDate || null,
+        sentDate || null,
+        costValue !== undefined && costValue !== null ? Number(costValue) : null,
+        toothNumber || null,
+        shadeColor || null,
+        material || null,
+        labName || null,
+        workType || null,
+        notes || null,
+        id,
+        tenantId
+      );
+
+      const updated = db.prepare('SELECT * FROM dental_prosthetics_lab WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
+
+      if (updated) {
+        try {
+          const evolutionText = ClinicalRecordService.formatDentalProstheticEvolution(
+            updated.work_type, updated.lab_name, updated.tooth_number, updated.shade_color, updated.material, updated.expected_date, updated.cost_value, updated.status
+          );
+          ClinicalRecordService.recordClinicalEvent({
+            tenantId,
+            patientId: updated.patient_id,
+            professionalId: updated.professional_id,
+            moduleType: 'ZemdaOdonto',
+            sourceId: id,
+            sourceType: 'dental_prosthetics_lab',
+            title: `Laboratório de Prótese: ${updated.work_type}`,
+            procedureName: updated.work_type,
+            clinicalEvolution: evolutionText,
+            technicalNotes: updated.notes || null,
+            moduleData: updated,
+            createdBy: req.user?.name || 'Cirurgião-Dentista'
+          });
+        } catch (_) {}
+      }
+
+      logAudit(req, 'UPDATE_PROSTHETIC', 'dental_prosthetics_lab', id, { status, updatedFields: Object.keys(req.body) });
+      res.json({ message: 'Trabalho de prótese atualizado com sucesso', prosthetic: updated });
+    } catch (err: any) {
+      console.error('[DentistryController.updateProsthetic] Erro:', err);
+      res.status(500).json({ error: 'Erro ao atualizar prótese' });
+    }
+  }
+
+  // =========================================================================
+  // 7. ORTODONTIA & HOF
+  // =========================================================================
+
+  static getOrtho(req: Request, res: Response): void {
+    try {
+      const patientId = String(req.params.patientId);
+      const tenantId = req.tenantId;
+
+      if (!isDentistOrClinicManager(req)) {
+        res.status(403).json({ error: 'Acesso restrito', code: 'DENTISTRY_RESTRICTED' });
+        return;
+      }
+
+      const row = db.prepare(`
+        SELECT * FROM dental_orthodontics 
+        WHERE patient_id = ? AND tenant_id = ?
+        ORDER BY created_at DESC LIMIT 1
+      `).get(patientId, tenantId) as any;
+
+      if (!row) {
+        res.json(null);
+        return;
+      }
+
+      res.json({
+        ...row,
+        monthly_evolutions: JSON.parse(row.monthly_evolutions_json || '[]')
+      });
+    } catch (err: any) {
+      console.error('[DentistryController.getOrtho] Erro:', err);
+      res.status(500).json({ error: 'Erro ao buscar dados ortodônticos' });
+    }
+  }
+
+  static saveOrtho(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      if (!isDentistOrClinicManager(req)) {
+        res.status(403).json({ error: 'Acesso restrito', code: 'DENTISTRY_RESTRICTED' });
+        return;
+      }
+
+      const { patientId, applianceType, installationDate, forecastMonths, monthlyEvolutions, status = 'active', notes } = req.body;
+      if (!patientId) {
+        res.status(400).json({ error: 'patientId é obrigatório' });
+        return;
+      }
+
+      let profId: string | null = null;
+      if (req.user?.role === 'professional') {
+        const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
+        if (prof) profId = prof.id;
+      }
+
+      const existing = db.prepare(`SELECT id FROM dental_orthodontics WHERE patient_id = ? AND tenant_id = ?`).get(patientId, tenantId) as any;
+      const evolutionsJson = JSON.stringify(monthlyEvolutions || []);
+
+      if (existing) {
+        db.prepare(`
+          UPDATE dental_orthodontics SET
+            appliance_type = COALESCE(?, appliance_type),
+            installation_date = COALESCE(?, installation_date),
+            forecast_months = COALESCE(?, forecast_months),
+            monthly_evolutions_json = ?,
+            status = COALESCE(?, status),
+            notes = COALESCE(?, notes),
+            updated_at = datetime('now')
+          WHERE id = ? AND tenant_id = ?
+        `).run(applianceType || null, installationDate || null, forecastMonths || null, evolutionsJson, status, notes || null, existing.id, tenantId);
+        res.json({ id: existing.id, message: 'Dados ortodônticos atualizados' });
+      } else {
+        const id = 'ort-' + uuidv4().slice(0, 8);
+        db.prepare(`
+          INSERT INTO dental_orthodontics (
+            id, tenant_id, patient_id, professional_id,
+            appliance_type, installation_date, forecast_months,
+            monthly_evolutions_json, status, notes
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(id, tenantId, patientId, profId, applianceType || null, installationDate || null, forecastMonths || null, evolutionsJson, status, notes || null);
+        res.status(201).json({ id, message: 'Plano ortodôntico cadastrado' });
+      }
+    } catch (err: any) {
+      console.error('[DentistryController.saveOrtho] Erro:', err);
+      res.status(500).json({ error: 'Erro ao salvar dados ortodônticos' });
+    }
+  }
+
+  static listHof(req: Request, res: Response): void {
+    try {
+      const patientId = String(req.params.patientId);
+      const tenantId = req.tenantId;
+
+      if (!isDentistOrClinicManager(req)) {
+        res.status(403).json({ error: 'Acesso restrito', code: 'DENTISTRY_RESTRICTED' });
+        return;
+      }
+
+      const rows = db.prepare(`
+        SELECT dh.*, p.name as professional_name
+        FROM dental_hof dh
+        LEFT JOIN professionals p ON p.id = dh.professional_id
+        WHERE dh.patient_id = ? AND dh.tenant_id = ?
+        ORDER BY dh.created_at DESC
+      `).all(patientId, tenantId) as any[];
+
+      res.json(rows.map(r => ({
+        ...r,
+        application_points: JSON.parse(r.application_points_json || '[]'),
+        before_after_images: JSON.parse(r.before_after_images_json || '[]')
+      })));
+    } catch (err: any) {
+      console.error('[DentistryController.listHof] Erro:', err);
+      res.status(500).json({ error: 'Erro ao buscar procedimentos de harmonização facial' });
+    }
+  }
+
+  static saveHof(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      if (!isDentistOrClinicManager(req)) {
+        res.status(403).json({ error: 'Acesso restrito', code: 'DENTISTRY_RESTRICTED' });
+        return;
+      }
+
+      const {
+        patientId, procedureName, facialRegion, productBrand, lotNumber,
+        unitsQuantity, expiryDate, applicationPoints, beforeAfterImages, notes
+      } = req.body;
+
+      if (!patientId || !procedureName) {
+        res.status(400).json({ error: 'patientId e procedureName são obrigatórios' });
+        return;
+      }
+
+      let profId: string | null = null;
+      if (req.user?.role === 'professional') {
+        const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
+        if (prof) profId = prof.id;
+      }
+
+      const id = 'hof-' + uuidv4().slice(0, 8);
+      const pointsJson = JSON.stringify(applicationPoints || []);
+      const imagesJson = JSON.stringify(beforeAfterImages || []);
+
+      db.prepare(`
+        INSERT INTO dental_hof (
+          id, tenant_id, patient_id, professional_id, procedure_name,
+          facial_region, product_brand, lot_number, units_quantity,
+          expiry_date, application_points_json, before_after_images_json, notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        id, tenantId, patientId, profId, procedureName,
+        facialRegion || null, productBrand || null, lotNumber || null, unitsQuantity || null,
+        expiryDate || null, pointsJson, imagesJson, notes || null
+      );
+
+      res.status(201).json({ id, message: 'Procedimento HOF registrado com sucesso' });
+    } catch (err: any) {
+      console.error('[DentistryController.saveHof] Erro:', err);
+      res.status(500).json({ error: 'Erro ao registrar HOF' });
+    }
+  }
+
+  // =========================================================================
+  // 8. FINALIZAR ATENDIMENTO ODONTOLÓGICO (INTEGRAÇÃO COM EVOLUÇÃO E PRONTUÁRIO)
+  // =========================================================================
+
+  static finishConsultation(req: Request, res: Response): void {
+    if (req.body.appointmentId) {
+      if (!isDentistOrClinicManager(req)) { res.status(403).json({ error: 'Sem acesso ao módulo clínico.' }); return; }
+      const body = req.body;
+      req.params.id = body.appointmentId;
+      req.body = { ...body, evolution: {
+        ...body, moduleType: 'ZemdaOdonto', moduleData: { ...body },
+        clinicalEvolution: body.clinicalEvolution || 'Atendimento clínico registrado.'
+      }};
+      DocumentsController.finishConsultation(req, res);
+      return;
+    }
+    try {
+      const tenantId = req.tenantId;
+      if (!isDentistOrClinicManager(req)) {
+        res.status(403).json({ error: 'Acesso restrito a cirurgiões-dentistas', code: 'DENTISTRY_RESTRICTED' });
+        return;
+      }
+
+      const {
+        patientId, appointmentId, clinicalEvolution, proceduresPerformed,
+        odontogramData, toothChanges, isSealed, sessionDate, sessionTime,
+        procedureName, title, technicalNotes, conducts, clinicalData
+      } = req.body;
+
+      if (!patientId || !clinicalEvolution) {
+        res.status(400).json({ error: 'patientId e clinicalEvolution são obrigatórios' });
+        return;
+      }
+
+      let profId: string | null = null;
+      if (req.user?.role === 'professional') {
+        const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
+        if (prof) profId = prof.id;
+      } else if (req.body.professionalId) {
+        profId = req.body.professionalId;
+      }
+
+      // Se tiver appointmentId, busca dados complementares
+      let apptRow: any = null;
+      if (appointmentId) {
+        apptRow = db.prepare('SELECT start_time, professional_id, service_id FROM appointments WHERE id = ? AND tenant_id = ?').get(appointmentId, tenantId);
+        if (!profId && apptRow?.professional_id) profId = apptRow.professional_id;
+      }
+
+      const creatorName = req.user?.name || req.user?.email || 'Cirurgião-Dentista';
+      const recordId = 'rec-odo-' + uuidv4().slice(0, 8);
+
+      // Data e hora de Brasília
+      const spDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+      const recDate = sessionDate || (apptRow?.start_time ? apptRow.start_time.split('T')[0] : spDateStr);
+      const recTime = sessionTime || (apptRow?.start_time?.includes('T') ? apptRow.start_time.split('T')[1].slice(0, 5) : null);
+      const recProc = procedureName || proceduresPerformed || (apptRow ? (db.prepare('SELECT name FROM services WHERE id = ?').get(apptRow.service_id) as any)?.name : 'Procedimento Odontológico');
+      const recTitle = title || 'Atendimento Odontológico (ZemdaOdonto)';
+
+      const clinicalDataJson = clinicalData ? (typeof clinicalData === 'string' ? clinicalData : JSON.stringify(clinicalData)) : null;
+      const odontoModuleData = {
+        ...req.body,
+        proceduresPerformed: proceduresPerformed || null,
+        toothChanges: toothChanges || [],
+        odontogramData: odontogramData || null
+      };
+
+      // Inicia transação atômica segura (Regra 56)
+      db.exec('BEGIN TRANSACTION');
+      let transactionCommitted = false;
+
+      try {
+        db.prepare(`
+          INSERT INTO records (
+            id, tenant_id, patient_id, appointment_id, professional_id,
+            session_date, session_time, procedure_name, title, clinical_evolution,
+            technical_notes, conducts, clinical_data_json, module_type, module_data_json,
+            is_sealed, created_by, updated_by, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ZemdaOdonto', ?, ?, ?, ?, datetime('now'), datetime('now'))
+        `).run(
+          recordId, tenantId, patientId, appointmentId || null, profId,
+          recDate, recTime, recProc, recTitle, clinicalEvolution,
+          technicalNotes || (proceduresPerformed ? `Procedimentos: ${proceduresPerformed}` : null),
+          conducts || null, clinicalDataJson, JSON.stringify(odontoModuleData),
+          isSealed ? 1 : 0, creatorName, creatorName
+        );
+
+        if (odontogramData) {
+          const statusJson = typeof odontogramData === 'string' ? odontogramData : JSON.stringify(odontogramData);
+
+          // 1. Grava odontograma inicial se for a primeira consulta do paciente (Regra 53)
+          const hasInitial = db.prepare("SELECT id FROM odontograms WHERE patient_id = ? AND tenant_id = ? AND type = 'initial'").get(patientId, tenantId);
+          if (!hasInitial) {
+            const initOdoId = 'odo-init-' + uuidv4().slice(0, 8);
+            db.prepare(`
+              INSERT INTO odontograms (id, tenant_id, patient_id, professional_id, appointment_id, record_id, type, status_data_json, notes)
+              VALUES (?, ?, ?, ?, ?, ?, 'initial', ?, 'Odontograma Inicial do Paciente')
+            `).run(initOdoId, tenantId, patientId, profId, appointmentId || null, recordId, statusJson);
+          }
+
+          // 2. Atualiza ou cria odontograma ATUAL do paciente
+          const existingOdo = db.prepare('SELECT id FROM odontograms WHERE patient_id = ? AND tenant_id = ? AND type = ?').get(patientId, tenantId, 'current') as any;
+          if (existingOdo) {
+            db.prepare(`UPDATE odontograms SET status_data_json = ?, record_id = ?, updated_at = datetime('now') WHERE id = ?`).run(statusJson, recordId, existingOdo.id);
+          } else {
+            const newOdoId = 'odo-' + uuidv4().slice(0, 8);
+            db.prepare(`
+              INSERT INTO odontograms (id, tenant_id, patient_id, professional_id, appointment_id, record_id, type, status_data_json)
+              VALUES (?, ?, ?, ?, ?, ?, 'current', ?)
+            `).run(newOdoId, tenantId, patientId, profId, appointmentId || null, recordId, statusJson);
+          }
+
+          // 3. Grava SNAPSHOT histórico imutável vinculado a este atendimento (Regras 52 e 53)
+          const snapOdoId = 'odo-snap-' + uuidv4().slice(0, 8);
+          db.prepare(`
+            INSERT INTO odontograms (id, tenant_id, patient_id, professional_id, appointment_id, record_id, type, status_data_json, notes)
+            VALUES (?, ?, ?, ?, ?, ?, 'consultation_snapshot', ?, ?)
+          `).run(snapOdoId, tenantId, patientId, profId, appointmentId || null, recordId, statusJson, `Snapshot do atendimento ${recDate} ${recTime || ''}`);
+        }
+
+        // 4. Registra histórico detalhado por dente e face (Regra 52)
+        if (Array.isArray(toothChanges) && toothChanges.length > 0) {
+          const insertToothStmt = db.prepare(`
+            INSERT INTO dental_tooth_records (
+              id, tenant_id, patient_id, professional_id, appointment_id,
+              tooth_number, face, condition, previous_condition, procedure_name, notes
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `);
+
+          for (const change of toothChanges) {
+            insertToothStmt.run(
+              'dtr-' + uuidv4().slice(0, 8), tenantId, patientId, profId, appointmentId || null,
+              change.toothNumber, change.face || 'whole', change.condition,
+              change.previousCondition || null, change.procedureName || proceduresPerformed || null, change.notes || null
+            );
+          }
+        }
+
+        // 4b. Registra insumos utilizados na consulta odontológica
+        const rawUsages = req.body.inventoryUsages || odontoModuleData.inventoryUsages;
+        if (Array.isArray(rawUsages) && rawUsages.length > 0) {
+          ClinicalInventoryService.processConsultationUsages(tenantId!, {
+            usages: rawUsages,
+            moduleType: 'ZemdaOdonto',
+            sourceType: 'dentistry_usage',
+            appointmentId: appointmentId || null,
+            patientId: patientId,
+            professionalId: profId,
+            userId: req.user?.userId
+          });
+        }
+
+        // 5. Marca agendamento como finalizado após todos os registros clínicos estarem garantidos
+        if (appointmentId) {
+          db.prepare(`UPDATE appointments SET status = 'completed', updated_at = datetime('now') WHERE id = ? AND tenant_id = ?`).run(appointmentId, tenantId);
+        }
+
+        db.exec('COMMIT');
+        transactionCommitted = true;
+        if (appointmentId) {
+          try {
+            ServiceReminderService.onAppointmentCompleted(appointmentId, tenantId);
+          } catch (reminderErr) {
+            console.warn('[finishConsultation] Aviso ao gerar lembrete de retorno odonto:', reminderErr);
+          }
+        }
+      } catch (innerErr) {
+        if (!transactionCommitted) {
+          try { db.exec('ROLLBACK'); } catch (_) {}
+        }
+        throw innerErr;
+      }
+
+      logAudit(req, 'FINISH_DENTAL_CONSULTATION', 'records', recordId, { patientId, appointmentId });
+      res.status(201).json({
+        recordId,
+        message: 'Atendimento Odontológico finalizado e registrado com sucesso no prontuário!'
+      });
+    } catch (err: any) {
+      console.error('[DentistryController.finishConsultation] Erro:', err);
+      if (typeof err.status === 'number' && err.status >= 400 && err.status < 500) {
+        res.status(err.status).json({ error: err.message, field: err.field });
+        return;
+      }
+      res.status(500).json({ error: err?.message || 'Erro ao finalizar atendimento odontológico' });
+    }
+  }
+
+  // =========================================================================
+  // 10. DOSSIÊ DO DENTE & LINHA DO TEMPO CRONOLÓGICA (Itens 7 e 8)
+  // =========================================================================
+  static getToothDossier(req: Request, res: Response): void {
+    try {
+      const patientId = String(req.params.patientId);
+      const toothNumber = String(req.params.toothNumber);
+      const tenantId = req.tenantId;
+
+      if (!isDentistOrClinicManager(req) || !hasClinicalAccess(req, patientId)) {
+        res.status(403).json({ error: 'Acesso restrito' });
+        return;
+      }
+
+      // 1. Odontograma atual e inicial
+      const currentOdo = db.prepare(`
+        SELECT * FROM odontograms WHERE patient_id = ? AND tenant_id = ? AND type = 'current' ORDER BY created_at DESC LIMIT 1
+      `).get(patientId, tenantId) as any;
+
+      const initialOdo = db.prepare(`
+        SELECT * FROM odontograms WHERE patient_id = ? AND tenant_id = ? AND type = 'initial' ORDER BY created_at ASC LIMIT 1
+      `).get(patientId, tenantId) as any;
+
+      let currentToothStatus: any = null;
+      let initialToothStatus: any = null;
+
+      if (currentOdo?.status_data_json) {
+        try {
+          const map = JSON.parse(currentOdo.status_data_json);
+          currentToothStatus = map[toothNumber] || map[Number(toothNumber)] || null;
+        } catch {}
+      }
+
+      if (initialOdo?.status_data_json) {
+        try {
+          const map = JSON.parse(initialOdo.status_data_json);
+          initialToothStatus = map[toothNumber] || map[Number(toothNumber)] || null;
+        } catch {}
+      }
+
+      // 2. Histórico de alterações do dente (dental_tooth_records)
+      const toothRecords = db.prepare(`
+        SELECT r.*, p.name as professional_name
+        FROM dental_tooth_records r
+        LEFT JOIN professionals p ON p.id = r.professional_id
+        WHERE r.patient_id = ? AND r.tenant_id = ? AND r.tooth_number = ?
+        ORDER BY r.created_at DESC
+      `).all(patientId, tenantId, toothNumber) as any[];
+
+      // 3. Endodontia relacionada ao dente
+      const endoRecords = db.prepare(`
+        SELECT r.*, p.name as professional_name
+        FROM dental_endodontic_records r
+        LEFT JOIN professionals p ON p.id = r.professional_id
+        WHERE r.patient_id = ? AND r.tenant_id = ? AND r.tooth_number = ?
+        ORDER BY r.created_at DESC
+      `).all(patientId, tenantId, toothNumber) as any[];
+
+      // 4. Periodontia relacionada
+      const perioRecords = db.prepare(`
+        SELECT r.*, p.name as professional_name
+        FROM dental_periodontal_records r
+        LEFT JOIN professionals p ON p.id = r.professional_id
+        WHERE r.patient_id = ? AND r.tenant_id = ?
+        ORDER BY r.created_at DESC
+      `).all(patientId, tenantId) as any[];
+
+      // Filtra perio onde o dente tenha sido registrado
+      const relatedPerio = perioRecords.filter(pr => {
+        if (!pr.periodontogram_json && !pr.six_sites_json) return false;
+        const text = (pr.periodontogram_json || '') + (pr.six_sites_json || '');
+        return text.includes(`"${toothNumber}"`) || text.includes(`:${toothNumber}`);
+      });
+
+      // 5. Próteses e Laboratório relacionados
+      const prosthetics = db.prepare(`
+        SELECT r.*, p.name as professional_name
+        FROM dental_prosthetics_lab r
+        LEFT JOIN professionals p ON p.id = r.professional_id
+        WHERE r.patient_id = ? AND r.tenant_id = ? AND (r.tooth_number = ? OR r.tooth_number LIKE ?)
+        ORDER BY r.created_at DESC
+      `).all(patientId, tenantId, toothNumber, `%${toothNumber}%`) as any[];
+
+      // 6. Implantes relacionados
+      const implants = db.prepare(`
+        SELECT r.*, p.name as professional_name
+        FROM dental_implants r
+        LEFT JOIN professionals p ON p.id = r.professional_id
+        WHERE r.patient_id = ? AND r.tenant_id = ? AND (r.tooth_region = ? OR r.tooth_region LIKE ?)
+        ORDER BY r.created_at DESC
+      `).all(patientId, tenantId, toothNumber, `%${toothNumber}%`) as any[];
+
+      // 7. Exames radiográficos relacionados
+      const exams = db.prepare(`
+        SELECT r.*, p.name as professional_name
+        FROM dental_exams r
+        LEFT JOIN professionals p ON p.id = r.professional_id
+        WHERE r.patient_id = ? AND r.tenant_id = ? AND (r.tooth_number = ? OR r.region LIKE ?)
+        ORDER BY r.exam_date DESC
+      `).all(patientId, tenantId, toothNumber, `%${toothNumber}%`) as any[];
+
+      // 8. Fotos relacionadas
+      const photos = db.prepare(`
+        SELECT r.*, p.name as professional_name
+        FROM dental_photos r
+        LEFT JOIN professionals p ON p.id = r.professional_id
+        WHERE r.patient_id = ? AND r.tenant_id = ? AND (r.tooth_number = ? OR r.region LIKE ?)
+        ORDER BY r.photo_date DESC
+      `).all(patientId, tenantId, toothNumber, `%${toothNumber}%`) as any[];
+
+      // 9. Constrói a Linha do Tempo Unificada
+      const timeline: any[] = [];
+
+      for (const tr of toothRecords) {
+        timeline.push({
+          id: tr.id,
+          date: tr.created_at,
+          type: 'tooth_record',
+          title: tr.procedure_name || `Condição: ${tr.condition}`,
+          face: tr.face,
+          condition: tr.condition,
+          previousCondition: tr.previous_condition,
+          professionalName: tr.professional_name,
+          notes: tr.notes
+        });
+      }
+
+      for (const er of endoRecords) {
+        timeline.push({
+          id: er.id,
+          date: er.created_at,
+          type: 'endodontics',
+          title: `Endodontia: ${er.pulpar_diagnosis || 'Tratamento Endodôntico'}`,
+          professionalName: er.professional_name,
+          notes: er.notes || er.periapical_diagnosis
+        });
+      }
+
+      for (const pr of relatedPerio) {
+        timeline.push({
+          id: pr.id,
+          date: pr.created_at,
+          type: 'periodontics',
+          title: 'Avaliação Periodontal',
+          professionalName: pr.professional_name,
+          notes: pr.notes
+        });
+      }
+
+      for (const pro of prosthetics) {
+        timeline.push({
+          id: pro.id,
+          date: pro.created_at,
+          type: 'prosthetic',
+          title: `Prótese: ${pro.work_type} (${pro.status})`,
+          professionalName: pro.professional_name,
+          notes: `${pro.lab_name} - Cor: ${pro.shade_color || 'N/A'}`
+        });
+      }
+
+      for (const imp of implants) {
+        timeline.push({
+          id: imp.id,
+          date: imp.surgery_date || imp.created_at,
+          type: 'implant',
+          title: `Implante: ${imp.brand} ${imp.model || ''} (${imp.status})`,
+          professionalName: imp.professional_name,
+          notes: `Torque: ${imp.torque_ncm || '-'} N.cm | Diâmetro: ${imp.diameter || '-'}`
+        });
+      }
+
+      for (const ex of exams) {
+        timeline.push({
+          id: ex.id,
+          date: ex.exam_date || ex.created_at,
+          type: 'exam',
+          title: `Exame: ${ex.exam_type}`,
+          fileUrl: ex.file_url,
+          professionalName: ex.professional_name,
+          notes: ex.notes
+        });
+      }
+
+      for (const ph of photos) {
+        timeline.push({
+          id: ph.id,
+          date: ph.photo_date || ph.created_at,
+          type: 'photo',
+          title: `Fotografia: ${ph.category}`,
+          fileId: ph.file_id,
+          professionalName: ph.professional_name,
+          notes: ph.notes
+        });
+      }
+
+      // Ordena decrescente por data
+      timeline.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+      res.json({
+        toothNumber,
+        currentStatus: currentToothStatus,
+        initialStatus: initialToothStatus,
+        timeline,
+        endoRecords,
+        prosthetics,
+        implants,
+        exams,
+        photos
+      });
+    } catch (err: any) {
+      console.error('[DentistryController.getToothDossier]', err);
+      res.status(500).json({ error: 'Erro ao gerar dossiê do dente' });
+    }
+  }
+
+  // =========================================================================
+  // 11. EXAMES ODONTOLÓGICOS INDEPENDENTES (Item 10)
+  // =========================================================================
+  static listExams(req: Request, res: Response): void {
+    try {
+      const patientId = String(req.params.patientId);
+      const tenantId = req.tenantId;
+
+      if (!isDentistOrClinicManager(req) || !hasClinicalAccess(req, patientId)) {
+        res.status(403).json({ error: 'Acesso restrito' });
+        return;
+      }
+
+      const rows = db.prepare(`
+        SELECT e.*, p.name as professional_name
+        FROM dental_exams e
+        LEFT JOIN professionals p ON p.id = e.professional_id
+        WHERE e.patient_id = ? AND e.tenant_id = ?
+        ORDER BY e.exam_date DESC
+      `).all(patientId, tenantId) as any[];
+
+      res.json(rows);
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao listar exames odontológicos' });
+    }
+  }
+
+  static saveExam(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      if (!isDentistOrClinicManager(req)) {
+        res.status(403).json({ error: 'Acesso restrito' });
+        return;
+      }
+
+      const { patientId, appointmentId, examType, examDate, toothNumber, region, attachmentId, fileUrl, notes } = req.body;
+      if (!patientId || !examType) {
+        res.status(400).json({ error: 'patientId e examType são obrigatórios' });
+        return;
+      }
+
+      let profId: string | null = null;
+      if (req.user?.role === 'professional') {
+        const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
+        if (prof) profId = prof.id;
+      }
+
+      const id = 'dex-' + uuidv4().slice(0, 8);
+      const dateStr = examDate || new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+
+      db.prepare(`
+        INSERT INTO dental_exams (
+          id, tenant_id, patient_id, professional_id, appointment_id,
+          exam_type, exam_date, tooth_number, region, attachment_id, file_url, notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        id, tenantId, patientId, profId, appointmentId || null,
+        examType, dateStr, toothNumber || null, region || null, attachmentId || null, fileUrl || null, notes || null
+      );
+
+      res.status(201).json({ id, message: 'Exame radiológico registrado com sucesso' });
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao salvar exame odontológico' });
+    }
+  }
+
+  // =========================================================================
+  // 12. IMPLANTODONTIA (Item 18)
+  // =========================================================================
+  static listImplants(req: Request, res: Response): void {
+    try {
+      const patientId = String(req.params.patientId);
+      const tenantId = req.tenantId;
+
+      if (!isDentistOrClinicManager(req) || !hasClinicalAccess(req, patientId)) {
+        res.status(403).json({ error: 'Acesso restrito' });
+        return;
+      }
+
+      const rows = db.prepare(`
+        SELECT i.*, p.name as professional_name
+        FROM dental_implants i
+        LEFT JOIN professionals p ON p.id = i.professional_id
+        WHERE i.patient_id = ? AND i.tenant_id = ?
+        ORDER BY i.surgery_date DESC, i.created_at DESC
+      `).all(patientId, tenantId) as any[];
+
+      const normalized = rows.map((r: any) => {
+        let normalizedStatus = r.status;
+        if (normalizedStatus === 'surgery_done') normalizedStatus = 'installed';
+        if (!['planned', 'installed', 'osseointegrated', 'loaded', 'failed'].includes(normalizedStatus)) {
+          normalizedStatus = 'installed';
+        }
+
+        const toothNum = r.tooth_region ? (Number(r.tooth_region) || null) : null;
+        const brand = r.brand || '';
+        const model = r.model || '';
+        const diam = r.diameter ? Number(r.diameter) || null : null;
+        const len = r.length ? Number(r.length) || null : null;
+        const torque = r.torque_ncm ? Number(r.torque_ncm) || null : null;
+        const isq = r.stability_isq ? Number(r.stability_isq) || null : null;
+        const graft = Boolean(r.bone_graft_used);
+        const graftMat = r.graft_material || r.biomaterial || null;
+        const dateStr = r.surgery_date || (r.created_at ? r.created_at.split('T')[0] : '');
+        const lot = r.lot_number || r.batch_number || null;
+        const anvisa = r.anvisa_registration || null;
+
+        return {
+          ...r,
+          tooth_number: toothNum,
+          toothNumber: toothNum,
+          tooth_region: r.tooth_region,
+          toothRegion: r.tooth_region,
+          implant_brand: brand,
+          implantBrand: brand,
+          brand,
+          implant_model: model,
+          implantModel: model,
+          model,
+          implant_diameter: diam,
+          implantDiameter: diam,
+          diameter: diam,
+          implant_length: len,
+          implantLength: len,
+          length: len,
+          insertion_torque_ncm: torque,
+          insertionTorqueNcm: torque,
+          torque_ncm: torque,
+          torqueNcm: torque,
+          stability_isq: isq,
+          stabilityIsq: isq,
+          bone_graft_used: graft,
+          boneGraftUsed: graft,
+          graft_material: graftMat,
+          graftMaterial: graftMat,
+          installation_date: dateStr,
+          installationDate: dateStr,
+          surgery_date: dateStr,
+          surgeryDate: dateStr,
+          expected_osseointegration_date: r.expected_osseointegration_date || null,
+          expectedOsseointegrationDate: r.expected_osseointegration_date || null,
+          batch_number: lot,
+          batchNumber: lot,
+          lot_number: lot,
+          lotNumber: lot,
+          anvisa_registration: anvisa,
+          anvisaRegistration: anvisa,
+          appointment_id: r.appointment_id || null,
+          appointmentId: r.appointment_id || null,
+          status: normalizedStatus
+        };
+      });
+
+      res.json(normalized);
+    } catch (err: any) {
+      console.error('[DentistryController.listImplants] Erro:', err);
+      res.status(500).json({ error: 'Erro ao listar implantes' });
+    }
+  }
+
+  static saveImplant(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      if (!isDentistOrClinicManager(req)) {
+        res.status(403).json({ error: 'Acesso restrito a dentistas ou gestores da clínica' });
+        return;
+      }
+
+      const body = req.body || {};
+      const patientId = body.patientId || body.patient_id;
+      const appointmentId = body.appointmentId || body.appointment_id || null;
+      const toothRegion = body.toothRegion || body.tooth_region || (body.toothNumber !== undefined ? String(body.toothNumber) : (body.tooth_number !== undefined ? String(body.tooth_number) : null));
+      const brand = body.implantBrand || body.implant_brand || body.brand;
+      const model = body.implantModel || body.implant_model || body.model || null;
+      const lotNumber = body.batchNumber || body.batch_number || body.lotNumber || body.lot_number || null;
+      const diameter = body.implantDiameter !== undefined ? String(body.implantDiameter) : (body.diameter !== undefined ? String(body.diameter) : null);
+      const length = body.implantLength !== undefined ? String(body.implantLength) : (body.length !== undefined ? String(body.length) : null);
+      const torqueNcm = body.insertionTorqueNcm !== undefined ? body.insertionTorqueNcm : (body.insertion_torque_ncm !== undefined ? body.insertion_torque_ncm : (body.torqueNcm !== undefined ? body.torqueNcm : body.torque_ncm));
+      const stabilityIsq = body.stabilityIsq !== undefined ? body.stabilityIsq : body.stability_isq;
+      const boneGraftUsed = body.boneGraftUsed !== undefined ? (body.boneGraftUsed ? 1 : 0) : (body.bone_graft_used ? 1 : 0);
+      const graftMaterial = body.graftMaterial || body.graft_material || body.biomaterial || null;
+      const graftType = body.graftType || body.graft_type || null;
+      const biomaterial = body.biomaterial || graftMaterial || null;
+      const membrane = body.membrane || null;
+      const healingAbutment = body.healingAbutment || body.healing_abutment || null;
+      const surgeryDate = body.installationDate || body.installation_date || body.surgeryDate || body.surgery_date || new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+      const expectedOsseointegrationDate = body.expectedOsseointegrationDate || body.expected_osseointegration_date || null;
+      const reopeningDate = body.reopeningDate || body.reopening_date || null;
+      const prostheticComponent = body.prostheticComponent || body.prosthetic_component || null;
+      const installedProsthesis = body.installedProsthesis || body.installed_prosthesis || null;
+      const anvisaRegistration = body.anvisaRegistration || body.anvisa_registration || null;
+      const attachmentId = body.attachmentId || body.attachment_id || null;
+      const notes = body.notes || null;
+
+      let rawStatus = body.status || 'installed';
+      if (rawStatus === 'surgery_done') rawStatus = 'installed';
+      const validStatuses = ['planned', 'installed', 'osseointegrated', 'loaded', 'failed'];
+      const status = validStatuses.includes(rawStatus) ? rawStatus : 'installed';
+
+      if (!patientId) {
+        res.status(400).json({ error: 'O paciente é obrigatório' });
+        return;
+      }
+      if (!toothRegion) {
+        res.status(400).json({ error: 'O dente ou região anatômica do implante é obrigatório' });
+        return;
+      }
+      if (!brand) {
+        res.status(400).json({ error: 'A marca do implante é obrigatória' });
+        return;
+      }
+
+      let profId: string | null = null;
+      if (req.user?.role === 'professional') {
+        const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
+        if (prof) profId = prof.id;
+      }
+
+      const id = 'dimp-' + uuidv4().slice(0, 8);
+
+      db.prepare(`
+        INSERT INTO dental_implants (
+          id, tenant_id, patient_id, professional_id, appointment_id, tooth_region,
+          brand, model, lot_number, diameter, length, surgery_date,
+          torque_ncm, stability_isq, bone_graft_used, graft_material, graft_type, biomaterial, membrane, healing_abutment,
+          expected_osseointegration_date, reopening_date, prosthetic_component, installed_prosthesis,
+          anvisa_registration, attachment_id, notes, status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        id, tenantId, patientId, profId, appointmentId, String(toothRegion),
+        String(brand), model, lotNumber, diameter, length, surgeryDate,
+        torqueNcm ? Number(torqueNcm) : null,
+        stabilityIsq ? Number(stabilityIsq) : null,
+        boneGraftUsed,
+        graftMaterial,
+        graftType,
+        biomaterial,
+        membrane,
+        healingAbutment,
+        expectedOsseointegrationDate,
+        reopeningDate,
+        prostheticComponent,
+        installedProsthesis,
+        anvisaRegistration,
+        attachmentId,
+        notes,
+        status
+      );
+
+      res.status(201).json({
+        id,
+        status,
+        message: 'Ficha de implante cadastrada com sucesso',
+        implant: {
+          id,
+          patientId,
+          appointmentId,
+          toothRegion,
+          toothNumber: Number(toothRegion) || null,
+          brand,
+          implantBrand: brand,
+          model,
+          implantModel: model,
+          status,
+          installationDate: surgeryDate
+        }
+      });
+    } catch (err: any) {
+      console.error('[DentistryController.saveImplant] Erro:', err);
+      res.status(500).json({ error: err.message || 'Erro ao salvar implante' });
+    }
+  }
+
+  // =========================================================================
+  // 13. FOTOGRAFIAS ODONTOLÓGICAS ESTRUTURADAS (Item 9)
+  // =========================================================================
+  static listPhotos(req: Request, res: Response): void {
+    try {
+      const patientId = String(req.params.patientId);
+      const tenantId = req.tenantId;
+
+      if (!isDentistOrClinicManager(req) || !hasClinicalAccess(req, patientId)) {
+        res.status(403).json({ error: 'Acesso restrito' });
+        return;
+      }
+
+      const rows = db.prepare(`
+        SELECT p.*, prof.name as professional_name
+        FROM dental_photos p
+        LEFT JOIN professionals prof ON prof.id = p.professional_id
+        WHERE p.patient_id = ? AND p.tenant_id = ?
+        ORDER BY p.photo_date DESC
+      `).all(patientId, tenantId) as any[];
+
+      res.json(rows);
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao listar fotografias odontológicas' });
+    }
+  }
+
+  static savePhoto(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      if (!isDentistOrClinicManager(req)) {
+        res.status(403).json({ error: 'Acesso restrito' });
+        return;
+      }
+
+      const {
+        patientId, appointmentId, category, toothNumber, region,
+        fileId, objectKey, photoDate, notes
+      } = req.body;
+
+      if (!patientId || !category) {
+        res.status(400).json({ error: 'patientId e category são obrigatórios' });
+        return;
+      }
+
+      let profId: string | null = null;
+      if (req.user?.role === 'professional') {
+        const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
+        if (prof) profId = prof.id;
+      }
+
+      // Verifica se já existe foto nesta categoria para o paciente
+      const prevPhotos = db.prepare(`
+        SELECT id FROM dental_photos
+        WHERE patient_id = ? AND tenant_id = ? AND category = ?
+      `).all(patientId, tenantId, category) as any[];
+
+      const isInitial = prevPhotos.length === 0 ? 1 : 0;
+
+      // Se já existiam fotos nesta categoria, desmarca is_current das anteriores
+      if (prevPhotos.length > 0) {
+        db.prepare(`
+          UPDATE dental_photos SET is_current = 0 WHERE patient_id = ? AND tenant_id = ? AND category = ?
+        `).run(patientId, tenantId, category);
+      }
+
+      const id = 'dpho-' + uuidv4().slice(0, 8);
+      const dateStr = photoDate || new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+
+      db.prepare(`
+        INSERT INTO dental_photos (
+          id, tenant_id, patient_id, professional_id, appointment_id,
+          category, tooth_number, region, is_initial, is_current,
+          file_id, object_key, photo_date, notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
+      `).run(
+        id, tenantId, patientId, profId, appointmentId || null,
+        category, toothNumber || null, region || null, isInitial,
+        fileId || null, objectKey || null, dateStr, notes || null
+      );
+
+      res.status(201).json({
+        id,
+        isInitial: isInitial === 1,
+        message: isInitial ? 'Foto inicial cadastrada' : 'Foto atualizada no histórico'
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao salvar fotografia' });
+    }
+  }
+
+  // =========================================================================
+  // 14. TRABALHOS PENDENTES E ATRASADOS DE PRÓTESE (Item 15)
+  // =========================================================================
+  static listPendingProsthetics(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      if (!isDentistOrClinicManager(req)) {
+        res.status(403).json({ error: 'Acesso restrito' });
+        return;
+      }
+
+      const rows = db.prepare(`
+        SELECT p.*, pat.full_name as patient_name, prof.name as professional_name
+        FROM dental_prosthetics_lab p
+        JOIN patients pat ON pat.id = p.patient_id
+        LEFT JOIN professionals prof ON prof.id = p.professional_id
+        WHERE p.tenant_id = ? AND p.status NOT IN ('installed', 'canceled', 'finished')
+        ORDER BY p.expected_date ASC
+      `).all(tenantId) as any[];
+
+      const today = new Date().toISOString().split('T')[0];
+      const result = rows.map(r => ({
+        ...r,
+        isOverdue: r.expected_date ? r.expected_date < today : false
+      }));
+
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao listar próteses pendentes' });
+    }
+  }
+}
+

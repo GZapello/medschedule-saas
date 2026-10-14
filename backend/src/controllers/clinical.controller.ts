@@ -1,3 +1,5 @@
+import { clinicalPatientIdentity } from '../middlewares/shared-patient.middleware';
+import { canAccessPatient, sharedOrigins, canReadSharedRecord } from '../services/patient-sharing.service';
 import { isPrimaryClinicalModule, resolveClinicalModule } from '../utils/clinical-module';
 import { Request, Response } from 'express';
 import { db } from '../config/database';
@@ -31,13 +33,13 @@ export function hasClinicalAccess(req: Request, patientId: string): boolean {
   // O cargo “Gerenciador da Clínica” NÃO concede automaticamente acesso a prontuários (Regra 2)
   // O gerenciador somente poderá acessar caso possua cadastro em área de atuação clínica
   if (req.user.role === 'clinic_admin') {
-    const patientBelongsToClinic = db.prepare('SELECT 1 FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId);
+    const patientBelongsToClinic = canAccessPatient(req.user.userId, tenantId, patientId, 'records') || !!db.prepare('SELECT 1 FROM clinic_patient_contexts WHERE tenant_id=? AND patient_id=?').get(tenantId,patientId);
     if (!patientBelongsToClinic) return false;
 
     const tenant = db.prepare('SELECT manager_profession, manager_practice_areas FROM tenants WHERE id = ?').get(tenantId) as any;
     const clinicUser = db.prepare(`
       SELECT cu.profession_custom, cu.practice_areas as cu_practice_areas,
-             u.profession_name, u.practice_areas as u_practice_areas
+             CASE WHEN u.tenant_id=cu.tenant_id THEN u.profession_name END AS profession_name, CASE WHEN u.tenant_id=cu.tenant_id THEN u.practice_areas END as u_practice_areas
       FROM users u
       LEFT JOIN clinic_users cu ON cu.user_id = u.id AND cu.tenant_id = ?
       WHERE u.id = ?
@@ -101,13 +103,88 @@ export function hasClinicalAccess(req: Request, patientId: string): boolean {
     if (hasRecord) return true;
 
     // d. Se o paciente pertence à clínica e o profissional está ativo na clínica atendendo este serviço/especialidade
-    const patientBelongsToClinic = db.prepare('SELECT 1 FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId);
+    const patientBelongsToClinic = canAccessPatient(req.user.userId, tenantId, patientId, 'records') || !!db.prepare('SELECT 1 FROM clinic_patient_contexts WHERE tenant_id=? AND patient_id=?').get(tenantId,patientId);
     if (patientBelongsToClinic) return true;
 
     return false;
   }
 
   return false;
+}
+
+function formatPdfTechnicalNotes(raw?: string | null): string {
+  if (!raw || !raw.trim()) return '';
+  const trimmed = raw.trim();
+
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed && typeof parsed === 'object') {
+        const isZemda = parsed.schemaVersion === 2 || parsed.layers || parsed.mapType || parsed.selectedRegions || parsed.drawings;
+        if (isZemda) {
+          const lines: string[] = [];
+          const mapType = parsed.mapType || (parsed.layers && Object.values(parsed.layers)[0] as any)?.mapType;
+          lines.push(mapType === 'FACE' ? 'Mapeamento Facial 360' : 'Mapeamento Corporal 360');
+          const sex = parsed.sexVariant || parsed.body_model || (parsed.layers && Object.values(parsed.layers)[0] as any)?.sexVariant;
+          lines.push(`Modelo: ${sex === 'male' ? 'Masculino' : 'Feminino'}`);
+
+          const regions: string[] = [];
+          const notes: string[] = [];
+          let marks = 0;
+          let drawings = 0;
+
+          if (parsed.layers && typeof parsed.layers === 'object') {
+            for (const l of Object.values(parsed.layers) as any[]) {
+              if (Array.isArray(l.selectedRegions)) regions.push(...l.selectedRegions);
+              if (Array.isArray(l.marks)) marks += l.marks.length;
+              if (Array.isArray(l.drawings)) drawings += l.drawings.length;
+              if (l.clinicalNotes && typeof l.clinicalNotes === 'string' && l.clinicalNotes.trim()) {
+                notes.push(l.clinicalNotes.trim());
+              }
+            }
+          }
+          if (Array.isArray(parsed.selectedRegions)) regions.push(...parsed.selectedRegions);
+          if (parsed.clinicalNotes && typeof parsed.clinicalNotes === 'string') notes.push(parsed.clinicalNotes.trim());
+
+          if (regions.length > 0) {
+            lines.push(`Regiões avaliadas: ${Array.from(new Set(regions)).join(', ')}`);
+          }
+          if (marks > 0) {
+            lines.push(`Marcações: ${marks} marcação(ões) registrada(s)`);
+          }
+          if (drawings > 0) {
+            lines.push(`Desenhos registrados: Sim (${drawings} traço(s))`);
+          }
+          if (notes.length > 0) {
+            lines.push(`Observações clínicas: ${Array.from(new Set(notes)).join(' • ')}`);
+          }
+          return lines.join('\n');
+        }
+
+        const techKeys = new Set([
+          'schemaVersion', 'schema_version', 'mapType', 'map_type', 'activeLayerKey', 'active_layer_key',
+          'layers', 'layer', 'sexVariant', 'sex_variant', 'selectionViews', 'selection_views',
+          'drawings', 'drawing', 'points', 'point', 'strokeId', 'stroke_id', 'toolType', 'tool_type',
+          'coordinates', 'coordinate', 'assessmentId', 'assessment_id'
+        ]);
+        const cleanLines: string[] = [];
+        for (const [k, v] of Object.entries(parsed)) {
+          if (!techKeys.has(k) && v !== null && v !== undefined && v !== '') {
+            cleanLines.push(`${k}: ${typeof v === 'object' ? JSON.stringify(v) : String(v)}`);
+          }
+        }
+        return cleanLines.join('\n');
+      }
+    } catch {
+      // Ignora erro
+    }
+  }
+
+  if (trimmed.includes('"schemaVersion"') || trimmed.includes('"strokeId"') || trimmed.includes('"activeLayerKey"')) {
+    return '';
+  }
+
+  return trimmed;
 }
 
 export class ClinicalController {
@@ -147,7 +224,7 @@ export class ClinicalController {
         FROM records r
         LEFT JOIN professionals p ON p.id = r.professional_id
         WHERE r.patient_id = ? AND r.tenant_id = ?
-        ORDER BY r.session_date DESC, r.created_at DESC
+        ORDER BY r.session_date DESC, r.session_time DESC, r.created_at DESC
       `);
       const records = stmt.all(patientId, tenantId).map((record: any) => ({
         ...record,
@@ -155,6 +232,31 @@ export class ClinicalController {
         specialty_or_module: record.specialty_or_module === 'ZemdaBody' ? 'Zemda360' : record.specialty_or_module,
         attachments: db.prepare('SELECT id, title, file_url FROM documents WHERE record_id=? AND tenant_id=? AND patient_id=?').all(record.id, tenantId, patientId)
       }));
+
+      const origins = sharedOrigins(req.user.userId, tenantId!, patientId, 'records');
+      for (const origin of origins) {
+        // Free-text universal clinical history only. Private notes and module JSON never leave their clinic.
+        const shared = db.prepare(`SELECT r.id,r.tenant_id,r.patient_id,r.professional_id,r.session_date,r.session_time,r.title,
+          r.clinical_evolution,r.conducts,r.module_type,r.created_at,p.name AS professional_name,t.name AS origin_clinic_name
+          FROM records r LEFT JOIN professionals p ON p.id=r.professional_id JOIN tenants t ON t.id=r.tenant_id
+          WHERE r.patient_id=? AND r.tenant_id=?`).all(patientId,origin);
+        records.push(...shared.filter((r:any)=>canReadSharedRecord(req,r)).map((r:any)=>({...r,shared:true,attachments:[]})));
+      }
+      records.sort((a: any, b: any) => {
+        const dateDiff = String(b.session_date || '').localeCompare(String(a.session_date || ''));
+        if (dateDiff !== 0) return dateDiff;
+        const timeA = a.session_time || a.consultation_time || '';
+        const timeB = b.session_time || b.consultation_time || '';
+        if (timeA && timeB) {
+          const timeDiff = timeB.localeCompare(timeA);
+          if (timeDiff !== 0) return timeDiff;
+        } else if (timeA && !timeB) {
+          return -1;
+        } else if (!timeA && timeB) {
+          return 1;
+        }
+        return String(b.created_at || '').localeCompare(String(a.created_at || ''));
+      });
 
       logAudit(req, 'VIEW_CLINICAL_RECORDS', 'records', patientId, { totalViewed: records.length });
       res.json(records);
@@ -170,7 +272,7 @@ export class ClinicalController {
       const { id } = req.params;
       const tenantId = req.tenantId;
 
-      const record = db.prepare(`
+      let record = db.prepare(`
         SELECT 
           r.*,
           p.name as professional_name, p.registration_type, p.registration_number,
@@ -181,6 +283,13 @@ export class ClinicalController {
         WHERE r.id = ? AND r.tenant_id = ?
       `).get(id, tenantId) as any;
 
+      if (!record && req.user && tenantId) {
+        const candidate = db.prepare(`SELECT r.id,r.tenant_id,r.patient_id,r.professional_id,r.session_date,r.title,
+          r.clinical_evolution,r.conducts,r.module_type,r.created_at,p.name AS professional_name,t.name AS origin_clinic_name
+          FROM records r LEFT JOIN professionals p ON p.id=r.professional_id JOIN tenants t ON t.id=r.tenant_id
+          WHERE r.id=?`).get(id);
+        if (candidate && canReadSharedRecord(req,candidate)) record={...candidate,shared:true};
+      }
       if (!record) {
         res.status(404).json({ error: 'Prontuário não encontrado' });
         return;
@@ -215,6 +324,13 @@ export class ClinicalController {
       if (!patientId || !sessionDate || !title) {
         res.status(400).json({ error: 'Paciente, data da sessão e título são obrigatórios' });
         return;
+      }
+
+      if (!req.user || !tenantId || !hasClinicalAccess(req,patientId) || !canAccessPatient(req.user.userId,tenantId,patientId,'records')) {
+        res.status(403).json({error:'Paciente fora do escopo clínico autorizado.'}); return;
+      }
+      if (professionalId && !db.prepare('SELECT id FROM professionals WHERE id=? AND tenant_id=? AND active=1').get(professionalId,tenantId)) {
+        res.status(403).json({error:'Profissional fora da clínica ativa.'}); return;
       }
 
       // Se não enviou professionalId explicitamente, resolve a partir do usuário autenticado
@@ -268,6 +384,12 @@ export class ClinicalController {
       const clinicalDataJson = clinicalData ? (typeof clinicalData === 'string' ? clinicalData : JSON.stringify(clinicalData)) : null;
       const moduleDataJson = moduleData ? (typeof moduleData === 'string' ? moduleData : JSON.stringify(moduleData)) : null;
 
+      const now = new Date();
+      const effectiveSessionDate = sessionDate ? String(sessionDate).trim() : now.toISOString().split('T')[0];
+      const effectiveSessionTime = sessionTime !== undefined
+        ? (sessionTime && String(sessionTime).trim() ? String(sessionTime).trim() : null)
+        : now.toTimeString().slice(0, 5);
+
       // Assinatura eletrônica e integridade criptográfica
       let signatureHash: string | null = null;
       let signedAt: string | null = null;
@@ -286,7 +408,7 @@ export class ClinicalController {
           ? `${prof.registration_type} ${prof.registration_number}` 
           : (prof?.registration_number || null);
 
-        const payloadToHash = `${tenantId}|${patientId}|${resolvedProfId}|${sessionDate}|${title}|${clinicalEvolution || ''}|${signedAt}|${signerRegistration || ''}`;
+        const payloadToHash = `${tenantId}|${patientId}|${resolvedProfId}|${effectiveSessionDate}|${title}|${clinicalEvolution || ''}|${signedAt}|${signerRegistration || ''}`;
         signatureHash = crypto.createHash('sha256').update(payloadToHash).digest('hex');
       }
 
@@ -308,8 +430,8 @@ export class ClinicalController {
         patientId,
         appointmentId || null,
         resolvedProfId,
-        sessionDate,
-        sessionTime || null,
+        effectiveSessionDate,
+        effectiveSessionTime,
         procedureName || null,
         title,
         clinicalEvolution || null,
@@ -344,7 +466,7 @@ export class ClinicalController {
     try {
       const { id } = req.params;
       const tenantId = req.tenantId;
-      const { title, clinicalEvolution, technicalNotes, privateNotes, isSealed, reason, amendmentReason, notes } = req.body;
+      const { title, clinicalEvolution, technicalNotes, privateNotes, isSealed, sessionDate, sessionTime, reason, amendmentReason, notes } = req.body;
 
       const record = db.prepare('SELECT * FROM records WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
       if (!record) {
@@ -433,7 +555,10 @@ export class ClinicalController {
       }
 
       // ── CASO B: Registro NÃO está selado ────────────────────────────
-      // Constrói histórico de versionamento (Item 11)
+      // Constrói histórico de versionamento (Item 11) com rastreamento de data e horário
+      const effectiveSessionDate = sessionDate !== undefined ? (sessionDate && String(sessionDate).trim() ? String(sessionDate).trim() : null) : record.session_date;
+      const effectiveSessionTime = sessionTime !== undefined ? (sessionTime && String(sessionTime).trim() ? String(sessionTime).trim() : null) : record.session_time;
+
       let history: any[] = [];
       try {
         if (record.edit_history_json) {
@@ -441,13 +566,21 @@ export class ClinicalController {
         }
       } catch (_) {}
 
-      history.push({
+      const historyEntry: any = {
         edited_by: editorName,
         edited_at: new Date().toISOString(),
         previous_title: record.title,
         previous_evolution: record.clinical_evolution,
-        previous_session_date: record.session_date
-      });
+        previous_session_date: record.session_date,
+        previous_session_time: record.session_time
+      };
+      if (sessionDate !== undefined && effectiveSessionDate !== record.session_date) {
+        historyEntry.new_session_date = effectiveSessionDate;
+      }
+      if (sessionTime !== undefined && effectiveSessionTime !== record.session_time) {
+        historyEntry.new_session_time = effectiveSessionTime;
+      }
+      history.push(historyEntry);
 
       // Se está sendo selado nesta requisição
       let newSignatureHash = record.signature_hash;
@@ -469,7 +602,7 @@ export class ClinicalController {
 
         const effectiveTitle = title !== undefined ? title : record.title;
         const effectiveEvolution = clinicalEvolution !== undefined ? clinicalEvolution : record.clinical_evolution;
-        const payloadToHash = `${tenantId}|${record.patient_id}|${record.professional_id}|${record.session_date}|${effectiveTitle}|${effectiveEvolution || ''}|${newSignedAt}|${newSignerRegistration || ''}`;
+        const payloadToHash = `${tenantId}|${record.patient_id}|${record.professional_id}|${effectiveSessionDate}|${effectiveTitle}|${effectiveEvolution || ''}|${newSignedAt}|${newSignerRegistration || ''}`;
         newSignatureHash = crypto.createHash('sha256').update(payloadToHash).digest('hex');
       }
 
@@ -479,6 +612,8 @@ export class ClinicalController {
           clinical_evolution = COALESCE(?, clinical_evolution),
           technical_notes = COALESCE(?, technical_notes),
           private_notes = COALESCE(?, private_notes),
+          session_date = ?,
+          session_time = ?,
           is_sealed = COALESCE(?, is_sealed),
           signature_hash = COALESCE(?, signature_hash),
           signed_at = COALESCE(?, signed_at),
@@ -497,6 +632,8 @@ export class ClinicalController {
         clinicalEvolution !== undefined ? clinicalEvolution : null,
         technicalNotes !== undefined ? technicalNotes : null,
         privateNotes !== undefined ? privateNotes : null,
+        effectiveSessionDate,
+        effectiveSessionTime,
         isSealed !== undefined ? (isSealed ? 1 : 0) : null,
         newSignatureHash || null,
         newSignedAt || null,
@@ -631,6 +768,8 @@ export class ClinicalController {
       const formattedProfName = (record.professional_name.startsWith('Dr.') || record.professional_name.startsWith('Dra.'))
         ? record.professional_name
         : `${profPrefix}${record.professional_name}`;
+
+      const formattedTechnicalNotes = formatPdfTechnicalNotes(record.technical_notes);
 
       const html = `
         <!DOCTYPE html>
@@ -808,7 +947,7 @@ export class ClinicalController {
 
             <div class="patient-box">
               <p><strong>Paciente:</strong> ${record.patient_name} | <strong>CPF:</strong> ${record.patient_cpf || 'Não informado'} | <strong>Nascimento:</strong> ${record.patient_birth_date || '-'}</p>
-              <p><strong>Data do Atendimento:</strong> ${new Date(record.session_date + 'T12:00:00').toLocaleDateString('pt-BR')} | <strong>Profissional:</strong> ${formattedProfName} (${record.registration_type || 'Conselho'} ${record.registration_number || ''})</p>
+              <p><strong>Data do Atendimento:</strong> ${new Date(record.session_date + 'T12:00:00').toLocaleDateString('pt-BR')} | <strong>Horário:</strong> ${record.session_time ? record.session_time.slice(0, 5) : 'Não informado'} | <strong>Profissional:</strong> ${formattedProfName} (${record.registration_type || 'Conselho'} ${record.registration_number || ''})</p>
             </div>
 
             <div class="content-section">
@@ -816,10 +955,10 @@ export class ClinicalController {
               <div class="content-text">${record.clinical_evolution || 'Sem notas clínicas textuais.'}</div>
             </div>
 
-            ${record.technical_notes ? `
+            ${formattedTechnicalNotes ? `
               <div class="content-section">
                 <div class="section-label">Orientações & Anotações Complementares</div>
-                <div class="content-text">${record.technical_notes}</div>
+                <div class="content-text">${formattedTechnicalNotes}</div>
               </div>
             ` : ''}
 
@@ -882,7 +1021,7 @@ export class ClinicalController {
         return;
       }
 
-      const patient = db.prepare('SELECT id, full_name FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId) as any;
+      const patient = clinicalPatientIdentity(req, String(patientId), String(req.body.moduleType || 'general')) as any;
       if (!patient) {
         res.status(404).json({ error: 'Paciente não encontrado' });
         return;
@@ -927,6 +1066,9 @@ export class ClinicalController {
         }
       }
 
+      if (patient.tenant_id !== tenantId && (!clinicalPatientIdentity(req,String(patientId),effectiveModule || 'general') || !canAccessPatient(req.user!.userId,tenantId,String(patientId),'appointments'))) {
+        res.status(403).json({error:'O compartilhamento não permite este atendimento.'}); return;
+      }
       db.transaction(() => {
       // 1. Verifica se já existe um atendimento in_progress para este paciente na clínica
       const existingInProgress = db.prepare(`

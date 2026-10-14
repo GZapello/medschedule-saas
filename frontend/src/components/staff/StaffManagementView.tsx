@@ -1,3 +1,4 @@
+import { PatientShareManagement } from '../staff/PatientShareManagement';
 import { ResponsiveTable } from '../common/ResponsiveTable';
 import { useBillingSummary } from '../billing/BillingView';
 import React, { useState, useEffect } from 'react';
@@ -487,6 +488,7 @@ export const StaffManagementView: React.FC = () => {
         </div>
       )}
 
+      <PatientShareManagement />
       {/* Lista de Membros da Equipe */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredStaff.map(member => (
@@ -518,9 +520,21 @@ export const StaffManagementView: React.FC = () => {
                     <h3 className="font-bold text-slate-800 text-sm leading-snug">
                       {member.role === 'professional' ? formatDoctorName(member.name, member.gender) : member.name}
                     </h3>
-                    <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
-                      {getRoleLabel(member.role)}
-                    </span>
+                    <div className="flex flex-wrap items-center gap-1 mt-0.5">
+                      <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                        {getRoleLabel(member.role)}
+                      </span>
+                      {Boolean((member as any).is_linked) && (
+                        <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200">
+                          Usuário Vinculado
+                        </span>
+                      )}
+                      {Number((member as any).shared_patient_count) > 0 && (
+                        <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200">
+                          {(member as any).shared_patient_count} {(member as any).shared_patient_count === 1 ? 'paciente compartilhado' : 'pacientes compartilhados'}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
 
