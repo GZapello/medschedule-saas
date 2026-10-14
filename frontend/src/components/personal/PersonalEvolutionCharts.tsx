@@ -1,3 +1,4 @@
+import { ResponsiveTable } from '../common/ResponsiveTable';
 import {IndicatorDetails,assessmentIndicators} from './PersonalAssessmentIndicator';
 import {ReportTrend,evolutionMetrics,reportNumber,visceralEvolutionSeries,visceralSeriesKey} from './PersonalAssessmentReportCharts';
 import { ClinicalTrendChart } from '../clinical/ClinicalTrendChart';
@@ -293,8 +294,8 @@ export const PersonalEvolutionCharts: React.FC<PersonalEvolutionChartsProps> = (
             </h4>
           </div>
 
-          <div className="overflow-x-auto bg-white border border-slate-200 rounded-2xl">
-            <table className="w-full text-left text-xs">
+          <div className="overflow-x-auto bg-white border border-slate-200 rounded-2xl mobile-table-container">
+            <ResponsiveTable className="w-full text-left text-xs">
               <thead>
                 <tr className="border-b border-slate-200 text-slate-400 font-semibold uppercase text-[10px] bg-slate-50">
                   <th className="py-2.5 px-3">Data</th>
@@ -363,15 +364,15 @@ export const PersonalEvolutionCharts: React.FC<PersonalEvolutionChartsProps> = (
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </ResponsiveTable>
           </div>
         </div>
       )}
 
       {/* Tabela Cronológica Geral */}
       {(
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+        <div className="overflow-x-auto mobile-table-container">
+          <ResponsiveTable className="w-full text-left text-xs">
             <thead>
               <tr className="border-b border-slate-200 text-slate-400 font-semibold uppercase text-[10px]">
                 <th className="py-2.5 px-3">Data</th>
@@ -409,7 +410,7 @@ export const PersonalEvolutionCharts: React.FC<PersonalEvolutionChartsProps> = (
                 </tr>
               ))}
             </tbody>
-          </table>
+          </ResponsiveTable>
         </div>
       )}
       <details className="text-xs text-slate-600"><summary className="font-semibold cursor-pointer">Todos os indicadores de evolução</summary><div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">{evolutionMetrics.map(([key,label,unit])=><ReportTrend key={key} history={sorted} metric={key} title={label} unit={unit}/>)}</div></details>

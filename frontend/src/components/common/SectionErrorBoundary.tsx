@@ -135,7 +135,7 @@ export class SectionErrorBoundary extends Component<Props, State> {
             </button>
 
             {showDetails && (
-              <div className="bg-slate-950 text-rose-300 p-3 rounded-xl text-2xs font-mono overflow-x-auto text-left border border-slate-800 space-y-1">
+              <div className="bg-slate-950 text-rose-300 p-3 rounded-xl text-2xs font-mono whitespace-pre-wrap break-all lg:whitespace-pre lg:break-normal lg:overflow-x-auto text-left border border-slate-800 space-y-1">
                 <p><strong>Módulo afetado:</strong> {sectionName || 'Geral'}</p>
                 <p><strong>Mensagem:</strong> {sanitizedError}</p>
               </div>

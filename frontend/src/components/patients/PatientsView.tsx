@@ -1,3 +1,4 @@
+import { ResponsiveTable } from '../common/ResponsiveTable';
 import React, { useState, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -209,8 +210,8 @@ export const PatientsView: React.FC<PatientsViewProps> = ({
         </div>
 
         {/* Desktop Table (hidden sm:block) */}
-        <div className="hidden sm:block overflow-x-auto">
-          <table className="w-full text-left text-xs">
+        <div className="hidden sm:block overflow-x-auto mobile-table-container">
+          <ResponsiveTable className="w-full text-left text-xs">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase">
               <tr>
                 <th className="px-6 py-3.5">{clientTermLabel}</th>
@@ -288,7 +289,7 @@ export const PatientsView: React.FC<PatientsViewProps> = ({
                 ))
               )}
             </tbody>
-          </table>
+          </ResponsiveTable>
         </div>
       </div>
 

@@ -198,7 +198,7 @@ export const Perio6SitesGrid: React.FC<Perio6SitesGridProps> = ({
           Selecione o Dente para Sondagem Detalhada:
         </label>
         {/* Upper teeth */}
-        <div className="flex gap-1 overflow-x-auto pb-1">
+        <div className="flex gap-1 overflow-x-auto pb-1 mobile-wrap">
           {TEETH_NUMBERS_UPPER.map(num => (
             <button
               key={num}
@@ -217,7 +217,7 @@ export const Perio6SitesGrid: React.FC<Perio6SitesGridProps> = ({
           ))}
         </div>
         {/* Lower teeth */}
-        <div className="flex gap-1 overflow-x-auto pb-1">
+        <div className="flex gap-1 overflow-x-auto pb-1 mobile-wrap">
           {TEETH_NUMBERS_LOWER.map(num => (
             <button
               key={num}

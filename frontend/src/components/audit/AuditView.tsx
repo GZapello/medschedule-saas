@@ -1,3 +1,4 @@
+import { ResponsiveTable } from '../common/ResponsiveTable';
 import React, { useState, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
@@ -40,8 +41,8 @@ export const AuditView: React.FC = () => {
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+        <div className="overflow-x-auto mobile-table-container">
+          <ResponsiveTable className="w-full text-left text-xs">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase">
               <tr>
                 <th className="px-6 py-3.5">Data/Hora</th>
@@ -83,7 +84,7 @@ export const AuditView: React.FC = () => {
                 ))
               )}
             </tbody>
-          </table>
+          </ResponsiveTable>
         </div>
       </div>
     </div>

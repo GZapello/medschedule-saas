@@ -1,3 +1,5 @@
+import { ResponsiveTable } from '../common/ResponsiveTable';
+import { useAndroidSectionBack } from '../../hooks/useAndroidSectionBack';
 import { ClinicBookingSettings, ProfessionalBookingSettings } from '../public-booking/BookingLinkSettings';
 import { BillingView } from '../billing/BillingView';
 import React, { useState, useEffect, useRef } from 'react';
@@ -115,6 +117,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
       else if (initialSection === 'hub') setActiveSection('hub');
     }
   }, [initialSection]);
+  useAndroidSectionBack(activeSection !== 'hub', () => setActiveSection('hub'));
 
   const [activeTab, setActiveTab] = useState<'clinic' | 'document_templates' | 'insurances' | 'profile' | 'billing' | 'legal'>(
     isClinicAdmin ? 'clinic' : 'profile'
@@ -881,6 +884,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
               .map(card => (
                 <div
                   key={card.id}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={card.title}
+                  onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.currentTarget.click(); } }}
                   data-tour={`settings-${card.id}`}
                   onClick={() => {
                     setActiveSection(card.id as any);
@@ -1147,7 +1154,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
 
       {/* Modal: Editar Registro / Conselho Profissional */}
       {isRegModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200 mobile-modal">
           <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4 animate-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2.5">
@@ -1159,7 +1166,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
                   <p className="text-[11px] text-slate-500">Atualize seus dados de habilitação profissional</p>
                 </div>
               </div>
-              <button
+              <button aria-label="Fechar"
                 type="button"
                 onClick={() => setIsRegModalOpen(false)}
                 className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
@@ -1239,7 +1246,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
 
       {/* Modal: Corrigir minha profissão (Troca única) */}
       {isProfessionModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200 mobile-modal">
           <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4 animate-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2.5">
@@ -1251,7 +1258,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
                   <p className="text-[11px] text-slate-500">Alteração única e definitiva</p>
                 </div>
               </div>
-              <button
+              <button aria-label="Fechar"
                 type="button"
                 onClick={() => setIsProfessionModalOpen(false)}
                 className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
@@ -1856,8 +1863,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
                 </p>
               </div>
 
-              <div className="overflow-x-auto rounded-2xl border border-slate-200">
-                <table className="w-full text-left text-xs">
+              <div className="overflow-x-auto rounded-2xl border border-slate-200 mobile-table-container">
+                <ResponsiveTable className="w-full text-left text-xs">
                   <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase">
                     <tr>
                       <th className="px-4 py-3">Dia da Semana</th>
@@ -1950,7 +1957,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </ResponsiveTable>
               </div>
             </div>
 
@@ -2097,8 +2104,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
               </button>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+            <div className="overflow-x-auto mobile-table-container">
+              <ResponsiveTable className="w-full text-left text-xs">
                 <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase">
                   <tr>
                     <th className="px-4 py-3.5">Nome do Convênio</th>
@@ -2175,13 +2182,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
                     ))
                   )}
                 </tbody>
-              </table>
+              </ResponsiveTable>
             </div>
           </div>
 
           {/* Modal Cadastrar / Editar Convênio */}
           {showNewInsuranceModal && (
-            <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 mobile-modal">
               <form onSubmit={handleSaveInsurance} className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 space-y-4 text-xs">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                   <h3 className="text-base font-bold text-slate-900">
@@ -2281,7 +2288,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="block font-bold text-slate-700 mb-1">Telefone Autorizações</label>
-                      <input
+                      <input inputMode="tel"
                         type="text"
                         value={insuranceForm.phone}
                         onChange={e => setInsuranceForm({ ...insuranceForm, phone: e.target.value })}

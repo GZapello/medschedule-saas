@@ -451,7 +451,7 @@ export const ZemdaBodyWorkspace: React.FC<ZemdaBodyWorkspaceProps> = ({
       }
       {/* 5. MODAL DE CONFIRMAÇÃO: LIMPAR DESENHOS DA CANETA */}
       {showClearDrawingsConfirm && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150 mobile-modal">
           <div className="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl border border-slate-200 space-y-4">
             <div className="flex items-center gap-3 text-rose-600">
               <div className="w-10 h-10 rounded-xl bg-rose-100 flex items-center justify-center shrink-0">
@@ -486,7 +486,7 @@ export const ZemdaBodyWorkspace: React.FC<ZemdaBodyWorkspaceProps> = ({
           </div>
         </div>
       )}
-      {history && <div role="dialog" aria-label="Histórico Zemda360" className="fixed inset-0 z-[70] bg-slate-900/70 flex items-center justify-center p-4"><div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-auto p-5 space-y-4">
+      {history && <div role="dialog" aria-label="Histórico Zemda360" className="fixed inset-0 z-[70] bg-slate-900/70 flex items-center justify-center p-4 mobile-modal"><div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-auto p-5 space-y-4">
         <div className="flex justify-between items-center"><h3 className="font-bold">Histórico Zemda360</h3><button type="button" onClick={()=>{setHistory(null);setHistoryRecord(null);}}>Fechar histórico</button></div>
         {!history.length && <p>Nenhum registro anterior.</p>}
         <div className="flex flex-wrap gap-2">{history.map(a=><button key={a.id} type="button" className="border rounded-xl p-3 text-sm" onClick={async()=>{try{setHistoryRecord(await ApiClient.get(`/v1/body-assessments/${a.id}`));}catch{showToast('Erro ao abrir registro.','error');}}}>{a.assessment_date} · {a.professional_name || 'Profissional'} · Abrir registro</button>)}</div>

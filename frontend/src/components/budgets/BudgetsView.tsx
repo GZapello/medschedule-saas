@@ -1,3 +1,4 @@
+import { ResponsiveTable } from '../common/ResponsiveTable';
 import React, { useState, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
@@ -246,7 +247,7 @@ export const BudgetsView: React.FC = () => {
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-200 pb-2 overflow-x-auto no-scrollbar scroll-smooth">
+      <div className="flex items-center gap-2 border-b border-slate-200 pb-2 overflow-x-auto no-scrollbar scroll-smooth mobile-wrap">
         <button
           onClick={() => setActiveTab('patient')}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 whitespace-nowrap ${
@@ -307,8 +308,8 @@ export const BudgetsView: React.FC = () => {
             Nenhum orçamento encontrado nesta categoria.
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
+          <div className="overflow-x-auto mobile-table-container">
+            <ResponsiveTable className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-500 font-semibold uppercase tracking-wider text-[10px]">
                   <th className="p-4">Identificador</th>
@@ -401,14 +402,14 @@ export const BudgetsView: React.FC = () => {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </ResponsiveTable>
           </div>
         )}
       </div>
 
       {/* Modal Novo Orçamento */}
       {showNewModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto mobile-modal">
           <div className="bg-white rounded-3xl max-w-2xl w-full p-4 sm:p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
               <h3 className="text-lg font-bold text-slate-900">
@@ -466,8 +467,8 @@ export const BudgetsView: React.FC = () => {
                   </button>
                 </div>
 
-                <div className="border border-slate-200 rounded-xl overflow-x-auto">
-                  <table className="w-full text-left text-xs min-w-[500px]">
+                <div className="border border-slate-200 rounded-xl overflow-x-auto mobile-table-container">
+                  <ResponsiveTable className="w-full text-left text-xs min-w-0 lg:min-w-[500px]">
                     <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold text-[10px]">
                       <tr>
                         <th className="p-2.5">Descrição do Item / Procedimento</th>
@@ -528,7 +529,7 @@ export const BudgetsView: React.FC = () => {
                         );
                       })}
                     </tbody>
-                  </table>
+                  </ResponsiveTable>
                 </div>
               </div>
 
@@ -607,7 +608,7 @@ export const BudgetsView: React.FC = () => {
 
       {/* Modal Visualização e Impressão Formato A4 */}
       {printBudgetData && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto print:p-0 print:bg-white">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto print:p-0 print:bg-white mobile-modal">
           <div className="bg-white rounded-3xl max-w-3xl w-full p-4 sm:p-8 shadow-2xl border border-slate-200 my-auto max-h-[90vh] overflow-y-auto print:max-h-none print:overflow-visible print:border-0 print:shadow-none print:m-0 print:max-w-none print:w-full">
             {/* Barra de controle na tela (oculta na impressão) */}
             <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-6 print:hidden">
@@ -625,7 +626,7 @@ export const BudgetsView: React.FC = () => {
                   <Printer className="w-4 h-4" />
                   Imprimir / Salvar PDF
                 </button>
-                <button
+                <button aria-label="Fechar"
                   onClick={() => setPrintBudgetData(null)}
                   className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
                 >
@@ -669,7 +670,7 @@ export const BudgetsView: React.FC = () => {
 
               {/* Tabela de Itens */}
               <div className="border border-slate-300 rounded-xl overflow-hidden">
-                <table className="w-full text-left border-collapse text-xs">
+                <ResponsiveTable className="w-full text-left border-collapse text-xs">
                   <thead className="bg-slate-100 border-b border-slate-300 text-slate-700 font-bold uppercase text-[10px]">
                     <tr>
                       <th className="p-3">Procedimento / Especificação</th>
@@ -723,7 +724,7 @@ export const BudgetsView: React.FC = () => {
                       </td>
                     </tr>
                   </tfoot>
-                </table>
+                </ResponsiveTable>
               </div>
 
               {/* Observações e Condições */}

@@ -325,7 +325,7 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
         description="Gestão de alunos, dobras cutâneas (Pollock), periodização e mapa 3D de sobrecarga muscular."
       >
         {/* Barra de Busca Rápida Global */}
-        <div ref={searchContainerRef} className="relative flex-1 min-w-[220px] max-w-xs md:max-w-sm">
+        <div ref={searchContainerRef} className="relative flex-1 min-w-0 lg:min-w-[220px] max-w-xs md:max-w-sm">
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
@@ -341,7 +341,7 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
 
           {/* Dropdown de Resultados da Busca */}
           {(isSearchOpen || searchResults) && (
-            <div className="absolute top-full right-0 mt-2 w-80 bg-white rounded-2xl shadow-xl border border-slate-200 p-3 z-50 max-h-80 overflow-y-auto space-y-3 animate-slideDown">
+            <div className="absolute top-full right-0 mt-2 w-[min(20rem,calc(100vw-3rem))] lg:w-80 bg-white rounded-2xl shadow-xl border border-slate-200 p-3 z-50 max-h-80 overflow-y-auto space-y-3 animate-slideDown">
               {/* Botão + Cadastrar novo paciente */}
               <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-xs border-b border-slate-100 p-1 mb-2">
                 <button
@@ -484,7 +484,7 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
                 </span>
               )}
               {!lockStudentContext && (
-                <button
+                <button aria-label="Fechar"
                   type="button"
                   onClick={() => handleSelectStudent(null)}
                   className="p-0.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
@@ -590,7 +590,7 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
           {currentTab === 'students' && (
             <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm space-y-4">
               <div className="flex items-center justify-between flex-wrap gap-3">
-                <div className="flex items-center gap-3 flex-1 min-w-[240px]">
+                <div className="flex items-center gap-3 flex-1 min-w-0 lg:min-w-[240px]">
                   <div className="relative flex-1">
                     <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                     <input
@@ -786,11 +786,11 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
 
       {/* MODAL: NOVO ALUNO RÁPIDO */}
       {isNewStudentModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn mobile-modal">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <h3 className="font-bold text-slate-800 text-sm">Cadastrar Novo Aluno</h3>
-              <button onClick={() => setIsNewStudentModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+              <button aria-label="Fechar" onClick={() => setIsNewStudentModalOpen(false)} className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
               </button>
             </div>

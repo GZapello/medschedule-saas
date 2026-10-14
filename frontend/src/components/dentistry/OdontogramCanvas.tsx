@@ -1,3 +1,4 @@
+import { MobileGraphicViewport } from '../common/MobileGraphicViewport';
 import React, { useState, useEffect } from 'react';
 import {
   Sparkles,
@@ -484,7 +485,7 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
 
   // Renderizador unificado da arcada dentária completa:
   // Mostra todos os dentes juntos, centralizados no desktop, sem scrolls separados nos quadrantes.
-  // No mobile/tablet, mantém um único scroll horizontal por arcada.
+  // No mobile/tablet, escala responsiva com controles de ampliação e movimento interno.
   const renderArchRow = (
     rightTeeth: number[],
     leftTeeth: number[],
@@ -492,7 +493,7 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
     isDeciduous = false
   ) => {
     return (
-      <div className="w-full overflow-x-auto pb-1.5 scrollbar-thin">
+      <MobileGraphicViewport>
         <div className={`flex items-center justify-center min-w-max mx-auto p-2 sm:p-2.5 rounded-2xl border transition-all ${
           isDeciduous
             ? 'bg-cyan-50/50 border-cyan-200'
@@ -522,7 +523,7 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
             {leftTeeth.map((tooth) => renderTooth(tooth, isCompareInitial))}
           </div>
         </div>
-      </div>
+      </MobileGraphicViewport>
     );
   };
 

@@ -235,7 +235,7 @@ export const EditPatientModal: React.FC<EditPatientModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto mobile-modal">
       <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 max-h-[92vh] overflow-y-auto my-4">
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
@@ -250,7 +250,7 @@ export const EditPatientModal: React.FC<EditPatientModalProps> = ({
               </p>
             </div>
           </div>
-          <button
+          <button aria-label="Fechar"
             onClick={onClose}
             className="p-1.5 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
           >
@@ -391,7 +391,7 @@ export const EditPatientModal: React.FC<EditPatientModalProps> = ({
 
               <div>
                 <label className="block text-slate-700 font-semibold mb-1">CPF</label>
-                <input
+                <input inputMode="numeric"
                   type="text"
                   value={cpf}
                   onChange={e => setCpf(e.target.value)}
@@ -402,7 +402,7 @@ export const EditPatientModal: React.FC<EditPatientModalProps> = ({
 
               <div>
                 <label className="block text-slate-700 font-semibold mb-1">Telefone / WhatsApp *</label>
-                <input
+                <input inputMode="tel"
                   type="text"
                   required
                   value={phone}

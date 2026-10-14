@@ -1047,7 +1047,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
         <>
           {completion.dialog}
           {showFinishConfirmModal && (
-            <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4" role="dialog" aria-modal="true">
+            <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 mobile-modal" role="dialog" aria-modal="true">
               <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
@@ -1117,7 +1117,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
           )}
 
           {completionSuccessData && completion.isCompleted && (
-            <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4" role="dialog" aria-modal="true">
+            <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 mobile-modal" role="dialog" aria-modal="true">
               <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 text-center space-y-4">
                 <div className="w-14 h-14 bg-teal-100 text-teal-800 rounded-full flex items-center justify-center mx-auto shadow-xs">
                   <CheckCircle2 className="w-8 h-8" />
@@ -1180,14 +1180,14 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
           />
 
           {showAiDrawer && (
-            <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-2xs flex justify-end" role="dialog" aria-modal="true">
+            <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-2xs flex justify-end mobile-modal" role="dialog" aria-modal="true">
               <div className="bg-white w-full max-w-md h-full shadow-2xl p-6 flex flex-col space-y-4 overflow-y-auto">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                   <div className="flex items-center gap-2 text-purple-900 font-extrabold text-sm">
                     <Sparkles className="w-4 h-4 text-purple-600" />
                     Assistente de IA Ético (CFP)
                   </div>
-                  <button
+                  <button aria-label="Fechar"
                     onClick={() => setShowAiDrawer(false)}
                     className="p-1 rounded-lg text-slate-400 hover:text-slate-700 cursor-pointer"
                   >

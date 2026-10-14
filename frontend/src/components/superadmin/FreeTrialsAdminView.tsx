@@ -1,3 +1,4 @@
+import { ResponsiveTable } from '../common/ResponsiveTable';
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { ApiClient } from '../../api/client';
@@ -518,7 +519,7 @@ export const FreeTrialsAdminView: React.FC = () => {
 
           {/* Barra de Filtros e Busca Solo */}
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0 text-xs font-bold">
+            <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0 text-xs font-bold mobile-wrap">
               <button
                 type="button"
                 onClick={() => setSoloStatusFilter('all')}
@@ -593,8 +594,8 @@ export const FreeTrialsAdminView: React.FC = () => {
 
           {/* Tabela de Testes Solo */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
+            <div className="overflow-x-auto mobile-table-container">
+              <ResponsiveTable className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[11px]">
                     <th className="py-3 px-4">Clínica / Consultório</th>
@@ -736,7 +737,7 @@ export const FreeTrialsAdminView: React.FC = () => {
                     })
                   )}
                 </tbody>
-              </table>
+              </ResponsiveTable>
             </div>
           </div>
         </div>
@@ -806,7 +807,7 @@ export const FreeTrialsAdminView: React.FC = () => {
 
       {/* Barra de Filtros e Busca */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0 text-xs font-bold">
+        <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0 text-xs font-bold mobile-wrap">
           <button
             onClick={() => setStatusFilter('all')}
             className={`px-3 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap ${
@@ -885,8 +886,8 @@ export const FreeTrialsAdminView: React.FC = () => {
 
       {/* Tabela de Testes Grátis */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs">
+        <div className="overflow-x-auto mobile-table-container">
+          <ResponsiveTable className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
                 <th className="py-3.5 px-4">Cliente / Clínica</th>
@@ -1109,7 +1110,7 @@ export const FreeTrialsAdminView: React.FC = () => {
                 })
               )}
             </tbody>
-          </table>
+          </ResponsiveTable>
         </div>
       </div>
       </div>
@@ -1119,7 +1120,7 @@ export const FreeTrialsAdminView: React.FC = () => {
       {/* MODAL: GERAR NOVO LINK DE TESTE GRÁTIS */}
       {/* ========================================================================= */}
       {isCreateModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 mobile-modal">
           <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
             <div className="p-6 bg-gradient-to-r from-slate-900 to-indigo-950 text-white flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -1131,7 +1132,7 @@ export const FreeTrialsAdminView: React.FC = () => {
                   <p className="text-xs text-slate-400">Link exclusivo, individual e de uso único</p>
                 </div>
               </div>
-              <button
+              <button aria-label="Fechar"
                 onClick={() => setIsCreateModalOpen(false)}
                 className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-white/10 transition-colors cursor-pointer"
               >
@@ -1306,10 +1307,10 @@ export const FreeTrialsAdminView: React.FC = () => {
       {/* MODAL: LINK GERADO COM SUCESSO (CÓPIA RÁPIDA) */}
       {/* ========================================================================= */}
       {generatedTrial && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 mobile-modal">
           <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
             <div className="p-6 bg-gradient-to-r from-emerald-600 to-teal-700 text-white text-center relative">
-              <button
+              <button aria-label="Fechar"
                 onClick={() => setGeneratedTrial(null)}
                 className="absolute top-4 right-4 p-2 text-white/80 hover:text-white rounded-xl hover:bg-white/10 transition-colors cursor-pointer"
               >
@@ -1382,7 +1383,7 @@ export const FreeTrialsAdminView: React.FC = () => {
       {/* MODAL: CONFIRMAR REVOGAÇÃO */}
       {/* ========================================================================= */}
       {revokingTrial && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 mobile-modal">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4 animate-in fade-in zoom-in-95 duration-200">
             <div className="flex items-center gap-3 text-rose-600">
               <div className="p-3 bg-rose-100 rounded-2xl">
@@ -1425,7 +1426,7 @@ export const FreeTrialsAdminView: React.FC = () => {
       {/* MODAL: CONFIRMAR EXCLUSÃO DEFINITIVA */}
       {/* ========================================================================= */}
       {deletingTrial && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 mobile-modal">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4 animate-in fade-in zoom-in-95 duration-200">
             <div className="flex items-center gap-3 text-rose-600">
               <div className="p-3 bg-rose-100 rounded-2xl">
@@ -1466,7 +1467,7 @@ export const FreeTrialsAdminView: React.FC = () => {
       {/* MODAL: ALTERAR VALIDADE DO TESTE (SUPERADMIN) */}
       {/* ========================================================================= */}
       {validityModalData && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 mobile-modal">
           <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
             {/* Header */}
             <div className="p-6 bg-gradient-to-r from-slate-900 to-indigo-950 text-white flex items-center justify-between">
@@ -1479,7 +1480,7 @@ export const FreeTrialsAdminView: React.FC = () => {
                   <p className="text-xs text-slate-400">Prorrogar, reduzir ou definir vencimento manual</p>
                 </div>
               </div>
-              <button
+              <button aria-label="Fechar"
                 type="button"
                 onClick={() => setValidityModalData(null)}
                 className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-white/10 transition-colors cursor-pointer"

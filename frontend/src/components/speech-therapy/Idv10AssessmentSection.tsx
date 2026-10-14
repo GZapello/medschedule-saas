@@ -176,7 +176,7 @@ export const Idv10AssessmentSection: React.FC<Idv10AssessmentSectionProps> = ({
             </div>
 
             {/* Opções Likert */}
-            <div className="flex items-center gap-1.5 shrink-0 overflow-x-auto no-scrollbar">
+            <div className="flex items-center gap-1.5 shrink-0 overflow-x-auto no-scrollbar mobile-wrap">
               {LIKERT_OPTIONS.map(opt => {
                 const isSelected = answers[idx] === opt.value;
                 return (
@@ -251,12 +251,12 @@ export const Idv10AssessmentSection: React.FC<Idv10AssessmentSectionProps> = ({
               <span className="text-[10px] text-slate-400">Pontuação máxima: 40</span>
             </div>
 
-            <div className="h-32 flex items-end gap-3 pt-6 pb-2 px-2 overflow-x-auto no-scrollbar border-b border-slate-200">
+            <div className="h-32 flex items-end gap-3 pt-6 pb-2 px-2 overflow-x-auto no-scrollbar border-b border-slate-200 mobile-wrap">
               {history.map((h, i) => {
                 const heightPct = Math.max(8, Math.min(100, (h.totalScore / 40) * 100));
                 const isOverCutoff = h.totalScore > 7;
                 return (
-                  <div key={h.id || i} className="flex-1 min-w-[50px] flex flex-col items-center gap-1.5">
+                  <div key={h.id || i} className="flex-1 min-w-0 lg:min-w-[50px] flex flex-col items-center gap-1.5">
                     <span className="text-[10px] font-extrabold text-slate-700">{h.totalScore}</span>
                     <div
                       style={{ height: `${heightPct}%` }}

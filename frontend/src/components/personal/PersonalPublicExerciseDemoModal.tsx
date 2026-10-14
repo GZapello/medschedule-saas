@@ -59,7 +59,7 @@ export const PersonalPublicExerciseDemoModal: React.FC<PersonalPublicExerciseDem
       role="dialog"
       aria-modal="true"
       aria-label={`Demonstração de ${exercise.name}`}
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-in fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-in fade-in mobile-modal"
       onClick={onClose}
     >
       <div

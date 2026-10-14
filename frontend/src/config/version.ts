@@ -1,5 +1,6 @@
-// Configuração central de versão do aplicativo Zemda / MedSchedule
-export const APP_VERSION = '1.1.2';
+import { version } from '../../package.json';
+// package.json is shared by the web UI, build metadata and Android Gradle.
+export const APP_VERSION = version;
 export const APP_NAME = 'Zemda';
 export const RELEASE_DATE = '2026-09-12';
 export const RELEASE_NOTES = 'Recursos recentes: Verticais médicas e estéticas integradas, mapeamento anatômico Zemda360, IA para evolução clínica e melhorias de estabilidade.';

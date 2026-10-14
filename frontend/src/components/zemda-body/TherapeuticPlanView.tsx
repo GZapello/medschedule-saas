@@ -1,3 +1,4 @@
+import { ResponsiveTable } from '../common/ResponsiveTable';
 import React, { useState, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
@@ -273,8 +274,8 @@ export const TherapeuticPlanView: React.FC<TherapeuticPlanViewProps> = ({
 
             {/* Tabela Estruturada: Parte corporal | Avaliação | Alterações/Queixas | Objetivo | Plano/Conduta | Observações */}
             <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs min-w-[760px]">
+              <div className="overflow-x-auto mobile-table-container">
+                <ResponsiveTable className="w-full text-left border-collapse text-xs min-w-0 lg:min-w-[760px]">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase text-[10px]">
                       <th className="py-3 px-3 w-40">Parte Corporal</th>
@@ -381,7 +382,7 @@ export const TherapeuticPlanView: React.FC<TherapeuticPlanViewProps> = ({
                       ))
                     )}
                   </tbody>
-                </table>
+                </ResponsiveTable>
               </div>
             </div>
 
@@ -463,7 +464,7 @@ export const TherapeuticPlanView: React.FC<TherapeuticPlanViewProps> = ({
 
                     {record.items && record.items.length > 0 && (
                       <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
-                        <table className="w-full text-left border-collapse text-xs">
+                        <ResponsiveTable className="w-full text-left border-collapse text-xs">
                           <thead>
                             <tr className="bg-slate-100/70 text-slate-600 font-bold uppercase text-[9px] border-b border-slate-200">
                               <th className="py-2 px-3">Região</th>
@@ -484,7 +485,7 @@ export const TherapeuticPlanView: React.FC<TherapeuticPlanViewProps> = ({
                               </tr>
                             ))}
                           </tbody>
-                        </table>
+                        </ResponsiveTable>
                       </div>
                     )}
 

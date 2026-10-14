@@ -1,3 +1,4 @@
+import { ResponsiveTable } from '../common/ResponsiveTable';
 import React, { useEffect, useState } from 'react';
 import { ApiClient } from '../../api/client';
 
@@ -31,11 +32,11 @@ export default function SystemIntegrityView() {
           ['Jobs', data.jobs.pendingNotifications + data.jobs.pendingClinicDeletions || data.jobs.webhookJobs?.some((row: any) => ['PENDING','PROCESSING','RETRY'].includes(row.status) && row.count) ? 'Atenção' : 'Sem pendências'],
           ['Clínicas afetadas', String(data.affectedClinics)]].map(([label, value]) => <article key={label} className="bg-white rounded-2xl border p-4"><h3 className="text-xs font-bold text-slate-500">{label}</h3><p className={`mt-2 font-bold ${value === 'Erro' ? 'text-red-700' : value === 'Atenção' ? 'text-amber-700' : 'text-slate-800'}`}>{value}</p></article>)}
       </div>
-      <article className="bg-white border rounded-2xl p-5 overflow-x-auto">
+      <article className="bg-white border rounded-2xl p-5 overflow-x-auto mobile-table-container">
         <h3 className="font-bold mb-3">Erros recentes</h3>
-        <table className="w-full text-xs text-left"><thead><tr>{['Data/hora', 'Serviço', 'Endpoint', 'Tipo', 'Clínica (ID)', 'Mensagem', 'Ocorrências'].map(label => <th key={label} className="p-2">{label}</th>)}</tr></thead><tbody>
+        <ResponsiveTable className="w-full text-xs text-left"><thead><tr>{['Data/hora', 'Serviço', 'Endpoint', 'Tipo', 'Clínica (ID)', 'Mensagem', 'Ocorrências'].map(label => <th key={label} className="p-2">{label}</th>)}</tr></thead><tbody>
           {data.recent.map((row: any, i: number) => <tr key={i} className="border-t"><td className="p-2">{time(row.last_seen)}</td><td>{row.event_type}</td><td className="break-all">{row.endpoint}</td><td>{row.severity}</td><td>{row.tenant_id || 'Global'}</td><td>{row.message}</td><td>{row.occurrences}</td></tr>)}
-        </tbody></table>
+        </tbody></ResponsiveTable>
         {!data.recent.length && <p className="text-sm text-slate-500 py-3">Nenhuma falha registrada neste período.</p>}
         <div className="flex justify-end gap-4 mt-4 text-xs"><button disabled={page === 1 || loading} onClick={() => setPage(value => value - 1)}>Anterior</button><span>Página {page} · {data.pagination.total} grupos</span><button disabled={page * 25 >= data.pagination.total || loading} onClick={() => setPage(value => value + 1)}>Próxima</button></div>
       </article>

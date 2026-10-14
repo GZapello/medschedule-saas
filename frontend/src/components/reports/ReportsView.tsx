@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { downloadBlob } from '../../utils/download';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import {
@@ -43,12 +44,7 @@ export const ReportsView: React.FC = () => {
     try {
       const csvText = await ApiClient.get<string>(`/v1/reports/export-csv?type=${type}`);
       const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `relatorio-${type}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
+      await downloadBlob(blob, `relatorio-${type}.csv`);
       showToast(`Relatório de ${type} baixado com sucesso!`, 'success');
     } catch (err) {
       showToast('Erro ao exportar CSV', 'error');

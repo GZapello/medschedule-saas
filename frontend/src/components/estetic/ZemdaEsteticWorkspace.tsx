@@ -1,3 +1,4 @@
+import { ResponsiveTable } from '../common/ResponsiveTable';
 import { ClinicalFinishButton } from '../clinical/ClinicalFinishButton';
 import { ClinicalInventorySelector } from '../clinical/ClinicalInventorySelector';
 import { resolveConsultationAppointment } from '../clinical/resolveConsultationAppointment';
@@ -865,7 +866,7 @@ interface EsteticPlanItemForm {
         onClose={() => setFinishAppointment(null)}
         onCompleted={() => { setAppointmentCompleted(true); void autosave.clearDraft(); }}
         onFinished={() => { setFinishAppointment(null); onFinishConsultation?.(); }} />}
-      {showComparison && <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"><div role="dialog" aria-label="Comparação de avaliações" className="bg-white rounded-2xl p-5 max-h-[85vh] overflow-auto w-full max-w-3xl"><button type="button" className="mb-3 border rounded-lg p-2" onClick={() => setShowComparison(false)}>Fechar comparação</button><table className="w-full text-xs"><thead><tr><th>Campo</th>{comparisonIds.map(id => <th key={id}>{assessments.find(row => row.id === id)?.assessment_date}</th>)}</tr></thead><tbody>{Object.keys(defaults.current.assessmentForm).filter(key => key !== 'assessmentDate').map(key => <tr key={key}><th className="text-left border p-2">{assessmentLabels[key] || ({ complaint: 'Queixa principal', expectations: 'Expectativas' } as Record<string,string>)[key] || key}</th>{comparisonIds.map(id => <td key={id} className="border p-2">{formatAssessmentValue(assessments.find(row => row.id === id)?.specificData?.[key] ?? '') || 'Não informado'}</td>)}</tr>)}</tbody></table></div></div>}
+      {showComparison && <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 mobile-modal"><div role="dialog" aria-label="Comparação de avaliações" className="bg-white rounded-2xl p-5 max-h-[85vh] overflow-auto w-full max-w-3xl"><button type="button" className="mb-3 border rounded-lg p-2" onClick={() => setShowComparison(false)}>Fechar comparação</button><ResponsiveTable className="w-full text-xs"><thead><tr><th>Campo</th>{comparisonIds.map(id => <th key={id}>{assessments.find(row => row.id === id)?.assessment_date}</th>)}</tr></thead><tbody>{Object.keys(defaults.current.assessmentForm).filter(key => key !== 'assessmentDate').map(key => <tr key={key}><th className="text-left border p-2">{assessmentLabels[key] || ({ complaint: 'Queixa principal', expectations: 'Expectativas' } as Record<string,string>)[key] || key}</th>{comparisonIds.map(id => <td key={id} className="border p-2">{formatAssessmentValue(assessments.find(row => row.id === id)?.specificData?.[key] ?? '') || 'Não informado'}</td>)}</tr>)}</tbody></ResponsiveTable></div></div>}
       {pendingDelete && (() => {
         const { kind, id } = pendingDelete;
         const targetRow = pendingDelete.row || (() => {
@@ -917,7 +918,7 @@ interface EsteticPlanItemForm {
             role="dialog"
             aria-modal="true"
             aria-label={title}
-            className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150"
+            className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150 mobile-modal"
           >
             <div className="bg-white rounded-2xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-slate-200 space-y-4">
               <div className="flex items-start gap-3.5">
@@ -2744,11 +2745,11 @@ interface EsteticPlanItemForm {
 
       {/* Modal: Novo Plano de Tratamento */}
       {isNewPlanModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs mobile-modal">
           <div role="dialog" aria-label="Planejamento estético" className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 space-y-4 animate-in zoom-in-95">
             <div className="flex items-center justify-between border-b pb-3">
               <h3 className="font-bold text-slate-900 text-base">Novo Plano de Tratamento Estético</h3>
-              <button onClick={() => { cancelEdit(); setIsNewPlanModalOpen(false); }} className="p-1 text-slate-400 hover:text-slate-700">
+              <button aria-label="Fechar" onClick={() => { cancelEdit(); setIsNewPlanModalOpen(false); }} className="p-1 text-slate-400 hover:text-slate-700">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -2956,11 +2957,11 @@ interface EsteticPlanItemForm {
 
       {/* Modal: Registrar Procedimento Realizado */}
       {isNewProcedureModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs mobile-modal">
           <div role="dialog" aria-label="Procedimento estético" className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 space-y-4 animate-in zoom-in-95">
             <div className="flex items-center justify-between border-b pb-3">
               <h3 className="font-bold text-slate-900 text-base">Registrar Procedimento Estético Realizado</h3>
-              <button onClick={() => { cancelEdit(); setIsNewProcedureModalOpen(false); }} className="p-1 text-slate-400 hover:text-slate-700">
+              <button aria-label="Fechar" onClick={() => { cancelEdit(); setIsNewProcedureModalOpen(false); }} className="p-1 text-slate-400 hover:text-slate-700">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -3066,11 +3067,11 @@ interface EsteticPlanItemForm {
 
       {/* Modal: Anexar Foto Clínica */}
       {isNewPhotoModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs mobile-modal">
           <div role="dialog" aria-label="Fotografia clínica" className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-md p-6 space-y-4 animate-in zoom-in-95">
             <div className="flex items-center justify-between border-b pb-3">
               <h3 className="font-bold text-slate-900 text-base">Anexar Fotografia Clínica</h3>
-              <button onClick={() => { cancelEdit(); setIsNewPhotoModalOpen(false); }} className="p-1 text-slate-400 hover:text-slate-700">
+              <button aria-label="Fechar" onClick={() => { cancelEdit(); setIsNewPhotoModalOpen(false); }} className="p-1 text-slate-400 hover:text-slate-700">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -3171,11 +3172,11 @@ interface EsteticPlanItemForm {
 
       {/* Modal: Nova Evolução */}
       {isNewEvolutionModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs mobile-modal">
           <div role="dialog" aria-label="Evolução estética" className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg p-6 space-y-4 animate-in zoom-in-95">
             <div className="flex items-center justify-between border-b pb-3">
               <h3 className="font-bold text-slate-900 text-base">Registrar Evolução Clínica</h3>
-              <button onClick={() => { cancelEdit(); setIsNewEvolutionModalOpen(false); }} className="p-1 text-slate-400 hover:text-slate-700">
+              <button aria-label="Fechar" onClick={() => { cancelEdit(); setIsNewEvolutionModalOpen(false); }} className="p-1 text-slate-400 hover:text-slate-700">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -3251,11 +3252,11 @@ interface EsteticPlanItemForm {
 
       {/* Modal: Agendar / Registrar Retorno */}
       {isNewReturnModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs mobile-modal">
           <div role="dialog" aria-label="Retorno estético" className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg p-6 space-y-4 animate-in zoom-in-95">
             <div className="flex items-center justify-between border-b pb-3">
               <h3 className="font-bold text-slate-900 text-base">Agendar / Registrar Retorno Clínico</h3>
-              <button onClick={() => { cancelEdit(); setIsNewReturnModalOpen(false); }} className="p-1 text-slate-400 hover:text-slate-700">
+              <button aria-label="Fechar" onClick={() => { cancelEdit(); setIsNewReturnModalOpen(false); }} className="p-1 text-slate-400 hover:text-slate-700">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -3356,7 +3357,7 @@ interface EsteticPlanItemForm {
       {/* Lightbox de Foto */}
       {lightboxPhoto && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs mobile-modal"
           onClick={() => setLightboxPhoto(null)}
         >
           <div
@@ -3372,7 +3373,7 @@ interface EsteticPlanItemForm {
                   {new Date(lightboxPhoto.taken_at).toLocaleDateString('pt-BR')}
                 </span>
               </div>
-              <button onClick={() => setLightboxPhoto(null)} className="p-1 text-slate-400 hover:text-slate-700">
+              <button aria-label="Fechar" onClick={() => setLightboxPhoto(null)} className="p-1 text-slate-400 hover:text-slate-700">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -3388,7 +3389,7 @@ interface EsteticPlanItemForm {
 
       {/* Modal: Detalhes da Avaliação Anterior */}
       {selectedAssessmentDetail && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs mobile-modal">
           <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-xl max-h-[85vh] overflow-y-auto p-6 space-y-4 animate-in zoom-in-95">
             <div className="flex items-center justify-between border-b pb-3">
               <div>
@@ -3397,7 +3398,7 @@ interface EsteticPlanItemForm {
                   {new Date(selectedAssessmentDetail.created_at).toLocaleDateString('pt-BR')} • {selectedAssessmentDetail.area}
                 </span>
               </div>
-              <button onClick={() => setSelectedAssessmentDetail(null)} className="p-1 text-slate-400 hover:text-slate-700">
+              <button aria-label="Fechar" onClick={() => setSelectedAssessmentDetail(null)} className="p-1 text-slate-400 hover:text-slate-700">
                 <X className="w-5 h-5" />
               </button>
             </div>

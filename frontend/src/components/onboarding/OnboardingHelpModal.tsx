@@ -80,7 +80,7 @@ export const OnboardingHelpModal: React.FC = () => {
 
   return (
     <div
-      className="fixed inset-0 z-[9990] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-200"
+      className="fixed inset-0 z-[9990] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-200 mobile-modal"
       role="dialog"
       aria-modal="true"
       aria-labelledby="help-modal-title"

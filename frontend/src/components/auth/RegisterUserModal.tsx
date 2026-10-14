@@ -42,14 +42,14 @@ export const RegisterUserModal: React.FC<RegisterUserModalProps> = ({ isOpen, on
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs mobile-modal">
       <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
         <div className="flex items-center justify-between pb-4 border-b border-slate-100">
           <div>
             <h2 className="text-lg font-bold text-slate-800">Acesso para Colaboradores</h2>
             <p className="text-xs text-slate-500">Cadastro de equipe e profissionais de saúde</p>
           </div>
-          <button
+          <button aria-label="Fechar"
             onClick={onClose}
             className="p-1 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
           >

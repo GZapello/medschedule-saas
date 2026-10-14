@@ -602,7 +602,7 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
   ];
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden">
+    <div className="fixed inset-0 z-50 overflow-hidden mobile-modal">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-xs" onClick={onClose} />
 
       <div className="absolute inset-y-0 right-0 max-w-full flex pl-6 sm:pl-10">
@@ -633,7 +633,7 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
                 <Plus className="w-3.5 h-3.5" />
                 <span>Nova conversa</span>
               </button>
-              <button
+              <button aria-label="Fechar"
                 onClick={onClose}
                 className="p-1.5 text-white/80 hover:text-white rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
                 title="Fechar assistente"
@@ -711,7 +711,7 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
           {activeTab === 'chat' && (
             <>
               {/* Quick Actions — ações rápidas expandidas */}
-              <div className="p-2.5 bg-slate-50 border-b border-slate-200 overflow-x-auto flex gap-1.5 no-scrollbar">
+              <div className="p-2.5 bg-slate-50 border-b border-slate-200 overflow-x-auto flex gap-1.5 no-scrollbar mobile-wrap">
                 {quickActions.map((qa, i) => (
                   <button
                     key={i}

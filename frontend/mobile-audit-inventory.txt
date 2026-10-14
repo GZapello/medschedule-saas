@@ -1,0 +1,956 @@
+frontend/src\App.tsx:822:      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+frontend/src\App.tsx:849:        <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+frontend/src\App.tsx:1054:        <div className="min-h-screen bg-[#fafbfc] text-slate-800 font-sans flex flex-col justify-between">
+frontend/src\App.tsx:1179:        <div className="min-h-screen bg-[#fafbfc] text-slate-800 flex flex-col items-center justify-center p-4 sm:p-6 relative font-sans">
+frontend/src\App.tsx:1180:          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[450px] bg-gradient-to-b from-teal-100/60 via-emerald-50/30 to-transparent blur-3xl -z-10 pointer-events-none" />
+frontend/src\App.tsx:1268:    <div className="min-h-screen bg-[#fafbfc] flex flex-col">
+frontend/src\App.tsx:1331:        <main data-tour-page={currentView} className="flex-1 overflow-y-auto p-3 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full min-w-0">
+frontend/src\App.tsx:1824:          <Suspense fallback={<div role="status" className="min-h-screen flex items-center justify-center">Carregando Zemda...</div>}><AppContent /></Suspense>
+frontend/src\components\ai-copilot\AICopilotDrawer.tsx:605:    <div className="fixed inset-0 z-50 overflow-hidden">
+frontend/src\components\ai-copilot\AICopilotDrawer.tsx:714:              <div className="p-2.5 bg-slate-50 border-b border-slate-200 overflow-x-auto flex gap-1.5 no-scrollbar">
+frontend/src\components\ai-copilot\AICopilotDrawer.tsx:719:                    className="text-[11px] font-semibold bg-white border border-slate-200 hover:border-indigo-400 px-3 py-1 rounded-full whitespace-nowrap text-slate-700 hover:text-indigo-600 transition-colors shadow-2xs cursor-pointer"
+frontend/src\components\ai-copilot\AICopilotDrawer.tsx:735:                      className={`p-3.5 rounded-2xl text-xs max-w-[90%] leading-relaxed ${
+frontend/src\components\ai-copilot\AICopilotDrawer.tsx:790:                      <div className="mt-2 space-y-1 max-w-[90%]">
+frontend/src\components\audit\AuditView.tsx:43:        <div className="overflow-x-auto">
+frontend/src\components\audit\AuditView.tsx:44:          <table className="w-full text-left text-xs">
+frontend/src\components\audit\AuditView.tsx:64:                    <td className="px-6 py-3.5 font-medium text-slate-500 whitespace-nowrap">
+frontend/src\components\dashboard\TodayWorklist.tsx:174:        ? 'grid-cols-1 md:grid-cols-3'
+frontend/src\components\dashboard\TodayWorklist.tsx:176:          ? 'grid-cols-1 md:grid-cols-2 xl:grid-cols-4'
+frontend/src\components\dashboard\TodayWorklist.tsx:177:          : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5';
+frontend/src\components\dashboard\TodayWorklist.tsx:211:              <div className={`overflow-y-auto overflow-x-hidden pr-1.5 my-2 [scrollbar-width:thin] [scrollbar-color:#cbd5e1_transparent] ${
+frontend/src\components\dashboard\TodayWorklist.tsx:212:                isWideDrafts ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-[220px]' : 'space-y-1.5 max-h-[192px]'
+frontend/src\components\dashboard\TodayWorklist.tsx:263:              <div className="max-h-[192px] overflow-y-auto overflow-x-hidden pr-1.5 my-1.5 space-y-1.5 [scrollbar-width:thin] [scrollbar-color:#cbd5e1_transparent]">
+frontend/src\components\dashboard\TodayWorklist.tsx:297:              <div className="max-h-[192px] overflow-y-auto overflow-x-hidden pr-1.5 my-1.5 space-y-1.5 [scrollbar-width:thin] [scrollbar-color:#cbd5e1_transparent]">
+frontend/src\components\dashboard\TodayWorklist.tsx:327:              <div className="max-h-[220px] overflow-y-auto overflow-x-hidden pr-1 my-1.5 space-y-2 [scrollbar-width:thin] [scrollbar-color:#cbd5e1_transparent]">
+frontend/src\components\dashboard\TodayWorklist.tsx:336:                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md whitespace-nowrap ${timing.badgeClass}`}>
+frontend/src\components\dashboard\TodayWorklist.tsx:473:              <div className="max-h-[140px] overflow-y-auto overflow-x-hidden space-y-1.5 pr-1.5 my-2 [scrollbar-width:thin] [scrollbar-color:#f59e0b_transparent]">
+frontend/src\components\dashboard\TodayWorklist.tsx:512:        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+frontend/src\components\dashboard\TodayWorklist.tsx:594:                      <div className="space-y-1 min-w-0">
+frontend/src\components\ai-copilot\QuickAIAssistantShortcut.tsx:88:            <div className="flex items-center gap-2.5 min-w-0">
+frontend/src\components\ai-copilot\QuickAIAssistantShortcut.tsx:101:              <div className="min-w-0">
+frontend/src\components\financial\FinancialView.tsx:229:      <div className="flex items-center gap-2 border-b border-slate-200 pb-2 text-xs font-bold overflow-x-auto no-scrollbar scroll-smooth">
+frontend/src\components\financial\FinancialView.tsx:232:          className={`px-4 py-2 rounded-xl transition-all shrink-0 whitespace-nowrap ${
+frontend/src\components\financial\FinancialView.tsx:242:          className={`px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
+frontend/src\components\financial\FinancialView.tsx:259:          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+frontend/src\components\financial\FinancialView.tsx:323:            <div className="overflow-x-auto">
+frontend/src\components\financial\FinancialView.tsx:324:              <table className="w-full text-left text-xs">
+frontend/src\components\financial\FinancialView.tsx:431:                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs">
+frontend/src\components\financial\FinancialView.tsx:513:            <div className="overflow-x-auto">
+frontend/src\components\financial\FinancialView.tsx:514:              <table className="w-full text-left text-xs">
+frontend/src\components\financial\FinancialView.tsx:574:        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+frontend/src\components\financial\FinancialView.tsx:609:        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+frontend/src\components\financial\FinancialView.tsx:693:        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+frontend/src\components\dashboard\DashboardView.tsx:243:    <div data-tour-loading={loading} className="space-y-2 min-w-0">
+frontend/src\components\dashboard\DashboardView.tsx:278:      <div className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 ${metrics?.permissions?.finance ? 'lg:grid-cols-5' : 'lg:grid-cols-3'} gap-2`}>
+frontend/src\components\dashboard\DashboardView.tsx:349:      <div className="grid grid-cols-1 lg:grid-cols-3 gap-2.5 items-start">
+frontend/src\components\dashboard\DashboardView.tsx:379:                className={`px-2 py-1 rounded-lg font-semibold whitespace-nowrap transition-all cursor-pointer shrink-0 ${
+frontend/src\components\dashboard\DashboardView.tsx:404:            <div className="divide-y divide-slate-100 max-h-[480px] overflow-y-auto overflow-x-hidden pr-1.5 [scrollbar-width:thin] [scrollbar-color:#cbd5e1_transparent]">
+frontend/src\components\dashboard\DashboardView.tsx:633:            <div className="grid grid-cols-3 gap-1.5 text-center">
+frontend/src\components\budgets\BudgetsView.tsx:249:      <div className="flex items-center gap-2 border-b border-slate-200 pb-2 overflow-x-auto no-scrollbar scroll-smooth">
+frontend/src\components\budgets\BudgetsView.tsx:252:          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 whitespace-nowrap ${
+frontend/src\components\budgets\BudgetsView.tsx:263:          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 whitespace-nowrap ${
+frontend/src\components\budgets\BudgetsView.tsx:276:        <div className="flex-1 min-w-0 relative">
+frontend/src\components\budgets\BudgetsView.tsx:310:          <div className="overflow-x-auto">
+frontend/src\components\budgets\BudgetsView.tsx:311:            <table className="w-full text-left border-collapse text-xs">
+frontend/src\components\budgets\BudgetsView.tsx:356:                    <td className="p-4 text-right space-x-1.5 whitespace-nowrap">
+frontend/src\components\budgets\BudgetsView.tsx:411:        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+frontend/src\components\budgets\BudgetsView.tsx:469:                <div className="border border-slate-200 rounded-xl overflow-x-auto">
+frontend/src\components\budgets\BudgetsView.tsx:470:                  <table className="w-full text-left text-xs min-w-[500px]">
+frontend/src\components\budgets\BudgetsView.tsx:610:        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto print:p-0 print:bg-white">
+frontend/src\components\budgets\BudgetsView.tsx:672:                <table className="w-full text-left border-collapse text-xs">
+frontend/src\components\exams\PendingExamsView.tsx:248:      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+frontend/src\components\exams\PendingExamsView.tsx:282:        <form onSubmit={handleSearchSubmit} className="flex-1 min-w-[200px] relative">
+frontend/src\components\exams\PendingExamsView.tsx:342:          <div className="overflow-x-auto">
+frontend/src\components\exams\PendingExamsView.tsx:343:            <table className="w-full text-left border-collapse text-xs">
+frontend/src\components\exams\PendingExamsView.tsx:417:                      <td className="p-4 text-right space-x-1.5 whitespace-nowrap">
+frontend/src\components\exams\PendingExamsView.tsx:487:        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+frontend/src\components\exams\PendingExamsView.tsx:597:        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+frontend/src\components\exams\PendingExamsView.tsx:655:        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+frontend/src\components\estetic\ZemdaEsteticWorkspace.tsx:12:import { useHorizontalTabScroll, HorizontalTabNav } from '../../hooks/useHorizontalTabScroll';
+frontend/src\components\estetic\ZemdaEsteticWorkspace.tsx:110:  const tabScroll = useHorizontalTabScroll(activeTab);
+frontend/src\components\estetic\ZemdaEsteticWorkspace.tsx:858:    <div className="flex flex-col min-h-screen bg-slate-50" data-testid="zemda-estetic-workspace">
+frontend/src\components\estetic\ZemdaEsteticWorkspace.tsx:868:      {showComparison && <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"><div role="dialog" aria-label="Comparação de avaliações" className="bg-white rounded-2xl p-5 max-h-[85vh] overflow-auto w-full max-w-3xl"><button type="button" className="mb-3 border rounded-lg p-2" onClick={() => setShowComparison(false)}>Fechar comparação</button><table className="w-full text-xs"><thead><tr><th>Campo</th>{comparisonIds.map(id => <th key={id}>{assessments.find(row => row.id === id)?.assessment_date}</th>)}</tr></thead><tbody>{Object.keys(defaults.current.assessmentForm).filter(key => key !== 'assessmentDate').map(key => <tr key={key}><th className="text-left border p-2">{assessmentLabels[key] || ({ complaint: 'Queixa principal', expectations: 'Expectativas' } as Record<string,string>)[key] || key}</th>{comparisonIds.map(id => <td key={id} className="border p-2">{formatAssessmentValue(assessments.find(row => row.id === id)?.specificData?.[key] ?? '') || 'Não informado'}</td>)}</tr>)}</tbody></table></div></div>}
+frontend/src\components\estetic\ZemdaEsteticWorkspace.tsx:920:            className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150"
+frontend/src\components\estetic\ZemdaEsteticWorkspace.tsx:927:                <div className="flex-1 min-w-0">
+frontend/src\components\estetic\ZemdaEsteticWorkspace.tsx:1117:              <span className="font-bold text-xs text-slate-900 truncate max-w-[160px] sm:max-w-[240px]">
+frontend/src\components\estetic\ZemdaEsteticWorkspace.tsx:1144:              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-bold shadow-xs cursor-pointer whitespace-nowrap"
+frontend/src\components\estetic\ZemdaEsteticWorkspace.tsx:1153:              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-bold shadow-xs cursor-pointer whitespace-nowrap"
+frontend/src\components\estetic\ZemdaEsteticWorkspace.tsx:1162:              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs cursor-pointer transition-colors whitespace-nowrap"
+frontend/src\components\estetic\ZemdaEsteticWorkspace.tsx:1171:              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold shadow-xs cursor-pointer transition-colors whitespace-nowrap"
+frontend/src\components\estetic\ZemdaEsteticWorkspace.tsx:1241:                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+frontend/src\components\estetic\ZemdaEsteticWorkspace.tsx:1261:                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+frontend/src\components\estetic\ZemdaEsteticWorkspace.tsx:1422:                          <div className="grid grid-cols-3 gap-2">
+frontend/src\components\estetic\ZemdaEsteticWorkspace.tsx:1555:                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+frontend/src\components\estetic\ZemdaEsteticWorkspace.tsx:1582:                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+frontend/src\components\estetic\ZemdaEsteticWorkspace.tsx:1618:                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+frontend/src\components\estetic\ZemdaEsteticWorkspace.tsx:1634:                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+frontend/src\components\estetic\ZemdaEsteticWorkspace.tsx:1683:                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-white p-4 rounded-xl border border-slate-200">
+frontend/src\components\estetic\ZemdaEsteticWorkspace.tsx:1760:                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+frontend/src\components\estetic\ZemdaEsteticWorkspace.tsx:1806:                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-white p-4 rounded-xl border border-slate-200">
+frontend/src\components\estetic\ZemdaEsteticWorkspace.tsx:2026:                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+frontend/src\components\estetic\ZemdaEsteticWorkspace.tsx:2747:        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+frontend/src\components\estetic\ZemdaEsteticWorkspace.tsx:2887:                    <div className="grid grid-cols-3 gap-2">
+frontend/src\components\estetic\ZemdaEsteticWorkspace.tsx:2959:        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+frontend/src\components\estetic\ZemdaEsteticWorkspace.tsx:2969:              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+frontend/src\components\estetic\ZemdaEsteticWorkspace.tsx:3069:        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+frontend/src\components\estetic\ZemdaEsteticWorkspace.tsx:3174:        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+frontend/src\components\estetic\ZemdaEsteticWorkspace.tsx:3254:        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+frontend/src\components\estetic\ZemdaEsteticWorkspace.tsx:3359:          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs"
+frontend/src\components\estetic\ZemdaEsteticWorkspace.tsx:3391:        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+frontend/src\hooks\useHorizontalTabScroll.ts:35:export function useHorizontalTabScroll<T extends HTMLElement = HTMLDivElement>(
+frontend/src\hooks\useHorizontalTabScroll.ts:239:      className: `overflow-x-auto no-scrollbar scroll-smooth select-none px-8 sm:px-10 ${
+frontend/src\hooks\useHorizontalTabScroll.ts:367:    { className: `relative w-full min-w-0 ${className}` },
+frontend/src\components\consents\SignatureCanvas.tsx:28:    <canvas ref={canvas} width={900} height={280} aria-labelledby="signature-label" aria-describedby="signature-help"
+frontend/src\components\billing\GlobalBillingView.tsx:13:      <dl className="grid sm:grid-cols-3 gap-4"><div><dt className="text-sm text-slate-500">Ambiente</dt><dd className="font-bold">{connection?.environment==='production'?'Production':'Sandbox'}</dd></div><div><dt className="text-sm text-slate-500">Status</dt><dd className="font-bold">{connection?.connected===true?'Conectado':connection?.connected===false?'Erro':'Ainda não testado'}</dd></div><div><dt className="text-sm text-slate-500">Último teste</dt><dd>{connection?.lastTest?new Date(connection.lastTest).toLocaleString('pt-BR'):'—'}</dd></div></dl>
+frontend/src\components\billing\GlobalBillingView.tsx:16:      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">{[['TOTAL','Total',data?.total || 0],...Object.entries(labels).map(([key,label])=>[key,label,data?.counts.find((c:any)=>c.status===key)?.total || 0]),['MRR','MRR ativo',Number(data?.mrr || 0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})]].map(([key,label,value])=><div key={key} className="bg-white rounded-2xl p-5 border"><p className="text-xs text-slate-500">{label}</p><p className="text-2xl font-bold mt-1">{value}</p></div>)}</div>
+frontend/src\components\billing\GlobalBillingView.tsx:25:      <div className="bg-white rounded-2xl border p-4 overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr>{['Clínica','Plano','Status','Valor mensal','Próxima cobrança','Ambiente'].map(h=><th key={h} className="p-3">{h}</th>)}</tr></thead><tbody>{data?.rows.map((s:any)=><tr key={s.id} className="border-t"><td className="p-3 font-bold">{s.clinic_name}</td><td>{s.plan_name}</td><td>{labels[s.status] || s.status}</td><td>{Number(s.monthly_price).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}</td><td>{s.next_due_date || '—'}</td><td>{s.gateway_environment}</td></tr>)}</tbody></table>{data?.rows.length===0 && <p className="p-5 text-slate-500">Nenhuma assinatura encontrada.</p>}</div>
+frontend/src\components\billing\BillingView.tsx:221:      <div className="grid sm:grid-cols-4 gap-5">
+frontend/src\components\billing\BillingView.tsx:268:          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs text-slate-700 font-medium pt-1">
+frontend/src\components\billing\BillingView.tsx:281:        <div className="grid md:grid-cols-3 gap-6">
+frontend/src\components\billing\BillingView.tsx:409:    {historyOpen && summary && <div className="bg-white border border-slate-200/80 shadow-xs rounded-3xl p-6 overflow-x-auto"><h2 className="font-bold text-slate-900 mb-4">Histórico de cobranças</h2><table className="w-full text-xs text-left"><thead><tr className="border-b border-slate-100 text-slate-500"><th className="p-3">Data</th><th>Valor</th><th>Forma</th><th>Status</th><th>Pagamento</th></tr></thead><tbody>
+frontend/src\components\billing\BillingView.tsx:413:    {cancelOpen && <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4"><form role="dialog" aria-modal="true" aria-label="Gerenciar assinatura" onSubmit={cancel} className="bg-white p-6 sm:p-8 rounded-3xl space-y-4 max-w-lg w-full shadow-2xl border border-slate-100">
+frontend/src\components\dentistry\DentalImplantsManager.tsx:260:          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+frontend/src\components\dentistry\DentalImplantsManager.tsx:307:          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+frontend/src\components\dentistry\DentalImplantsManager.tsx:350:          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+frontend/src\components\psychology\PsychologyWorkspace.tsx:44:import { useHorizontalTabScroll, HorizontalTabNav } from '../../hooks/useHorizontalTabScroll';
+frontend/src\components\psychology\PsychologyWorkspace.tsx:85:  const tabScroll = useHorizontalTabScroll(activeTab);
+frontend/src\components\psychology\PsychologyWorkspace.tsx:1050:            <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4" role="dialog" aria-modal="true">
+frontend/src\components\psychology\PsychologyWorkspace.tsx:1120:            <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4" role="dialog" aria-modal="true">
+frontend/src\components\psychology\PsychologyWorkspace.tsx:1183:            <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-2xs flex justify-end" role="dialog" aria-modal="true">
+frontend/src\components\psychology\PsychologyWorkspace.tsx:1342:                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+frontend/src\components\psychology\PsychologyWorkspace.tsx:1387:                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+frontend/src\components\psychology\PsychologyWorkspace.tsx:1620:                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+frontend/src\components\psychology\PsychologyWorkspace.tsx:1654:                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+frontend/src\components\psychology\PsychologyWorkspace.tsx:1698:                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+frontend/src\components\psychology\PsychologyWorkspace.tsx:1784:                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
+frontend/src\components\psychology\PsychologyWorkspace.tsx:1999:                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+frontend/src\components\psychology\PsychologyWorkspace.tsx:2212:                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs">
+frontend/src\components\psychology\PsychologyWorkspace.tsx:2325:                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+frontend/src\components\psychology\PsychologyWorkspace.tsx:2423:                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+frontend/src\components\consents\PatientConsentsPanel.tsx:165:    {activeToken&&<div role="dialog" aria-modal="true" aria-label="Assinar termo" className="fixed inset-0 z-[10001] overflow-y-auto bg-slate-50"><div className="sticky top-0 z-10 bg-white border-b p-3"><button type="button" className="consent-secondary" onClick={()=>{setActiveToken(null);void run(load);notify();}}>Voltar aos termos</button></div><PublicConsentPage token={activeToken}/></div>}
+frontend/src\components\consents\PatientConsentsPanel.tsx:178:      <fieldset disabled={busy||!!editor} className="space-y-4 min-w-0">
+frontend/src\components\consents\PatientConsentsPanel.tsx:226:  return createPortal(<div className="fixed inset-0 z-[10000] bg-slate-900/30 p-3 sm:p-6 overflow-y-auto" role="dialog" aria-modal="true" aria-label="Termos & Consentimentos"><div className="max-w-4xl mx-auto bg-white rounded-2xl p-4 sm:p-6 space-y-4"><div className="flex justify-between gap-3"><div><h2 className="font-bold">Termos &amp; Consentimentos</h2>{data&&<p>Paciente: {data.patient.full_name}</p>}</div><button className="consent-secondary" onClick={onClose}>Voltar à agenda</button></div>{error?<div role="alert">{error}<button className="consent-secondary" onClick={()=>setRetry(v=>v+1)}>Tentar novamente</button></div>:!data?<p role="status">Carregando paciente...</p>:<PatientConsentsPanel patientId={patientId} patient={data.patient} guardians={data.guardians||[]}/>}</div></div>,document.body);
+frontend/src\components\patients\PatientsView.tsx:125:                className="flex-1 sm:flex-initial justify-center flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-xl transition-all whitespace-nowrap cursor-pointer min-h-[40px]"
+frontend/src\components\patients\PatientsView.tsx:135:              className="flex-1 sm:flex-initial justify-center flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-all whitespace-nowrap cursor-pointer min-h-[40px]"
+frontend/src\components\patients\PatientsView.tsx:212:        <div className="hidden sm:block overflow-x-auto">
+frontend/src\components\patients\PatientsView.tsx:213:          <table className="w-full text-left text-xs">
+frontend/src\components\dentistry\DentalAIDictationModal.tsx:90:    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+frontend/src\components\clinical\ClinicalDraftRecoveryModal.tsx:49:    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+frontend/src\components\psychology\PsychologyHistoryModal.tsx:143:    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto" role="dialog" aria-modal="true">
+frontend/src\components\patients\PatientProfileModal.tsx:44:import { useHorizontalTabScroll, HorizontalTabNav } from '../../hooks/useHorizontalTabScroll';
+frontend/src\components\patients\PatientProfileModal.tsx:78:  const tabScroll = useHorizontalTabScroll(activeTab);
+frontend/src\components\patients\PatientProfileModal.tsx:555:      <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+frontend/src\components\patients\PatientProfileModal.tsx:566:      <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+frontend/src\components\patients\PatientProfileModal.tsx:587:    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+frontend/src\components\patients\PatientProfileModal.tsx:591:          <div className="flex items-start gap-3 sm:gap-4 min-w-0">
+frontend/src\components\patients\PatientProfileModal.tsx:595:            <div className="min-w-0">
+frontend/src\components\patients\PatientProfileModal.tsx:690:                    className={`flex items-center gap-2 py-3 px-3 border-b-2 font-bold transition-all whitespace-nowrap shrink-0 cursor-pointer ${
+frontend/src\components\patients\PatientProfileModal.tsx:733:                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+frontend/src\components\patients\PatientProfileModal.tsx:829:                <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 text-xs">
+frontend/src\components\patients\PatientProfileModal.tsx:844:                      className={`px-3 py-1.5 rounded-xl font-semibold whitespace-nowrap transition-all ${
+frontend/src\components\patients\PatientProfileModal.tsx:977:                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+frontend/src\components\patients\PatientProfileModal.tsx:1078:                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+frontend/src\components\patients\PatientProfileModal.tsx:1268:                          <div className="flex-1 min-w-0">
+frontend/src\components\patients\PatientProfileModal.tsx:1787:                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+frontend/src\components\patients\PatientProfileModal.tsx:2081:                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2">
+frontend/src\components\patients\PatientProfileModal.tsx:2160:                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1 text-slate-700">
+frontend/src\components\dentistry\DentalProstheticsKanban.tsx:120:      <div className="grid grid-cols-1 md:grid-cols-6 gap-3 overflow-x-auto min-h-[320px]">
+frontend/src\components\dentistry\DentalProstheticsKanban.tsx:129:              className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-2xl p-3 flex flex-col space-y-2 min-w-[210px]"
+frontend/src\components\dentistry\DentistryWorkspace.tsx:52:import { useHorizontalTabScroll, HorizontalTabNav } from '../../hooks/useHorizontalTabScroll';
+frontend/src\components\dentistry\DentistryWorkspace.tsx:136:  const tabScroll = useHorizontalTabScroll(activeTab);
+frontend/src\components\dentistry\DentistryWorkspace.tsx:1851:                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+frontend/src\components\dentistry\DentistryWorkspace.tsx:1941:                                      <span className="truncate max-w-[210px] flex items-center gap-1">
+frontend/src\components\dentistry\DentistryWorkspace.tsx:2094:                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+frontend/src\components\dentistry\DentistryWorkspace.tsx:2137:                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+frontend/src\components\dentistry\DentistryWorkspace.tsx:2246:                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+frontend/src\components\dentistry\DentistryWorkspace.tsx:2278:                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+frontend/src\components\dentistry\DentistryWorkspace.tsx:2460:                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+frontend/src\components\psychology\PsychologyDocumentModal.tsx:203:    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto" role="dialog" aria-modal="true">
+frontend/src\components\psychology\PsychologyDocumentModal.tsx:349:              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+frontend/src\components\patients\NewPatientModal.tsx:164:    <div className={`fixed inset-0 ${zIndex || 'z-50'} bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto`}>
+frontend/src\components\patients\NewPatientModal.tsx:212:          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+frontend/src\components\dentistry\OdontogramCanvas.tsx:336:            <svg viewBox="0 0 50 50" className="w-full h-full text-slate-800">
+frontend/src\components\dentistry\OdontogramCanvas.tsx:342:            <svg viewBox="0 0 50 50" className="w-full h-full text-rose-600">
+frontend/src\components\dentistry\OdontogramCanvas.tsx:356:            <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xs select-none">
+frontend/src\components\dentistry\OdontogramCanvas.tsx:495:      <div className="w-full overflow-x-auto pb-1.5 scrollbar-thin">
+frontend/src\components\dentistry\OdontogramCanvas.tsx:496:        <div className={`flex items-center justify-center min-w-max mx-auto p-2 sm:p-2.5 rounded-2xl border transition-all ${
+frontend/src\components\dentistry\OdontogramCanvas.tsx:513:            <div className="h-2 w-[2px] bg-cyan-400 group-hover:bg-cyan-500 transition-colors" />
+frontend/src\components\dentistry\OdontogramCanvas.tsx:517:            <div className="h-6 sm:h-9 w-[2px] bg-cyan-500 group-hover:bg-cyan-600 rounded-full transition-colors" />
+frontend/src\components\patients\EditPatientModal.tsx:238:    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+frontend/src\components\patients\EditPatientModal.tsx:434:              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+frontend/src\components\patients\EditPatientModal.tsx:474:              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+frontend/src\components\psychology\PsychologyAIOrganizerModal.tsx:66:  return <div className="fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4"><div role="dialog" aria-modal="true" aria-label="Organizar atendimento ZemdaPsico" className="bg-white rounded-2xl w-full max-w-5xl max-h-[92vh] overflow-y-auto p-6 space-y-4">
+frontend/src\components\psychology\PsychologyAIOrganizerModal.tsx:89:    {pending[0] && <div role="dialog" aria-label="Revisar aplicação" className="fixed inset-0 z-[60] bg-slate-900/60 flex items-center justify-center p-4"><div className="bg-white rounded-xl p-6 max-w-xl max-h-[85vh] overflow-y-auto space-y-3"><h3>{pending[0].item.label} · {pending.length} pendente(s)</h3><p className="whitespace-pre-line">Conteúdo atual: {existing(pending[0].section,pending[0].field) || '(vazio)'}</p><p className="whitespace-pre-line">Sugestão da IA: {pending[0].item.value}</p>{evidence(pending[0].item.evidence)}<div className="flex gap-4"><button onClick={() => resolve('keep')}>Manter atual</button><button onClick={() => resolve('append')}>Adicionar</button><button onClick={() => resolve('replace')}>{existing(pending[0].section,pending[0].field) ? 'Substituir' : 'Aplicar'}</button><button onClick={() => setPending([])}>Cancelar restantes</button></div></div></div>}
+frontend/src\components\dentistry\forms\PeriodontalExamForm.tsx:17:                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+frontend/src\components\dentistry\Perio6SitesGrid.tsx:151:      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+frontend/src\components\dentistry\Perio6SitesGrid.tsx:201:        <div className="flex gap-1 overflow-x-auto pb-1">
+frontend/src\components\dentistry\Perio6SitesGrid.tsx:220:        <div className="flex gap-1 overflow-x-auto pb-1">
+frontend/src\components\dentistry\Perio6SitesGrid.tsx:303:            <div className="grid grid-cols-3 gap-2">
+frontend/src\components\dentistry\Perio6SitesGrid.tsx:347:            <div className="grid grid-cols-3 gap-2">
+frontend/src\components\clinical\AppointmentConsultation.tsx:95:      <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4" role="alertdialog">
+frontend/src\components\clinical\AppointmentConsultation.tsx:112:      <div className="fixed inset-0 z-50 bg-white/80 backdrop-blur-xs flex items-center justify-center p-8">
+frontend/src\components\clinical\AppointmentConsultation.tsx:118:  if (status.alreadyCompleted) return <div role="dialog" aria-label="Atendimento concluído" className="fixed inset-0 z-50 bg-white p-8"><p>Este atendimento já foi finalizado. Consulte o prontuário para ver os registros.</p><button onClick={onFinished}>Voltar à agenda</button></div>;
+frontend/src\components\clinical\AppointmentConsultation.tsx:148:      <div className="fixed inset-0 z-50 bg-slate-100 flex flex-col overflow-auto" role="dialog" aria-modal="true" aria-label="Atendimento com Zemda360">
+frontend/src\components\clinical\AppointmentConsultation.tsx:151:          <div className="flex items-center gap-2 min-w-0">
+frontend/src\components\clinical\AppointmentConsultation.tsx:163:          <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200 overflow-x-auto max-w-full">
+frontend/src\components\clinical\AppointmentConsultation.tsx:167:              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg text-slate-600 hover:text-slate-900 cursor-pointer shrink-0 whitespace-nowrap min-h-[36px]"
+frontend/src\components\clinical\AppointmentConsultation.tsx:176:                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg text-slate-600 hover:text-slate-900 cursor-pointer shrink-0 whitespace-nowrap min-h-[36px]"
+frontend/src\components\clinical\AppointmentConsultation.tsx:184:              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-extrabold rounded-lg bg-teal-600 text-white shadow-xs cursor-default shrink-0 whitespace-nowrap min-h-[36px]"
+frontend/src\components\clinical\AppointmentConsultation.tsx:210:        <div className="fixed inset-0 z-50 bg-slate-50 overflow-auto" role="dialog" aria-modal="true" aria-label="Atendimento Personal Trainer">
+frontend/src\components\clinical\AppointmentConsultation.tsx:212:            <div className="flex items-center gap-2 min-w-0">
+frontend/src\components\clinical\AppointmentConsultation.tsx:221:            <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200 overflow-x-auto max-w-full">
+frontend/src\components\clinical\AppointmentConsultation.tsx:225:                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg text-slate-600 hover:text-slate-900 cursor-pointer shrink-0 whitespace-nowrap min-h-[36px]"
+frontend/src\components\clinical\AppointmentConsultation.tsx:231:                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-extrabold rounded-lg bg-orange-600 text-white shadow-xs cursor-default shrink-0 whitespace-nowrap min-h-[36px]"
+frontend/src\components\clinical\AppointmentConsultation.tsx:239:                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg text-teal-800 hover:bg-teal-50 cursor-pointer shrink-0 whitespace-nowrap min-h-[36px]"
+frontend/src\components\clinical\AppointmentConsultation.tsx:261:      <div className="fixed inset-0 z-50 bg-slate-50 overflow-auto" role="dialog" aria-modal="true" aria-label="Atendimento clínico especializado">
+frontend/src\components\clinical\AppointmentConsultation.tsx:263:          <div className="flex items-center gap-2 min-w-0">
+frontend/src\components\clinical\AppointmentConsultation.tsx:272:          <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200 overflow-x-auto max-w-full">
+frontend/src\components\clinical\AppointmentConsultation.tsx:276:              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg text-slate-600 hover:text-slate-900 cursor-pointer shrink-0 whitespace-nowrap min-h-[36px]"
+frontend/src\components\clinical\AppointmentConsultation.tsx:282:              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-extrabold rounded-lg bg-indigo-600 text-white shadow-xs cursor-default shrink-0 whitespace-nowrap min-h-[36px]"
+frontend/src\components\clinical\AppointmentConsultation.tsx:290:                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg text-teal-800 hover:bg-teal-50 cursor-pointer shrink-0 whitespace-nowrap min-h-[36px]"
+frontend/src\components\dentistry\ProcedureSuggestionModal.tsx:43:    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+frontend/src\components\clinical\ADLAssessment.tsx:16:                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-[11px] p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
+frontend/src\components\dentistry\ToothDossierDrawer.tsx:73:    <div className="fixed inset-0 z-50 overflow-hidden bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+frontend/src\components\medical\ZemdaMedWorkspace.tsx:15:import { useHorizontalTabScroll, HorizontalTabNav } from '../../hooks/useHorizontalTabScroll';
+frontend/src\components\medical\ZemdaMedWorkspace.tsx:668:  const tabScroll = useHorizontalTabScroll(activeTab);
+frontend/src\components\medical\ZemdaMedWorkspace.tsx:1129:                  <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+frontend/src\components\medical\ZemdaMedWorkspace.tsx:1739:                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+frontend/src\components\inventory\InventoryView.tsx:267:      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+frontend/src\components\inventory\InventoryView.tsx:367:            <form onSubmit={handleSearchSubmit} className="flex-1 min-w-[200px] relative">
+frontend/src\components\inventory\InventoryView.tsx:401:              <div className="overflow-x-auto">
+frontend/src\components\inventory\InventoryView.tsx:402:                <table className="w-full text-left border-collapse text-xs">
+frontend/src\components\inventory\InventoryView.tsx:524:            <div className="overflow-x-auto">
+frontend/src\components\inventory\InventoryView.tsx:525:              <table className="w-full text-left border-collapse text-xs">
+frontend/src\components\inventory\InventoryView.tsx:590:                            <div className="text-[11px] text-slate-700 font-medium mt-0.5 truncate max-w-[150px]" title={m.patient_name}>
+frontend/src\components\inventory\InventoryView.tsx:614:        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+frontend/src\components\inventory\InventoryView.tsx:662:              <div className="grid grid-cols-3 gap-3">
+frontend/src\components\inventory\InventoryView.tsx:794:        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+frontend/src\components\inventory\InventoryView.tsx:811:                <div className="grid grid-cols-3 gap-2">
+frontend/src\components\zemda-body\ZemdaBodyWorkspace.tsx:310:      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+frontend/src\components\zemda-body\ZemdaBodyWorkspace.tsx:454:        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+frontend/src\components\zemda-body\ZemdaBodyWorkspace.tsx:489:      {history && <div role="dialog" aria-label="Histórico Zemda360" className="fixed inset-0 z-[70] bg-slate-900/70 flex items-center justify-center p-4"><div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-auto p-5 space-y-4">
+frontend/src\components\nutrition\NutritionWorkspace.tsx:48:import { useHorizontalTabScroll, HorizontalTabNav } from '../../hooks/useHorizontalTabScroll';
+frontend/src\components\nutrition\NutritionWorkspace.tsx:137:  const tabScroll = useHorizontalTabScroll(activeTab);
+frontend/src\components\nutrition\NutritionWorkspace.tsx:1030:            <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+frontend/src\components\nutrition\NutritionWorkspace.tsx:1104:                  <div className="grid grid-cols-4 gap-2 text-center font-bold text-emerald-800">
+frontend/src\components\nutrition\NutritionWorkspace.tsx:1284:                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+frontend/src\components\nutrition\NutritionWorkspace.tsx:1435:                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+frontend/src\components\nutrition\NutritionWorkspace.tsx:1565:                    <div className="overflow-x-auto">
+frontend/src\components\nutrition\NutritionWorkspace.tsx:1566:                      <table className="w-full text-xs text-left">
+frontend/src\components\nutrition\NutritionWorkspace.tsx:1621:                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+frontend/src\components\nutrition\NutritionWorkspace.tsx:1734:                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+frontend/src\components\nutrition\NutritionWorkspace.tsx:1827:                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+frontend/src\components\nutrition\NutritionWorkspace.tsx:1872:                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 p-5 bg-gradient-to-br from-emerald-50 to-green-50/50 rounded-2xl border border-emerald-200">
+frontend/src\components\nutrition\NutritionWorkspace.tsx:1901:                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+frontend/src\components\nutrition\NutritionWorkspace.tsx:2088:                  <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+frontend/src\components\nutrition\NutritionWorkspace.tsx:2118:                        <div className="grid grid-cols-4 gap-1 text-center font-bold">
+frontend/src\components\nutrition\NutritionWorkspace.tsx:2346:                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+frontend/src\components\auth\RegistrationProfessionSelect.tsx:173:    <div ref={rootRef} className="relative min-w-0 w-full">
+frontend/src\components\auth\RegistrationProfessionSelect.tsx:191:        className={`w-full min-w-0 ${
+frontend/src\components\auth\RegistrationProfessionSelect.tsx:222:            className="fixed inset-0 z-[9998] bg-black/20 sm:bg-transparent backdrop-blur-2xs sm:backdrop-blur-none cursor-default"
+frontend/src\components\auth\RegistrationProfessionSelect.tsx:321:                      <div className="min-w-0 flex-1">
+frontend/src\components\zemda-body\ZemdaBodyRecordsView.tsx:277:          <div data-tour="body-patient-select" className="flex items-center gap-2 flex-1 min-w-[280px]">
+frontend/src\components\zemda-body\ZemdaBodyRecordsView.tsx:278:            <label className="text-xs font-bold text-slate-500 whitespace-nowrap">
+frontend/src\components\zemda-body\ZemdaBodyRecordsView.tsx:378:                  <div className="flex items-start sm:items-center gap-3.5 flex-1 min-w-0">
+frontend/src\components\zemda-body\ZemdaBodyRecordsView.tsx:393:                    <div className="space-y-1.5 flex-1 min-w-0">
+frontend/src\components\zemda-body\ZemdaBodyRecordsView.tsx:463:        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex justify-end animate-in fade-in duration-150">
+frontend/src\components\zemda-body\ZemdaBodyRecordsView.tsx:744:        <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 overflow-y-auto animate-in fade-in">
+frontend/src\components\auth\RegistrationPlans.tsx:67:      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-5 items-stretch">
+frontend/src\components\auth\RegistrationPlans.tsx:77:              className={`relative rounded-3xl p-5 sm:p-6 flex flex-col h-full min-w-0 cursor-pointer transition-all duration-200 ${
+frontend/src\components\profile\ProfileSpecialties.tsx:71:    {open && <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+frontend/src\components\nutrition\ManualMealFoodModal.tsx:22:  return <div className="fixed inset-0 z-[10000] bg-slate-900/60 flex items-center justify-center p-4" onKeyDown={event => {
+frontend/src\components\auth\RegisterUserModal.tsx:45:    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+frontend/src\components\calendar\TeleconsultationModal.tsx:58:  return createPortal(<div className="fixed inset-0 z-[11000] bg-slate-900/60 flex items-center justify-center p-4">
+frontend/src\components\onboarding\WhatsNewModal.tsx:116:      className="fixed inset-0 z-[9990] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-200"
+frontend/src\components\occupational-therapy\OccupationalParticipationModal.tsx:174:    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-150">
+frontend/src\components\occupational-therapy\OccupationalParticipationModal.tsx:249:                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+frontend/src\components\profile\MyResourcesView.tsx:305:                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+frontend/src\components\profile\MyResourcesView.tsx:454:                            className="flex items-center gap-3.5 min-w-0 flex-1 cursor-pointer select-none"
+frontend/src\components\profile\MyResourcesView.tsx:465:                            <div className="min-w-0 flex-1">
+frontend/src\components\profile\MyResourcesView.tsx:506:                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+frontend/src\components\profile\MyResourcesView.tsx:535:                                    <div className="min-w-0 flex-1">
+frontend/src\components\profile\MyResourcesView.tsx:561:              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+frontend/src\components\import\MedicalRecordScanner.tsx:622:      <div className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-between p-4">
+frontend/src\components\import\MedicalRecordScanner.tsx:772:        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+frontend/src\components\import\MedicalRecordScanner.tsx:842:            <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3">
+frontend/src\components\import\MedicalRecordScanner.tsx:877:                        <span className="text-[10px] font-medium text-slate-600 truncate max-w-[80px]">
+frontend/src\components\import\MedicalRecordScanner.tsx:887:                        <span className="text-[10px] font-medium text-slate-600 truncate max-w-[80px]">
+frontend/src\components\import\MedicalRecordScanner.tsx:978:          <div className="absolute inset-x-0 h-1 bg-teal-500 shadow-[0_0_8px_rgba(20,184,166,0.8)] animate-bounce" />
+frontend/src\components\zemda-body\ZemdaBodyModal.tsx:44:      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-900/70 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto"
+frontend/src\components\zemda-body\ZemdaBodyModal.tsx:51:          <div className="flex items-center gap-3 min-w-0">
+frontend/src\components\zemda-body\ZemdaBodyModal.tsx:55:            <div className="min-w-0">
+frontend/src\components\zemda-body\ZemdaBodyModal.tsx:79:            className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-2xl transition-colors cursor-pointer shrink-0 min-h-[40px] min-w-[40px] flex items-center justify-center"
+frontend/src\components\auth\InviteRegisterView.tsx:533:      <div className="min-h-screen bg-[#fafbfc] text-slate-800 flex flex-col items-center justify-center p-4 sm:p-6 relative overflow-hidden font-sans">
+frontend/src\components\auth\InviteRegisterView.tsx:534:        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[450px] bg-gradient-to-b from-teal-100/60 via-emerald-50/30 to-transparent blur-3xl -z-10 pointer-events-none" />
+frontend/src\components\auth\InviteRegisterView.tsx:554:      <div className="min-h-screen bg-[#fafbfc] text-slate-800 flex flex-col items-center justify-center p-4 sm:p-6 relative overflow-hidden font-sans">
+frontend/src\components\auth\InviteRegisterView.tsx:555:        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[450px] bg-gradient-to-b from-teal-100/60 via-emerald-50/30 to-transparent blur-3xl -z-10 pointer-events-none" />
+frontend/src\components\auth\InviteRegisterView.tsx:598:      <div className="min-h-screen bg-[#fafbfc] text-slate-800 flex flex-col items-center justify-center p-4 sm:p-6 relative overflow-hidden font-sans">
+frontend/src\components\auth\InviteRegisterView.tsx:599:        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[450px] bg-gradient-to-b from-teal-100/60 via-emerald-50/30 to-transparent blur-3xl -z-10 pointer-events-none" />
+frontend/src\components\auth\InviteRegisterView.tsx:645:    <div className="min-h-screen bg-[#fafbfc] text-slate-800 flex flex-col items-center justify-center p-4 sm:p-6 relative overflow-hidden font-sans">
+frontend/src\components\auth\InviteRegisterView.tsx:647:      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[450px] bg-gradient-to-b from-teal-100/60 via-emerald-50/30 to-transparent blur-3xl -z-10 pointer-events-none" />
+frontend/src\components\auth\InviteRegisterView.tsx:687:            <div className="space-y-0.5 flex-1 min-w-0">
+frontend/src\components\occupational-therapy\RoutineMapModal.tsx:164:    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-150">
+frontend/src\components\calendar\NewAppointmentModal.tsx:325:    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+frontend/src\components\calendar\NewAppointmentModal.tsx:537:                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-36 overflow-y-auto p-1">
+frontend/src\components\zemda-body\ZemdaBodyCanvas.tsx:370:      <div className="w-full max-w-[1100px] mb-2 flex items-center justify-between flex-wrap gap-2 px-1">
+frontend/src\components\zemda-body\ZemdaBodyCanvas.tsx:501:          <svg
+frontend/src\components\zemda-body\ZemdaBodyCanvas.tsx:608:          <canvas
+frontend/src\components\zemda-body\ZemdaBodyCanvas.tsx:643:        <div className="w-full max-w-[1100px] mt-2 px-2 flex justify-around text-xs font-bold text-slate-500 uppercase tracking-wider">
+frontend/src\components\import\ImportDataView.tsx:458:            <div className="overflow-x-auto">
+frontend/src\components\import\ImportDataView.tsx:459:              <table className="w-full text-left text-xs border-collapse">
+frontend/src\components\import\ImportDataView.tsx:581:                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+frontend/src\components\import\ImportDataView.tsx:751:                          <div className="flex items-center gap-2.5 min-w-0">
+frontend/src\components\import\ImportDataView.tsx:761:                            <div className="min-w-0">
+frontend/src\components\import\ImportDataView.tsx:762:                              <p className="text-xs font-semibold text-slate-800 truncate max-w-[200px]" title={item.name}>
+frontend/src\components\import\ImportDataView.tsx:859:              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+frontend/src\components\import\ImportDataView.tsx:868:                        <span className="text-xs font-bold text-slate-800 font-mono truncate max-w-[180px]" title={mapping.sourceColumn}>
+frontend/src\components\import\ImportDataView.tsx:918:                <div className="overflow-x-auto border border-slate-200 rounded-xl">
+frontend/src\components\import\ImportDataView.tsx:919:                  <table className="w-full text-left text-2xs border-collapse">
+frontend/src\components\import\ImportDataView.tsx:923:                          <th key={m.sourceColumn} className="p-2.5 whitespace-nowrap">
+frontend/src\components\import\ImportDataView.tsx:933:                            <td key={m.sourceColumn} className="p-2.5 whitespace-nowrap text-slate-700">
+frontend/src\components\import\ImportDataView.tsx:1130:              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+frontend/src\components\medical\specialties\SpecialtySectionRenderer.tsx:117:                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+frontend/src\components\occupational-therapy\OccupationalTherapyWorkspace.tsx:52:import { useHorizontalTabScroll, HorizontalTabNav } from '../../hooks/useHorizontalTabScroll';
+frontend/src\components\occupational-therapy\OccupationalTherapyWorkspace.tsx:557:  const tabScroll = useHorizontalTabScroll(activeTab);
+frontend/src\components\occupational-therapy\OccupationalTherapyWorkspace.tsx:1063:                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+frontend/src\components\calendar\CalendarView.tsx:839:        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-x-auto">
+frontend/src\components\calendar\CalendarView.tsx:840:          <div className="min-w-[800px]">
+frontend/src\components\calendar\CalendarView.tsx:842:            <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50 text-center text-xs font-semibold text-slate-700">
+frontend/src\components\calendar\CalendarView.tsx:863:                <div key={timeSlot} className="grid grid-cols-7 min-h-[75px]">
+frontend/src\components\calendar\CalendarView.tsx:1104:        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+frontend/src\components\calendar\CalendarView.tsx:1105:          {/* Backdrop cobrindo 100vw/100vh */}
+frontend/src\components\calendar\CalendarView.tsx:1107:            className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs"
+frontend/src\components\calendar\CalendarView.tsx:1333:                            <div className="flex items-center gap-1.5 min-w-0">
+frontend/src\components\calendar\CalendarView.tsx:1393:                      <div className="grid grid-cols-4 gap-1.5 max-h-36 overflow-y-auto p-1 bg-slate-50 rounded-xl border border-slate-200">
+frontend/src\components\calendar\CalendarView.tsx:1458:        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 overflow-y-auto">
+frontend/src\components\calendar\CalendarView.tsx:1459:          {/* Backdrop cobrindo 100vw/100vh */}
+frontend/src\components\calendar\CalendarView.tsx:1461:            className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs"
+frontend/src\components\auth\GoogleAuthButton.tsx:35:  <svg className={className} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+frontend/src\components\occupational-therapy\TOEvolutionReportModal.tsx:94:    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-150">
+frontend/src\components\occupational-therapy\TOEvolutionReportModal.tsx:314:              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+frontend/src\components\profile\ConnectCertificateModal.tsx:130:    <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+frontend/src\components\common\UpdateNotificationModal.tsx:68:    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+frontend/src\components\onboarding\OnboardingWizardView.tsx:299:    <div className="min-h-screen bg-[#fafbfc] text-slate-800 flex flex-col items-center justify-center p-4 sm:p-6 lg:p-8">
+frontend/src\components\onboarding\OnboardingWizardView.tsx:509:              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+frontend/src\components\medical\specialties\SpecialtyCustomRenderers.tsx:42:        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+frontend/src\components\medical\specialties\SpecialtyCustomRenderers.tsx:53:        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
+frontend/src\components\medical\specialties\SpecialtyCustomRenderers.tsx:74:        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+frontend/src\components\medical\specialties\SpecialtyCustomRenderers.tsx:83:        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+frontend/src\components\medical\specialties\SpecialtyCustomRenderers.tsx:94:        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+frontend/src\components\medical\specialties\SpecialtyCustomRenderers.tsx:104:        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+frontend/src\components\medical\specialties\SpecialtyCustomRenderers.tsx:169:        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+frontend/src\components\medical\specialties\SpecialtyCustomRenderers.tsx:188:      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+frontend/src\components\medical\specialties\SpecialtyCustomRenderers.tsx:200:      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+frontend/src\components\medical\specialties\SpecialtyCustomRenderers.tsx:212:      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+frontend/src\components\medical\specialties\SpecialtyCustomRenderers.tsx:224:      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+frontend/src\components\medical\specialties\SpecialtyCustomRenderers.tsx:421:                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+frontend/src\components\medical\specialties\SpecialtyCustomRenderers.tsx:457:                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+frontend/src\components\medical\specialties\SpecialtyCustomRenderers.tsx:497:                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+frontend/src\components\medical\specialties\SpecialtyCustomRenderers.tsx:542:                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+frontend/src\components\medical\specialties\SpecialtyCustomRenderers.tsx:623:        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+frontend/src\components\medical\specialties\SpecialtyCustomRenderers.tsx:709:        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+frontend/src\components\medical\specialties\SpecialtyCustomRenderers.tsx:717:        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+frontend/src\components\medical\specialties\SpecialtyCustomRenderers.tsx:731:        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+frontend/src\components\medical\specialties\SpecialtyCustomRenderers.tsx:739:        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+frontend/src\components\medical\specialties\SpecialtyCustomRenderers.tsx:749:      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+frontend/src\components\medical\specialties\SpecialtyCustomRenderers.tsx:766:      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+frontend/src\components\medical\specialties\SpecialtyCustomRenderers.tsx:778:      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+frontend/src\components\medical\specialties\SpecialtyCustomRenderers.tsx:810:      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+frontend/src\components\medical\specialties\SpecialtyCustomRenderers.tsx:824:      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+frontend/src\components\medical\specialties\SpecialtyCustomRenderers.tsx:839:      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+frontend/src\components\medical\specialties\SpecialtyCustomRenderers.tsx:877:      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+frontend/src\components\medical\specialties\SpecialtyCustomRenderers.tsx:886:      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+frontend/src\components\medical\specialties\SpecialtyCustomRenderers.tsx:901:      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+frontend/src\components\medical\specialties\SpecialtyCustomRenderers.tsx:909:      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-2">
+frontend/src\components\medical\specialties\SpecialtyCustomRenderers.tsx:921:      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+frontend/src\components\medical\specialties\SpecialtyCustomRenderers.tsx:933:      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+frontend/src\components\medical\specialties\SpecialtyCustomRenderers.tsx:955:      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+frontend/src\components\medical\specialties\SpecialtyCustomRenderers.tsx:982:      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+frontend/src\components\medical\specialties\SpecialtyCustomRenderers.tsx:1018:        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+frontend/src\components\medical\specialties\SpecialtyCustomRenderers.tsx:1049:        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+frontend/src\components\medical\specialties\SpecialtyCustomRenderers.tsx:1065:      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+frontend/src\components\medical\specialties\SpecialtyCustomRenderers.tsx:1080:    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+frontend/src\components\medical\specialties\SpecialtyCustomRenderers.tsx:1115:      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+frontend/src\components\medical\specialties\SpecialtyCustomRenderers.tsx:1130:      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+frontend/src\components\medical\specialties\SpecialtyCustomRenderers.tsx:1143:      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+frontend/src\components\auth\GoogleAccountLinkDialog.tsx:17:  return createPortal(<div className="fixed inset-0 z-[15000] bg-slate-900/60 flex items-center justify-center p-4">
+frontend/src\components\onboarding\OnboardingWelcomeModal.tsx:18:      className="fixed inset-0 z-[9990] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-200"
+frontend/src\components\zemda-body\TherapeuticPlanView.tsx:276:              <div className="overflow-x-auto">
+frontend/src\components\zemda-body\TherapeuticPlanView.tsx:277:                <table className="w-full text-left border-collapse text-xs min-w-[760px]">
+frontend/src\components\zemda-body\TherapeuticPlanView.tsx:466:                        <table className="w-full text-left border-collapse text-xs">
+frontend/src\components\profile\AccountSettingsModal.tsx:144:    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+frontend/src\components\occupational-therapy\TODashboardView.tsx:42:      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+frontend/src\components\occupational-therapy\TODashboardView.tsx:123:          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+frontend/src\components\occupational-therapy\TaskAnalysisModal.tsx:150:    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-150">
+frontend/src\components\common\UniversalWhatsAppModal.tsx:17:  <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+frontend/src\components\common\UniversalWhatsAppModal.tsx:111:      className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
+frontend/src\components\onboarding\OnboardingHelpModal.tsx:83:      className="fixed inset-0 z-[9990] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-200"
+frontend/src\components\clinical\ClinicalScales.tsx:18:                    <div key={idx} className="grid grid-cols-1 md:grid-cols-3 gap-2 bg-white p-2.5 rounded-lg border border-purple-100">
+frontend/src\components\onboarding\OnboardingSpotlight.tsx:119:  return <div className="fixed inset-0 pointer-events-none z-[9998]" data-tour-overlay>
+frontend/src\components\onboarding\OnboardingSpotlight.tsx:123:    {!ready && !suspended && <div role="status" className="pointer-events-auto fixed bottom-4 right-4 max-w-[calc(100vw-32px)] rounded-xl border border-teal-100 bg-white p-3 shadow-lg text-xs text-slate-700 flex items-center gap-3">
+frontend/src\components\auth\FreeTrialActivationView.tsx:281:      <div className="min-h-screen bg-[#fafbfc] flex items-center justify-center p-4">
+frontend/src\components\auth\FreeTrialActivationView.tsx:298:      <div className="min-h-screen bg-[#fafbfc] flex items-center justify-center p-4">
+frontend/src\components\auth\FreeTrialActivationView.tsx:344:      <div className="min-h-screen bg-[#fafbfc] flex items-center justify-center p-4">
+frontend/src\components\common\SignatureChoiceModal.tsx:54:    <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+frontend/src\components\clinical\ClinicalReviewContent.tsx:98:    <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-3 p-4">{group.rows.map(row => <div key={row.path} className={`min-w-0 ${row.value.length > 100 ? 'sm:col-span-2' : ''}`}>
+frontend/src\components\professionals\ProfessionalsView.tsx:221:      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+frontend/src\components\professionals\ProfessionalsView.tsx:322:        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+frontend/src\components\professionals\ProfessionalsView.tsx:332:              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+frontend/src\components\professionals\ProfessionalsView.tsx:584:        <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+frontend/src\components\professionals\ProfessionalsView.tsx:627:        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+frontend/src\components\auth\AuthPage.tsx:176:    <div className={`${isCreateClinicOpen ? 'signup-auth-host' : ''} auth-experience min-h-screen bg-[#fafbfc] text-slate-800 flex flex-col items-center justify-center p-4 sm:p-6 relative overflow-hidden font-sans`}>
+frontend/src\components\auth\AuthPage.tsx:179:      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[450px] bg-gradient-to-b from-teal-100/60 via-emerald-50/30 to-transparent blur-3xl -z-10 pointer-events-none" />
+frontend/src\components\payroll\ProfessionalPayrollView.tsx:223:            <span className="px-3 text-xs font-bold text-slate-800 capitalize min-w-[130px] text-center">
+frontend/src\components\payroll\ProfessionalPayrollView.tsx:247:      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+frontend/src\components\payroll\ProfessionalPayrollView.tsx:290:          <div className="overflow-x-auto">
+frontend/src\components\payroll\ProfessionalPayrollView.tsx:291:            <table className="w-full text-left border-collapse text-xs">
+frontend/src\components\payroll\ProfessionalPayrollView.tsx:385:                      <td className="p-4 text-right whitespace-nowrap">
+frontend/src\components\payroll\ProfessionalPayrollView.tsx:410:        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+frontend/src\components\payroll\ProfessionalPayrollView.tsx:471:        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+frontend/src\components\common\Sidebar.tsx:289:          className="fixed inset-0 bg-slate-900/40 z-40 lg:hidden backdrop-blur-xs transition-opacity"
+frontend/src\components\common\Sidebar.tsx:296:        className={`fixed top-0 bottom-0 left-0 z-50 w-64 max-w-[85vw] bg-white text-slate-700 flex flex-col transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:z-auto border-r border-slate-200/80 ${
+frontend/src\components\clinical\ClinicalRecordsView.tsx:215:          <label className="text-xs font-bold text-slate-700 whitespace-nowrap">
+frontend/src\components\clinical\ClinicalRecordsView.tsx:240:          className="flex items-center justify-center gap-1.5 w-full sm:w-auto px-4 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-all whitespace-nowrap cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed min-h-[40px]"
+frontend/src\components\clinical\ClinicalRecordsView.tsx:287:                    <div className="flex-1 min-w-0">
+frontend/src\components\clinical\ClinicalRecordsView.tsx:570:        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+frontend/src\components\clinical\ClinicalRecordsView.tsx:701:        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+frontend/src\components\clinical\ClinicalRecordsView.tsx:789:        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+frontend/src\components\auth\ForgotPasswordModal.tsx:285:    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+frontend/src\components\auth\CreateClinicModal.tsx:929:    <div ref={presentation === 'page' ? contentRef : undefined} className={presentation === 'page' ? 'signup-page' : 'fixed inset-0 z-50 flex items-center justify-center bg-black/70 sm:p-4 backdrop-blur-xs overflow-y-auto'}>
+frontend/src\components\auth\CreateClinicModal.tsx:1636:                                  className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer select-none"
+frontend/src\components\auth\CreateClinicModal.tsx:1647:                                  <div className="min-w-0 flex-1">
+frontend/src\components\auth\CreateClinicModal.tsx:1746:                      <div className="min-w-0 flex-1">
+frontend/src\components\auth\CreateClinicModal.tsx:1803:                            <div className="min-w-0 flex-1">
+frontend/src\components\auth\CreateClinicModal.tsx:1837:                            <div className="min-w-0 flex-1">
+frontend/src\components\auth\CreateClinicModal.tsx:1909:                              <div className="min-w-0 flex-1">
+frontend/src\components\clinical\ClinicalQuickToolsMenu.tsx:119:        className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border shadow-xs transition-all cursor-pointer whitespace-nowrap ${currentVariant.button}`}
+frontend/src\components\clinical\ClinicalQuickToolsMenu.tsx:161:                  <div className="flex items-center gap-2 min-w-0">
+frontend/src\components\clinical\useConsultationCompletion.tsx:104:        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+frontend/src\components\reports\ReportsView.tsx:100:                <div className="grid grid-cols-3 gap-2 text-[11px] text-slate-500 pt-1">
+frontend/src\components\reports\ReportsView.tsx:137:          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
+frontend/src\components\staff\StaffManagementView.tsx:405:        <div className="flex items-center gap-1.5 p-1 bg-slate-200/70 rounded-2xl w-full sm:w-fit text-xs font-bold overflow-x-auto no-scrollbar scroll-smooth">
+frontend/src\components\staff\StaffManagementView.tsx:408:            className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer shrink-0 whitespace-nowrap ${
+frontend/src\components\staff\StaffManagementView.tsx:419:            className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
+frontend/src\components\staff\StaffManagementView.tsx:490:      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+frontend/src\components\staff\StaffManagementView.tsx:711:            <div className="overflow-x-auto">
+frontend/src\components\staff\StaffManagementView.tsx:712:              <table className="w-full text-left text-xs">
+frontend/src\components\staff\StaffManagementView.tsx:753:                        <td className="p-3.5 whitespace-nowrap text-slate-500 text-[11px]">
+frontend/src\components\staff\StaffManagementView.tsx:761:                        <td className="p-3.5 whitespace-nowrap text-[11px]">
+frontend/src\components\staff\StaffManagementView.tsx:769:                        <td className="p-3.5 whitespace-nowrap">
+frontend/src\components\staff\StaffManagementView.tsx:791:                        <td className="p-3.5 whitespace-nowrap text-slate-400 text-[11px]">
+frontend/src\components\staff\StaffManagementView.tsx:794:                        <td className="p-3.5 text-right whitespace-nowrap">
+frontend/src\components\staff\StaffManagementView.tsx:835:        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
+frontend/src\components\staff\StaffManagementView.tsx:981:        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
+frontend/src\components\staff\StaffManagementView.tsx:1081:        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
+frontend/src\components\clinical\ClinicalQuickHeaderActions.tsx:64:          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 shadow-xs transition-all cursor-pointer whitespace-nowrap"
+frontend/src\components\clinical\ClinicalQuickHeaderActions.tsx:79:          className="px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 shadow-xs transition-all cursor-pointer whitespace-nowrap disabled:opacity-50"
+frontend/src\components\clinical\ClinicalQuickHeaderActions.tsx:91:          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 shadow-xs transition-all cursor-pointer whitespace-nowrap"
+frontend/src\components\common\SectionErrorBoundary.tsx:138:              <div className="bg-slate-950 text-rose-300 p-3 rounded-xl text-2xs font-mono overflow-x-auto text-left border border-slate-800 space-y-1">
+frontend/src\components\clinical\useClinicalReview.tsx:66:    <div className="fixed inset-0 z-[100000] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4"
+frontend/src\components\clinical\useClinicalReview.tsx:76:      <section role="dialog" aria-modal="true" aria-labelledby={headingId} className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-3xl max-h-[92dvh] min-w-0 flex flex-col">
+frontend/src\components\clinical\useClinicalReview.tsx:79:          <dl className="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-2 mt-2 break-words text-xs text-slate-600">
+frontend/src\components\clinical\useClinicalReview.tsx:86:        <div className="min-h-0 flex-1 px-4 py-3 sm:px-5 overflow-y-auto overflow-x-hidden bg-slate-50/60 [scrollbar-width:thin]">
+frontend/src\components\zemda-body\AnthropometricAssessmentView.tsx:554:              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
+frontend/src\components\zemda-body\AnthropometricAssessmentView.tsx:700:              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+frontend/src\components\zemda-body\AnthropometricAssessmentView.tsx:767:                <div className="grid grid-cols-5 gap-1 pt-1">
+frontend/src\components\zemda-body\AnthropometricAssessmentView.tsx:805:                <table className="w-full text-left border-collapse text-xs">
+frontend/src\components\zemda-body\AnthropometricAssessmentView.tsx:904:                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+frontend/src\components\zemda-body\AnthropometricAssessmentView.tsx:1013:                    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2 text-xs">
+frontend/src\components\clinical\TeleconsultationTranscriptModal.tsx:63:  return createPortal(<div className="fixed inset-0 z-[12000] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6" onKeyDown={e => {
+frontend/src\components\receipts\ReceiptsView.tsx:246:            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer whitespace-nowrap"
+frontend/src\components\receipts\ReceiptsView.tsx:254:      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+frontend/src\components\receipts\ReceiptsView.tsx:288:        <div className="overflow-x-auto">
+frontend/src\components\receipts\ReceiptsView.tsx:289:          <table className="w-full text-left border-collapse text-xs">
+frontend/src\components\receipts\ReceiptsView.tsx:308:                  <td className="py-3 px-3 text-slate-600 whitespace-nowrap">
+frontend/src\components\receipts\ReceiptsView.tsx:364:        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
+frontend/src\components\receipts\ReceiptsView.tsx:380:              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-slate-50 rounded-2xl border border-slate-200">
+frontend/src\components\receipts\ReceiptsView.tsx:477:                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+frontend/src\components\receipts\ReceiptsView.tsx:601:          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs overflow-y-auto print:p-0 print:bg-white">
+frontend/src\components\receipts\ReceiptsView.tsx:646:                        className="h-16 max-w-[180px] object-contain rounded-xl"
+frontend/src\components\receipts\ReceiptsView.tsx:779:                    <svg className="w-3.5 h-3.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+frontend/src\components\receipts\ReceiptsView.tsx:839:        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
+frontend/src\components\physiotherapy\RegionalPhysioAssessmentModal.tsx:294:    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
+frontend/src\components\physiotherapy\RegionalPhysioAssessmentModal.tsx:351:        <div className="flex border-b border-slate-200 px-6 bg-slate-50/40 gap-1 overflow-x-auto text-xs font-bold">
+frontend/src\components\physiotherapy\RegionalPhysioAssessmentModal.tsx:355:            className={`py-3 px-3 border-b-2 flex items-center gap-1.5 transition-colors whitespace-nowrap ${
+frontend/src\components\physiotherapy\RegionalPhysioAssessmentModal.tsx:367:            className={`py-3 px-3 border-b-2 flex items-center gap-1.5 transition-colors whitespace-nowrap ${
+frontend/src\components\physiotherapy\RegionalPhysioAssessmentModal.tsx:379:            className={`py-3 px-3 border-b-2 flex items-center gap-1.5 transition-colors whitespace-nowrap ${
+frontend/src\components\physiotherapy\RegionalPhysioAssessmentModal.tsx:391:            className={`py-3 px-3 border-b-2 flex items-center gap-1.5 transition-colors whitespace-nowrap ${
+frontend/src\components\physiotherapy\RegionalPhysioAssessmentModal.tsx:403:            className={`py-3 px-3 border-b-2 flex items-center gap-1.5 transition-colors whitespace-nowrap ${
+frontend/src\components\physiotherapy\RegionalPhysioAssessmentModal.tsx:415:            className={`py-3 px-3 border-b-2 flex items-center gap-1.5 transition-colors whitespace-nowrap ${
+frontend/src\components\physiotherapy\RegionalPhysioAssessmentModal.tsx:434:              <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+frontend/src\components\physiotherapy\RegionalPhysioAssessmentModal.tsx:547:              <div className="overflow-x-auto border border-slate-200 rounded-xl">
+frontend/src\components\physiotherapy\RegionalPhysioAssessmentModal.tsx:548:                <table className="w-full text-xs text-left">
+frontend/src\components\physiotherapy\RegionalPhysioAssessmentModal.tsx:663:              <div className="overflow-x-auto border border-slate-200 rounded-xl">
+frontend/src\components\physiotherapy\RegionalPhysioAssessmentModal.tsx:664:                <table className="w-full text-xs text-left">
+frontend/src\components\physiotherapy\RegionalPhysioAssessmentModal.tsx:804:                    <div className="grid grid-cols-4 gap-1 mb-2">
+frontend/src\components\physiotherapy\RegionalPhysioAssessmentModal.tsx:1073:        {clinicalDetails && <div className="px-6 py-3 grid grid-cols-1 md:grid-cols-3 gap-3 border-t border-slate-100">
+frontend/src\components\services\ServicesView.tsx:697:          <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
+frontend/src\components\services\ServicesView.tsx:773:                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+frontend/src\components\services\ServicesView.tsx:819:                            <span className="text-sm font-extrabold text-indigo-600 whitespace-nowrap">
+frontend/src\components\services\ServicesView.tsx:879:        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+frontend/src\components\services\ServicesView.tsx:897:        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-hidden">
+frontend/src\components\services\ServicesView.tsx:1062:                      <span className="font-semibold text-slate-700 whitespace-nowrap">Lembrar após</span>
+frontend/src\components\services\ServicesView.tsx:1112:        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+frontend/src\components\services\ServicesView.tsx:1164:        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-hidden">
+frontend/src\components\services\ServicesView.tsx:1348:                      <span className="font-semibold text-slate-700 whitespace-nowrap">Lembrar após</span>
+frontend/src\components\services\ServicesView.tsx:1399:        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+frontend/src\components\clinical\ClinicalModuleShell.tsx:8:import { HorizontalTabNav, useHorizontalTabScroll } from '../../hooks/useHorizontalTabScroll';
+frontend/src\components\clinical\ClinicalModuleShell.tsx:140:  const tabScroll = useHorizontalTabScroll(activeTab);
+frontend/src\components\clinical\ClinicalModuleShell.tsx:147:    <div className={`flex flex-col min-h-screen bg-slate-50 text-slate-800 ${className}`}>
+frontend/src\components\clinical\ClinicalModuleShell.tsx:186:              <span className="font-bold text-xs text-slate-900 truncate max-w-[160px] sm:max-w-[240px]">
+frontend/src\components\personal\PersonalAssessmentComparisonModal.tsx:208:    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+frontend/src\components\personal\PersonalAssessmentComparisonModal.tsx:303:            <div className="px-6 py-2 border-b border-slate-200 bg-white flex items-center gap-1 overflow-x-auto">
+frontend/src\components\personal\PersonalAssessmentComparisonModal.tsx:306:                className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-colors whitespace-nowrap ${
+frontend/src\components\personal\PersonalAssessmentComparisonModal.tsx:314:                className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-colors whitespace-nowrap ${
+frontend/src\components\personal\PersonalAssessmentComparisonModal.tsx:322:                className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-colors whitespace-nowrap ${
+frontend/src\components\personal\PersonalAssessmentComparisonModal.tsx:330:                className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-colors whitespace-nowrap ${
+frontend/src\components\personal\PersonalAssessmentComparisonModal.tsx:338:                className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-colors whitespace-nowrap ${
+frontend/src\components\personal\PersonalAssessmentComparisonModal.tsx:346:                className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-colors whitespace-nowrap ${
+frontend/src\components\personal\PersonalAssessmentComparisonModal.tsx:400:                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+frontend/src\components\personal\PersonalAssessmentComparisonModal.tsx:465:                  <div className="overflow-x-auto">
+frontend/src\components\personal\PersonalAssessmentComparisonModal.tsx:466:                    <table className="w-full text-left text-xs">
+frontend/src\components\personal\PersonalAssessmentComparisonModal.tsx:529:                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+frontend/src\components\medical\shared\MedicalCapabilityTools.tsx:283:      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-3">
+frontend/src\components\clinical\SelectConsultationModuleModal.tsx:364:      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto"
+frontend/src\components\clinical\SelectConsultationModuleModal.tsx:373:          <div className="min-w-0 pr-2">
+frontend/src\components\clinical\SelectConsultationModuleModal.tsx:383:            className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer shrink-0 min-h-[40px] min-w-[40px] flex items-center justify-center"
+frontend/src\components\clinical\SelectConsultationModuleModal.tsx:424:                  <div className="flex items-center gap-3.5 min-w-0">
+frontend/src\components\clinical\SelectConsultationModuleModal.tsx:428:                    <div className="min-w-0">
+frontend/src\components\services\NewServiceModal.tsx:94:    <div className={`fixed inset-0 ${zIndex} bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto`}>
+frontend/src\components\physiotherapy\RegionalLongitudinalComparisonModal.tsx:137:    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto print:p-0 print:bg-white">
+frontend/src\components\physiotherapy\RegionalLongitudinalComparisonModal.tsx:217:              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+frontend/src\components\physiotherapy\RegionalLongitudinalComparisonModal.tsx:266:                        <span className="text-slate-600 font-medium truncate max-w-[120px]">{m.movement}:</span>
+frontend/src\components\physiotherapy\RegionalLongitudinalComparisonModal.tsx:291:                        <span className="text-slate-600 font-medium truncate max-w-[120px]">{s.movement}:</span>
+frontend/src\components\physiotherapy\RegionalLongitudinalComparisonModal.tsx:314:                  <div className="flex items-center gap-2 overflow-x-auto py-2">
+frontend/src\components\physiotherapy\RegionalLongitudinalComparisonModal.tsx:318:                        className="flex-1 min-w-[90px] bg-white p-2.5 rounded-lg border border-slate-200 text-center relative"
+frontend/src\components\common\PatientSearchSelect.tsx:313:          <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 hover:border-slate-300 rounded-xl transition-all shadow-2xs group max-w-[320px]">
+frontend/src\components\common\PatientSearchSelect.tsx:337:          <div className="relative min-w-[240px] sm:min-w-[280px]">
+frontend/src\components\zemda-body\AnatomicalRegionPanel.tsx:11:  return <aside className="min-w-0 rounded-2xl bg-slate-50 border border-slate-200 p-4 space-y-4" aria-label="Regiões e marcações">
+frontend/src\components\physiotherapy\PhysiotherapyWorkspace.tsx:43:import { useHorizontalTabScroll, HorizontalTabNav } from '../../hooks/useHorizontalTabScroll';
+frontend/src\components\physiotherapy\PhysiotherapyWorkspace.tsx:199:  const tabScroll = useHorizontalTabScroll(activeTab);
+frontend/src\components\physiotherapy\PhysiotherapyWorkspace.tsx:740:            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+frontend/src\components\physiotherapy\PhysiotherapyWorkspace.tsx:815:                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+frontend/src\components\physiotherapy\PhysiotherapyWorkspace.tsx:1839:                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+frontend/src\components\physiotherapy\PhysiotherapyWorkspace.tsx:2012:                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+frontend/src\components\physiotherapy\PhysiotherapyWorkspace.tsx:2106:                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+frontend/src\components\physiotherapy\PhysiotherapyWorkspace.tsx:2179:                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+frontend/src\components\personal\PersonalAIAssistantModal.tsx:135:    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+frontend/src\components\personal\PersonalAIAssistantModal.tsx:188:              <span className="font-semibold text-slate-600 whitespace-nowrap">Aluno em Análise:</span>
+frontend/src\components\personal\PersonalAIAssistantModal.tsx:225:                className={`max-w-[85%] rounded-2xl p-4 text-xs leading-relaxed shadow-sm ${
+frontend/src\components\personal\PersonalAIAssistantModal.tsx:258:        <div className="px-4 py-2 border-t border-slate-100 bg-white flex items-center gap-2 overflow-x-auto">
+frontend/src\components\personal\PersonalAIAssistantModal.tsx:264:              className="px-3 py-1.5 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-600 rounded-xl text-[11px] font-semibold whitespace-nowrap transition-colors border border-slate-200/60"
+frontend/src\components\services\NewRoomModal.tsx:59:    <div className={`fixed inset-0 ${zIndex} bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto`}>
+frontend/src\components\physiotherapy\RegionalEvaluationsListModal.tsx:90:    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
+frontend/src\components\common\NetworkOfflineModal.tsx:106:    <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-xs flex items-center justify-center p-4">
+frontend/src\components\physiotherapy\PhysiotherapyRecordsView.tsx:281:              className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-teal-100 bg-teal-800/80 hover:bg-teal-700 border border-teal-600/50 rounded-xl transition-all shadow-sm cursor-pointer whitespace-nowrap"
+frontend/src\components\physiotherapy\PhysiotherapyRecordsView.tsx:290:            className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-teal-950 bg-teal-400 hover:bg-teal-300 rounded-xl transition-all shadow-sm cursor-pointer whitespace-nowrap"
+frontend/src\components\physiotherapy\PhysiotherapyRecordsView.tsx:296:            className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-all cursor-pointer whitespace-nowrap"
+frontend/src\components\physiotherapy\PhysiotherapyRecordsView.tsx:306:          <label className="text-xs font-bold text-slate-700 whitespace-nowrap">
+frontend/src\components\physiotherapy\PhysiotherapyRecordsView.tsx:409:                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+frontend/src\components\physiotherapy\PhysiotherapyRecordsView.tsx:556:        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+frontend/src\components\physiotherapy\PhysiotherapyRecordsView.tsx:961:        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+frontend/src\components\physiotherapy\PhysiotherapyRecordsView.tsx:1084:        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+frontend/src\components\clinical\ReferralModal.tsx:137:    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+frontend/src\components\clinical\ClinicalInventorySelector.tsx:371:              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+frontend/src\components\clinical\ClinicalInventorySelector.tsx:476:        <div className="fixed inset-0 z-[100001] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+frontend/src\components\personal\PersonalAssessmentReportCharts.tsx:30:  return <div className="border border-slate-200 rounded-xl p-3 break-inside-avoid"><h4 className="text-xs font-semibold text-slate-700">{title} ({unit || 'índice'})</h4><svg role="img" aria-label={`Evolução de ${title}`} viewBox="0 0 390 165" className="w-full"><path d="M40 25 V125 H355" fill="none" stroke="#cbd5e1"/><polyline fill="none" stroke="#0d9488" strokeWidth="2" points={coords.map(c=>`${c.x},${c.y}`).join(' ')}/>{coords.map(c=><g key={c.p.a.id}><circle cx={c.x} cy={c.y} r="3" fill="#0d9488"/><text x={c.x} y={c.y-7} textAnchor="middle" fontSize="10" fill="#334155">{reportNumber(c.p.v)}</text><text x={c.x} y="145" textAnchor="middle" fontSize="8" fill="#64748b">{String(c.p.a.assessment_date).slice(0,10)}</text></g>)}</svg></div>;
+frontend/src\components\personal\PersonalAssessmentReportCharts.tsx:35:  return <svg role="img" aria-label="Somatocarta Heath-Carter" viewBox="0 0 300 270" className="w-72 max-w-full mx-auto"><path d="M30 140 H270 M150 20 V250 M45 220 L150 35 L255 220 Z" stroke="#cbd5e1" fill="none"/><text x="150" y="18" textAnchor="middle" fontSize="10" fill="#64748b">Mesomorfia</text><text x="8" y="245" fontSize="10" fill="#64748b">Endomorfia</text><text x="225" y="245" fontSize="10" fill="#64748b">Ectomorfia</text><circle cx={150+x*scale} cy={140-y*scale} r="5" fill="#0d9488"/><text x="150" y="263" textAnchor="middle" fontSize="10">X: {reportNumber(x)} · Y: {reportNumber(y)}</text></svg>;
+frontend/src\components\common\Navbar.tsx:32:      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+frontend/src\components\common\Navbar.tsx:41:        <div className="flex items-center gap-2.5 sm:gap-3 cursor-pointer min-w-0" onClick={() => onNavigate('dashboard')}>
+frontend/src\components\common\Navbar.tsx:53:          <div className="min-w-0">
+frontend/src\components\clinical\ClinicalFinishButton.tsx:6:    className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 shadow-md shadow-emerald-500/20 transition-all cursor-pointer whitespace-nowrap disabled:opacity-50"
+frontend/src\components\physiotherapy\BodyPainMapCanvas.tsx:363:        <canvas
+frontend/src\components\schedules\WorkSchedulesView.tsx:283:          <label className="text-xs font-semibold text-slate-600 flex items-center gap-1.5 whitespace-nowrap">
+frontend/src\components\schedules\WorkSchedulesView.tsx:290:            className="border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer min-w-[220px]"
+frontend/src\components\schedules\WorkSchedulesView.tsx:455:                            <span className="font-bold text-slate-600 min-w-[70px]">Turno #{shiftIdx + 1}:</span>
+frontend/src\components\schedules\WorkSchedulesView.tsx:552:            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+frontend/src\components\schedules\WorkSchedulesView.tsx:592:        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+frontend/src\components\personal\PersonalAssessmentReport.tsx:27:  const comparisonRows=(labels:Record<string,string>)=><table className="w-full text-xs"><thead><tr className="bg-slate-50 text-slate-600"><th className="text-left p-2">Medida (cm)</th><th>Anterior</th><th>Atual</th><th>Diferença</th></tr></thead><tbody>{Object.entries(labels).filter(([k])=>a[k]!=null || p?.[k]!=null).map(([k,l])=><tr key={k} className="border-b border-slate-100"><td className="p-2">{l}</td><td className="text-center">{fmt(p?.[k])}</td><td className="text-center">{fmt(a[k])}</td><td className="text-center">{fmt(a[k]!=null && p?.[k]!=null ? a[k]-p[k] : null)}</td></tr>)}</tbody></table>;
+frontend/src\components\personal\PersonalAssessmentReport.tsx:33:      {page('AVALIAÇÃO FÍSICA',<><div className="text-xs space-y-1"><p>Profissional: {data.professional?.name || 'Não informado'}</p><p>Idade na avaliação: {a.age_at_assessment ?? 'Não informado'} · Referência antropométrica utilizada: {sexLabel(a.anthropometric_sex_at_assessment)}</p><p>Objetivo: {student.goal || 'Não informado'}</p>{a.anthropometric_sex_at_assessment==='not_informed' && <p>Sexo de referência não informado — métricas dependentes de sexo não calculadas.</p>}{data.legacy && <p>Avaliação legada: valores históricos preservados; derivados somente para leitura.</p>}</div><div className="grid grid-cols-3 gap-3">{cells.filter(([k])=>allowed(k)).filter(([k])=>!['muscle_mass_kg','tav_estimated_value','tav_value','vai_value','bmr_kcal'].includes(k) || a[k]!=null).map(([k,l,u])=>field(k,l,u))}</div><div className="text-xs space-y-1"><p>IMC: {a.bmi_classification || 'Classificação não disponível — referência não documentada.'} · WHO, adultos.</p><p>Gordura: {a.body_fat_classification || 'Sem classificação para esta referência'} · {a.body_fat_reference || 'Referência não informada'}</p><p>RCQ: {a.whr_classification || 'Sem classificação para esta referência'}</p><p>RCE: {a.whtr_classification || 'Sem classificação para esta referência'}</p></div></>)}
+frontend/src\components\personal\PersonalAssessmentReport.tsx:35:      {page('DOBRAS E COMPOSIÇÃO',<>{title('Dobras cutâneas (mm)')}<table className="w-full text-xs"><thead><tr><th className="text-left">Dobra</th><th>1ª</th><th>2ª</th><th>3ª</th><th>Final</th></tr></thead><tbody>{Object.entries(foldLabels).filter(([k])=>a['fold_'+k]!=null || raw['fold_'+k]?.some((v:any)=>v!=null)).map(([k,l])=><tr className="border-b border-slate-100" key={k}><td className="py-2">{l}</td>{[0,1,2].map(i=><td className="text-center" key={i}>{fmt(raw['fold_'+k]?.[i])}</td>)}<td className="text-center">{fmt(a['fold_'+k])}</td></tr>)}</tbody></table><div className="grid grid-cols-3 gap-3">{field('skinfold_sum','Somatório disponível','mm')}{field('skinfold_central_sum','Somatório central','mm')}{field('skinfold_peripheral_sum','Somatório periférico','mm')}</div><p className="text-xs">Protocolo: {a.skinfolds_protocol || a.protocol || 'Não informado'} · {meta.metrics?.body_fat_percentage?.reference || 'Referência não informada'}. Somatórios usam os pontos disponíveis.</p>{a.weight>0 && a.fat_mass_kg!=null && a.lean_mass_kg!=null && <svg role="img" aria-label="Composição corporal" viewBox="0 0 500 95" className="w-full"><rect x="10" y="20" width={480*a.fat_mass_kg/a.weight} height="24" fill="#0d9488"/><rect x={10+480*a.fat_mass_kg/a.weight} y="20" width={480*a.lean_mass_kg/a.weight} height="24" fill="#94a3b8"/><text x="10" y="65" fontSize="12">Massa adiposa: {fmt(a.fat_mass_kg)} kg · Livre de gordura: {fmt(a.lean_mass_kg)} kg</text><text x="10" y="85" fontSize="12">Peso total: {fmt(a.weight)} kg{a.muscle_mass_kg!=null?` · Muscular (parte da massa livre): ${fmt(a.muscle_mass_kg)} kg`:''}</text></svg>}{a.muscle_mass_kg!=null && <p className="text-xs">Massa muscular: {a.muscle_mass_method || 'Método legado não documentado'} · {a.muscle_mass_notes || '—'}</p>}</>)}
+frontend/src\components\personal\PersonalAssessmentReport.tsx:36:      {page('ÍNDICES E ADIPOSIDADE VISCERAL',<>{title('Adiposidade Visceral: eVAT (Bonora), Medição e VAI')}<div className="text-xs space-y-1 bg-slate-50 border border-slate-200 rounded-xl p-3"><div className="font-semibold text-slate-800">Área visceral estimada (eVAT — Bonora et al., 1995): <span className="font-bold text-teal-700">{a.tav_estimated_value!=null?`${fmt(a.tav_estimated_value)} ${a.tav_estimated_unit || 'cm²'}`:meta.visceralAdiposity?.predictedTav?.status==='out_of_domain'?'Estimativa não interpretável pela equação.':'Não calculado'}</span></div><IndicatorDetails item={assessmentIndicators(a).predictedTav}/><p className="text-slate-500">Método: Equação preditiva antropométrica (eVAT) · Bonora et al. (1995)</p><p className="text-[10px] text-amber-800 bg-amber-50 border border-amber-200 rounded p-1.5">{meta.visceralAdiposity?.predictedTav?.limitation || 'Estimativa antropométrica de precisão limitada; não equivale à mensuração por imagem.'}</p>{meta.visceralAdiposity?.predictedTav?.equation && <p className="text-slate-500">Equação: {meta.visceralAdiposity.predictedTav.equation}</p>}</div>{a.tav_value!=null ? <div className="text-xs space-y-1 bg-slate-50 border border-slate-200 rounded-xl p-3"><div className="font-semibold text-slate-800">{(a.tav_unit==='cm²' || a.tav_measured_unit==='cm²') ? 'Área visceral medida (imagem / DXA / TC / RM): ' : 'Nível de gordura visceral por bioimpedância: '}<span className="font-bold text-teal-700">{fmt(a.tav_value)} {a.tav_unit || ''}</span></div><p className="text-slate-600">{a.tav_equipment ? `Equipamento: ${a.tav_equipment}` : 'Equipamento não informado'}{a.tav_classification ? ` · Classificação: ${a.tav_classification}` : ''}{a.tav_reference_source ? ` (${a.tav_reference_source})` : ''}</p><p className="text-slate-500">Método: {a.tav_method || 'Não informado'} · Origem: {a.tav_source_type || 'Manual / equipamento'}</p>{(a.tav_unit==='nível' || a.tav_measured_unit==='nível') && <p className="text-[10px] text-slate-500 italic">Escore/nível proprietário do equipamento de bioimpedância. Não representa área em cm².</p>}{a.tav_notes && <p className="text-slate-500">{a.tav_notes}</p>}</div> : <p className="text-xs text-slate-400">Área visceral medida / Nível por bioimpedância: Não informado.</p>}{a.vai_value!=null ? <div className="text-xs space-y-1 bg-slate-50 border border-slate-200 rounded-xl p-3"><div className="font-semibold text-slate-800">Índice de Adiposidade Visceral (VAI — Amato et al., 2010): <span className="font-bold text-teal-700">{fmt(a.vai_value)}</span> <span className="text-[10px] text-slate-500 font-normal">(índice matemático adimensional — indicador indireto)</span></div><IndicatorDetails item={assessmentIndicators(a).vai}/>{a.vai_reference && <p className="text-slate-500">{a.vai_reference}</p>}<p className="text-[10px] text-slate-500">Inputs: cintura {fmt(a.waist_cm)} cm · IMC {fmt(a.bmi)} · TG {fmt(a.triglycerides_mg_dl)} mg/dL · HDL {fmt(a.hdl_mg_dl)} mg/dL. Conversões: TG ÷ 88,57; HDL ÷ 38,67 para mmol/L.</p></div> : <p className="text-xs text-slate-400">VAI (Índice de Adiposidade Visceral): Não calculado (requer cintura, IMC, triglicerídeos e HDL).</p>}<div className="grid grid-cols-3 gap-3">{[['bmi','IMC','kg/m²'],['whr','RCQ',''],['whtr','RCE',''],['resting_heart_rate_bpm','FC repouso','bpm'],['blood_pressure_systolic','Pressão sistólica','mmHg'],['blood_pressure_diastolic','Pressão diastólica','mmHg'],['hba1c_pct','HbA1c','%'],['uric_acid_mg_dl','Ácido úrico','mg/dL'],['glucose_mg_dl','Glicose','mg/dL'],['triglycerides_mg_dl','Triglicerídeos','mg/dL'],['ldl_mg_dl','LDL-C','mg/dL'],['hdl_mg_dl','HDL-C','mg/dL'],['body_water_liters','Água corporal','L'],['bmr_kcal','TMB','kcal/dia']].filter(([k])=>a[k]!=null).map(([k,l,u])=>field(k,l,u))}</div>{a.glucose_is_fasting!=null && <p className="text-xs">Glicemia em jejum: {a.glucose_is_fasting?'Sim':'Não confirmado'}</p>}{a.biochemical_source && <p className="text-xs">Origem: {a.biochemical_source} · Exame: {a.biochemical_exam_date || 'Não informado'}</p>}{a.bmr_kcal!=null && <p className="text-xs">TMB: {a.bmr_method || 'Método não informado'} · estimativa de repouso, quando calculada.</p>}</>)}
+frontend/src\components\personal\PersonalAssessmentReport.tsx:37:      {a.somatochart_x!=null && page('SOMATOTIPO',<>{title('Heath-Carter anthropometric somatotype')}<div className="grid grid-cols-3 gap-3">{field('somatotype_endomorphy','Endomorfia')}{field('somatotype_mesomorphy','Mesomorfia')}{field('somatotype_ectomorphy','Ectomorfia')}</div><Somatochart a={a}/></>)}
+frontend/src\components\personal\PersonalAssessmentReport.tsx:38:      {(a.notes || ['mobility_json','pain_json','functional_json','gait_json'].some(key=>a[key]) || a.posture_json || a.vo2_max!=null || tests.some(k=>parse(a[k])?.length)) && page('TESTES E OBSERVAÇÕES',<>{a.vo2_max!=null && field('vo2_max','VO₂ máximo',a.vo2_protocol || '')}{a.flexibility_wells_cm!=null && field('flexibility_wells_cm','Flexibilidade Wells','cm')}{tests.map(k=>{const rows=parse(a[k]);return Array.isArray(rows) && rows.length>0?<div key={k}>{title(k==='strength_tests_json'?'Força':k==='muscular_endurance_tests_json'?'Resistência':'Flexibilidade')}<table className="w-full text-xs"><tbody>{rows.map((r:any,i:number)=><tr key={i}><td className="py-2">{r.exercise_name || r.test_name}</td><td>{Object.entries(r).filter(([key])=>!['exercise_name','test_name'].includes(key)).map(([key,v])=>`${key}: ${typeof v==='number'?fmt(v):v ?? '—'}`).join(' · ')}</td></tr>)}</tbody></table></div>:null;})}{['mobility_json','pain_json','functional_json','gait_json'].filter(allowed).map(key=>parse(a[key])?.notes?<div key={key}>{title(({mobility_json:'Mobilidade',pain_json:'Dor',functional_json:'Avaliação funcional',gait_json:'Postura e marcha'} as Record<string,string>)[key])}<p className="text-xs whitespace-pre-wrap">{parse(a[key]).notes}</p></div>:null)}{a.notes && <div>{title('Parecer / observações')}<p className="whitespace-pre-wrap text-xs">{a.notes}</p></div>}{a.posture_json && <div>{title('Avaliação postural')}{(parse(a.posture_json).observations || []).map((o:any,i:number)=><p key={i} className="text-xs py-1">{o.region}: {o.text || 'Não informado'}</p>)}</div>}</>)}
+frontend/src\components\personal\PersonalAssessmentReport.tsx:55:        return <div key={key+'-'+chunk} className="break-inside-avoid">{title(`${label} (${unit || 'índice'})`)}<table className="w-full text-xs"><thead><tr><th>Data</th><th>Anterior</th><th>Atual</th><th>Diferença</th><th>% variação</th></tr></thead><tbody>{rows.map((r:any,i:number)=>{const index=chunk*5+i,prev=tableHistory.slice(0,index).reverse().find((prior:any)=>prior[key]!=null)?.[key] ?? null,delta=prev!=null && r[key]!=null?r[key]-prev:null;return <tr key={r.id} className="border-b border-slate-100 text-center"><td className="py-2">{r.assessment_date}</td><td>{fmt(prev)}</td><td>{fmt(r[key])}<IndicatorDetails item={assessmentIndicators(r)[key.startsWith('tav_group_')?tavGroups[Number(key.slice(10))].indicator:indicatorKey[key]]}/></td><td>{fmt(delta)}</td><td>{fmt(prev && delta!=null?delta/Math.abs(prev)*100:null)}</td></tr>;})}</tbody></table></div>;
+frontend/src\components\clinical\QuickConsultationModal.tsx:853:    <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+frontend/src\components\clinical\QuickConsultationModal.tsx:858:          <div className="flex items-center gap-2 sm:gap-3 flex-wrap min-w-0">
+frontend/src\components\clinical\QuickConsultationModal.tsx:1051:              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs bg-slate-50 p-3 rounded-xl border border-slate-100 lg:w-auto w-full">
+frontend/src\components\clinical\QuickConsultationModal.tsx:1114:          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+frontend/src\components\clinical\QuickConsultationModal.tsx:1539:                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+frontend/src\components\clinical\QuickConsultationModal.tsx:1834:        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+frontend/src\components\clinical\QuickConsultationModal.tsx:1898:            <div className="mt-3 flex items-center gap-1.5 overflow-x-auto pb-1.5 border-b border-slate-100">
+frontend/src\components\clinical\QuickConsultationModal.tsx:2175:        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+frontend/src\components\clinical\QuickConsultationModal.tsx:2208:                        <div className="flex-1 min-w-0 pr-2">
+frontend/src\components\clinical\QuickConsultationModal.tsx:2335:        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+frontend/src\components\clinical\QuickConsultationModal.tsx:2368:                        <div className="flex-1 min-w-0 pr-2">
+frontend/src\components\clinical\QuickConsultationModal.tsx:2517:        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+frontend/src\components\common\MeasurableGoalsManager.tsx:365:          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+frontend/src\components\common\MeasurableGoalsManager.tsx:393:          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+frontend/src\components\common\MeasurableGoalsManager.tsx:661:        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+frontend/src\components\speech-therapy\FluencyCounterModal.tsx:139:    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+frontend/src\components\speech-therapy\FluencyCounterModal.tsx:194:              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
+frontend/src\components\speech-therapy\FluencyCounterModal.tsx:436:                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+frontend/src\components\public-booking\PublicBookingView.tsx:112:        {p.photo_url?<img alt={`Foto de ${p.name}`} src={p.photo_url} className="h-12 w-12 shrink-0 rounded-xl object-cover"/>:<span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-teal-50 text-teal-800"><UserRound aria-hidden="true"/></span>}<div className="min-w-0"><h3 className="font-semibold text-slate-900">{p.name}</h3><p className="text-sm text-slate-600">{[p.profession_name,p.specialty_name].filter(Boolean).join(' · ')}</p>{p.registration_number&&<p className="text-xs text-slate-500">{p.registration_type} {p.registration_number}</p>}<p className="mt-1 text-xs text-teal-700">{[...new Set(p.services.map((s:any)=>modalityLabel(s.modality)))].join(' · ')}</p></div>{professional?.id===p.id&&<CheckCircle2 aria-hidden="true" className="ml-auto h-5 w-5 shrink-0 text-teal-700"/>}</button>)}</div>{professional&&servicePicker}{!compatible.length&&<BookingEmptyState title="Não encontramos horários disponíveis para esta especialidade no momento."><button className={bookingSecondary} onClick={()=>go(1)}>Escolher outra especialidade</button></BookingEmptyState>}<div className="flex justify-between gap-2"><BookingBackButton onClick={back}/><button className={bookingButton} disabled={!service} onClick={()=>go(3)}>Continuar<ArrowRight aria-hidden="true" className="h-4 w-4"/></button></div></section>}
+frontend/src\components\public-booking\PublicBookingView.tsx:114:      {step===4 && <section className="space-y-5"><div><h2 className="text-xl font-bold text-slate-900">Escolha o horário</h2><p className="text-sm text-slate-500">{new Date(`${date}T12:00:00`).toLocaleDateString('pt-BR')} · {service?.name}</p></div>{loadingSlots?<BookingSkeleton/>:slots.length?<div className="grid grid-cols-3 gap-2 sm:grid-cols-4">{slots.map(s=><button key={s.startTime} type="button" aria-pressed={slot?.startTime===s.startTime} onClick={()=>setSlot(s)} className={`min-h-12 rounded-xl border text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 ${slot?.startTime===s.startTime?'border-teal-700 bg-teal-700 text-white':'border-slate-200 bg-white text-slate-700 hover:border-teal-600'}`}>{s.time}</button>)}</div>:<BookingEmptyState title="Nenhum horário disponível nesta data."><button className={bookingSecondary} onClick={()=>{go(3);setTimeout(()=>dateInput.current?.focus(),0);}}>Escolher outra data</button>{!individual&&<><button className={bookingSecondary} onClick={()=>go(2)}>Escolher outro profissional</button><button className={bookingSecondary} onClick={()=>go(1)}>Voltar para especialidades</button></>}<button className={bookingSecondary} onClick={()=>setReloadSlots(n=>n+1)}>Atualizar horários</button></BookingEmptyState>}<div className="flex justify-between gap-2"><BookingBackButton onClick={back}/><button className={bookingButton} disabled={!slot||loadingSlots} onClick={()=>go(5)}>Continuar<ArrowRight aria-hidden="true" className="h-4 w-4"/></button></div></section>}
+frontend/src\components\personal\PersonalAssessmentModal.tsx:759:    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+frontend/src\components\personal\PersonalAssessmentModal.tsx:791:        <div className="bg-slate-50 px-6 py-3 border-b border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+frontend/src\components\personal\PersonalAssessmentModal.tsx:868:        {!postureOnly && <div className="flex gap-2 px-6 py-2 border-b overflow-x-auto">
+frontend/src\components\personal\PersonalAssessmentModal.tsx:869:          {availableTabs.map(tab=><button type="button" key={tab.id} disabled={photosUploading || postureBusy} onClick={()=>setActiveTab(tab.id as typeof activeTab)} className={`px-3 py-2 text-xs rounded-xl whitespace-nowrap ${activeTab===tab.id?'bg-teal-600 text-white':'bg-slate-100 text-slate-700'}`}>{tab.label}</button>)}
+frontend/src\components\personal\PersonalAssessmentModal.tsx:885:                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+frontend/src\components\personal\PersonalAssessmentModal.tsx:935:                  <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
+frontend/src\components\personal\PersonalAssessmentModal.tsx:1010:                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+frontend/src\components\personal\PersonalAssessmentModal.tsx:1107:                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+frontend/src\components\personal\PersonalAssessmentModal.tsx:1229:                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-2">
+frontend/src\components\personal\PersonalAssessmentModal.tsx:1314:                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+frontend/src\components\personal\PersonalAssessmentModal.tsx:1466:              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+frontend/src\components\personal\PersonalAssessmentModal.tsx:1591:                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+frontend/src\components\personal\PersonalAssessmentModal.tsx:1640:                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+frontend/src\components\personal\PersonalAssessmentModal.tsx:1857:                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+frontend/src\components\personal\PersonalExerciseLibraryModal.tsx:265:    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+frontend/src\components\personal\PersonalExerciseLibraryModal.tsx:303:            <form onSubmit={handleSearchSubmit} className="flex-1 min-w-[240px] relative">
+frontend/src\components\personal\PersonalExerciseLibraryModal.tsx:350:          <div className="flex items-center gap-1.5 overflow-x-auto py-1 max-w-full">
+frontend/src\components\personal\PersonalExerciseLibraryModal.tsx:355:                className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+frontend/src\components\personal\PersonalExerciseLibraryModal.tsx:383:              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+frontend/src\components\personal\PersonalExerciseLibraryModal.tsx:491:          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md animate-fadeIn">
+frontend/src\components\personal\PersonalExerciseLibraryModal.tsx:525:              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+frontend/src\components\personal\PersonalExerciseLibraryModal.tsx:581:        <div className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-4 bg-slate-900/70 backdrop-blur-sm overflow-y-auto animate-fadeIn">
+frontend/src\components\personal\PersonalExerciseLibraryModal.tsx:605:              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+frontend/src\components\personal\PersonalDashboard.tsx:54:      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+frontend/src\components\personal\PersonalDashboard.tsx:268:      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+frontend/src\components\clinical\PrintableDocumentModal.tsx:190:      <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+frontend/src\components\clinical\PrintableDocumentModal.tsx:207:    <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-2 sm:p-6 overflow-y-auto print:p-0 print:bg-white print:fixed print:inset-0">
+frontend/src\components\clinical\PrintableDocumentModal.tsx:216:            <span className="text-xs font-semibold text-slate-200 truncate max-w-[200px] sm:max-w-xs">
+frontend/src\components\clinical\PrintableDocumentModal.tsx:287:              className="text-teal-700 hover:text-teal-900 font-bold underline whitespace-nowrap ml-3 cursor-pointer shrink-0"
+frontend/src\components\clinical\PrintableDocumentModal.tsx:336:              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+frontend/src\components\common\LegalReacceptanceModal.tsx:51:      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs overflow-y-auto"
+frontend/src\components\speech-therapy\DysphagiaMatrixModal.tsx:194:    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+frontend/src\components\speech-therapy\DysphagiaMatrixModal.tsx:283:                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-xs">
+frontend/src\components\public-booking\PublicBookingShell.tsx:9:  return <main className="min-h-screen bg-slate-50 px-4 py-6 text-slate-800 sm:py-10">
+frontend/src\components\public-booking\PublicBookingShell.tsx:15:        <div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-wide text-teal-700">Agendamento online</p><h1 className="break-words text-xl font-bold text-slate-900 sm:text-2xl">{clinic?.trade_name || clinic?.name || 'Sua próxima consulta'}</h1>{(clinic?.city || clinic?.state) && <p className="text-sm text-slate-500">{[clinic.city, clinic.state].filter(Boolean).join(' / ')}</p>}</div>
+frontend/src\components\public-booking\PublicBookingShell.tsx:26:  return <ol aria-label="Etapas do agendamento" className={`mb-6 grid gap-2 border-b border-slate-100 pb-5 ${individual ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3 sm:grid-cols-6'}`}>
+frontend/src\components\public-booking\PublicBookingShell.tsx:27:    {labels.map((label, i) => <li key={label} aria-current={active === i ? 'step' : undefined} className={`flex min-w-0 flex-col items-start gap-1 text-[11px] sm:text-xs ${active === i ? 'font-bold text-teal-800' : 'text-slate-500'}`}><span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${i <= active ? 'bg-teal-100 text-teal-800' : 'bg-slate-100'}`}>{i < active ? <Check aria-hidden="true" className="h-3.5 w-3.5" /> : i + 1}</span><span className="max-w-full break-words">{label}</span></li>)}
+frontend/src\components\personal\PersonalBeforeAfterModal.tsx:38:    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-md animate-fadeIn">
+frontend/src\components\taxonomy\TaxonomyView.tsx:285:          <div className="overflow-x-auto -mx-4 sm:-mx-6">
+frontend/src\components\taxonomy\TaxonomyView.tsx:286:            <table className="w-full text-left text-xs">
+frontend/src\components\taxonomy\TaxonomyView.tsx:371:        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+frontend/src\components\taxonomy\TaxonomyView.tsx:398:          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+frontend/src\components\taxonomy\TaxonomyView.tsx:414:        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+frontend/src\components\taxonomy\TaxonomyView.tsx:493:        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+frontend/src\components\taxonomy\TaxonomyView.tsx:561:        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+frontend/src\components\personal\PersonalBodyMapIntegration.tsx:172:      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+frontend/src\components\clinical\PostureGait.tsx:2:export const PostureGait: React.FC<{ postureAnterior: string; setPostureAnterior: (value: string) => void; postureLateral: string; setPostureLateral: (value: string) => void; posturePosterior: string; setPosturePosterior: (value: string) => void; gaitAnalysis: string; setGaitAnalysis: (value: string) => void }> = ({ postureAnterior, setPostureAnterior, postureLateral, setPostureLateral, posturePosterior, setPosturePosterior, gaitAnalysis, setGaitAnalysis }) => (<>                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+frontend/src\components\speech-therapy\SpeechTherapyWorkspace.tsx:55:import { useHorizontalTabScroll, HorizontalTabNav } from '../../hooks/useHorizontalTabScroll';
+frontend/src\components\speech-therapy\SpeechTherapyWorkspace.tsx:699:  const tabScroll = useHorizontalTabScroll(activeTab);
+frontend/src\components\speech-therapy\SpeechTherapyWorkspace.tsx:952:                <div className="overflow-x-auto border border-slate-200 rounded-xl">
+frontend/src\components\speech-therapy\SpeechTherapyWorkspace.tsx:953:                  <table className="w-full text-xs text-left">
+frontend/src\components\speech-therapy\SpeechTherapyWorkspace.tsx:1146:                      <audio controls src={audioBlobUrl} className="h-8 max-w-[220px]" />
+frontend/src\components\speech-therapy\SpeechTherapyWorkspace.tsx:1152:                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+frontend/src\components\speech-therapy\SpeechTherapyWorkspace.tsx:1178:                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 bg-slate-50 border border-slate-200 rounded-xl">
+frontend/src\components\speech-therapy\SpeechTherapyWorkspace.tsx:1448:                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+frontend/src\components\speech-therapy\SpeechTherapyWorkspace.tsx:1536:                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs">
+frontend/src\components\speech-therapy\SpeechTherapyWorkspace.tsx:1774:                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+frontend/src\components\personal\PersonalEvolutionCharts.tsx:97:      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+frontend/src\components\personal\PersonalEvolutionCharts.tsx:296:          <div className="overflow-x-auto bg-white border border-slate-200 rounded-2xl">
+frontend/src\components\personal\PersonalEvolutionCharts.tsx:297:            <table className="w-full text-left text-xs">
+frontend/src\components\personal\PersonalEvolutionCharts.tsx:373:        <div className="overflow-x-auto">
+frontend/src\components\personal\PersonalEvolutionCharts.tsx:374:          <table className="w-full text-left text-xs">
+frontend/src\components\common\HomeSchoolProgramManager.tsx:149:          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+frontend/src\components\public-booking\BookingLinkSettings.tsx:11:  return <div className="min-w-0 rounded-2xl border border-slate-200 bg-white shadow-sm">
+frontend/src\components\public-booking\BookingLinkSettings.tsx:14:      <span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold text-slate-900">{title}</span>{accordion.subtitle && <span className="block truncate text-xs text-slate-500">{accordion.subtitle}</span>}<span className="block text-xs text-slate-500">{enabled?'Página ativa':'Página desativada'}</span></span>
+frontend/src\components\public-booking\BookingLinkSettings.tsx:19:    <div className={`min-h-0 min-w-0 ${accordion?'overflow-hidden':''} ${accordion&&!accordion.expanded?'invisible':''}`}>
+frontend/src\components\public-booking\BookingLinkSettings.tsx:25:    {enabled && url ? <><label htmlFor={`${id}-url`} className="block text-xs font-semibold text-slate-600">Link de agendamento</label><input id={`${id}-url`} readOnly value={url} className="w-full min-w-0 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700"/><div className="flex flex-wrap gap-2"><button type="button" onClick={async()=>{try{await navigator.clipboard.writeText(url);showToast('Link copiado.','success');}catch{showToast('Não foi possível copiar. Selecione e copie o link.','error');}}} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 focus-visible:ring-2 focus-visible:ring-teal-600"><Copy aria-hidden="true" className="h-4 w-4"/>Copiar link</button><a href={url} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 focus-visible:ring-2 focus-visible:ring-teal-600"><ExternalLink aria-hidden="true" className="h-4 w-4"/>Visualizar página</a></div></> : <p className="text-xs text-slate-500">{enabled?'O link estará disponível após salvar as alterações.':accordion?'Página pública desativada.':'Página desativada. Novos agendamentos por este link estão indisponíveis.'}</p>}
+frontend/src\components\public-booking\BookingLinkSettings.tsx:49:  return <section className="min-w-0 rounded-2xl border border-slate-200 bg-white shadow-sm">
+frontend/src\components\public-booking\BookingLinkSettings.tsx:52:      <span className="min-w-0 flex-1">
+frontend/src\components\public-booking\BookingLinkSettings.tsx:61:      <div className={`min-h-0 min-w-0 overflow-hidden ${sectionExpanded?'':'invisible'}`}>
+frontend/src\components\clinical\FinishConsultationModal.tsx:489:        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+frontend/src\components\clinical\FinishConsultationModal.tsx:654:      <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+frontend/src\components\clinical\FinishConsultationModal.tsx:658:            <div className="min-w-0 pr-2">
+frontend/src\components\clinical\FinishConsultationModal.tsx:671:              className="p-2 text-slate-400 hover:text-white rounded-xl bg-white/10 transition-all shrink-0 min-h-[40px] min-w-[40px] flex items-center justify-center cursor-pointer"
+frontend/src\components\clinical\FinishConsultationModal.tsx:684:              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs">
+frontend/src\components\clinical\FinishConsultationModal.tsx:817:                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+frontend/src\components\clinical\FinishConsultationModal.tsx:899:                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+frontend/src\components\speech-therapy\AuditoryProcessingScreening.tsx:146:        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+frontend/src\components\speech-therapy\AuditoryProcessingScreening.tsx:241:      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+frontend/src\components\speech-therapy\AuditoryProcessingScreening.tsx:280:          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+frontend/src\components\personal\PersonalPostureComparison.tsx:17:      <div className="min-w-0">
+frontend/src\components\personal\PersonalPostureComparison.tsx:20:      <aside className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm space-y-4 min-w-0">
+frontend/src\components\personal\PersonalPostureComparison.tsx:23:        <div className="grid grid-cols-3 gap-1">{(['improved','stable','worse'] as const).map(status=><div key={status} className={`rounded-lg p-2 text-center ${status==='improved'?'bg-emerald-50':status==='worse'?'bg-rose-50':'bg-slate-50'}`}><strong className="block text-lg">{same?'—':observations.filter(o=>o.evolution===status).length}</strong><span className="text-[10px]">{evolutionLabels[status]}</span></div>)}</div>
+frontend/src\components\personal\PersonalPostureComparison.tsx:25:        <table className="w-full text-[11px]"><thead><tr className="text-left text-slate-500"><th>Região</th><th>Inicial</th><th>Atual</th></tr></thead><tbody>{regions.map(([id,label])=><tr key={id} className="border-t"><td className="py-1.5">{label}</td><td>{initial.filter(o=>o.region===id).length}</td><td>{observations.filter(o=>o.region===id).length}</td></tr>)}</tbody></table>
+frontend/src\components\personal\PersonalPostureEditor.tsx:69:      <aside className="bg-white rounded-xl border p-3 space-y-3 min-w-0">
+frontend/src\components\clinical\PatientPreviousRecordsModal.tsx:116:      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-900/60 backdrop-blur-xs overflow-y-auto print:p-0 print:bg-white print:static"
+frontend/src\components\speech-therapy\ReadingWritingScreening.tsx:147:      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+frontend/src\components\speech-therapy\ReadingWritingScreening.tsx:181:      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs">
+frontend/src\components\speech-therapy\ReadingWritingScreening.tsx:225:      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+frontend/src\components\personal\PersonalPublicExerciseDemoModal.tsx:62:      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-in fade-in"
+frontend/src\components\personal\PersonalPublicExerciseDemoModal.tsx:146:          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 text-center text-xs">
+frontend/src\components\common\FileImageUploader.tsx:554:          <div className="flex-1 min-w-0">
+frontend/src\components\common\FileImageUploader.tsx:573:              <span className="truncate max-w-[180px] font-semibold text-slate-700">{selectedFile.name}</span>
+frontend/src\components\common\FileImageUploader.tsx:606:              <div className="flex-1 min-w-0">
+frontend/src\components\common\FileImageUploader.tsx:674:                className="flex-1 min-w-[110px] px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-indigo-600 bg-white hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 rounded-xl transition flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer disabled:opacity-50"
+frontend/src\components\common\FileImageUploader.tsx:695:            <div className="flex items-center gap-3 min-w-0">
+frontend/src\components\common\FileImageUploader.tsx:705:              <div className="min-w-0 flex-1">
+frontend/src\components\common\FileImageUploader.tsx:825:          className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn"
+frontend/src\components\common\FileImageUploader.tsx:834:              <div className="flex items-center gap-2 min-w-0">
+frontend/src\components\clinical\ConsultationPaymentModal.tsx:28:  return <div className="fixed inset-0 z-[60] bg-slate-900/60 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="receipt-title">
+frontend/src\components\personal\PersonalPdfExportModal.tsx:155:    <div className="personal-print-root fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-fadeIn">
+frontend/src\components\personal\PersonalPdfExportModal.tsx:272:            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
+frontend/src\components\personal\PersonalPdfExportModal.tsx:323:                    <table className="w-full text-left text-xs border-collapse">
+frontend/src\components\personal\PersonalPdfExportModal.tsx:392:                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+frontend/src\components\personal\PersonalPdfExportModal.tsx:444:                        <table className="w-full text-left text-xs border-collapse bg-white rounded-lg overflow-hidden border border-slate-200">
+frontend/src\components\personal\PersonalPdfExportModal.tsx:485:                    <table className="w-full text-xs text-left border-collapse border border-slate-200 rounded-xl overflow-hidden">
+frontend/src\components\support\SupportTicketsView.tsx:417:                          className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-xs leading-relaxed ${
+frontend/src\components\support\SupportTicketsView.tsx:444:                      className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-2xs whitespace-nowrap cursor-pointer transition-all self-start sm:self-auto"
+frontend/src\components\support\SupportTicketsView.tsx:483:        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+frontend/src\components\personal\PersonalPublicStudentRecordsModal.tsx:130:      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-in fade-in"
+frontend/src\components\personal\PersonalPublicStudentRecordsModal.tsx:186:            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+frontend/src\components\speech-therapy\PhonologyComparisonView.tsx:124:      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+frontend/src\components\speech-therapy\PhonologyComparisonView.tsx:139:              <div className="grid grid-cols-3 gap-1 pt-1 text-[10px] font-semibold text-center">
+frontend/src\components\speech-therapy\PhonologyComparisonView.tsx:170:              <div className="grid grid-cols-3 gap-1 pt-1 text-[10px] font-semibold text-center">
+frontend/src\components\speech-therapy\PhonologyComparisonView.tsx:197:          <div className="grid grid-cols-3 gap-1 pt-1 text-[10px] font-semibold text-center">
+frontend/src\components\speech-therapy\PhonologyComparisonView.tsx:247:        <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white">
+frontend/src\components\speech-therapy\PhonologyComparisonView.tsx:248:          <table className="w-full text-xs text-left">
+frontend/src\components\clinical\PatientFollowUpDocumentModal.tsx:334:    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+frontend/src\components\clinical\PatientFollowUpDocumentModal.tsx:507:              className="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm w-full max-w-[210mm] text-slate-800 font-sans space-y-6"
+frontend/src\components\personal\PersonalPublicStudentWorkoutView.tsx:442:      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-6 selection:bg-teal-500 selection:text-white">
+frontend/src\components\personal\PersonalPublicStudentWorkoutView.tsx:487:      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
+frontend/src\components\personal\PersonalPublicStudentWorkoutView.tsx:500:      <div className="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8 flex flex-col items-center justify-center animate-in fade-in">
+frontend/src\components\personal\PersonalPublicStudentWorkoutView.tsx:605:      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between selection:bg-teal-500 selection:text-white">
+frontend/src\components\personal\PersonalPublicStudentWorkoutView.tsx:614:              <h2 className="text-xs font-black text-white truncate max-w-[180px]">
+frontend/src\components\personal\PersonalPublicStudentWorkoutView.tsx:744:              <div className="grid grid-cols-3 gap-2 text-center">
+frontend/src\components\personal\PersonalPublicStudentWorkoutView.tsx:874:              <span className="font-bold text-slate-300 truncate max-w-[240px]">
+frontend/src\components\personal\PersonalPublicStudentWorkoutView.tsx:889:          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+frontend/src\components\personal\PersonalPublicStudentWorkoutView.tsx:990:    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-teal-500 selection:text-white pb-14">
+frontend/src\components\personal\PersonalPublicStudentWorkoutView.tsx:1042:        <section className="grid grid-cols-3 gap-2">
+frontend/src\components\personal\PersonalPublicStudentWorkoutView.tsx:1104:              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+frontend/src\components\clinical\ClinicalTrendChart.tsx:60:      <div className="w-full overflow-x-auto">
+frontend/src\components\clinical\ClinicalTrendChart.tsx:61:        <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-60" role="img" aria-label={title || 'Evolução clínica'}>
+frontend/src\components\common\ExternalTestsManager.tsx:452:        <div className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+frontend/src\components\personal\PersonalStudentLinkModal.tsx:154:    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+frontend/src\components\personal\PersonalStudentProfile.tsx:588:      <div className="flex items-center gap-2 border-b border-slate-200 overflow-x-auto pb-1">
+frontend/src\components\personal\PersonalStudentProfile.tsx:591:          className={`px-4 py-2.5 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap ${
+frontend/src\components\personal\PersonalStudentProfile.tsx:603:          className={`px-4 py-2.5 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap ${
+frontend/src\components\personal\PersonalStudentProfile.tsx:615:          className={`px-4 py-2.5 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap ${
+frontend/src\components\personal\PersonalStudentProfile.tsx:627:          className={`px-4 py-2.5 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap ${
+frontend/src\components\personal\PersonalStudentProfile.tsx:639:          className={`px-4 py-2.5 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap ${
+frontend/src\components\personal\PersonalStudentProfile.tsx:651:          className={`px-4 py-2.5 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap ${
+frontend/src\components\personal\PersonalStudentProfile.tsx:663:          className={`px-4 py-2.5 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap ${
+frontend/src\components\personal\PersonalStudentProfile.tsx:939:              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+frontend/src\components\personal\PersonalStudentProfile.tsx:977:          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+frontend/src\components\personal\PersonalStudentProfile.tsx:1058:            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+frontend/src\components\personal\PersonalStudentProfile.tsx:1131:        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+frontend/src\components\personal\PersonalStudentProfile.tsx:1305:          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fadeIn"
+frontend/src\components\personal\PersonalTechnicalFields.tsx:19:      {value.technical_mode && <div className="overflow-x-auto"><table className="w-full text-xs"><thead><tr><th className="text-left">Dobra</th><th>Medida 1</th><th>Medida 2</th><th>Medida 3</th><th>Final (mm)</th></tr></thead><tbody>{Object.entries(foldLabels).map(([key,label])=>{
+frontend/src\components\clinical\ClinicalSnapshot.tsx:224:          <div key={k} className="min-w-0">
+frontend/src\components\clinical\ClinicalSnapshot.tsx:365:                    className={`min-w-0 ${
+frontend/src\components\speech-therapy\LanguageSampleModal.tsx:111:    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+frontend/src\components\speech-therapy\LanguageSampleModal.tsx:139:          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+frontend/src\components\common\EvolutionPhotoField.tsx:374:        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setZoomPhoto(null)}>
+frontend/src\components\common\EvolutionPhotoField.tsx:397:        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in">
+frontend/src\components\common\EvolutionPhotoField.tsx:454:        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
+frontend/src\components\common\EvolutionPhotoField.tsx:465:            <div className="flex-1 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 gap-3 p-1">
+frontend/src\components\speech-therapy\audiology\PrintableAudiologyModal.tsx:146:    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+frontend/src\components\speech-therapy\audiology\PrintableAudiologyModal.tsx:197:            className="bg-white w-full max-w-[210mm] min-h-[297mm] p-8 shadow-sm text-slate-800 border border-slate-200 space-y-6 text-xs"
+frontend/src\components\speech-therapy\audiology\PrintableAudiologyModal.tsx:270:                <svg viewBox={`0 0 ${svgW} ${svgH}`} width={svgW} height={svgH} className="select-none">
+frontend/src\components\speech-therapy\audiology\PrintableAudiologyModal.tsx:394:                <table className="w-full text-left">
+frontend/src\components\speech-therapy\audiology\PrintableAudiologyModal.tsx:431:                  <div className="grid grid-cols-5 gap-1 text-[10px] text-center">
+frontend/src\components\personal\PersonalWorkoutBuilder.tsx:265:    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+frontend/src\components\personal\PersonalWorkoutBuilder.tsx:293:          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+frontend/src\components\personal\PersonalWorkoutBuilder.tsx:438:                        <div className="flex-1 min-w-[200px]">
+frontend/src\components\personal\PersonalWorkoutBuilder.tsx:512:                    <div className="grid grid-cols-2 sm:grid-cols-6 gap-2.5 pt-2 border-t border-slate-100">
+frontend/src\components\personal\PersonalWorkoutBuilder.tsx:670:            className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fadeIn cursor-pointer"
+frontend/src\components\clinical\GeneralClinicalWorkspace.tsx:395:    <div className="flex flex-col min-h-screen bg-slate-50">
+frontend/src\components\clinical\GeneralClinicalWorkspace.tsx:463:        <div className="max-w-7xl mx-auto flex items-center gap-2 overflow-x-auto py-2">
+frontend/src\components\clinical\GeneralClinicalWorkspace.tsx:467:            className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+frontend/src\components\clinical\GeneralClinicalWorkspace.tsx:480:              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+frontend/src\components\clinical\GeneralClinicalWorkspace.tsx:494:              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+frontend/src\components\clinical\GeneralClinicalWorkspace.tsx:513:              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+frontend/src\components\clinical\GeneralClinicalWorkspace.tsx:527:              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+frontend/src\components\clinical\GeneralClinicalWorkspace.tsx:541:              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+frontend/src\components\clinical\GeneralClinicalWorkspace.tsx:557:          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+frontend/src\components\clinical\GeneralClinicalWorkspace.tsx:740:            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+frontend/src\components\personal\PersonalWorkoutExecutionModal.tsx:179:    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-slate-900/75 backdrop-blur-md animate-fadeIn">
+frontend/src\components\personal\PersonalWorkoutExecutionModal.tsx:396:          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md animate-fadeIn">
+frontend/src\components\personal\PersonalWorkoutExecutionModal.tsx:440:            className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fadeIn cursor-pointer"
+frontend/src\components\common\EvolutionComparisonModal.tsx:84:    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-150">
+frontend/src\components\common\EvolutionComparisonModal.tsx:140:                    <table className="w-full text-left text-xs">
+frontend/src\components\speech-therapy\InteractiveAudiogram.tsx:528:        <div className="w-full max-w-[660px] overflow-x-auto bg-white dark:bg-slate-950 p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-inner">
+frontend/src\components\speech-therapy\InteractiveAudiogram.tsx:529:          <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} className="w-full select-none">
+frontend/src\components\speech-therapy\audiology\AudiologyWorkspaceSection.tsx:629:            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+frontend/src\components\speech-therapy\audiology\AudiologyWorkspaceSection.tsx:729:            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs">
+frontend/src\components\speech-therapy\audiology\AudiologyWorkspaceSection.tsx:783:              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+frontend/src\components\speech-therapy\audiology\AudiologyWorkspaceSection.tsx:1105:            <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
+frontend/src\components\speech-therapy\audiology\AudiologyWorkspaceSection.tsx:1159:            <div className="overflow-x-auto">
+frontend/src\components\speech-therapy\audiology\AudiologyWorkspaceSection.tsx:1160:              <table className="w-full text-xs text-left">
+frontend/src\components\speech-therapy\audiology\AudiologyWorkspaceSection.tsx:1605:            <div className="overflow-x-auto">
+frontend/src\components\speech-therapy\audiology\AudiologyWorkspaceSection.tsx:1606:              <table className="w-full text-xs text-left">
+frontend/src\components\speech-therapy\audiology\AudiologyWorkspaceSection.tsx:1855:          <div className="overflow-x-auto">
+frontend/src\components\speech-therapy\audiology\AudiologyWorkspaceSection.tsx:1856:            <table className="w-full text-xs text-left">
+frontend/src\components\common\CookiePreferencesModal.tsx:105:      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs overflow-y-auto"
+frontend/src\components\personal\PosturePhotoCanvas.tsx:17:    {ready && <svg aria-label="Área de marcação postural" className="absolute inset-0 w-full h-full" viewBox="0 0 1000 1000" preserveAspectRatio="none" style={{touchAction:tool==='select'?'auto':'none',pointerEvents:!onStrokes?'none':undefined}}
+frontend/src\components\common\ErrorBoundary.tsx:125:          <div className="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center p-4">
+frontend/src\components\common\ErrorBoundary.tsx:139:                <div className="bg-slate-950/80 rounded-xl p-3 text-left border border-slate-700/60 overflow-x-auto text-2xs font-mono text-indigo-300 max-h-24">
+frontend/src\components\common\ErrorBoundary.tsx:175:        <div className="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center p-4">
+frontend/src\components\common\ErrorBoundary.tsx:189:              <div className="bg-slate-950/80 rounded-xl p-3 text-left border border-slate-700/60 overflow-x-auto text-2xs font-mono text-rose-300 max-h-28">
+frontend/src\components\speech-therapy\Idv10AssessmentSection.tsx:179:            <div className="flex items-center gap-1.5 shrink-0 overflow-x-auto no-scrollbar">
+frontend/src\components\speech-therapy\Idv10AssessmentSection.tsx:203:      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+frontend/src\components\speech-therapy\Idv10AssessmentSection.tsx:254:            <div className="h-32 flex items-end gap-3 pt-6 pb-2 px-2 overflow-x-auto no-scrollbar border-b border-slate-200">
+frontend/src\components\speech-therapy\Idv10AssessmentSection.tsx:259:                  <div key={h.id || i} className="flex-1 min-w-[50px] flex flex-col items-center gap-1.5">
+frontend/src\components\speech-therapy\Idv10AssessmentSection.tsx:263:                      className={`w-full max-w-[32px] rounded-t-lg transition-all ${
+frontend/src\components\speech-therapy\Idv10AssessmentSection.tsx:268:                    <span className="text-[9px] text-slate-500 truncate max-w-[50px]">
+frontend/src\components\superadmin\SystemIntegrityView.tsx:28:      <div className="grid sm:grid-cols-2 xl:grid-cols-6 gap-3">
+frontend/src\components\superadmin\SystemIntegrityView.tsx:34:      <article className="bg-white border rounded-2xl p-5 overflow-x-auto">
+frontend/src\components\superadmin\SystemIntegrityView.tsx:36:        <table className="w-full text-xs text-left"><thead><tr>{['Data/hora', 'Serviço', 'Endpoint', 'Tipo', 'Clínica (ID)', 'Mensagem', 'Ocorrências'].map(label => <th key={label} className="p-2">{label}</th>)}</tr></thead><tbody>
+frontend/src\components\public\PublicFooter.tsx:20:      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-x-7 gap-y-9">
+frontend/src\components\psychopedagogy\PsychopedagogyDocumentModal.tsx:224:      className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 overflow-y-auto print:p-0 print:bg-white print:static"
+frontend/src\components\psychopedagogy\PsychopedagogyDocumentModal.tsx:284:        <div className="bg-slate-50 border-b border-slate-200 px-6 py-2.5 flex items-center gap-2 overflow-x-auto print:hidden">
+frontend/src\components\psychopedagogy\PsychopedagogyDocumentModal.tsx:296:              className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-colors cursor-pointer whitespace-nowrap ${
+frontend/src\components\psychopedagogy\PsychopedagogyDocumentModal.tsx:368:              className="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm w-full max-w-[210mm] text-slate-800 font-sans space-y-6 print:border-none print:shadow-none print:p-0 print:max-w-none"
+frontend/src\components\common\ClinicalFileUploader.tsx:481:            <div className="flex-1 min-w-0">
+frontend/src\components\common\ClinicalFileUploader.tsx:605:        <div className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+frontend/src\components\common\ClinicalFileUploader.tsx:608:              <div className="flex items-center gap-2 min-w-0">
+frontend/src\components\psychopedagogy\PsychopedagogyWorkspace.tsx:12:import { useHorizontalTabScroll, HorizontalTabNav } from '../../hooks/useHorizontalTabScroll';
+frontend/src\components\psychopedagogy\PsychopedagogyWorkspace.tsx:96:  const tabScroll = useHorizontalTabScroll(activeTab);
+frontend/src\components\psychopedagogy\PsychopedagogyWorkspace.tsx:884:            <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+frontend/src\components\psychopedagogy\PsychopedagogyWorkspace.tsx:973:            <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+frontend/src\components\psychopedagogy\PsychopedagogyWorkspace.tsx:1268:                    <div className="p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
+frontend/src\components\psychopedagogy\PsychopedagogyWorkspace.tsx:1498:                    <div className="p-5 grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+frontend/src\components\psychopedagogy\PsychopedagogyWorkspace.tsx:1704:                  <div className="flex items-center gap-2 overflow-x-auto pb-1">
+frontend/src\components\psychopedagogy\PsychopedagogyWorkspace.tsx:1719:                          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+frontend/src\components\psychopedagogy\PsychopedagogyWorkspace.tsx:1914:                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs pt-2">
+frontend/src\components\psychopedagogy\PsychopedagogyWorkspace.tsx:1985:                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs pt-2">
+frontend/src\components\psychopedagogy\PsychopedagogyWorkspace.tsx:2086:                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
+frontend/src\components\psychopedagogy\PsychopedagogyWorkspace.tsx:2238:                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+frontend/src\components\psychopedagogy\PsychopedagogyWorkspace.tsx:2498:                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+frontend/src\components\psychopedagogy\PsychopedagogyWorkspace.tsx:2602:                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+frontend/src\components\speech-therapy\FonoEvolutionReportModal.tsx:92:    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+frontend/src\components\speech-therapy\FonoEvolutionReportModal.tsx:312:              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+frontend/src\components\public\PrivacyPolicyView.tsx:46:    <div className="min-h-screen bg-[#fafbfc] text-slate-800 font-sans antialiased selection:bg-teal-500 selection:text-white flex flex-col justify-between">
+frontend/src\components\public\PublicSeoPageView.tsx:13: return <div className="min-h-screen bg-white text-slate-800">
+frontend/src\components\personal\ZemdaPersonalView.tsx:7:import { useHorizontalTabScroll, HorizontalTabNav } from '../../hooks/useHorizontalTabScroll';
+frontend/src\components\personal\ZemdaPersonalView.tsx:78:  const tabScroll = useHorizontalTabScroll(currentTab);
+frontend/src\components\personal\ZemdaPersonalView.tsx:328:        <div ref={searchContainerRef} className="relative flex-1 min-w-[220px] max-w-xs md:max-w-sm">
+frontend/src\components\personal\ZemdaPersonalView.tsx:450:            className="px-3.5 py-2 text-xs font-bold rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 shadow-xs flex items-center gap-2 transition-all whitespace-nowrap cursor-pointer"
+frontend/src\components\personal\ZemdaPersonalView.tsx:460:            className="px-3.5 py-2 text-xs font-bold rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-xs flex items-center gap-2 transition-all whitespace-nowrap cursor-pointer"
+frontend/src\components\personal\ZemdaPersonalView.tsx:478:              <span className="font-bold text-xs text-slate-900 truncate max-w-[180px] sm:max-w-[240px]">
+frontend/src\components\personal\ZemdaPersonalView.tsx:529:                  className={`flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap transition-colors cursor-pointer shrink-0 ${
+frontend/src\components\personal\ZemdaPersonalView.tsx:593:                <div className="flex items-center gap-3 flex-1 min-w-[240px]">
+frontend/src\components\personal\ZemdaPersonalView.tsx:789:        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+frontend/src\components\superadmin\SuperAdminView.tsx:376:        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+frontend/src\components\superadmin\SuperAdminView.tsx:402:        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+frontend/src\components\superadmin\SuperAdminView.tsx:406:          <div className="min-w-0">
+frontend/src\components\superadmin\SuperAdminView.tsx:418:        <div className="flex items-center gap-1.5 p-1.5 bg-white/10 backdrop-blur-md rounded-2xl border border-white/10 text-xs font-bold overflow-x-auto max-w-full no-scrollbar scroll-smooth">
+frontend/src\components\superadmin\SuperAdminView.tsx:419:          <button onClick={()=>setMainSection('subscriptions')} className="px-3 py-2 rounded-xl hover:bg-white/10 shrink-0 whitespace-nowrap">Assinaturas</button>
+frontend/src\components\superadmin\SuperAdminView.tsx:420:          <button onClick={() => setMainSection('integrity')} className="px-3 py-2 rounded-xl hover:bg-white/10 shrink-0 whitespace-nowrap">Integridade</button>
+frontend/src\components\superadmin\SuperAdminView.tsx:421:          <button onClick={()=>setMainSection('integrations')} className="px-3 py-2 rounded-xl hover:bg-white/10 shrink-0 whitespace-nowrap">Integrações</button>
+frontend/src\components\superadmin\SuperAdminView.tsx:424:            className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
+frontend/src\components\superadmin\SuperAdminView.tsx:436:            className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
+frontend/src\components\superadmin\SuperAdminView.tsx:448:            className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
+frontend/src\components\superadmin\SuperAdminView.tsx:460:            className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
+frontend/src\components\superadmin\SuperAdminView.tsx:472:            className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
+frontend/src\components\superadmin\SuperAdminView.tsx:506:                className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-xs cursor-pointer shadow-xs whitespace-nowrap"
+frontend/src\components\superadmin\SuperAdminView.tsx:515:            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+frontend/src\components\superadmin\SuperAdminView.tsx:547:              <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-2xl w-full sm:w-fit text-xs font-bold overflow-x-auto no-scrollbar scroll-smooth">
+frontend/src\components\superadmin\SuperAdminView.tsx:550:                  className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer shrink-0 whitespace-nowrap ${
+frontend/src\components\superadmin\SuperAdminView.tsx:558:                  className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1 shrink-0 whitespace-nowrap ${
+frontend/src\components\superadmin\SuperAdminView.tsx:573:                  className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer shrink-0 whitespace-nowrap ${
+frontend/src\components\superadmin\SuperAdminView.tsx:581:                  className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer shrink-0 whitespace-nowrap ${
+frontend/src\components\superadmin\SuperAdminView.tsx:601:            <div className="overflow-x-auto">
+frontend/src\components\superadmin\SuperAdminView.tsx:602:              <table className="w-full text-left text-xs">
+frontend/src\components\superadmin\SuperAdminView.tsx:778:          <div className="overflow-x-auto">
+frontend/src\components\superadmin\SuperAdminView.tsx:779:            <table className="w-full text-left text-xs">
+frontend/src\components\superadmin\SuperAdminView.tsx:889:        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
+frontend/src\components\superadmin\SuperAdminView.tsx:974:        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
+frontend/src\components\superadmin\SuperAdminView.tsx:1013:        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
+frontend/src\components\superadmin\SuperAdminView.tsx:1069:                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+frontend/src\components\superadmin\SuperAdminView.tsx:1103:                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+frontend/src\components\superadmin\SuperAdminView.tsx:1128:                  <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-3">
+frontend/src\components\superadmin\SuperAdminView.tsx:1166:                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+frontend/src\components\superadmin\SuperAdminView.tsx:1208:                    <div className="grid grid-cols-3 gap-3">
+frontend/src\components\superadmin\SuperAdminView.tsx:1231:                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+frontend/src\components\superadmin\SuperAdminView.tsx:1282:        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
+frontend/src\components\speech-therapy\AbfwRecordsSection.tsx:154:      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+frontend/src\components\speech-therapy\AbfwRecordsSection.tsx:180:          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+frontend/src\components\speech-therapy\AbfwRecordsSection.tsx:215:          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs">
+frontend/src\components\speech-therapy\AbfwRecordsSection.tsx:260:          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+frontend/src\components\speech-therapy\AbfwRecordsSection.tsx:295:          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+frontend/src\components\speech-therapy\AbfwRecordsSection.tsx:330:        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
+frontend/src\components\speech-therapy\FoisAssessmentSection.tsx:249:            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs">
+frontend/src\components\public\TermsOfUseView.tsx:44:    <div className="min-h-screen bg-[#fafbfc] text-slate-800 font-sans antialiased selection:bg-teal-500 selection:text-white flex flex-col justify-between">
+frontend/src\components\public\VerifyDocumentView.tsx:96:    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col justify-between selection:bg-teal-500 selection:text-white">
+frontend/src\components\superadmin\SuperAdminLaboratoryView.tsx:194:      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+frontend/src\components\superadmin\SuperAdminLaboratoryView.tsx:199:          <div className="min-w-0">
+frontend/src\components\superadmin\SuperAdminLaboratoryView.tsx:209:          <div className="min-w-0">
+frontend/src\components\superadmin\SuperAdminLaboratoryView.tsx:219:          <div className="min-w-0">
+frontend/src\components\superadmin\SuperAdminLaboratoryView.tsx:229:          <div className="min-w-0">
+frontend/src\components\superadmin\SuperAdminLaboratoryView.tsx:244:        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2">
+frontend/src\components\superadmin\SuperAdminLaboratoryView.tsx:313:                        className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer select-none"
+frontend/src\components\superadmin\SuperAdminLaboratoryView.tsx:324:                        <div className="min-w-0 flex-1">
+frontend/src\components\superadmin\SuperAdminLaboratoryView.tsx:355:                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5">
+frontend/src\components\superadmin\SuperAdminLaboratoryView.tsx:398:            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+frontend/src\components\superadmin\SuperAdminLaboratoryView.tsx:441:          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+frontend/src\components\superadmin\FreeTrialsAdminView.tsx:481:          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+frontend/src\components\superadmin\FreeTrialsAdminView.tsx:521:            <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0 text-xs font-bold">
+frontend/src\components\superadmin\FreeTrialsAdminView.tsx:525:                className={`px-3 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap ${
+frontend/src\components\superadmin\FreeTrialsAdminView.tsx:536:                className={`px-3 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+frontend/src\components\superadmin\FreeTrialsAdminView.tsx:548:                className={`px-3 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+frontend/src\components\superadmin\FreeTrialsAdminView.tsx:560:                className={`px-3 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+frontend/src\components\superadmin\FreeTrialsAdminView.tsx:596:            <div className="overflow-x-auto">
+frontend/src\components\superadmin\FreeTrialsAdminView.tsx:597:              <table className="w-full text-left border-collapse text-xs">
+frontend/src\components\superadmin\FreeTrialsAdminView.tsx:654:                          <td className="py-3.5 px-4 whitespace-nowrap text-slate-600">
+frontend/src\components\superadmin\FreeTrialsAdminView.tsx:659:                          <td className="py-3.5 px-4 whitespace-nowrap">
+frontend/src\components\superadmin\FreeTrialsAdminView.tsx:666:                          <td className="py-3.5 px-4 text-center whitespace-nowrap">
+frontend/src\components\superadmin\FreeTrialsAdminView.tsx:685:                          <td className="py-3.5 px-4 text-center whitespace-nowrap">
+frontend/src\components\superadmin\FreeTrialsAdminView.tsx:707:                          <td className="py-3.5 px-4 text-right whitespace-nowrap">
+frontend/src\components\superadmin\FreeTrialsAdminView.tsx:751:      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
+frontend/src\components\superadmin\FreeTrialsAdminView.tsx:809:        <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0 text-xs font-bold">
+frontend/src\components\superadmin\FreeTrialsAdminView.tsx:812:            className={`px-3 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap ${
+frontend/src\components\superadmin\FreeTrialsAdminView.tsx:822:            className={`px-3 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+frontend/src\components\superadmin\FreeTrialsAdminView.tsx:833:            className={`px-3 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+frontend/src\components\superadmin\FreeTrialsAdminView.tsx:844:            className={`px-3 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+frontend/src\components\superadmin\FreeTrialsAdminView.tsx:854:            className={`px-3 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap ${
+frontend/src\components\superadmin\FreeTrialsAdminView.tsx:864:            className={`px-3 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap ${
+frontend/src\components\superadmin\FreeTrialsAdminView.tsx:888:        <div className="overflow-x-auto">
+frontend/src\components\superadmin\FreeTrialsAdminView.tsx:889:          <table className="w-full text-left border-collapse text-xs">
+frontend/src\components\superadmin\FreeTrialsAdminView.tsx:949:                      <td className="py-3.5 px-4 text-center whitespace-nowrap">
+frontend/src\components\superadmin\FreeTrialsAdminView.tsx:969:                      <td className="py-3.5 px-4 whitespace-nowrap text-slate-600">
+frontend/src\components\superadmin\FreeTrialsAdminView.tsx:974:                      <td className="py-3.5 px-4 whitespace-nowrap">
+frontend/src\components\superadmin\FreeTrialsAdminView.tsx:984:                      <td className="py-3.5 px-4 whitespace-nowrap text-slate-600">
+frontend/src\components\superadmin\FreeTrialsAdminView.tsx:995:                      <td className="py-3.5 px-4 whitespace-nowrap text-slate-600">
+frontend/src\components\superadmin\FreeTrialsAdminView.tsx:1006:                      <td className="py-3.5 px-4 text-center whitespace-nowrap">
+frontend/src\components\superadmin\FreeTrialsAdminView.tsx:1037:                      <td className="py-3.5 px-4 text-right whitespace-nowrap">
+frontend/src\components\superadmin\FreeTrialsAdminView.tsx:1122:        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+frontend/src\components\superadmin\FreeTrialsAdminView.tsx:1180:                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+frontend/src\components\superadmin\FreeTrialsAdminView.tsx:1230:                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+frontend/src\components\superadmin\FreeTrialsAdminView.tsx:1309:        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+frontend/src\components\superadmin\FreeTrialsAdminView.tsx:1385:        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+frontend/src\components\superadmin\FreeTrialsAdminView.tsx:1428:        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+frontend/src\components\superadmin\FreeTrialsAdminView.tsx:1469:        <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+frontend/src\components\superadmin\FreeTrialsAdminView.tsx:1520:                  <div className="grid grid-cols-5 gap-2">
+frontend/src\components\superadmin\InfobipWhatsAppAdmin.tsx:149:        <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+frontend/src\components\superadmin\InfobipWhatsAppAdmin.tsx:155:            <div className="min-w-0">
+frontend/src\components\superadmin\InfobipWhatsAppAdmin.tsx:171:            <div className="min-w-0">
+frontend/src\components\superadmin\InfobipWhatsAppAdmin.tsx:191:            <div className="min-w-0">
+frontend/src\components\superadmin\InfobipWhatsAppAdmin.tsx:211:            <div className="min-w-0">
+frontend/src\components\settings\DigitalCertificatesSection.tsx:266:        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+frontend/src\components\settings\NewInsuranceModal.tsx:81:    <div className={`fixed inset-0 ${zIndex} bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto`}>
+frontend/src\components\settings\SettingsView.tsx:874:          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+frontend/src\components\settings\SettingsView.tsx:1150:        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+frontend/src\components\settings\SettingsView.tsx:1242:        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+frontend/src\components\settings\SettingsView.tsx:1595:            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+frontend/src\components\settings\SettingsView.tsx:1780:            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+frontend/src\components\settings\SettingsView.tsx:1859:              <div className="overflow-x-auto rounded-2xl border border-slate-200">
+frontend/src\components\settings\SettingsView.tsx:1860:                <table className="w-full text-left text-xs">
+frontend/src\components\settings\SettingsView.tsx:2009:              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+frontend/src\components\settings\SettingsView.tsx:2100:            <div className="overflow-x-auto">
+frontend/src\components\settings\SettingsView.tsx:2101:              <table className="w-full text-left text-xs">
+frontend/src\components\settings\SettingsView.tsx:2184:            <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+frontend/src\components\settings\SettingsView.tsx:2413:            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+frontend/src\shared\clinical-assessments\ClinicalAssessmentsPanel.tsx:77:    {report && <div className="fixed inset-0 z-50 bg-white overflow-y-auto p-6 clinical-assessment-print-root">
+frontend/src\components\settings\UnifiedTeamManagement.tsx:650:        <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-2xl text-xs font-bold overflow-x-auto">
+frontend/src\components\settings\UnifiedTeamManagement.tsx:790:        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+frontend/src\components\settings\UnifiedTeamManagement.tsx:921:        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+frontend/src\components\settings\UnifiedTeamManagement.tsx:957:            <div className="px-6 pt-3 bg-white border-b border-slate-200 flex items-center gap-2 overflow-x-auto text-xs font-bold">
+frontend/src\components\settings\UnifiedTeamManagement.tsx:1018:                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+frontend/src\components\settings\UnifiedTeamManagement.tsx:1392:                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+frontend/src\components\settings\UnifiedTeamManagement.tsx:1694:        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+frontend/src\components\settings\UnifiedTeamManagement.tsx:1785:        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">

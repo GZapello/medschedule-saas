@@ -319,11 +319,11 @@ export const ProfessionalsView: React.FC = () => {
 
       {/* Modal Editar Profissional */}
       {editingProf && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto mobile-modal">
           <div className="bg-white rounded-3xl max-w-lg w-full p-4 sm:p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
               <h3 className="text-lg font-bold text-slate-900">Editar Profissional: {editingProf.name}</h3>
-              <button onClick={handleCloseEditModal} className="p-1 text-slate-400 hover:text-slate-700 rounded-lg">
+              <button aria-label="Fechar" onClick={handleCloseEditModal} className="p-1 text-slate-400 hover:text-slate-700 rounded-lg">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -581,7 +581,7 @@ export const ProfessionalsView: React.FC = () => {
 
       {/* Modal de Confirmação: Alteração Única de Profissão (Item 2) */}
       {showConfirmChangeModal && (
-        <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto mobile-modal">
           <div className="bg-white rounded-3xl max-w-md w-full p-4 sm:p-6 shadow-2xl border border-amber-200 animate-in zoom-in-95 duration-200 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center gap-3 text-amber-600">
               <div className="w-10 h-10 rounded-2xl bg-amber-100 flex items-center justify-center flex-shrink-0">
@@ -624,11 +624,11 @@ export const ProfessionalsView: React.FC = () => {
 
       {/* Modal Bloqueio de Horário */}
       {showBlockModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto mobile-modal">
           <div className="bg-white rounded-3xl max-w-md w-full p-4 sm:p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
               <h3 className="text-lg font-bold text-slate-900">Bloquear Agenda / Ausência</h3>
-              <button onClick={() => setShowBlockModal(false)} className="p-1 text-slate-400 hover:text-slate-700 rounded-lg">
+              <button aria-label="Fechar" onClick={() => setShowBlockModal(false)} className="p-1 text-slate-400 hover:text-slate-700 rounded-lg">
                 <X className="w-5 h-5" />
               </button>
             </div>

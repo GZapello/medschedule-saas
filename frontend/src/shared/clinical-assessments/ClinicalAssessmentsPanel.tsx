@@ -74,7 +74,7 @@ export function ClinicalAssessmentsPanel({patientId,patient,appointmentId,source
     </div>}
     {editor!==undefined && <ClinicalAssessmentEditor key={patientId+':'+(editor?.id || 'new')} isOpen patientId={patientId} student={subject} appointmentId={appointmentId} sourceModule={sourceModule} allowedCapabilities={caps} assessmentToEdit={editor} onClose={()=>setEditor(undefined)} onSaved={()=>{setEditor(undefined);void load();}}/>}
     {comparing && <ClinicalAssessmentComparison isOpen student={subject} assessmentsList={history} allowedCapabilities={caps} onClose={()=>setComparing(false)}/>}
-    {report && <div className="fixed inset-0 z-50 bg-white overflow-y-auto p-6 clinical-assessment-print-root">
+    {report && <div className="fixed inset-0 z-50 bg-white overflow-y-auto p-6 clinical-assessment-print-root mobile-modal">
       <style>{`@media print { body * { visibility:hidden; } .clinical-assessment-print-root,.clinical-assessment-print-root * { visibility:visible; } .clinical-assessment-print-root { position:absolute; inset:0; overflow:visible; } .clinical-assessment-print-actions { display:none; } }`}</style>
       <div className="clinical-assessment-print-actions flex gap-4 mb-4"><button type="button" onClick={()=>window.print()}>Imprimir / Salvar PDF</button><button type="button" onClick={()=>setReport(null)}>Fechar</button></div>
       <ClinicalAssessmentReport data={report} clinic={report.clinic} allowedCapabilities={caps}/>

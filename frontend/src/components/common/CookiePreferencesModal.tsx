@@ -102,7 +102,7 @@ export const CookiePreferencesModal: React.FC<CookiePreferencesModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-labelledby="cookie-modal-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs overflow-y-auto mobile-modal"
     >
       <div className="bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl border border-slate-200/80 my-8 animate-in fade-in zoom-in-95 duration-200 text-left">
         {/* Header */}

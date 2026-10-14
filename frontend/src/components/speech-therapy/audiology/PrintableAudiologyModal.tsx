@@ -1,3 +1,5 @@
+import { isNativePrint, printNativeHtml } from '../../../utils/nativePrint';
+import { ResponsiveTable } from '../../common/ResponsiveTable';
 import React, { useRef } from 'react';
 import { X, Printer, Eye, Download, ShieldCheck, CheckCircle2 } from 'lucide-react';
 import { AudiologyRecordPayload } from './audiology.types';
@@ -56,15 +58,8 @@ export const PrintableAudiologyModal: React.FC<PrintableAudiologyModalProps> = (
 
   const handleOpenNewTab = () => {
     if (!canPrint || !printSheetRef.current) return;
-    const printWin = window.open('', '_blank', 'width=950,height=1050');
-    if (!printWin) {
-      alert('Por favor, autorize pop-ups para visualizar a ficha de impressão.');
-      return;
-    }
-
     const htmlContent = printSheetRef.current.innerHTML;
-    printWin.document.open();
-    printWin.document.write(`
+    const previewHtml = `
       <!DOCTYPE html>
       <html lang="pt-BR">
       <head>
@@ -109,7 +104,16 @@ export const PrintableAudiologyModal: React.FC<PrintableAudiologyModalProps> = (
         </div>
       </body>
       </html>
-    `);
+    `;
+    if (isNativePrint()) { void printNativeHtml(previewHtml).catch(() => alert('Não foi possível abrir a impressão.')); return; }
+    const printWin = window.open('', '_blank', 'width=950,height=1050');
+    if (!printWin) {
+      alert('Por favor, autorize pop-ups para visualizar a ficha de impressão.');
+      return;
+    }
+
+        printWin.document.open();
+    printWin.document.write(previewHtml);
     printWin.document.close();
   };
 
@@ -143,7 +147,7 @@ export const PrintableAudiologyModal: React.FC<PrintableAudiologyModalProps> = (
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto mobile-modal">
       <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full max-h-[92vh] flex flex-col overflow-hidden">
         {/* Barra superior de ações */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50">
@@ -180,7 +184,7 @@ export const PrintableAudiologyModal: React.FC<PrintableAudiologyModalProps> = (
               <Printer className="w-4 h-4" />
               <span>Imprimir / Salvar PDF</span>
             </button>
-            <button
+            <button aria-label="Fechar"
               type="button"
               onClick={onClose}
               className="p-1.5 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-200 cursor-pointer"
@@ -391,7 +395,7 @@ export const PrintableAudiologyModal: React.FC<PrintableAudiologyModalProps> = (
               {/* Logoaudiometria */}
               <div className="border border-slate-200 rounded-lg p-3">
                 <b className="block text-slate-900 border-b border-slate-200 pb-1 mb-2">Logoaudiometria</b>
-                <table className="w-full text-left">
+                <ResponsiveTable className="w-full text-left">
                   <thead>
                     <tr className="text-slate-500 border-b">
                       <th className="pb-1 font-semibold">Parâmetro</th>
@@ -421,7 +425,7 @@ export const PrintableAudiologyModal: React.FC<PrintableAudiologyModalProps> = (
                       <td className="py-1">{record.speechAudiometry.presentationIntensityOE || '-'} dB / {record.speechAudiometry.maskingOE || '-'} dB</td>
                     </tr>
                   </tbody>
-                </table>
+                </ResponsiveTable>
               </div>
 
               {/* Weber e Timpanometria Sintética */}

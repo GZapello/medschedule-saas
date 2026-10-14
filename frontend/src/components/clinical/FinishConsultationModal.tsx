@@ -486,7 +486,7 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
   if (completionSummary) {
     return (
       <>
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto mobile-modal">
           <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 p-4 sm:p-6 text-center space-y-4 sm:space-y-5 max-h-[90vh] overflow-y-auto">
             <div className="w-14 h-14 bg-teal-100 text-teal-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
               <CheckCircle2 className="w-8 h-8" />
@@ -651,7 +651,7 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
 
   return <>{review.dialog}{(
     <>
-      <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+      <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto mobile-modal">
         <div className="bg-white rounded-3xl w-full max-w-4xl shadow-2xl border border-slate-200 flex flex-col max-h-[92vh] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
           {/* Header */}
           <div className="bg-gradient-to-r from-teal-700 via-indigo-900 to-slate-900 text-white p-4 sm:p-6 flex items-start justify-between gap-3 shrink-0">
@@ -666,9 +666,9 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
                 Serviço: <strong>{appointment.service_name}</strong> • Profissional: <strong>{appointment.professional_name}</strong>
               </p>
             </div>
-            <button
+            <button aria-label="Fechar"
               onClick={onClose}
-              className="p-2 text-slate-400 hover:text-white rounded-xl bg-white/10 transition-all shrink-0 min-h-[40px] min-w-[40px] flex items-center justify-center cursor-pointer"
+              className="p-2 text-slate-400 hover:text-white rounded-xl bg-white/10 transition-all shrink-0 min-h-[40px] min-w-0 lg:min-w-[40px] flex items-center justify-center cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>

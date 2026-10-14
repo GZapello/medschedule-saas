@@ -134,7 +134,7 @@ export const RegionalLongitudinalComparisonModal: React.FC<RegionalLongitudinalC
   const isPainImproved = (painDiff ?? 0) < 0; // EVA menor = melhora
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto print:p-0 print:bg-white">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto print:p-0 print:bg-white mobile-modal">
       <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden print:max-h-none print:shadow-none print:border-none">
         
         {/* Cabeçalho */}
@@ -172,7 +172,7 @@ export const RegionalLongitudinalComparisonModal: React.FC<RegionalLongitudinalC
             >
               <Printer className="w-4 h-4 text-slate-500" /> Imprimir Resumo
             </button>
-            <button
+            <button aria-label="Fechar"
               onClick={onClose}
               className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
             >
@@ -311,11 +311,11 @@ export const RegionalLongitudinalComparisonModal: React.FC<RegionalLongitudinalC
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-2 overflow-x-auto py-2">
+                  <div className="flex items-center gap-2 overflow-x-auto py-2 mobile-wrap">
                     {data.timeline.map((point, idx) => (
                       <div
                         key={idx}
-                        className="flex-1 min-w-[90px] bg-white p-2.5 rounded-lg border border-slate-200 text-center relative"
+                        className="flex-1 min-w-0 lg:min-w-[90px] bg-white p-2.5 rounded-lg border border-slate-200 text-center relative"
                       >
                         <div className="text-[10px] text-slate-400 font-semibold mb-1">
                           {point.date}

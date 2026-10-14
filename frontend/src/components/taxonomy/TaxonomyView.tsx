@@ -1,3 +1,4 @@
+import { ResponsiveTable } from '../common/ResponsiveTable';
 import React, { useState, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
@@ -282,8 +283,8 @@ export const TaxonomyView: React.FC = () => {
             </div>
           </div>
 
-          <div className="overflow-x-auto -mx-4 sm:-mx-6">
-            <table className="w-full text-left text-xs">
+          <div className="overflow-x-auto -mx-4 sm:-mx-6 mobile-table-container">
+            <ResponsiveTable className="w-full text-left text-xs">
               <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase">
                 <tr>
                   <th className="px-6 py-3.5">Profissão</th>
@@ -361,7 +362,7 @@ export const TaxonomyView: React.FC = () => {
                     </tr>
                   ))}
               </tbody>
-            </table>
+            </ResponsiveTable>
           </div>
         </div>
       )}
@@ -411,11 +412,11 @@ export const TaxonomyView: React.FC = () => {
 
       {/* Modal Nova Profissão */}
       {showProfModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 mobile-modal">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
               <h3 className="text-lg font-bold text-slate-900">Cadastrar Nova Profissão</h3>
-              <button onClick={() => setShowProfModal(false)} className="p-1 text-slate-400 hover:text-slate-700 rounded-lg">
+              <button aria-label="Fechar" onClick={() => setShowProfModal(false)} className="p-1 text-slate-400 hover:text-slate-700 rounded-lg">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -490,11 +491,11 @@ export const TaxonomyView: React.FC = () => {
 
       {/* Modal Nova Categoria */}
       {showCatModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 mobile-modal">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
               <h3 className="text-lg font-bold text-slate-900">Cadastrar Nova Categoria</h3>
-              <button onClick={() => setShowCatModal(false)} className="p-1 text-slate-400 hover:text-slate-700 rounded-lg">
+              <button aria-label="Fechar" onClick={() => setShowCatModal(false)} className="p-1 text-slate-400 hover:text-slate-700 rounded-lg">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -558,7 +559,7 @@ export const TaxonomyView: React.FC = () => {
 
       {/* Modal: Exclusão Definitiva de Profissão Global */}
       {deletingProf && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs mobile-modal">
           <div className="bg-white rounded-3xl p-6 w-full max-w-lg shadow-2xl border border-slate-100 space-y-4 animate-in fade-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2.5">
@@ -574,7 +575,7 @@ export const TaxonomyView: React.FC = () => {
                   </p>
                 </div>
               </div>
-              <button
+              <button aria-label="Fechar"
                 type="button"
                 onClick={closeDeleteProfModal}
                 disabled={deleteProfBusy}

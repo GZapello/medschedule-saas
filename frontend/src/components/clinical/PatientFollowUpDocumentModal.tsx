@@ -1,3 +1,4 @@
+import { isNativePrint, printNativeHtml } from '../../utils/nativePrint';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
@@ -307,6 +308,8 @@ export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModal
 </body>
 </html>`;
 
+  if (isNativePrint()) { void printNativeHtml(fullHtml).catch(() => alert('Não foi possível abrir a impressão.')); return; }
+
     // Tentativa síncrona de abrir janela no gesto do usuário
     let printWindow: Window | null = null;
     try {
@@ -331,7 +334,7 @@ export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModal
   const showActivities = moduleType === 'ZemdaFono' || moduleType === 'ZemdaTO' || moduleType === 'ZemdaPP' || Boolean(homeActivities.trim()) || Boolean(homeActivitiesText);
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto mobile-modal">
       <div className="bg-white rounded-3xl w-full max-w-4xl shadow-2xl border border-slate-200 flex flex-col max-h-[92vh] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         
         {/* Header Modal */}
@@ -378,7 +381,7 @@ export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModal
               <Printer className="w-4 h-4 text-teal-700" />
               <span>Imprimir / PDF A4</span>
             </button>
-            <button
+            <button aria-label="Fechar"
               type="button"
               onClick={onClose}
               className="p-1.5 rounded-xl text-white/70 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"

@@ -459,7 +459,7 @@ export const OnboardingWizardView: React.FC<OnboardingWizardViewProps> = ({ onCo
 
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Telefone Principal</label>
-                  <input
+                  <input inputMode="tel"
                     type="text"
                     value={formData.phone}
                     onChange={e => setFormData({ ...formData, phone: e.target.value })}

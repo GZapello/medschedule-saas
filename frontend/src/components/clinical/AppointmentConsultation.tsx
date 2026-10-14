@@ -92,7 +92,7 @@ export function AppointmentConsultation({
 
   if (error) {
     return (
-      <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4" role="alertdialog">
+      <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4 mobile-modal" role="alertdialog">
         <div className="bg-white rounded-2xl p-6 max-w-md w-full text-center space-y-4 shadow-xl">
           <h3 className="text-lg font-bold text-slate-800">Acesso Restrito</h3>
           <p className="text-sm text-slate-600">{error}</p>
@@ -109,13 +109,13 @@ export function AppointmentConsultation({
 
   if (!status) {
     return (
-      <div className="fixed inset-0 z-50 bg-white/80 backdrop-blur-xs flex items-center justify-center p-8">
+      <div className="fixed inset-0 z-50 bg-white/80 backdrop-blur-xs flex items-center justify-center p-8 mobile-modal">
         <p className="text-sm font-medium text-slate-600">Carregando atendimento…</p>
       </div>
     );
   }
 
-  if (status.alreadyCompleted) return <div role="dialog" aria-label="Atendimento concluído" className="fixed inset-0 z-50 bg-white p-8"><p>Este atendimento já foi finalizado. Consulte o prontuário para ver os registros.</p><button onClick={onFinished}>Voltar à agenda</button></div>;
+  if (status.alreadyCompleted) return <div role="dialog" aria-label="Atendimento concluído" className="fixed inset-0 z-50 bg-white p-8 mobile-modal"><p>Este atendimento já foi finalizado. Consulte o prontuário para ver os registros.</p><button onClick={onFinished}>Voltar à agenda</button></div>;
 
   if (status.awaitingPayment) {
     return (
@@ -145,7 +145,7 @@ export function AppointmentConsultation({
   // Se o profissional estiver visualizando o ZemdaBody dentro do mesmo atendimento:
   if (activeTab === 'zemda_body') {
     return (
-      <div className="fixed inset-0 z-50 bg-slate-100 flex flex-col overflow-auto" role="dialog" aria-modal="true" aria-label="Atendimento com Zemda360">
+      <div className="fixed inset-0 z-50 bg-slate-100 flex flex-col overflow-auto mobile-modal" role="dialog" aria-modal="true" aria-label="Atendimento com Zemda360">
         {/* Barra superior de alternância */}
         <div className="flex flex-wrap items-center justify-between px-3 sm:px-5 py-2.5 sm:py-3 bg-white border-b border-slate-200 sticky top-0 z-20 shadow-xs gap-2">
           <div className="flex items-center gap-2 min-w-0">
@@ -160,7 +160,7 @@ export function AppointmentConsultation({
             </span>
           </div>
 
-          <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200 overflow-x-auto max-w-full">
+          <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200 overflow-x-auto max-w-full mobile-wrap">
             <button
               type="button"
               onClick={() => setActiveTab('records')}
@@ -207,7 +207,7 @@ export function AppointmentConsultation({
   if (activeTab === 'specialized' && Workspace) {
     if (effectiveModuleType === 'ZemdaPersonal') {
       return (
-        <div className="fixed inset-0 z-50 bg-slate-50 overflow-auto" role="dialog" aria-modal="true" aria-label="Atendimento Personal Trainer">
+        <div className="fixed inset-0 z-50 bg-slate-50 overflow-auto mobile-modal" role="dialog" aria-modal="true" aria-label="Atendimento Personal Trainer">
           <div className="flex flex-wrap items-center justify-between px-3 sm:px-5 py-2.5 sm:py-3 bg-white border-b border-slate-200 sticky top-0 z-10 gap-2">
             <div className="flex items-center gap-2 min-w-0">
               <button onClick={onClose} className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-900 font-semibold cursor-pointer shrink-0 min-h-[36px]">
@@ -218,7 +218,7 @@ export function AppointmentConsultation({
               </span>
             </div>
 
-            <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200 overflow-x-auto max-w-full">
+            <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200 overflow-x-auto max-w-full mobile-wrap">
               <button
                 type="button"
                 onClick={() => setActiveTab('records')}
@@ -258,7 +258,7 @@ export function AppointmentConsultation({
     }
 
     return (
-      <div className="fixed inset-0 z-50 bg-slate-50 overflow-auto" role="dialog" aria-modal="true" aria-label="Atendimento clínico especializado">
+      <div className="fixed inset-0 z-50 bg-slate-50 overflow-auto mobile-modal" role="dialog" aria-modal="true" aria-label="Atendimento clínico especializado">
         <div className="flex flex-wrap items-center justify-between px-3 sm:px-5 py-2.5 sm:py-3 bg-white border-b border-slate-200 sticky top-0 z-10 gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <button onClick={onClose} className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-900 font-semibold cursor-pointer shrink-0 min-h-[36px]">
@@ -269,7 +269,7 @@ export function AppointmentConsultation({
             </span>
           </div>
 
-          <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200 overflow-x-auto max-w-full">
+          <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200 overflow-x-auto max-w-full mobile-wrap">
             <button
               type="button"
               onClick={() => setActiveTab('records')}

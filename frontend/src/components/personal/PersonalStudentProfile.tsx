@@ -1,3 +1,4 @@
+import { ResponsiveSectionNav } from '../common/ResponsiveSectionNav';
 import { AnthropometricSexField } from './PersonalTechnicalFields';
 import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import {
@@ -378,7 +379,7 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
           </div>
         )}
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 mobile-wrap">
           <button
             onClick={onOpenNewWorkout}
             className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors"
@@ -585,7 +586,12 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
       </div>
 
       {/* Navegação por Sub-Abas */}
-      <div className="flex items-center gap-2 border-b border-slate-200 overflow-x-auto pb-1">
+      <ResponsiveSectionNav value={activeTab} onChange={setActiveTab} label="Seção do aluno" options={[
+        { value: 'workouts', label: 'Treinos prescritos' }, { value: 'assessments', label: 'Avaliação física e dobras' },
+        { value: 'evolution', label: 'Gráficos de evolução' }, { value: 'photos', label: 'Fotos antes e depois' },
+        { value: 'bodymap', label: 'Mapa muscular e volume' }, { value: 'logs', label: 'Execuções e recordes' }, { value: 'attendance', label: 'Frequência e aulas' }
+      ]}>
+      <div className="flex items-center gap-2 border-b border-slate-200 overflow-x-auto pb-1 mobile-wrap">
         <button
           onClick={() => setActiveTab('workouts')}
           className={`px-4 py-2.5 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap ${
@@ -670,6 +676,8 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
           Frequência & Aulas
         </button>
       </div>
+
+      </ResponsiveSectionNav>
 
       {/* Conteúdo da Aba Ativa */}
       <div className="space-y-6">
@@ -1128,7 +1136,7 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
 
       {/* MODAL DE EDIÇÃO DE ALUNO */}
       {isEditModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn mobile-modal">
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -1137,7 +1145,7 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
                 </div>
                 <h3 className="text-base font-bold text-slate-800">Editar Dados do Aluno</h3>
               </div>
-              <button
+              <button aria-label="Fechar"
                 onClick={() => setIsEditModalOpen(false)}
                 className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl"
               >
@@ -1302,13 +1310,13 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
       {/* LIGHTBOX DE FOTO DO ALUNO */}
       {showPhotoLightbox && student.avatar_url && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fadeIn"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fadeIn mobile-modal"
           onClick={() => setShowPhotoLightbox(false)}
         >
           <div className="relative max-w-2xl max-h-[90vh] flex flex-col items-center bg-slate-900/95 p-4 rounded-3xl border border-slate-700 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="w-full flex items-center justify-between pb-3 mb-2 border-b border-slate-800">
               <span className="text-white text-sm font-bold truncate">{student.name}</span>
-              <button
+              <button aria-label="Fechar"
                 type="button"
                 onClick={() => setShowPhotoLightbox(false)}
                 className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"

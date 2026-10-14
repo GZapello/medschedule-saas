@@ -19,7 +19,7 @@ export function ManualMealFoodModal({ item, onSave, onClose }: { item?: MealPlan
     }
     onSave({ ...item, food: name.trim(), quantity: amount, unit, portion: `${amount} ${unit}`, grams: unit === 'g' ? amount : 0, ...nutrients, source: 'manual', notes: notes.trim() || undefined });
   };
-  return <div className="fixed inset-0 z-[10000] bg-slate-900/60 flex items-center justify-center p-4" onKeyDown={event => {
+  return <div className="fixed inset-0 z-[10000] bg-slate-900/60 flex items-center justify-center p-4 mobile-modal" onKeyDown={event => {
     if (event.key === 'Escape') onClose();
     if (event.key === 'Tab') {
       const controls = event.currentTarget.querySelectorAll<HTMLElement>('button, input, select, textarea');

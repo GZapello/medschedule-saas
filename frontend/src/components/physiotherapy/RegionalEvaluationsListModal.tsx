@@ -87,7 +87,7 @@ export const RegionalEvaluationsListModal: React.FC<RegionalEvaluationsListModal
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto mobile-modal">
       <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in">
         
         {/* Header */}
@@ -109,7 +109,7 @@ export const RegionalEvaluationsListModal: React.FC<RegionalEvaluationsListModal
             </p>
           </div>
 
-          <button
+          <button aria-label="Fechar"
             onClick={onClose}
             className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
           >

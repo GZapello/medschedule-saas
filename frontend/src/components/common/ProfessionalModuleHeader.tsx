@@ -24,7 +24,7 @@ export const ProfessionalModuleHeader: React.FC<ProfessionalModuleHeaderProps> =
   children
 }) => {
   return (
-    <div className="bg-white border-b border-slate-200 px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0">
+    <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4 shrink-0">
       <div className="flex items-center gap-3">
         <div
           className={`w-10 h-10 rounded-xl bg-gradient-to-tr ${iconGradient} text-white flex items-center justify-center shadow-md ${iconShadow} shrink-0`}

@@ -127,7 +127,7 @@ export const ConnectCertificateModal: React.FC<ConnectCertificateModalProps> = (
   };
 
   return (
-    <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+    <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs mobile-modal">
       <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-100 flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-150">
         {/* Header */}
         <div className="p-6 bg-gradient-to-r from-teal-800 to-slate-900 text-white flex items-center justify-between">
@@ -140,7 +140,7 @@ export const ConnectCertificateModal: React.FC<ConnectCertificateModalProps> = (
               <p className="text-xs text-teal-200">Validade jurídica plena conforme MP nº 2.200-2/2001 (PAdES)</p>
             </div>
           </div>
-          <button
+          <button aria-label="Fechar"
             onClick={onClose}
             className="p-1.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
           >

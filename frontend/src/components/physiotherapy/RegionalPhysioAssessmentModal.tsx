@@ -1,3 +1,4 @@
+import { ResponsiveTable } from '../common/ResponsiveTable';
 import { ClinicalPainScale } from '../clinical/ClinicalPainScale';
 import { ClinicalBooleanSelect } from '../clinical/ClinicalBooleanSelect';
 import { ClinicalScales } from '../clinical/ClinicalScales';
@@ -291,7 +292,7 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto mobile-modal">
       <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in duration-200">
         
         {/* Cabeçalho do Modal */}
@@ -338,7 +339,7 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
               onChange={e => setEvaluationDate(e.target.value)}
               className="text-xs px-2 py-1.5 rounded-lg border border-slate-300 bg-white"
             />
-            <button
+            <button aria-label="Fechar"
               onClick={onClose}
               className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
             >
@@ -348,7 +349,7 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
         </div>
 
         {/* Abas Internas da Avaliação Regional */}
-        <div className="flex border-b border-slate-200 px-6 bg-slate-50/40 gap-1 overflow-x-auto text-xs font-bold">
+        <div className="flex border-b border-slate-200 px-6 bg-slate-50/40 gap-1 overflow-x-auto text-xs font-bold mobile-wrap">
           <button
             hidden={!!allowedTabs && !allowedTabs.includes('pain')}
             onClick={() => setActiveTab('pain')}
@@ -544,8 +545,8 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
                 </button>
               </div>
 
-              <div className="overflow-x-auto border border-slate-200 rounded-xl">
-                <table className="w-full text-xs text-left">
+              <div className="overflow-x-auto border border-slate-200 rounded-xl mobile-table-container">
+                <ResponsiveTable className="w-full text-xs text-left">
                   <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
                     <tr>
                       <th className="py-2.5 px-3">Movimento</th>
@@ -643,7 +644,7 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </ResponsiveTable>
               </div>
             </div>
           )}
@@ -660,8 +661,8 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
                 </p>
               </div>
 
-              <div className="overflow-x-auto border border-slate-200 rounded-xl">
-                <table className="w-full text-xs text-left">
+              <div className="overflow-x-auto border border-slate-200 rounded-xl mobile-table-container">
+                <ResponsiveTable className="w-full text-xs text-left">
                   <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
                     <tr>
                       <th className="py-2.5 px-3">Grupo Muscular / Ação</th>
@@ -730,7 +731,7 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </ResponsiveTable>
               </div>
 
               <button

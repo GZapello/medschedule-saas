@@ -176,7 +176,7 @@ export const PersonalWorkoutExecutionModal: React.FC<PersonalWorkoutExecutionMod
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-slate-900/75 backdrop-blur-md animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-slate-900/75 backdrop-blur-md animate-fadeIn mobile-modal">
       <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
         {/* Header */}
         <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-900 text-white">
@@ -195,7 +195,7 @@ export const PersonalWorkoutExecutionModal: React.FC<PersonalWorkoutExecutionMod
           </div>
           <div className="flex items-center gap-3">
             <ClinicalAutosaveIndicator status={autosave.autosaveStatus} lastSavedTime={autosave.lastSavedTime} />
-            <button
+            <button aria-label="Fechar"
               onClick={onClose}
               className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors"
             >
@@ -393,7 +393,7 @@ export const PersonalWorkoutExecutionModal: React.FC<PersonalWorkoutExecutionMod
 
         {/* MODAL DE CELEBRAÇÃO DE RECORDES PESSOAIS (PRs) */}
         {achievedPRs.length > 0 && (
-          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md animate-fadeIn">
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md animate-fadeIn mobile-modal">
             <div className="bg-white rounded-3xl max-w-md w-full p-6 text-center space-y-5 shadow-2xl border border-amber-200">
               <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
                 <Trophy className="w-8 h-8 animate-bounce" />
@@ -437,7 +437,7 @@ export const PersonalWorkoutExecutionModal: React.FC<PersonalWorkoutExecutionMod
         {zoomedPhoto && (
           <div
             onClick={() => setZoomedPhoto(null)}
-            className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fadeIn cursor-pointer"
+            className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fadeIn cursor-pointer mobile-modal"
           >
             <div className="max-w-md w-full bg-white rounded-3xl overflow-hidden p-4 shadow-2xl space-y-3">
               <div className="flex items-center justify-between px-1">

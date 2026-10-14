@@ -1,3 +1,4 @@
+import { isNativePrint, printNativeHtml } from '../../utils/nativePrint';
 import { buildApiUrl, getApiBaseUrl } from '../../api/client';
 
 /**
@@ -49,6 +50,8 @@ export async function printPsychologyDocument(docId: string): Promise<void> {
           }, 300);
         });
       </script></body>`);
+
+  if (isNativePrint()) { void printNativeHtml(printReadyHtml).catch(() => alert('Não foi possível abrir a impressão.')); return; }
 
   const blob = new Blob([printReadyHtml], { type: 'text/html;charset=utf-8' });
   const blobUrl = URL.createObjectURL(blob);

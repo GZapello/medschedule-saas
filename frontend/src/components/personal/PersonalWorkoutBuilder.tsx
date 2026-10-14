@@ -262,7 +262,7 @@ export const PersonalWorkoutBuilder: React.FC<PersonalWorkoutBuilderProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn mobile-modal">
       <div className="bg-white rounded-3xl max-w-5xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
         {/* Header */}
         <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
@@ -279,7 +279,7 @@ export const PersonalWorkoutBuilder: React.FC<PersonalWorkoutBuilderProps> = ({
               </p>
             </div>
           </div>
-          <button
+          <button aria-label="Fechar"
             onClick={onClose}
             className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
           >
@@ -435,7 +435,7 @@ export const PersonalWorkoutBuilder: React.FC<PersonalWorkoutBuilderProps> = ({
                           />
                         </div>
 
-                        <div className="flex-1 min-w-[200px]">
+                        <div className="flex-1 min-w-0 lg:min-w-[200px]">
                           <input
                             type="text"
                             value={ex.name}
@@ -667,7 +667,7 @@ export const PersonalWorkoutBuilder: React.FC<PersonalWorkoutBuilderProps> = ({
         {zoomedPhoto && (
           <div
             onClick={() => setZoomedPhoto(null)}
-            className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fadeIn cursor-pointer"
+            className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fadeIn cursor-pointer mobile-modal"
           >
             <div className="max-w-md w-full bg-white rounded-2xl overflow-hidden p-2 shadow-2xl">
               <SecureFileImage

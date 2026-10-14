@@ -1,3 +1,4 @@
+import { ResponsiveTable } from '../common/ResponsiveTable';
 import { ManualMealFoodModal } from './ManualMealFoodModal';
 import { ClinicalModuleEmptyState } from '../clinical/ClinicalModuleEmptyState';
 import { useClinicalFormReset } from '../../hooks/useClinicalFormReset';
@@ -1027,11 +1028,11 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
           )}
           {completion.dialog}
           {showRecipeModal && (
-            <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 mobile-modal">
               <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden p-6 space-y-4 animate-in zoom-in-95">
                 <div className="flex items-center justify-between border-b pb-3">
                   <h3 className="font-bold text-sm text-slate-900">Criador de Receita com Macros por Porção</h3>
-                  <button onClick={() => setShowRecipeModal(false)} className="p-1 text-slate-400 hover:text-slate-600">
+                  <button aria-label="Fechar" onClick={() => setShowRecipeModal(false)} className="p-1 text-slate-400 hover:text-slate-600">
                     <X className="w-5 h-5" />
                   </button>
                 </div>
@@ -1562,8 +1563,8 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
                     <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
                       Histórico Longitudinal de Antropometria ({assessments.length})
                     </h4>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-xs text-left">
+                    <div className="overflow-x-auto mobile-table-container">
+                      <ResponsiveTable className="w-full text-xs text-left">
                         <thead className="bg-slate-50 text-slate-500 border-b border-slate-200">
                           <tr>
                             <th className="py-2.5 px-3">Data</th>
@@ -1594,7 +1595,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
                             </tr>
                           ))}
                         </tbody>
-                      </table>
+                      </ResponsiveTable>
                     </div>
                   </div>
                 )}
@@ -2085,11 +2086,11 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
 
                 {/* MODAL ADICIONAR PORÇÃO ESPECÍFICA */}
                 {addingFoodTarget && (
-                  <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+                  <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 mobile-modal">
                     <div className="bg-white rounded-2xl p-5 max-w-sm w-full shadow-2xl border border-slate-200 space-y-4 animate-in zoom-in-95">
                       <div className="flex items-center justify-between border-b pb-3">
                         <h4 className="font-bold text-sm text-slate-900">Definir Quantidade / Porção</h4>
-                        <button onClick={() => setAddingFoodTarget(null)} className="p-1 text-slate-400 hover:text-slate-600">
+                        <button aria-label="Fechar" onClick={() => setAddingFoodTarget(null)} className="p-1 text-slate-400 hover:text-slate-600">
                           <X className="w-4 h-4" />
                         </button>
                       </div>

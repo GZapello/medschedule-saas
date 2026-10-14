@@ -537,7 +537,7 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
         <div className="mb-3 p-3 rounded-xl bg-rose-50 border border-rose-200/80 flex items-start gap-2.5 text-xs text-rose-700 animate-fadeIn">
           <AlertCircle className="w-4 h-4 text-rose-500 flex-shrink-0 mt-0.5" />
           <div className="flex-1">{errorMessage}</div>
-          <button
+          <button aria-label="Fechar"
             type="button"
             onClick={() => setErrorMessage(null)}
             className="text-rose-400 hover:text-rose-600 transition"
@@ -671,7 +671,7 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
                 type="button"
                 onClick={handleOpenFileDialog}
                 disabled={disabled || isUploading}
-                className="flex-1 min-w-[110px] px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-indigo-600 bg-white hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 rounded-xl transition flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer disabled:opacity-50"
+                className="flex-1 min-w-0 lg:min-w-[110px] px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-indigo-600 bg-white hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 rounded-xl transition flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer disabled:opacity-50"
                 title="Alterar ou trocar a foto do aluno"
               >
                 <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
@@ -822,7 +822,7 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn"
+          className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn mobile-modal"
           onClick={() => setIsViewerOpen(false)}
         >
           <div
@@ -849,7 +849,7 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
                     <ExternalLink className="w-4 h-4" />
                   </a>
                 )}
-                <button
+                <button aria-label="Fechar"
                   type="button"
                   onClick={() => setIsViewerOpen(false)}
                   className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-lg transition"

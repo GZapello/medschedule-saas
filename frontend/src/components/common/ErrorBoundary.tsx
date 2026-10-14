@@ -136,7 +136,7 @@ export class ErrorBoundary extends Component<Props, State> {
               </div>
 
               {error && (
-                <div className="bg-slate-950/80 rounded-xl p-3 text-left border border-slate-700/60 overflow-x-auto text-2xs font-mono text-indigo-300 max-h-24">
+                <div className="bg-slate-950/80 rounded-xl p-3 text-left border border-slate-700/60 whitespace-pre-wrap break-all lg:whitespace-pre lg:break-normal lg:overflow-x-auto text-2xs font-mono text-indigo-300 max-h-24">
                   {error.message || String(error)}
                 </div>
               )}
@@ -186,7 +186,7 @@ export class ErrorBoundary extends Component<Props, State> {
             </div>
 
             {error && (
-              <div className="bg-slate-950/80 rounded-xl p-3 text-left border border-slate-700/60 overflow-x-auto text-2xs font-mono text-rose-300 max-h-28">
+              <div className="bg-slate-950/80 rounded-xl p-3 text-left border border-slate-700/60 whitespace-pre-wrap break-all lg:whitespace-pre lg:break-normal lg:overflow-x-auto text-2xs font-mono text-rose-300 max-h-28">
                 {error.message || String(error)}
               </div>
             )}

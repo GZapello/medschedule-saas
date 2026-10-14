@@ -41,7 +41,7 @@ export const ZemdaBodyModal: React.FC<ZemdaBodyModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-900/70 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-900/70 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto mobile-modal"
       role="dialog"
       aria-modal="true"
     >
@@ -76,7 +76,7 @@ export const ZemdaBodyModal: React.FC<ZemdaBodyModalProps> = ({
 
           <button
             onClick={close}
-            className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-2xl transition-colors cursor-pointer shrink-0 min-h-[40px] min-w-[40px] flex items-center justify-center"
+            className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-2xl transition-colors cursor-pointer shrink-0 min-h-[40px] min-w-0 lg:min-w-[40px] flex items-center justify-center"
             aria-label="Fechar modal do Zemda360"
           >
             <X className="w-5 h-5" />

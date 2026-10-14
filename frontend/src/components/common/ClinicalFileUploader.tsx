@@ -1,4 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { Capacitor } from '@capacitor/core';
+import { downloadBlob } from '../../utils/download';
 import { ApiClient } from '../../api/client';
 import { cacheFileUrl } from './SecureFileImage';
 import { optimizeImageFile } from '../../utils/imageOptimizer';
@@ -344,7 +346,9 @@ export const ClinicalFileUploader: React.FC<ClinicalFileUploaderProps> = ({
       return;
     }
 
-    if (cat === 'image') {
+    if (Capacitor.isNativePlatform() && cat === 'pdf') {
+      await handleDownload();
+    } else if (cat === 'image') {
       setViewerType('image');
       setViewerUrl(url);
       setIsViewerOpen(true);
@@ -364,6 +368,12 @@ export const ClinicalFileUploader: React.FC<ClinicalFileUploaderProps> = ({
     if (!url) return;
 
     try {
+      if (Capacitor.isNativePlatform()) {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('Falha ao baixar anexo.');
+        await downloadBlob(await response.blob(), currentFilename || 'anexo_clinico');
+        return;
+      }
       const a = document.createElement('a');
       a.href = url;
       a.target = '_blank';
@@ -373,7 +383,8 @@ export const ClinicalFileUploader: React.FC<ClinicalFileUploaderProps> = ({
       a.click();
       document.body.removeChild(a);
     } catch (err) {
-      window.open(url, '_blank');
+      if (Capacitor.isNativePlatform()) setErrorMessage('Não foi possível baixar o anexo. Tente novamente.');
+      else window.open(url, '_blank');
     }
   };
 
@@ -602,7 +613,7 @@ export const ClinicalFileUploader: React.FC<ClinicalFileUploaderProps> = ({
 
       {/* Modal de Visualização Ampliada (Imagens e PDF) */}
       {isViewerOpen && viewerUrl && (
-        <div className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 mobile-modal">
           <div className="bg-white rounded-3xl overflow-hidden shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col">
             <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
               <div className="flex items-center gap-2 min-w-0">
@@ -622,7 +633,7 @@ export const ClinicalFileUploader: React.FC<ClinicalFileUploaderProps> = ({
                   <Download className="w-3.5 h-3.5" />
                   <span>Baixar</span>
                 </button>
-                <button
+                <button aria-label="Fechar"
                   type="button"
                   onClick={() => setIsViewerOpen(false)}
                   className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-colors cursor-pointer"

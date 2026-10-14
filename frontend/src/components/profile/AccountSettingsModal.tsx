@@ -141,7 +141,7 @@ export const AccountSettingsModal: React.FC<AccountSettingsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs mobile-modal">
       <div className="bg-white rounded-3xl max-w-xl w-full overflow-hidden shadow-2xl border border-slate-100 flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="p-6 bg-slate-900 text-white flex items-center justify-between">
@@ -154,7 +154,7 @@ export const AccountSettingsModal: React.FC<AccountSettingsModalProps> = ({
               <p className="text-xs text-slate-400">Configurações pessoais do seu perfil no sistema</p>
             </div>
           </div>
-          <button
+          <button aria-label="Fechar"
             onClick={onClose}
             className="p-1 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
           >

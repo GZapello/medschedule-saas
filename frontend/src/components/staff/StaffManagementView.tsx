@@ -1,3 +1,4 @@
+import { ResponsiveTable } from '../common/ResponsiveTable';
 import { useBillingSummary } from '../billing/BillingView';
 import React, { useState, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
@@ -402,7 +403,7 @@ export const StaffManagementView: React.FC = () => {
 
       {/* Abas e Busca */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-1.5 p-1 bg-slate-200/70 rounded-2xl w-full sm:w-fit text-xs font-bold overflow-x-auto no-scrollbar scroll-smooth">
+        <div className="flex items-center gap-1.5 p-1 bg-slate-200/70 rounded-2xl w-full sm:w-fit text-xs font-bold overflow-x-auto no-scrollbar scroll-smooth mobile-wrap">
           <button
             onClick={() => setActiveTab('active')}
             className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer shrink-0 whitespace-nowrap ${
@@ -708,8 +709,8 @@ export const StaffManagementView: React.FC = () => {
           </div>
 
           <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-xs">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+            <div className="overflow-x-auto mobile-table-container">
+              <ResponsiveTable className="w-full text-left text-xs">
                 <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
                   <tr>
                     <th className="p-3.5">Cargo / Papel</th>
@@ -816,7 +817,7 @@ export const StaffManagementView: React.FC = () => {
                     );
                   })}
                 </tbody>
-              </table>
+              </ResponsiveTable>
             </div>
 
             {clinicInvites.length === 0 && (
@@ -832,7 +833,7 @@ export const StaffManagementView: React.FC = () => {
       {/* MODAL 1: Gerar Link de Convite Único da Clínica */}
       {/* ========================================================== */}
       {isInviteModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto mobile-modal">
           <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl my-auto border border-slate-100 animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
             <div className="p-4 sm:p-6 bg-slate-900 text-white flex items-center justify-between">
               <div>
@@ -844,7 +845,7 @@ export const StaffManagementView: React.FC = () => {
                   Gere um link exclusivo e seguro com vínculo inalterável a esta clínica.
                 </p>
               </div>
-              <button
+              <button aria-label="Fechar"
                 type="button"
                 onClick={() => setIsInviteModalOpen(false)}
                 className="text-slate-400 hover:text-white"
@@ -978,14 +979,14 @@ export const StaffManagementView: React.FC = () => {
       {/* MODAL 2: Editar Cargo, Profissão e Áreas de Atuação */}
       {/* ========================================================== */}
       {editingRoleUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto mobile-modal">
           <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl my-auto max-h-[90vh] overflow-y-auto">
             <div className="p-4 sm:p-6 bg-slate-900 text-white flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-extrabold">Editar Função & Áreas de Atuação</h3>
                 <p className="text-xs text-slate-400">{editingRoleUser.name}</p>
               </div>
-              <button onClick={() => setEditingRoleUser(null)} className="text-slate-400 hover:text-white">
+              <button aria-label="Fechar" onClick={() => setEditingRoleUser(null)} className="text-slate-400 hover:text-white">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -1078,7 +1079,7 @@ export const StaffManagementView: React.FC = () => {
       {/* MODAL 3: Editar Permissões do Funcionário */}
       {/* ========================================================== */}
       {editingPermissionsUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto mobile-modal">
           <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl my-auto max-h-[90vh] overflow-y-auto">
             <div className="p-4 sm:p-6 bg-slate-900 text-white flex items-center justify-between">
               <div>
@@ -1087,7 +1088,7 @@ export const StaffManagementView: React.FC = () => {
                   {getRoleLabel(editingPermissionsUser.role)}
                 </p>
               </div>
-              <button onClick={() => setEditingPermissionsUser(null)} className="text-slate-400 hover:text-white">
+              <button aria-label="Fechar" onClick={() => setEditingPermissionsUser(null)} className="text-slate-400 hover:text-white">
                 <X className="w-5 h-5" />
               </button>
             </div>

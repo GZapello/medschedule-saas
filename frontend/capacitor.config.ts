@@ -1,17 +1,21 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.medschedule.app',
+  appId: 'br.com.zemda.app',
   appName: 'Zemda',
   webDir: 'dist',
   server: {
     androidScheme: 'https',
-    cleartext: true
+    cleartext: false
   },
   android: {
-    allowMixedContent: true
+    allowMixedContent: false,
+    webContentsDebuggingEnabled: false
   },
   plugins: {
+    SocialLogin: {
+      providers: { google: true, facebook: false, apple: false, twitter: false }
+    },
     CapacitorHttp: {
       enabled: true
     }

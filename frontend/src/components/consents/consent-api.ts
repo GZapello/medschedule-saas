@@ -1,4 +1,6 @@
 import { buildApiUrl, getApiBaseUrl } from '../../api/client';
+import { Capacitor } from '@capacitor/core';
+import { downloadBlob } from '../../utils/download';
 
 export const CONSENT_MODULES=['general','ZemdaFono','ZemdaTO','ZemdaNutri','ZemdaPsico','ZemdaPP','ZemdaPersonal','ZemdaFisio','ZemdaOdonto','Zemda360','ZemdaEstetic','ZemdaMed','ZemdaBody'];
 export const consentDate=(value?:string|null)=>value?new Date(value.includes('T')?value:value.replace(' ','T')+'Z').toLocaleString('pt-BR'):'—';
@@ -12,15 +14,18 @@ export async function publicConsentApi<T>(path:string,body?:object):Promise<T> {
   return data;
 }
 export async function downloadConsentPdf(id:string,preview=false):Promise<void> {
-  const viewer=preview?window.open('about:blank','_blank'):null;
-  if(preview&&!viewer) throw new Error('Permita abrir a visualização do PDF no navegador.');
+  const native = Capacitor.isNativePlatform();
+  const viewer=preview&&!native?window.open('about:blank','_blank'):null;
+  if(preview&&!native&&!viewer) throw new Error('Permita abrir a visualização do PDF no navegador.');
   if(viewer){viewer.opener=null;viewer.document.title='Carregando documento';viewer.document.body.textContent='Carregando PDF para visualização e impressão...';}
   try {
   const response=await fetch(buildApiUrl(getApiBaseUrl(),`/v1/consents/${id}/pdf`),{
     headers:{Authorization:`Bearer ${localStorage.getItem('auth_token')||''}`,'X-Tenant-ID':localStorage.getItem('active_tenant_id')||''},cache:'no-store'
   });
   if(!response.ok) { const data=await response.json(); throw new Error(data.error||'Erro ao gerar PDF.'); }
-  const url=URL.createObjectURL(await response.blob());
+  const blob = await response.blob();
+  if (native) { await downloadBlob(blob, `termo-${id}.pdf`); return; }
+  const url=URL.createObjectURL(blob);
   if(viewer){viewer.location.replace(url);setTimeout(()=>URL.revokeObjectURL(url),300000);return;}
   const anchor=document.createElement('a');anchor.href=url;anchor.download=`termo-${id}.pdf`;anchor.click();
   setTimeout(()=>URL.revokeObjectURL(url),60000);

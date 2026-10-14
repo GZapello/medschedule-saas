@@ -132,7 +132,7 @@ export const PersonalAIAssistantModal: React.FC<PersonalAIAssistantModalProps> =
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn mobile-modal">
       <div className="bg-white rounded-3xl max-w-3xl w-full h-[85vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
         {/* Header */}
         <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-indigo-900 to-slate-900 text-white">
@@ -161,7 +161,7 @@ export const PersonalAIAssistantModal: React.FC<PersonalAIAssistantModalProps> =
             >
               <RotateCcw className="w-4 h-4" />
             </button>
-            <button
+            <button aria-label="Fechar"
               onClick={onClose}
               className="p-2 text-slate-300 hover:text-white hover:bg-white/10 rounded-xl transition-colors"
             >
@@ -255,7 +255,7 @@ export const PersonalAIAssistantModal: React.FC<PersonalAIAssistantModalProps> =
         </div>
 
         {/* Chips de Ações Rápidas */}
-        <div className="px-4 py-2 border-t border-slate-100 bg-white flex items-center gap-2 overflow-x-auto">
+        <div className="px-4 py-2 border-t border-slate-100 bg-white flex items-center gap-2 overflow-x-auto mobile-wrap">
           {QUICK_PROMPTS.map((prompt, idx) => (
             <button
               key={idx}

@@ -1,4 +1,7 @@
 import { PublicConsentPage } from './components/consents/PublicConsentPage';
+import { App as CapacitorApp } from '@capacitor/app';
+import { Capacitor } from '@capacitor/core';
+import { dismissTopOverlay } from './utils/mobileOverlay';
 import { parseBookingRoute, BookingRoute } from './utils/publicBooking';
 import { updatePublicSeo, clearPublicSeo } from './utils/publicSeo';
 import { getRouteByPath } from './data/seoPagesData';
@@ -604,6 +607,7 @@ const AppContent: React.FC = () => {
   // Tratamento do botão Voltar nativo do Android
   useEffect(() => {
     const handleBackButton = () => {
+      if (dismissTopOverlay()) return;
       // 1. Fecha modais de criação/edição se estiverem abertos
       if (isNewApptOpen) {
         setIsNewApptOpen(false);
@@ -621,12 +625,7 @@ const AppContent: React.FC = () => {
         setSidebarOpen(false);
         return;
       }
-      // 2. Se houver modal genérico com botão Fechar aberto, clica nele
-      const modalClose = document.querySelector('[role="dialog"] button[aria-label="Fechar"], button.close-modal') as HTMLElement;
-      if (modalClose) {
-        modalClose.click();
-        return;
-      }
+      if (!window.dispatchEvent(new Event('zemda-section-back', { cancelable: true }))) return;
       // 3. Se estiver em página legal, volta para a tela anterior / home
       if (activeLegalPage) {
         setActiveLegalPage(null);
@@ -664,7 +663,8 @@ const AppContent: React.FC = () => {
       }
       // 7. Se estiver em visualização secundária, retorna ao dashboard
       if (currentView !== 'dashboard' && currentUser?.role !== 'superadmin') {
-        setCurrentView('dashboard');
+        if (subRouteId) handleNavigateView(currentView, null);
+        else handleNavigateView('dashboard');
         return;
       }
     };
@@ -781,33 +781,17 @@ const AppContent: React.FC = () => {
     window.addEventListener('popstate', handleSyncUrlState);
     document.addEventListener('click', handleDocumentClick);
 
+    let disposed = false;
     let cleanupCapacitorListener: (() => void) | null = null;
-    try {
-      const capApp = (window as any).Capacitor?.Plugins?.App;
-      if (capApp && typeof capApp.addListener === 'function') {
-        const result = capApp.addListener('backButton', () => {
-          handleBackButton();
-        });
-
-        if (result && typeof result.then === 'function') {
-          result.then((handle: any) => {
-            if (handle && typeof handle.remove === 'function') {
-              cleanupCapacitorListener = () => {
-                try { handle.remove(); } catch (_) {}
-              };
-            }
-          }).catch(() => {});
-        } else if (result && typeof result.remove === 'function') {
-          cleanupCapacitorListener = () => {
-            try { result.remove(); } catch (_) {}
-          };
-        }
-      }
-    } catch (e) {
-      console.warn('Listener nativo de backButton indisponível:', e);
+    if (Capacitor.isNativePlatform()) {
+      CapacitorApp.addListener('backButton', handleBackButton).then(handle => {
+        if (disposed) void handle.remove();
+        else cleanupCapacitorListener = () => { void handle.remove(); };
+      }).catch(error => console.warn('Listener Android indisponível:', error));
     }
 
     return () => {
+      disposed = true;
       window.removeEventListener('android-back-button', handleBackButton);
       window.removeEventListener('popstate', handleSyncUrlState);
       document.removeEventListener('click', handleDocumentClick);
@@ -815,7 +799,7 @@ const AppContent: React.FC = () => {
         cleanupCapacitorListener();
       }
     };
-  }, [isNewApptOpen, isNewPatientOpen, isAIOpen, sidebarOpen, currentView, currentUser, publicView, activeSeoSlug, activeLegalPage]);
+  }, [isNewApptOpen, isNewPatientOpen, isAIOpen, sidebarOpen, currentView, subRouteId, currentUser, publicView, activeSeoSlug, activeLegalPage, activeBooking, activeTrialToken, activeVerificationToken, activeWorkoutToken]);
 
   if (loading) {
     return (
@@ -1177,7 +1161,7 @@ const AppContent: React.FC = () => {
 
       return (
         <div className="min-h-screen bg-[#fafbfc] text-slate-800 flex flex-col items-center justify-center p-4 sm:p-6 relative font-sans">
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[450px] bg-gradient-to-b from-teal-100/60 via-emerald-50/30 to-transparent blur-3xl -z-10 pointer-events-none" />
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full lg:w-[800px] h-[450px] bg-gradient-to-b from-teal-100/60 via-emerald-50/30 to-transparent blur-3xl -z-10 pointer-events-none" />
 
           <div className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-8 shadow-xl border border-slate-100 text-center space-y-6">
             <div className="flex justify-center">
@@ -1318,7 +1302,7 @@ const AppContent: React.FC = () => {
         onNavigate={handleNavigateView}
       />
 
-      <div className="flex-1 flex overflow-hidden">
+      <div className="app-shell flex-1 flex overflow-hidden">
         {/* Responsive Sidebar */}
         <Sidebar
           currentView={currentView}

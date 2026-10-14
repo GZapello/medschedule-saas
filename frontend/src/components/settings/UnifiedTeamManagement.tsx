@@ -647,7 +647,7 @@ export const UnifiedTeamManagement: React.FC = () => {
       {/* Barra de Busca e Navegação por Abas */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         {/* Abas */}
-        <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-2xl text-xs font-bold overflow-x-auto">
+        <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-2xl text-xs font-bold overflow-x-auto mobile-wrap">
           <button
             type="button"
             onClick={() => setActiveTab('active')}
@@ -918,7 +918,7 @@ export const UnifiedTeamManagement: React.FC = () => {
       {/* MODAL: FICHA ÚNICA DO MEMBRO (Consolidação em 4 Abas) */}
       {/* ========================================================================= */}
       {selectedMember && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150 mobile-modal">
           <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden">
             {/* Header da Ficha Única */}
             <div className="p-6 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/50">
@@ -942,7 +942,7 @@ export const UnifiedTeamManagement: React.FC = () => {
               </div>
 
               <div className="flex items-center gap-2 self-end sm:self-auto">
-                <button
+                <button aria-label="Fechar"
                   type="button"
                   onClick={() => setSelectedMember(null)}
                   className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-xl transition-colors cursor-pointer"
@@ -954,7 +954,7 @@ export const UnifiedTeamManagement: React.FC = () => {
             </div>
 
             {/* Abas da Ficha Única */}
-            <div className="px-6 pt-3 bg-white border-b border-slate-200 flex items-center gap-2 overflow-x-auto text-xs font-bold">
+            <div className="px-6 pt-3 bg-white border-b border-slate-200 flex items-center gap-2 overflow-x-auto text-xs font-bold mobile-wrap">
               <button
                 type="button"
                 onClick={() => setMemberSheetTab('profile')}
@@ -1691,14 +1691,14 @@ export const UnifiedTeamManagement: React.FC = () => {
       {/* MODAL: NOVO BLOQUEIO / FÉRIAS */}
       {/* ========================================================================= */}
       {showBlockModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150 mobile-modal">
           <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
                 <Palmtree className="w-4 h-4 text-emerald-600" />
                 Registrar Bloqueio ou Férias
               </h3>
-              <button
+              <button aria-label="Fechar"
                 type="button"
                 onClick={() => setShowBlockModal(false)}
                 className="text-slate-400 hover:text-slate-600"
@@ -1782,14 +1782,14 @@ export const UnifiedTeamManagement: React.FC = () => {
       {/* MODAL: GERAR LINK DE CONVITE */}
       {/* ========================================================================= */}
       {showInviteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150 mobile-modal">
           <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
                 <LinkIcon className="w-4 h-4 text-indigo-600" />
                 Gerar Link de Convite
               </h3>
-              <button
+              <button aria-label="Fechar"
                 type="button"
                 onClick={() => setShowInviteModal(false)}
                 className="text-slate-400 hover:text-slate-600"

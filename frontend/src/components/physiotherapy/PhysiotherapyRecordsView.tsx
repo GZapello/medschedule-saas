@@ -553,7 +553,7 @@ export const PhysiotherapyRecordsView: React.FC = () => {
       {/* MODAL: NOVA AVALIAÇÃO FISIOTERAPÊUTICA (ACCORDION EXPANSÍVEL)              */}
       {/* ========================================================================= */}
       {showAssessmentModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 mobile-modal">
           <div className="bg-white rounded-3xl max-w-3xl w-full p-6 shadow-2xl border border-slate-200 max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
               <div className="flex items-center gap-2.5">
@@ -565,7 +565,7 @@ export const PhysiotherapyRecordsView: React.FC = () => {
                   <p className="text-xs text-slate-500">Paciente: {currentPatient?.full_name}</p>
                 </div>
               </div>
-              <button
+              <button aria-label="Fechar"
                 onClick={() => setShowAssessmentModal(false)}
                 className="p-1.5 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-100"
               >
@@ -958,7 +958,7 @@ export const PhysiotherapyRecordsView: React.FC = () => {
       {/* MODAL: NOVA EVOLUÇÃO DE SESSÃO                                             */}
       {/* ========================================================================= */}
       {showEvolutionModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 mobile-modal">
           <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
               <div className="flex items-center gap-2.5">
@@ -970,7 +970,7 @@ export const PhysiotherapyRecordsView: React.FC = () => {
                   <p className="text-xs text-slate-500">Paciente: {currentPatient?.full_name}</p>
                 </div>
               </div>
-              <button
+              <button aria-label="Fechar"
                 onClick={() => setShowEvolutionModal(false)}
                 className="p-1.5 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-100"
               >
@@ -1081,14 +1081,14 @@ export const PhysiotherapyRecordsView: React.FC = () => {
       {/* MODAL: VISUALIZAR AVALIAÇÃO COMPLETA                                       */}
       {/* ========================================================================= */}
       {viewingAssessment && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 mobile-modal">
           <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2">
                 <Activity className="w-5 h-5 text-teal-600" />
                 <h3 className="text-base font-bold text-slate-900">Avaliação Fisioterapêutica Completa</h3>
               </div>
-              <button onClick={() => setViewingAssessment(null)} className="p-1 rounded-lg hover:bg-slate-100">
+              <button aria-label="Fechar" onClick={() => setViewingAssessment(null)} className="p-1 rounded-lg hover:bg-slate-100">
                 <X className="w-5 h-5 text-slate-500" />
               </button>
             </div>

@@ -134,7 +134,7 @@ export const ReferralModal: React.FC<ReferralModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 mobile-modal">
       <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-200 max-h-[92vh] overflow-y-auto space-y-4">
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
@@ -145,7 +145,7 @@ export const ReferralModal: React.FC<ReferralModalProps> = ({
             </span>
             <h3 className="text-base font-bold text-slate-900 mt-0.5">{patientName}</h3>
           </div>
-          <button
+          <button aria-label="Fechar"
             onClick={onClose}
             className="p-1 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
           >

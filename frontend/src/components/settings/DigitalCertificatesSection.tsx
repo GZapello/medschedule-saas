@@ -263,14 +263,14 @@ export const DigitalCertificatesSection: React.FC = () => {
 
       {/* Modal de Conexão de Certificado */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 mobile-modal">
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-5 animate-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
                 <ShieldCheck className="w-5 h-5 text-teal-600" />
                 <h3 className="font-bold text-slate-900 text-base">Vincular Certificado Digital ICP-Brasil</h3>
               </div>
-              <button
+              <button aria-label="Fechar"
                 onClick={() => setShowAddModal(false)}
                 className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 cursor-pointer"
               >

@@ -55,7 +55,7 @@ export function TeleconsultationModal({ appointment, onClose, onSaved, onStart, 
     } catch (err: any) { showToast(err.message || 'Não foi possível salvar o link.', 'error'); }
     finally { setSaving(false); }
   };
-  return createPortal(<div className="fixed inset-0 z-[11000] bg-slate-900/60 flex items-center justify-center p-4">
+  return createPortal(<div className="fixed inset-0 z-[11000] bg-slate-900/60 flex items-center justify-center p-4 mobile-modal">
     <section role="dialog" aria-modal="true" aria-label={online ? 'Teleconsulta' : 'Editar modalidade'} className="bg-white rounded-2xl p-5 w-full max-w-lg space-y-4 max-h-[90vh] overflow-auto">
       <div className="flex justify-between items-center"><h3 className="font-bold">{online ? '📹 Teleconsulta' : 'Editar modalidade'}</h3><button type="button" onClick={onClose} aria-label="Fechar teleconsulta">✕</button></div>
       <p>Paciente: {appointment.patient_name || 'Paciente'}</p>

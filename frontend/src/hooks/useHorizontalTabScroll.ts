@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { useMobileLayout } from './useMobileLayout';
 
 export interface HorizontalTabScrollReturn<T extends HTMLElement = HTMLDivElement> {
   containerRef: React.RefObject<T>;
@@ -68,7 +69,7 @@ export function useHorizontalTabScroll<T extends HTMLElement = HTMLDivElement>(
   const scrollBy = useCallback(
     (offset: number) => {
       const el = containerRef.current;
-      if (!el) return;
+      if (!el || window.matchMedia('(max-width: 1023px)').matches) return;
       el.scrollBy({
         left: offset,
         behavior: 'smooth'
@@ -109,7 +110,7 @@ export function useHorizontalTabScroll<T extends HTMLElement = HTMLDivElement>(
 
     const timer = setTimeout(() => {
       const el = containerRef.current;
-      if (!el) return;
+      if (!el || window.innerWidth < 1024) return;
 
       const activeEl = el.querySelector<HTMLElement>(
         '[data-active="true"], [data-active=true], [aria-selected="true"]'
@@ -174,7 +175,7 @@ export function useHorizontalTabScroll<T extends HTMLElement = HTMLDivElement>(
 
   // Início do arraste pelo ponteiro do mouse (mouse drag)
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.button !== 0 || !containerRef.current) return;
+    if (e.button !== 0 || !containerRef.current || window.innerWidth < 1024) return;
     isDraggingRef.current = true;
     hasMovedRef.current = false;
     startXRef.current = e.pageX - containerRef.current.offsetLeft;
@@ -204,7 +205,7 @@ export function useHorizontalTabScroll<T extends HTMLElement = HTMLDivElement>(
 
   // Rolagem por roda do mouse horizontal
   const handleWheel = useCallback((e: React.WheelEvent) => {
-    if (!containerRef.current) return;
+    if (!containerRef.current || window.innerWidth < 1024) return;
     if (Math.abs(e.deltaY) > Math.abs(e.deltaX) && Math.abs(e.deltaY) > 5) {
       containerRef.current.scrollLeft += e.deltaY;
     }
@@ -282,6 +283,25 @@ export const HorizontalTabNav: React.FC<HorizontalTabNavProps> = ({
   rightArrowLabel = 'Ver próximas abas'
 }) => {
   const { canScrollLeft, canScrollRight, scrollLeft, scrollRight } = scroll;
+  const mobile = useMobileLayout();
+  const desktopRef = useRef<HTMLDivElement>(null);
+  const [tabs, setTabs] = useState<{ label: string; active: boolean; disabled: boolean }[]>([]);
+  useEffect(() => {
+    const element = desktopRef.current;
+    if (!element || !mobile) return;
+    const update = () => {
+      const buttons = Array.from(element.querySelectorAll<HTMLButtonElement>('button'));
+      setTabs(buttons.map(button => ({
+        label: button.textContent?.trim() || button.getAttribute('aria-label') || 'Seção',
+        active: button.dataset.active === 'true' || button.getAttribute('aria-selected') === 'true',
+        disabled: button.disabled
+      })));
+    };
+    update();
+    const observer = new MutationObserver(update);
+    observer.observe(element, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-active', 'aria-selected', 'disabled', 'class'] });
+    return () => observer.disconnect();
+  }, [mobile, children]);
 
   const gradientFrom =
     customGradientFrom ||
@@ -365,9 +385,15 @@ export const HorizontalTabNav: React.FC<HorizontalTabNavProps> = ({
   return React.createElement(
     'div',
     { className: `relative w-full min-w-0 ${className}` },
-    leftElements,
-    children,
-    rightElements
+    React.createElement('label', { className: 'zemda-tab-mobile' },
+      React.createElement('span', { className: 'sr-only' }, 'Seção atual'),
+      React.createElement('select', {
+        'aria-label': 'Seção atual',
+        value: Math.max(0, tabs.findIndex(tab => tab.active)),
+        onChange: (event: React.ChangeEvent<HTMLSelectElement>) => desktopRef.current?.querySelectorAll<HTMLButtonElement>('button')[Number(event.target.value)]?.click()
+      }, tabs.map((tab, index) => React.createElement('option', { key: index, value: index, disabled: tab.disabled }, tab.label)))
+    ),
+    React.createElement('div', { className: 'zemda-tab-desktop' }, leftElements, React.createElement('div', { ref: desktopRef }, children), rightElements)
   );
 };
 

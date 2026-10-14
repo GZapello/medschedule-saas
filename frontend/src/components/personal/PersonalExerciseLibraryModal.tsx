@@ -262,7 +262,7 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn mobile-modal">
       <div className="bg-white rounded-3xl max-w-6xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
         {/* Header */}
         <div className="p-5 sm:p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
@@ -288,7 +288,7 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
               <Plus className="w-3.5 h-3.5" />
               Criar Exercício
             </button>
-            <button
+            <button aria-label="Fechar"
               onClick={onClose}
               className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
             >
@@ -300,7 +300,7 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
         {/* Filtros e Busca */}
         <div className="p-4 border-b border-slate-100 bg-white space-y-3">
           <div className="flex flex-wrap items-center gap-3">
-            <form onSubmit={handleSearchSubmit} className="flex-1 min-w-[240px] relative">
+            <form onSubmit={handleSearchSubmit} className="flex-1 min-w-0 lg:min-w-[240px] relative">
               <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
@@ -347,7 +347,7 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
           </div>
 
           {/* Chips de Músculos */}
-          <div className="flex items-center gap-1.5 overflow-x-auto py-1 max-w-full">
+          <div className="flex items-center gap-1.5 overflow-x-auto py-1 max-w-full mobile-wrap">
             {MUSCLE_CATEGORIES.map((cat) => (
               <button
                 key={cat.id}
@@ -488,7 +488,7 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
 
         {/* Modal de Zoom do Exercício */}
         {zoomedExercise && (
-          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md animate-fadeIn">
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md animate-fadeIn mobile-modal">
             <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto">
               <div className="flex items-center justify-between">
                 <div>
@@ -497,7 +497,7 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                   </span>
                   <h3 className="text-lg font-bold text-slate-800 mt-1">{zoomedExercise.name}</h3>
                 </div>
-                <button
+                <button aria-label="Fechar"
                   onClick={() => setZoomedExercise(null)}
                   className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl"
                 >
@@ -578,7 +578,7 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
 
       {/* Modal Separado Criar / Editar Exercício (z-[70] sobre a Biblioteca z-50) */}
       {isFormOpen && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-4 bg-slate-900/70 backdrop-blur-sm overflow-y-auto animate-fadeIn">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-4 bg-slate-900/70 backdrop-blur-sm overflow-y-auto animate-fadeIn mobile-modal">
           <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl border border-slate-200 my-auto max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-5">
               <div>
@@ -589,7 +589,7 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                   Preencha os dados biomecânicos e selecione uma foto anatômica para o catálogo.
                 </p>
               </div>
-              <button
+              <button aria-label="Fechar"
                 type="button"
                 onClick={() => {
                   setIsFormOpen(false);

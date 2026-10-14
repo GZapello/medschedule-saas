@@ -117,7 +117,7 @@ export const DentalProstheticsKanban: React.FC<DentalProstheticsKanbanProps> = (
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-6 gap-3 overflow-x-auto min-h-[320px]">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 lg:overflow-x-auto min-h-[320px]">
         {COLUMNS.map(col => {
           const colItems = items.filter(i => {
             const st = i.status === 'requested' ? 'sent_to_lab' : (i.status || 'sent_to_lab');
@@ -126,7 +126,7 @@ export const DentalProstheticsKanban: React.FC<DentalProstheticsKanbanProps> = (
           return (
             <div
               key={col.id}
-              className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-2xl p-3 flex flex-col space-y-2 min-w-[210px]"
+              className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-2xl p-3 flex flex-col space-y-2 min-w-0 lg:min-w-[210px]"
             >
               <div className={`p-2 rounded-xl border text-xs font-black uppercase flex items-center justify-between ${col.color}`}>
                 <span className="truncate">{col.label}</span>

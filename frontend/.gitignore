@@ -1,0 +1,4 @@
+test-results/
+*.jks
+*.keystore
+keystore.properties

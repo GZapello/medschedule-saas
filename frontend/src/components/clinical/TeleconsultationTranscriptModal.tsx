@@ -60,7 +60,7 @@ export function TeleconsultationTranscriptModal({ appointment, onClose, onInsert
     finally { if (alive.current) setBusy(false); }
   };
   const button = 'rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium hover:bg-slate-50 disabled:opacity-40';
-  return createPortal(<div className="fixed inset-0 z-[12000] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6" onKeyDown={e => {
+  return createPortal(<div className="fixed inset-0 z-[12000] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 mobile-modal" onKeyDown={e => {
     if (e.key === 'Escape') { e.stopPropagation(); close(); }
     if (e.key === 'Tab') {
       const nodes = dialog.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input, textarea, summary, [tabindex="0"]');

@@ -1,3 +1,5 @@
+import { ResponsiveTable } from '../common/ResponsiveTable';
+import { navigateToUrl } from '../../utils/nativeNavigation';
 import { BILLING_BENEFITS } from './billingBenefits';
 import { trackConfirmedPurchase } from '../../utils/purchaseAnalytics';
 import React, { useCallback, useEffect, useState, useRef } from 'react';
@@ -61,7 +63,7 @@ export const BillingView: React.FC<BillingViewProps> = ({
   const openCheckout = async (code: string) => {
     const result = await ApiClient.post<{ url: string }>('/v1/subscriptions/checkout', { planCode: code });
     // The backend validates and returns only an Asaas HTTPS URL.
-    window.location.assign(result.url);
+    await navigateToUrl(result.url);
   };
   const choose = async (code: string) => {
     if (!currentUser) { window.location.assign('/cadastro?plan=' + encodeURIComponent(code)); return; }
@@ -406,11 +408,11 @@ export const BillingView: React.FC<BillingViewProps> = ({
         </div>
       </div>
     )}
-    {historyOpen && summary && <div className="bg-white border border-slate-200/80 shadow-xs rounded-3xl p-6 overflow-x-auto"><h2 className="font-bold text-slate-900 mb-4">Histórico de cobranças</h2><table className="w-full text-xs text-left"><thead><tr className="border-b border-slate-100 text-slate-500"><th className="p-3">Data</th><th>Valor</th><th>Forma</th><th>Status</th><th>Pagamento</th></tr></thead><tbody>
+    {historyOpen && summary && <div className="bg-white border border-slate-200/80 shadow-xs rounded-3xl p-6 overflow-x-auto mobile-table-container"><h2 className="font-bold text-slate-900 mb-4">Histórico de cobranças</h2><ResponsiveTable className="w-full text-xs text-left"><thead><tr className="border-b border-slate-100 text-slate-500"><th className="p-3">Data</th><th>Valor</th><th>Forma</th><th>Status</th><th>Pagamento</th></tr></thead><tbody>
       {summary.payments.map((p:any)=><tr key={p.id} className="border-b border-slate-100"><td className="p-3 text-slate-700 font-medium">{date(p.due_date)}</td><td className="font-semibold text-slate-900">{money(p.amount)}</td><td>{p.billing_type==='CREDIT_CARD'?'Cartão':p.billing_type}</td><td><span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-medium">{statuses[p.status] || p.status}</span></td><td>{p.invoice_url && <a href={p.invoice_url} target="_blank" rel="noopener noreferrer" className="text-teal-700 hover:text-teal-800 font-bold inline-flex items-center gap-1">Abrir cobrança<ArrowUpRight className="w-3.5 h-3.5"/></a>}</td></tr>)}
-    </tbody></table>{!summary.payments.length && <p className="text-slate-500 p-4 text-xs">Nenhuma cobrança registrada.</p>}</div>}
+    </tbody></ResponsiveTable>{!summary.payments.length && <p className="text-slate-500 p-4 text-xs">Nenhuma cobrança registrada.</p>}</div>}
     {summary && ['PAST_DUE','SUSPENDED'].includes(summary.status) && canManage && <button onClick={()=>setHistoryOpen(true)} className="bg-gradient-to-r from-teal-600 to-emerald-600 text-white font-bold text-xs p-3 rounded-xl shadow-xs">Regularizar pagamento</button>}
-    {cancelOpen && <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4"><form role="dialog" aria-modal="true" aria-label="Gerenciar assinatura" onSubmit={cancel} className="bg-white p-6 sm:p-8 rounded-3xl space-y-4 max-w-lg w-full shadow-2xl border border-slate-100">
+    {cancelOpen && <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 mobile-modal"><form role="dialog" aria-modal="true" aria-label="Gerenciar assinatura" onSubmit={cancel} className="bg-white p-6 sm:p-8 rounded-3xl space-y-4 max-w-lg w-full shadow-2xl border border-slate-100">
       <h2 className="font-bold text-lg text-slate-900">Cancelar renovação</h2><p className="text-xs text-slate-600">O cancelamento encerra as próximas cobranças. Os dados da clínica serão preservados.</p>
       <label className="block text-xs font-semibold text-slate-700">Motivo (opcional)<textarea maxLength={1000} value={reason} onChange={e=>setReason(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 mt-1 bg-slate-50 text-xs focus:ring-2 focus:ring-teal-500 focus:outline-hidden" /></label>
       <label className="block text-xs font-semibold text-slate-700">Digite CANCELAR<input autoFocus required value={confirmation} onChange={e=>setConfirmation(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 mt-1 bg-slate-50 text-xs focus:ring-2 focus:ring-teal-500 focus:outline-hidden" /></label>

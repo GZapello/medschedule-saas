@@ -116,7 +116,7 @@ const TourSpotlightStep: React.FC = () => {
   if (!step || !currentTour) return null;
   const total = currentTour.steps.length;
   const ready = !!layout && !suspended;
-  return <div className="fixed inset-0 pointer-events-none z-[9998]" data-tour-overlay>
+  return <div className="fixed inset-0 pointer-events-none z-[9998] mobile-modal" data-tour-overlay>
     {ready && <div data-tour-highlight style={{ position: 'fixed', top: layout.rect.top, left: layout.rect.left,
       width: layout.rect.width, height: layout.rect.height, borderRadius: 10, border: '2px solid #0d9488',
       boxShadow: '0 0 0 9999px rgba(15,23,42,0.22)' }} />}

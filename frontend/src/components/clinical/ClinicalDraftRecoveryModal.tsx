@@ -46,7 +46,7 @@ export const ClinicalDraftRecoveryModal: React.FC<ClinicalDraftRecoveryModalProp
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 mobile-modal">
       <div role="dialog" aria-modal="true" aria-label="Recuperar rascunho" className="bg-white rounded-3xl w-full max-w-lg shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 p-6 space-y-5">
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
           <div className="flex items-center gap-2.5 text-amber-600">
@@ -58,7 +58,7 @@ export const ClinicalDraftRecoveryModal: React.FC<ClinicalDraftRecoveryModalProp
               <p className="text-xs text-slate-500">Identificamos duas cópias salvas para {moduleName}.</p>
             </div>
           </div>
-          <button
+          <button aria-label="Fechar"
             type="button"
             onClick={onClose}
             className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition-colors"

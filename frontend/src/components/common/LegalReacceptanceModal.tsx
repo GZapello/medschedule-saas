@@ -48,7 +48,7 @@ export const LegalReacceptanceModal: React.FC<LegalReacceptanceModalProps> = ({ 
       role="dialog"
       aria-modal="true"
       aria-labelledby="legal-reaccept-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs overflow-y-auto mobile-modal"
     >
       <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl border border-slate-100 my-8 animate-in fade-in zoom-in-95 duration-200 text-left">
         {/* Header */}

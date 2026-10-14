@@ -1,3 +1,4 @@
+import { ResponsiveTable } from '../common/ResponsiveTable';
 import React, { useState, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -285,8 +286,8 @@ export const ReceiptsView: React.FC = () => {
           />
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs">
+        <div className="overflow-x-auto mobile-table-container">
+          <ResponsiveTable className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="border-b border-slate-100 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
                 <th className="py-3 px-3">Número</th>
@@ -353,7 +354,7 @@ export const ReceiptsView: React.FC = () => {
                 </tr>
               )}
             </tbody>
-          </table>
+          </ResponsiveTable>
         </div>
       </div>
 
@@ -361,7 +362,7 @@ export const ReceiptsView: React.FC = () => {
       {/* MODAL 1: Emissão de Novo Recibo */}
       {/* ========================================================== */}
       {isIssueModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto mobile-modal">
           <div className="bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl my-8">
             <div className="p-6 bg-slate-900 text-white flex items-center justify-between">
               <div>
@@ -370,7 +371,7 @@ export const ReceiptsView: React.FC = () => {
                   Numeração gerada: <strong className="text-indigo-400 font-mono">{settings?.receipt_prefix || 'REC-'}{String(settings?.next_sequence || 1).padStart(6, '0')}</strong>
                 </p>
               </div>
-              <button onClick={() => setIsIssueModalOpen(false)} className="text-slate-400 hover:text-white">
+              <button aria-label="Fechar" onClick={() => setIsIssueModalOpen(false)} className="text-slate-400 hover:text-white">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -598,7 +599,7 @@ export const ReceiptsView: React.FC = () => {
         const dateFormattedLong = issueDate.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' });
 
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs overflow-y-auto print:p-0 print:bg-white">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs overflow-y-auto print:p-0 print:bg-white mobile-modal">
             <div className="bg-white rounded-3xl w-full max-w-3xl overflow-hidden shadow-2xl my-8 print:my-0 print:max-w-none print:shadow-none print:rounded-none">
               {/* Barra de Ações Superior (Oculta na Impressão) */}
               <div className="p-4 bg-slate-900 text-white flex items-center justify-between print:hidden">
@@ -625,7 +626,7 @@ export const ReceiptsView: React.FC = () => {
                     <Mail className="w-3.5 h-3.5" />
                     Enviar E-mail
                   </button>
-                  <button
+                  <button aria-label="Fechar"
                     onClick={() => setSelectedReceipt(null)}
                     className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
                   >
@@ -836,7 +837,7 @@ export const ReceiptsView: React.FC = () => {
       {/* MODAL 3: Configuração de Dados para Emissão de Recibos */}
       {/* ========================================================== */}
       {isSettingsModalOpen && settings && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto mobile-modal">
           <div className="bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl my-8">
             <div className="p-6 bg-slate-900 text-white flex items-center justify-between">
               <div>
@@ -845,7 +846,7 @@ export const ReceiptsView: React.FC = () => {
                   Dados cadastrais do emitente e modelo de recibo da clínica.
                 </p>
               </div>
-              <button onClick={() => setIsSettingsModalOpen(false)} className="text-slate-400 hover:text-white">
+              <button aria-label="Fechar" onClick={() => setIsSettingsModalOpen(false)} className="text-slate-400 hover:text-white">
                 <X className="w-5 h-5" />
               </button>
             </div>

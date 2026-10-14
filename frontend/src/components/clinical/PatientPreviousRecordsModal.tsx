@@ -113,7 +113,7 @@ export const PatientPreviousRecordsModal: React.FC<PatientPreviousRecordsModalPr
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-900/60 backdrop-blur-xs overflow-y-auto print:p-0 print:bg-white print:static"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-900/60 backdrop-blur-xs overflow-y-auto print:p-0 print:bg-white print:static mobile-modal"
       role="dialog"
       aria-modal="true"
       aria-label="Histórico de Prontuários Anteriores"
@@ -150,7 +150,7 @@ export const PatientPreviousRecordsModal: React.FC<PatientPreviousRecordsModalPr
               <span className="hidden sm:inline">Imprimir</span>
             </button>
 
-            <button
+            <button aria-label="Fechar"
               type="button"
               onClick={onClose}
               className="p-1.5 text-slate-400 hover:text-white rounded-xl hover:bg-white/10 transition-colors cursor-pointer"

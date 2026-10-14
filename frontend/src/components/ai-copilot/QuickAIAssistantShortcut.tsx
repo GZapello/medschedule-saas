@@ -110,7 +110,7 @@ export const QuickAIAssistantShortcut: React.FC<QuickAIAssistantShortcutProps> =
               </div>
             </div>
 
-            <button
+            <button aria-label="Fechar"
               onClick={() => setIsOpen(false)}
               className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
               title="Fechar"

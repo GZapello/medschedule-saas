@@ -1,3 +1,4 @@
+import { ResponsiveTable } from '../common/ResponsiveTable';
 import React, { useState, useEffect, useMemo } from 'react';
 import { MessageSquare, GitCompare, History, TrendingUp, CheckCircle2, AlertCircle } from 'lucide-react';
 import { ApiClient } from '../../api/client';
@@ -244,8 +245,8 @@ export const PhonologyComparisonView: React.FC<PhonologyComparisonViewProps> = (
           </select>
         </div>
 
-        <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white">
-          <table className="w-full text-xs text-left">
+        <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white mobile-table-container">
+          <ResponsiveTable className="w-full text-xs text-left">
             <thead className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
               <tr>
                 <th className="py-2 px-3">Fonema</th>
@@ -280,7 +281,7 @@ export const PhonologyComparisonView: React.FC<PhonologyComparisonViewProps> = (
                   );
                 })}
             </tbody>
-          </table>
+          </ResponsiveTable>
         </div>
       </div>
     </div>

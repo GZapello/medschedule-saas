@@ -1,3 +1,4 @@
+import { downloadBlob } from '../../utils/download';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Calendar, CheckCircle2, UserRound, ArrowRight, Stethoscope } from 'lucide-react';
 import { ApiClient } from '../../api/client';
@@ -93,10 +94,10 @@ export const PublicBookingView: React.FC<Props> = ({ tenantSlug, bookingSequence
       if (e.status === 409) { setSlot(null); setStep(4); setReloadSlots(n=>n+1); }
     } finally { if (version === contextVersion.current) {setSubmitting(false); submittingRef.current=false;} }
   };
-  const downloadCalendar = () => {
+  const downloadCalendar = async () => {
     if (!slot) return;
     const blob = new Blob([calendarBooking({startTime:slot.startTime,endTime:slot.endTime,title:`${service?.name} — ${professional?.name}`,clinic:clinic.trade_name || clinic.name})], {type:'text/calendar;charset=utf-8'});
-    const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url;a.download='agendamento-zemda.ics';a.click();URL.revokeObjectURL(url);
+    try { await downloadBlob(blob, 'agendamento-zemda.ics'); } catch { setError('Não foi possível exportar o agendamento.'); }
   };
   const servicePicker = <>{linkedServices.length > 1 && <div><label htmlFor="booking-service" className="mb-1 block text-sm font-semibold">Atendimento</label><select id="booking-service" className={bookingInput} value={serviceId} onChange={e => {setServiceId(e.target.value);setSlot(null);setSlots([]);}}><option value="">Escolha o atendimento</option>{linkedServices.map(s=><option key={s.id} value={s.id}>{s.name} · {professional.services.find((link:any)=>link.id===s.id)?.duration_minutes || s.duration_minutes} min</option>)}</select></div>}{service?.modality==='both' && <div><label htmlFor="booking-modality" className="mb-1 block text-sm font-semibold">Modalidade</label><select id="booking-modality" className={bookingInput} value={selectedModality} onChange={e=>setSelectedModality(e.target.value)}><option value="presential">Presencial</option><option value="online">Online</option></select></div>}</>;
   const summary = <dl className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm sm:grid-cols-2">{[['Especialidade',area || professional?.specialty_name || professional?.profession_name],['Profissional',professional?.name],['Atendimento',service?.name],['Data',date ? new Date(`${date}T12:00:00`).toLocaleDateString('pt-BR'): ''],['Horário',slot?.time],['Modalidade',modalityLabel(bookingModality || '')],['Clínica',clinic?.trade_name || clinic?.name]].map(([label,value])=><div key={label}><dt className="text-xs text-slate-500">{label}</dt><dd className="mt-0.5 font-semibold text-slate-900">{value}</dd></div>)}</dl>;

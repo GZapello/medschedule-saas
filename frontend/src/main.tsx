@@ -4,6 +4,10 @@ import { App } from './App';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { triggerChunkRecovery, cleanRefreshQueryParam } from './utils/chunkRecovery';
 import './styles/global.css';
+import './styles/mobile.css';
+import { installNativeNavigation } from './utils/nativeNavigation';
+
+installNativeNavigation();
 
 // Limpa parâmetro de cache-busting (__zemda_refresh) da URL sem recarregar a página
 cleanRefreshQueryParam();

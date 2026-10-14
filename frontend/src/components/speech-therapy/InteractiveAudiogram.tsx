@@ -525,7 +525,7 @@ export const InteractiveAudiogram: React.FC<InteractiveAudiogramProps> = ({
 
       {/* Gráfico SVG com Proporção Rígida */}
       <div className="flex flex-col xl:flex-row items-start justify-center gap-6">
-        <div className="w-full max-w-[660px] overflow-x-auto bg-white dark:bg-slate-950 p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-inner">
+        <div className="w-full max-w-[660px] lg:overflow-x-auto bg-white dark:bg-slate-950 p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-inner">
           <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} className="w-full select-none">
             {/* Área da Fala (Speech Banana) */}
             {showSpeechBanana && (

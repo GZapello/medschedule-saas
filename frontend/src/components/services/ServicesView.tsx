@@ -694,7 +694,7 @@ export const ServicesView: React.FC = () => {
 
         {/* Filtros e Seletores por Profissional */}
         {professionals.length > 1 && (
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs mobile-wrap">
             <button
               type="button"
               onClick={() => setSelectedProfFilter('all')}
@@ -894,12 +894,12 @@ export const ServicesView: React.FC = () => {
       {/* Modal Novo Serviço */}
       {/* Modal Novo Serviço */}
       {showServiceModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-hidden">
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-hidden mobile-modal">
           <div className="bg-white rounded-3xl max-w-lg w-full max-h-[90vh] shadow-2xl border border-slate-200 flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
             {/* Header Fixo / Sticky */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 flex-shrink-0 bg-white">
               <h3 className="text-lg font-bold text-slate-900">Novo Serviço</h3>
-              <button
+              <button aria-label="Fechar"
                 type="button"
                 onClick={() => setShowServiceModal(false)}
                 className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
@@ -1109,11 +1109,11 @@ export const ServicesView: React.FC = () => {
 
       {/* Modal Nova Sala */}
       {showRoomModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 mobile-modal">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
               <h3 className="text-lg font-bold text-slate-900">Nova Sala</h3>
-              <button onClick={() => setShowRoomModal(false)} className="p-1 text-slate-400 hover:text-slate-700 rounded-lg">
+              <button aria-label="Fechar" onClick={() => setShowRoomModal(false)} className="p-1 text-slate-400 hover:text-slate-700 rounded-lg">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -1161,7 +1161,7 @@ export const ServicesView: React.FC = () => {
 
       {/* Modal Editar Serviço */}
       {editingService && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-hidden">
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-hidden mobile-modal">
           <div className="bg-white rounded-3xl max-w-lg w-full max-h-[90vh] shadow-2xl border border-slate-200 flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
             {/* Header Fixo */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 flex-shrink-0 bg-white">
@@ -1169,7 +1169,7 @@ export const ServicesView: React.FC = () => {
                 <h3 className="text-base font-bold text-slate-900">Editar Serviço</h3>
                 <p className="text-xs text-slate-500">Altere os dados do atendimento ou regras de retorno</p>
               </div>
-              <button
+              <button aria-label="Fechar"
                 onClick={() => setEditingService(null)}
                 className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition cursor-pointer"
               >
@@ -1396,7 +1396,7 @@ export const ServicesView: React.FC = () => {
 
       {/* Modal Confirmar Exclusão ou Inativação */}
       {serviceToDelete && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 mobile-modal">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200">
             <div className="flex items-center gap-3 pb-3 border-b border-slate-100 mb-4 text-rose-600">
               <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center">

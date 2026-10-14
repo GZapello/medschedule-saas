@@ -886,7 +886,7 @@ export const PersonalPublicStudentWorkoutView: React.FC<PersonalPublicStudentWor
 
         {/* Modal de Confirmação de Finalização */}
         {showFinishModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in mobile-modal">
             <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -895,7 +895,7 @@ export const PersonalPublicStudentWorkoutView: React.FC<PersonalPublicStudentWor
                   </div>
                   <h3 className="font-bold text-white text-base">Finalizar Treino</h3>
                 </div>
-                <button
+                <button aria-label="Fechar"
                   onClick={() => setShowFinishModal(false)}
                   className="text-slate-400 hover:text-white"
                 >
@@ -1101,7 +1101,7 @@ export const PersonalPublicStudentWorkoutView: React.FC<PersonalPublicStudentWor
           <>
             {/* Seletor de Divisões (Treino A, Treino B, Treino C...) */}
             {workouts.length > 1 && (
-              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none mobile-wrap">
                 {workouts.map((w, idx) => (
                   <button
                     key={w.id}

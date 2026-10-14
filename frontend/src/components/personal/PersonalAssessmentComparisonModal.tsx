@@ -1,3 +1,4 @@
+import { ResponsiveTable } from '../common/ResponsiveTable';
 import { fieldCapability } from '../../shared/clinical-assessments/policy';
 import {IndicatorDetails,assessmentIndicators,indicatorKey} from './PersonalAssessmentIndicator';
 import { dateLabel } from './posture';
@@ -205,7 +206,7 @@ export const PersonalAssessmentComparisonModal: React.FC<PersonalAssessmentCompa
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn mobile-modal">
       <div className="bg-white rounded-3xl max-w-5xl w-full max-h-[94vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
         {/* Header */}
         <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
@@ -223,7 +224,7 @@ export const PersonalAssessmentComparisonModal: React.FC<PersonalAssessmentCompa
             </div>
           </div>
 
-          <button
+          <button aria-label="Fechar"
             onClick={onClose}
             className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
           >
@@ -300,7 +301,7 @@ export const PersonalAssessmentComparisonModal: React.FC<PersonalAssessmentCompa
         {!postureOnly ? (
           <>
             {/* Sub-abas de Categoria */}
-            <div className="px-6 py-2 border-b border-slate-200 bg-white flex items-center gap-1 overflow-x-auto">
+            <div className="px-6 py-2 border-b border-slate-200 bg-white flex items-center gap-1 overflow-x-auto mobile-wrap">
               <button
                 onClick={() => setActiveCategory('all')}
                 className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-colors whitespace-nowrap ${
@@ -462,8 +463,8 @@ export const PersonalAssessmentComparisonModal: React.FC<PersonalAssessmentCompa
                     </span>
                   </div>
 
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs">
+                  <div className="overflow-x-auto mobile-table-container">
+                    <ResponsiveTable className="w-full text-left text-xs">
                       <thead>
                         <tr className="border-b border-slate-200 text-slate-400 font-semibold uppercase text-[10px] bg-slate-50/50">
                           <th className="py-2.5 px-4">Métrica / Parâmetro</th>
@@ -511,7 +512,7 @@ export const PersonalAssessmentComparisonModal: React.FC<PersonalAssessmentCompa
                           );
                         })}
                       </tbody>
-                    </table>
+                    </ResponsiveTable>
                   </div>
                 </div>
               )}

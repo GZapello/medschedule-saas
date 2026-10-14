@@ -756,7 +756,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn mobile-modal">
       <div className="bg-white rounded-3xl max-w-5xl w-full max-h-[94vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
         {/* Header */}
         <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
@@ -778,7 +778,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
               status={autosave.autosaveStatus}
               lastSavedTime={autosave.lastSavedTime}
             />}
-            <button
+            <button aria-label="Fechar"
               onClick={onClose}
               className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
             >
@@ -865,7 +865,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
         </div>
 
         </>}
-        {!postureOnly && <div className="flex gap-2 px-6 py-2 border-b overflow-x-auto">
+        {!postureOnly && <div className="flex gap-2 px-6 py-2 border-b overflow-x-auto mobile-wrap">
           {availableTabs.map(tab=><button type="button" key={tab.id} disabled={photosUploading || postureBusy} onClick={()=>setActiveTab(tab.id as typeof activeTab)} className={`px-3 py-2 text-xs rounded-xl whitespace-nowrap ${activeTab===tab.id?'bg-teal-600 text-white':'bg-slate-100 text-slate-700'}`}>{tab.label}</button>)}
         </div>}
         {/* Formulário Principal */}

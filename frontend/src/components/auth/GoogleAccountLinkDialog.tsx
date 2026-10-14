@@ -14,7 +14,7 @@ export function GoogleAccountLinkDialog({ idToken, email, onClose, onLinked }: {
   const [password,setPassword] = useState('');
   const [error,setError] = useState('');
   const [busy,setBusy] = useState(false);
-  return createPortal(<div className="fixed inset-0 z-[15000] bg-slate-900/60 flex items-center justify-center p-4">
+  return createPortal(<div className="fixed inset-0 z-[15000] bg-slate-900/60 flex items-center justify-center p-4 mobile-modal">
     <section role="dialog" aria-modal="true" aria-label="Vincular Conta Google" className="bg-white rounded-2xl p-6 max-w-sm w-full space-y-4">
       <h3 className="font-bold text-slate-900">Vincular Conta Google</h3>
       <p className="text-sm text-slate-600">Já existe uma conta com o e-mail <strong>{email}</strong>. Confirme sua senha do Zemda para vincular o Google.</p>

@@ -1,3 +1,4 @@
+import { ResponsiveTable } from '../../common/ResponsiveTable';
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Ear,
@@ -1156,8 +1157,8 @@ export const AudiologyWorkspaceSection: React.FC<AudiologyWorkspaceSectionProps>
 
         {openSections.speech && (
           <div className="p-6 space-y-5">
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs text-left">
+            <div className="overflow-x-auto mobile-table-container">
+              <ResponsiveTable className="w-full text-xs text-left">
                 <thead>
                   <tr className="border-b border-slate-200 text-slate-600">
                     <th className="py-2 font-bold uppercase">Teste Vocal</th>
@@ -1338,7 +1339,7 @@ export const AudiologyWorkspaceSection: React.FC<AudiologyWorkspaceSectionProps>
                     </td>
                   </tr>
                 </tbody>
-              </table>
+              </ResponsiveTable>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1602,8 +1603,8 @@ export const AudiologyWorkspaceSection: React.FC<AudiologyWorkspaceSectionProps>
 
         {openSections.reflexes && (
           <div className="p-6 space-y-4">
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs text-left">
+            <div className="overflow-x-auto mobile-table-container">
+              <ResponsiveTable className="w-full text-xs text-left">
                 <thead>
                   <tr className="border-b border-slate-200 text-slate-600">
                     <th className="py-2">Modo</th>
@@ -1725,7 +1726,7 @@ export const AudiologyWorkspaceSection: React.FC<AudiologyWorkspaceSectionProps>
                     ))}
                   </tr>
                 </tbody>
-              </table>
+              </ResponsiveTable>
             </div>
           </div>
         )}
@@ -1852,8 +1853,8 @@ export const AudiologyWorkspaceSection: React.FC<AudiologyWorkspaceSectionProps>
             </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs text-left">
+          <div className="overflow-x-auto mobile-table-container">
+            <ResponsiveTable className="w-full text-xs text-left">
               <thead>
                 <tr className="border-b border-slate-200 text-slate-600">
                   <th className="py-2">Orelha</th>
@@ -1908,7 +1909,7 @@ export const AudiologyWorkspaceSection: React.FC<AudiologyWorkspaceSectionProps>
                   ))}
                 </tr>
               </tbody>
-            </table>
+            </ResponsiveTable>
           </div>
         </div>
       )}

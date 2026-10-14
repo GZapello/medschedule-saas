@@ -161,11 +161,11 @@ export const NewPatientModal: React.FC<NewPatientModalProps> = ({
   };
 
   return (
-    <div className={`fixed inset-0 ${zIndex || 'z-50'} bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto`}>
+    <div className={`fixed inset-0 ${zIndex || 'z-50'} bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto mobile-modal`}>
       <div className="bg-white rounded-3xl max-w-xl w-full p-4 sm:p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto my-auto">
         <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
           <h3 className="text-lg font-bold text-slate-900">Novo {clientTermLabel}</h3>
-          <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer">
+          <button aria-label="Fechar" onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -222,7 +222,7 @@ export const NewPatientModal: React.FC<NewPatientModalProps> = ({
             <AnthropometricSexField value={anthropometricSex} onChange={setAnthropometricSex}/>
             <div>
               <label className="block font-semibold text-slate-700 mb-1">CPF</label>
-              <input
+              <input inputMode="numeric"
                 type="text"
                 value={cpf}
                 onChange={e => setCpf(e.target.value)}

@@ -567,14 +567,14 @@ export const ClinicalRecordsView: React.FC = () => {
 
       {/* MODAL 1: VISUALIZAR PRONTUÁRIO */}
       {viewingRecord && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto mobile-modal">
           <div className="bg-white rounded-3xl max-w-2xl w-full p-4 sm:p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
                 <span className="text-xs font-bold text-teal-600 uppercase tracking-wider">Visualização de Prontuário</span>
                 <h3 className="text-base sm:text-lg font-bold text-slate-900">{viewingRecord.title}</h3>
               </div>
-              <button
+              <button aria-label="Fechar"
                 onClick={() => setViewingRecord(null)}
                 className="p-1 text-slate-400 hover:text-slate-700 rounded-lg shrink-0"
               >
@@ -698,14 +698,14 @@ export const ClinicalRecordsView: React.FC = () => {
 
       {/* MODAL 2: EDITAR PRONTUÁRIO COM AUDITORIA */}
       {editingRecord && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto mobile-modal">
           <div className="bg-white rounded-3xl max-w-xl w-full p-4 sm:p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
                 <span className="text-xs font-bold text-indigo-600 uppercase">Edição com Auditoria LGPD</span>
                 <h3 className="text-base sm:text-lg font-bold text-slate-900">{editingRecord.title}</h3>
               </div>
-              <button
+              <button aria-label="Fechar"
                 onClick={() => setEditingRecord(null)}
                 className="p-1 text-slate-400 hover:text-slate-700 rounded-lg shrink-0"
               >
@@ -786,14 +786,14 @@ export const ClinicalRecordsView: React.FC = () => {
 
       {/* MODAL 3: NOVA EVOLUÇÃO */}
       {showNewModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto mobile-modal">
           <div className="bg-white rounded-3xl max-w-xl w-full p-4 sm:p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
               <div>
                 <span className="text-xs font-bold text-indigo-600 uppercase">Novo Registro Clínico</span>
                 <h3 className="text-lg sm:text-xl font-bold text-slate-900">{currentPatient?.full_name}</h3>
               </div>
-              <button onClick={() => setShowNewModal(false)} className="p-1 text-slate-400 hover:text-slate-700 rounded-lg shrink-0">
+              <button aria-label="Fechar" onClick={() => setShowNewModal(false)} className="p-1 text-slate-400 hover:text-slate-700 rounded-lg shrink-0">
                 <X className="w-5 h-5" />
               </button>
             </div>

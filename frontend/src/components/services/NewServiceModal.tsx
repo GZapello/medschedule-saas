@@ -91,7 +91,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
   };
 
   return (
-    <div className={`fixed inset-0 ${zIndex} bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto`}>
+    <div className={`fixed inset-0 ${zIndex} bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto mobile-modal`}>
       <div className="bg-white rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 my-auto text-xs">
         <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
           <div className="flex items-center gap-2">
@@ -103,7 +103,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
               <p className="text-[11px] text-slate-400">Cadastro rápido de atendimento</p>
             </div>
           </div>
-          <button
+          <button aria-label="Fechar"
             type="button"
             onClick={onClose}
             className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"

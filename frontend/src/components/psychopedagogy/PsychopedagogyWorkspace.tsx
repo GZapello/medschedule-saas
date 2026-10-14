@@ -881,7 +881,7 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
         <>
           {completion.dialog}
           {showPostConsultationModal && completion.isCompleted && (
-            <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 mobile-modal">
               <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl border border-slate-200 overflow-hidden p-6 text-center space-y-5 animate-in zoom-in-95">
                 <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
                   <CheckCircle2 className="w-8 h-8" />
@@ -970,14 +970,14 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
           )}
 
           {showAiModal && (
-            <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 mobile-modal">
               <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-in zoom-in-95">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                   <div className="flex items-center gap-2">
                     <Sparkles className="w-5 h-5 text-purple-600" />
                     <h3 className="font-bold text-slate-900 text-base">Assistente IA Psicopedagógica</h3>
                   </div>
-                  <button
+                  <button aria-label="Fechar"
                     onClick={() => setShowAiModal(false)}
                     className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 cursor-pointer"
                   >
@@ -1701,7 +1701,7 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
                   </div>
 
                   {/* Subabas de Navegação */}
-                  <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                  <div className="flex items-center gap-2 overflow-x-auto pb-1 mobile-wrap">
                     {[
                       { id: 'reading', label: 'Leitura', icon: BookOpen },
                       { id: 'writing', label: 'Escrita', icon: Pencil },

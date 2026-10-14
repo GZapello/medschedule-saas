@@ -371,7 +371,7 @@ export const EvolutionPhotoField: React.FC<EvolutionPhotoFieldProps> = ({
 
       {/* Full-screen Zoom Modal */}
       {zoomPhoto && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setZoomPhoto(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm mobile-modal" onClick={() => setZoomPhoto(null)}>
           <div className="relative max-w-4xl max-h-[90vh] bg-transparent" onClick={(e) => e.stopPropagation()}>
             <div className="max-w-full max-h-[85vh] rounded-lg overflow-hidden flex items-center justify-center">
               <SecureFileImage
@@ -382,7 +382,7 @@ export const EvolutionPhotoField: React.FC<EvolutionPhotoFieldProps> = ({
                 placeholderText="Foto"
               />
             </div>
-            <button
+            <button aria-label="Fechar"
               onClick={() => setZoomPhoto(null)}
               className="absolute -top-3 -right-3 p-2 bg-white text-slate-800 rounded-full shadow-lg hover:bg-slate-100 cursor-pointer"
             >
@@ -394,14 +394,14 @@ export const EvolutionPhotoField: React.FC<EvolutionPhotoFieldProps> = ({
 
       {/* Comparison Modal */}
       {showCompareModal && initialPhoto && currentPhoto && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in mobile-modal">
           <div className="bg-white w-full max-w-4xl rounded-3xl p-6 shadow-2xl border border-slate-100 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
                 <Columns className="w-5 h-5 text-teal-600" />
                 Comparação Fotográfica: {label}
               </h3>
-              <button onClick={() => setShowCompareModal(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer">
+              <button aria-label="Fechar" onClick={() => setShowCompareModal(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -451,14 +451,14 @@ export const EvolutionPhotoField: React.FC<EvolutionPhotoFieldProps> = ({
 
       {/* History Modal */}
       {showHistoryModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs mobile-modal">
           <div className="bg-white w-full max-w-3xl rounded-3xl p-6 shadow-2xl border border-slate-100 space-y-4 max-h-[85vh] flex flex-col">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
                 <History className="w-5 h-5 text-teal-600" />
                 Histórico Fotográfico ({photos.length})
               </h3>
-              <button onClick={() => setShowHistoryModal(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer">
+              <button aria-label="Fechar" onClick={() => setShowHistoryModal(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>

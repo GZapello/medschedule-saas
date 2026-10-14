@@ -1,3 +1,4 @@
+import { ResponsiveTable } from '../common/ResponsiveTable';
 import React, { useState, useEffect, useRef } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -455,8 +456,8 @@ export const ImportDataView: React.FC<ImportDataViewProps> = ({ onNavigate }) =>
               Nenhum lote de importação registrado ainda.
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
+            <div className="overflow-x-auto mobile-table-container">
+              <ResponsiveTable className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 font-semibold">
                     <th className="py-2.5 px-3">Identificador</th>
@@ -507,7 +508,7 @@ export const ImportDataView: React.FC<ImportDataViewProps> = ({ onNavigate }) =>
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </ResponsiveTable>
             </div>
           )}
         </div>
@@ -915,8 +916,8 @@ export const ImportDataView: React.FC<ImportDataViewProps> = ({ onNavigate }) =>
                   <Eye className="w-3.5 h-3.5 text-slate-500" />
                   Pré-visualização dos Primeiros Registros Mapeados
                 </h4>
-                <div className="overflow-x-auto border border-slate-200 rounded-xl">
-                  <table className="w-full text-left text-2xs border-collapse">
+                <div className="overflow-x-auto border border-slate-200 rounded-xl mobile-table-container">
+                  <ResponsiveTable className="w-full text-left text-2xs border-collapse">
                     <thead>
                       <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
                         {columnMappings.filter(m => m.targetField).map(m => (
@@ -937,7 +938,7 @@ export const ImportDataView: React.FC<ImportDataViewProps> = ({ onNavigate }) =>
                         </tr>
                       ))}
                     </tbody>
-                  </table>
+                  </ResponsiveTable>
                 </div>
               </div>
 

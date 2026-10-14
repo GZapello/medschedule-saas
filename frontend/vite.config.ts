@@ -1,3 +1,4 @@
+import packageInfo from './package.json';
 import { getRouteByPath, generateSitemapXml, generateRobotsTxt } from '../backend/src/seo/seoRoutes';
 import { renderSeoHead } from '../backend/src/seo/seoPresentation';
 import { defineConfig } from 'vite';
@@ -5,6 +6,11 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   base: process.env.BUILD_TARGET === 'desktop' ? './' : '/',
+  define: {
+    'import.meta.env.VITE_ZEMDA_ANDROID_VERSION_NAME': JSON.stringify(packageInfo.version),
+    'import.meta.env.VITE_ZEMDA_ANDROID_VERSION_CODE': JSON.stringify(String(packageInfo.android.versionCode)),
+    'import.meta.env.VITE_ZEMDA_ANDROID_BUILD_DATE': JSON.stringify(new Date().toISOString())
+  },
   plugins: [react(), {
     name: 'zemda-public-seo',
     transformIndexHtml(html) { return renderSeoHead(html, getRouteByPath('/')!); },

@@ -274,7 +274,7 @@ export const ZemdaBodyRecordsView: React.FC = () => {
 
         {/* Seletor de Paciente e Botão de Nova Avaliação */}
         <div className="flex items-center gap-3 flex-wrap max-w-lg w-full justify-end">
-          <div data-tour="body-patient-select" className="flex items-center gap-2 flex-1 min-w-[280px]">
+          <div data-tour="body-patient-select" className="flex items-center gap-2 flex-1 min-w-0 lg:min-w-[280px]">
             <label className="text-xs font-bold text-slate-500 whitespace-nowrap">
               {clientTermLabel}:
             </label>
@@ -460,7 +460,7 @@ export const ZemdaBodyRecordsView: React.FC = () => {
 
       {/* Drawer / Painel Lateral de Detalhes à Direita */}
       {detailsAssessment && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex justify-end animate-in fade-in duration-150">
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex justify-end animate-in fade-in duration-150 mobile-modal">
           <div className="bg-white w-full max-w-md h-full shadow-2xl flex flex-col border-l border-slate-200 animate-in slide-in-from-right duration-200">
             {/* Header do Drawer */}
             <div className="p-5 border-b border-slate-100 flex items-center justify-between shrink-0 bg-slate-50/70">
@@ -478,7 +478,7 @@ export const ZemdaBodyRecordsView: React.FC = () => {
                     : 'Data não informada'}
                 </p>
               </div>
-              <button
+              <button aria-label="Fechar"
                 type="button"
                 onClick={() => setDetailsAssessment(null)}
                 className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors cursor-pointer"
@@ -741,7 +741,7 @@ export const ZemdaBodyRecordsView: React.FC = () => {
 
       {/* Modal de Comparação Lado a Lado de Duas Avaliações */}
       {comparingData && (
-        <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 overflow-y-auto animate-in fade-in">
+        <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 overflow-y-auto animate-in fade-in mobile-modal">
           <div className="bg-slate-50 rounded-3xl max-w-7xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
             {/* Header da Comparação */}
             <div className="p-4 sm:p-5 bg-white border-b border-slate-200 flex items-center justify-between shrink-0">
@@ -759,7 +759,7 @@ export const ZemdaBodyRecordsView: React.FC = () => {
                 </div>
               </div>
 
-              <button
+              <button aria-label="Fechar"
                 type="button"
                 onClick={() => setComparingData(null)}
                 className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"

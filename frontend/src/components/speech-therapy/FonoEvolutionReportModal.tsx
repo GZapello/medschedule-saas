@@ -1,3 +1,4 @@
+import { downloadBlob } from '../../utils/download';
 import React, { useState } from 'react';
 import { X, Sparkles, CheckCircle2, Copy, Download, Edit3, ArrowRight, ShieldCheck, FileText, AlertCircle } from 'lucide-react';
 import { ApiClient } from '../../api/client';
@@ -77,19 +78,16 @@ export const FonoEvolutionReportModal: React.FC<FonoEvolutionReportModalProps> =
     }
   };
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     const blob = new Blob([generatedReport], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `relatorio-evolucao-fono-${patientName ? patientName.toLowerCase().replace(/\s+/g, '-') : 'paciente'}.txt`;
-    link.click();
-    URL.revokeObjectURL(url);
+    try {
+      await downloadBlob(blob, `relatorio-evolucao-fono-${patientName ? patientName.toLowerCase().replace(/\s+/g, '-') : 'paciente'}.txt`);
+    } catch { showToast('Não foi possível exportar o relatório.', 'error'); return; }
     showToast('Download iniciado!', 'success');
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150 mobile-modal">
       <div className="bg-white dark:bg-slate-900 w-full max-w-4xl max-h-[90vh] rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden">
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/40">
@@ -109,7 +107,7 @@ export const FonoEvolutionReportModal: React.FC<FonoEvolutionReportModalProps> =
               </p>
             </div>
           </div>
-          <button
+          <button aria-label="Fechar"
             onClick={onClose}
             className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
           >

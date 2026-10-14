@@ -1,3 +1,4 @@
+import { ResponsiveTable } from '../common/ResponsiveTable';
 import { useClinicalFormReset } from '../../hooks/useClinicalFormReset';
 import { ClinicalBooleanSelect } from '../clinical/ClinicalBooleanSelect';
 import { useConsultationCompletion } from '../clinical/useConsultationCompletion';
@@ -949,8 +950,8 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
                 </div>
 
                 {/* TABELA DE FONEMAS */}
-                <div className="overflow-x-auto border border-slate-200 rounded-xl">
-                  <table className="w-full text-xs text-left">
+                <div className="overflow-x-auto border border-slate-200 rounded-xl mobile-table-container">
+                  <ResponsiveTable className="w-full text-xs text-left">
                     <thead className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
                       <tr>
                         <th className="py-2.5 px-3">Fonema</th>
@@ -1074,7 +1075,7 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
                         </tr>
                       ))}
                     </tbody>
-                  </table>
+                  </ResponsiveTable>
                 </div>
 
                 <div className="flex justify-end pt-2">

@@ -658,14 +658,14 @@ export const MeasurableGoalsManager: React.FC<MeasurableGoalsManagerProps> = ({
 
       {/* Modal Registrar Progresso */}
       {selectedGoalForProgress && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 mobile-modal">
           <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col">
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-teal-50/50">
               <div className="flex items-center gap-2">
                 <TrendingUp className="w-5 h-5 text-teal-600" />
                 <h3 className="font-bold text-slate-800 text-base">Registrar Progresso da Meta</h3>
               </div>
-              <button
+              <button aria-label="Fechar"
                 type="button"
                 onClick={() => setSelectedGoalForProgress(null)}
                 className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-white transition-colors cursor-pointer"

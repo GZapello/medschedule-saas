@@ -850,7 +850,7 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
     : patientData?.allergies || '';
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto mobile-modal">
       <div className="bg-white rounded-3xl w-full max-w-5xl shadow-2xl border border-slate-200 flex flex-col max-h-[96vh] overflow-hidden animate-in zoom-in-95 duration-200">
         
         {/* TOP BAR: Identidade Zemda & Fechar */}
@@ -982,7 +982,7 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
               </button>
             )}
 
-            <button
+            <button aria-label="Fechar"
               onClick={onClose}
               className="p-1.5 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition-colors"
               title="Fechar (seu rascunho está seguro)"
@@ -1831,7 +1831,7 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
 
       {/* MODAL DE RASCUNHO GERADO POR IA (Evolução Clínica) */}
       {showAiEvolutionModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 mobile-modal">
           <div className="bg-white rounded-3xl max-w-4xl w-full p-5 sm:p-6 shadow-2xl border border-slate-200 flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-200 text-xs">
             
             {/* Cabeçalho */}
@@ -1895,7 +1895,7 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
             )}
 
             {/* Opções Rápidas de Transformação (Item 8) */}
-            <div className="mt-3 flex items-center gap-1.5 overflow-x-auto pb-1.5 border-b border-slate-100">
+            <div className="mt-3 flex items-center gap-1.5 overflow-x-auto pb-1.5 border-b border-slate-100 mobile-wrap">
               <span className="text-[10px] uppercase font-bold text-slate-400 shrink-0 mr-1">
                 Opções Rápidas:
               </span>
@@ -2172,14 +2172,14 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
 
       {/* Modal de Gerenciamento Rápido de Alergias */}
       {showAllergiesModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 mobile-modal">
           <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[90vh]">
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-rose-50/50">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="w-5 h-5 text-rose-600" />
                 <h3 className="font-bold text-slate-800 text-base">Gerenciar Alergias do Paciente</h3>
               </div>
-              <button
+              <button aria-label="Fechar"
                 type="button"
                 onClick={() => setShowAllergiesModal(false)}
                 className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-white transition-colors"
@@ -2332,14 +2332,14 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
 
       {/* Modal de Gerenciamento Rápido de Medicamentos */}
       {showMedicationsModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 mobile-modal">
           <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[90vh]">
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-blue-50/50">
               <div className="flex items-center gap-2">
                 <Pill className="w-5 h-5 text-blue-600" />
                 <h3 className="font-bold text-slate-800 text-base">Medicamentos de Uso Contínuo</h3>
               </div>
-              <button
+              <button aria-label="Fechar"
                 type="button"
                 onClick={() => setShowMedicationsModal(false)}
                 className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-white transition-colors"
@@ -2514,14 +2514,14 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
 
       {/* Modal de Gerenciamento Rápido de Observações e Alertas */}
       {showAlertsModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 mobile-modal">
           <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[90vh]">
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-amber-50/50">
               <div className="flex items-center gap-2">
                 <ShieldCheck className="w-5 h-5 text-amber-600" />
                 <h3 className="font-bold text-slate-800 text-base">Observações & Alertas do Paciente</h3>
               </div>
-              <button
+              <button aria-label="Fechar"
                 type="button"
                 onClick={() => setShowAlertsModal(false)}
                 className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-white transition-colors"

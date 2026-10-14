@@ -221,7 +221,7 @@ Data: ${todayStr}
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 overflow-y-auto print:p-0 print:bg-white print:static"
+      className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 overflow-y-auto print:p-0 print:bg-white print:static mobile-modal"
       role="dialog"
       aria-modal="true"
       aria-label="Emissão de Documentos Psicopedagógicos"
@@ -270,7 +270,7 @@ Data: ${todayStr}
               <span>Imprimir / Salvar PDF</span>
             </button>
 
-            <button
+            <button aria-label="Fechar"
               type="button"
               onClick={onClose}
               className="p-1.5 rounded-xl text-white/70 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
@@ -281,7 +281,7 @@ Data: ${todayStr}
         </div>
 
         {/* Barra de Tipos de Documentos (Oculta na Impressão) */}
-        <div className="bg-slate-50 border-b border-slate-200 px-6 py-2.5 flex items-center gap-2 overflow-x-auto print:hidden">
+        <div className="bg-slate-50 border-b border-slate-200 px-6 py-2.5 flex items-center gap-2 overflow-x-auto print:hidden mobile-wrap">
           <span className="text-xs font-bold text-slate-500 shrink-0 mr-1">Tipo de Documento:</span>
           {[
             { id: 'relatorio', label: 'Relatório Psicopedagógico' },

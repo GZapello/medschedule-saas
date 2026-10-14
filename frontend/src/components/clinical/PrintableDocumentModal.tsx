@@ -1,3 +1,4 @@
+import { isNativePrint, printNativeHtml } from '../../utils/nativePrint';
 import React, { useState, useEffect, useRef } from 'react';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
@@ -76,17 +77,9 @@ export const PrintableDocumentModal: React.FC<PrintableDocumentModalProps> = ({
   // Opção 1: Visualizar (Abre em nova guia limpa para pré-visualização completa sem UI)
   const handleVisualizar = () => {
     if (!sheetRef.current || !data) return;
-    const printWindow = window.open('', '_blank', 'width=900,height=1000');
-    if (!printWindow) {
-      showToast('Aviso: Ative os pop-ups do navegador para abrir a visualização em nova guia.', 'info');
-      return;
-    }
-
     const title = getCleanDocTitle();
     const sheetHtml = sheetRef.current.outerHTML;
-
-    printWindow.document.open();
-    printWindow.document.write(`
+    const previewHtml = `
       <!DOCTYPE html>
       <html lang="pt-BR">
       <head>
@@ -149,7 +142,17 @@ export const PrintableDocumentModal: React.FC<PrintableDocumentModalProps> = ({
         </div>
       </body>
       </html>
-    `);
+    `;
+    if (isNativePrint()) { void printNativeHtml(previewHtml).catch(() => alert('Não foi possível abrir a impressão.')); return; }
+    const printWindow = window.open('', '_blank', 'width=900,height=1000');
+    if (!printWindow) {
+      showToast('Aviso: Ative os pop-ups do navegador para abrir a visualização em nova guia.', 'info');
+      return;
+    }
+
+
+    printWindow.document.open();
+    printWindow.document.write(previewHtml);
     printWindow.document.close();
   };
 
@@ -187,7 +190,7 @@ export const PrintableDocumentModal: React.FC<PrintableDocumentModalProps> = ({
 
   if (loading || !data) {
     return (
-      <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 mobile-modal">
         <div className="bg-white p-6 rounded-2xl shadow-xl flex items-center gap-3 text-slate-700">
           <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
           <span className="text-xs font-semibold">Formatando documento A4...</span>
@@ -204,7 +207,7 @@ export const PrintableDocumentModal: React.FC<PrintableDocumentModalProps> = ({
   ].filter(Boolean).join(' - ');
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-2 sm:p-6 overflow-y-auto print:p-0 print:bg-white print:fixed print:inset-0">
+    <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-2 sm:p-6 overflow-y-auto print:p-0 print:bg-white print:fixed print:inset-0 mobile-modal">
       <div className="bg-white rounded-3xl w-full max-w-3xl shadow-2xl border border-slate-200 flex flex-col max-h-[96vh] overflow-hidden print:border-none print:shadow-none print:max-h-none print:w-full print:rounded-none">
         {/* Modal Top Bar (3 Opções Distintas: Visualizar, Imprimir, Baixar PDF) - Hidden on print */}
         <div className="bg-slate-900 text-white px-5 py-3.5 flex items-center justify-between gap-3 print:hidden">
@@ -260,7 +263,7 @@ export const PrintableDocumentModal: React.FC<PrintableDocumentModalProps> = ({
               Assinatura
             </button>
 
-            <button
+            <button aria-label="Fechar"
               onClick={onClose}
               className="p-1.5 text-slate-400 hover:text-white rounded-xl bg-white/10 transition-all ml-1 cursor-pointer"
             >

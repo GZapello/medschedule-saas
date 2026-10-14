@@ -25,7 +25,7 @@ export function ConsultationPaymentModal({ appointmentId, initialPayment, onFini
     } catch (err: any) { setError(err.message || 'Não foi possível registrar o recebimento.'); }
     finally { setSaving(false); }
   };
-  return <div className="fixed inset-0 z-[60] bg-slate-900/60 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="receipt-title">
+  return <div className="fixed inset-0 z-[60] bg-slate-900/60 flex items-center justify-center p-4 mobile-modal" role="dialog" aria-modal="true" aria-labelledby="receipt-title">
     <form onSubmit={confirm} className="bg-white rounded-2xl p-6 w-full max-w-lg space-y-4 shadow-xl">
       <h2 id="receipt-title" className="text-xl font-bold">Recebimento do atendimento</h2>
       <p className="text-sm text-slate-600">Prontuário salvo. Confirme o recebimento para finalizar a consulta e atualizar o Financeiro da clínica. Você também pode registrar como pendente.</p>

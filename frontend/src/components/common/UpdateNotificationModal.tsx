@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { navigateToUrl } from '../../utils/nativeNavigation';
 import { ApiClient } from '../../api/client';
 import { APP_VERSION, compareVersions, VersionInfo } from '../../config/version';
 import { ArrowDownToLine, Sparkles, X, CheckCircle2, ShieldCheck } from 'lucide-react';
@@ -52,7 +53,7 @@ export const UpdateNotificationModal: React.FC = () => {
       : `${baseUrl}/v1/public/download-windows`;
 
     // Dispara o download diretamente no navegador / WebView
-    window.location.href = downloadEndpoint;
+    void navigateToUrl(downloadEndpoint).catch(() => { setDownloading(false); window.alert('Não foi possível abrir o download.'); });
 
     setTimeout(() => {
       setDownloading(false);
@@ -65,7 +66,7 @@ export const UpdateNotificationModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200 mobile-modal">
       <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-100 space-y-5 animate-in zoom-in-95 duration-200">
         
         {/* Header com ícone e badge */}

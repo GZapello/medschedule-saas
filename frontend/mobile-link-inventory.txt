@@ -1,0 +1,22 @@
+frontend/src\components\billing\BillingView.tsx:405:          O teste grátis de 7 dias é exclusivo do plano <strong>Zemda Solo</strong>. Para dúvidas comerciais ou condições personalizadas de implantação dos planos <strong>Equipe</strong> e <strong>Clínica</strong>, entre em contato pelo <a href="mailto:suporte@zemda.com.br" className="text-teal-700 font-bold underline hover:text-teal-900">suporte@zemda.com.br</a>.
+frontend/src\components\common\ClinicalFileUploader.tsx:376:      window.open(url, '_blank');
+frontend/src\components\common\ErrorBoundary.tsx:204:                  placeholder="http://192.168.0.100:4000/api"
+frontend/src\components\auth\RegisterUserModal.tsx:26:      if (target.startsWith('http://') || target.startsWith('https://')) {
+frontend/src\components\clinical\ClinicalRecordsView.tsx:178:    window.open(printUrl, '_blank');
+frontend/src\components\consents\consent-api.ts:15:  const viewer=preview?window.open('about:blank','_blank'):null;
+frontend/src\components\consents\consent-api.ts:25:  const anchor=document.createElement('a');anchor.href=url;anchor.download=`termo-${id}.pdf`;anchor.click();
+frontend/src\components\auth\GoogleAuthButton.tsx:35:  <svg className={className} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+frontend/src\components\common\NetworkOfflineModal.tsx:153:                placeholder="http://192.168.0.100:4000/api"
+frontend/src\utils\teleconsultation.ts:22:  window.open(appointment.meeting_url.trim(), '_blank', 'noopener,noreferrer');
+frontend/src\utils\phone.utils.ts:137:  return `https://wa.me/${normalizedPhone}?text=${encodeURIComponent(message)}`;
+frontend/src\components\clinical\PatientFollowUpDocumentModal.tsx:313:      printWindow = window.open('', '_blank', 'width=900,height=1000');
+frontend/src\components\clinical\PatientFollowUpDocumentModal.tsx:315:      console.warn('window.open bloqueado ou restrito:', e);
+frontend/src\components\common\UniversalWhatsAppModal.tsx:81:      window.open(url, '_blank', 'noopener,noreferrer');
+frontend/src\components\clinical\PrintableDocumentModal.tsx:79:    const printWindow = window.open('', '_blank', 'width=900,height=1000');
+frontend/src\components\public-booking\PublicBookingView.tsx:99:    const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url;a.download='agendamento-zemda.ics';a.click();URL.revokeObjectURL(url);
+frontend/src\components\psychology\psychology-print.util.ts:57:  const printWindow = window.open(blobUrl, '_blank', 'noopener,noreferrer');
+frontend/src\components\superadmin\FreeTrialsAdminView.tsx:725:                                href={`mailto:${trial.email}?subject=Acompanhamento%20Zemda%20Solo%20-%20${encodeURIComponent(trial.clinic_name)}`}
+frontend/src\components\speech-therapy\audiology\PrintableAudiologyModal.tsx:59:    const printWin = window.open('', '_blank', 'width=950,height=1050');
+frontend/src\components\personal\PersonalStudentLinkModal.tsx:127:      const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
+frontend/src\components\personal\PersonalStudentLinkModal.tsx:128:      window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
+frontend/src\components\personal\PersonalStudentLinkModal.tsx:134:    window.open(linkData.linkUrl, '_blank');

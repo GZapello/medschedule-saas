@@ -509,7 +509,7 @@ export function TodayWorklist({ data, onNavigate, onPatient }: {
 
       {/* Modal Completo: Todos os Lembretes de Contato */}
       {showAllModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 mobile-modal">
           <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 max-h-[85vh] flex flex-col">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
               <div className="flex items-center gap-2">
@@ -521,7 +521,7 @@ export function TodayWorklist({ data, onNavigate, onPatient }: {
                   <p className="text-xs text-slate-500">Acompanhe os pacientes para novos retornos conforme serviços realizados</p>
                 </div>
               </div>
-              <button
+              <button aria-label="Fechar"
                 type="button"
                 onClick={() => setShowAllModal(false)}
                 className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer transition-colors"

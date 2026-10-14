@@ -57,7 +57,7 @@ export const ClinicalTrendChart: React.FC<Props> = ({ history, metric: key, colo
     }, '');
 
     return (
-      <div className="w-full overflow-x-auto">
+      <div className="w-full lg:overflow-x-auto">
         <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-60" role="img" aria-label={title || 'Evolução clínica'}>
           {/* Linhas de Grade de Fundo */}
           <line x1={padding} y1={padding} x2={width - padding} y2={padding} stroke="#f1f5f9" strokeWidth="1" />

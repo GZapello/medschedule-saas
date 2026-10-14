@@ -70,7 +70,7 @@ export const ToothDossierDrawer: React.FC<ToothDossierDrawerProps> = ({
   const timeline = dossier?.timeline || [];
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 overflow-hidden bg-black/50 backdrop-blur-sm animate-in fade-in duration-200 mobile-modal">
       <div className="absolute inset-y-0 right-0 max-w-full flex pl-10">
         <div className="w-screen max-w-xl bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-800 flex flex-col">
           {/* Header */}
@@ -90,7 +90,7 @@ export const ToothDossierDrawer: React.FC<ToothDossierDrawerProps> = ({
                 </div>
               </div>
             </div>
-            <button
+            <button aria-label="Fechar"
               onClick={onClose}
               className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition"
             >

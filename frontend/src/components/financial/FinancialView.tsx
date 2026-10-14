@@ -1,3 +1,5 @@
+import { ResponsiveTable } from '../common/ResponsiveTable';
+import { downloadBlob } from '../../utils/download';
 import React, { useState, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -161,12 +163,7 @@ export const FinancialView: React.FC = () => {
     try {
       const csvText = await ApiClient.get<string>('/v1/reports/export-csv?type=payments');
       const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'relatorio-financeiro.csv';
-      a.click();
-      URL.revokeObjectURL(url);
+      await downloadBlob(blob, 'relatorio-financeiro.csv');
       showToast('Relatório financeiro baixado com sucesso!', 'success');
     } catch (err) {
       showToast('Erro ao exportar CSV', 'error');
@@ -226,7 +223,7 @@ export const FinancialView: React.FC = () => {
       </div>
 
       {/* Sub-tab Switcher */}
-      <div className="flex items-center gap-2 border-b border-slate-200 pb-2 text-xs font-bold overflow-x-auto no-scrollbar scroll-smooth">
+      <div className="flex items-center gap-2 border-b border-slate-200 pb-2 text-xs font-bold overflow-x-auto no-scrollbar scroll-smooth mobile-wrap">
         <button
           onClick={() => setFinancialTab('transactions')}
           className={`px-4 py-2 rounded-xl transition-all shrink-0 whitespace-nowrap ${
@@ -320,8 +317,8 @@ export const FinancialView: React.FC = () => {
               </div>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+            <div className="overflow-x-auto mobile-table-container">
+              <ResponsiveTable className="w-full text-left text-xs">
                 <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase">
                   <tr>
                     <th className="px-6 py-3.5">Data</th>
@@ -391,7 +388,7 @@ export const FinancialView: React.FC = () => {
                     ))
                   )}
                 </tbody>
-              </table>
+              </ResponsiveTable>
             </div>
           </div>
         </>
@@ -510,8 +507,8 @@ export const FinancialView: React.FC = () => {
             <div className="p-4 border-b border-slate-100">
               <h3 className="font-bold text-slate-900 text-sm">Histórico de Fechamentos de Caixa</h3>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+            <div className="overflow-x-auto mobile-table-container">
+              <ResponsiveTable className="w-full text-left text-xs">
                 <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase">
                   <tr>
                     <th className="px-6 py-3.5">Abertura / Fechamento</th>
@@ -563,7 +560,7 @@ export const FinancialView: React.FC = () => {
                     ))
                   )}
                 </tbody>
-              </table>
+              </ResponsiveTable>
             </div>
           </div>
         </div>
@@ -571,11 +568,11 @@ export const FinancialView: React.FC = () => {
 
       {/* Modal Abertura de Caixa */}
       {showOpenCashModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto mobile-modal">
           <div className="bg-white rounded-3xl max-w-sm w-full p-4 sm:p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-base font-bold text-slate-900">Abertura de Caixa</h3>
-              <button onClick={() => setShowOpenCashModal(false)} className="p-1 text-slate-400 hover:text-slate-700">
+              <button aria-label="Fechar" onClick={() => setShowOpenCashModal(false)} className="p-1 text-slate-400 hover:text-slate-700">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -606,11 +603,11 @@ export const FinancialView: React.FC = () => {
 
       {/* Modal Fechamento de Caixa */}
       {showCloseCashModal && cashRegister && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto mobile-modal">
           <div className="bg-white rounded-3xl max-w-md w-full p-4 sm:p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-base font-bold text-slate-900">Fechamento & Conferência de Caixa</h3>
-              <button onClick={() => setShowCloseCashModal(false)} className="p-1 text-slate-400 hover:text-slate-700">
+              <button aria-label="Fechar" onClick={() => setShowCloseCashModal(false)} className="p-1 text-slate-400 hover:text-slate-700">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -690,11 +687,11 @@ export const FinancialView: React.FC = () => {
 
       {/* Modal Novo Pagamento */}
       {showModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto mobile-modal">
           <div className="bg-white rounded-3xl max-w-md w-full p-4 sm:p-6 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
               <h3 className="text-lg font-bold text-slate-900">Registrar Recebimento</h3>
-              <button onClick={() => setShowModal(false)} className="p-1 text-slate-400 hover:text-slate-700 rounded-lg">
+              <button aria-label="Fechar" onClick={() => setShowModal(false)} className="p-1 text-slate-400 hover:text-slate-700 rounded-lg">
                 <X className="w-5 h-5" />
               </button>
             </div>

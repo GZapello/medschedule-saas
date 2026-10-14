@@ -1,3 +1,6 @@
+import { AndroidAppAdmin } from './AndroidAppAdmin';
+import { useAndroidSectionBack } from '../../hooks/useAndroidSectionBack';
+import { ResponsiveTable } from '../common/ResponsiveTable';
 const SystemIntegrityView = React.lazy(() => import('./SystemIntegrityView'));
 import { GlobalBillingView } from '../billing/GlobalBillingView';
 import React, { useState, useEffect } from 'react';
@@ -45,11 +48,11 @@ export const SuperAdminView: React.FC = () => {
   const { showToast } = useToast();
 
   // Navegação Principal do SuperAdmin (Aba "categories" removida conforme governança)
-  const [mainSection, setMainSection] = useState<'tenants' | 'professions' | 'subscriptions' | 'integrations' | 'free_trials' | 'whatsapp' | 'laboratory' | 'integrity'>(() => {
+  const [mainSection, setMainSection] = useState<'tenants' | 'professions' | 'subscriptions' | 'integrations' | 'free_trials' | 'whatsapp' | 'laboratory' | 'integrity' | 'android'>(() => {
     try {
       const params = new URLSearchParams(window.location.search);
       const s = params.get('section');
-      if (s && ['tenants', 'professions', 'subscriptions', 'integrations', 'free_trials', 'whatsapp', 'laboratory', 'integrity'].includes(s)) {
+      if (s && ['tenants', 'professions', 'subscriptions', 'integrations', 'free_trials', 'whatsapp', 'laboratory', 'integrity', 'android'].includes(s)) {
         return s as any;
       }
     } catch {}
@@ -60,7 +63,7 @@ export const SuperAdminView: React.FC = () => {
     const handleUrlChange = () => {
       const params = new URLSearchParams(window.location.search);
       const s = params.get('section');
-      if (s && ['tenants', 'professions', 'subscriptions', 'integrations', 'free_trials', 'whatsapp', 'laboratory', 'integrity'].includes(s)) {
+      if (s && ['tenants', 'professions', 'subscriptions', 'integrations', 'free_trials', 'whatsapp', 'laboratory', 'integrity', 'android'].includes(s)) {
         setMainSection(s as any);
       } else if (s === 'categories') {
         // Redireciona ?section=categories de volta para a visão padrão
@@ -70,6 +73,8 @@ export const SuperAdminView: React.FC = () => {
     window.addEventListener('popstate', handleUrlChange);
     return () => window.removeEventListener('popstate', handleUrlChange);
   }, []);
+
+  useAndroidSectionBack(user?.role === 'superadmin' && mainSection !== 'tenants', () => setMainSection('tenants'));
 
   // Clínicas
   const [metrics, setMetrics] = useState<any>(null);
@@ -373,7 +378,7 @@ export const SuperAdminView: React.FC = () => {
   return (
     <div className="space-y-6">
       {control && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto mobile-modal">
           <form onSubmit={submitControl} role="dialog" aria-modal="true" aria-labelledby="clinic-control-title" className="bg-white rounded-2xl p-4 sm:p-6 w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto">
             <h3 id="clinic-control-title" className="font-bold text-lg">{control.action === 'delete' ? 'Excluir clínica definitivamente' : 'Banir clínica'}</h3>
             <p>Clínica: <strong>{control.clinic.name}</strong></p>
@@ -415,7 +420,16 @@ export const SuperAdminView: React.FC = () => {
         </div>
 
         {/* Menu Superior de Módulos Globais */}
-        <div className="flex items-center gap-1.5 p-1.5 bg-white/10 backdrop-blur-md rounded-2xl border border-white/10 text-xs font-bold overflow-x-auto max-w-full no-scrollbar scroll-smooth">
+        <label className="lg:hidden block w-full min-w-0">Área global
+          <select aria-label="Área global" value={mainSection} onChange={e => setMainSection(e.target.value as typeof mainSection)} className="mt-2 w-full rounded-xl bg-white p-3 text-slate-900">
+            <option value="tenants">Clínicas</option><option value="professions">Profissões</option>
+            <option value="subscriptions">Assinaturas</option><option value="integrity">Integridade</option>
+            <option value="integrations">Integrações</option><option value="free_trials">Testes grátis</option>
+            <option value="whatsapp">WhatsApp</option><option value="laboratory">Laboratório</option><option value="android">Aplicativo Android</option>
+          </select>
+        </label>
+        <div className="hidden lg:flex items-center gap-1.5 p-1.5 bg-white/10 backdrop-blur-md rounded-2xl border border-white/10 text-xs font-bold overflow-x-auto max-w-full no-scrollbar scroll-smooth mobile-wrap">
+          <button onClick={() => setMainSection('android')} className="px-3 py-2 rounded-xl hover:bg-white/10 shrink-0 whitespace-nowrap">Aplicativo Android</button>
           <button onClick={()=>setMainSection('subscriptions')} className="px-3 py-2 rounded-xl hover:bg-white/10 shrink-0 whitespace-nowrap">Assinaturas</button>
           <button onClick={() => setMainSection('integrity')} className="px-3 py-2 rounded-xl hover:bg-white/10 shrink-0 whitespace-nowrap">Integridade</button>
           <button onClick={()=>setMainSection('integrations')} className="px-3 py-2 rounded-xl hover:bg-white/10 shrink-0 whitespace-nowrap">Integrações</button>
@@ -484,6 +498,7 @@ export const SuperAdminView: React.FC = () => {
       {/* ========================================================================= */}
       {/* SEÇÕES GLOBAIS DE GOVERNANÇA DO SAAS */}
       {/* ========================================================================= */}
+      {mainSection === 'android' && <AndroidAppAdmin />}
       {mainSection === 'integrity' && <React.Suspense fallback={<p>Carregando integridade…</p>}><SystemIntegrityView /></React.Suspense>}
       {mainSection === 'subscriptions' && <GlobalBillingView />}
       {mainSection === 'integrations' && <GlobalBillingView integration />}
@@ -544,7 +559,7 @@ export const SuperAdminView: React.FC = () => {
           {/* Tabela de Clínicas */}
           <div className="bg-white rounded-3xl p-4 sm:p-6 border border-slate-100 shadow-xs space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-2xl w-full sm:w-fit text-xs font-bold overflow-x-auto no-scrollbar scroll-smooth">
+              <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-2xl w-full sm:w-fit text-xs font-bold overflow-x-auto no-scrollbar scroll-smooth mobile-wrap">
                 <button
                   onClick={() => setActiveTab('all')}
                   className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer shrink-0 whitespace-nowrap ${
@@ -598,8 +613,8 @@ export const SuperAdminView: React.FC = () => {
               </div>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+            <div className="overflow-x-auto mobile-table-container">
+              <ResponsiveTable className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-slate-100 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
                     <th className="py-3 px-3">Clínica / Estabelecimento</th>
@@ -730,7 +745,7 @@ export const SuperAdminView: React.FC = () => {
                     </tr>
                   )))}
                 </tbody>
-              </table>
+              </ResponsiveTable>
             </div>
           </div>
         </div>
@@ -775,8 +790,8 @@ export const SuperAdminView: React.FC = () => {
             </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+          <div className="overflow-x-auto mobile-table-container">
+            <ResponsiveTable className="w-full text-left text-xs">
               <thead>
                 <tr className="border-b border-slate-100 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
                   <th className="py-3 px-4">Profissão</th>
@@ -875,7 +890,7 @@ export const SuperAdminView: React.FC = () => {
                   </tr>
                 )))}
               </tbody>
-            </table>
+            </ResponsiveTable>
           </div>
         </div>
       )}
@@ -886,13 +901,13 @@ export const SuperAdminView: React.FC = () => {
       {/* MODAL: Nova / Editar Profissão Global */}
       {/* ========================================================================= */}
       {isProfModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto mobile-modal">
           <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl p-4 sm:p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <h3 className="text-base font-bold text-slate-900">
                 {editingProf ? `Editar Profissão: ${editingProf.name}` : 'Cadastrar Nova Profissão Global'}
               </h3>
-              <button onClick={() => setIsProfModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+              <button aria-label="Fechar" onClick={() => setIsProfModalOpen(false)} className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -971,7 +986,7 @@ export const SuperAdminView: React.FC = () => {
 
       {/* Modal: Recusar Cadastro */}
       {rejectingClinic && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto mobile-modal">
           <div className="bg-white rounded-3xl p-4 sm:p-6 w-full max-w-md shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
             <h3 className="text-base font-extrabold text-slate-900">
               Recusar Cadastro de "{rejectingClinic.name}"
@@ -1010,7 +1025,7 @@ export const SuperAdminView: React.FC = () => {
 
       {/* Modal: Resumo Estatístico da Clínica (Operacional Agregado — Zero PII) */}
       {selectedClinic && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto mobile-modal">
           <div className="bg-white rounded-3xl w-full max-w-4xl overflow-hidden shadow-2xl p-4 sm:p-6 space-y-6 max-h-[90vh] overflow-y-auto">
             {/* Header */}
             <div className="flex items-start justify-between pb-4 border-b border-slate-100">
@@ -1026,7 +1041,7 @@ export const SuperAdminView: React.FC = () => {
                   Visão operacional e quantitativa exclusiva para governança do SuperAdmin (sem exibição de dados pessoais ou clínicos individuais).
                 </p>
               </div>
-              <button
+              <button aria-label="Fechar"
                 type="button"
                 onClick={() => { setSelectedClinic(null); setClinicSummary(null); }}
                 className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
@@ -1279,7 +1294,7 @@ export const SuperAdminView: React.FC = () => {
 
       {/* Modal: Exclusão Definitiva de Profissão Global */}
       {deletingProf && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto mobile-modal">
           <div className="bg-white rounded-3xl p-4 sm:p-6 w-full max-w-lg shadow-2xl border border-slate-100 space-y-4 animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2.5">
@@ -1295,7 +1310,7 @@ export const SuperAdminView: React.FC = () => {
                   </p>
                 </div>
               </div>
-              <button
+              <button aria-label="Fechar"
                 type="button"
                 onClick={closeDeleteProfModal}
                 disabled={deleteProfBusy}

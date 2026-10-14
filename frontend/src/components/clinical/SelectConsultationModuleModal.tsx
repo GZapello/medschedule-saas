@@ -361,7 +361,7 @@ export const SelectConsultationModuleModal: React.FC<SelectConsultationModuleMod
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto mobile-modal"
       role="dialog"
       aria-modal="true"
       aria-labelledby="select-module-title"
@@ -380,7 +380,7 @@ export const SelectConsultationModuleModal: React.FC<SelectConsultationModuleMod
           </div>
           <button
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer shrink-0 min-h-[40px] min-w-[40px] flex items-center justify-center"
+            className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer shrink-0 min-h-[40px] min-w-0 lg:min-w-[40px] flex items-center justify-center"
             aria-label="Fechar modal"
           >
             <X className="w-5 h-5" />

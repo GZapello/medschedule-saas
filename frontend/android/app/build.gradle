@@ -1,14 +1,38 @@
 apply plugin: 'com.android.application'
 
+// Optional fresh output directory for OneDrive/cache recovery, without deleting existing artifacts.
+def customBuildDir = System.getenv('ZEMDA_ANDROID_BUILD_DIR') ?: project.findProperty('zemdaBuildDir')
+if (customBuildDir) {
+    layout.buildDirectory.set(file(customBuildDir))
+}
+
+def packageInfo = new groovy.json.JsonSlurper().parse(file('../../package.json'))
+def signingValues = ['ZEMDA_KEYSTORE_PATH', 'ZEMDA_KEYSTORE_PASSWORD', 'ZEMDA_KEY_ALIAS', 'ZEMDA_KEY_PASSWORD'].collectEntries { [(it): System.getenv(it)] }
+def configuredSigning = signingValues.values().every { it }
+if (signingValues.values().any { it } && !configuredSigning) {
+    throw new GradleException('Configuração de assinatura Zemda incompleta: defina todas as variáveis de assinatura.')
+}
+
 android {
-    namespace = "com.medschedule.app"
+    buildFeatures { buildConfig true }
+    signingConfigs {
+        if (configuredSigning) {
+            release {
+                storeFile file(signingValues['ZEMDA_KEYSTORE_PATH'])
+                storePassword signingValues['ZEMDA_KEYSTORE_PASSWORD']
+                keyAlias signingValues['ZEMDA_KEY_ALIAS']
+                keyPassword signingValues['ZEMDA_KEY_PASSWORD']
+            }
+        }
+    }
+    namespace = "br.com.zemda.app"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.medschedule.app"
+        applicationId "br.com.zemda.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 10102
-        versionName "1.1.2"
+        versionCode packageInfo.android.versionCode as Integer
+        versionName packageInfo.version
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -18,6 +42,7 @@ android {
     }
     buildTypes {
         release {
+            if (configuredSigning) signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

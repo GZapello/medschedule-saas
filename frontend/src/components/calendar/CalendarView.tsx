@@ -30,12 +30,14 @@ import { AppointmentConsultation } from '../clinical/AppointmentConsultation';
 import { SelectConsultationModuleModal, getCompatibleClinicalModules, getModuleForProfession } from '../clinical/SelectConsultationModuleModal';
 import { WhatsAppReminderModal, WhatsAppIcon } from '../common/WhatsAppReminderModal';
 import { isValidPhoneNumber, formatPhoneDisplay } from '../../utils/phone.utils';
+import { useMobileLayout } from '../../hooks/useMobileLayout';
 
 interface CalendarViewProps {
   onOpenNewAppointment: (prefill?: { date?: string; time?: string; professionalId?: string }) => void;
 }
 
 export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment }) => {
+  const mobile = useMobileLayout();
   const [consentPatientId, setConsentPatientId] = useState<string | null>(null);
   const auth = useAuth();
   const { currentTenant, clientTermLabel } = auth;
@@ -43,6 +45,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
 
   const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>(() => (typeof window !== 'undefined' && window.innerWidth < 768 ? 'day' : 'week'));
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
+  useEffect(() => { if (mobile) setViewMode('day'); }, [mobile]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -804,7 +807,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
           </select>
 
           {/* Modos de visualização */}
-          <div className="flex items-center bg-slate-100 p-1 rounded-xl shrink-0">
+          <div className="hidden lg:flex items-center bg-slate-100 p-1 rounded-xl shrink-0">
             <button
               onClick={() => setViewMode('day')}
               className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
@@ -835,9 +838,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
       </div>
 
       {/* Calendar Grid (Week Mode) */}
-      {viewMode === 'week' && (
+      {viewMode === 'week' && !mobile && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-x-auto">
-          <div className="min-w-[800px]">
+          <div className="min-w-0 lg:min-w-[800px]">
             {/* Week Header */}
             <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50 text-center text-xs font-semibold text-slate-700">
               <div className="py-3 border-r border-slate-200 text-slate-400">Horário</div>
@@ -969,7 +972,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
       )}
 
       {/* Calendar Day View */}
-      {viewMode === 'day' && (
+      {(viewMode === 'day' || mobile) && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-4 sm:p-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
             <h3 className="font-bold text-slate-900 text-base sm:text-lg">
@@ -987,6 +990,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
             </button>
           </div>
           <div className="divide-y divide-slate-100">
+            {mobile && <label className="block mb-4 text-sm font-semibold">Data da agenda
+              <input type="date" aria-label="Data da agenda" value={formatDateLocal(currentDate)} onChange={e => {
+                if (e.target.value) setCurrentDate(new Date(`${e.target.value}T12:00:00`));
+              }} className="mt-2 block w-full border border-slate-300 rounded-xl p-3" />
+            </label>}
             {timeSlots.map(timeSlot => {
               const currentDateStr = formatDateLocal(currentDate);
               const availability = getSlotAvailability(currentDateStr, timeSlot);
@@ -1008,7 +1016,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                       professionalId: selectedProf !== 'all' ? selectedProf : undefined
                     });
                   }}
-                  className={`py-2.5 px-3 flex items-start gap-4 rounded-xl transition-colors bg-white min-h-[52px] ${
+                  className={`mobile-day-slot py-2.5 px-3 flex items-start gap-4 rounded-xl transition-colors bg-white min-h-[52px] ${
                     !canSchedule
                       ? (hasAppointments ? 'cursor-default' : 'cursor-default select-none')
                       : 'hover:bg-indigo-50/40 cursor-pointer group'
@@ -1101,10 +1109,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
         notifyAppointmentChange();
       }} />}
       {selectedAppt && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 overflow-y-auto mobile-modal">
           {/* Backdrop cobrindo 100vw/100vh */}
           <div
-            className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs"
+            className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs mobile-modal"
             onClick={() => {
               setSelectedAppt(null);
               setIsRescheduling(false);
@@ -1121,7 +1129,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                 <button type="button" className="text-xs text-indigo-600" onClick={() => setTeleAppt(selectedAppt)}>Editar modalidade</button>
                 {selectedAppt.modality === 'online' && <span className="text-xs inline-flex items-center gap-1"><Video className="w-3 h-3" /> Online</span>}
               </div>
-              <button
+              <button aria-label="Fechar"
                 onClick={() => {
                   setSelectedAppt(null);
                   setIsRescheduling(false);
@@ -1455,10 +1463,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
 
       {/* Modal de Cancelamento Estruturado com Motivo Obrigatório (Item 10) */}
       {cancellingAppt && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 overflow-y-auto mobile-modal">
           {/* Backdrop cobrindo 100vw/100vh */}
           <div
-            className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs"
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs mobile-modal"
             onClick={() => setCancellingAppt(null)}
             aria-hidden="true"
           />
@@ -1470,7 +1478,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                 <span className="text-xs font-bold text-rose-600 uppercase">Cancelamento Obrigatório</span>
                 <h3 className="text-base font-bold text-slate-900">Confirmar Cancelamento</h3>
               </div>
-              <button
+              <button aria-label="Fechar"
                 onClick={() => setCancellingAppt(null)}
                 className="p-1 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
               >

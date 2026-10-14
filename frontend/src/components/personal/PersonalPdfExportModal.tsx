@@ -1,3 +1,4 @@
+import { ResponsiveTable } from '../common/ResponsiveTable';
 import { PersonalAssessmentReport } from './PersonalAssessmentReport';
 import React, { useState, useRef, useEffect } from 'react';
 import {
@@ -152,7 +153,7 @@ export const PersonalPdfExportModal: React.FC<PersonalPdfExportModalProps> = ({
   const age=reportData?.assessment?.age_at_assessment ?? null;
 
   return (
-    <div className="personal-print-root fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-fadeIn">
+    <div className="personal-print-root fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-fadeIn mobile-modal">
       <style>{`@media print {
         body * { visibility: hidden; }
         .personal-print-root, .personal-print-root * { visibility: visible; }
@@ -192,7 +193,7 @@ export const PersonalPdfExportModal: React.FC<PersonalPdfExportModalProps> = ({
               <Printer className="w-4 h-4" />
               Imprimir / Salvar em PDF
             </button>
-            <button
+            <button aria-label="Fechar"
               onClick={onClose}
               className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded-xl transition-colors"
             >
@@ -320,7 +321,7 @@ export const PersonalPdfExportModal: React.FC<PersonalPdfExportModalProps> = ({
                       </p>
                     )}
 
-                    <table className="w-full text-left text-xs border-collapse">
+                    <ResponsiveTable className="w-full text-left text-xs border-collapse">
                       <thead>
                         <tr className="border-b-2 border-slate-200 text-[10px] font-bold uppercase text-slate-500">
                           <th className="py-2 px-2">#</th>
@@ -369,7 +370,7 @@ export const PersonalPdfExportModal: React.FC<PersonalPdfExportModalProps> = ({
                           </tr>
                         ))}
                       </tbody>
-                    </table>
+                    </ResponsiveTable>
                   </div>
                 ))}
               </div>
@@ -441,7 +442,7 @@ export const PersonalPdfExportModal: React.FC<PersonalPdfExportModalProps> = ({
                           <span className="text-[11px] text-slate-500">{w.structure_type || 'Personal'}</span>
                         </div>
                         {w.notes && <p className="text-[11px] text-slate-600 italic">{w.notes}</p>}
-                        <table className="w-full text-left text-xs border-collapse bg-white rounded-lg overflow-hidden border border-slate-200">
+                        <ResponsiveTable className="w-full text-left text-xs border-collapse bg-white rounded-lg overflow-hidden border border-slate-200">
                           <thead>
                             <tr className="border-b border-slate-200 text-[10px] font-bold uppercase text-slate-500 bg-slate-100/70">
                               <th className="py-1 px-2">#</th>
@@ -469,7 +470,7 @@ export const PersonalPdfExportModal: React.FC<PersonalPdfExportModalProps> = ({
                               </tr>
                             ))}
                           </tbody>
-                        </table>
+                        </ResponsiveTable>
                       </div>
                     ))}
                   </div>
@@ -482,7 +483,7 @@ export const PersonalPdfExportModal: React.FC<PersonalPdfExportModalProps> = ({
                       <Activity className="w-3.5 h-3.5 text-indigo-600" />
                       <span>Histórico Recente de Execução de Treinos</span>
                     </h5>
-                    <table className="w-full text-xs text-left border-collapse border border-slate-200 rounded-xl overflow-hidden">
+                    <ResponsiveTable className="w-full text-xs text-left border-collapse border border-slate-200 rounded-xl overflow-hidden">
                       <thead>
                         <tr className="border-b text-[10px] text-slate-500 font-bold uppercase bg-slate-50">
                           <th className="py-1.5 px-2">Data</th>
@@ -509,7 +510,7 @@ export const PersonalPdfExportModal: React.FC<PersonalPdfExportModalProps> = ({
                           </tr>
                         ))}
                       </tbody>
-                    </table>
+                    </ResponsiveTable>
                   </div>
                 )}
               </div>

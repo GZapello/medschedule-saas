@@ -1,4 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { Capacitor } from '@capacitor/core';
+import { nativeGoogleCredential } from '../../utils/nativeGoogleAuth';
 
 export { GOOGLE_LOGIN_ERROR } from './googleAuthErrors';
 import { GOOGLE_LOGIN_ERROR, googleAuthError } from './googleAuthErrors';
@@ -103,8 +105,11 @@ export const GoogleAuthButton: React.FC<GoogleAuthButtonProps> = ({
   const [error,setError] = useState('');
   const [ready,setReady] = useState(false);
   const [attempt,setAttempt] = useState(0);
+  const [nativeBusy, setNativeBusy] = useState(false);
+  const native = Capacitor.getPlatform() === 'android';
   const clientId = (import.meta.env.VITE_GOOGLE_CLIENT_ID || '').trim();
   useEffect(() => {
+    if (native) return;
     let live = true;
     let responseTimer: number | undefined;
     const buttonState = `zemda-google-${++nextButton}`;
@@ -175,6 +180,15 @@ export const GoogleAuthButton: React.FC<GoogleAuthButtonProps> = ({
       receivers.delete(buttonState);
     };
   },[clientId,text,theme,shape,size,width,attempt]);
+  if (native) return <div className={`w-full ${className}`}>
+    <button type="button" disabled={disabled || nativeBusy} className="w-full min-h-11 flex items-center justify-center gap-3 border border-slate-300 rounded-xl bg-white text-slate-800 px-4 py-3" onClick={async () => {
+      setNativeBusy(true); setError('');
+      try { const credential = await nativeGoogleCredential(clientId); callbacks.current.onSuccess(credential); }
+      catch (cause) { const message = googleAuthError(cause); setError(message); callbacks.current.onError?.(message); }
+      finally { setNativeBusy(false); }
+    }}>{nativeBusy ? 'Conectando…' : customLabel || 'Continuar com o Google'}</button>
+    {error && <p role="alert" className="mt-2 text-sm text-red-700">{error}</p>}
+  </div>;
   return <div className={`w-full flex flex-col items-center gap-2 ${className}`}>
     <div ref={containerRef} {...(disabled ? {inert: ''} : {})} aria-disabled={disabled} className={`w-full flex items-center justify-center min-h-[40px] ${disabled?'pointer-events-none opacity-50':''}`} />
     {!ready&&!error&&<p role="status" className="text-xs text-slate-500">Carregando {customLabel || 'login Google'}…</p>}

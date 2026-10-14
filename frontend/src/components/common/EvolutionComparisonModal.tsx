@@ -1,3 +1,4 @@
+import { ResponsiveTable } from './ResponsiveTable';
 import React from 'react';
 import { X, ArrowRight, TrendingUp, Minus, TrendingDown, HelpCircle, CheckCircle2, Calendar } from 'lucide-react';
 
@@ -81,7 +82,7 @@ export const EvolutionComparisonModal: React.FC<EvolutionComparisonModalProps> =
   const categories = Array.from(new Set(items.map(i => i.category || 'Geral')));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-150 mobile-modal">
       <div className="bg-white w-full max-w-5xl max-h-[90vh] rounded-3xl shadow-2xl flex flex-col border border-slate-100 overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/70">
@@ -92,7 +93,7 @@ export const EvolutionComparisonModal: React.FC<EvolutionComparisonModalProps> =
             </h2>
             {subtitle && <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>}
           </div>
-          <button
+          <button aria-label="Fechar"
             onClick={onClose}
             className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
           >
@@ -137,7 +138,7 @@ export const EvolutionComparisonModal: React.FC<EvolutionComparisonModalProps> =
                     {category}
                   </h3>
                   <div className="overflow-hidden border border-slate-200 bg-white rounded-2xl shadow-xs">
-                    <table className="w-full text-left text-xs">
+                    <ResponsiveTable className="w-full text-left text-xs">
                       <thead className="bg-slate-50 text-xs font-semibold text-slate-600 border-b border-slate-100">
                         <tr>
                           <th className="py-3 px-4">Item Avaliado</th>
@@ -169,7 +170,7 @@ export const EvolutionComparisonModal: React.FC<EvolutionComparisonModalProps> =
                           </tr>
                         ))}
                       </tbody>
-                    </table>
+                    </ResponsiveTable>
                   </div>
                 </div>
               );

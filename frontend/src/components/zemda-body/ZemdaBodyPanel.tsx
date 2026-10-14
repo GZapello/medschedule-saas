@@ -243,7 +243,7 @@ export const ZemdaBodyPanel: React.FC<ZemdaBodyPanelProps> = ({
             </span>
           </div>
         </div>
-        <button
+        <button aria-label="Fechar"
           onClick={onClose}
           className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-700/70 rounded-xl transition-colors cursor-pointer"
           title="Fechar painel"

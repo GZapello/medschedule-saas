@@ -68,7 +68,7 @@ export function ProfileSpecialties() {
       {chips.map(chip => <span key={chip.id} className="rounded-full border border-teal-100 bg-teal-50 px-3 py-1 text-xs font-semibold text-teal-800">{chip.name}</span>)}
       {!chips.length && <p className="text-slate-500">{error ? 'Não foi possível carregar as especialidades.' : !data ? 'Carregando especialidades…' : 'Nenhuma especialidade selecionada.'}</p>}
     </div>
-    {open && <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+    {open && <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs mobile-modal">
       <div id="profile-specialties-dialog" role="dialog" aria-modal="true" aria-labelledby="profile-specialties-title" className="w-full max-w-4xl max-h-[90dvh] overflow-y-auto rounded-3xl border border-slate-200 bg-white shadow-2xl p-4 sm:p-6">
         <div className="flex items-center justify-between gap-3 mb-4"><h3 id="profile-specialties-title" className="text-base font-bold text-slate-900">Editar especialidades</h3><button id="profile-specialties-close" type="button" disabled={saving} onClick={() => setOpen(false)} aria-label="Fechar" className="p-2 rounded-xl hover:bg-slate-100 disabled:opacity-50"><X className="w-5 h-5" /></button></div>
         <MyResourcesView areasOnly onSavingChange={setSaving} onAreasSaved={async () => { await load(); setSaving(false); setOpen(false); }} />

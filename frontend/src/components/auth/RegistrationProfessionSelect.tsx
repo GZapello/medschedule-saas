@@ -219,7 +219,7 @@ export const RegistrationProfessionSelect: React.FC<RegistrationProfessionSelect
         <>
           {/* Backdrop for click outside without layout interference */}
           <div
-            className="fixed inset-0 z-[9998] bg-black/20 sm:bg-transparent backdrop-blur-2xs sm:backdrop-blur-none cursor-default"
+            className="fixed inset-0 z-[9998] bg-black/20 sm:bg-transparent backdrop-blur-2xs sm:backdrop-blur-none cursor-default mobile-modal"
             onClick={handleClose}
           />
 

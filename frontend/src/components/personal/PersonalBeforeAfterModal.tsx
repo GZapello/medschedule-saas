@@ -35,7 +35,7 @@ export const PersonalBeforeAfterModal: React.FC<PersonalBeforeAfterModalProps> =
   const deltaFat = (afterPhoto?.body_fat_percentage || 0) - (beforePhoto?.body_fat_percentage || 0);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-md animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-md animate-fadeIn mobile-modal">
       <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
         {/* Header */}
         <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
@@ -52,7 +52,7 @@ export const PersonalBeforeAfterModal: React.FC<PersonalBeforeAfterModalProps> =
               </p>
             </div>
           </div>
-          <button
+          <button aria-label="Fechar"
             onClick={onClose}
             className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
           >

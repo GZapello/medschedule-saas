@@ -308,9 +308,9 @@ export const PatientSearchSelect: React.FC<PatientSearchSelectProps> = ({
   // ========================================================
   if (compact) {
     return (
-      <div ref={containerRef} className={`relative inline-block ${className}`}>
+      <div ref={containerRef} className={`relative inline-block max-w-full lg:max-w-none ${className}`}>
         {value && loadedPatient ? (
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 hover:border-slate-300 rounded-xl transition-all shadow-2xs group max-w-[320px]">
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 hover:border-slate-300 rounded-xl transition-all shadow-2xs group max-w-full lg:max-w-[320px]">
             <div className="w-5 h-5 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-[10px] shrink-0">
               {displayName ? displayName.charAt(0).toUpperCase() : <User className="w-3 h-3 text-slate-500" />}
             </div>
@@ -334,7 +334,7 @@ export const PatientSearchSelect: React.FC<PatientSearchSelectProps> = ({
             )}
           </div>
         ) : (
-          <div className="relative min-w-[240px] sm:min-w-[280px]">
+          <div className="relative min-w-0 sm:min-w-[280px]">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               ref={inputRef}

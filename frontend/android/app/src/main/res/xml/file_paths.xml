@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
-    <external-path name="my_images" path="." />
-    <cache-path name="my_cache_images" path="." />
+    <cache-path name="zemda_exports" path="zemda-exports/" />
+    <!-- Capacitor's existing file-input camera capture writes app-private Pictures. -->
+    <external-files-path name="camera_pictures" path="Pictures/" />
 </paths>

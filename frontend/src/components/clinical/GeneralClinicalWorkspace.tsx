@@ -460,7 +460,7 @@ export const GeneralClinicalWorkspace: React.FC<GeneralClinicalWorkspaceProps> =
 
       {/* Navegação de Abas Dinâmicas baseadas em Capabilities */}
       <div className="bg-white border-b border-slate-200 px-4 sm:px-6">
-        <div className="max-w-7xl mx-auto flex items-center gap-2 overflow-x-auto py-2">
+        <div className="max-w-7xl mx-auto flex items-center gap-2 overflow-x-auto py-2 mobile-wrap">
           <button
             type="button"
             onClick={() => setActiveTab('evolution')}
