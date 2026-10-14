@@ -1,8 +1,8 @@
 /** Conteúdo público compartilhado entre a landing e sua pré-renderização. */
-export const LANDING_HERO_TITLE_LINES = ['Gestão e atendimento em saúde.', 'Do profissional solo à clínica.'];
+export const LANDING_HERO_TITLE_LINES = ['Seu atendimento e sua gestão, conectados.', 'Do profissional solo à clínica.'];
 export const LANDING_HERO = {
   title: LANDING_HERO_TITLE_LINES.join(' '),
-  description: 'O sistema completo para médicos, profissionais de saúde e clínicas multiprofissionais: agenda inteligente, prontuário eletrônico estruturado, emissão de documentos, controle financeiro, gestão de equipe e módulos clínicos especializados em uma única plataforma.'
+  description: 'O Zemda reúne agenda, prontuário, documentos, financeiro, equipe e recursos clínicos especializados em uma única plataforma, para que você tenha mais organização na rotina e mais tempo para cuidar de quem realmente importa.'
 };
 
 export const LANDING_MODULES = [
