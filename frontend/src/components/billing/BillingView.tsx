@@ -13,18 +13,30 @@ const emptyProfile={name:'',cpfCnpj:'',email:'',phone:'',postalCode:'',address:'
 const statuses:Record<string,string>={ACTIVE:'Ativo',PENDING_PAYMENT:'Aguardando pagamento',PAST_DUE:'Pagamento pendente',SUSPENDED:'Suspenso',CANCELED:'Cancelado',NOT_SUBSCRIBED:'Escolha seu plano',CONFIRMED:'Pago',RECEIVED:'Pago',OVERDUE:'Vencido',PENDING:'Pendente',REFUNDED:'Estornado',DELETED:'Removido',TRIAL:'Teste Grátis (7 dias)',TRIAL_EXPIRED:'Teste Grátis Encerrado'};
 export function useBillingSummary(includeGlobal=false) {
   const {currentUser,currentTenant}=useAuth();
-  const [summary,setSummary]=useState<any>(null);
+  const identityKey=`${currentUser?.id || ''}:${currentTenant?.id || currentUser?.tenantId || ''}`;
+  const identity=useRef(identityKey); identity.current=identityKey;
+  const request=useRef(0);
+  const [snapshot,setSnapshot]=useState<{key:string;summary:any}>({key:'',summary:null});
   const [error,setError]=useState('');
   const reload=useCallback(async()=>{
-    if(!currentUser || currentUser.role==='superadmin' && !includeGlobal) {setSummary(null);return;}
-    try {setSummary(await ApiClient.get('/v1/subscriptions/current'));setError('');}
-    catch(e:any){setError(e.message || 'Não foi possível consultar sua assinatura.');}
-  },[currentUser?.id,currentTenant?.id,includeGlobal]);
-  useEffect(()=>{setSummary(null);void reload();const timer=setInterval(()=>{if(!document.hidden) void reload();},15000);
+    const sequence=++request.current;
+    if(!currentUser || currentUser.role==='superadmin' && !includeGlobal) {setSnapshot({key:identityKey,summary:null});return;}
+    try {
+      const summary=await ApiClient.get('/v1/subscriptions/current');
+      if(identity.current===identityKey && sequence===request.current) {setSnapshot({key:identityKey,summary});setError('');}
+    } catch(e:any){
+      if(identity.current===identityKey && sequence===request.current) {setSnapshot({key:identityKey,summary:null});setError(e.message || 'Não foi possível consultar sua assinatura.');}
+    }
+  },[identityKey,includeGlobal]);
+  useEffect(()=>{setSnapshot({key:identityKey,summary:null});setError('');void reload();
+    const timer=setInterval(()=>{if(!document.hidden) void reload();},15000);
     const event=()=>void reload();window.addEventListener('zemda-billing-refresh',event);
-    return()=>{clearInterval(timer);window.removeEventListener('zemda-billing-refresh',event);};},[reload]);
-  return {summary,error,reload};
+    const denied=()=>{setSnapshot({key:identityKey,summary:null});void reload();};
+    window.addEventListener('zemda-billing-denied',denied);
+    return()=>{++request.current;clearInterval(timer);window.removeEventListener('zemda-billing-refresh',event);window.removeEventListener('zemda-billing-denied',denied);};},[reload]);
+  return {summary:snapshot.key===identityKey ? snapshot.summary : null,error,reload};
 }
+
 export interface BillingViewProps {
   publicPage?: boolean;
   callback?: string;
@@ -57,6 +69,7 @@ export const BillingView: React.FC<BillingViewProps> = ({
       const res = await ApiClient.post<any>('/v1/subscriptions/start-trial', {});
       setNotice(res.message || 'Teste grátis de 7 dias ativado com sucesso! Aproveite todos os recursos do Zemda Solo.');
       await refresh();
+      await reloadSession();
       setShowPlans(false);
     } catch (e: any) { setError(e.message); } finally { setBusy(false); }
   };
@@ -101,11 +114,14 @@ export const BillingView: React.FC<BillingViewProps> = ({
   useEffect(() => {
     if (!summary || !currentUser || !checkoutRequested.current) return;
     checkoutRequested.current = false;
-    if (summary.status === 'NOT_SUBSCRIBED' && summary.selectedPlan && summary.selectedPlan.code !== 'SOLO') {
+    if (['NOT_SUBSCRIBED','PENDING_PAYMENT'].includes(summary.status) && summary.selectedPlan) {
       setRegistrationCheckout(true); setProfileOpen(true); setShowPlans(false);
       setNotice('Plano escolhido: ' + summary.selectedPlan.name + '. Complete os dados do pagador para continuar ao pagamento.');
     }
   }, [summary, currentUser]);
+  useEffect(() => {
+    if (summary?.canOperate && currentUser?.onboardingStatus === 'pending_payment') void reloadSession();
+  }, [summary?.canOperate,currentUser?.onboardingStatus]);
   const pending = summary?.status === 'PAST_DUE';
 
   const navigateToDashboard = () => {
@@ -165,6 +181,10 @@ export const BillingView: React.FC<BillingViewProps> = ({
         <CreditCard className="w-7 h-7" />
       </div>
     </header>
+    {currentUser && !summary?.canOperate && <div className="rounded-xl bg-amber-50 text-amber-950 p-4 space-y-2" role="status">
+      <p>{summary ? 'Acesso operacional indisponível. Regularize a assinatura para continuar. Seus dados estão preservados.' : 'Consultando a liberação financeira da clínica…'}{summary && !canManage && ' Solicite a regularização ao responsável da clínica.'}</p>
+      <button type="button" onClick={() => logout()} className="underline font-semibold">Sair da conta</button>
+    </div>}
     {callback && <div className="rounded-2xl border bg-white p-5" role="status">
       <h2 className="font-bold">{callback==='sucesso'?'Pagamento enviado para confirmação.':callback==='cancelada'?'Você retornou do checkout.':'O prazo deste checkout terminou.'}</h2>
       <p className="text-sm text-slate-600 mt-1">{callback==='sucesso'?'Estamos confirmando sua assinatura. Esta página será atualizada após a confirmação do Asaas.':'O retorno do checkout não ativa nenhum plano. Consulte o status abaixo antes de tentar novamente.'}</p>
@@ -314,7 +334,7 @@ export const BillingView: React.FC<BillingViewProps> = ({
                 subDescription = 'Seu período de teste terminou. Assine o Zemda Solo para continuar seus atendimentos.';
                 buttonText = 'Assinar Zemda Solo';
                 buttonAction = () => void choose('SOLO');
-              } else if (!summary?.trialUsed && summary?.status !== 'ACTIVE') {
+              } else if ((!currentUser || summary?.trialEligible === true) && summary?.status !== 'ACTIVE') {
                 topBadge = '7 Dias Grátis';
                 subDescription = 'Teste grátis de 7 dias exclusivo para o plano Solo. Sem cobrança hoje.';
                 buttonText = 'Começar teste grátis (7 dias)';
@@ -331,7 +351,7 @@ export const BillingView: React.FC<BillingViewProps> = ({
               <article
                 key={plan.code}
                 className={`bg-white rounded-3xl p-6 sm:p-8 flex flex-col justify-between gap-6 transition-all relative ${
-                  isFeatured || (isSolo && (summary?.isTrial || (!summary?.trialUsed && summary?.status !== 'ACTIVE')))
+                  isFeatured || (isSolo && (summary?.isTrial || ((!currentUser || summary?.trialEligible === true) && summary?.status !== 'ACTIVE')))
                     ? 'border-2 border-teal-500 shadow-xl shadow-teal-900/10 scale-[1.02] z-10'
                     : 'border border-slate-200 shadow-xs hover:border-slate-300'
                 }`}
@@ -390,7 +410,7 @@ export const BillingView: React.FC<BillingViewProps> = ({
                   disabled={buttonDisabled}
                   onClick={buttonAction}
                   className={`w-full font-bold text-xs py-3 px-4 rounded-xl cursor-pointer transition-all disabled:opacity-50 ${
-                    isFeatured || (isSolo && (summary?.isTrial || (!summary?.trialUsed && summary?.status !== 'ACTIVE')))
+                    isFeatured || (isSolo && (summary?.isTrial || ((!currentUser || summary?.trialEligible === true) && summary?.status !== 'ACTIVE')))
                       ? 'bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white shadow-md shadow-teal-700/20'
                       : 'bg-slate-900 hover:bg-slate-800 text-white shadow-xs'
                   }`}

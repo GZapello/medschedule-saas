@@ -83,8 +83,8 @@ let server,eventCounter=0;
   r=await call('/v1/auth/login',{email:'new@test.invalid',password:'password123'});assert.equal(r.status,200,JSON.stringify(r));
   const signupToken=r.body.token;
   const pendingOnboarding = await call('/v1/patients',null,signupToken);
-  assert.equal(pendingOnboarding.status,403);
-  assert.equal(pendingOnboarding.body.code,'ONBOARDING_INCOMPLETE');
+  assert.equal(pendingOnboarding.status,402);
+  assert.equal(pendingOnboarding.body.code,'BILLING_ACCESS_REQUIRED');
   assert.equal((await call('/subscriptions/current',null,signupToken)).status,200);
   assert.equal((await call('/admin/subscriptions',null,signupToken)).status,403);
   r=await call('/subscriptions/checkout',{planCode:'SOLO'},signupToken);assert.equal(r.status,422);assert.equal(r.body.code,'BILLING_ADDRESS_REQUIRED');assert.equal(customerCounter,0);
@@ -197,6 +197,11 @@ let server,eventCounter=0;
       assert.equal(db.prepare('SELECT COUNT(*) n FROM billing_checkouts WHERE clinic_id=?').get(cid).n,0);continue;
     }
     assert.equal(created.body.isTrial,false);assert.equal(canOperate(cid),false);
+    const selected=await call('/v1/onboarding/select-plan',{planCode:plan.code},auth);
+    assert.equal(selected.body.onboardingStatus,'pending_payment');assert.equal(selected.body.requiresCheckout,true);
+    assert.equal((await call('/v1/onboarding/current-state',null,auth)).body.hasPlan,false);
+    assert.equal((await call('/v1/onboarding/complete-profile',{practiceAreaIds:[]},auth)).status,402);
+
     assert.equal(BillingService.summary(cid).selectedPlan.id,plan.id);assert.equal(BillingService.summary(cid).confirmedPurchase,null);
     assert.equal((await call('/subscriptions/profile',{...profile,email},auth,'PUT')).status,200);
     rejectCheckout=true;assert.equal((await call('/subscriptions/checkout',{planCode:plan.code},auth)).status,422);rejectCheckout=false;
@@ -211,6 +216,9 @@ let server,eventCounter=0;
     const paid={id:'payment-'+plan.code,customer:remote.customer,subscription:remote.id,checkoutSession:pendingSub.asaas_checkout_id,status:'PENDING',billingType:'CREDIT_CARD',value:plan.monthly_price,dueDate:currentDay()};payments.set(paid.id,paid);
     await event('PAYMENT_CREDIT_CARD_CAPTURE_REFUSED',{payment:paid});assert.equal(canOperate(cid),false);assert.equal(BillingService.summary(cid).confirmedPurchase,null);
     paid.status='CONFIRMED';await event('PAYMENT_CONFIRMED',{payment:paid});assert.equal(canOperate(cid),true);
+    assert.equal(db.prepare('SELECT onboarding_status FROM users WHERE id=?').get(created.body.user.id).onboarding_status,'pending_profile');
+    assert.equal((await call('/v1/onboarding/complete-profile',{practiceAreaIds:[]},auth)).status,200);
+    assert.equal((await call('/v1/patients',null,auth)).status,200);
     const confirmed=BillingService.summary(cid);assert.equal(confirmed.plan.code,plan.code);assert.equal(confirmed.confirmedPurchase.value,plan.monthly_price);assert.deepEqual(Object.keys(confirmed.confirmedPurchase).sort(),['transaction_id','value']);
   }
   assert.equal(db.prepare('PRAGMA foreign_key_check').all().length,0);

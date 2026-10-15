@@ -215,6 +215,10 @@ export class ApiClient {
           errorMsg = text.trim();
         }
       } catch (_) {}
+      if (response.status === 402 && ['BILLING_ACCESS_REQUIRED','SUBSCRIPTION_REQUIRED','TRIAL_EXPIRED'].includes(errorCode || '') &&
+          typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('zemda-billing-denied'));
+      }
       const err: any = new Error(errorMsg);
       err.code = errorCode;
       err.field = errorField;

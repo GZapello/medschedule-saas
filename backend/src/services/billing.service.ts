@@ -39,12 +39,49 @@ export function requireCapacity(clinic: string, additional=1, excludeUser?: stri
 export function canOperate(clinic: string): boolean {
   const tenant=db.prepare('SELECT status,billing_required FROM tenants WHERE id=?').get(clinic);
   if (!tenant || tenant.status !== 'active') return false;
+  return hasBillingEntitlement(clinic);
+}
+// Financial entitlement is independent of account/profile activation.
+export function hasBillingEntitlement(clinic: string): boolean {
+  const tenant=db.prepare('SELECT billing_required FROM tenants WHERE id=?').get(clinic);
+  if (!tenant) return false;
   if (!tenant.billing_required) return true;
   const s=currentSubscription(clinic); if (!s?.managed) return false;
   if (s.status==='TRIAL') return !!s.trial_ends_at && new Date(s.trial_ends_at).getTime() > Date.now();
   if (s.status==='ACTIVE') return !!s.current_period_end && s.current_period_end > today();
   if (s.status==='PAST_DUE') return !!s.current_period_end && !!s.grace_period_until && s.grace_period_until > today();
   return s.status==='CANCELED' && !!s.current_period_end && s.current_period_end > today();
+}
+
+const normalizeDocument = (value: unknown) => String(value || '').replace(/\D/g, '');
+export function assertTrialEligibility(input: {clinicId?: string; userId?: string; email?: string; document?: string}): void {
+  const tenant=input.clinicId ? db.prepare('SELECT * FROM tenants WHERE id=?').get(input.clinicId) : null;
+  const user=input.userId ? db.prepare('SELECT email FROM users WHERE id=?').get(input.userId) : null;
+  const emails=[input.email,user?.email,tenant?.email,tenant?.responsible_email].filter(Boolean).map(v=>String(v).trim().toLowerCase());
+  const documents=[input.document,tenant?.cnpj_cpf,tenant?.responsible_cpf].map(normalizeDocument).filter(v=>v.length>=11);
+  const documentSql=(column:string)=>`replace(replace(replace(replace(replace(replace(${column},'.',''),'-',''),'/',''),' ',''),'(',''),')','')`;
+  const identityFilter=(tenantColumn:string,emailColumns:string[],docColumns:string[],userColumn?:string)=>{
+    const clauses:string[]=[],values:string[]=[];
+    if(input.clinicId) {clauses.push(`${tenantColumn}=?`);values.push(input.clinicId);}
+    if(input.userId && userColumn) {clauses.push(`${userColumn}=?`);values.push(input.userId);}
+    for(const email of new Set(emails)) for(const col of emailColumns) {clauses.push(`lower(trim(${col}))=?`);values.push(email);}
+    for(const doc of new Set(documents)) for(const col of docColumns) {clauses.push(`${documentSql(col)}=?`);values.push(doc);}
+    return {sql:clauses.length ? clauses.join(' OR ') : '0',values};
+  };
+  const history=identityFilter('tenant_id',['email'],['cnpj_cpf'],'user_id');
+  const previous=identityFilter('t.id',['t.email','t.responsible_email'],['t.cnpj_cpf','t.responsible_cpf']);
+  const admin=identityFilter('tenant_id',['target_email'],[],'user_id');
+  const used = tenant?.trial_used ||
+    db.prepare(`SELECT 1 FROM trial_history WHERE ${history.sql} LIMIT 1`).get(...history.values) ||
+    db.prepare(`SELECT 1 FROM free_trials WHERE activated_at IS NOT NULL AND (${admin.sql}) LIMIT 1`).get(...admin.values) ||
+    db.prepare(`SELECT 1 FROM tenants t WHERE (${previous.sql}) AND (
+      t.trial_used=1 OR EXISTS(SELECT 1 FROM subscriptions s WHERE (s.clinic_id=t.id OR s.tenant_id=t.id)
+        AND (upper(s.status) IN ('TRIAL','TRIAL_EXPIRED') OR s.trial_started_at IS NOT NULL))
+        OR EXISTS(SELECT 1 FROM free_trials f WHERE f.tenant_id=t.id AND f.activated_at IS NOT NULL)) LIMIT 1`).get(...previous.values);
+  if (used) throw new BillingError('TRIAL_ALREADY_USED','O teste grátis já foi utilizado para esta clínica, conta, e-mail ou CPF/CNPJ. Assine um plano para continuar.',400);
+  if (input.clinicId && db.prepare(`SELECT 1 FROM subscriptions WHERE (clinic_id=? OR tenant_id=?) AND managed=1
+    AND (status IN ('ACTIVE','PAST_DUE','SUSPENDED','CANCELED','PENDING_PAYMENT') OR asaas_subscription_id IS NOT NULL)`)
+    .get(input.clinicId,input.clinicId)) throw new BillingError('SUBSCRIPTION_EXISTS','Esta clínica já iniciou uma contratação. Regularize a assinatura existente.',409);
 }
 export function pendingBillingManager(user: any): boolean {
   return user?.role==='clinic_admin' && user.status==='pending' && !!db.prepare("SELECT 1 FROM tenants t JOIN clinic_users cu ON cu.tenant_id=t.id WHERE t.id=? AND cu.user_id=? AND t.status='pending' AND t.billing_required=1 AND cu.is_manager=1 AND cu.status='pending'").get(user.tenant_id,user.id);
@@ -108,18 +145,23 @@ export class BillingService {
     this.expireGrace();
     this.expireTrials();
     const s=currentSubscription(clinic);
-    const tenant=db.prepare('SELECT name, trial_used, plan_id FROM tenants WHERE id=?').get(clinic);
+    const tenant=db.prepare('SELECT name, trial_used, plan_id, billing_required FROM tenants WHERE id=?').get(clinic);
     const selectedPlan=tenant?.plan_id ? this.plans().find(p=>p.id===tenant.plan_id) || null : null;
     const plan=s?.managed ? db.prepare('SELECT code,name,monthly_price,max_users FROM plans WHERE id=?').get(s.plan_id) : null;
     const pending=s?.pending_plan_id ? db.prepare('SELECT code,name,monthly_price,max_users FROM plans WHERE id=?').get(s.pending_plan_id) : null;
+    const administrativeTrial=s?.managed ? null : db.prepare(`SELECT f.trial_end_at AS endsAt,f.duration_days AS durationDays,p.name AS planName
+      FROM free_trials f LEFT JOIN plans p ON p.id=? WHERE f.tenant_id=? AND f.activated_at IS NOT NULL
+      ORDER BY f.activated_at DESC LIMIT 1`).get(s?.plan_id,clinic) || null;
     const isTrial = s?.managed && s.status === 'TRIAL';
     let trialDaysRemaining: number | null = null;
     if (isTrial && s.trial_ends_at) {
       const diffMs = new Date(s.trial_ends_at).getTime() - Date.now();
       trialDaysRemaining = Math.max(0, Math.ceil(diffMs / (24 * 60 * 60 * 1000)));
     }
+    let trialEligible=false;
+    try { assertTrialEligibility({clinicId:clinic}); trialEligible=true; } catch (e) { if (!(e instanceof BillingError)) throw e; }
     const confirmedPurchase=s?.managed && s.status==='ACTIVE' ? db.prepare("SELECT id AS transaction_id,amount AS value FROM subscription_payments WHERE subscription_id=? AND status IN ('CONFIRMED','RECEIVED') ORDER BY due_date DESC LIMIT 1").get(s.id) : null;
-    return {clinicName:tenant?.name,selectedPlan,confirmedPurchase,plan,status:s?.managed?s.status:'NOT_SUBSCRIBED',activeUsers:activeUsers(clinic),maxUsers:plan?.max_users || null,
+    return {clinicName:tenant?.name,administrativeTrial,billingRequired:!!tenant?.billing_required,trialEligible,selectedPlan,confirmedPurchase,plan,status:s?.managed?s.status:'NOT_SUBSCRIBED',activeUsers:activeUsers(clinic),maxUsers:plan?.max_users || null,
       nextDueDate:s?.next_due_date || null,gracePeriodUntil:s?.grace_period_until || null,currentPeriodEnd:s?.current_period_end || null,
       pendingPlan:pending,changeEffectiveOn:s?.pending_plan_effective_on || null,canOperate:canOperate(clinic),
       environment:s?.gateway_environment || AsaasService.getEnvironment(),managed:!!s?.managed,
@@ -304,93 +346,53 @@ export class BillingService {
       return expired.length;
     })();
   }
+  // Synchronous primitive: every caller must hold the registration/start-trial transaction.
+  // Eligibility, durable history and the one current subscription commit atomically.
+  static createSoloTrialInTransaction(clinicId: string, userId: string) {
+    assertTrialEligibility({clinicId,userId});
+    const tenant=clinicForBilling(clinicId),plan=chosenPlan('SOLO');
+    checkPlanSize(clinicId,plan);
+    const started=new Date(),trialStartedAt=started.toISOString();
+    const trialEndsAt=new Date(started.getTime()+SOLO_TRIAL_DAYS*86400000).toISOString();
+    const sid=randomUUID();
+    db.prepare('UPDATE subscriptions SET is_current=0 WHERE clinic_id=? AND is_current=1').run(clinicId);
+    db.prepare(`INSERT INTO subscriptions(id,tenant_id,clinic_id,plan_id,status,current_period_start,current_period_end,
+      managed,is_current,trial_started_at,trial_ends_at,updated_at)
+      VALUES(?,?,?,?,'TRIAL',?,?,1,1,?,?,datetime('now'))`)
+      .run(sid,clinicId,clinicId,plan.id,trialStartedAt.slice(0,10),trialEndsAt.slice(0,10),trialStartedAt,trialEndsAt);
+    db.prepare('UPDATE tenants SET plan_id=?,trial_used=1,billing_required=1 WHERE id=?').run(plan.id,clinicId);
+    const owner=db.prepare('SELECT email FROM users WHERE id=?').get(userId);
+    db.prepare(`INSERT INTO trial_history(id,tenant_id,user_id,subscription_id,email,cnpj_cpf,started_at,ends_at,status)
+      VALUES(?,?,?,?,?,?,?,?,'ACTIVE')`).run(randomUUID(),clinicId,userId,sid,
+      String(owner?.email || tenant.responsible_email || tenant.email || '').trim().toLowerCase(),
+      normalizeDocument(tenant.cnpj_cpf || tenant.responsible_cpf) || null,trialStartedAt,trialEndsAt);
+    billingAudit({id:sid,clinic_id:clinicId},'TRIAL_STARTED',null,'TRIAL',userId,{planCode:'SOLO',trialStartedAt,trialEndsAt});
+    return {trialStartedAt,trialEndsAt};
+  }
+  static notifySoloTrialStarted(clinicId:string,userId:string):void {
+    const tenant=db.prepare('SELECT * FROM tenants WHERE id=?').get(clinicId);
+    const user=db.prepare('SELECT name,email FROM users WHERE id=?').get(userId);
+    const sub=currentSubscription(clinicId);
+    if(!tenant || sub?.status!=='TRIAL') return;
+    const email=user?.email || tenant.responsible_email || tenant.email;
+    const name=user?.name || tenant.responsible_name || tenant.name;
+    if(email) void TrialNotificationService.notifyTrialStarted(clinicId,email,name,sub.trial_ends_at).catch(()=>{});
+    void AdminNotificationService.notifyTrialStarted({tenantId:clinicId,clinicName:tenant.name,responsibleName:name,email,
+      professionName:tenant.responsible_profession,planName:'Zemda Solo',startedAt:sub.trial_started_at,
+      endsAt:sub.trial_ends_at,trialDays:SOLO_TRIAL_DAYS,userId}).catch(()=>{});
+  }
   static async startSoloTrial(clinicId: string, userId: string): Promise<any> {
     return withOperation(clinicId, async () => {
-      const tenant = clinicForBilling(clinicId);
-      if (tenant.trial_used) {
-        throw new BillingError('TRIAL_ALREADY_USED', 'O teste grátis de 7 dias já foi utilizado para esta clínica.', 400);
-      }
-
-      const email = tenant.responsible_email || tenant.email;
-      const cnpjCpf = tenant.cnpj_cpf ? String(tenant.cnpj_cpf).replace(/\D/g, '') : null;
-      if (email) {
-        const usedEmail = db.prepare('SELECT id FROM trial_history WHERE email = ?').get(email.trim().toLowerCase());
-        if (usedEmail) {
-          throw new BillingError('TRIAL_ALREADY_USED', 'O teste grátis já foi utilizado para este e-mail.', 400);
-        }
-      }
-      if (cnpjCpf && cnpjCpf.length >= 11) {
-        const usedDoc = db.prepare('SELECT id FROM trial_history WHERE cnpj_cpf = ?').get(cnpjCpf);
-        if (usedDoc) {
-          throw new BillingError('TRIAL_ALREADY_USED', 'O teste grátis já foi utilizado para este CPF/CNPJ.', 400);
-        }
-      }
-
-      const soloPlan = chosenPlan('SOLO');
-      const s = currentSubscription(clinicId);
-      if (s?.managed && s.status === 'ACTIVE') {
-        throw new BillingError('SUBSCRIPTION_ACTIVE', 'Esta clínica já possui uma assinatura ativa.', 400);
-      }
-
-      const sid = randomUUID();
-      const now = new Date();
-      const trialStartedAt = now.toISOString();
-      const trialEndsAt = new Date(now.getTime() + SOLO_TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString();
-      const startDay = today();
-      const endDay = addDays(startDay, SOLO_TRIAL_DAYS);
-
-      db.transaction(() => {
-        if (s) {
-          db.prepare('UPDATE subscriptions SET is_current = 0 WHERE id = ?').run(s.id);
-        }
-        db.prepare(`
-          INSERT INTO subscriptions (
-            id, tenant_id, clinic_id, plan_id, status, current_period_start, current_period_end,
-            managed, is_current, trial_started_at, trial_ends_at, updated_at
-          ) VALUES (?, ?, ?, ?, 'TRIAL', ?, ?, 1, 1, ?, ?, datetime('now'))
-        `).run(sid, clinicId, clinicId, soloPlan.id, startDay, endDay, trialStartedAt, trialEndsAt);
-
-        db.prepare("UPDATE tenants SET plan_id = ?, trial_used = 1, billing_required = 1, status = 'active', updated_at = datetime('now') WHERE id = ?").run(soloPlan.id, clinicId);
-
-        const manager = db.prepare("SELECT user_id FROM clinic_users WHERE tenant_id = ? AND is_manager = 1 AND status = 'pending' ORDER BY created_at LIMIT 1").get(clinicId) as { user_id: string } | undefined;
-        if (manager) {
-          db.prepare("UPDATE users SET status = 'active' WHERE id = ? AND status = 'pending'").run(manager.user_id);
-          db.prepare("UPDATE clinic_users SET status = 'active' WHERE tenant_id = ? AND user_id = ? AND status = 'pending'").run(clinicId, manager.user_id);
-        }
-
-        const historyId = randomUUID();
-        db.prepare(`
-          INSERT INTO trial_history (
-            id, tenant_id, user_id, subscription_id, email, cnpj_cpf, started_at, ends_at, status
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')
-        `).run(historyId, clinicId, userId, sid, email?.trim().toLowerCase() || '', cnpjCpf || null, trialStartedAt, trialEndsAt);
-
-        const newSub = db.prepare('SELECT * FROM subscriptions WHERE id = ?').get(sid);
-        billingAudit(newSub, 'TRIAL_STARTED', s?.status || null, 'TRIAL', userId, {
-          planCode: 'SOLO',
-          trialStartedAt,
-          trialEndsAt
-        });
+      clinicForBilling(clinicId);
+      const { trialEndsAt } = db.transaction(() => {
+        const trial = this.createSoloTrialInTransaction(clinicId, userId);
+        db.prepare("UPDATE tenants SET status='active' WHERE id=? AND status='pending'").run(clinicId);
+        db.prepare("UPDATE tenants SET onboarding_status='pending_profile' WHERE id=? AND onboarding_status IN ('pending_plan','pending_payment')").run(clinicId);
+        db.prepare("UPDATE users SET onboarding_status='pending_profile' WHERE id=? AND onboarding_status IN ('pending_plan','pending_payment')").run(userId);
+        return trial;
       })();
 
-      const recipientEmail = tenant.responsible_email || tenant.email;
-      const recipientName = tenant.responsible_name || tenant.name || 'Profissional';
-      if (recipientEmail) {
-        void TrialNotificationService.notifyTrialStarted(clinicId, recipientEmail, recipientName, trialEndsAt);
-      }
-
-      void AdminNotificationService.notifyTrialStarted({
-        tenantId: clinicId,
-        clinicName: tenant.name,
-        responsibleName: tenant.responsible_name || tenant.name,
-        email: recipientEmail || tenant.email,
-        professionName: tenant.responsible_profession,
-        planName: 'Zemda Solo',
-        startedAt: trialStartedAt,
-        endsAt: trialEndsAt,
-        trialDays: 7,
-        userId
-      }).catch(err => console.error('[BillingService.startSoloTrial] Erro ao notificar SuperAdmin de início de trial:', err));
+      this.notifySoloTrialStarted(clinicId,userId);
 
       return {
         success: true,

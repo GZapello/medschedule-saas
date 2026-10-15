@@ -32,7 +32,7 @@ function manager(req:Request,res:Response,next:NextFunction) {
 }
 export function subscriptionGate(req:Request,res:Response,next:NextFunction) {
   if(req.user?.role==='superadmin' && /^\/(?:v1\/)?(?:admin|tenants|taxonomy|audit)(?:\/|$)/.test(req.path)) {next();return;}
-  if(/^\/(?:v1\/)?(?:subscriptions|auth\/me|auth\/accept-legal|auth\/logout|auth\/change-password|tenants\/current|onboarding|user-onboarding)(?:\/|$)/.test(req.path)) {next();return;}
+  if(/^\/(?:v1\/)?(?:subscriptions|plans|auth|tenants\/current|clinics\/current|onboarding|user-onboarding|taxonomy|capabilities|support)(?:\/|$)/.test(req.path)) {next();return;}
   if(req.tenantId) {
     BillingService.expireGrace();
     BillingService.expireTrials();
@@ -43,7 +43,7 @@ export function subscriptionGate(req:Request,res:Response,next:NextFunction) {
       const errorMsg = isTrialExpired
         ? 'Período de teste grátis encerrado. Assine o plano para continuar.'
         : 'Acesse Assinatura e Plano para regularizar o pagamento.';
-      res.status(402).json({ code: isTrialExpired ? 'TRIAL_EXPIRED' : 'SUBSCRIPTION_REQUIRED', error: errorMsg });
+      res.status(402).json({ code: 'BILLING_ACCESS_REQUIRED', billingStatus: sub?.status || 'NOT_SUBSCRIBED', error: errorMsg });
       return;
     }
   }

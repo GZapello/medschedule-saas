@@ -151,6 +151,12 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
       } else if (currentUser.onboardingStatus === 'pending_profile') {
         setStep('profile');
       }
+      let canceled=false;
+      void ApiClient.get<any>('/v1/onboarding/current-state').then(state => {
+        if (canceled) return;
+        if (state.nextStep === 'payment') { window.location.assign('/assinatura?checkout=1'); return; }
+        if (['verify_email','plans','profile'].includes(state.nextStep)) setStep(state.nextStep);
+      }).catch(() => {});
       setFormData(prev => ({
         ...prev,
         email: currentUser.email || prev.email,
@@ -159,6 +165,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
       }));
       if (currentUser.registrationType) setRegistrationType(currentUser.registrationType);
       if (currentUser.registrationNumber) setRegistrationNumber(currentUser.registrationNumber);
+      return () => { canceled=true; };
     }
   }, [currentUser]);
 
@@ -772,7 +779,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
     setLoading(true);
 
     try {
-      await ApiClient.post<any>('/v1/onboarding/select-plan', {
+      const selection = await ApiClient.post<any>('/v1/onboarding/select-plan', {
         planCode: plan.code,
         startTrial: plan.trial_days > 0
       });
@@ -786,7 +793,13 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
         trackTrialStarted(plan.code, plan.trial_days);
       }
 
-      showToast(plan.trial_days > 0 ? 'Teste grátis de 7 dias selecionado! Agora personalize sua área de atuação.' : 'Plano selecionado! Agora personalize sua área de atuação.', 'success');
+      await reloadSession();
+      window.dispatchEvent(new Event('zemda-billing-refresh'));
+      if (selection.requiresCheckout) {
+        window.location.assign('/assinatura?checkout=1');
+        return;
+      }
+      showToast('Teste grátis ativado! Agora personalize sua área de atuação.', 'success');
       setStep('profile');
     } catch (err: any) {
       trackSignupError({

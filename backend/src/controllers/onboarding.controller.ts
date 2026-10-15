@@ -1,12 +1,12 @@
+import { BillingError, hasBillingEntitlement } from '../services/billing.service';
+import { respondBillingError } from './billing.controller';
 import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { logAudit } from '../middlewares/audit.middleware';
 import { EmailService } from '../services/email.service';
-import { BillingService, today, addDays, SOLO_TRIAL_DAYS } from '../services/billing.service';
+import { BillingService } from '../services/billing.service';
 import { CapabilityService } from '../services/capability.service';
 import { MedicalTreeService } from '../services/medical-tree.service';
-import { TrialNotificationService } from '../services/trial-notification.service';
-import { AdminNotificationService } from '../services/admin-notification.service';
 import { resolveCanonicalProfession } from '../utils/profession-module';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -526,31 +526,20 @@ export class OnboardingController {
 
       const tenant = tenantId ? db.prepare('SELECT id, name, slug, status, onboarding_status, plan_id, trial_used FROM tenants WHERE id = ?').get(tenantId) as any : null;
 
-      // Verifica plano/trial ativo
-      let activeSub: any = null;
-      if (tenantId) {
-        activeSub = db.prepare(`
-          SELECT s.id, s.plan_id, s.status, s.trial_ends_at, p.code as plan_code, p.name as plan_name
-          FROM subscriptions s
-          LEFT JOIN plans p ON p.id = s.plan_id
-          WHERE s.tenant_id = ? AND s.status IN ('active', 'ACTIVE', 'trial', 'TRIAL')
-          ORDER BY s.created_at DESC LIMIT 1
-        `).get(tenantId);
-      }
-
+      const billing = tenantId ? BillingService.summary(tenantId) : null;
       const emailVerified = Boolean(user.email_verified === 1);
-      const hasPlan = Boolean(activeSub || (tenant?.plan_id && tenant?.status === 'active'));
-      const planCode = activeSub?.plan_code || (tenant?.trial_used ? 'SOLO' : null);
+      const hasPlan = Boolean(tenantId && hasBillingEntitlement(tenantId));
+      const planCode = billing?.plan?.code || null;
 
       let computedStatus = user.onboarding_status || 'active';
-      let nextStep: 'verify_email' | 'plans' | 'profile' | 'completed' = 'completed';
+      let nextStep: 'verify_email' | 'plans' | 'payment' | 'profile' | 'completed' = 'completed';
 
       if (!emailVerified) {
         computedStatus = 'pending_verification';
         nextStep = 'verify_email';
       } else if (!hasPlan) {
-        computedStatus = 'pending_plan';
-        nextStep = 'plans';
+        computedStatus = billing?.selectedPlan || billing?.managed ? 'pending_payment' : 'pending_plan';
+        nextStep = computedStatus === 'pending_payment' ? 'payment' : 'plans';
       } else if (computedStatus !== 'active') {
         computedStatus = 'pending_profile';
         nextStep = 'profile';
@@ -565,6 +554,9 @@ export class OnboardingController {
         email: user.email,
         emailVerified,
         hasPlan,
+        canOperate: billing?.canOperate || false,
+        selectedPlan: billing?.selectedPlan || null,
+        trialEligible: billing?.trialEligible || false,
         planCode,
         professionId: user.profession_id,
         professionName: user.profession_name,
@@ -695,7 +687,6 @@ export class OnboardingController {
         return;
       }
 
-      const tenant = db.prepare('SELECT id, name, cnpj_cpf FROM tenants WHERE id = ?').get(tenantId) as any;
       const startTrial = req.body.startTrial === true || req.body.startTrial === 'true' || req.body.planId === 'trial' || req.body.planCode === 'TRIAL';
       const rawCode = req.body.planCode || (req.body.planId === 'trial' ? 'SOLO' : req.body.planId) || 'SOLO';
       const planCode = String(rawCode).toUpperCase();
@@ -706,85 +697,30 @@ export class OnboardingController {
         return;
       }
 
-      if (startTrial) {
-        if (planCode !== 'SOLO') {
-          res.status(400).json({ error: 'O teste grátis de 7 dias é exclusivo para o plano Zemda Solo.' });
-          return;
-        }
-        const usedEmail = db.prepare('SELECT id FROM trial_history WHERE email = ?').get(user.email);
-        if (usedEmail) {
-          res.status(400).json({ error: 'O teste grátis já foi utilizado para este e-mail. Escolha um plano para assinar.' });
-          return;
-        }
-      }
+      if (startTrial && planCode !== 'SOLO') throw new BillingError('PLAN_INVALID','O teste grátis é exclusivo para o Zemda Solo.',400);
+      // Recording intent cannot activate a subscription or reset trial_used.
+      const onboardingStatus = db.transaction(() => {
+        if (startTrial) BillingService.createSoloTrialInTransaction(tenantId,userId);
+        const entitled=hasBillingEntitlement(tenantId);
+        const state=entitled ? 'pending_profile' : 'pending_payment';
+        db.prepare("UPDATE tenants SET plan_id=?,onboarding_status=?,updated_at=datetime('now') WHERE id=?")
+          .run(selectedPlan.id,state,tenantId);
+        db.prepare("UPDATE users SET onboarding_status=?,updated_at=datetime('now') WHERE id=?").run(state,userId);
+        return state;
+      })();
 
-      const soloPlan = db.prepare("SELECT id, code, name FROM plans WHERE code = 'SOLO' AND active = 1").get() as any;
-      const now = new Date();
-      const trialStartedAt = now.toISOString();
-      const trialEndsAt = new Date(now.getTime() + SOLO_TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString();
-      const trialStartDay = today();
-      const trialEndDay = addDays(trialStartDay, SOLO_TRIAL_DAYS);
-      const subId = 'sub-' + uuidv4().slice(0, 8);
-
-      const planIdToSet = startTrial ? (soloPlan?.id || selectedPlan.id) : selectedPlan.id;
-
-      if (startTrial && soloPlan) {
-        db.prepare("DELETE FROM subscriptions WHERE tenant_id = ? AND status = 'TRIAL'").run(tenantId);
-
-        db.prepare(`
-          INSERT INTO subscriptions (
-            id, tenant_id, clinic_id, plan_id, status, current_period_start, current_period_end,
-            managed, is_current, trial_started_at, trial_ends_at, updated_at
-          ) VALUES (?, ?, ?, ?, 'TRIAL', ?, ?, 1, 1, ?, ?, datetime('now'))
-        `).run(subId, tenantId, tenantId, soloPlan.id, trialStartDay, trialEndDay, trialStartedAt, trialEndsAt);
-
-        db.prepare(`
-          INSERT INTO trial_history (
-            id, tenant_id, user_id, subscription_id, email, cnpj_cpf, started_at, ends_at, status
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')
-        `).run('th-' + uuidv4().slice(0, 8), tenantId, userId, subId, user.email, tenant?.cnpj_cpf || null, trialStartedAt, trialEndsAt);
-
-        db.prepare(`
-          INSERT INTO subscription_audit (id, clinic_id, subscription_id, user_id, action, previous_status, next_status, details_json)
-          VALUES (?, ?, ?, ?, 'TRIAL_STARTED', NULL, 'TRIAL', ?)
-        `).run(uuidv4(), tenantId, subId, userId, JSON.stringify({ planCode: 'SOLO', trialStartedAt, trialEndsAt }));
-
-        void TrialNotificationService.notifyTrialStarted(tenantId, user.email, user.name, trialEndsAt);
-        void AdminNotificationService.notifyTrialStarted({
-          tenantId,
-          clinicName: tenant.name,
-          responsibleName: user.name,
-          email: user.email,
-          professionName: '',
-          planName: 'Zemda Solo',
-          startedAt: trialStartedAt,
-          endsAt: trialEndsAt,
-          trialDays: 7,
-          userId
-        }).catch(() => {});
-      }
-
-      db.prepare(`
-        UPDATE tenants
-        SET plan_id = ?, trial_used = ?, onboarding_status = 'pending_profile', updated_at = datetime('now')
-        WHERE id = ?
-      `).run(planIdToSet, startTrial ? 1 : 0, tenantId);
-
-      db.prepare(`
-        UPDATE users
-        SET onboarding_status = 'pending_profile', updated_at = datetime('now')
-        WHERE id = ?
-      `).run(userId);
-
+      if (startTrial) BillingService.notifySoloTrialStarted(tenantId,userId);
       logAudit(req, 'ONBOARDING_PLAN_SELECTED', 'tenants', tenantId, { planCode, isTrial: startTrial });
 
       res.json({
         success: true,
-        onboardingStatus: 'pending_profile',
+        onboardingStatus,
+        requiresCheckout: onboardingStatus === 'pending_payment',
         isTrial: startTrial,
         message: startTrial ? 'Teste grátis ativado com sucesso!' : 'Plano selecionado com sucesso!'
       });
     } catch (err: any) {
+      if (respondBillingError(res,err)) return;
       console.error('[OnboardingController.selectPlan] Erro:', err);
       res.status(500).json({ error: 'Erro ao selecionar plano' });
     }
@@ -803,6 +739,15 @@ export class OnboardingController {
       const user = db.prepare('SELECT id, email, name, email_verified, profession_id, profession_name FROM users WHERE id = ?').get(userId) as any;
       if (!user || user.email_verified !== 1) {
         res.status(403).json({ error: 'É necessário verificar o e-mail antes de concluir o cadastro.', code: 'EMAIL_NOT_VERIFIED' });
+        return;
+      }
+
+      if (!hasBillingEntitlement(tenantId)) {
+        db.transaction(() => {
+          db.prepare("UPDATE users SET onboarding_status='pending_payment' WHERE id=?").run(userId);
+          db.prepare("UPDATE tenants SET onboarding_status='pending_payment' WHERE id=?").run(tenantId);
+        })();
+        res.status(402).json({code:'BILLING_ACCESS_REQUIRED',error:'Conclua o pagamento para continuar.',onboardingStatus:'pending_payment'});
         return;
       }
 

@@ -181,6 +181,8 @@ mountPublicConsentRoutes(api);
 
 api.use(authMiddleware);
 api.use(tenantMiddleware);
+// Enforce billing before every authenticated operational route, including shared-patient APIs.
+api.use(subscriptionGate);
 
 // Perfil autenticado & Aceite Legal (Acesso pessoal para qualquer usuário do sistema)
 api.get('/v1/auth/me', AuthController.me);
@@ -199,7 +201,6 @@ api.put('/v1/auth/profile/password', AuthController.updateProfilePassword);
 api.put('/v1/auth/profile/email', AuthController.updateProfileEmail);
 
 api.use(onboardingGate);
-api.use(subscriptionGate);
 mountConsentRoutes(api);
 
 // Tenants & Configurações da Clínica

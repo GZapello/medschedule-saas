@@ -1,8 +1,10 @@
+import { clinicTeam } from '../services/clinic-team.service';
+import { canOperate } from '../services/billing.service';
 import { ensureClinicBookingIdentity } from '../utils/clinic-booking-identity';
 import { resolveBookingTenant } from '../utils/public-booking';
 import { REGISTRATION_PROFESSION_ALIASES } from '../types/registration-professions';
 import { respondBillingError } from './billing.controller';
-import { requireCapacity, pendingBillingManager, BillingService, today, addDays, SOLO_TRIAL_DAYS } from '../services/billing.service';
+import { requireCapacity, pendingBillingManager, BillingService, assertTrialEligibility } from '../services/billing.service';
 import { Request, Response } from 'express';
 import { db, CURRENT_TERMS_VERSION, CURRENT_PRIVACY_VERSION } from '../config/database';
 import { logAudit } from '../middlewares/audit.middleware';
@@ -12,7 +14,6 @@ import { v4 as uuidv4 } from 'uuid';
 import { globalAudit, purgeClinic, purgeTenantCompletely } from '../services/clinic-control.service';
 import { ensureDefaultClinicService } from '../services/default-service.service';
 import { EmailService } from '../services/email.service';
-import { TrialNotificationService } from '../services/trial-notification.service';
 import { AdminNotificationService } from '../services/admin-notification.service';
 import { CapabilityService } from '../services/capability.service';
 import { MedicalTreeService } from '../services/medical-tree.service';
@@ -184,30 +185,14 @@ export class TenantController {
           return;
         }
 
-        const usedEmail = db.prepare('SELECT id FROM trial_history WHERE email = ?').get(cleanEmail);
-        if (usedEmail) {
-          res.status(400).json({ error: 'O teste grátis já foi utilizado para este e-mail. Escolha um plano para assinar.' });
-          return;
-        }
-        if (identity && identity.length >= 11) {
-          const usedDoc = db.prepare('SELECT id FROM trial_history WHERE cnpj_cpf = ?').get(identity);
-          if (usedDoc) {
-            res.status(400).json({ error: 'O teste grátis já foi utilizado para este CPF/CNPJ. Escolha um plano para assinar.' });
-            return;
-          }
-        }
+        assertTrialEligibility({email:cleanEmail,document:identity});
       }
 
-      const now = new Date();
-      const trialStartedAt = now.toISOString();
-      const trialEndsAt = new Date(now.getTime() + SOLO_TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString();
-      const trialStartDay = today();
-      const trialEndDay = addDays(trialStartDay, SOLO_TRIAL_DAYS);
+      let trialEndsAt: string | null = null;
       const soloPlan = startTrial ? db.prepare("SELECT id, code, name FROM plans WHERE code = 'SOLO' AND active = 1").get() as any : null;
       if (startTrial && !soloPlan) {
         res.status(400).json({ error: 'O plano Solo não está disponível para cadastro.' }); return;
       }
-      const subId = 'sub-' + uuidv4().slice(0, 8);
 
       // Preparação dos dados auxiliares antes da transação (obtém IP seguro via req.ip/trust proxy)
       const ipAddress = (req.ip || req.socket?.remoteAddress || null)?.replace(/^::ffff:/, '') || null;
@@ -278,7 +263,7 @@ export class TenantController {
           CURRENT_TERMS_VERSION,
           CURRENT_PRIVACY_VERSION,
           startTrial ? soloPlan?.id : selectedPlan?.id || null,
-          startTrial ? 1 : 0
+          0
         );
 
         // 4. Insere o usuário gestor com role 'clinic_admin', status 'pending', onboarding_status
@@ -392,25 +377,7 @@ export class TenantController {
         ensureDefaultClinicService(tenantId, true);
 
         // 10. Se for Teste Grátis Solo, cria a assinatura TRIAL e o registro em trial_history
-        if (startTrial && soloPlan) {
-          db.prepare(`
-            INSERT INTO subscriptions (
-              id, tenant_id, clinic_id, plan_id, status, current_period_start, current_period_end,
-              managed, is_current, trial_started_at, trial_ends_at, updated_at
-            ) VALUES (?, ?, ?, ?, 'TRIAL', ?, ?, 1, 1, ?, ?, datetime('now'))
-          `).run(subId, tenantId, tenantId, soloPlan.id, trialStartDay, trialEndDay, trialStartedAt, trialEndsAt);
-
-          db.prepare(`
-            INSERT INTO trial_history (
-              id, tenant_id, user_id, subscription_id, email, cnpj_cpf, started_at, ends_at, status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')
-          `).run('th-' + uuidv4().slice(0, 8), tenantId, userId, subId, cleanEmail, identity || null, trialStartedAt, trialEndsAt);
-
-          db.prepare(`
-            INSERT INTO subscription_audit (id, clinic_id, subscription_id, user_id, action, previous_status, next_status, details_json)
-            VALUES (?, ?, ?, ?, 'TRIAL_STARTED', NULL, 'TRIAL', ?)
-          `).run(uuidv4(), tenantId, subId, userId, JSON.stringify({ planCode: 'SOLO', trialStartedAt, trialEndsAt }));
-        }
+        if (startTrial && soloPlan) trialEndsAt = BillingService.createSoloTrialInTransaction(tenantId,userId).trialEndsAt;
       });
 
       try {
@@ -426,6 +393,8 @@ export class TenantController {
         }
         throw txErr;
       }
+
+      if (startTrial) BillingService.notifySoloTrialStarted(tenantId,userId);
 
       let rawPracticeAreas: string[] = [];
       if (req.body.practiceAreaIds && Array.isArray(req.body.practiceAreaIds)) {
@@ -936,20 +905,13 @@ export class TenantController {
       const todayDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(now);
 
       // 1. Usuários e Equipe
-      const userStats = db.prepare(`
-        SELECT 
-          COUNT(*) as total,
-          SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active,
-          SUM(CASE WHEN status != 'active' THEN 1 ELSE 0 END) as inactive,
-          SUM(CASE WHEN role = 'professional' THEN 1 ELSE 0 END) as professionals,
-          SUM(CASE WHEN role IN ('receptionist', 'secretary') THEN 1 ELSE 0 END) as receptionists,
-          SUM(CASE WHEN role IN ('clinic_admin', 'admin') THEN 1 ELSE 0 END) as admins
-        FROM users
-        WHERE tenant_id = ? AND role != 'superadmin' AND role != 'patient'
-      `).get(tenantId) as any;
-
-      const profTableCount = (db.prepare('SELECT COUNT(*) as c FROM professionals WHERE tenant_id = ?').get(tenantId) as any)?.c || 0;
-      const professionalsCount = Math.max(Number(userStats?.professionals || 0), profTableCount);
+      const team=clinicTeam(String(tenantId));
+      const activeTeam=team.filter(m=>m.status==='active' && m.account_status==='active');
+      const userStats={total:team.length,active:activeTeam.length,inactive:team.length-activeTeam.length,
+        receptionists:team.filter(m=>['receptionist','secretary'].includes(m.role)).length,
+        admins:team.filter(m=>['clinic_admin','admin'].includes(m.role)).length};
+      const professionalsCount=team.filter(m=>m.is_professional).length;
+      const billing=BillingService.summary(String(tenantId));
 
       // 2. Pacientes
       const totalPatients = (db.prepare('SELECT COUNT(*) as c FROM patients WHERE tenant_id = ?').get(tenantId) as any)?.c || 0;
@@ -1032,6 +994,12 @@ export class TenantController {
       } catch (_) {}
 
       res.json({
+        subscription: {plan:billing.plan,selectedPlan:billing.selectedPlan,status:billing.status,managed:billing.managed,
+          canOperate:billing.canOperate,activeUsers:billing.activeUsers,maxUsers:billing.maxUsers,
+          trialEndsAt:billing.trialEndsAt,trialDaysRemaining:billing.trialDaysRemaining,currentPeriodEnd:billing.currentPeriodEnd,
+          billingRequired:billing.billingRequired,administrativeTrial:billing.administrativeTrial},
+        activeProfessionals:activeTeam.filter(m=>m.is_professional).map(m=>({id:m.id,name:m.name,email:m.email,
+          professionName:m.profession_name,role:m.role,status:m.status,registrationType:m.registration_type,registrationNumber:m.registration_number})),
         clinic: {
           id: tenant.id,
           name: tenant.name,
@@ -1103,12 +1071,19 @@ export class TenantController {
           t.city, t.state, t.logo_url, t.status, t.onboarding_completed, t.manager_confirmed,
           t.registrations_blocked, t.banned_at, t.banned_by, t.banned_reason,
           t.responsible_name, t.responsible_email, t.created_at,
-          p.name as plan_name, p.slug as plan_slug,
+          p.name as plan_name, p.slug as plan_slug, p.code AS selected_plan_code,
+          t.billing_required, s.status AS subscription_status, s.managed,
+          sp.code AS subscription_plan_code, sp.name AS subscription_plan_name, sp.max_users AS subscription_max_users,
+          COALESCE(s.trial_ends_at,CASE WHEN upper(s.status)='TRIAL' THEN s.current_period_end END) AS trial_ends_at,s.current_period_end,
+          CASE WHEN s.managed=0 AND EXISTS(SELECT 1 FROM free_trials ft WHERE ft.tenant_id=t.id AND ft.activated_at IS NOT NULL) THEN 1 ELSE 0 END AS administrative_trial,
+          (SELECT COUNT(*) FROM billing_active_users bau WHERE bau.clinic_id=t.id) AS active_users,
           (SELECT COUNT(*) FROM professionals WHERE tenant_id = t.id AND active = 1) as total_professionals,
           (SELECT COUNT(*) FROM patients WHERE tenant_id = t.id AND active = 1) as total_patients,
           (SELECT COUNT(*) FROM appointments WHERE tenant_id = t.id) as total_appointments
         FROM tenants t
         LEFT JOIN plans p ON p.id = t.plan_id
+        LEFT JOIN subscriptions s ON s.clinic_id=t.id AND s.is_current=1
+        LEFT JOIN plans sp ON sp.id=s.plan_id
         WHERE 1=1
       `;
       const params: any[] = [];
@@ -1127,7 +1102,11 @@ export class TenantController {
       query += ' ORDER BY t.created_at DESC';
 
       const stmt = db.prepare(query);
-      const tenants = stmt.all(...params);
+      BillingService.expireTrials();
+      BillingService.expireGrace();
+      const tenants = stmt.all(...params).map(t=>({...t,can_operate:canOperate(t.id),
+        total_professionals:clinicTeam(t.id).filter(m=>m.is_professional && m.status==='active' && m.account_status==='active').length,
+        trial_days_remaining:t.trial_ends_at ? Math.max(0,Math.ceil((Date.parse(t.trial_ends_at)-Date.now())/86400000)) : null}));
       const pendingCleanup = db.prepare(`SELECT j.clinic_id AS id, a.clinic_name AS name, 'cleanup_pending' AS status
         FROM clinic_deletion_jobs j JOIN global_clinic_audit a ON a.clinic_id = j.clinic_id AND a.action = 'DELETE_REQUESTED'`).all();
       tenants.push(...pendingCleanup);

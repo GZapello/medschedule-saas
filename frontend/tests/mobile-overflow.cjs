@@ -36,7 +36,7 @@ function bootstrap(route) {
   const appointment = { id: 'appt', patient_id: 'patient', patient_name: patient.name, professional_id: 'prof', professional_name: 'Profissional de teste', service_name: 'Consulta de avaliação multidisciplinar', start_time: `${day}T09:15:00`, end_time: `${day}T10:15:00`, status: 'scheduled', modality: 'presencial', clinical_module: module };
   window.qaGet = async endpoint => {
     const url = endpoint.split('?')[0];
-    if (url === '/v1/subscriptions/current') return { access: { allowed: true }, status: 'active', subscription: { status: 'active' }, plan: { name: 'Clínica' } };
+    if (url === '/v1/subscriptions/current') return { canOperate: true, billingRequired: true, access: { allowed: true }, status: 'ACTIVE', subscription: { status: 'active' }, plan: { name: 'Clínica' } };
     if (url === '/v1/user-onboarding') return { onboardingStatus: 'completed', onboardingDismissed: true, moduleToursCompleted: [], whatsNewDismissed: [] };
     if (url === '/v1/dashboard/metrics') return { today: { total: 1, appointments: [appointment] }, monthly: {}, totals: {}, permissions: { finance: true }, chart: [] };
     if (url === '/v1/admin/metrics') return { totalClinics: 1, activeClinics: 1, pendingClinics: 0, totalUsers: 1, totalProfessionals: 1, totalAppointments: 1, totalRevenueEstimate: 180 };

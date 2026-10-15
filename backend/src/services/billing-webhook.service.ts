@@ -204,6 +204,10 @@ export class BillingWebhookService {
           db.prepare("UPDATE clinic_users SET status='active' WHERE tenant_id=? AND user_id=? AND status='pending'").run(s.clinic_id,manager.user_id);
         }
       }
+      // Payment unlocks profile completion, never skips the professional profile.
+      db.prepare("UPDATE tenants SET onboarding_status='pending_profile' WHERE id=? AND onboarding_status='pending_payment'").run(s.clinic_id);
+      db.prepare(`UPDATE users SET onboarding_status='pending_profile' WHERE onboarding_status='pending_payment'
+        AND id IN (SELECT user_id FROM clinic_users WHERE tenant_id=? AND is_manager=1)`).run(s.clinic_id);
       if (['TRIAL', 'TRIAL_EXPIRED'].includes(s.status)) {
         db.prepare("UPDATE trial_history SET status = 'CONVERTED', converted_at = datetime('now'), updated_at = datetime('now') WHERE subscription_id = ? OR tenant_id = ?").run(s.id, s.clinic_id);
         billingAudit(s, 'TRIAL_CONVERTED_TO_ACTIVE', s.status, 'ACTIVE');

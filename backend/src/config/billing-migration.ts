@@ -120,11 +120,12 @@ export function migrateBilling(db: DatabaseSync): void {
         sent_at TEXT NOT NULL DEFAULT (datetime('now')),
         UNIQUE(tenant_id, stage)
       );
-      CREATE VIEW IF NOT EXISTS billing_active_users AS
+      DROP VIEW IF EXISTS billing_active_users;
+      CREATE VIEW billing_active_users AS
         SELECT cu.tenant_id AS clinic_id,u.id AS user_id FROM clinic_users cu JOIN users u ON u.id=cu.user_id
-          WHERE u.status='active' AND cu.status='active' AND u.role!='superadmin'
+          WHERE u.status='active' AND cu.status='active' AND cu.role NOT IN ('superadmin','patient') AND u.role NOT IN ('superadmin','patient')
         UNION
-        SELECT u.tenant_id,u.id FROM users u WHERE u.status='active' AND u.role!='superadmin' AND u.tenant_id IS NOT NULL
+        SELECT u.tenant_id,u.id FROM users u WHERE u.status='active' AND u.role NOT IN ('superadmin','patient') AND u.tenant_id IS NOT NULL
           AND NOT EXISTS(SELECT 1 FROM clinic_users cu WHERE cu.tenant_id=u.tenant_id AND cu.user_id=u.id);
       DROP VIEW IF EXISTS billing_user_limits;
       CREATE VIEW billing_user_limits AS
@@ -144,16 +145,17 @@ export function migrateBilling(db: DatabaseSync): void {
       db.exec(`DROP TRIGGER IF EXISTS billing_limit_${table}_INSERT;
                DROP TRIGGER IF EXISTS billing_limit_${table}_UPDATE;`);
       const userCol = table === 'users' ? 'NEW.id' : 'NEW.user_id';
+      const affectedClinics = table === 'clinic_users' ? 'l.clinic_id=NEW.tenant_id' : `l.clinic_id IN (SELECT clinic_id FROM billing_active_users WHERE user_id=${userCol})`;
       db.exec(`CREATE TRIGGER billing_limit_${table}_INSERT AFTER INSERT ON ${table}
         WHEN NEW.status='active' AND EXISTS(SELECT 1 FROM billing_user_limits l WHERE
-          l.clinic_id IN (SELECT clinic_id FROM billing_active_users WHERE user_id=${userCol})
+          ${affectedClinics}
           AND (SELECT COUNT(*) FROM billing_active_users a WHERE a.clinic_id=l.clinic_id)>l.max_users)
         BEGIN SELECT RAISE(ABORT,'PLAN_USER_LIMIT_REACHED'); END;`);
       const updateOf = `status,tenant_id,role${table==='clinic_users'?',user_id':''}`;
       db.exec(`CREATE TRIGGER billing_limit_${table}_UPDATE AFTER UPDATE OF ${updateOf} ON ${table}
         WHEN NEW.status='active' AND (OLD.status!='active' OR OLD.tenant_id IS NOT NEW.tenant_id)
           AND EXISTS(SELECT 1 FROM billing_user_limits l WHERE
-          l.clinic_id IN (SELECT clinic_id FROM billing_active_users WHERE user_id=${userCol})
+          ${affectedClinics}
           AND (SELECT COUNT(*) FROM billing_active_users a WHERE a.clinic_id=l.clinic_id)>l.max_users)
         BEGIN SELECT RAISE(ABORT,'PLAN_USER_LIMIT_REACHED'); END;`);
     }

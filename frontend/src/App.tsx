@@ -1151,7 +1151,7 @@ const AppContent: React.FC = () => {
   }
 
   // Se o usuário estiver autenticado porém em estado de onboarding pendente, renderiza o fluxo de onboarding obrigatório
-  if (currentUser.role !== 'superadmin' && !isSandboxSession && currentUser.onboardingStatus && currentUser.onboardingStatus !== 'active') {
+  if (currentUser.role !== 'superadmin' && !isSandboxSession && currentUser.onboardingStatus && !['active','pending_payment'].includes(currentUser.onboardingStatus) && !(window.location.pathname.startsWith('/assinatura'))) {
     if (onboardingSuspended) {
       const getStepLabel = () => {
         if (currentUser.onboardingStatus === 'pending_verification') return 'Verificação de e-mail (código de 6 dígitos)';
@@ -1230,19 +1230,10 @@ const AppContent: React.FC = () => {
     );
   }
 
-  const isTrialActive = Boolean(billingSummary?.isTrial && (billingSummary?.trialDaysRemaining === null || billingSummary?.trialDaysRemaining > 0));
-  const isPendingOnboarding = Boolean(currentUser.onboardingStatus && currentUser.onboardingStatus !== 'active');
-  const isUserActive = currentUser.onboardingStatus === 'active';
-
-  if (
-    currentUser.role !== 'superadmin' &&
-    !isSandboxSession &&
-    billingSummary &&
-    !billingSummary.canOperate &&
-    !isTrialActive &&
-    !isUserActive &&
-    !isPendingOnboarding
-  ) {
+  // Account activation and onboarding completion never substitute financial entitlement.
+  // An absent/failed billing response also cannot reveal operational screens.
+  if (currentUser.role !== 'superadmin' && !isSandboxSession &&
+      (!billingSummary || !billingSummary.canOperate || currentUser.onboardingStatus === 'pending_payment')) {
     return <BillingView onBack={() => handleNavigateView('dashboard')} />;
   }
   if (currentView === 'subscription' || window.location.pathname === '/assinatura') {

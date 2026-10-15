@@ -1,9 +1,10 @@
+import { BillingError } from '../services/billing.service';
 import { selectLoginClinic } from '../services/membership.service';
 import crypto from 'crypto';
 import { completeProfessionalProfile } from '../utils/professional-profile';
 import { resolveProfessionModule, resolveCanonicalProfession } from '../utils/profession-module';
 import { respondBillingError } from './billing.controller';
-import { requireCapacity, pendingBillingManager, BillingService, today, addDays, SOLO_TRIAL_DAYS } from '../services/billing.service';
+import { requireCapacity, pendingBillingManager, BillingService, assertTrialEligibility } from '../services/billing.service';
 import { Request, Response } from 'express';
 import { requireOpenRegistration } from '../services/clinic-control.service';
 import { db, CURRENT_TERMS_VERSION, CURRENT_PRIVACY_VERSION } from '../config/database';
@@ -122,7 +123,7 @@ export class AuthController {
       let tenantData: any = null;
       if (user.tenant_id) {
         const tenantStmt = db.prepare(`
-          SELECT 
+          SELECT
             id, slug, name, corporate_name, trade_name, email, phone, logo_url,
             primary_color, client_term_label, status, onboarding_status, banned_reason, registrations_blocked,
             onboarding_completed, onboarding_step, manager_confirmed, manager_profession, manager_practice_areas
@@ -189,7 +190,7 @@ export class AuthController {
       let profDetails: any = null;
       if (user.role === 'professional' || user.role === 'clinic_admin') {
         profDetails = db.prepare(`
-          SELECT 
+          SELECT
             p.id as professional_id, p.active as professional_active, p.profession_id, p.specialty_id, p.registration_type, p.registration_number,
             p.practice_areas, p.slug as professional_slug, p.zemda_fisio_enabled, p.zemda_odonto_enabled, p.zemda_nutri_enabled, p.zemda_to_enabled, p.zemda_fono_enabled, p.zemda_pp_enabled, p.zemda_psico_enabled, p.zemda_personal_enabled, p.zemda_estetic_enabled,
             prof.name as profession_name, prof.slug as profession_slug,
@@ -394,7 +395,7 @@ export class AuthController {
     let profDetails: any = null;
     if (user.role === 'professional' || user.role === 'clinic_admin') {
       profDetails = db.prepare(`
-        SELECT 
+        SELECT
           p.id as professional_id, p.active as professional_active, p.profession_id, p.specialty_id, p.registration_type, p.registration_number,
           p.practice_areas, p.slug as professional_slug, p.zemda_fisio_enabled, p.zemda_odonto_enabled, p.zemda_nutri_enabled, p.zemda_to_enabled, p.zemda_fono_enabled, p.zemda_pp_enabled, p.zemda_psico_enabled, p.zemda_personal_enabled, p.zemda_estetic_enabled,
           prof.name as profession_name, prof.slug as profession_slug,
@@ -605,7 +606,7 @@ export class AuthController {
       let tenantData: any = null;
       if (user.tenant_id) {
         const tenantStmt = db.prepare(`
-          SELECT 
+          SELECT
             id, slug, name, corporate_name, trade_name, email, phone, logo_url,
             primary_color, client_term_label, status, onboarding_status,
             onboarding_completed, onboarding_step, manager_confirmed, manager_profession, manager_practice_areas
@@ -619,7 +620,7 @@ export class AuthController {
       let profDetails: any = null;
       if (user.role === 'professional' || user.role === 'clinic_admin') {
         profDetails = db.prepare(`
-          SELECT 
+          SELECT
             p.id as professional_id, p.active as professional_active, p.profession_id, p.specialty_id, p.registration_type, p.registration_number,
             p.practice_areas, p.slug as professional_slug, p.zemda_fisio_enabled, p.zemda_odonto_enabled, p.zemda_nutri_enabled, p.zemda_to_enabled, p.zemda_fono_enabled, p.zemda_pp_enabled, p.zemda_psico_enabled, p.zemda_personal_enabled, p.zemda_estetic_enabled,
             prof.name as profession_name, prof.slug as profession_slug,
@@ -1179,7 +1180,7 @@ export class AuthController {
 
       // Busca o convite no banco
       const invite = db.prepare(`
-        SELECT 
+        SELECT
           ci.id, ci.tenant_id, ci.token, ci.role, ci.expires_at, ci.status,
           ci.max_uses, ci.used_count, ci.created_at,
           (SELECT name FROM users WHERE id=ci.created_by) AS inviter_name,
@@ -1351,7 +1352,7 @@ export class AuthController {
       // Transação atômica para validar o convite e registrar o usuário
       const transaction = db.transaction(() => {
         const invite = db.prepare(`
-          SELECT 
+          SELECT
             ci.id, ci.tenant_id, ci.token, ci.role, ci.expires_at, ci.status,
             ci.max_uses, ci.used_count, t.name as clinic_name, t.status as clinic_status,
             t.registrations_blocked
@@ -1933,7 +1934,7 @@ export class AuthController {
         let tenantData: any = null;
         if (user.tenant_id) {
           tenantData = db.prepare(`
-            SELECT 
+            SELECT
               id, slug, name, corporate_name, trade_name, email, phone, logo_url,
               primary_color, client_term_label, status, onboarding_status, banned_reason, registrations_blocked,
               onboarding_completed, onboarding_step, manager_confirmed, manager_profession, manager_practice_areas
@@ -2074,13 +2075,12 @@ export class AuthController {
         const planCode = additionalData.planCode ? String(additionalData.planCode).toUpperCase() : null;
         const selectedPlan = planCode ? BillingService.plans().find(p => p.code === planCode) : null;
 
-        const now = new Date();
-        const trialStartedAt = now.toISOString();
-        const trialEndsAt = new Date(now.getTime() + SOLO_TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString();
-        const trialStartDay = today();
-        const trialEndDay = addDays(trialStartDay, SOLO_TRIAL_DAYS);
+        if (planCode && !selectedPlan) throw new BillingError('PLAN_INVALID','Selecione um plano válido.',400);
+        if (startTrial) {
+          if (planCode && planCode !== 'SOLO') throw new BillingError('PLAN_INVALID','O teste grátis é exclusivo para o Zemda Solo.',400);
+          assertTrialEligibility({email:cleanEmail,document:String(cnpjCpf || '')});
+        }
         const soloPlan = startTrial ? db.prepare("SELECT id, code, name FROM plans WHERE code = 'SOLO' AND active = 1").get() as any : null;
-        const subId = 'sub-' + uuidv4().slice(0, 8);
 
         const ipAddress = (req.ip || req.socket?.remoteAddress || null)?.replace(/^::ffff:/, '') || null;
         const userAgent = (req.headers['user-agent'] as string) || null;
@@ -2139,7 +2139,7 @@ export class AuthController {
                 CURRENT_TERMS_VERSION,   // terms_version
                 CURRENT_PRIVACY_VERSION, // privacy_version
                 startTrial ? soloPlan?.id : selectedPlan?.id || null, // plan_id
-                startTrial ? 1 : 0       // trial_used
+                0       // trial_used
               );
             } catch (err: any) {
               console.error('[GoogleAuth.signup] Falha ao criar tenant:', err.message || err);
@@ -2283,36 +2283,14 @@ export class AuthController {
               throw err;
             }
 
-            if (startTrial && soloPlan) {
-              currentStep = 'subscription_trial';
-              try {
-                db.prepare(`
-                  INSERT INTO subscriptions (
-                    id, tenant_id, clinic_id, plan_id, status, current_period_start, current_period_end,
-                    managed, is_current, trial_started_at, trial_ends_at, updated_at
-                  ) VALUES (?, ?, ?, ?, 'TRIAL', ?, ?, 1, 1, ?, ?, datetime('now'))
-                `).run(subId, tenantId, tenantId, soloPlan.id, trialStartDay, trialEndDay, trialStartedAt, trialEndsAt);
-
-                db.prepare(`
-                  INSERT INTO trial_history (
-                    id, tenant_id, user_id, subscription_id, email, cnpj_cpf, started_at, ends_at, status
-                  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')
-                `).run('th-' + uuidv4().slice(0, 8), tenantId, userId, subId, cleanEmail, cnpjCpf || null, trialStartedAt, trialEndsAt);
-
-                db.prepare(`
-                  INSERT INTO subscription_audit (id, clinic_id, subscription_id, user_id, action, previous_status, next_status, details_json)
-                  VALUES (?, ?, ?, ?, 'TRIAL_STARTED', NULL, 'TRIAL', ?)
-                `).run(uuidv4(), tenantId, subId, userId, JSON.stringify({ planCode: 'SOLO', trialStartedAt, trialEndsAt }));
-              } catch (err: any) {
-                console.error('[GoogleAuth.signup] Falha ao criar assinatura/trial:', err.message || err);
-                throw err;
-              }
-            }
+            if (startTrial && soloPlan) BillingService.createSoloTrialInTransaction(tenantId,userId);
           })();
         } catch (txErr: any) {
           console.error(`[GoogleAuth.signup] Transação abortada na etapa "${currentStep}". Rollback executado.`);
           throw txErr;
         }
+
+        if (startTrial) BillingService.notifySoloTrialStarted(tenantId,userId);
 
         // Grava áreas de atuação adicionais se fornecidas
         let rawPracticeAreas: string[] = [];
@@ -2577,6 +2555,7 @@ export class AuthController {
 
       res.status(400).json({ error: `Contexto de autenticação inválido: ${context}` });
     } catch (err: any) {
+      if (respondBillingError(res,err)) return;
       console.error('[AuthController.googleAuth] Erro inesperado:', err);
       res.status(500).json({ error: 'Erro interno ao autenticar via Google.' });
     }

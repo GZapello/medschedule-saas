@@ -43,6 +43,19 @@ import { FreeTrialsAdminView } from './FreeTrialsAdminView';
 import { InfobipWhatsAppAdmin } from './InfobipWhatsAppAdmin';
 import { SuperAdminLaboratoryView } from './SuperAdminLaboratoryView';
 
+const financialLabel=(status?:string,days?:number|null,allowed?:boolean)=> {
+  const labels:Record<string,string>={TRIAL:`Teste grátis · ${days ?? 0} dias restantes`,TRIAL_EXPIRED:'Teste encerrado',
+    ACTIVE:allowed?'Ativo':'Período encerrado',PENDING_PAYMENT:'Aguardando pagamento',PAST_DUE:'Pagamento pendente',
+    SUSPENDED:'Suspenso',CANCELED:'Cancelado'};
+  return labels[String(status || '').toUpperCase()] || 'Sem assinatura';
+};
+const TenantPlan=({tenant}:{tenant:any})=><div className="space-y-1">
+  <p className="font-bold text-slate-800">{tenant.subscription_plan_name || tenant.plan_name || 'Sem plano'}</p>
+  <p className="text-xs text-slate-600">{tenant.administrative_trial ? `Teste administrativo · ${tenant.trial_days_remaining ?? 0} dias restantes` : financialLabel(tenant.subscription_status,tenant.trial_days_remaining,tenant.can_operate)}</p>
+  {!tenant.subscription_status && tenant.selected_plan_code && <p className="text-xs text-amber-800">Plano selecionado · Aguardando pagamento</p>}
+  {tenant.billing_required === 0 && <p className="text-xs text-slate-500">Clínica legada · Cobrança dispensada</p>}
+</div>;
+
 export const SuperAdminView: React.FC = () => {
   const { switchTenant, currentUser: user } = useAuth();
   const { showToast } = useToast();
@@ -619,6 +632,7 @@ export const SuperAdminView: React.FC = () => {
                   <tr className="border-b border-slate-100 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
                     <th className="py-3 px-3">Clínica / Estabelecimento</th>
                     <th className="py-3 px-3">Responsável</th>
+                    <th className="py-3 px-3">Plano / Assinatura</th>
                     <th className="py-3 px-3">Status</th>
                     <th className="py-3 px-3">Onboarding</th>
                     <th className="py-3 px-3 text-center">Profissionais</th>
@@ -629,7 +643,7 @@ export const SuperAdminView: React.FC = () => {
                 <tbody className="divide-y divide-slate-50">
                   {loading ? (
                     <tr>
-                      <td colSpan={7} className="py-12 text-center">
+                      <td colSpan={8} className="py-12 text-center">
                         <div className="flex flex-col items-center justify-center gap-2 text-slate-400">
                           <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
                           <span className="text-xs font-medium">Carregando estabelecimentos cadastrados...</span>
@@ -638,7 +652,7 @@ export const SuperAdminView: React.FC = () => {
                     </tr>
                   ) : filteredTenants.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-10 text-center text-slate-400 text-xs font-medium">
+                      <td colSpan={8} className="py-10 text-center text-slate-400 text-xs font-medium">
                         Nenhum estabelecimento encontrado com os filtros selecionados.
                       </td>
                     </tr>
@@ -655,6 +669,7 @@ export const SuperAdminView: React.FC = () => {
                         <p className="font-semibold text-slate-700">{t.responsible_name || 'Gestor'}</p>
                         <p className="text-[10px] text-slate-400">{t.responsible_email || t.email}</p>
                       </td>
+                      <td className="py-3 px-3"><TenantPlan tenant={t} /></td>
                       <td className="py-3 px-3">
                         <span
                           className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase ${
@@ -1038,7 +1053,7 @@ export const SuperAdminView: React.FC = () => {
                   Resumo da Clínica — {selectedClinic.name}
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Visão operacional e quantitativa exclusiva para governança do SuperAdmin (sem exibição de dados pessoais ou clínicos individuais).
+                  Visão administrativa da clínica. Dados clínicos dos pacientes não são exibidos.
                 </p>
               </div>
               <button aria-label="Fechar"
@@ -1075,6 +1090,25 @@ export const SuperAdminView: React.FC = () => {
               </div>
             ) : clinicSummary ? (
               <div className="space-y-6">
+                {clinicSummary.subscription && <section className="rounded-2xl border border-teal-100 bg-teal-50 p-4 space-y-2">
+                  <h4 className="font-bold">Plano atual</h4>
+                  <p>{clinicSummary.subscription.plan?.name || clinicSummary.subscription.selectedPlan?.name || 'Sem assinatura'}</p>
+                  <p>{clinicSummary.subscription.administrativeTrial ? 'Teste administrativo' : financialLabel(clinicSummary.subscription.status,clinicSummary.subscription.trialDaysRemaining,clinicSummary.subscription.canOperate)}</p>
+                  <p>{clinicSummary.subscription.activeUsers} / {clinicSummary.subscription.maxUsers ?? '—'} acessos</p>
+                  <p className="text-sm font-semibold">{clinicSummary.subscription.canOperate ? 'Acesso operacional permitido' : 'Sem acesso operacional'}</p>
+                </section>}
+                <section className="space-y-3">
+                  <h4 className="font-bold text-slate-800">Profissionais ativos</h4>
+                  {!clinicSummary.activeProfessionals?.length ? <p className="text-sm text-slate-500">Nenhum profissional ativo nesta clínica.</p> :
+                    <div className="overflow-x-auto mobile-table-container"><ResponsiveTable className="w-full text-left text-sm">
+                      <thead><tr>{['Nome','E-mail','Profissão','Papel na clínica','Status','Registro profissional'].map(label=><th key={label} className="p-2">{label}</th>)}</tr></thead>
+                      <tbody>{clinicSummary.activeProfessionals.map((member:any)=><tr key={member.id}>
+                        <td className="p-2">{member.name}</td><td className="p-2 break-all">{member.email}</td>
+                        <td className="p-2">{member.professionName || '—'}</td><td className="p-2">{({clinic_admin:'Administrador',professional:'Profissional',receptionist:'Recepcionista',secretary:'Secretaria'} as Record<string,string>)[member.role] || member.role}</td>
+                        <td className="p-2">Ativo</td><td className="p-2">{[member.registrationType,member.registrationNumber].filter(Boolean).join(' ') || '—'}</td>
+                      </tr>)}</tbody>
+                    </ResponsiveTable></div>}
+                </section>
                 {/* 1. VISÃO GERAL */}
                 <div className="space-y-2.5">
                   <h4 className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
