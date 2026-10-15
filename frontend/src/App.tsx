@@ -1,3 +1,4 @@
+import { BillingAccessStatus } from './components/billing/BillingAccessStatus';
 import { PublicConsentPage } from './components/consents/PublicConsentPage';
 import { App as CapacitorApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
@@ -264,7 +265,7 @@ const AppContent: React.FC = () => {
     logout
   } = useAuth();
 
-  const { summary: billingSummary } = useBillingSummary();
+  const { summary: billingSummary, loading: billingLoading, error: billingError, reload: reloadBilling } = useBillingSummary();
 
   // Resolução inicial de rota para suportar F5, histórico e links diretos
   const getInitialRoute = () => {
@@ -1230,11 +1231,14 @@ const AppContent: React.FC = () => {
     );
   }
 
-  // Account activation and onboarding completion never substitute financial entitlement.
-  // An absent/failed billing response also cannot reveal operational screens.
-  if (currentUser.role !== 'superadmin' && !isSandboxSession &&
-      (!billingSummary || !billingSummary.canOperate || currentUser.onboardingStatus === 'pending_payment')) {
-    return <BillingView onBack={() => handleNavigateView('dashboard')} />;
+  // A pending request is not a financial denial. Both loading and errors remain closed to operation.
+  if (currentUser.role !== 'superadmin' && !isSandboxSession) {
+    if (billingLoading || billingError || !billingSummary) {
+      return <BillingAccessStatus error={billingError} onRetry={() => void reloadBilling()} />;
+    }
+    if (!billingSummary.canOperate || currentUser.onboardingStatus === 'pending_payment') {
+      return <BillingView onBack={() => handleNavigateView('dashboard')} />;
+    }
   }
   if (currentView === 'subscription' || window.location.pathname === '/assinatura') {
     return <BillingView onBack={() => handleNavigateView('dashboard')} />;

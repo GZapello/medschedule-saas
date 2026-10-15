@@ -1,3 +1,4 @@
+import { BillingAccessStatus } from './BillingAccessStatus';
 import { ResponsiveTable } from '../common/ResponsiveTable';
 import { navigateToUrl } from '../../utils/nativeNavigation';
 import { BILLING_BENEFITS } from './billingBenefits';
@@ -11,30 +12,44 @@ const money=(v:number)=>Number(v).toLocaleString('pt-BR',{style:'currency',curre
 const date=(v:string)=>v?new Date(v.slice(0,10)+'T12:00:00').toLocaleDateString('pt-BR'):'—';
 const emptyProfile={name:'',cpfCnpj:'',email:'',phone:'',postalCode:'',address:'',addressNumber:'',province:'',complement:''};
 const statuses:Record<string,string>={ACTIVE:'Ativo',PENDING_PAYMENT:'Aguardando pagamento',PAST_DUE:'Pagamento pendente',SUSPENDED:'Suspenso',CANCELED:'Cancelado',NOT_SUBSCRIBED:'Escolha seu plano',CONFIRMED:'Pago',RECEIVED:'Pago',OVERDUE:'Vencido',PENDING:'Pendente',REFUNDED:'Estornado',DELETED:'Removido',TRIAL:'Teste Grátis (7 dias)',TRIAL_EXPIRED:'Teste Grátis Encerrado'};
+type BillingSnapshot = {key:string;summary:any;status:'idle'|'loading'|'loaded'|'error';error:string};
 export function useBillingSummary(includeGlobal=false) {
   const {currentUser,currentTenant}=useAuth();
   const identityKey=`${currentUser?.id || ''}:${currentTenant?.id || currentUser?.tenantId || ''}`;
+  const enabled=!!currentUser && (currentUser.role!=='superadmin' || includeGlobal);
   const identity=useRef(identityKey); identity.current=identityKey;
   const request=useRef(0);
-  const [snapshot,setSnapshot]=useState<{key:string;summary:any}>({key:'',summary:null});
-  const [error,setError]=useState('');
+  const [snapshot,setSnapshot]=useState<BillingSnapshot>({key:'',summary:null,status:'idle',error:''});
   const reload=useCallback(async()=>{
     const sequence=++request.current;
-    if(!currentUser || currentUser.role==='superadmin' && !includeGlobal) {setSnapshot({key:identityKey,summary:null});return;}
+    if(!enabled) {setSnapshot({key:identityKey,summary:null,status:'idle',error:''});return;}
+    // Keep an already validated, mounted environment during a silent refresh.
+    // A new identity or retry has no usable summary and must show the neutral loader.
+    setSnapshot(previous=>previous.key===identityKey && previous.status==='loaded' ? previous :
+      {key:identityKey,summary:null,status:'loading',error:''});
     try {
-      const summary=await ApiClient.get('/v1/subscriptions/current');
-      if(identity.current===identityKey && sequence===request.current) {setSnapshot({key:identityKey,summary});setError('');}
+      const summary=await ApiClient.get<any>('/v1/subscriptions/current');
+      if(!summary || typeof summary.canOperate!=='boolean') throw new Error('Resposta de assinatura inválida.');
+      if(identity.current===identityKey && sequence===request.current)
+        setSnapshot({key:identityKey,summary,status:'loaded',error:''});
     } catch(e:any){
-      if(identity.current===identityKey && sequence===request.current) {setSnapshot({key:identityKey,summary:null});setError(e.message || 'Não foi possível consultar sua assinatura.');}
+      if(identity.current===identityKey && sequence===request.current)
+        setSnapshot({key:identityKey,summary:null,status:'error',error:e.message || 'Não foi possível consultar sua assinatura.'});
     }
-  },[identityKey,includeGlobal]);
-  useEffect(()=>{setSnapshot({key:identityKey,summary:null});setError('');void reload();
+  },[identityKey,enabled]);
+  useEffect(()=>{
+    void reload();
     const timer=setInterval(()=>{if(!document.hidden) void reload();},15000);
-    const event=()=>void reload();window.addEventListener('zemda-billing-refresh',event);
-    const denied=()=>{setSnapshot({key:identityKey,summary:null});void reload();};
+    const refresh=()=>void reload();
+    const denied=()=>{setSnapshot({key:identityKey,summary:null,status:'loading',error:''});void reload();};
+    window.addEventListener('zemda-billing-refresh',refresh);
     window.addEventListener('zemda-billing-denied',denied);
-    return()=>{++request.current;clearInterval(timer);window.removeEventListener('zemda-billing-refresh',event);window.removeEventListener('zemda-billing-denied',denied);};},[reload]);
-  return {summary:snapshot.key===identityKey ? snapshot.summary : null,error,reload};
+    return()=>{++request.current;clearInterval(timer);window.removeEventListener('zemda-billing-refresh',refresh);window.removeEventListener('zemda-billing-denied',denied);};
+  },[reload]);
+  const current=snapshot.key===identityKey;
+  const status=enabled ? (current && snapshot.status!=='idle' ? snapshot.status : 'loading') : 'idle';
+  return {summary:current && status==='loaded' ? snapshot.summary : null,
+    loading:status==='loading',status,error:current && status==='error' ? snapshot.error : '',reload};
 }
 
 export interface BillingViewProps {
@@ -49,7 +64,7 @@ export const BillingView: React.FC<BillingViewProps> = ({
   onBack
 }) => {
   const { currentUser, logout, reloadSession } = useAuth();
-  const { summary, error: summaryError, reload } = useBillingSummary(true);
+  const { summary, loading: billingLoading, error: summaryError, reload } = useBillingSummary(true);
   const [plans, setPlans] = useState<any[]>([]), [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
   const [showPlans, setShowPlans] = useState(publicPage), [cancelOpen, setCancelOpen] = useState(false), [confirmation, setConfirmation] = useState(''), [reason, setReason] = useState('');
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -148,6 +163,10 @@ export const BillingView: React.FC<BillingViewProps> = ({
       window.location.assign('/');
     }
   };
+
+  if (currentUser && (billingLoading || summaryError)) {
+    return <BillingAccessStatus error={summaryError} onRetry={() => void reload()} />;
+  }
 
   return <section className="max-w-6xl mx-auto space-y-6 p-4 sm:p-6">
     <div className="flex flex-wrap items-center justify-between gap-3">

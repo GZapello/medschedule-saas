@@ -15,7 +15,8 @@
     "android:debug": "npm run android:sync && node scripts/android-build.mjs debug",
     "android:release": "npm run android:sync && node scripts/android-build.mjs release",
     "android:bundle": "npm run android:sync && node scripts/android-build.mjs bundle",
-    "test:billing": "node tests/billing-access.cjs",
+    "test:billing": "node tests/billing-access.cjs && node tests/billing-loading.cjs",
+    "test:billing:loading": "node tests/billing-loading.cjs",
     "test:mobile": "node tests/mobile-overflow.cjs",
     "test:mobile:interactions": "node tests/mobile-interactions.cjs"
   },

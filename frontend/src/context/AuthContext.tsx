@@ -106,6 +106,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     localStorage.setItem('auth_token', data.token);
     setToken(data.token);
     setCurrentUser(data.user);
+    setCurrentTenant(data.tenant || null);
 
     if (data.tenant) {
       localStorage.setItem('active_tenant_id', data.tenant.id);
@@ -121,6 +122,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     localStorage.setItem('auth_token', authToken);
     setToken(authToken);
     setCurrentUser(userData);
+    setCurrentTenant(tenantData || null);
 
     if (tenantData) {
       localStorage.setItem('active_tenant_id', tenantData.id);
@@ -238,12 +240,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const switchTenant = async (tenantId: string) => {
+    setLoading(true);
     const previous = localStorage.getItem('active_tenant_id');
     localStorage.setItem('active_tenant_id', tenantId);
     try {
       if (currentUser?.role === 'superadmin') {
         const tenantData = await ApiClient.get<Tenant>('/v1/tenants/current');
         setCurrentTenant(tenantData);
+        setLoading(false);
         return;
       }
       const data = await ApiClient.get<{user: User; tenant: Tenant}>('/v1/auth/me');
@@ -256,6 +260,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } catch (err) {
       if (previous) localStorage.setItem('active_tenant_id', previous);
       else localStorage.removeItem('active_tenant_id');
+      setLoading(false);
       throw err;
     }
   };
@@ -285,6 +290,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setCurrentTenant(null);
         localStorage.removeItem('active_tenant_id');
       }
+      window.dispatchEvent(new Event('zemda-billing-refresh'));
     } catch (err) {
       console.error('Erro ao recarregar sessão:', err);
     }

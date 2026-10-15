@@ -81,7 +81,17 @@ function bootstrap(scenario) {
         await page.getByRole('heading',{name:'Assinatura e Plano',exact:true}).waitFor();
         assert.equal(await page.locator('main[data-tour-page]').count(),0);
       }
-      else {await page.getByRole('heading',{name:'Assinatura e Plano',exact:true}).waitFor();assert.equal(await page.locator('main[data-tour-page]').count(),0);}
+      else {
+        if(scenario==='error') {
+          await page.getByText('Não foi possível verificar sua assinatura agora.',{exact:true}).waitFor();
+          assert.equal(await page.getByRole('heading',{name:'Assinatura e Plano',exact:true}).count(),0);
+        } else {
+          await page.getByRole('status').filter({hasText:'Carregando Zemda...'}).waitFor();
+          assert.equal(await page.getByRole('heading',{name:'Assinatura e Plano',exact:true}).count(),0);
+          await page.getByRole('heading',{name:'Assinatura e Plano',exact:true}).waitFor();
+        }
+        assert.equal(await page.locator('main[data-tour-page]').count(),0);
+      }
       results.push({scenario,passed:true});await context.close();
     }
     for(const width of [360,1280]) {
