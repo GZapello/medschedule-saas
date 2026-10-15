@@ -1,6 +1,8 @@
 import { ClinicalFinishButton } from './ClinicalFinishButton';
 import { resolveConsultationAppointment } from './resolveConsultationAppointment';
 import { ClinicalAssessmentsPanel } from '../../shared/clinical-assessments/ClinicalAssessmentsPanel';
+import { assessmentCapabilities } from '../../shared/clinical-assessments/policy';
+import { useAssessmentCapabilities } from '../../shared/clinical-assessments/useAssessmentCapabilities';
 import { useClinicalFormReset } from '../../hooks/useClinicalFormReset';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { ApiClient } from '../../api/client';
@@ -32,7 +34,8 @@ import {
   AlertCircle,
   Eye,
   ShieldCheck,
-  Stethoscope
+  Stethoscope,
+  ClipboardList
 } from 'lucide-react';
 
 interface GeneralClinicalWorkspaceProps {
@@ -62,6 +65,11 @@ export const GeneralClinicalWorkspace: React.FC<GeneralClinicalWorkspaceProps> =
   const [appointment, setAppointment] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<string>('evolution');
+  const assessmentCaps = useAssessmentCapabilities();
+  const canViewAssessments = assessmentCaps.some(cap => assessmentCapabilities.includes(cap));
+  useEffect(() => {
+    if (activeTab === 'assessments' && !canViewAssessments) setActiveTab('evolution');
+  }, [activeTab, canViewAssessments]);
 
   // Dados da Evolução Clínica
   const [chiefComplaint, setChiefComplaint] = useState('');
@@ -456,7 +464,6 @@ export const GeneralClinicalWorkspace: React.FC<GeneralClinicalWorkspaceProps> =
           </div>
         </div>
       </header>
-      <ClinicalAssessmentsPanel patientId={patient?.id || initialPatientId || appointment?.patient_id || ''} patient={patient} appointmentId={initialAppointmentId || appointment?.id} sourceModule="general"/>
 
       {/* Navegação de Abas Dinâmicas baseadas em Capabilities */}
       <div className="bg-white border-b border-slate-200 px-4 sm:px-6">
@@ -547,11 +554,28 @@ export const GeneralClinicalWorkspace: React.FC<GeneralClinicalWorkspaceProps> =
               <Baby className="w-4 h-4" /> Acompanhamento Gestacional
             </button>
           )}
+          {canViewAssessments && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('assessments')}
+              aria-pressed={activeTab === 'assessments'}
+              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+                activeTab === 'assessments'
+                  ? 'bg-teal-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              }`}
+            >
+              <ClipboardList className="w-4 h-4" /> Avaliações
+            </button>
+          )}
         </div>
       </div>
 
       {/* Conteúdo Principal do Atendimento */}
       <main className="flex-1 max-w-7xl mx-auto w-full p-4 sm:p-6 space-y-6">
+        {activeTab === 'assessments' && canViewAssessments && (
+          <ClinicalAssessmentsPanel patientId={patient?.id || initialPatientId || appointment?.patient_id || ''} patient={patient} appointmentId={initialAppointmentId || appointment?.id} sourceModule="general" />
+        )}
         {/* ABA: EVOLUÇÃO CLÍNICA & CONDUTA */}
         {activeTab === 'evolution' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

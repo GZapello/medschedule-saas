@@ -4,11 +4,12 @@ import { useAuth } from '../../context/AuthContext';
 import { ClinicalAssessmentEditor, ClinicalAssessmentComparison, ClinicalAssessmentReport, ReportTrend, evolutionMetrics, visceralEvolutionSeries } from './index';
 import { fieldCapability, assessmentCapabilities } from './policy';
 import { resolveConsultationAppointment } from '../../components/clinical/resolveConsultationAppointment';
+import { useAssessmentCapabilities } from './useAssessmentCapabilities';
 
 /** One patient history, editor, comparison, graphs and printable report for every workspace. */
-export function ClinicalAssessmentsPanel({patientId,patient,appointmentId,sourceModule}: {patientId:string,patient:any,appointmentId?:string,sourceModule:string}) {
-  const { capabilities, currentUser, currentTenant } = useAuth();
-  const [caps,setCaps]=useState<string[]>([]);
+export function ClinicalAssessmentsPanel({patientId,patient,appointmentId,sourceModule,complementary=false}: {patientId:string,patient:any,appointmentId?:string,sourceModule:string,complementary?:boolean}) {
+  const { currentUser } = useAuth();
+  const caps = useAssessmentCapabilities();
   const [history,setHistory]=useState<any[]>([]);
   const [error,setError]=useState('');
   const [editor,setEditor]=useState<any>(undefined);
@@ -17,12 +18,6 @@ export function ClinicalAssessmentsPanel({patientId,patient,appointmentId,source
   const [showGraphs,setShowGraphs]=useState(false);
   const [busy,setBusy]=useState(false);
   const version=useRef(0);
-  useEffect(()=>{
-    let active=true;
-    setCaps([]);
-    ApiClient.get<any>('/v1/capabilities/my-resources').then(data=>{if(active)setCaps(data.activeCapabilities || []);}).catch(()=>{});
-    return ()=>{active=false;};
-  },[currentUser?.id,currentTenant?.id,capabilities.join(',')]);
   const capKey=caps.join(',');
   const enabled=caps.some(cap=>assessmentCapabilities.includes(cap));
   const load=async()=>{
@@ -54,8 +49,8 @@ export function ClinicalAssessmentsPanel({patientId,patient,appointmentId,source
     }catch {if(request===version.current)setError('Não foi possível carregar esta avaliação.');}
     finally {if(request===version.current)setBusy(false);}
   };
-  return <section className="m-4 p-4 rounded-2xl border border-slate-200 bg-white" aria-label="Avaliações clínicas compartilhadas">
-    <div className="flex flex-wrap items-center gap-3"><h3 className="font-semibold mr-auto">Avaliações</h3>
+  const content = <>
+    <div className="flex flex-wrap items-center gap-3"><h3 className="font-semibold mr-auto">{complementary ? 'Avaliações complementares' : 'Avaliações'}</h3>
       <button type="button" disabled={busy || !!error} onClick={()=>setEditor(null)} className="px-3 py-2 rounded-xl bg-teal-600 text-white text-sm">Nova avaliação</button>
       {history.length>1 && <button type="button" onClick={()=>setComparing(true)} className="text-sm text-teal-700">Comparar avaliações</button>}
       {history.length>0 && <button type="button" onClick={()=>setShowGraphs(!showGraphs)} className="text-sm text-teal-700">Gráficos de evolução</button>}
@@ -63,8 +58,8 @@ export function ClinicalAssessmentsPanel({patientId,patient,appointmentId,source
     {error && <p role="alert" className="text-sm text-red-700 my-3">{error} <button type="button" onClick={()=>void load()}>Tentar novamente</button></p>}
     {busy && <p className="text-sm text-slate-500">Carregando avaliações…</p>}
     {!busy && !error && !history.length && <p className="text-sm text-slate-500 mt-3">Nenhuma avaliação registrada.</p>}
-    <div className="space-y-2 mt-3">{[...history].reverse().map(row=><div key={row.id} className="flex gap-4 items-center border-t pt-2 text-sm">
-      <span className="mr-auto">{row.assessment_date} · {row.source_module || sourceModule}</span>
+    <div className="space-y-2 mt-3">{[...history].reverse().map(row=><div key={row.id} className="flex flex-wrap gap-x-4 gap-y-2 items-center border-t pt-2 text-sm">
+      <span className="min-w-0 break-words mr-auto">{row.assessment_date} · {row.source_module || sourceModule}</span>
       <button type="button" disabled={busy} onClick={()=>void open(row.id,'edit')}>Visualizar / editar</button>
       <button type="button" disabled={busy} onClick={()=>void open(row.id,'report')}>Relatório / PDF</button>
     </div>)}</div>
@@ -80,5 +75,10 @@ export function ClinicalAssessmentsPanel({patientId,patient,appointmentId,source
       <ClinicalAssessmentReport data={report} clinic={report.clinic} allowedCapabilities={caps}/>
       <ClinicalAssessmentReport data={report} clinic={report.clinic} allowedCapabilities={caps} evolution/>
     </div>}
-  </section>;
+  </>;
+  if (complementary) return <details key={patientId} className="min-w-0 max-w-full border-t border-slate-200 pt-3" aria-label="Histórico complementar">
+    <summary className="cursor-pointer text-sm font-medium text-slate-600 py-2">Histórico / avaliações complementares</summary>
+    <div className="min-w-0 pt-3">{content}</div>
+  </details>;
+  return <section className="min-w-0 max-w-full p-4 rounded-2xl border border-slate-200 bg-white" aria-label="Avaliações clínicas compartilhadas">{content}</section>;
 }

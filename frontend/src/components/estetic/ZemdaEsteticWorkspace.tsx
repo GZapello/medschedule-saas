@@ -857,7 +857,6 @@ interface EsteticPlanItemForm {
 
   return (
     <div className="flex flex-col min-h-screen bg-slate-50" data-testid="zemda-estetic-workspace">
-      {encounterId && <ClinicalAssessmentsPanel patientId={selectedPatientId} patient={selectedPatient} appointmentId={encounterId} sourceModule="ZemdaEstetic"/>}
       <ClinicalDraftRecoveryModal isOpen={autosave.conflictModalOpen} moduleName="ZemdaEstetic"
         onClose={() => autosave.resolveConflict('local')} onSelectVersion={autosave.resolveConflict} />
       {finishAppointment && <FinishConsultationModal appointment={finishAppointment}
@@ -1970,6 +1969,9 @@ interface EsteticPlanItemForm {
                         ))}
                       </div>
                     </div>
+                  )}
+                  {encounterId && (
+                    <ClinicalAssessmentsPanel patientId={selectedPatientId} patient={selectedPatient} appointmentId={encounterId} sourceModule="ZemdaEstetic" complementary />
                   )}
                 </div>
               )}
