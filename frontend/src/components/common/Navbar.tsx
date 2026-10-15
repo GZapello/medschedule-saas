@@ -30,7 +30,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, onNavigate }) =
 
   return (
     <header className="bg-white border-b border-slate-200 sticky top-0 z-30 h-16 flex items-center justify-between px-3 sm:px-6 shadow-xs">
-      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
         <button
           onClick={onToggleSidebar}
           className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg lg:hidden shrink-0 cursor-pointer"
@@ -39,7 +39,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, onNavigate }) =
           <Menu className="w-5 h-5" />
         </button>
 
-        <div className="flex items-center gap-2.5 sm:gap-3 cursor-pointer min-w-0" onClick={() => onNavigate('dashboard')}>
+        <div className="hidden min-[400px]:flex items-center gap-2.5 sm:gap-3 cursor-pointer min-w-0" onClick={() => onNavigate('dashboard')}>
           {currentTenant?.logo_url ? (
             <img
               src={currentTenant.logo_url}
@@ -51,7 +51,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, onNavigate }) =
               {currentTenant?.name?.charAt(0) || 'Z'}
             </div>
           )}
-          <div className="min-w-0">
+          <div className="min-w-0 hidden sm:block">
             <div className="flex items-center gap-2">
               <h1 className="font-bold text-slate-900 text-sm sm:text-base leading-tight truncate">
                 {isZemdaOdonto ? 'ZemdaOdonto' : isZemdaFisio ? 'ZemdaFisio' : (currentTenant?.trade_name || currentTenant?.name || 'Zemda')}
@@ -80,8 +80,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, onNavigate }) =
         </div>
       </div>
 
-      <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-        <ClinicSwitcher compact />
+      <div className="flex items-center gap-1 sm:gap-2 min-w-0 max-w-full">
+        <ClinicSwitcher />
         {/* Botão de retorno ao Painel Global para SuperAdmin */}
         {isSuperAdmin && !isSandboxSession && (
           <button

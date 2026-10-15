@@ -75,7 +75,7 @@ export function useClinicDocumentData(initialData?: Partial<ClinicData> | null):
         const data = await ApiClient.get<any>('/v1/clinics/current');
         if (!isMounted) return;
 
-        if (data && data.name) {
+        if (data && data.name && (!currentTenant?.id || data.id===currentTenant.id)) {
           setClinic({
             id: data.id,
             name: data.name,
@@ -137,9 +137,11 @@ export function useClinicDocumentData(initialData?: Partial<ClinicData> | null):
     };
   }, [currentTenant]);
 
-  const canIssue = !loading && !error && Boolean(clinic && clinic.name && clinic.name.trim().length > 0);
+  const scopedClinic=currentTenant?.id && clinic?.id!==currentTenant.id ? null : clinic;
+  const scopedLoading=loading || (!scopedClinic && !error);
+  const canIssue = !scopedLoading && !error && Boolean(scopedClinic?.name?.trim());
 
-  return { clinic, loading, error, canIssue };
+  return { clinic:scopedClinic, loading:scopedLoading, error, canIssue };
 }
 
 /** Formata endereço completo e limpo para cabeçalho */

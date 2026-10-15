@@ -91,6 +91,8 @@ export class PendingExamController {
         return;
       }
 
+      if(!db.prepare('SELECT 1 FROM patients WHERE id=? AND tenant_id=?').get(patientId,tenantId)){res.status(404).json({error:'Paciente não encontrado na clínica ativa.'});return;}
+      if(professionalId && !db.prepare('SELECT 1 FROM professionals WHERE id=? AND tenant_id=?').get(professionalId,tenantId)){res.status(400).json({error:'Profissional não pertence à clínica ativa.'});return;}
       const id = 'pex-' + uuidv4().slice(0, 8);
 
       db.prepare(`
@@ -134,6 +136,7 @@ export class PendingExamController {
         return;
       }
 
+      if(professionalId && !db.prepare('SELECT 1 FROM professionals WHERE id=? AND tenant_id=?').get(professionalId,tenantId)){res.status(400).json({error:'Profissional não pertence à clínica ativa.'});return;}
       db.prepare(`
         UPDATE pending_exams SET
           exam_name = COALESCE(?, exam_name),
@@ -169,6 +172,7 @@ export class PendingExamController {
 
   static getDocument(req: Request, res: Response): void {
     try {
+      if(!req.user || ['patient','superadmin'].includes(req.user.role)){res.status(403).json({error:'Acesso a documento clínico não autorizado.'});return;}
       const { id } = req.params;
       const tenantId = req.tenantId;
       if (!tenantId) {
@@ -189,8 +193,8 @@ export class PendingExamController {
           t.name as clinic_name, t.cnpj_cpf as clinic_cnpj, t.phone as clinic_phone, t.email as clinic_email,
           t.street, t.number, t.neighborhood, t.city, t.city as clinic_city, t.state, t.state as clinic_state, t.address, t.logo_url
         FROM pending_exams pe
-        JOIN patients p ON p.id = pe.patient_id
-        LEFT JOIN professionals prof ON prof.id = pe.professional_id
+        JOIN patients p ON p.id = pe.patient_id AND p.tenant_id=pe.tenant_id
+        LEFT JOIN professionals prof ON prof.id = pe.professional_id AND prof.tenant_id=pe.tenant_id
         LEFT JOIN specialties spec ON spec.id = prof.specialty_id
         JOIN tenants t ON t.id = pe.tenant_id
         WHERE pe.id = ? AND pe.tenant_id = ?

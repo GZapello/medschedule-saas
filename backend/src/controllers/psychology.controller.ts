@@ -1,9 +1,9 @@
+import {resolveDocumentContext,DocumentContextError} from '../services/document-context.service';
 import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 import { GeminiService } from '../services/gemini.service';
-import { generateQrCodeDataUrl } from '../utils/qr-generator';
 import { ServiceReminderService } from '../services/service-reminder.service';
 import { createDefaultSchedules } from '../utils/schedule-defaults';
 import { DocumentsController } from './documents.controller';
@@ -1399,6 +1399,10 @@ export class PsychologyController {
       }
 
       const prof = db.prepare('SELECT id, name, registration_type, registration_number FROM professionals WHERE user_id = ? AND tenant_id = ?').get(userId, tenantId) as any;
+      if(!prof) throw new DocumentContextError('Cadastre o profissional responsável na clínica ativa.');
+      const context=resolveDocumentContext(req,{patientId,professionalId:prof.id,appointmentId,recordId:req.body.recordId});
+      const attendance=context.sessionDate ? `\n\nData do atendimento: ${context.sessionDate.split('-').reverse().join('/')}${context.sessionTime ? ` • Horário: ${context.sessionTime}` : ''}` : '';
+      const documentText=renderedText.trim()+attendance;
       const signerName = prof?.name || req.user?.name || 'Psicólogo(a) Responsável';
       const signerReg = prof?.registration_type && prof?.registration_number
         ? `${prof.registration_type} ${prof.registration_number}`
@@ -1418,7 +1422,7 @@ export class PsychologyController {
         documentType,
         purpose.trim(),
         requesterName.trim(),
-        renderedText.trim(),
+        documentText,
         signerName,
         signerReg,
         nowIso
@@ -1436,7 +1440,7 @@ export class PsychologyController {
         docId, tenantId, patientId, prof?.id || 'prof-unknown', appointmentId || null,
         documentType, docNumber, purpose.trim(), requesterName.trim(),
         typeof contentJson === 'object' ? JSON.stringify(contentJson) : (contentJson || '{}'),
-        renderedText.trim(), nowIso, signatureHash, signerName, signerReg, userId || null
+        documentText, nowIso, signatureHash, signerName, signerReg, userId || null
       );
 
       logPsychologyAudit(req, patientId, 'emit_document', 'psychology_documents', docId, `Emissão de ${documentType.toUpperCase()} Nº ${docNumber}`);
@@ -1452,6 +1456,7 @@ export class PsychologyController {
         signerRegistration: signerReg
       });
     } catch (err: any) {
+      if(err instanceof DocumentContextError){res.status(err.status).json({error:err.message});return;}
       console.error('[PsychologyController.createDocument]', err);
       res.status(500).json({ error: 'Erro ao emitir documento psicológico.' });
     }
@@ -1504,9 +1509,9 @@ export class PsychologyController {
 
       const doc = db.prepare(`
         SELECT d.*, p.full_name as patient_name, p.cpf as patient_cpf, p.birth_date as patient_birth,
-               t.name as clinic_name, t.cnpj_cpf as clinic_cnpj, t.address as clinic_address, t.phone as clinic_phone
+               t.name as clinic_name, t.cnpj_cpf as clinic_cnpj, t.address as clinic_address, t.phone as clinic_phone,t.logo_url
         FROM psychology_documents d
-        LEFT JOIN patients p ON p.id = d.patient_id
+        LEFT JOIN patients p ON p.id = d.patient_id AND p.tenant_id=d.tenant_id
         LEFT JOIN tenants t ON t.id = d.tenant_id
         WHERE d.id = ? AND d.tenant_id = ?
       `).get(id, tenantId) as any;
@@ -1518,8 +1523,8 @@ export class PsychologyController {
 
       logPsychologyAudit(req, doc.patient_id, 'print_document', 'psychology_documents', id, `Visualização/impressão do documento ${doc.document_number}`);
 
-      const verificationUrl = `${process.env.APP_URL || 'https://zemda.app'}/verificar-documento?hash=${doc.signature_hash}`;
-      const qrCodeData = generateQrCodeDataUrl(verificationUrl);
+      const escape=(value:any)=>String(value ?? '').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]!));
+      for(const key of ['clinic_name','patient_name','patient_cpf','requester_name','purpose','signed_by_name','signed_by_registration','rendered_text','document_number','logo_url']) doc[key]=escape(doc[key]);
 
       const typeLabels: Record<string, string> = {
         declaracao: 'DECLARAÇÃO PSICOLÓGICA',
@@ -1562,6 +1567,7 @@ export class PsychologyController {
 </head>
 <body>
   <div class="header">
+    ${doc.logo_url && /^(https?:|\/)/.test(doc.logo_url) ? `<img src="${doc.logo_url}" alt="Logo da clínica" style="max-width:100px;max-height:65px;object-fit:contain">` : ''}
     <h1>${title}</h1>
     <div class="sub">${doc.clinic_name ? `${doc.clinic_name} • ` : ''}Em conformidade com a Resolução CFP nº 06/2019</div>
   </div>
@@ -1591,12 +1597,12 @@ export class PsychologyController {
 
   <div class="digital-stamp">
     <div style="flex: 1; padding-right: 12px;">
-      <strong style="color: #0f766e;">Assinatura Eletrônica e Selamento Criptográfico</strong><br>
-      Documento digital assinado em ${new Date(doc.sealed_at).toLocaleString('pt-BR')} sob os termos da MP 2.200-2/2001 e Resoluções CFP 01/2009 e 06/2019.<br>
+      <strong style="color: #0f766e;">Registro de emissão e selamento interno</strong><br>
+      Registro selado no Zemda em ${new Date(doc.sealed_at).toLocaleString('pt-BR')}.<br>
       <span class="hash">Hash SHA-256: ${doc.signature_hash}</span><br>
-      Consulte a autenticidade e validade ética escaneando o QR Code ao lado.
+      Esta impressão requer assinatura física ou assinatura digital pelo fluxo próprio da plataforma.
     </div>
-    <img src="${qrCodeData}" class="qr" alt="QR Code de Verificação" />
+
   </div>
 </body>
 </html>`;

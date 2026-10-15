@@ -1,3 +1,4 @@
+import {formatClinicalDate} from '../../utils/clinicalDocument';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
@@ -23,6 +24,8 @@ import {
 } from '../common/ClinicDocumentHeader';
 import { SignatureChoiceModal } from '../common/SignatureChoiceModal';
 
+const EMPTY_DOCUMENT_DATA: any[] = [];
+
 export type PsychopedagogyDocType = 'relatorio' | 'parecer' | 'encaminhamento' | 'orientacoes';
 
 export interface PsychopedagogyDocumentModalProps {
@@ -46,8 +49,8 @@ export const PsychopedagogyDocumentModal: React.FC<PsychopedagogyDocumentModalPr
   profileData,
   assessmentData,
   sessionData,
-  domainsData = [],
-  instrumentsData = [],
+  domainsData = EMPTY_DOCUMENT_DATA,
+  instrumentsData = EMPTY_DOCUMENT_DATA,
   planData
 }) => {
   const { currentUser } = useAuth();
@@ -66,7 +69,7 @@ export const PsychopedagogyDocumentModal: React.FC<PsychopedagogyDocumentModalPr
 
   const patientName = patient?.full_name || patient?.name || 'Aprendente';
   const birthDateStr = patient?.birth_date
-    ? new Date(patient.birth_date).toLocaleDateString('pt-BR')
+    ? formatClinicalDate(patient.birth_date)
     : 'Não informada';
   const ageStr = patient?.birth_date
     ? `${Math.floor((Date.now() - new Date(patient.birth_date).getTime()) / (1000 * 60 * 60 * 24 * 365.25))} anos`
@@ -96,8 +99,8 @@ export const PsychopedagogyDocumentModal: React.FC<PsychopedagogyDocumentModalPr
       const hypothesis = assessmentData?.pedagogical_hypothesis || '';
       const recommendations = assessmentData?.recommendations || '';
       const instrumentsList = instrumentsData.length > 0
-        ? instrumentsData.map(i => `• ${i.instrument_name} (${new Date(i.application_date || Date.now()).toLocaleDateString('pt-BR')}) - ${i.results_summary || 'Aplicado'}`).join('\n')
-        : '• Provas Operatórias Piagetianas, EOCA e análise qualitativa de produções escolares.';
+        ? instrumentsData.map(i => `• ${i.instrument_name} (${formatClinicalDate(i.application_date) || 'data não informada'}) - ${i.results_summary || 'Aplicado'}`).join('\n')
+        : '[Informar os instrumentos efetivamente utilizados na avaliação.]';
 
       setDocumentContent(
 `1. IDENTIFICAÇÃO DO APRENDENTE
@@ -148,7 +151,7 @@ Data de Emissão: ${todayStr}
 O(A) aprendente ${patientName} encontra-se em acompanhamento psicopedagógico clínico regular nesta instituição, com foco no desenvolvimento de estratégias de aprendizagem, autonomia e funções executivas.
 
 2. ASPECTOS OBSERVADOS E EVOLUÇÃO
-No decorrer dos atendimentos, foram trabalhados estímulos específicos voltados às áreas de leitura, escrita e raciocínio lógico. Observou-se evolução significativa no engajamento com as tarefas escolares e no desenvolvimento da autorregulação.
+No decorrer dos atendimentos, foram trabalhados estímulos específicos voltados às áreas de leitura, escrita e raciocínio lógico. [Descrever a evolução observada conforme os registros do atendimento.]
 
 3. CONSIDERAÇÕES PSICOPEDAGÓGICAS
 ${assessmentData?.psychopedagogical_synthesis || 'Recomenda-se a manutenção do suporte psicopedagógico e a continuidade do diálogo frequente entre clínica, escola e família para consolidação dos ganhos pedagógicos.'}
@@ -171,10 +174,10 @@ Prezado(a) Colega,
 Encaminho o(a) aprendente ${patientName}, atualmente em intervenção psicopedagógica neste serviço, para vossa criteriosa avaliação especializada nas áreas complementares.
 
 Motivo do Encaminhamento:
-${profileData?.main_complaint || 'Dificuldades atencionais e no processamento da leitura/escrita que demandam investigação clínica interdisciplinar.'}
+${profileData?.main_complaint || '[Descrever o motivo do encaminhamento conforme avaliação.]'}
 
 Observações Psicopedagógicas Relevantes:
-${assessmentData?.areas_of_difficulty || 'Observa-se fadiga cognitiva rápida em tarefas de retenção auditiva e necessidade de descartar alterações fonoaudiológicas ou neurobiológicas associadas.'}
+${assessmentData?.areas_of_difficulty || '[Registrar apenas as observações relevantes documentadas na avaliação.]'}
 
 Coloco-me à disposição para discussão conjunta de caso e compartilhamento de relatórios técnicos em prol do melhor desenvolvimento do aprendente.`);
     } else if (docType === 'orientacoes') {
@@ -399,6 +402,8 @@ Data: ${todayStr}
                   </span>
                 </div>
               </div>
+
+              {sessionData?.session_date && <p className="text-xs text-slate-600">Data do atendimento: {formatClinicalDate(sessionData.session_date)}{sessionData.session_time ? ` • Horário: ${sessionData.session_time.slice(0,5)}` : ''}</p>}
 
               {/* Texto do Documento */}
               <div className="text-xs text-slate-800 leading-relaxed whitespace-pre-wrap font-sans py-2 min-h-[280px]">

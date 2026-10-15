@@ -1,9 +1,10 @@
+import { useAuth } from '../../context/AuthContext';
+import { formatClinicalDate } from '../../utils/clinicalDocument';
 import { isNativePrint, printNativeHtml } from '../../utils/nativePrint';
 import React, { useState, useEffect, useRef } from 'react';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { X, Printer, Download, Eye, CheckCircle2, AlertCircle, ShieldCheck } from 'lucide-react';
-import { formatDoctorName } from '../../utils/formatters';
 import { SignatureChoiceModal } from '../common/SignatureChoiceModal';
 
 export interface PrintableDocumentModalProps {
@@ -20,6 +21,9 @@ export const PrintableDocumentModal: React.FC<PrintableDocumentModalProps> = ({
   initialAction
 }) => {
   const { showToast } = useToast();
+  const {currentTenant}=useAuth();
+  const contextKey=`${currentTenant?.id || ''}:${documentType}:${documentId}`;
+  const [loadError,setLoadError]=useState<{key:string;message:string}|null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [data, setData] = useState<any>(null);
   const [digitalSignature, setDigitalSignature] = useState<any>(null);
@@ -39,9 +43,12 @@ export const PrintableDocumentModal: React.FC<PrintableDocumentModalProps> = ({
   }, [digitalSignature]);
 
   useEffect(() => {
+    let alive=true;
+    triggeredActionRef.current=false;
     async function loadDocument() {
       try {
         setLoading(true);
+        setLoadError(null);
         const endpoint =
           documentType === 'certificate' ? `/v1/clinical/certificates/${documentId}` :
           documentType === 'prescription' ? `/v1/clinical/prescriptions/${documentId}` :
@@ -52,18 +59,18 @@ export const PrintableDocumentModal: React.FC<PrintableDocumentModalProps> = ({
           ApiClient.get<any>(endpoint),
           ApiClient.get<any>(`/v1/digital-signatures/document/${documentType}/${documentId}`).catch(() => null)
         ]);
-        setData(res);
-        if (sigRes?.signature) {
-          setDigitalSignature(sigRes.signature);
-        }
+        if(!alive) return;
+        setData({...res,_contextKey:contextKey});
+        setDigitalSignature(sigRes?.signature || null);
       } catch (err: any) {
-        showToast('Erro ao carregar documento para impressão', 'error');
+        if(alive) setLoadError({key:contextKey,message:'Não foi possível carregar o documento.'});
       } finally {
-        setLoading(false);
+        if(alive) setLoading(false);
       }
     }
-    loadDocument();
-  }, [documentType, documentId]);
+    void loadDocument();
+    return ()=>{alive=false;};
+  }, [contextKey]);
 
   const getCleanDocTitle = () => {
     const typeLabel =
@@ -78,14 +85,18 @@ export const PrintableDocumentModal: React.FC<PrintableDocumentModalProps> = ({
   const handleVisualizar = () => {
     if (!sheetRef.current || !data) return;
     const title = getCleanDocTitle();
-    const sheetHtml = sheetRef.current.outerHTML;
+    const sheet=sheetRef.current.cloneNode(true) as HTMLElement;
+    sheet.querySelectorAll('img').forEach(img=>{img.src=new URL(img.getAttribute('src') || '',window.location.href).href;});
+    const sheetHtml = sheet.outerHTML;
+    const styles=Array.from(document.querySelectorAll('style,link[rel="stylesheet"]')).map(el=>
+      el instanceof HTMLLinkElement ? `<link rel="stylesheet" href="${el.href}">` : el.outerHTML).join('');
     const previewHtml = `
       <!DOCTYPE html>
       <html lang="pt-BR">
       <head>
         <meta charset="utf-8">
         <title>${title}</title>
-        <script src="https://cdn.tailwindcss.com"></script>
+        ${styles}
         <style>
           @page {
             size: A4 portrait;
@@ -188,7 +199,10 @@ export const PrintableDocumentModal: React.FC<PrintableDocumentModalProps> = ({
     }
   }, [loading, data, initialAction]);
 
-  if (loading || !data) {
+  if(loadError?.key===contextKey) return <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4 mobile-modal">
+    <div role="alert" className="bg-white rounded-2xl p-6 space-y-4"><p>{loadError.message}</p><button onClick={onClose} className="min-h-11 px-4 py-2 rounded-xl bg-teal-700 text-white">Fechar</button></div>
+  </div>;
+  if (loading || !data || data._contextKey!==contextKey) {
     return (
       <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 mobile-modal">
         <div className="bg-white p-6 rounded-2xl shadow-xl flex items-center gap-3 text-slate-700">
@@ -217,7 +231,7 @@ export const PrintableDocumentModal: React.FC<PrintableDocumentModalProps> = ({
             </span>
             <span className="text-xs text-slate-500">|</span>
             <span className="text-xs font-semibold text-slate-200 truncate max-w-[200px] sm:max-w-xs">
-              {documentType === 'certificate' ? 'Atestado Médico' :
+              {documentType === 'certificate' ? (doc.certificate_type==='attendance' ? 'Declaração de Comparecimento' : 'Atestado') :
                documentType === 'prescription' ? 'Receituário Clínico' : 'Solicitação de Exames'}
             </span>
           </div>
@@ -310,7 +324,7 @@ export const PrintableDocumentModal: React.FC<PrintableDocumentModalProps> = ({
                 <h1 className="text-xl font-bold text-slate-900 tracking-tight">{doc.clinic_name}</h1>
                 <p className="text-xs text-slate-600 mt-0.5">{clinicAddress}</p>
                 <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-3">
-                  {doc.clinic_cnpj && <span>CNPJ: {doc.clinic_cnpj}</span>}
+                  {doc.clinic_cnpj && <span>CPF/CNPJ: {doc.clinic_cnpj}</span>}
                   {doc.clinic_phone && <span>Tel: {doc.clinic_phone}</span>}
                   {doc.clinic_email && <span>E-mail: {doc.clinic_email}</span>}
                 </div>
@@ -323,10 +337,10 @@ export const PrintableDocumentModal: React.FC<PrintableDocumentModalProps> = ({
             {/* Title */}
             <div className="text-center">
               <h2 className="text-2xl font-black text-slate-900 uppercase tracking-wider">
-                {documentType === 'certificate' ? 'Atestado Médico' :
+                {documentType === 'certificate' ? (doc.certificate_type==='attendance' ? 'Declaração de Comparecimento' : 'Atestado') :
                  documentType === 'prescription' ? 'Receituário' : 'Solicitação de Exames'}
               </h2>
-              {doc.certificate_type && (
+              {doc.certificate_type && doc.certificate_type!=='attendance' && (
                 <span className="text-xs text-slate-500 font-medium">
                   {doc.certificate_type === 'rest' ? 'Repouso e Afastamento das Atividades' :
                    doc.certificate_type === 'attendance' ? 'Declaração de Comparecimento' : 'Aptidão'}
@@ -347,22 +361,30 @@ export const PrintableDocumentModal: React.FC<PrintableDocumentModalProps> = ({
                 </div>
                 <div>
                   <span className="text-slate-500 font-medium block">Data de Nascimento:</span>
-                  <strong className="text-slate-900 block">{doc.patient_birth ? new Date(doc.patient_birth).toLocaleDateString('pt-BR') : 'Não informada'}</strong>
+                  <strong className="text-slate-900 block">{formatClinicalDate(doc.patient_birth) || 'Não informada'}</strong>
                 </div>
               </div>
             </div>
+
+            {doc.attendance_date && <div className="text-xs flex flex-wrap gap-x-6 gap-y-2" data-testid="document-attendance">
+              <p><strong>Data do atendimento:</strong> {formatClinicalDate(doc.attendance_date)}</p>
+              {doc.attendance_time && <p><strong>Horário do atendimento:</strong> {doc.attendance_time}</p>}
+            </div>}
 
             {/* Body */}
             <div className="text-sm leading-relaxed text-slate-800 min-h-[220px] py-4">
               {documentType === 'certificate' && (
                 <div className="space-y-4">
                   <p className="indent-8 text-justify">
-                    Atesto para os devidos fins que o(a) paciente <strong>{doc.patient_name}</strong> esteve sob meus cuidados profissionais nesta data
-                    {doc.days_off ? `, devendo permanecer em repouso e afastado(a) de suas atividades laborais e/ou escolares por um período de ${doc.days_off} dia(s), a contar de ${doc.start_date ? new Date(doc.start_date).toLocaleDateString('pt-BR') : 'hoje'}.` : '.'}
+                    {doc.certificate_type==='attendance' ? 'Declaro' : 'Atesto'} para os devidos fins que o(a) paciente <strong>{doc.patient_name}</strong> esteve sob meus cuidados profissionais
+                    {doc.attendance_date ? ` em ${formatClinicalDate(doc.attendance_date)}` : ''}
+                    {doc.attendance_time ? `, às ${doc.attendance_time}` : ''}
+                    {doc.certificate_type==='rest' && doc.days_off ? `, devendo permanecer em repouso e afastado(a) de suas atividades por ${doc.days_off} dia(s)${doc.start_date ? `, a contar de ${formatClinicalDate(doc.start_date)}` : ''}.` : '.'}
+
                   </p>
                   {doc.cid_code && (
                     <p className="text-xs text-slate-700 bg-slate-100 p-2.5 rounded-lg border border-slate-200 inline-block font-mono">
-                      <strong>CID-10:</strong> {doc.cid_code} (Registrado mediante autorização e consentimento expresso do paciente conforme Resolução CFM)
+                      <strong>CID-10:</strong> {doc.cid_code}
                     </p>
                   )}
                   {doc.notes && (
@@ -403,18 +425,18 @@ export const PrintableDocumentModal: React.FC<PrintableDocumentModalProps> = ({
 
             {/* Date and Location (Localidade automática da clínica) */}
             <div className="text-right text-xs text-slate-600 mt-8">
-              {(doc.clinic_city || doc.address_city || doc.city ? `${doc.clinic_city || doc.address_city || doc.city}${doc.clinic_state || doc.address_state || doc.state ? ` - ${doc.clinic_state || doc.address_state || doc.state}` : ''}` : 'Localidade')}, {new Date(doc.created_at || Date.now()).toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' })}.
+              {(doc.clinic_city || doc.address_city || doc.city ? `${doc.clinic_city || doc.address_city || doc.city}${doc.clinic_state || doc.address_state || doc.state ? ` - ${doc.clinic_state || doc.address_state || doc.state}` : ''}` : '')}{(doc.clinic_city || doc.address_city || doc.city) ? ', ' : ''} {(doc.signed_at || doc.created_at ? new Date((doc.signed_at || doc.created_at).replace(' ','T') + (/Z$|[+-]\d\d:\d\d$/.test(doc.signed_at || doc.created_at) ? '' : 'Z')).toLocaleDateString('pt-BR') : 'Data de emissão não informada')}.
             </div>
 
             {/* Professional Signature Block (Dr. / Dra., Especialidade e Registro) */}
             <div className="pt-16 mt-12 flex flex-col items-center justify-center text-center page-break-inside-avoid">
               <div className="w-72 border-t-2 border-slate-800 mb-2" />
               <strong className="text-slate-900 text-sm">
-                {doc.professional_name ? formatDoctorName(doc.professional_name, doc.professional_gender) : 'Assinatura e Carimbo do Profissional Solicitante'}
+                {doc.signed_by_name || doc.professional_name || 'Assinatura e Carimbo do Profissional Solicitante'}
               </strong>
               <span className="text-xs text-slate-600 font-medium">
                 {doc.professional_name
-                  ? `${doc.specialty || 'Profissional de Saúde'}${doc.registration_number ? ` • ${doc.registration_type || 'CRM'} nº ${doc.registration_number}` : ''}`
+                  ? `${doc.specialty || 'Profissional de Saúde'}${doc.signed_by_registration ? ` • ${doc.signed_by_registration}` : doc.registration_number ? ` • ${doc.registration_type || 'Registro'} nº ${doc.registration_number}` : ''}`
                   : (doc.clinic_name || 'Clínica')}
               </span>
             </div>
@@ -508,7 +530,7 @@ export const PrintableDocumentModal: React.FC<PrintableDocumentModalProps> = ({
           documentType={documentType === 'pending_exam' ? 'exam_request' : documentType}
           documentId={documentId}
           documentTitle={
-            documentType === 'certificate' ? 'Atestado Médico' :
+            documentType === 'certificate' ? (doc.certificate_type==='attendance' ? 'Declaração de Comparecimento' : 'Atestado') :
             documentType === 'prescription' ? 'Receituário Clínico' : 'Solicitação de Exames'
           }
           patientName={doc?.patient_name}

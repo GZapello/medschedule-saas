@@ -1054,6 +1054,13 @@ export function initializeDatabase(): void {
     addColIfMissing('clinical_exam_requests', 'signed_by_registration', 'TEXT');
     addColIfMissing('clinical_exam_requests', 'is_sealed', 'INTEGER DEFAULT 0');
     addColIfMissing('clinical_exam_requests', 'created_at', "TEXT DEFAULT (datetime('now'))");
+    for (const table of ['clinical_certificates','clinical_prescriptions','clinical_exam_requests']) {
+      addColIfMissing(table,'attendance_date','TEXT');
+      addColIfMissing(table,'attendance_time','TEXT');
+      addColIfMissing(table,'source_record_id','TEXT');
+      addColIfMissing(table,'attendance_context_version','INTEGER');
+    }
+
 
     // Migração de patient_consents: as chamadas de addColIfMissing feitas antes de a tabela
     // ser criada (mais acima neste arquivo) eram no-ops (tableColumns retornava [] e a

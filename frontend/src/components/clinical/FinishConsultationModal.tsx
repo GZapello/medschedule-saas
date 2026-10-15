@@ -229,7 +229,7 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
   const [certificate, setCertificate] = useState({
     certificateType: 'rest', // rest, attendance, fitness
     daysOff: 1,
-    startDate: new Date().toISOString().split('T')[0],
+    startDate: appointment.start_time?.slice(0,10) || '',
     cidCode: '',
     notes: ''
   });
@@ -616,10 +616,9 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
             patientId={appointment.patient_id}
             patientName={appointment.patient_name || 'Paciente'}
             appointmentId={appointment.id}
-            professionalName={appointment.professional_name || currentUser?.name}
+            professionalName={appointment.professional_name}
             serviceName={appointment.service_name}
             moduleType={clinicalData?.moduleType}
-            professionalCouncil={currentUser?.registrationNumber ? (currentUser.registrationType ? `${currentUser.registrationType}: ${currentUser.registrationNumber}` : `Registro: ${currentUser.registrationNumber}`) : undefined}
             moduleData={clinicalData?.moduleData}
             clinicalEvolution={clinicalData?.clinicalEvolution}
             technicalNotes={clinicalData?.technicalNotes}

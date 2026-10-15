@@ -1,3 +1,4 @@
+import {resolveDocumentContext,DocumentContextError} from '../services/document-context.service';
 import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
@@ -27,18 +28,12 @@ export class ReferralController {
         return;
       }
 
-      // Resolve profissional emissor a partir do usuário autenticado se não informado
-      let resolvedFromProfId = fromProfessionalId;
-      if (!resolvedFromProfId && req.user) {
-        const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
-        if (prof) resolvedFromProfId = prof.id;
-      }
-
-      if (!resolvedFromProfId) {
-        // Fallback para primeiro profissional da clínica
-        const anyProf = db.prepare('SELECT id FROM professionals WHERE tenant_id = ? AND active = 1 LIMIT 1').get(tenantId) as any;
-        resolvedFromProfId = anyProf?.id || 'prof-unknown';
-      }
+      const context=resolveDocumentContext(req,{patientId,professionalId:fromProfessionalId,appointmentId:originAppointmentId});
+      const resolvedFromProfId=context.professionalId;
+      if(!db.prepare('SELECT 1 FROM professionals WHERE id=? AND tenant_id=? AND active=1').get(toProfessionalId,tenantId))
+        throw new DocumentContextError('Profissional de destino não encontrado na clínica ativa.');
+      if(serviceId && !db.prepare('SELECT 1 FROM services WHERE id=? AND tenant_id=?').get(serviceId,tenantId))
+        throw new DocumentContextError('Serviço não encontrado na clínica ativa.');
 
       const referralId = 'ref-' + uuidv4().slice(0, 8);
       let targetAppointmentId: string | null = null;
@@ -111,6 +106,7 @@ export class ReferralController {
         targetAppointmentId
       });
     } catch (err: any) {
+      if(err instanceof DocumentContextError){res.status(err.status).json({error:err.message});return;}
       console.error('[ReferralController.create] Erro:', err);
       res.status(500).json({ error: 'Erro ao registrar encaminhamento: ' + (err.message || '') });
     }

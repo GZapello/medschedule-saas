@@ -1,3 +1,4 @@
+import { resolveDocumentContext, saveDocumentContext, DocumentContextError, recordedAttendance, appointmentRecord } from '../services/document-context.service';
 import { isPrimaryClinicalModule, resolveClinicalModule, getAvailableModulesForProfessional } from '../utils/clinical-module';
 import { Request, Response } from 'express';
 import { db } from '../config/database';
@@ -81,26 +82,17 @@ export class DocumentsController {
         return;
       }
 
-      let resolvedProfId = professionalId;
-      if (!resolvedProfId && req.user) {
-        const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ?').get(req.user.userId) as { id: string } | undefined;
-        if (prof) resolvedProfId = prof.id;
-      }
-      if (!resolvedProfId) {
-        const defaultProf = db.prepare('SELECT id FROM professionals WHERE tenant_id = ? AND active = 1 LIMIT 1').get(tenantId) as { id: string } | undefined;
-        if (defaultProf) resolvedProfId = defaultProf.id;
-      }
-
-      if (!resolvedProfId) {
-        res.status(400).json({ error: 'Profissional emissor não identificado' });
-        return;
-      }
+      if(!['rest','attendance','fitness'].includes(certificateType)) throw new DocumentContextError('Tipo de atestado inválido.');
+      const certificateDays=certificateType==='rest' ? Number(daysOff ?? 1) : 0;
+      if(!Number.isInteger(certificateDays) || certificateDays<0) throw new DocumentContextError('Quantidade de dias inválida.');
+      const context=resolveDocumentContext(req,{patientId,appointmentId,professionalId,recordId:req.body.recordId});
+      const resolvedProfId=context.professionalId;
 
       const year = new Date().getFullYear();
       const countRow = db.prepare('SELECT COUNT(*) as c FROM clinical_certificates WHERE tenant_id = ?').get(tenantId) as any;
       const certNumber = `AT-${year}-${String((countRow?.c || 0) + 1).padStart(4, '0')}`;
       const id = 'crt-' + uuidv4().slice(0, 8);
-      const textSummary = notes || `Atestado de ${certificateType === 'rest' ? 'repouso' : 'comparecimento'} (${daysOff || 1} dias).`;
+      const textSummary = notes || (certificateType==='rest' ? `Atestado de repouso (${certificateDays} dias).` : certificateType==='attendance' ? 'Declaração de comparecimento.' : 'Atestado de aptidão.');
 
       const profRow = db.prepare('SELECT name, registration_type, registration_number FROM professionals WHERE id = ?').get(resolvedProfId) as any;
       const signedByName = profRow?.name || req.user?.name || req.user?.email || 'Profissional';
@@ -115,16 +107,17 @@ export class DocumentsController {
         patientId,
         certNumber,
         certificateType,
-        daysOff || 1,
+        certificateDays,
         startDate || '',
         cidCode || '',
         textSummary,
         signedByName,
         signedByRegistration || '',
-        signedAt
+        signedAt, context.sessionDate || '', context.sessionTime || '', context.recordId || ''
       ].join('|');
       const signatureHash = crypto.createHash('sha256').update(hashPayload).digest('hex');
 
+      db.transaction(()=>{
       db.prepare(`
         INSERT INTO clinical_certificates (
           id, tenant_id, patient_id, appointment_id, professional_id,
@@ -136,11 +129,14 @@ export class DocumentsController {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
       `).run(
         id, tenantId, patientId, appointmentId || null, resolvedProfId,
-        certNumber, daysOff || 1, cidCode || null, textSummary,
-        certificateType, daysOff || 1, startDate || null, cidCode || null, notes || null,
+        certNumber, certificateDays, cidCode || null, textSummary,
+        certificateType, certificateDays, startDate || null, cidCode || null, notes || null,
         signatureHash, signedAt, signedByName, signedByRegistration,
         req.user?.name || req.user?.email || 'Profissional'
       );
+
+        saveDocumentContext('clinical_certificates',id,tenantId!,context);
+      })();
 
       logAudit(req, 'CREATE_CERTIFICATE', 'clinical_certificates', id, { patientId, certificateType, signatureHash });
       res.status(201).json({
@@ -154,6 +150,7 @@ export class DocumentsController {
         message: 'Atestado emitido com sucesso'
       });
     } catch (err: any) {
+      if(err instanceof DocumentContextError) {res.status(err.status).json({error:err.message});return;}
       console.error('[DocumentsController.createCertificate] Erro:', err);
       res.status(500).json({ error: 'Erro ao emitir atestado' });
     }
@@ -161,6 +158,7 @@ export class DocumentsController {
 
   static getCertificate(req: Request, res: Response): void {
     try {
+      if(!req.user || ['patient','superadmin'].includes(req.user.role)) {res.status(403).json({error:'Acesso a documento clínico não autorizado.'});return;}
       const { id } = req.params;
       const tenantId = req.tenantId;
 
@@ -173,8 +171,8 @@ export class DocumentsController {
           t.name as clinic_name, t.cnpj_cpf as clinic_cnpj, t.phone as clinic_phone, t.email as clinic_email,
           t.street, t.number, t.neighborhood, t.city, t.city as clinic_city, t.state, t.state as clinic_state, t.address, t.logo_url
         FROM clinical_certificates c
-        JOIN patients p ON p.id = c.patient_id
-        JOIN professionals pr ON pr.id = c.professional_id
+        JOIN patients p ON p.id = c.patient_id AND p.tenant_id = c.tenant_id
+        JOIN professionals pr ON pr.id = c.professional_id AND pr.tenant_id = c.tenant_id
         LEFT JOIN specialties spec ON spec.id = pr.specialty_id
         JOIN tenants t ON t.id = c.tenant_id
         WHERE c.id = ? AND c.tenant_id = ?
@@ -208,20 +206,8 @@ export class DocumentsController {
         return;
       }
 
-      let resolvedProfId = professionalId;
-      if (!resolvedProfId && req.user) {
-        const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ?').get(req.user.userId) as { id: string } | undefined;
-        if (prof) resolvedProfId = prof.id;
-      }
-      if (!resolvedProfId) {
-        const defaultProf = db.prepare('SELECT id FROM professionals WHERE tenant_id = ? AND active = 1 LIMIT 1').get(tenantId) as { id: string } | undefined;
-        if (defaultProf) resolvedProfId = defaultProf.id;
-      }
-
-      if (!resolvedProfId) {
-        res.status(400).json({ error: 'Profissional emissor não identificado' });
-        return;
-      }
+      const context=resolveDocumentContext(req,{patientId,appointmentId,professionalId,recordId:req.body.recordId});
+      const resolvedProfId=context.professionalId;
 
       const year = new Date().getFullYear();
       const countRow = db.prepare('SELECT COUNT(*) as c FROM clinical_prescriptions WHERE tenant_id = ?').get(tenantId) as any;
@@ -244,10 +230,11 @@ export class DocumentsController {
         content,
         signedByName,
         signedByRegistration || '',
-        signedAt
+        signedAt, context.sessionDate || '', context.sessionTime || '', context.recordId || ''
       ].join('|');
       const signatureHash = crypto.createHash('sha256').update(hashPayload).digest('hex');
 
+      db.transaction(()=>{
       db.prepare(`
         INSERT INTO clinical_prescriptions (
           id, tenant_id, patient_id, appointment_id, professional_id,
@@ -265,6 +252,9 @@ export class DocumentsController {
         req.user?.name || req.user?.email || 'Profissional'
       );
 
+        saveDocumentContext('clinical_prescriptions',id,tenantId!,context);
+      })();
+
       logAudit(req, 'CREATE_PRESCRIPTION', 'clinical_prescriptions', id, { patientId, prescriptionType, signatureHash });
       res.status(201).json({
         id,
@@ -277,6 +267,7 @@ export class DocumentsController {
         message: 'Receituário gerado com sucesso'
       });
     } catch (err: any) {
+      if(err instanceof DocumentContextError) {res.status(err.status).json({error:err.message});return;}
       console.error('[DocumentsController.createPrescription] Erro:', err);
       res.status(500).json({ error: 'Erro ao emitir receituário' });
     }
@@ -284,6 +275,7 @@ export class DocumentsController {
 
   static getPrescription(req: Request, res: Response): void {
     try {
+      if(!req.user || ['patient','superadmin'].includes(req.user.role)) {res.status(403).json({error:'Acesso a documento clínico não autorizado.'});return;}
       const { id } = req.params;
       const tenantId = req.tenantId;
 
@@ -296,8 +288,8 @@ export class DocumentsController {
           t.name as clinic_name, t.cnpj_cpf as clinic_cnpj, t.phone as clinic_phone, t.email as clinic_email,
           t.street, t.number, t.neighborhood, t.city, t.city as clinic_city, t.state, t.state as clinic_state, t.address, t.logo_url
         FROM clinical_prescriptions pr
-        JOIN patients p ON p.id = pr.patient_id
-        JOIN professionals prof ON prof.id = pr.professional_id
+        JOIN patients p ON p.id = pr.patient_id AND p.tenant_id = pr.tenant_id
+        JOIN professionals prof ON prof.id = pr.professional_id AND prof.tenant_id = pr.tenant_id
         LEFT JOIN specialties spec ON spec.id = prof.specialty_id
         JOIN tenants t ON t.id = pr.tenant_id
         WHERE pr.id = ? AND pr.tenant_id = ?
@@ -330,20 +322,8 @@ export class DocumentsController {
         return;
       }
 
-      let resolvedProfId = professionalId;
-      if (!resolvedProfId && req.user) {
-        const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ?').get(req.user.userId) as { id: string } | undefined;
-        if (prof) resolvedProfId = prof.id;
-      }
-      if (!resolvedProfId) {
-        const defaultProf = db.prepare('SELECT id FROM professionals WHERE tenant_id = ? AND active = 1 LIMIT 1').get(tenantId) as { id: string } | undefined;
-        if (defaultProf) resolvedProfId = defaultProf.id;
-      }
-
-      if (!resolvedProfId) {
-        res.status(400).json({ error: 'Profissional solicitante não identificado' });
-        return;
-      }
+      const context=resolveDocumentContext(req,{patientId,appointmentId,professionalId,recordId:req.body.recordId});
+      const resolvedProfId=context.professionalId;
 
       const year = new Date().getFullYear();
       const countRow = db.prepare('SELECT COUNT(*) as c FROM clinical_exam_requests WHERE tenant_id = ?').get(tenantId) as any;
@@ -367,10 +347,11 @@ export class DocumentsController {
         cidCode || '',
         signedByName,
         signedByRegistration || '',
-        signedAt
+        signedAt, context.sessionDate || '', context.sessionTime || '', context.recordId || ''
       ].join('|');
       const signatureHash = crypto.createHash('sha256').update(hashPayload).digest('hex');
 
+      db.transaction(()=>{
       db.prepare(`
         INSERT INTO clinical_exam_requests (
           id, tenant_id, patient_id, appointment_id, professional_id,
@@ -388,6 +369,9 @@ export class DocumentsController {
         req.user?.name || req.user?.email || 'Profissional'
       );
 
+        saveDocumentContext('clinical_exam_requests',id,tenantId!,context);
+      })();
+
       logAudit(req, 'CREATE_EXAM_REQUEST', 'clinical_exam_requests', id, { patientId, cidCode, signatureHash });
       res.status(201).json({
         id,
@@ -400,6 +384,7 @@ export class DocumentsController {
         message: 'Pedido de exame emitido com sucesso'
       });
     } catch (err: any) {
+      if(err instanceof DocumentContextError) {res.status(err.status).json({error:err.message});return;}
       console.error('[DocumentsController.createExamRequest] Erro:', err);
       res.status(500).json({ error: 'Erro ao emitir pedido de exame' });
     }
@@ -407,6 +392,7 @@ export class DocumentsController {
 
   static getExamRequest(req: Request, res: Response): void {
     try {
+      if(!req.user || ['patient','superadmin'].includes(req.user.role)) {res.status(403).json({error:'Acesso a documento clínico não autorizado.'});return;}
       const { id } = req.params;
       const tenantId = req.tenantId;
 
@@ -419,8 +405,8 @@ export class DocumentsController {
           t.name as clinic_name, t.cnpj_cpf as clinic_cnpj, t.phone as clinic_phone, t.email as clinic_email,
           t.street, t.number, t.neighborhood, t.city, t.city as clinic_city, t.state, t.state as clinic_state, t.address, t.logo_url
         FROM clinical_exam_requests er
-        JOIN patients p ON p.id = er.patient_id
-        JOIN professionals prof ON prof.id = er.professional_id
+        JOIN patients p ON p.id = er.patient_id AND p.tenant_id = er.tenant_id
+        JOIN professionals prof ON prof.id = er.professional_id AND prof.tenant_id = er.tenant_id
         LEFT JOIN specialties spec ON spec.id = prof.specialty_id
         JOIN tenants t ON t.id = er.tenant_id
         WHERE er.id = ? AND er.tenant_id = ?
@@ -758,8 +744,9 @@ export class DocumentsController {
         const recId = 'rec-' + uuidv4().slice(0, 8);
         const srvName = (db.prepare('SELECT name FROM services WHERE id = ?').get(appt.service_id) as any)?.name || 'Atendimento Geral';
         const spDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
-        const sessionDate = appt.start_time ? appt.start_time.split('T')[0] : spDateStr;
-        const sessionTime = appt.start_time?.includes('T') ? appt.start_time.split('T')[1].slice(0, 5) : null;
+        const recorded=recordedAttendance(appt,appointmentRecord(tenantId!,appt.patient_id,appointmentId));
+        const sessionDate = recorded.sessionDate || spDateStr;
+        const sessionTime = recorded.sessionTime;
         const clinicalDataJson = evolution.clinicalData ? (typeof evolution.clinicalData === 'string' ? evolution.clinicalData : JSON.stringify(evolution.clinicalData)) : null;
         const snapshot = typeof evolution.moduleData === 'string' ? JSON.parse(evolution.moduleData) : { ...evolution.moduleData };
         if (evolution.assessmentData && !snapshot.assessmentData && !snapshot.assessment) snapshot.assessment = evolution.assessmentData;
@@ -1033,18 +1020,25 @@ export class DocumentsController {
         : (docProf?.registration_number || null);
       const docSignedAt = new Date().toISOString();
 
+      const documentContext = (certificate?.certificateType || prescription?.content || examRequest?.examsList)
+        ? resolveDocumentContext(req,{patientId:appt.patient_id,professionalId:resolvedProfId,appointmentId})
+        : {sessionDate:null,sessionTime:null,recordId:null,professionalId:resolvedProfId};
+
       // 2. Emite Atestado, se preenchido
       if (certificate && certificate.certificateType) {
         currentStage = 'CREATE_CERTIFICATE';
+        if(!['rest','attendance','fitness'].includes(certificate.certificateType)) throw new DocumentContextError('Tipo de atestado inválido.');
+        const certificateDays=certificate.certificateType==='rest' ? Number(certificate.daysOff ?? 1) : 0;
+        if(!Number.isInteger(certificateDays) || certificateDays<0) throw new DocumentContextError('Quantidade de dias inválida.');
         const certId = 'crt-' + uuidv4().slice(0, 8);
         const countRow = db.prepare('SELECT COUNT(*) as c FROM clinical_certificates WHERE tenant_id = ?').get(tenantId) as any;
         const certNum = `AT-${year}-${String((countRow?.c || 0) + 1).padStart(4, '0')}`;
-        const certSummary = certificate.notes || `Atestado de ${certificate.certificateType === 'rest' ? 'repouso' : 'comparecimento'} (${certificate.daysOff || 1} dias).`;
+        const certSummary = certificate.notes || (certificate.certificateType==='rest' ? `Atestado de repouso (${certificateDays} dias).` : certificate.certificateType==='attendance' ? 'Declaração de comparecimento.' : 'Atestado de aptidão.');
 
         const certHash = crypto.createHash('sha256').update([
           certId, tenantId, appt.patient_id, certNum, certificate.certificateType,
-          certificate.daysOff || 1, certificate.startDate || '', certificate.cidCode || '',
-          certSummary, docSignerName, docSignerReg || '', docSignedAt
+          certificateDays, certificate.startDate || '', certificate.cidCode || '',
+          certSummary, docSignerName, docSignerReg || '', docSignedAt, documentContext.sessionDate || '', documentContext.sessionTime || ''
         ].join('|')).digest('hex');
 
         db.prepare(`
@@ -1058,12 +1052,13 @@ export class DocumentsController {
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
         `).run(
           certId, tenantId, appt.patient_id, appointmentId, resolvedProfId,
-          certNum, certificate.daysOff || 1, certificate.cidCode || null, certSummary,
-          certificate.certificateType, certificate.daysOff || 1, certificate.startDate || null,
+          certNum, certificateDays, certificate.cidCode || null, certSummary,
+          certificate.certificateType, certificateDays, certificate.startDate || null,
           certificate.cidCode || null, certificate.notes || null,
           certHash, docSignedAt, docSignerName, docSignerReg,
           req.user?.name || 'Profissional'
         );
+        saveDocumentContext('clinical_certificates',certId,tenantId!,documentContext);
         generatedDocs.certificateId = certId;
       }
 
@@ -1076,7 +1071,7 @@ export class DocumentsController {
 
         const prescHash = crypto.createHash('sha256').update([
           prescId, tenantId, appt.patient_id, prescNum, prescription.prescriptionType || 'simple',
-          prescription.content, docSignerName, docSignerReg || '', docSignedAt
+          prescription.content, docSignerName, docSignerReg || '', docSignedAt, documentContext.sessionDate || '', documentContext.sessionTime || ''
         ].join('|')).digest('hex');
 
         db.prepare(`
@@ -1095,6 +1090,7 @@ export class DocumentsController {
           prescHash, docSignedAt, docSignerName, docSignerReg,
           req.user?.name || 'Profissional'
         );
+        saveDocumentContext('clinical_prescriptions',prescId,tenantId!,documentContext);
         generatedDocs.prescriptionId = prescId;
       }
 
@@ -1107,7 +1103,7 @@ export class DocumentsController {
 
         const examHash = crypto.createHash('sha256').update([
           reqId, tenantId, appt.patient_id, reqNum, examRequest.examsList,
-          examRequest.clinicalIndication || '', docSignerName, docSignerReg || '', docSignedAt
+          examRequest.clinicalIndication || '', docSignerName, docSignerReg || '', docSignedAt, documentContext.sessionDate || '', documentContext.sessionTime || ''
         ].join('|')).digest('hex');
 
         db.prepare(`
@@ -1126,6 +1122,7 @@ export class DocumentsController {
           examHash, docSignedAt, docSignerName, docSignerReg,
           req.user?.name || 'Profissional'
         );
+        saveDocumentContext('clinical_exam_requests',reqId,tenantId!,documentContext);
         generatedDocs.examRequestId = reqId;
       }
 

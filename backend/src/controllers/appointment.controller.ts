@@ -1,3 +1,4 @@
+import {recordedAttendance,appointmentRecord} from '../services/document-context.service';
 import { canAccessPatient } from '../services/patient-sharing.service';
 import { resolveBookingTenant, publicBookingProfessional, professionalBookingService, validBookingDate } from '../utils/public-booking';
 import { calculateAvailableSlots } from '../utils/slot-calculator';
@@ -255,16 +256,16 @@ export class AppointmentController {
           s.clinical_module as service_clinical_module,
           pat.full_name as patient_name, pat.phone as patient_phone, pat.email as patient_email,
           pat.birth_date as patient_birth_date, pat.cpf as patient_cpf, pat.is_child as patient_is_child,
-          p.name as professional_name, p.registration_number,
+          p.name as professional_name, p.registration_number, p.registration_type,
           s.name as service_name, s.price as service_price, s.duration_minutes,
           r.name as room_name,
           pay.id as payment_id, pay.status as payment_status, pay.amount as payment_amount, pay.payment_method
         FROM appointments a
-        JOIN patients pat ON pat.id = a.patient_id
-        JOIN professionals p ON p.id = a.professional_id
-        JOIN services s ON s.id = a.service_id
+        JOIN patients pat ON pat.id = a.patient_id AND pat.tenant_id=a.tenant_id
+        JOIN professionals p ON p.id = a.professional_id AND p.tenant_id=a.tenant_id
+        JOIN services s ON s.id = a.service_id AND s.tenant_id=a.tenant_id
         LEFT JOIN rooms r ON r.id = a.room_id
-        LEFT JOIN payments pay ON pay.appointment_id = a.id
+        LEFT JOIN payments pay ON pay.appointment_id = a.id AND pay.tenant_id=a.tenant_id
         WHERE a.id = ? AND a.tenant_id = ?
       `);
       const appointment = stmt.get(id, tenantId);
@@ -288,7 +289,8 @@ export class AppointmentController {
       `);
       const statusHistory = historyStmt.all(id);
 
-      res.json({ appointment, statusHistory });
+      const attendance=recordedAttendance(appointment,appointmentRecord(tenantId!,appointment.patient_id,appointment.id));
+      res.json({ appointment:{...appointment,attendance_date:attendance.sessionDate,attendance_time:attendance.sessionTime}, statusHistory });
     } catch (err: any) {
       console.error('[AppointmentController.getById] Erro:', err);
       res.status(500).json({ error: 'Erro ao buscar agendamento' });

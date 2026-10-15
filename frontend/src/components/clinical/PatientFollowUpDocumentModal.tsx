@@ -1,3 +1,4 @@
+import {formatClinicalDate} from '../../utils/clinicalDocument';
 import { isNativePrint, printNativeHtml } from '../../utils/nativePrint';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ApiClient } from '../../api/client';
@@ -74,22 +75,24 @@ export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModal
   nextAppointmentNote = ''
 }) => {
   const { showToast } = useToast();
-  const { currentUser } = useAuth();
+  const { currentUser, currentTenant } = useAuth();
   const printSheetRef = useRef<HTMLDivElement>(null);
 
   const { clinic: clinicData, loading: clinicLoading, error: clinicError, canIssue: canIssueClinic } = useClinicDocumentData();
   const [patientDetails, setPatientDetails] = useState<any>(null);
   const [appointmentDetails, setAppointmentDetails] = useState<any>(null);
 
-  // Carrega agendamento ativo se profissional ou registro não vierem por props
+  // O agendamento vinculado determina o emissor, mesmo quando há sugestões por props.
   useEffect(() => {
     let isMounted = true;
+    setAppointmentDetails(null);
     async function loadAppointment() {
-      if (appointmentId && (!professionalName || !professionalCouncil)) {
+      if (appointmentId) {
         try {
-          const appt = await ApiClient.get<any>(`/v1/appointments/${appointmentId}`);
-          if (isMounted && appt) {
-            setAppointmentDetails(appt);
+          const response = await ApiClient.get<any>(`/v1/appointments/${appointmentId}`);
+          const appt=response.appointment || response;
+          if (isMounted && appt?.id===appointmentId && appt.patient_id===patientId) {
+            setAppointmentDetails({...appt,_tenantId:currentTenant?.id});
           }
         } catch (e) {
           console.warn('Erro ao carregar dados do agendamento para profissional:', e);
@@ -102,18 +105,13 @@ export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModal
     return () => {
       isMounted = false;
     };
-  }, [isOpen, appointmentId, professionalName, professionalCouncil]);
+  }, [isOpen, appointmentId, patientId, currentTenant?.id]);
 
-  // Resolução em cascata do profissional responsável:
-  // 1. Props diretas
-  // 2. Agendamento ativo vinculado
-  // 3. Usuário logado na sessão com registro de conselho real
-  const effectiveProfessionalName = (
-    professionalName ||
-    appointmentDetails?.professional_name ||
-    currentUser?.name ||
-    ''
-  ).trim();
+  // Documentos vinculados usam exclusivamente o profissional do atendimento.
+  const matchingAppointment=appointmentDetails?._tenantId===currentTenant?.id && appointmentDetails?.id===appointmentId && appointmentDetails?.patient_id===patientId;
+  const effectiveProfessionalName = (appointmentId
+    ? (matchingAppointment ? appointmentDetails.professional_name : '')
+    : professionalName || currentUser?.name || '').trim();
 
   const formatCouncil = (type?: string, num?: string) => {
     if (!num) return '';
@@ -121,13 +119,9 @@ export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModal
     return `${prefix}${num}`;
   };
 
-  const effectiveProfessionalCouncil = (
-    professionalCouncil ||
-    appointmentDetails?.professional_council ||
-    formatCouncil(currentUser?.registrationType, currentUser?.registrationNumber) ||
-    currentUser?.professionName ||
-    ''
-  ).trim();
+  const effectiveProfessionalCouncil = (appointmentId
+    ? (matchingAppointment ? formatCouncil(appointmentDetails.registration_type,appointmentDetails.registration_number) : '')
+    : professionalCouncil || formatCouncil(currentUser?.registrationType,currentUser?.registrationNumber) || '').trim();
 
   const hasProfessional = Boolean(effectiveProfessionalName.length > 0);
   const canPrint = canIssueClinic && hasProfessional;
@@ -189,20 +183,14 @@ export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModal
   }, [isOpen, adaptedContent]);
 
   useEffect(() => {
-    async function loadPatient() {
-      try {
-        if (patientId) {
-          const pat = await ApiClient.get<any>(`/v1/patients/${patientId}`);
-          setPatientDetails(pat);
-        }
-      } catch (err) {
-        console.warn('Erro ao carregar dados do paciente:', err);
-      }
-    }
-    if (isOpen && patientId) {
-      loadPatient();
-    }
-  }, [isOpen, patientId]);
+    let alive=true;
+    setPatientDetails(null);
+    if(isOpen && patientId) void ApiClient.get<any>(`/v1/patients/${patientId}`).then(response=>{
+      const patient=response.patient || response;
+      if(alive && patient.id===patientId) setPatientDetails({...patient,_tenantId:currentTenant?.id});
+    }).catch(()=>{});
+    return ()=>{alive=false;};
+  }, [isOpen,patientId,currentTenant?.id]);
 
   if (!isOpen) return null;
 
@@ -523,9 +511,9 @@ export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModal
                 <div>
                   <span className="text-[10px] uppercase font-bold text-slate-400 block">Paciente</span>
                   <strong className="text-sm text-slate-900 block">{patientName}</strong>
-                  {patientDetails?.birth_date && (
+                  {patientDetails?._tenantId===currentTenant?.id && patientDetails?.birth_date && (
                     <span className="text-slate-500 text-[11px]">
-                      Nascimento: {new Date(patientDetails.birth_date).toLocaleDateString('pt-BR')}
+                      Nascimento: {formatClinicalDate(patientDetails.birth_date)}
                     </span>
                   )}
                 </div>
@@ -539,6 +527,8 @@ export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModal
                   </span>
                 </div>
               </div>
+
+              {matchingAppointment && appointmentDetails.attendance_date && <p className="text-xs text-slate-600">Data do atendimento: {formatClinicalDate(appointmentDetails.attendance_date)}{appointmentDetails.attendance_time ? ` • Horário: ${appointmentDetails.attendance_time}` : ''}</p>}
 
               {/* Title of the handout */}
               <div className="text-center py-2 border-b border-slate-100">
