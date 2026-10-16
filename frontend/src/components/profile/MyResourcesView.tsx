@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -22,9 +22,12 @@ import { PracticeArea, Capability, ComputedUserCapabilities, MedicalTreeResponse
 
 interface MyResourcesViewProps { areasOnly?: boolean; onAreasSaved?: () => Promise<void>; onSavingChange?: (saving: boolean) => void }
 export const MyResourcesView: React.FC<MyResourcesViewProps> = ({ areasOnly = false, onAreasSaved, onSavingChange }) => {
-  const { currentUser, reloadSession } = useAuth();
+  const { currentUser, currentTenant, reloadSession } = useAuth();
   const { showToast } = useToast();
 
+  const resourcesKey = JSON.stringify([currentUser?.id, currentTenant?.id, currentUser?.professionId, currentUser?.canonicalProfessionId, currentUser?.commercialModule]);
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  const requestId = useRef(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [data, setData] = useState<{
@@ -49,10 +52,18 @@ export const MyResourcesView: React.FC<MyResourcesViewProps> = ({ areasOnly = fa
   const [expandedMedicalSpecialties, setExpandedMedicalSpecialties] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<'resources' | 'areas'>(areasOnly ? 'areas' : 'resources');
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
+    const request = ++requestId.current;
+    setLoading(true);
+    setData(null);
+    setSelectedOptionals([]);
+    setSelectedAreas([]);
+    setSelectedMedicalSpecialties([]);
+    setSelectedMedicalPracticeAreas([]);
+    setExpandedMedicalSpecialties([]);
     try {
-      setLoading(true);
       const res = await ApiClient.get<any>('/v1/capabilities/my-resources');
+      if (request !== requestId.current) return;
       setData(res);
       setSelectedOptionals(res.selectedOptionalCapabilities || []);
       setSelectedAreas(res.practiceAreaIds || []);
@@ -64,16 +75,23 @@ export const MyResourcesView: React.FC<MyResourcesViewProps> = ({ areasOnly = fa
         setExpandedMedicalSpecialties(specs.length > 0 ? specs : ['med-spec-clinica']);
       }
     } catch (err: any) {
+      if (request !== requestId.current) return;
       console.error('Erro ao carregar recursos:', err);
       showToast(err.message || 'Erro ao carregar seus recursos profissionais', 'error');
     } finally {
-      setLoading(false);
+      if (request === requestId.current) { setLoadedKey(resourcesKey); setLoading(false); }
     }
-  };
+  }, [resourcesKey]);
 
   useEffect(() => {
-    loadData();
-  }, []);
+    const refresh = () => { void loadData(); };
+    refresh();
+    window.addEventListener('zemda-profession-changed', refresh);
+    return () => {
+      ++requestId.current;
+      window.removeEventListener('zemda-profession-changed', refresh);
+    };
+  }, [loadData]);
 
   useEffect(() => { onSavingChange?.(saving); }, [saving, onSavingChange]);
 
@@ -151,7 +169,7 @@ export const MyResourcesView: React.FC<MyResourcesViewProps> = ({ areasOnly = fa
     }
   };
 
-  if (loading) {
+  if (loading || loadedKey !== resourcesKey) {
     return (
       <div className="flex flex-col items-center justify-center p-12 text-slate-500">
         <RefreshCw className="w-8 h-8 animate-spin text-teal-600 mb-3" />

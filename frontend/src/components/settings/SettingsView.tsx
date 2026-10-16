@@ -235,10 +235,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
       await ApiClient.put(`/v1/professionals/${currentUser.professionalId}`, {
         professionId: selectedNewProfessionId
       });
-      showToast('Profissão atualizada com sucesso!', 'success');
       setIsProfessionModalOpen(false);
       setMyProfessional(prev => prev ? { ...prev, profession_change_used: 1, profession_changed_at: new Date().toISOString() } : null);
-      await reloadSession();
+      try {
+        const updated = await ApiClient.get<{ professional: Professional }>(`/v1/professionals/${currentUser.professionalId}`);
+        if (updated.professional) setMyProfessional(updated.professional);
+      } finally {
+        await reloadSession();
+        window.dispatchEvent(new CustomEvent('zemda-profession-changed'));
+      }
+      showToast('Profissão atualizada com sucesso!', 'success');
     } catch (err: any) {
       showToast(err.message || 'Erro ao alterar profissão', 'error');
     } finally {

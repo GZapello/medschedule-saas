@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Edit3, X } from 'lucide-react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -17,22 +17,32 @@ interface Resources {
 // All reads and writes target the authenticated user's existing resources endpoints.
 export function ProfileSpecialties() {
   const { currentUser, currentTenant } = useAuth();
-  const [data, setData] = useState<Resources | null>(null);
+  const resourcesKey = JSON.stringify([currentUser?.id, currentTenant?.id, currentUser?.professionId, currentUser?.canonicalProfessionId, currentUser?.commercialModule]);
+  const [snapshot, setSnapshot] = useState<{ key: string; resources: Resources } | null>(null);
+  const data = snapshot?.key === resourcesKey ? snapshot.resources : null;
+  const requestId = useRef(0);
   const [error, setError] = useState(false);
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const load = async () => {
-    const resources = await ApiClient.get<Resources>('/v1/capabilities/my-resources');
-    setData(resources); setError(false);
-  };
+  const load = useCallback(async () => {
+    const request = ++requestId.current;
+    setSnapshot(null); setError(false);
+    try {
+      const resources = await ApiClient.get<Resources>('/v1/capabilities/my-resources');
+      if (request === requestId.current) setSnapshot({ key: resourcesKey, resources });
+    } catch {
+      if (request === requestId.current) setError(true);
+    }
+  }, [resourcesKey]);
   useEffect(() => {
-    let active = true;
-    setData(null); setError(false); setOpen(false);
-    ApiClient.get<Resources>('/v1/capabilities/my-resources').then(resources => {
-      if (active) setData(resources);
-    }).catch(() => { if (active) setError(true); });
-    return () => { active = false; };
-  }, [currentUser?.id, currentTenant?.id]);
+    const refresh = () => { setOpen(false); void load(); };
+    refresh();
+    window.addEventListener('zemda-profession-changed', refresh);
+    return () => {
+      ++requestId.current;
+      window.removeEventListener('zemda-profession-changed', refresh);
+    };
+  }, [load]);
   useEffect(() => {
     if (!open) return;
     const previous = document.activeElement as HTMLElement | null;
