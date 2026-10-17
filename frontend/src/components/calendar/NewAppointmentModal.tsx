@@ -390,7 +390,8 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                 ))}
               </select>
             </div>
-            <div>
+            <div className="grid grid-cols-[minmax(0,1fr)_6rem] sm:grid-cols-[minmax(0,7fr)_minmax(6rem,3fr)] gap-2 min-w-0 sm:col-span-2">
+              <div className="min-w-0">
               <label className="block font-semibold text-slate-700 mb-1">Serviço *</label>
               <QuickActionDropdown
                 value={serviceId}
@@ -406,8 +407,10 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                 onAction={() => setIsNewServiceModalOpen(true)}
                 showAction={canManageServices}
               />
-              <label htmlFor="appointment-price" className="block font-semibold text-slate-700 mt-3 mb-1">Valor da consulta *</label>
-              <div className="flex items-center gap-2 w-full border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 focus-within:ring-2 focus-within:ring-indigo-500">
+              </div>
+              <div className="min-w-0">
+              <label htmlFor="appointment-price" className="block text-slate-500 mb-1">Valor</label>
+              <div className="flex items-center gap-1 w-full border border-slate-200 rounded-xl px-2 py-2 bg-slate-50 focus-within:ring-2 focus-within:ring-indigo-500">
                 <span aria-hidden="true" className="shrink-0 whitespace-nowrap text-slate-500">R$</span>
                 <input id="appointment-price" type="text" inputMode="decimal" required
                   value={appointmentPrice} disabled={!serviceId}
@@ -417,11 +420,11 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                     setAppointmentPrice(event.target.value);
                   }}
                   onBlur={() => { const value = parseAppointmentPrice(appointmentPrice); if (value !== null) setAppointmentPrice(formatAppointmentPrice(value)); }}
-                  aria-describedby="appointment-price-hint"
+                  aria-label="Valor da consulta *"
                   aria-invalid={appointmentPrice !== '' && parseAppointmentPrice(appointmentPrice) === null}
-                  className="w-full min-w-0 flex-1 bg-transparent outline-none text-sm" />
+                  className="w-full min-w-0 !min-h-0 flex-1 !p-0 bg-transparent outline-none text-xs" />
               </div>
-              <p id="appointment-price-hint" className="mt-1 text-slate-500">Valor somente deste agendamento.</p>
+              </div>
             </div>
           </div>
 
