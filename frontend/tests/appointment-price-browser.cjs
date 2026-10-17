@@ -19,10 +19,16 @@ const {build}=require('esbuild');const {chromium}=require('playwright');
  const server=http.createServer((req,res)=>{res.setHeader('Content-Type','text/html');res.end(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${fs.readFileSync(path.join(root,'dist/assets',cssFile),'utf8')}</style><div id="root"></div><script>${bundle.outputFiles[0].text}</script>`)});
  await new Promise(r=>server.listen(0,'127.0.0.1',r));const browser=await chromium.launch({headless:true});
  try{
- for(const width of [390,1280]){
+ for(const width of [320,390,1280]){
   const page=await browser.newPage({viewport:{width,height:1000}});await page.goto(`http://127.0.0.1:${server.address().port}`);
   const field=page.getByLabel('Valor da consulta *');await field.waitFor();await page.waitForFunction(()=>document.getElementById('appointment-price').value==='150,00');
   assert.deepEqual(await page.evaluate(()=>['150','150,00','150.50','1.234,56','0','-1','NaN','1e3','12,345'].map(window.parsePrice)),[150,150,150.5,1234.56,0,null,null,null,null]);
+  await field.click();
+  assert.equal(await page.getByRole('button',{name:'+ Adicionar novo serviço',exact:true}).count(),0,'editing price does not open dropdown');
+  await page.getByRole('button',{name:'Consulta',exact:true}).click();await page.getByRole('button',{name:'+ Adicionar novo serviço',exact:true}).waitFor({state:'visible'});await field.click();
+  assert.equal(await page.getByRole('button',{name:'+ Adicionar novo serviço',exact:true}).count(),1,'editing price does not close dropdown');
+  await page.getByRole('button',{name:'Abrir opções',exact:true}).click();
+  assert.equal(await field.evaluate(input=>{const trigger=input.closest('.border.rounded-xl');return !!trigger && !!trigger.querySelector('button') && !input.closest('button')}),true,'price and service share one border with valid interactive markup');
   await field.fill('120,00');await page.getByRole('button',{name:'Consulta',exact:true}).click();await page.getByText('Consulta inicial',{exact:true}).click();await page.waitForFunction(()=>document.getElementById('appointment-price').value==='200,00');
   await page.getByRole('button',{name:'Consulta inicial',exact:true}).click();await page.getByText('Consulta',{exact:true}).last().click();await page.waitForFunction(()=>document.getElementById('appointment-price').value==='150,00');
   await page.getByRole('button',{name:'Consulta',exact:true}).click();await page.getByRole('button',{name:'+ Adicionar novo serviço',exact:true}).click();await page.getByRole('button',{name:'Criar serviço teste'}).click();await page.waitForFunction(()=>document.getElementById('appointment-price').value==='180,00');

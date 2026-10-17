@@ -390,8 +390,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                 ))}
               </select>
             </div>
-            <div className="grid grid-cols-[minmax(0,1fr)_6rem] sm:grid-cols-[minmax(0,7fr)_minmax(6rem,3fr)] gap-2 min-w-0 sm:col-span-2">
-              <div className="min-w-0">
+            <div className="min-w-0 sm:col-span-2">
               <label className="block font-semibold text-slate-700 mb-1">Serviço *</label>
               <QuickActionDropdown
                 value={serviceId}
@@ -406,25 +405,23 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                 actionLabel="+ Adicionar novo serviço"
                 onAction={() => setIsNewServiceModalOpen(true)}
                 showAction={canManageServices}
+                rightContent={
+                  <div className="flex items-center gap-1 w-24 border-l border-slate-200 pl-2">
+                    <span aria-hidden="true" className="shrink-0 whitespace-nowrap text-slate-500">R$</span>
+                    <input id="appointment-price" type="text" inputMode="decimal" required
+                      value={appointmentPrice} disabled={!serviceId}
+                      onChange={event => {
+                        if (!/^[\d.,]*$/.test(event.target.value)) return;
+                        priceEdited.current = true;
+                        setAppointmentPrice(event.target.value);
+                      }}
+                      onBlur={() => { const value = parseAppointmentPrice(appointmentPrice); if (value !== null) setAppointmentPrice(formatAppointmentPrice(value)); }}
+                      aria-label="Valor da consulta *"
+                      aria-invalid={appointmentPrice !== '' && parseAppointmentPrice(appointmentPrice) === null}
+                      className="w-full min-w-0 !min-h-0 flex-1 !p-0 bg-transparent outline-none text-xs" />
+                  </div>
+                }
               />
-              </div>
-              <div className="min-w-0">
-              <label htmlFor="appointment-price" className="block text-slate-500 mb-1">Valor</label>
-              <div className="flex items-center gap-1 w-full border border-slate-200 rounded-xl px-2 py-2 bg-slate-50 focus-within:ring-2 focus-within:ring-indigo-500">
-                <span aria-hidden="true" className="shrink-0 whitespace-nowrap text-slate-500">R$</span>
-                <input id="appointment-price" type="text" inputMode="decimal" required
-                  value={appointmentPrice} disabled={!serviceId}
-                  onChange={event => {
-                    if (!/^[\d.,]*$/.test(event.target.value)) return;
-                    priceEdited.current = true;
-                    setAppointmentPrice(event.target.value);
-                  }}
-                  onBlur={() => { const value = parseAppointmentPrice(appointmentPrice); if (value !== null) setAppointmentPrice(formatAppointmentPrice(value)); }}
-                  aria-label="Valor da consulta *"
-                  aria-invalid={appointmentPrice !== '' && parseAppointmentPrice(appointmentPrice) === null}
-                  className="w-full min-w-0 !min-h-0 flex-1 !p-0 bg-transparent outline-none text-xs" />
-              </div>
-              </div>
             </div>
           </div>
 

@@ -18,6 +18,7 @@ export interface QuickActionDropdownProps {
   showAction?: boolean;
   disabled?: boolean;
   className?: string;
+  rightContent?: React.ReactNode;
 }
 
 export const QuickActionDropdown: React.FC<QuickActionDropdownProps> = ({
@@ -30,7 +31,8 @@ export const QuickActionDropdown: React.FC<QuickActionDropdownProps> = ({
   onAction,
   showAction = false,
   disabled = false,
-  className = ''
+  className = '',
+  rightContent
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -66,6 +68,23 @@ export const QuickActionDropdown: React.FC<QuickActionDropdownProps> = ({
 
   return (
     <div ref={containerRef} className={`relative ${isOpen ? 'z-40' : ''} ${className}`}>
+      {rightContent ? (
+        <div className={`w-full min-w-0 border rounded-xl px-3 text-xs flex items-center gap-2 transition-all focus-within:ring-2 focus-within:ring-sky-500/20 ${disabled ? 'opacity-60' : ''} ${isOpen ? 'border-sky-500 bg-white' : 'border-slate-200 bg-slate-50 hover:bg-white'}`}>
+          <button type="button" disabled={disabled} aria-expanded={isOpen}
+            onClick={() => setIsOpen(prev => !prev)}
+            className="flex-1 min-w-0 !px-0 py-2 text-left bg-transparent cursor-pointer disabled:cursor-not-allowed">
+            <span className={`block truncate ${selectedOption ? 'text-slate-800 font-medium' : 'text-slate-500'}`}>{displayText}</span>
+          </button>
+          <div className="shrink-0" onClick={event => event.stopPropagation()} onMouseDown={event => event.stopPropagation()}>
+            {rightContent}
+          </div>
+          <button type="button" disabled={disabled} aria-label="Abrir opções" aria-expanded={isOpen}
+            onClick={() => setIsOpen(prev => !prev)}
+            className="shrink-0 !min-w-0 !px-0 py-2 bg-transparent cursor-pointer disabled:cursor-not-allowed">
+            <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${isOpen ? 'rotate-180 text-sky-600' : ''}`} />
+          </button>
+        </div>
+      ) : (
       <button
         type="button"
         disabled={disabled}
@@ -85,6 +104,7 @@ export const QuickActionDropdown: React.FC<QuickActionDropdownProps> = ({
           }`}
         />
       </button>
+      )}
 
       {isOpen && (
         <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 max-h-60 overflow-y-auto divide-y divide-slate-100 animate-fadeIn">
