@@ -375,6 +375,20 @@ export class AppointmentController {
       }
       if (!isPublic) BillingService.expireGrace();
       if (!canOperate(tenantId)) { res.status(isPublic ? 404 : 402).json(isPublic ? {error:'Agendamento online indisponível.'} : {code:'SUBSCRIPTION_REQUIRED',error:'Agendamento indisponível. A clínica precisa regularizar sua assinatura.'}); return; }
+      const serviceRow = db.prepare('SELECT price FROM services WHERE id = ? AND tenant_id = ?').get(serviceId, tenantId) as { price: number } | undefined;
+      if (!serviceRow) { res.status(400).json({ error: 'Serviço não pertence à clínica.' }); return; }
+      // Only the existing authenticated scheduling flow can set a custom price.
+      if (isPublic && req.body.appointmentPrice !== undefined) {
+        res.status(400).json({ error: 'Dados de agendamento inválidos.' }); return;
+      }
+      const suppliedPrice = req.body.appointmentPrice;
+      const appointmentPrice = suppliedPrice === undefined ? serviceRow.price : suppliedPrice;
+      if (typeof appointmentPrice !== 'number' || !Number.isFinite(appointmentPrice) || appointmentPrice < 0 ||
+          !Number.isSafeInteger(Math.round(appointmentPrice * 100)) || Math.abs(appointmentPrice * 100 - Math.round(appointmentPrice * 100)) > 0.000001) {
+        res.status(400).json({ error: 'Valor da consulta inválido. Informe um número não negativo com até duas casas decimais.' }); return;
+      }
+      const agreedAmount = Math.round(appointmentPrice * 100) / 100;
+
       // Resolve ou cria o paciente
       let resolvedPatientId = patientId;
       if (!resolvedPatientId && newPatientData) {
@@ -590,13 +604,12 @@ export class AppointmentController {
         VALUES (?, ?, NULL, 'scheduled', ?, 'Agendamento criado com sucesso')
       `).run(uuidv4(), appointmentId, req.user ? req.user.name : 'Cliente Online');
 
-      // Gera registro financeiro pendente baseado no valor do serviço
-      const serviceRow = db.prepare('SELECT price FROM services WHERE id = ?').get(serviceId) as { price: number } | undefined;
-      if (serviceRow && serviceRow.price > 0) {
+      // Snapshot: zero explicitamente combinado é isenção, nunca cobrança pendente.
+      if (agreedAmount > 0 || suppliedPrice !== undefined) {
         db.prepare(`
           INSERT INTO payments (id, tenant_id, appointment_id, patient_id, amount, payment_method, status, notes)
-          VALUES (?, ?, ?, ?, ?, 'pix', 'pending', 'Gerado automaticamente pelo agendamento')
-        `).run('pay-' + uuidv4().slice(0, 8), tenantId, appointmentId, resolvedPatientId, serviceRow.price);
+          VALUES (?, ?, ?, ?, ?, 'pix', ?, 'Gerado automaticamente pelo agendamento')
+        `).run('pay-' + uuidv4().slice(0, 8), tenantId, appointmentId, resolvedPatientId, agreedAmount, agreedAmount === 0 ? 'exempt' : 'pending');
       }
 
       // Enfileira notificação

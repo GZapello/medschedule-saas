@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
@@ -11,6 +11,16 @@ import { NewPatientModal } from '../patients/NewPatientModal';
 import { NewServiceModal } from '../services/NewServiceModal';
 import { NewInsuranceModal } from '../settings/NewInsuranceModal';
 import { NewRoomModal } from '../services/NewRoomModal';
+
+export function parseAppointmentPrice(input: string): number | null {
+  const text = input.trim();
+  if (!/^(?:\d+(?:[.,]\d{1,2})?|\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?)$/.test(text)) return null;
+  const normalized = text.includes(',') ? text.replace(/\./g, '').replace(',', '.') : /^\d{1,3}(?:\.\d{3})+$/.test(text) ? text.replace(/\./g, '') : text;
+  const value = Number(normalized);
+  return Number.isFinite(value) && value >= 0 && Number.isSafeInteger(Math.round(value * 100)) ? Math.round(value * 100) / 100 : null;
+}
+
+const formatAppointmentPrice = (value: number) => value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: false });
 
 interface NewAppointmentModalProps {
   isOpen: boolean;
@@ -49,6 +59,9 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
   const [newPatientSearchQuery, setNewPatientSearchQuery] = useState('');
   const [professionalId, setProfessionalId] = useState<string>('');
   const [serviceId, setServiceId] = useState<string>('');
+  const [appointmentPrice, setAppointmentPrice] = useState('');
+  const priceServiceId = useRef<string | null>(null);
+  const priceEdited = useRef(false);
   const [insuranceId, setInsuranceId] = useState<string>('');
   const [roomId, setRoomId] = useState<string>('');
   const [conflictError, setConflictError] = useState<string | null>(null);
@@ -67,6 +80,9 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
   const [loadingSlots, setLoadingSlots] = useState<boolean>(false);
 
   useEffect(() => {
+    priceServiceId.current = null;
+    priceEdited.current = false;
+    setAppointmentPrice('');
     if (isOpen) {
       setMeetingUrl('');
       setIsCustomTime(false);
@@ -189,6 +205,15 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
     }
   }, [isOpen, initialPrefill]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const selectedService = services.find(service => service.id === serviceId);
+    if (priceServiceId.current !== serviceId) priceEdited.current = false;
+    if (priceEdited.current) return;
+    priceServiceId.current = serviceId;
+    setAppointmentPrice(selectedService ? formatAppointmentPrice(Number(selectedService.price)) : '');
+  }, [isOpen, serviceId, services]);
+
   // Consulta slots livres imediatamente ao alterar profissional, serviço, data ou sala
   useEffect(() => {
     if (professionalId && serviceId && date) {
@@ -244,6 +269,12 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
       return;
     }
 
+    const normalizedPrice = parseAppointmentPrice(appointmentPrice);
+    if (normalizedPrice === null) {
+      showToast('Informe um valor da consulta válido, com até duas casas decimais e maior ou igual a zero.', 'error');
+      return;
+    }
+
     if (!isCustomTime && !selectedSlot) {
       showToast('Selecione um horário disponível ou agende em horário avulso', 'error');
       return;
@@ -280,6 +311,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
         patientId,
         professionalId,
         serviceId,
+        appointmentPrice: normalizedPrice,
         roomId: roomId || null,
         insuranceId: insuranceId || null,
         startTime: startIso,
@@ -365,7 +397,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                 onChange={val => setServiceId(val)}
                 options={filteredServices.map(s => ({
                   value: s.id,
-                  label: `${s.name} (R$ ${s.price})`,
+                  label: s.name,
                   sublabel: s.duration_minutes ? `${s.duration_minutes} min` : undefined
                 }))}
                 placeholder={filteredServices.length === 0 ? "Nenhum serviço disponível" : "Selecione um serviço..."}
@@ -374,6 +406,22 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                 onAction={() => setIsNewServiceModalOpen(true)}
                 showAction={canManageServices}
               />
+              <label htmlFor="appointment-price" className="block font-semibold text-slate-700 mt-3 mb-1">Valor da consulta *</label>
+              <div className="flex items-center gap-2 w-full border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 focus-within:ring-2 focus-within:ring-indigo-500">
+                <span aria-hidden="true" className="shrink-0 whitespace-nowrap text-slate-500">R$</span>
+                <input id="appointment-price" type="text" inputMode="decimal" required
+                  value={appointmentPrice} disabled={!serviceId}
+                  onChange={event => {
+                    if (!/^[\d.,]*$/.test(event.target.value)) return;
+                    priceEdited.current = true;
+                    setAppointmentPrice(event.target.value);
+                  }}
+                  onBlur={() => { const value = parseAppointmentPrice(appointmentPrice); if (value !== null) setAppointmentPrice(formatAppointmentPrice(value)); }}
+                  aria-describedby="appointment-price-hint"
+                  aria-invalid={appointmentPrice !== '' && parseAppointmentPrice(appointmentPrice) === null}
+                  className="w-full min-w-0 flex-1 bg-transparent outline-none text-sm" />
+              </div>
+              <p id="appointment-price-hint" className="mt-1 text-slate-500">Valor somente deste agendamento.</p>
             </div>
           </div>
 
