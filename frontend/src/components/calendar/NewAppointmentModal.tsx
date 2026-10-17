@@ -25,7 +25,7 @@ const formatAppointmentPrice = (value: number) => value.toLocaleString('pt-BR', 
 interface NewAppointmentModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (data?: any) => void;
   initialPrefill?: { date?: string; time?: string; professionalId?: string };
 }
 
@@ -307,7 +307,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
     try {
       setLoading(true);
       setConflictError(null);
-      await ApiClient.post('/v1/appointments', {
+      const createdAppt = await ApiClient.post('/v1/appointments', {
         patientId,
         professionalId,
         serviceId,
@@ -323,7 +323,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
       });
 
       showToast('Atendimento agendado com sucesso!', 'success');
-      onSuccess();
+      onSuccess(createdAppt);
       onClose();
     } catch (err: any) {
       const errorMsg = err.error || err.message || 'Este horário não está mais disponível. Escolha outro horário.';

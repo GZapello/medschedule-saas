@@ -408,6 +408,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
         ApiClient.get<Room[]>('/v1/rooms')
       ]);
       setAppointments(apptsData);
+      setSelectedAppt(prev => {
+        if (!prev) return null;
+        return apptsData.find(a => a.id === prev.id) || prev;
+      });
       setProfessionals(profsData);
       setRooms(roomsData);
     } catch (err: any) {
@@ -926,10 +930,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                             <div className="text-[10px] opacity-90 truncate leading-tight mt-0.5">
                               {appt.service_name}
                               {(() => {
-                                const amt = appt.payment_amount !== null && appt.payment_amount !== undefined
-                                  ? appt.payment_amount
-                                  : (appt.display_amount !== null && appt.display_amount !== undefined
-                                      ? appt.display_amount
+                                const amt = appt.display_amount !== null && appt.display_amount !== undefined
+                                  ? appt.display_amount
+                                  : (appt.payment_amount !== null && appt.payment_amount !== undefined
+                                      ? appt.payment_amount
                                       : (appt.service_price !== null && appt.service_price !== undefined ? appt.service_price : null));
                                 return (amt !== null && amt !== undefined)
                                   ? ` · ${Number(amt).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`
@@ -1066,10 +1070,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                                 <h4 className="font-bold text-slate-900 text-sm">{appt.modality === 'online' ? <button type="button" className="hover:underline" onClick={e => { e.stopPropagation(); setTeleAppt(appt); }}>{appt.patient_name}</button> : appt.patient_name}</h4>
                                 {appt.modality === 'online' && <span className="text-xs inline-flex items-center gap-1 text-indigo-600"><Video className="w-3 h-3" /> Online</span>}
                                 {(() => {
-                                  const amt = appt.payment_amount !== null && appt.payment_amount !== undefined
-                                    ? appt.payment_amount
-                                    : (appt.display_amount !== null && appt.display_amount !== undefined
-                                        ? appt.display_amount
+                                  const amt = appt.display_amount !== null && appt.display_amount !== undefined
+                                    ? appt.display_amount
+                                    : (appt.payment_amount !== null && appt.payment_amount !== undefined
+                                        ? appt.payment_amount
                                         : (appt.service_price !== null && appt.service_price !== undefined ? appt.service_price : null));
                                   const formatted = (amt !== null && amt !== undefined)
                                     ? Number(amt).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -1184,17 +1188,20 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                   <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
                     <span className="text-slate-400 font-medium">Serviço:</span>
+                    <p className="font-bold text-slate-800 text-sm mt-0.5">{selectedAppt.service_name}</p>
+                  </div>
+                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                    <span className="text-slate-400 font-medium">Valor da consulta:</span>
                     <p className="font-bold text-slate-800 text-sm mt-0.5">
-                      {selectedAppt.service_name}
                       {(() => {
-                        const amt = selectedAppt.payment_amount !== null && selectedAppt.payment_amount !== undefined
-                          ? selectedAppt.payment_amount
-                          : (selectedAppt.display_amount !== null && selectedAppt.display_amount !== undefined
-                              ? selectedAppt.display_amount
+                        const amt = selectedAppt.display_amount !== null && selectedAppt.display_amount !== undefined
+                          ? selectedAppt.display_amount
+                          : (selectedAppt.payment_amount !== null && selectedAppt.payment_amount !== undefined
+                              ? selectedAppt.payment_amount
                               : (selectedAppt.service_price !== null && selectedAppt.service_price !== undefined ? selectedAppt.service_price : null));
                         return (amt !== null && amt !== undefined)
-                          ? ` · ${Number(amt).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`
-                          : '';
+                          ? Number(amt).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                          : 'R$ 0,00';
                       })()}
                     </p>
                   </div>
@@ -1593,19 +1600,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
         <div className="relative z-[9999]">
           <AppointmentConsultation
             appointment={{
-              id: activeConsultationAppt.id,
-              patient_id: activeConsultationAppt.patient_id,
-              patient_name: activeConsultationAppt.patient_name,
-              patient_phone: activeConsultationAppt.patient_phone,
-              professional_id: activeConsultationAppt.professional_id,
-              professional_name: activeConsultationAppt.professional_name,
-              service_id: activeConsultationAppt.service_id,
-              service_name: activeConsultationAppt.service_name,
-              start_time: activeConsultationAppt.start_time,
-              end_time: activeConsultationAppt.end_time,
-              modality: activeConsultationAppt.modality,
-              meeting_url: activeConsultationAppt.meeting_url,
-              status: activeConsultationAppt.status,
+              ...activeConsultationAppt,
               clinical_module: activeConsultationAppt.clinical_module || activeConsultationModule
             }}
             initialModuleType={activeConsultationModule || activeConsultationAppt.clinical_module}
@@ -1625,14 +1620,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
         <div className="relative z-[9999]">
           <FinishConsultationModal
             appointment={{
-              id: finishingAppt.id,
-              patient_id: finishingAppt.patient_id,
-              patient_name: finishingAppt.patient_name,
-              professional_id: finishingAppt.professional_id,
-              professional_name: finishingAppt.professional_name,
-              service_id: finishingAppt.service_id,
-              service_name: finishingAppt.service_name,
-              start_time: finishingAppt.start_time
+              ...finishingAppt
             }}
             onClose={() => setFinishingAppt(null)}
             onFinished={() => {

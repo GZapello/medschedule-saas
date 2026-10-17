@@ -114,6 +114,9 @@ interface FinishConsultationModalProps {
     service_id: string;
     service_name?: string;
     start_time: string;
+    display_amount?: number;
+    payment_amount?: number;
+    service_price?: number;
   };
   clinicalData?: {
     title?: string;
@@ -662,7 +665,18 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
                 Finalizar Atendimento: {appointment.patient_name || 'Paciente'}
               </h2>
               <p className="text-xs text-slate-300 mt-1 truncate">
-                Serviço: <strong>{appointment.service_name}</strong> • Profissional: <strong>{appointment.professional_name}</strong>
+                Serviço: <strong>{appointment.service_name}</strong>
+                {(() => {
+                  const amt = (appointment as any).display_amount !== null && (appointment as any).display_amount !== undefined
+                    ? (appointment as any).display_amount
+                    : ((appointment as any).payment_amount !== null && (appointment as any).payment_amount !== undefined
+                        ? (appointment as any).payment_amount
+                        : ((appointment as any).service_price !== null && (appointment as any).service_price !== undefined ? (appointment as any).service_price : null));
+                  return (amt !== null && amt !== undefined)
+                    ? <> • Valor: <strong>{Number(amt).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong></>
+                    : null;
+                })()}
+                {" "}• Profissional: <strong>{appointment.professional_name}</strong>
               </p>
             </div>
             <button aria-label="Fechar"

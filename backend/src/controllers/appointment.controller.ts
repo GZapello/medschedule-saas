@@ -265,13 +265,15 @@ export class AppointmentController {
           p.name as professional_name, p.registration_number, p.registration_type,
           s.name as service_name, s.price as service_price, s.duration_minutes,
           r.name as room_name,
-          pay.id as payment_id, pay.status as payment_status, pay.amount as payment_amount, pay.payment_method
+          (SELECT pay.id FROM payments pay WHERE pay.appointment_id = a.id AND pay.tenant_id = a.tenant_id ORDER BY pay.created_at ASC LIMIT 1) as payment_id,
+          (SELECT pay.status FROM payments pay WHERE pay.appointment_id = a.id AND pay.tenant_id = a.tenant_id ORDER BY pay.created_at ASC LIMIT 1) as payment_status,
+          (SELECT pay.amount FROM payments pay WHERE pay.appointment_id = a.id AND pay.tenant_id = a.tenant_id ORDER BY pay.created_at ASC LIMIT 1) as payment_amount,
+          (SELECT pay.payment_method FROM payments pay WHERE pay.appointment_id = a.id AND pay.tenant_id = a.tenant_id ORDER BY pay.created_at ASC LIMIT 1) as payment_method
         FROM appointments a
         JOIN patients pat ON pat.id = a.patient_id AND pat.tenant_id=a.tenant_id
         JOIN professionals p ON p.id = a.professional_id AND p.tenant_id=a.tenant_id
         JOIN services s ON s.id = a.service_id AND s.tenant_id=a.tenant_id
         LEFT JOIN rooms r ON r.id = a.room_id
-        LEFT JOIN payments pay ON pay.appointment_id = a.id AND pay.tenant_id=a.tenant_id
         WHERE a.id = ? AND a.tenant_id = ?
       `);
       const appointment = stmt.get(id, tenantId);

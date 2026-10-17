@@ -703,19 +703,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {quickConsultAppt && (
         <AppointmentConsultation
           appointment={{
-            id: quickConsultAppt.id,
-            patient_id: quickConsultAppt.patient_id,
-            patient_name: quickConsultAppt.patient_name,
-            patient_phone: quickConsultAppt.patient_phone,
-            professional_id: quickConsultAppt.professional_id,
-            professional_name: quickConsultAppt.professional_name,
-            service_id: quickConsultAppt.service_id,
-            service_name: quickConsultAppt.service_name,
-            start_time: quickConsultAppt.start_time,
-            end_time: quickConsultAppt.end_time,
-            modality: quickConsultAppt.modality,
-            meeting_url: quickConsultAppt.meeting_url,
-            status: quickConsultAppt.status,
+            ...quickConsultAppt,
             clinical_module: quickConsultAppt.clinical_module || activeConsultationModule
           }}
           initialModuleType={activeConsultationModule || quickConsultAppt.clinical_module}

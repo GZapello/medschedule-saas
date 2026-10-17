@@ -75,6 +75,9 @@ interface QuickConsultationModalProps {
     meeting_url?: string | null;
     status?: string;
     clinical_module?: string;
+    display_amount?: number;
+    payment_amount?: number;
+    service_price?: number;
   };
   onMeetingUrlSaved?: (url: string | null) => void;
   moduleType?: string;
@@ -1068,6 +1071,16 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
                   <span className="text-[10px] uppercase font-bold text-slate-400 block">Procedimento</span>
                   <p className="font-bold text-slate-800 truncate mt-0.5">
                     {appointment.service_name || 'Atendimento Geral'}
+                    {(() => {
+                      const amt = appointment.display_amount !== null && appointment.display_amount !== undefined
+                        ? appointment.display_amount
+                        : (appointment.payment_amount !== null && appointment.payment_amount !== undefined
+                            ? appointment.payment_amount
+                            : (appointment.service_price !== null && appointment.service_price !== undefined ? appointment.service_price : null));
+                      return amt !== null && amt !== undefined
+                        ? ` · ${Number(amt).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`
+                        : '';
+                    })()}
                   </p>
                 </div>
               </div>
@@ -1790,14 +1803,8 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
       {showFinishModal && (
         <FinishConsultationModal
           appointment={{
-            id: appointment.id,
-            patient_id: appointment.patient_id,
-            patient_name: patientName,
-            professional_id: appointment.professional_id,
-            professional_name: appointment.professional_name,
-            service_id: appointment.service_id,
-            service_name: appointment.service_name,
-            start_time: appointment.start_time
+            ...appointment,
+            patient_name: patientName
           }}
           clinicalData={{
             title,

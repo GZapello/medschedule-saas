@@ -1736,8 +1736,8 @@ const AppContent: React.FC = () => {
           setNewApptPrefill(undefined);
         }}
         initialPrefill={newApptPrefill}
-        onSuccess={() => {
-          window.dispatchEvent(new CustomEvent('zemda-appointment-updated'));
+        onSuccess={(createdAppt?: any) => {
+          window.dispatchEvent(new CustomEvent('zemda-appointment-updated', { detail: createdAppt }));
           setCurrentView('calendar');
         }}
       />
