@@ -405,6 +405,13 @@ export const ServicesView: React.FC = () => {
 
   useEffect(() => {
     fetchData();
+    const handleAppointmentUpdated = () => {
+      fetchData();
+    };
+    window.addEventListener('zemda-appointment-updated', handleAppointmentUpdated);
+    return () => {
+      window.removeEventListener('zemda-appointment-updated', handleAppointmentUpdated);
+    };
   }, []);
 
   const handleSelectProfessional = (newProfId: string) => {
@@ -551,7 +558,7 @@ export const ServicesView: React.FC = () => {
     setEditSpecialtyId(s.specialty_id || '');
     setEditDurationMinutes(s.duration_minutes || 50);
     setEditBufferMinutes(s.buffer_minutes || 10);
-    setEditPrice(String(s.price || '0.00'));
+    setEditPrice(s.price !== undefined && s.price !== null ? String(s.price) : '0.00');
     setEditModality(s.modality || 'both');
     setEditDescription(s.description || '');
     setEditActive(s.active === 1);

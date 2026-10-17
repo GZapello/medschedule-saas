@@ -130,10 +130,12 @@ export class ServiceController {
       );
 
       try {
+        const normalizedCustomPrice = price !== undefined && price !== null && price !== '' ? Number(price) : null;
+        const normalizedCustomDuration = durationMinutes !== undefined && durationMinutes !== null && durationMinutes !== '' ? Number(durationMinutes) : null;
         db.prepare(`
           INSERT OR REPLACE INTO professional_services (id, professional_id, service_id, custom_price, custom_duration)
           VALUES (?, ?, ?, ?, ?)
-        `).run('ps-' + uuidv4().slice(0, 8), professionalId, id, price ? Number(price) : null, durationMinutes ? Number(durationMinutes) : null);
+        `).run('ps-' + uuidv4().slice(0, 8), professionalId, id, normalizedCustomPrice, normalizedCustomDuration);
       } catch (_) {}
 
       logAudit(req, 'CREATE_SERVICE', 'services', id, { name, price, professionalId, professionalName: prof.name, clinicalModule: targetModule });
@@ -227,12 +229,19 @@ export class ServiceController {
         tenantId
       );
 
-      if (professionalId) {
+      if (targetProfId) {
         try {
-          db.prepare(`
-            INSERT OR REPLACE INTO professional_services (id, professional_id, service_id, custom_price, custom_duration)
-            VALUES (?, ?, ?, ?, ?)
-          `).run('ps-' + uuidv4().slice(0, 8), professionalId, id, price ? Number(price) : null, durationMinutes ? Number(durationMinutes) : null);
+          const existingPs = db.prepare('SELECT id, custom_price, custom_duration FROM professional_services WHERE professional_id = ? AND service_id = ?').get(targetProfId, id) as { id: string; custom_price: number | null; custom_duration: number | null } | undefined;
+          const nextCustomPrice = price !== undefined && price !== null && price !== '' ? Number(price) : (existingPs ? existingPs.custom_price : null);
+          const nextCustomDuration = durationMinutes !== undefined && durationMinutes !== null && durationMinutes !== '' ? Number(durationMinutes) : (existingPs ? existingPs.custom_duration : null);
+          if (existingPs) {
+            db.prepare('UPDATE professional_services SET custom_price = ?, custom_duration = ? WHERE id = ?').run(nextCustomPrice, nextCustomDuration, existingPs.id);
+          } else if (professionalId) {
+            db.prepare(`
+              INSERT INTO professional_services (id, professional_id, service_id, custom_price, custom_duration)
+              VALUES (?, ?, ?, ?, ?)
+            `).run('ps-' + uuidv4().slice(0, 8), professionalId, id, nextCustomPrice, nextCustomDuration);
+          }
         } catch (_) {}
       }
 

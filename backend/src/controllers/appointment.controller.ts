@@ -386,7 +386,7 @@ export class AppointmentController {
       }
       if (!isPublic) BillingService.expireGrace();
       if (!canOperate(tenantId)) { res.status(isPublic ? 404 : 402).json(isPublic ? {error:'Agendamento online indisponível.'} : {code:'SUBSCRIPTION_REQUIRED',error:'Agendamento indisponível. A clínica precisa regularizar sua assinatura.'}); return; }
-      const serviceRow = db.prepare('SELECT price FROM services WHERE id = ? AND tenant_id = ?').get(serviceId, tenantId) as { price: number } | undefined;
+      const serviceRow = db.prepare('SELECT id, price, professional_id FROM services WHERE id = ? AND tenant_id = ?').get(serviceId, tenantId) as { id: string; price: number; professional_id: string | null } | undefined;
       if (!serviceRow) { res.status(400).json({ error: 'Serviço não pertence à clínica.' }); return; }
       // Only the existing authenticated scheduling flow can set a custom price.
       if (isPublic && req.body.appointmentPrice !== undefined) {
@@ -419,7 +419,7 @@ export class AppointmentController {
           resolvedPatientId = 'pat-' + uuidv4().slice(0, 8);
           db.prepare(`
             INSERT INTO patients (id, tenant_id, full_name, phone, email, is_child, notes_admin, active)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+          VALUES (?, ?, ?, ?, ?, ?, ?, 1)
           `).run(resolvedPatientId, tenantId, fullName, phone, email || null, isChild ? 1 : 0, notes || null);
 
           if (isChild && guardianName) {
@@ -574,53 +574,97 @@ export class AppointmentController {
         }
       }
 
-      // Insere agendamento com os novos campos de convênio e encaminhamento
-      const insertAppt = db.prepare(`
-        INSERT INTO appointments (
-          id, tenant_id, appointment_number, patient_id, professional_id, service_id,
-          room_id, start_time, end_time, status, modality, meeting_url, patient_notes, internal_notes,
-          insurance_id, referred_from_appointment_id, referred_by_professional_id, referral_reason,
-          clinical_module, profession_id,
-          created_by
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
+      const oldServicePrice = Math.round(Number(serviceRow.price ?? 0) * 100) / 100;
+      const hasValidProfessionalServiceLink =
+        !serviceRow.professional_id ||
+        serviceRow.professional_id === professionalId ||
+        Boolean(db.prepare('SELECT 1 FROM professional_services WHERE professional_id = ? AND service_id = ?').get(professionalId, serviceId));
 
-      insertAppt.run(
-        appointmentId,
-        tenantId,
-        appointmentNumber,
-        resolvedPatientId,
-        professionalId,
-        serviceId,
-        roomId || null,
-        normalizedStartTime,
-        normalizedEndTime,
-        modality || 'presential',
-        typeof meeting_url === 'string' ? meeting_url.trim() || null : null,
-        patientNotes || null,
-        internalNotes || null,
-        insuranceId || null,
-        referredFromAppointmentId || null,
-        referredByProfessionalId || null,
-        referralReason || null,
-        initialClinicalModule,
-        resolvedProfessionId,
-        req.user ? req.user.userId : 'online_booking'
-      );
+      const shouldUpdateServicePrice =
+        !isPublic &&
+        Boolean(req.user) &&
+        suppliedPrice !== undefined &&
+        hasValidProfessionalServiceLink &&
+        oldServicePrice !== agreedAmount;
 
-      // Insere histórico inicial
-      db.prepare(`
-        INSERT INTO appointment_status_history (id, appointment_id, previous_status, new_status, changed_by, reason)
-        VALUES (?, ?, NULL, 'scheduled', ?, 'Agendamento criado com sucesso')
-      `).run(uuidv4(), appointmentId, req.user ? req.user.name : 'Cliente Online');
+      const persistAppointmentAndPrice = db.transaction(() => {
+        // Insere agendamento com os novos campos de convênio e encaminhamento
+        const insertAppt = db.prepare(`
+          INSERT INTO appointments (
+            id, tenant_id, appointment_number, patient_id, professional_id, service_id,
+            room_id, start_time, end_time, status, modality, meeting_url, patient_notes, internal_notes,
+            insurance_id, referred_from_appointment_id, referred_by_professional_id, referral_reason,
+            clinical_module, profession_id,
+            created_by
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
 
-      // Snapshot: zero explicitamente combinado é isenção, nunca cobrança pendente.
-      if (agreedAmount > 0 || suppliedPrice !== undefined) {
+        insertAppt.run(
+          appointmentId,
+          tenantId,
+          appointmentNumber,
+          resolvedPatientId,
+          professionalId,
+          serviceId,
+          roomId || null,
+          normalizedStartTime,
+          normalizedEndTime,
+          modality || 'presential',
+          typeof meeting_url === 'string' ? meeting_url.trim() || null : null,
+          patientNotes || null,
+          internalNotes || null,
+          insuranceId || null,
+          referredFromAppointmentId || null,
+          referredByProfessionalId || null,
+          referralReason || null,
+          initialClinicalModule,
+          resolvedProfessionId,
+          req.user ? req.user.userId : 'online_booking'
+        );
+
+        // Insere histórico inicial
         db.prepare(`
-          INSERT INTO payments (id, tenant_id, appointment_id, patient_id, amount, payment_method, status, notes)
-          VALUES (?, ?, ?, ?, ?, 'pix', ?, 'Gerado automaticamente pelo agendamento')
-        `).run('pay-' + uuidv4().slice(0, 8), tenantId, appointmentId, resolvedPatientId, agreedAmount, agreedAmount === 0 ? 'exempt' : 'pending');
+          INSERT INTO appointment_status_history (id, appointment_id, previous_status, new_status, changed_by, reason)
+          VALUES (?, ?, NULL, 'scheduled', ?, 'Agendamento criado com sucesso')
+        `).run(uuidv4(), appointmentId, req.user ? req.user.name : 'Cliente Online');
+
+        // Snapshot: zero explicitamente combinado é isenção, nunca cobrança pendente.
+        if (agreedAmount > 0 || suppliedPrice !== undefined) {
+          db.prepare(`
+            INSERT INTO payments (id, tenant_id, appointment_id, patient_id, amount, payment_method, status, notes)
+            VALUES (?, ?, ?, ?, ?, 'pix', ?, 'Gerado automaticamente pelo agendamento')
+          `).run('pay-' + uuidv4().slice(0, 8), tenantId, appointmentId, resolvedPatientId, agreedAmount, agreedAmount === 0 ? 'exempt' : 'pending');
+        }
+
+        if (shouldUpdateServicePrice) {
+          if (!serviceRow.professional_id || serviceRow.professional_id === professionalId) {
+            db.prepare(`
+              UPDATE services
+              SET price = ?, updated_at = datetime('now')
+              WHERE id = ? AND tenant_id = ?
+            `).run(agreedAmount, serviceId, tenantId);
+          }
+
+          db.prepare(`
+            UPDATE professional_services
+            SET custom_price = ?
+            WHERE professional_id = ? AND service_id = ?
+          `).run(agreedAmount, professionalId, serviceId);
+        }
+      });
+
+      persistAppointmentAndPrice();
+
+      if (shouldUpdateServicePrice) {
+        logAudit(req, 'UPDATE_SERVICE_PRICE_FROM_APPOINTMENT', 'services', serviceId, {
+          serviceId,
+          professionalId,
+          oldPrice: oldServicePrice,
+          newPrice: agreedAmount,
+          appointmentId,
+          userId: req.user ? req.user.userId : null
+        });
       }
 
       // Enfileira notificação
