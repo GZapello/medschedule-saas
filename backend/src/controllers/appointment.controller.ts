@@ -194,13 +194,14 @@ export class AppointmentController {
           p.name as professional_name, p.photo_url as professional_photo,
           s.name as service_name, s.duration_minutes, s.price as service_price,
           r.name as room_name,
-          pay.status as payment_status, pay.amount as payment_amount, pay.payment_method
+          (SELECT pay.amount FROM payments pay WHERE pay.appointment_id = a.id AND pay.tenant_id = a.tenant_id ORDER BY pay.created_at ASC LIMIT 1) as payment_amount,
+          (SELECT pay.status FROM payments pay WHERE pay.appointment_id = a.id AND pay.tenant_id = a.tenant_id ORDER BY pay.created_at ASC LIMIT 1) as payment_status,
+          (SELECT pay.payment_method FROM payments pay WHERE pay.appointment_id = a.id AND pay.tenant_id = a.tenant_id ORDER BY pay.created_at ASC LIMIT 1) as payment_method
         FROM appointments a
         JOIN patients pat ON pat.id = a.patient_id
         JOIN professionals p ON p.id = a.professional_id
         JOIN services s ON s.id = a.service_id
         LEFT JOIN rooms r ON r.id = a.room_id
-        LEFT JOIN payments pay ON pay.appointment_id = a.id
         WHERE a.tenant_id = ?
       `;
       const params: any[] = [tenantId];
@@ -237,7 +238,12 @@ export class AppointmentController {
       query += ' ORDER BY a.start_time ASC';
 
       const stmt = db.prepare(query);
-      const appointments = stmt.all(...params);
+      const appointments = (stmt.all(...params) as any[]).map(row => ({
+        ...row,
+        display_amount: row.payment_amount !== null && row.payment_amount !== undefined
+          ? row.payment_amount
+          : (row.service_price !== null && row.service_price !== undefined ? row.service_price : null)
+      }));
       res.json(appointments);
     } catch (err: any) {
       console.error('[AppointmentController.list] Erro:', err);
@@ -290,7 +296,10 @@ export class AppointmentController {
       const statusHistory = historyStmt.all(id);
 
       const attendance=recordedAttendance(appointment,appointmentRecord(tenantId!,appointment.patient_id,appointment.id));
-      res.json({ appointment:{...appointment,attendance_date:attendance.sessionDate,attendance_time:attendance.sessionTime}, statusHistory });
+      const displayAmount = (appointment as any).payment_amount !== null && (appointment as any).payment_amount !== undefined
+        ? (appointment as any).payment_amount
+        : ((appointment as any).service_price !== null && (appointment as any).service_price !== undefined ? (appointment as any).service_price : null);
+      res.json({ appointment:{...appointment,display_amount:displayAmount,attendance_date:attendance.sessionDate,attendance_time:attendance.sessionTime}, statusHistory });
     } catch (err: any) {
       console.error('[AppointmentController.getById] Erro:', err);
       res.status(500).json({ error: 'Erro ao buscar agendamento' });

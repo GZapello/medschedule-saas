@@ -319,6 +319,7 @@ export interface Appointment {
   payment_status?: 'paid' | 'pending' | 'partial' | 'cancelled';
   payment_amount?: number;
   payment_method?: string;
+  display_amount?: number;
 }
 
 export interface ClinicalRecord {

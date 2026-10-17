@@ -925,6 +925,16 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                             {appt.modality === 'online' && <span className="text-[10px] inline-flex items-center gap-1"><Video className="w-3 h-3" /> Online</span>}
                             <div className="text-[10px] opacity-90 truncate leading-tight mt-0.5">
                               {appt.service_name}
+                              {(() => {
+                                const amt = appt.payment_amount !== null && appt.payment_amount !== undefined
+                                  ? appt.payment_amount
+                                  : (appt.display_amount !== null && appt.display_amount !== undefined
+                                      ? appt.display_amount
+                                      : (appt.service_price !== null && appt.service_price !== undefined ? appt.service_price : null));
+                                return (amt !== null && amt !== undefined)
+                                  ? ` · ${Number(amt).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`
+                                  : '';
+                              })()}
                             </div>
                             <div className="text-[10px] opacity-80 flex items-center gap-1 mt-1">
                               <Clock className="w-2.5 h-2.5" />
@@ -1055,7 +1065,21 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                               <div>
                                 <h4 className="font-bold text-slate-900 text-sm">{appt.modality === 'online' ? <button type="button" className="hover:underline" onClick={e => { e.stopPropagation(); setTeleAppt(appt); }}>{appt.patient_name}</button> : appt.patient_name}</h4>
                                 {appt.modality === 'online' && <span className="text-xs inline-flex items-center gap-1 text-indigo-600"><Video className="w-3 h-3" /> Online</span>}
-                                <p className="text-xs text-slate-500">{appt.service_name} • Profissional: {appt.professional_name}</p>
+                                {(() => {
+                                  const amt = appt.payment_amount !== null && appt.payment_amount !== undefined
+                                    ? appt.payment_amount
+                                    : (appt.display_amount !== null && appt.display_amount !== undefined
+                                        ? appt.display_amount
+                                        : (appt.service_price !== null && appt.service_price !== undefined ? appt.service_price : null));
+                                  const formatted = (amt !== null && amt !== undefined)
+                                    ? Number(amt).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                                    : null;
+                                  return (
+                                    <p className="text-xs text-slate-500">
+                                      {appt.service_name}{formatted ? ` · ${formatted}` : ''} • Profissional: {appt.professional_name}
+                                    </p>
+                                  );
+                                })()}
                               </div>
                             </div>
                             <div className={`text-xs font-semibold px-2.5 py-1 rounded-full ${getStatusColor(appt.status)}`}>
@@ -1160,7 +1184,19 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                   <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
                     <span className="text-slate-400 font-medium">Serviço:</span>
-                    <p className="font-bold text-slate-800 text-sm mt-0.5">{selectedAppt.service_name}</p>
+                    <p className="font-bold text-slate-800 text-sm mt-0.5">
+                      {selectedAppt.service_name}
+                      {(() => {
+                        const amt = selectedAppt.payment_amount !== null && selectedAppt.payment_amount !== undefined
+                          ? selectedAppt.payment_amount
+                          : (selectedAppt.display_amount !== null && selectedAppt.display_amount !== undefined
+                              ? selectedAppt.display_amount
+                              : (selectedAppt.service_price !== null && selectedAppt.service_price !== undefined ? selectedAppt.service_price : null));
+                        return (amt !== null && amt !== undefined)
+                          ? ` · ${Number(amt).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`
+                          : '';
+                      })()}
+                    </p>
                   </div>
                   <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
                     <span className="text-slate-400 font-medium">Profissional:</span>

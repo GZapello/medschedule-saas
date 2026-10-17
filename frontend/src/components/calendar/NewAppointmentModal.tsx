@@ -355,15 +355,15 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto mobile-modal">
-      <div className="bg-white rounded-3xl max-w-lg w-full p-4 sm:p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto my-auto">
-        <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
-          <h3 className="text-lg font-bold text-slate-900">Novo Agendamento</h3>
-          <button aria-label="Fechar" onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer">
+      <div className="bg-white rounded-2xl sm:rounded-3xl max-w-lg sm:max-w-xl w-full p-4 sm:p-5 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 mb-3">
+          <h3 className="text-base sm:text-lg font-bold text-slate-900">Novo Agendamento</h3>
+          <button aria-label="Fechar" onClick={onClose} className="p-1 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="space-y-3.5 text-xs">
+        <div className="space-y-2.5 text-xs">
           <PatientSearchSelect
             label={clientTermLabel}
             required
@@ -377,21 +377,21 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
             onCreateNew={handleOpenCreatePatient}
           />
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 relative z-30">
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">Profissional *</label>
+          <div className="grid grid-cols-1 sm:grid-cols-[0.85fr_1.15fr] gap-2.5 relative z-30">
+            <div className="min-w-0">
+              <label className="block font-semibold text-slate-700 mb-0.5">Profissional *</label>
               <select
                 value={professionalId}
                 onChange={e => setProfessionalId(e.target.value)}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50"
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 truncate"
               >
                 {professionals.map(p => (
                   <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
               </select>
             </div>
-            <div className="min-w-0 sm:col-span-2">
-              <label className="block font-semibold text-slate-700 mb-1">Serviço *</label>
+            <div className="min-w-0">
+              <label className="block font-semibold text-slate-700 mb-0.5">Serviço *</label>
               <QuickActionDropdown
                 value={serviceId}
                 onChange={val => setServiceId(val)}
@@ -425,9 +425,9 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 relative z-20">
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">Convênio</label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 relative z-20">
+            <div className="min-w-0">
+              <label className="block font-semibold text-slate-700 mb-0.5">Convênio</label>
               <QuickActionDropdown
                 value={insuranceId}
                 onChange={val => setInsuranceId(val)}
@@ -446,8 +446,8 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                 showAction={canManageInsurances}
               />
             </div>
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">Sala de Atendimento</label>
+            <div className="min-w-0">
+              <label className="block font-semibold text-slate-700 mb-0.5">Sala de Atendimento</label>
               <QuickActionDropdown
                 value={roomId}
                 onChange={val => setRoomId(val)}
@@ -468,9 +468,9 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Data *</label>
+              <label className="block font-semibold text-slate-700 mb-0.5">Data *</label>
               <input
                 type="date"
                 value={date}
@@ -480,7 +480,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
               />
             </div>
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Modalidade</label>
+              <label className="block font-semibold text-slate-700 mb-0.5">Modalidade</label>
               <select
                 value={modality}
                 onChange={e => setModality(e.target.value as any)}
@@ -492,26 +492,28 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
             </div>
           </div>
 
-          {modality === 'online' && <div className="p-3 bg-indigo-50 rounded-xl space-y-2">
-            <p className="font-bold text-indigo-800">Teleconsulta</p>
-            <label className="block text-xs font-semibold">Link da teleconsulta
-              <input type="url" value={meetingUrl} onChange={e => setMeetingUrl(e.target.value)} placeholder="https://meet.google.com/xxx-xxxx-xxx" className="w-full border rounded-xl px-3 py-2 mt-1" />
-            </label>
-          </div>}
+          {modality === 'online' && (
+            <div className="p-2.5 bg-indigo-50/80 rounded-xl space-y-1.5 border border-indigo-100">
+              <p className="font-bold text-indigo-800 text-[11px]">Teleconsulta</p>
+              <label className="block text-[11px] font-semibold text-indigo-900">Link da teleconsulta
+                <input type="url" value={meetingUrl} onChange={e => setMeetingUrl(e.target.value)} placeholder="https://meet.google.com/xxx-xxxx-xxx" className="w-full border border-indigo-200 bg-white rounded-xl px-3 py-1.5 mt-0.5 text-xs" />
+              </label>
+            </div>
+          )}
 
           {/* Banner de conflito de agendamento */}
           {conflictError && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-medium flex items-start gap-2">
-              <span className="font-bold text-red-800">Conflito Detectado:</span>
+            <div className="p-2.5 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-medium flex items-start gap-2">
+              <span className="font-bold text-red-800 shrink-0">Conflito Detectado:</span>
               <span>{conflictError}</span>
             </div>
           )}
 
           {/* Horários disponíveis / Horário Avulso */}
           {isCustomTime ? (
-            <div className="p-3.5 bg-amber-50/70 border border-amber-200 rounded-2xl space-y-3">
+            <div className="p-2.5 bg-amber-50/70 border border-amber-200 rounded-xl space-y-2">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
                   <span className="font-bold text-amber-900 text-xs">Agendamento em Horário Avulso</span>
                 </div>
@@ -527,42 +529,42 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Data do atendimento *</label>
+                  <label className="block font-semibold text-slate-700 mb-0.5 text-[11px]">Data do atendimento *</label>
                   <input
                     type="date"
                     value={date}
                     min={new Date().toISOString().split('T')[0]}
                     onChange={e => setDate(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white"
+                    className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-xs bg-white"
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Horário do atendimento *</label>
+                  <label className="block font-semibold text-slate-700 mb-0.5 text-[11px]">Horário do atendimento *</label>
                   <input
                     type="time"
                     value={customTime}
                     onChange={e => setCustomTime(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white"
+                    className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-xs bg-white"
                     required
                   />
                 </div>
               </div>
 
-              <p className="text-[11px] text-slate-600 italic">
+              <p className="text-[10px] text-slate-500 italic">
                 Este horário será válido apenas para este atendimento e não altera a disponibilidade habitual do profissional.
               </p>
             </div>
           ) : (
             <div>
-              <label className="block font-semibold text-slate-700 mb-1.5">
+              <label className="block font-semibold text-slate-700 mb-1">
                 Horários Livres Disponíveis (respeitando intervalos e bloqueios)
               </label>
               {loadingSlots ? (
-                <p className="text-slate-400 italic text-[11px]">Calculando slots...</p>
+                <p className="text-slate-400 italic text-[11px] py-1">Calculando slots...</p>
               ) : availableSlots.length === 0 ? (
-                <div className="space-y-2.5">
+                <div className="space-y-2 py-1">
                   <p className="text-amber-600 font-medium text-[11px]">
                     Nenhum horário livre disponível para esta data e profissional.
                   </p>
@@ -575,20 +577,20 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                           setCustomTime(initialPrefill?.time || '18:30');
                         }
                       }}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition-colors cursor-pointer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition-colors cursor-pointer"
                     >
                       + Agendar em horário avulso
                     </button>
                   </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-36 overflow-y-auto p-1">
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 max-h-32 overflow-y-auto p-0.5">
                   {availableSlots.map(slot => (
                     <button
                       key={slot.time}
                       type="button"
                       onClick={() => setSelectedSlot(slot)}
-                      className={`py-2 px-1 rounded-xl text-center font-bold text-xs transition-all cursor-pointer ${
+                      className={`py-1.5 px-1 rounded-xl text-center font-bold text-xs transition-all cursor-pointer ${
                         selectedSlot?.time === slot.time
                           ? 'bg-indigo-600 text-white shadow-xs'
                           : 'bg-slate-50 border border-slate-200 text-slate-700 hover:border-indigo-400'
@@ -603,7 +605,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
           )}
 
           <div>
-            <label className="block font-semibold text-slate-700 mb-1">Observações Internas</label>
+            <label className="block font-semibold text-slate-700 mb-0.5">Observações Internas</label>
             <input
               type="text"
               value={notes}
@@ -613,19 +615,21 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
             />
           </div>
 
-          <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-4 border-t border-slate-100">
+          <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-3 border-t border-slate-100">
             <button
+              type="button"
               onClick={onClose}
-              className="w-full sm:w-auto px-4 py-2.5 font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer min-h-[44px]"
+              className="w-full sm:w-auto px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer text-xs"
             >
               Cancelar
             </button>
             <button
+              type="button"
               onClick={handleBook}
               disabled={(!isCustomTime ? !selectedSlot : (!date || !customTime)) || !patientId || !professionalId || !serviceId || loading}
-              className="w-full sm:w-auto px-6 py-2.5 font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs disabled:opacity-50 cursor-pointer min-h-[44px]"
+              className="w-full sm:w-auto px-5 py-2 font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs disabled:opacity-50 cursor-pointer text-xs"
             >
-              Confirmar Agendamento
+              {loading ? 'Agendando...' : 'Confirmar Agendamento'}
             </button>
           </div>
         </div>

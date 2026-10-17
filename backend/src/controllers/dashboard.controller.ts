@@ -40,6 +40,9 @@ export class DashboardController {
           pat.full_name as patient_name, pat.phone as patient_phone,
           p.name as professional_name,
           s.name as service_name,
+          s.price as service_price,
+          (SELECT pay.amount FROM payments pay WHERE pay.appointment_id = a.id AND pay.tenant_id = a.tenant_id ORDER BY pay.created_at ASC LIMIT 1) as payment_amount,
+          (SELECT pay.status FROM payments pay WHERE pay.appointment_id = a.id AND pay.tenant_id = a.tenant_id ORDER BY pay.created_at ASC LIMIT 1) as payment_status,
           (SELECT id FROM records WHERE appointment_id = a.id LIMIT 1) as record_id,
           (SELECT COUNT(*) FROM records WHERE appointment_id = a.id) as has_evolution,
           (SELECT id FROM clinical_certificates WHERE appointment_id = a.id LIMIT 1) as certificate_id,
@@ -52,7 +55,12 @@ export class DashboardController {
         WHERE a.tenant_id = ? AND a.start_time LIKE ? ${profFilterToday}
         ORDER BY a.start_time ASC
       `);
-      const todayAppointments = todayApptsStmt.all(...todayParams);
+      const todayAppointments = (todayApptsStmt.all(...todayParams) as any[]).map(row => ({
+        ...row,
+        display_amount: row.payment_amount !== null && row.payment_amount !== undefined
+          ? row.payment_amount
+          : (row.service_price !== null && row.service_price !== undefined ? row.service_price : null)
+      }));
 
       // 2. Contadores do mês
       const countStmt = db.prepare(`

@@ -437,10 +437,30 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           )}
                         </div>
 
-                        <p className="text-xs text-slate-500">
-                          {appt.service_name} • <span className="font-medium text-slate-700">{appt.professional_name}</span>
-                          {appt.clinical_module && appt.clinical_module !== 'general' && <span> · {appt.clinical_module === 'ZemdaBody' ? 'Zemda360' : appt.clinical_module}</span>}
-                        </p>
+                        {(() => {
+                          const amount = appt.payment_amount !== null && appt.payment_amount !== undefined
+                            ? appt.payment_amount
+                            : (appt.display_amount !== null && appt.display_amount !== undefined
+                                ? appt.display_amount
+                                : (appt.service_price !== null && appt.service_price !== undefined ? appt.service_price : null));
+                          const formattedPrice = amount !== null && amount !== undefined
+                            ? Number(amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                            : null;
+                          return (
+                            <p className="text-xs text-slate-500">
+                              {appt.service_name}
+                              {formattedPrice && (
+                                <>
+                                  <span> · </span>
+                                  <span className="font-semibold text-slate-700">{formattedPrice}</span>
+                                </>
+                              )}
+                              <span> • </span>
+                              <span className="font-medium text-slate-700">{appt.professional_name}</span>
+                              {appt.clinical_module && appt.clinical_module !== 'general' && <span> · {appt.clinical_module === 'ZemdaBody' ? 'Zemda360' : appt.clinical_module}</span>}
+                            </p>
+                          );
+                        })()}
 
                         <div className="flex items-center gap-2.5 text-[11px] text-slate-400 flex-wrap">
                           {appt.modality === 'online' ? (
