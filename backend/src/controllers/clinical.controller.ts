@@ -31,26 +31,45 @@ export function hasClinicalAccess(req: Request, patientId: string): boolean {
 
   // 3. Validação para Gerenciador da Clínica (clinic_admin)
   // O cargo “Gerenciador da Clínica” NÃO concede automaticamente acesso a prontuários (Regra 2)
-  // O gerenciador somente poderá acessar caso possua cadastro em área de atuação clínica
+  // O gerenciador somente poderá acessar caso:
+  // - atue como profissional ativo na clínica e possua vínculo assistencial direto com o paciente (consulta, encaminhamento ou prontuário); OU
+  // - possua cadastro em área de atuação clínica na clínica ativa.
   if (req.user.role === 'clinic_admin') {
     const patientBelongsToClinic = canAccessPatient(req.user.userId, tenantId, patientId, 'records') || !!db.prepare('SELECT 1 FROM clinic_patient_contexts WHERE tenant_id=? AND patient_id=?').get(tenantId,patientId);
     if (!patientBelongsToClinic) return false;
 
+    const activeProf = db.prepare('SELECT id, active FROM professionals WHERE user_id = ? AND tenant_id = ? AND active = 1 ORDER BY id LIMIT 1').get(req.user.userId, tenantId) as any;
+    if (activeProf?.id) {
+      const hasAppt = db.prepare('SELECT 1 FROM appointments WHERE tenant_id = ? AND patient_id = ? AND professional_id = ? LIMIT 1').get(tenantId, patientId, activeProf.id);
+      if (hasAppt) return true;
+
+      const hasReferral = db.prepare('SELECT 1 FROM patient_referrals WHERE tenant_id = ? AND patient_id = ? AND to_professional_id = ? LIMIT 1').get(tenantId, patientId, activeProf.id);
+      if (hasReferral) return true;
+
+      const hasRecord = db.prepare('SELECT 1 FROM records WHERE tenant_id = ? AND patient_id = ? AND professional_id = ? LIMIT 1').get(tenantId, patientId, activeProf.id);
+      if (hasRecord) return true;
+    }
+
     const tenant = db.prepare('SELECT manager_profession, manager_practice_areas FROM tenants WHERE id = ?').get(tenantId) as any;
     const clinicUser = db.prepare(`
-      SELECT cu.profession_custom, cu.practice_areas as cu_practice_areas,
-             CASE WHEN u.tenant_id=cu.tenant_id THEN u.profession_name END AS profession_name, CASE WHEN u.tenant_id=cu.tenant_id THEN u.practice_areas END as u_practice_areas
+      SELECT cu.profession_id as cu_profession_id, cu.profession_name as cu_profession_name, cu.profession_custom, cu.practice_areas as cu_practice_areas,
+             CASE WHEN u.tenant_id = ? THEN u.profession_name END AS profession_name,
+             CASE WHEN u.tenant_id = ? THEN u.practice_areas END AS u_practice_areas
       FROM users u
       LEFT JOIN clinic_users cu ON cu.user_id = u.id AND cu.tenant_id = ?
       WHERE u.id = ?
-    `).get(tenantId, req.user.userId) as any;
+    `).get(tenantId, tenantId, tenantId, req.user.userId) as any;
 
-    const professional = db.prepare('SELECT p.practice_areas, pr.name FROM professionals p LEFT JOIN professions pr ON pr.id=p.profession_id WHERE p.user_id=? AND p.tenant_id=?').get(req.user.userId, tenantId) as any;
+    const professional = db.prepare('SELECT p.profession_id, p.profession_name, p.practice_areas, pr.name FROM professionals p LEFT JOIN professions pr ON pr.id=p.profession_id WHERE p.user_id=? AND p.tenant_id=?').get(req.user.userId, tenantId) as any;
     const managerAreaText = [
       professional?.name,
+      professional?.profession_name,
+      professional?.profession_id,
       professional?.practice_areas,
       tenant?.manager_profession,
       tenant?.manager_practice_areas,
+      clinicUser?.cu_profession_name,
+      clinicUser?.cu_profession_id,
       clinicUser?.profession_custom,
       clinicUser?.cu_practice_areas,
       clinicUser?.profession_name,
@@ -69,6 +88,7 @@ export function hasClinicalAccess(req: Request, patientId: string): boolean {
       managerAreaText.includes('médic') ||
       managerAreaText.includes('medic') ||
       managerAreaText.includes('psico') ||
+      managerAreaText.includes('pedag') ||
       managerAreaText.includes('enferm') ||
       managerAreaText.includes('personal') ||
       managerAreaText.includes('educa') ||
@@ -76,7 +96,9 @@ export function hasClinicalAccess(req: Request, patientId: string): boolean {
       managerAreaText.includes('cref') ||
       managerAreaText.includes('treina') ||
       managerAreaText.includes('estet') ||
-      managerAreaText.includes('estét');
+      managerAreaText.includes('estét') ||
+      managerAreaText.includes('biomed') ||
+      managerAreaText.includes('farmac');
 
     return hasAnyClinicalArea;
   }

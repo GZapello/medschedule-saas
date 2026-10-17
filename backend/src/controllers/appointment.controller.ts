@@ -845,7 +845,11 @@ export class AppointmentController {
         NotificationService.cancelAppointmentReminders(id as string);
       }
 
-      res.json({ message: `Status alterado para ${status}` });
+      res.json({
+        message: `Status alterado para ${status}`,
+        status,
+        clinicalModule: clinicalModule || current.clinical_module || null
+      });
     } catch (err: any) {
       console.error('[AppointmentController.updateStatus] Erro:', err);
       res.status(500).json({ error: 'Erro ao atualizar status do agendamento' });

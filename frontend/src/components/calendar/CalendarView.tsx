@@ -626,6 +626,27 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
     }
   };
 
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'scheduled':
+        return 'Agendado';
+      case 'confirmed':
+        return 'Confirmado';
+      case 'in_progress':
+        return 'Em atendimento';
+      case 'completed':
+        return 'Concluído';
+      case 'no_show':
+        return 'Faltou';
+      case 'cancelled':
+        return 'Cancelado';
+      case 'rescheduled':
+        return 'Remarcado';
+      default:
+        return status;
+    }
+  };
+
   // Filtra agendamentos
   const filteredAppointments = appointments.filter(a => {
     if (selectedProf !== 'all' && a.professional_id !== selectedProf) return false;
@@ -925,7 +946,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                               appt.status
                             )}`}
                           >
-                            <div className="font-bold truncate leading-tight">{appt.modality === 'online' ? <button type="button" className="hover:underline text-left" onClick={e => { e.stopPropagation(); setTeleAppt(appt); }}>{appt.patient_name}</button> : appt.patient_name}</div>
+                            <div className="font-bold truncate leading-tight">{appt.patient_name}</div>
                             {appt.modality === 'online' && <span className="text-[10px] inline-flex items-center gap-1"><Video className="w-3 h-3" /> Online</span>}
                             <div className="text-[10px] opacity-90 truncate leading-tight mt-0.5">
                               {appt.service_name}
@@ -940,9 +961,12 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                                   : '';
                               })()}
                             </div>
-                            <div className="text-[10px] opacity-80 flex items-center gap-1 mt-1">
-                              <Clock className="w-2.5 h-2.5" />
-                              {((appt.start_time || '').replace(' ', 'T').split('T')[1] || '').slice(0, 5)}
+                            <div className="text-[10px] opacity-80 flex items-center justify-between gap-1 mt-1">
+                              <span className="inline-flex items-center gap-1">
+                                <Clock className="w-2.5 h-2.5" />
+                                {((appt.start_time || '').replace(' ', 'T').split('T')[1] || '').slice(0, 5)}
+                              </span>
+                              {appt.status === 'in_progress' && <span className="font-semibold">Em atendimento</span>}
                             </div>
                           </div>
                         ))}
@@ -1067,7 +1091,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                                 {((appt.start_time || '').replace(' ', 'T').split('T')[1] || '').slice(0, 5)}
                               </div>
                               <div>
-                                <h4 className="font-bold text-slate-900 text-sm">{appt.modality === 'online' ? <button type="button" className="hover:underline" onClick={e => { e.stopPropagation(); setTeleAppt(appt); }}>{appt.patient_name}</button> : appt.patient_name}</h4>
+                                <h4 className="font-bold text-slate-900 text-sm">{appt.patient_name}</h4>
                                 {appt.modality === 'online' && <span className="text-xs inline-flex items-center gap-1 text-indigo-600"><Video className="w-3 h-3" /> Online</span>}
                                 {(() => {
                                   const amt = appt.display_amount !== null && appt.display_amount !== undefined
@@ -1087,7 +1111,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                               </div>
                             </div>
                             <div className={`text-xs font-semibold px-2.5 py-1 rounded-full ${getStatusColor(appt.status)}`}>
-                              {appt.status}
+                              {getStatusLabel(appt.status)}
                             </div>
                           </div>
                         ))}
@@ -1128,7 +1152,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
       )}
 
       {/* Appointment Detail & Actions Modal */}
-      {teleAppt && <TeleconsultationModal key={teleAppt.id} appointment={teleAppt} onClose={() => { setTeleAppt(null); }} onStart={() => { const target = teleAppt; setTeleAppt(null); startConsultation(target); }} onSaved={(meeting_url, modality) => {
+      {teleAppt && <TeleconsultationModal key={teleAppt.id} appointment={teleAppt} onClose={() => { setTeleAppt(null); }} onSaved={(meeting_url, modality) => {
         const update = (appt: Appointment): Appointment => appt.id === teleAppt.id ? { ...appt, meeting_url, modality: modality as Appointment['modality'] } : appt;
         setAppointments(previous => previous.map(update));
         setSelectedAppt(previous => previous ? update(previous) : null);
@@ -1153,9 +1177,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
               <div>
                 <span className="text-xs font-bold text-indigo-600 uppercase tracking-wider">{selectedAppt.appointment_number}</span>
-                <h3 className="text-lg sm:text-xl font-bold text-slate-900">{selectedAppt.modality === 'online' ? <button type="button" className="hover:underline" onClick={() => setTeleAppt(selectedAppt)}>{selectedAppt.patient_name}</button> : selectedAppt.patient_name}</h3>
+                <h3 className="text-lg sm:text-xl font-bold text-slate-900">{selectedAppt.patient_name}</h3>
                 <button type="button" className="text-xs text-indigo-600" onClick={() => setTeleAppt(selectedAppt)}>Editar modalidade</button>
-                {selectedAppt.modality === 'online' && <span className="text-xs inline-flex items-center gap-1"><Video className="w-3 h-3" /> Online</span>}
+                {selectedAppt.modality === 'online' && <span className="text-xs inline-flex items-center gap-1 ml-2"><Video className="w-3 h-3" /> Online</span>}
               </div>
               <button aria-label="Fechar"
                 onClick={() => {
@@ -1219,7 +1243,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                     <span className="text-slate-400 font-medium">Status Atual:</span>
                     <div className="mt-1">
                       <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${getStatusColor(selectedAppt.status)}`}>
-                        {selectedAppt.status}
+                        {getStatusLabel(selectedAppt.status)}
                       </span>
                     </div>
                   </div>
@@ -1262,10 +1286,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                     <button
                       type="button"
                       onClick={() => setTeleAppt(selectedAppt)}
-                      className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 transition-all"
+                      className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 transition-all cursor-pointer"
                     >
                       <span aria-hidden="true">📹</span>
-                      <span>{selectedAppt.meeting_url?.trim() ? 'Teleconsulta' : 'Configurar Teleconsulta'}</span>
+                      <span>Configurar teleconsulta</span>
                     </button>
                   )}
 

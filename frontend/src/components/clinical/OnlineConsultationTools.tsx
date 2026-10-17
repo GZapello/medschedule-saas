@@ -66,14 +66,15 @@ function OnlineTools({ appointment, onInsert, onRequestEvolution, onMeetingUrlSa
   };
 
   return (
-    <section aria-label="Teleconsulta" className="bg-indigo-50/80 border border-indigo-100 rounded-2xl p-3 sm:p-4 text-sm space-y-2.5">
+    <section aria-label="Atendimento online" className="bg-indigo-50/80 border border-indigo-100 rounded-2xl p-3 sm:p-4 text-sm space-y-2.5">
       <div className="flex flex-wrap items-center gap-2">
-        <h3 className="font-semibold text-indigo-900 mr-2">📹 Teleconsulta</h3>
-        <button type="button" className={button} onClick={() => { if (!openTeleconsultation(current)) setLinks('view'); }}>Abrir Google Meet</button>
+        <h3 className="font-semibold text-indigo-900 mr-2">📹 Atendimento online</h3>
+        <button type="button" className={button} onClick={() => { if (!openTeleconsultation(current)) setLinks('edit'); }}>Abrir Google Meet</button>
+        <button type="button" className={button} onClick={() => setLinks('edit')}>Configurar Meet</button>
         {!hasMeetUrl && !links && (
           <>
-            <span className="text-xs text-amber-800">Link da teleconsulta ainda não configurado.</span>
-            <button type="button" className={button} onClick={() => setLinks('edit')}>Adicionar link</button>
+            <span className="text-xs text-amber-800">Google Meet ainda não configurado.</span>
+            <button type="button" className={button} onClick={() => setLinks('edit')}>Configurar</button>
           </>
         )}
         <button type="button" className={button} onClick={() => setLinks(hasMeetUrl ? 'view' : 'edit')}>Compartilhar link</button>

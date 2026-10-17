@@ -22,9 +22,8 @@ export interface TeleconsultationAppointment {
   start_time: string;
 }
 
-export function TeleconsultationModal({ appointment, onClose, onSaved, onStart, onInsert, allowModalityChange = true, initialEditing = false }: {
+export function TeleconsultationModal({ appointment, onClose, onSaved, onInsert, allowModalityChange = true, initialEditing = false }: {
   appointment: TeleconsultationAppointment;
-  onStart?: () => void;
   onInsert?: (text: string) => void;
   allowModalityChange?: boolean;
   initialEditing?: boolean;
@@ -58,8 +57,8 @@ export function TeleconsultationModal({ appointment, onClose, onSaved, onStart, 
     finally { setSaving(false); }
   };
   return createPortal(<div className="fixed inset-0 z-[11000] bg-slate-900/60 flex items-center justify-center p-4 mobile-modal">
-    <section role="dialog" aria-modal="true" aria-label={online ? 'Teleconsulta' : 'Editar modalidade'} className="bg-white rounded-2xl p-5 w-full max-w-lg space-y-4 max-h-[90vh] overflow-auto">
-      <div className="flex justify-between items-center"><h3 className="font-bold">{online ? '📹 Teleconsulta' : 'Editar modalidade'}</h3><button type="button" onClick={onClose} aria-label="Fechar teleconsulta">✕</button></div>
+    <section role="dialog" aria-modal="true" aria-label={online ? 'Configurar teleconsulta' : 'Editar modalidade'} className="bg-white rounded-2xl p-5 w-full max-w-lg space-y-4 max-h-[90vh] overflow-auto">
+      <div className="flex justify-between items-center"><h3 className="font-bold">{online ? '📹 Configurar teleconsulta' : 'Editar modalidade'}</h3><button type="button" onClick={onClose} aria-label="Fechar teleconsulta">✕</button></div>
       <p>Paciente: {appointment.patient_name || 'Paciente'}</p>
       <p>Data: {date} • Horário: {time}</p>
       {editing ? <>
@@ -83,12 +82,11 @@ export function TeleconsultationModal({ appointment, onClose, onSaved, onStart, 
           </>}
           <button type="button" className="bg-white border border-indigo-200 rounded-lg p-2 text-indigo-800" onClick={() => setTranscription(true)}>Transcrição & IA</button>
           <TranscriptionHelp />
-          {onStart && savedUrl && <button type="button" className="bg-indigo-600 text-white rounded-lg p-2" onClick={onStart}>Iniciar atendimento</button>}
           <button type="button" className="border rounded-lg p-2" onClick={() => setEditing(true)}>{savedUrl ? 'Editar link / modalidade' : 'Adicionar link'}</button>
           <button type="button" onClick={onClose}>Cancelar</button>
         </div>
       </>}
-      {transcription && online && <TeleconsultationTranscriptModal appointment={{ ...appointment, modality, meeting_url: savedUrl }} onClose={() => setTranscription(false)} onInsert={onInsert || (onStart ? text => { queueReviewedEvolution(appointment.id, text); onStart(); } : undefined)} />}
+      {transcription && online && <TeleconsultationTranscriptModal appointment={{ ...appointment, modality, meeting_url: savedUrl }} onClose={() => setTranscription(false)} onInsert={onInsert || (text => { queueReviewedEvolution(appointment.id, text); })} />}
       {whatsapp && online && <UniversalWhatsAppModal isOpen onClose={() => setWhatsapp(false)} title="Compartilhar teleconsulta" recipientName={appointment.patient_name || 'Paciente'} phone={appointment.patient_phone}
         defaultMessage={`Olá, ${appointment.patient_name || 'Paciente'}. Segue o link para o seu atendimento online no dia ${date} às ${time}:\n\n${savedUrl}\n\nAcesse alguns minutos antes do horário combinado.`} />}
     </section>

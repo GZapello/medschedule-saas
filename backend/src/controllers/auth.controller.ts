@@ -398,7 +398,7 @@ export class AuthController {
         SELECT
           p.id as professional_id, p.active as professional_active, p.profession_id, p.specialty_id, p.registration_type, p.registration_number,
           p.practice_areas, p.slug as professional_slug, p.zemda_fisio_enabled, p.zemda_odonto_enabled, p.zemda_nutri_enabled, p.zemda_to_enabled, p.zemda_fono_enabled, p.zemda_pp_enabled, p.zemda_psico_enabled, p.zemda_personal_enabled, p.zemda_estetic_enabled,
-          prof.name as profession_name, prof.slug as profession_slug,
+          COALESCE(prof.name, p.profession_name) as profession_name, prof.slug as profession_slug,
           spec.name as specialty_name
         FROM professionals p
         LEFT JOIN professions prof ON prof.id = p.profession_id
@@ -408,20 +408,21 @@ export class AuthController {
 
       if (!profDetails && user.role === 'clinic_admin') {
         const cu = db.prepare(`
-          SELECT cu.profession_custom, cu.practice_areas, cu.zemda_fisio_enabled, cu.zemda_odonto_enabled, cu.zemda_pp_enabled, cu.zemda_psico_enabled, cu.zemda_personal_enabled, cu.zemda_estetic_enabled,
-                 u.profession_name, u.practice_areas as user_practice_areas,
+          SELECT cu.profession_id, cu.profession_name as cu_profession_name, cu.profession_custom, cu.practice_areas, cu.zemda_fisio_enabled, cu.zemda_odonto_enabled, cu.zemda_nutri_enabled, cu.zemda_to_enabled, cu.zemda_fono_enabled, cu.zemda_pp_enabled, cu.zemda_psico_enabled, cu.zemda_personal_enabled, cu.zemda_estetic_enabled,
+                 CASE WHEN u.tenant_id = cu.tenant_id THEN u.profession_name END as profession_name,
+                 CASE WHEN u.tenant_id = cu.tenant_id THEN u.practice_areas END as user_practice_areas,
                  u.registration_type, u.registration_number
           FROM clinic_users cu
           LEFT JOIN users u ON u.id = cu.user_id
           WHERE cu.user_id = ? AND cu.tenant_id = ?
         `).get(user.id, user.tenant_id) as any;
 
-        const pName = cu?.profession_custom || cu?.profession_name || tenantData?.manager_profession || '';
+        const pName = cu?.cu_profession_name || cu?.profession_custom || cu?.profession_name || tenantData?.manager_profession || '';
         const pAreas = cu?.practice_areas || cu?.user_practice_areas || tenantData?.manager_practice_areas || '';
 
         if (pName || pAreas) {
           const pSlug = pName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-');
-          let deducedProfId: string | undefined = undefined;
+          let deducedProfId: string | undefined = cu?.profession_id || undefined;
           if (pName.toLowerCase().includes('psicopedag')) deducedProfId = 'prof-psicopedagogo';
           else if (pName.toLowerCase().includes('psicolog') || pName.toLowerCase().includes('psicólog')) deducedProfId = 'prof-psicologo';
           else if (pName.toLowerCase().includes('fisio')) deducedProfId = 'prof-fisioterapeuta';
@@ -623,7 +624,7 @@ export class AuthController {
           SELECT
             p.id as professional_id, p.active as professional_active, p.profession_id, p.specialty_id, p.registration_type, p.registration_number,
             p.practice_areas, p.slug as professional_slug, p.zemda_fisio_enabled, p.zemda_odonto_enabled, p.zemda_nutri_enabled, p.zemda_to_enabled, p.zemda_fono_enabled, p.zemda_pp_enabled, p.zemda_psico_enabled, p.zemda_personal_enabled, p.zemda_estetic_enabled,
-            prof.name as profession_name, prof.slug as profession_slug,
+            COALESCE(prof.name, p.profession_name) as profession_name, prof.slug as profession_slug,
             spec.name as specialty_name
           FROM professionals p
           LEFT JOIN professions prof ON prof.id = p.profession_id
@@ -633,20 +634,21 @@ export class AuthController {
 
         if (!profDetails && user.role === 'clinic_admin') {
           const cu = db.prepare(`
-            SELECT cu.profession_custom, cu.practice_areas, cu.zemda_fisio_enabled, cu.zemda_odonto_enabled, cu.zemda_pp_enabled, cu.zemda_psico_enabled, cu.zemda_personal_enabled, cu.zemda_estetic_enabled,
-                   u.profession_name, u.practice_areas as user_practice_areas,
+            SELECT cu.profession_id, cu.profession_name as cu_profession_name, cu.profession_custom, cu.practice_areas, cu.zemda_fisio_enabled, cu.zemda_odonto_enabled, cu.zemda_nutri_enabled, cu.zemda_to_enabled, cu.zemda_fono_enabled, cu.zemda_pp_enabled, cu.zemda_psico_enabled, cu.zemda_personal_enabled, cu.zemda_estetic_enabled,
+                   CASE WHEN u.tenant_id = cu.tenant_id THEN u.profession_name END as profession_name,
+                   CASE WHEN u.tenant_id = cu.tenant_id THEN u.practice_areas END as user_practice_areas,
                    u.registration_type, u.registration_number
             FROM clinic_users cu
             LEFT JOIN users u ON u.id = cu.user_id
             WHERE cu.user_id = ? AND cu.tenant_id = ?
           `).get(user.id, user.tenant_id) as any;
 
-          const pName = cu?.profession_custom || cu?.profession_name || tenantData?.manager_profession || '';
+          const pName = cu?.cu_profession_name || cu?.profession_custom || cu?.profession_name || tenantData?.manager_profession || '';
           const pAreas = cu?.practice_areas || cu?.user_practice_areas || tenantData?.manager_practice_areas || '';
 
           if (pName || pAreas) {
             const pSlug = pName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-');
-            let deducedProfId: string | undefined = undefined;
+            let deducedProfId: string | undefined = cu?.profession_id || undefined;
             if (pName.toLowerCase().includes('psicopedag')) deducedProfId = 'prof-psicopedagogo';
             else if (pName.toLowerCase().includes('psicolog') || pName.toLowerCase().includes('psicólog')) deducedProfId = 'prof-psicologo';
             else if (pName.toLowerCase().includes('fisio')) deducedProfId = 'prof-fisioterapeuta';

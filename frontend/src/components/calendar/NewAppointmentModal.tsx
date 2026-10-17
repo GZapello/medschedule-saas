@@ -75,6 +75,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
   const [selectedSlot, setSelectedSlot] = useState<AvailableSlot | null>(null);
   const [modality, setModality] = useState<'presential' | 'online'>('presential');
   const [meetingUrl, setMeetingUrl] = useState('');
+  const [isConfiguringTele, setIsConfiguringTele] = useState(false);
   const [notes, setNotes] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [loadingSlots, setLoadingSlots] = useState<boolean>(false);
@@ -85,6 +86,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
     setAppointmentPrice('');
     if (isOpen) {
       setMeetingUrl('');
+      setIsConfiguringTele(false);
       setIsCustomTime(false);
       setCustomTime(initialPrefill?.time || '18:30');
     } else {
@@ -92,6 +94,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
       setSelectedPatientObj(null);
       setIsNewPatientModalOpen(false);
       setNewPatientSearchQuery('');
+      setIsConfiguringTele(false);
       setIsCustomTime(false);
       setCustomTime('18:30');
       setIsNewServiceModalOpen(false);
@@ -483,7 +486,11 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
               <label className="block font-semibold text-slate-700 mb-0.5">Modalidade</label>
               <select
                 value={modality}
-                onChange={e => setModality(e.target.value as any)}
+                onChange={e => {
+                  const next = e.target.value as 'presential' | 'online';
+                  setModality(next);
+                  if (next !== 'online') setIsConfiguringTele(false);
+                }}
                 className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50"
               >
                 <option value="presential">Presencial</option>
@@ -493,11 +500,57 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
           </div>
 
           {modality === 'online' && (
-            <div className="p-2.5 bg-indigo-50/80 rounded-xl space-y-1.5 border border-indigo-100">
-              <p className="font-bold text-indigo-800 text-[11px]">Teleconsulta</p>
-              <label className="block text-[11px] font-semibold text-indigo-900">Link da teleconsulta
-                <input type="url" value={meetingUrl} onChange={e => setMeetingUrl(e.target.value)} placeholder="https://meet.google.com/xxx-xxxx-xxx" className="w-full border border-indigo-200 bg-white rounded-xl px-3 py-1.5 mt-0.5 text-xs" />
-              </label>
+            <div>
+              {isConfiguringTele ? (
+                <div className="p-2.5 bg-slate-50 rounded-xl space-y-2 border border-slate-200">
+                  <label className="block text-[11px] font-semibold text-slate-700">
+                    Link do Google Meet
+                    <input
+                      aria-label="Link do Google Meet"
+                      type="url"
+                      value={meetingUrl}
+                      onChange={e => setMeetingUrl(e.target.value)}
+                      placeholder="https://meet.google.com/xxx-xxxx-xxx"
+                      className="w-full border border-slate-200 bg-white rounded-xl px-3 py-1.5 mt-1 text-xs"
+                    />
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (meetingUrl.trim() && !isMeetingUrl(meetingUrl)) {
+                          showToast('Informe um link HTTPS válido para a teleconsulta.', 'error');
+                          return;
+                        }
+                        setIsConfiguringTele(false);
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition-colors cursor-pointer"
+                    >
+                      Concluir configuração
+                    </button>
+                  </div>
+                </div>
+              ) : meetingUrl.trim() ? (
+                <div className="flex items-center justify-between px-3 py-1.5 rounded-xl bg-emerald-50/70 border border-emerald-200 text-xs">
+                  <span className="font-semibold text-emerald-800">✓ Teleconsulta configurada</span>
+                  <button
+                    type="button"
+                    onClick={() => setIsConfiguringTele(true)}
+                    className="font-semibold text-indigo-600 hover:text-indigo-800 cursor-pointer"
+                  >
+                    Editar
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setIsConfiguringTele(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-indigo-200 bg-indigo-50/60 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  <span aria-hidden="true">📹</span>
+                  <span>Configurar teleconsulta</span>
+                </button>
+              )}
             </div>
           )}
 

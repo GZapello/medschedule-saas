@@ -101,6 +101,15 @@ let server;
   assert.equal((await call('/v1/appointments/apt-fono/status',{status:'in_progress'},reception.data.token,'PUT')).status,403);
   db.prepare("UPDATE tenants SET manager_profession=NULL, manager_practice_areas=NULL WHERE id='test-clinic'").run();
   assert.equal((await call('/v1/appointments/apt-fono/status',{status:'in_progress'},manager.data.token,'PUT')).status,403,'Administrative manager alone cannot start a clinical consultation');
+  // A clinic_admin who also acts as an active professional assigned to the appointment can start it.
+  db.prepare("INSERT INTO professionals (id,tenant_id,user_id,name,active) VALUES ('pro-manager','test-clinic','manager','Gestor Profissional',1)").run();
+  db.prepare("INSERT INTO appointments (id,tenant_id,appointment_number,patient_id,professional_id,service_id,start_time,end_time,status,modality) VALUES ('apt-manager','test-clinic','TEST-MGR','pat-fono','pro-manager','svc-fono',?,?,'scheduled','online')")
+    .run(new Date().toISOString().slice(0,10)+'T14:00:00',new Date().toISOString().slice(0,10)+'T14:50:00');
+  const mgrStart=await call('/v1/appointments/apt-manager/status',{status:'in_progress'},manager.data.token,'PUT');
+  assert.equal(mgrStart.status,200,JSON.stringify(mgrStart));
+  assert.equal(mgrStart.data.status,'in_progress');
+  const mgrCompletion=await call('/v1/appointments/apt-manager/completion',null,manager.data.token);
+  assert.equal(mgrCompletion.status,200,JSON.stringify(mgrCompletion));
   db.prepare("INSERT INTO tenants (id,slug,name,email,status) VALUES ('foreign','foreign','Foreign','foreign@test.invalid','active')").run();
   db.prepare("INSERT INTO professionals (id,tenant_id,name) VALUES ('foreign-pro','foreign','Foreign professional')").run();
   db.prepare("INSERT INTO patients (id,tenant_id,full_name,phone) VALUES ('foreign-patient','foreign','Foreign patient','11999990000')").run();
