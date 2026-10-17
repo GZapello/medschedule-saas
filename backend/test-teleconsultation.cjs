@@ -16,6 +16,7 @@ async function call(method, body = {}, id, tenantId = 'tele-test') {
 
 (async () => {
   assert.ok(db.prepare('PRAGMA table_info(appointments)').all().some(column => column.name === 'meeting_url' && column.type === 'TEXT' && !column.notnull));
+  assert.ok(db.prepare('PRAGMA table_info(appointments)').all().some(column => column.name === 'google_drive_url' && column.type === 'TEXT' && !column.notnull));
   db.prepare("INSERT INTO tenants(id,name,slug,email,status) VALUES('tele-test','Teste','tele-test','tele@test.local','active')").run();
   db.prepare("INSERT INTO users(id,tenant_id,email,password_hash,role,name) VALUES('tele-user','tele-test','user@tele.test','test','clinic_admin','Profissional')").run();
   db.prepare("INSERT INTO professionals(id,user_id,tenant_id,name,active) VALUES('tele-pro','tele-user','tele-test','Profissional',1)").run();
@@ -23,28 +24,36 @@ async function call(method, body = {}, id, tenantId = 'tele-test') {
   db.prepare("INSERT INTO services(id,tenant_id,name,duration_minutes,price) VALUES('tele-service','tele-test','Consulta',50,0)").run();
   for (let day = 0; day < 7; day++) db.prepare("INSERT INTO schedules(id,tenant_id,professional_id,day_of_week,start_time,end_time,is_active) VALUES(?,'tele-test','tele-pro',?,'08:00','18:00',1)").run('tele-shift-' + day, day);
   const base = { patientId: 'tele-patient', professionalId: 'tele-pro', serviceId: 'tele-service', startTime: '2026-11-10T10:00:00', endTime: '2026-11-10T10:50:00', modality: 'online' };
-  const created = await call('create', { ...base, meeting_url: ' https://meet.google.com/abc-defg-hij ' });
+  const created = await call('create', { ...base, meeting_url: ' https://meet.google.com/abc-defg-hij ', google_drive_url: ' https://drive.google.com/drive/folders/123 ' });
   assert.equal(created.status, 201, JSON.stringify(created));
   const id = created.data.id;
   const row = () => db.prepare('SELECT * FROM appointments WHERE id=?').get(id);
   assert.equal(row().meeting_url, 'https://meet.google.com/abc-defg-hij');
+  assert.equal(row().google_drive_url, 'https://drive.google.com/drive/folders/123');
   const listed = await call('list');
   assert.equal(listed.status, 200);
   assert.ok(JSON.stringify(listed.data).includes('https://meet.google.com/abc-defg-hij'));
-  assert.equal((await call('update', { meeting_url: 'https://meet.google.com/edited-link' }, id)).status, 200);
+  assert.ok(JSON.stringify(listed.data).includes('https://drive.google.com/drive/folders/123'));
+  assert.equal((await call('update', { meeting_url: 'https://meet.google.com/edited-link', google_drive_url: 'https://drive.google.com/drive/folders/456' }, id)).status, 200);
   assert.equal(row().meeting_url, 'https://meet.google.com/edited-link');
+  assert.equal(row().google_drive_url, 'https://drive.google.com/drive/folders/456');
+  assert.equal((await call('update', { google_drive_url: 'javascript:alert(1)' }, id)).status, 400);
+  assert.equal(row().google_drive_url, 'https://drive.google.com/drive/folders/456');
   assert.equal((await call('update', { modality: 'presential' }, id)).status, 200);
   assert.equal(row().modality, 'presential');
   assert.equal(row().meeting_url, 'https://meet.google.com/edited-link', 'changing modality preserves the inactive link');
-  assert.equal((await call('update', { modality: 'online', meeting_url: null }, id)).status, 200);
+  assert.equal(row().google_drive_url, 'https://drive.google.com/drive/folders/456', 'changing modality preserves google_drive_url');
+  assert.equal((await call('update', { modality: 'online', meeting_url: null, google_drive_url: null }, id)).status, 200);
   assert.equal(row().meeting_url, null);
-  assert.equal((await call('update', { meeting_url: 'https://meet.google.com/restored-link' }, id)).status, 200);
+  assert.equal(row().google_drive_url, null);
+  assert.equal((await call('update', { meeting_url: 'https://meet.google.com/restored-link', google_drive_url: 'https://drive.google.com/drive/folders/restored' }, id)).status, 200);
   assert.equal((await call('update', { meeting_url: 'javascript:alert(1)' }, id)).status, 400);
   assert.equal(row().meeting_url, 'https://meet.google.com/restored-link');
   assert.equal((await call('update', { meeting_url: 'https://meet.google.com/wrong-clinic' }, id, 'other-clinic')).status, 404);
   assert.equal(row().meeting_url, 'https://meet.google.com/restored-link');
   const next = { ...base, startTime: '2026-11-10T11:00:00', endTime: '2026-11-10T11:50:00' };
   assert.equal((await call('create', { ...next, meeting_url: 'javascript:alert(1)' })).status, 400);
+  assert.equal((await call('create', { ...next, google_drive_url: 'javascript:alert(1)' })).status, 400);
   const noLink = await call('create', next);
   assert.equal(noLink.status, 201, JSON.stringify(noLink));
   assert.equal(db.prepare('SELECT meeting_url FROM appointments WHERE id=?').get(noLink.data.id).meeting_url, null);

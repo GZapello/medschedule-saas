@@ -185,7 +185,7 @@ export class AppointmentController {
       let query = `
         SELECT 
           a.id, a.tenant_id, a.appointment_number, a.patient_id, a.professional_id,
-          a.service_id, a.room_id, a.start_time, a.end_time, a.status, a.modality, a.meeting_url,
+          a.service_id, a.room_id, a.start_time, a.end_time, a.status, a.modality, a.meeting_url, a.google_drive_url,
           a.patient_notes, a.internal_notes, a.cancellation_reason, a.created_at,
           a.clinical_module,
           s.clinical_module as service_clinical_module,
@@ -340,8 +340,9 @@ export class AppointmentController {
         newPatientData
       } = req.body;
 
-      if (!validMeetingUrl(meeting_url)) {
-        res.status(400).json({ error: 'Informe um link HTTPS válido para a teleconsulta.' }); return;
+      const rawDriveUrl = req.body.google_drive_url !== undefined ? req.body.google_drive_url : req.body.googleDriveUrl;
+      if (!validMeetingUrl(meeting_url) || !validMeetingUrl(rawDriveUrl)) {
+        res.status(400).json({ error: 'Informe um link HTTPS válido para a teleconsulta ou Google Drive.' }); return;
       }
 
       const isPublic = req.path.startsWith('/v1/public/');
@@ -355,7 +356,7 @@ export class AppointmentController {
         if (!publicBookingProfessional(tenant.id, String(professionalId), individualSlug) || !professionalBookingService(tenant.id, String(professionalId), String(serviceId))) {
           res.status(404).json({ error: 'Atendimento indisponível.' }); return;
         }
-        if (patientId || roomId || internalNotes || insuranceId || referredFromAppointmentId || referredByProfessionalId || referralReason) {
+        if (patientId || roomId || internalNotes || insuranceId || referredFromAppointmentId || referredByProfessionalId || referralReason || rawDriveUrl !== undefined) {
           res.status(400).json({ error: 'Dados de agendamento inválidos.' }); return;
         }
         if (!newPatientData || typeof newPatientData.fullName !== 'string' || newPatientData.fullName.trim().length < 2 || newPatientData.fullName.length > 150 || typeof newPatientData.phone !== 'string' || !/^\d{10,13}$/.test(newPatientData.phone.replace(/\D/g, '')) || (newPatientData.email && (typeof newPatientData.email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newPatientData.email) || newPatientData.email.length > 254)) || (newPatientData.isChild && (typeof newPatientData.guardianName !== 'string' || !newPatientData.guardianName.trim())) || String(patientNotes || '').length > 1000 || String(newPatientData.notes || '').length > 1000) {
@@ -592,12 +593,12 @@ export class AppointmentController {
         const insertAppt = db.prepare(`
           INSERT INTO appointments (
             id, tenant_id, appointment_number, patient_id, professional_id, service_id,
-            room_id, start_time, end_time, status, modality, meeting_url, patient_notes, internal_notes,
+            room_id, start_time, end_time, status, modality, meeting_url, google_drive_url, patient_notes, internal_notes,
             insurance_id, referred_from_appointment_id, referred_by_professional_id, referral_reason,
             clinical_module, profession_id,
             created_by
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
 
         insertAppt.run(
@@ -612,6 +613,7 @@ export class AppointmentController {
           normalizedEndTime,
           modality || 'presential',
           typeof meeting_url === 'string' ? meeting_url.trim() || null : null,
+          typeof rawDriveUrl === 'string' ? rawDriveUrl.trim() || null : null,
           patientNotes || null,
           internalNotes || null,
           insuranceId || null,
@@ -991,7 +993,8 @@ export class AppointmentController {
         return;
       }
       const { serviceId, professionalId, roomId, startTime, endTime, notes, modality, meeting_url } = req.body;
-      if (!validMeetingUrl(meeting_url) || (modality !== undefined && !['presential', 'online', 'home'].includes(modality))) {
+      const rawDriveUrl = req.body.google_drive_url !== undefined ? req.body.google_drive_url : req.body.googleDriveUrl;
+      if (!validMeetingUrl(meeting_url) || !validMeetingUrl(rawDriveUrl) || (modality !== undefined && !['presential', 'online', 'home'].includes(modality))) {
         res.status(400).json({ error: 'Modalidade ou link HTTPS da teleconsulta inválido.' }); return;
       }
 
@@ -1053,6 +1056,7 @@ export class AppointmentController {
           patient_notes = COALESCE(?, patient_notes),
           modality = COALESCE(?, modality),
           meeting_url = CASE WHEN ? THEN ? ELSE meeting_url END,
+          google_drive_url = CASE WHEN ? THEN ? ELSE google_drive_url END,
           updated_at = datetime('now')
         WHERE id = ? AND tenant_id = ?
       `).run(
@@ -1066,6 +1070,8 @@ export class AppointmentController {
         modality || null,
         meeting_url !== undefined ? 1 : 0,
         typeof meeting_url === 'string' ? meeting_url.trim() || null : null,
+        rawDriveUrl !== undefined ? 1 : 0,
+        typeof rawDriveUrl === 'string' ? rawDriveUrl.trim() || null : null,
         id,
         tenantId
       );

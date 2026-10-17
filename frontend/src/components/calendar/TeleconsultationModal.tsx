@@ -15,17 +15,19 @@ export interface TeleconsultationAppointment {
   service_clinical_module?: string;
   modality?: string;
   meeting_url?: string | null;
+  google_drive_url?: string | null;
   patient_id?: string;
   patient_name?: string;
   patient_phone?: string;
   start_time: string;
 }
 
-export function TeleconsultationModal({ appointment, onClose, onSaved, onStart, onInsert, allowModalityChange = true }: {
+export function TeleconsultationModal({ appointment, onClose, onSaved, onStart, onInsert, allowModalityChange = true, initialEditing = false }: {
   appointment: TeleconsultationAppointment;
   onStart?: () => void;
   onInsert?: (text: string) => void;
   allowModalityChange?: boolean;
+  initialEditing?: boolean;
   onClose: () => void;
   onSaved: (url: string | null, modality: string) => void;
 }) {
@@ -33,7 +35,7 @@ export function TeleconsultationModal({ appointment, onClose, onSaved, onStart, 
   const [transcription, setTranscription] = useState(false);
   const [url, setUrl] = useState(appointment.meeting_url || '');
   const [modality, setModality] = useState(appointment.modality || 'presential');
-  const [editing, setEditing] = useState(appointment.modality !== 'online');
+  const [editing, setEditing] = useState(initialEditing || appointment.modality !== 'online');
   const [saving, setSaving] = useState(false);
   const [whatsapp, setWhatsapp] = useState(false);
   const [savedUrl, setSavedUrl] = useState(appointment.meeting_url || '');

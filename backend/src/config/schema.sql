@@ -406,6 +406,7 @@ CREATE TABLE IF NOT EXISTS appointments (
   status TEXT NOT NULL DEFAULT 'scheduled' CHECK(status IN ('scheduled', 'confirmed', 'in_progress', 'completed', 'cancelled', 'no_show', 'rescheduled')),
   modality TEXT NOT NULL DEFAULT 'presential' CHECK(modality IN ('presential', 'online', 'home')),
   meeting_url TEXT NULL,
+  google_drive_url TEXT NULL,
   patient_notes TEXT,
   internal_notes TEXT,
   cancellation_reason TEXT,

@@ -73,6 +73,7 @@ interface QuickConsultationModalProps {
     end_time?: string;
     modality?: string;
     meeting_url?: string | null;
+    google_drive_url?: string | null;
     status?: string;
     clinical_module?: string;
     display_amount?: number;
@@ -80,6 +81,7 @@ interface QuickConsultationModalProps {
     service_price?: number;
   };
   onMeetingUrlSaved?: (url: string | null) => void;
+  onDriveUrlSaved?: (url: string | null) => void;
   moduleType?: string;
   onClose: () => void;
   onFinished: () => void;
@@ -91,6 +93,7 @@ interface QuickConsultationModalProps {
 export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
   appointment,
   onMeetingUrlSaved,
+  onDriveUrlSaved,
   moduleType,
   onClose,
   onFinished,
@@ -1088,7 +1091,7 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
             </div>
           </div>
 
-          <OnlineConsultationTools appointment={{ ...appointment, clinical_module: effectiveModule }} onMeetingUrlSaved={onMeetingUrlSaved} onInsert={text => handleEvolutionChange(clinicalEvolution ? `${clinicalEvolution}\n\n${text}` : text)} />
+          <OnlineConsultationTools appointment={{ ...appointment, clinical_module: effectiveModule }} onMeetingUrlSaved={onMeetingUrlSaved} onDriveUrlSaved={onDriveUrlSaved} onInsert={text => handleEvolutionChange(clinicalEvolution ? `${clinicalEvolution}\n\n${text}` : text)} />
 
           {/* BANNER DE ACESSO AO MÓDULO ESPECIALIZADO DA PROFISSÃO */}
           {onOpenSpecializedModule && resolvedSpecializedName && (

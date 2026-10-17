@@ -412,6 +412,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
         if (!prev) return null;
         return apptsData.find(a => a.id === prev.id) || prev;
       });
+      setActiveConsultationAppt((prev: any) => {
+        if (!prev) return null;
+        const updated = apptsData.find(a => a.id === prev.id);
+        return updated ? { ...prev, ...updated, status: prev.status || updated.status, clinical_module: prev.clinical_module || updated.clinical_module } : prev;
+      });
       setProfessionals(profsData);
       setRooms(roomsData);
     } catch (err: any) {
@@ -545,11 +550,6 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
   const startConsultation = async (appointment: Appointment) => {
     if (['completed', 'cancelled', 'no_show'].includes(appointment.status)) {
       showToast('Abra o prontuário para consultar um atendimento encerrado.', 'info');
-      return;
-    }
-
-    if (appointment.modality === 'online' && !openTeleconsultation(appointment)) {
-      setTeleAppt(appointment);
       return;
     }
 

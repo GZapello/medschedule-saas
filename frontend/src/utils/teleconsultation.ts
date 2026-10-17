@@ -16,9 +16,22 @@ export function isMeetingUrl(value: string): boolean {
   } catch { return false; }
 }
 
+export function isGoogleDriveUrl(value: string): boolean {
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === 'https:' && !url.username && !url.password;
+  } catch { return false; }
+}
+
 // Call only from explicit user actions, never from effects or rendering.
 export function openTeleconsultation(appointment: { modality?: string; meeting_url?: string | null }): boolean {
   if (appointment.modality !== 'online' || !appointment.meeting_url || !isMeetingUrl(appointment.meeting_url)) return false;
   window.open(appointment.meeting_url.trim(), '_blank', 'noopener,noreferrer');
+  return true;
+}
+
+export function openGoogleDrive(driveUrl?: string | null): boolean {
+  if (!driveUrl || !isGoogleDriveUrl(driveUrl)) return false;
+  window.open(driveUrl.trim(), '_blank', 'noopener,noreferrer');
   return true;
 }
