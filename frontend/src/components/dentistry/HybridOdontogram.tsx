@@ -1,7 +1,7 @@
 import React, { useState, lazy, Suspense } from 'react';
 import { DENTAL_CONDITIONS, OdontogramData, ToothFace } from './odontogramModel';
 import { conditionLabel, describeToothStatus, faceLabel, toothFaces, toothName, ToothChange, updateToothCondition, isUpperTooth } from './odontogramClinical';
-const DentalArch3D = lazy(() => import('./DentalArch3D'));
+const HybridDentalArch = lazy(() => import('./HybridDentalArch'));
 
 export class AnatomicalViewBoundary extends React.Component<{onShowFaces:()=>void;children:React.ReactNode},{failed:boolean}> {
   state={failed:false};
@@ -20,11 +20,11 @@ interface Props {
   multiSelectMode: boolean;
   onToggleTooth: (tooth: number) => void;
   readOnly?: boolean;
-  showDebugBoundaries?: boolean;
+
 }
 const button = 'px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:border-cyan-500 focus-visible:ring-2 focus-visible:ring-cyan-500 disabled:opacity-40';
 
-export function Odontogram3D({ currentData, activeCondition, onChange, onToothClick, onOpenToothDossier, onShowFaces, selectedTeeth, multiSelectMode, onToggleTooth, readOnly = false, showDebugBoundaries = false }: Props) {
+export function HybridOdontogram({ currentData, activeCondition, onChange, onToothClick, onOpenToothDossier, onShowFaces, selectedTeeth, multiSelectMode, onToggleTooth, readOnly = false }: Props) {
   const [selected, setSelected] = useState<number | null>(null);
   const [hovered, setHovered] = useState<number | null>(null);
   const [zoom, setZoom] = useState(1);
@@ -50,9 +50,17 @@ export function Odontogram3D({ currentData, activeCondition, onChange, onToothCl
       if (result.changes.length) onChange(result.data, result.changes);
     }
   };
-  return <section aria-label="Odontograma 3D interativo" className="min-w-0 max-w-full bg-white border border-slate-200 rounded-2xl p-3 sm:p-4 space-y-3">
+  const selectFace = (tooth: number, face: ToothFace) => {
+    setSelected(tooth);
+    onToothClick?.(tooth, face);
+    if (multiSelectMode) { onToggleTooth(tooth); return; }
+    if (readOnly) return;
+    const result = updateToothCondition(currentData, tooth, face, activeCondition);
+    if (result.changes.length) onChange(result.data, result.changes);
+  };
+  return <section aria-label="Odontograma híbrido interativo" className="min-w-0 max-w-full bg-white border border-slate-200 rounded-2xl p-3 sm:p-4 space-y-3">
     <div className="flex flex-wrap justify-between items-center gap-2">
-      <p className="text-xs text-slate-500">32 dentes permanentes · Selecione um dente para consultar as faces.</p>
+      <p className="text-xs text-slate-500">Anatomia e faces do mesmo dente · Clique nas faces para registrar a condição.</p>
       <div className="flex gap-1 items-center">
         <button type="button" className={button} aria-label="Diminuir zoom" disabled={zoom <= 1} onClick={() => setZoom(z => Math.max(1, z - .25))}>−</button>
         <span className="text-xs text-slate-500">{Math.round(zoom * 100)}%</span>
@@ -61,12 +69,12 @@ export function Odontogram3D({ currentData, activeCondition, onChange, onToothCl
       </div>
     </div>
     <div className="max-w-full overflow-auto rounded-xl" style={{ maxHeight: zoom > 1 ? '70vh' : undefined }} tabIndex={0} aria-label="Arcadas; amplie e deslize para navegar">
-      <div className="bg-slate-50 rounded-xl" style={{ width: `${zoom * 100}%`, minHeight: 180 }}>
+      <div className="bg-slate-50 rounded-xl" style={{ width: `${zoom * 100}%`, minHeight: 180, minWidth: zoom * 880 }}>
         <AnatomicalViewBoundary onShowFaces={onShowFaces}>
           <Suspense fallback={<p role="status" className="p-6 text-sm text-slate-500">Carregando visualização anatômica...</p>}>
-            <DentalArch3D currentData={currentData} selected={selected} hovered={hovered}
+            <HybridDentalArch currentData={currentData} selected={selected} hovered={hovered}
               selectedTeeth={selectedTeeth} multiSelectMode={multiSelectMode}
-              onSelect={select} onHover={setHovered} showDebugBoundaries={showDebugBoundaries}/>
+              onSelect={select} onHover={setHovered} onFaceClick={selectFace} readOnly={readOnly}/>
           </Suspense>
         </AnatomicalViewBoundary>
       </div>
@@ -88,7 +96,7 @@ export function Odontogram3D({ currentData, activeCondition, onChange, onToothCl
         </div>
       </div>}
       <div className="flex flex-wrap gap-2">
-        <button type="button" className={button} onClick={onShowFaces}>Selecionar no Mapa de Faces</button>
+        <button type="button" className={button} onClick={onShowFaces}>Ampliar somente faces</button>
         {selected && onOpenToothDossier && <><button type="button" className={button} onClick={() => onOpenToothDossier(selected)}>Abrir dossiê</button><button type="button" className={button} onClick={() => onOpenToothDossier(selected)}>Histórico</button></>}
       </div>
     </div>}

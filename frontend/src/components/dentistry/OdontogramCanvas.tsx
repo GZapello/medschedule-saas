@@ -16,7 +16,8 @@ import { DENTAL_CONDITIONS, OdontogramData, ToothStatus, ToothFace } from './odo
 export { DENTAL_CONDITIONS } from './odontogramModel';
 export type { OdontogramData, ToothStatus, ToothFace, ToothCondition } from './odontogramModel';
 import { updateToothCondition, describeToothStatus } from './odontogramClinical';
-import { Odontogram3D } from './Odontogram3D';
+import { HybridOdontogram } from './HybridOdontogram';
+import { ToothFaceMiniMap } from './ToothFaceMiniMap';
 
 interface OdontogramCanvasProps {
   initialData?: OdontogramData;
@@ -79,8 +80,8 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
 
   const isUpper = (tooth: number) => (tooth >= 11 && tooth <= 28) || (tooth >= 51 && tooth <= 65);
 
-  const handleFaceClick = (toothNumber: number, face: ToothFace, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleFaceClick = (toothNumber: number, face: ToothFace, e?: React.MouseEvent) => {
+    e?.stopPropagation();
     if (readOnly || viewMode === 'initial') return;
 
     if (multiSelectMode) {
@@ -223,89 +224,9 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
               CR
             </div>
           ) : (
-            /* 5 Faces Geométricas Interativas */
-            <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xs select-none">
-              {/* Face Superior (Vestibular nos superiores, Lingual nos inferiores) */}
-              <polygon
-                points="15,15 85,15 65,35 35,35"
-                fill={isUpperTooth ? vestColor : lingPalColor}
-                stroke="#64748b"
-                strokeWidth="2"
-                className="cursor-pointer hover:brightness-90 transition-all"
-                onClick={(e) => handleFaceClick(toothNumber, isUpperTooth ? 'vestibular' : innerFaceKey, e)}
-              >
-                <title>{isUpperTooth ? 'Vestibular (V)' : (innerFaceKey === 'palatina' ? 'Palatina (P)' : 'Lingual (L)')}</title>
-              </polygon>
-
-              {/* Face Inferior (Palatina/Lingual nos superiores, Vestibular nos inferiores) */}
-              <polygon
-                points="35,65 65,65 85,85 15,85"
-                fill={isUpperTooth ? lingPalColor : vestColor}
-                stroke="#64748b"
-                strokeWidth="2"
-                className="cursor-pointer hover:brightness-90 transition-all"
-                onClick={(e) => handleFaceClick(toothNumber, isUpperTooth ? innerFaceKey : 'vestibular', e)}
-              >
-                <title>{isUpperTooth ? (innerFaceKey === 'palatina' ? 'Palatina (P)' : 'Lingual (L)') : 'Vestibular (V)'}</title>
-              </polygon>
-
-              {/* Face Esquerda (Distal em Q1/Q4/Q5/Q8; Mesial em Q2/Q3/Q6/Q7) */}
-              <polygon
-                points="15,15 35,35 35,65 15,85"
-                fill={leftColor}
-                stroke="#64748b"
-                strokeWidth="2"
-                className="cursor-pointer hover:brightness-90 transition-all"
-                onClick={(e) => handleFaceClick(toothNumber, leftFaceKey, e)}
-              >
-                <title>{leftFaceKey === 'mesial' ? 'Mesial (M) — voltada para a linha média' : 'Distal (D)'}</title>
-              </polygon>
-
-              {/* Face Direita (Mesial em Q1/Q4/Q5/Q8; Distal em Q2/Q3/Q6/Q7) */}
-              <polygon
-                points="85,15 65,35 65,65 85,85"
-                fill={rightColor}
-                stroke="#64748b"
-                strokeWidth="2"
-                className="cursor-pointer hover:brightness-90 transition-all"
-                onClick={(e) => handleFaceClick(toothNumber, rightFaceKey, e)}
-              >
-                <title>{rightFaceKey === 'mesial' ? 'Mesial (M) — voltada para a linha média' : 'Distal (D)'}</title>
-              </polygon>
-
-              {/* Face Central: Oclusal (ou Incisal em dentes anteriores) */}
-              {anterior ? (
-                <rect
-                  x="35"
-                  y="42"
-                  width="30"
-                  height="16"
-                  rx="2"
-                  fill={oclusalColor}
-                  stroke="#64748b"
-                  strokeWidth="2"
-                  className="cursor-pointer hover:brightness-90 transition-all"
-                  onClick={(e) => handleFaceClick(toothNumber, 'oclusal', e)}
-                >
-                  <title>Incisal (I)</title>
-                </rect>
-              ) : (
-                <rect
-                  x="35"
-                  y="35"
-                  width="30"
-                  height="30"
-                  rx="3"
-                  fill={oclusalColor}
-                  stroke="#64748b"
-                  strokeWidth="2"
-                  className="cursor-pointer hover:brightness-90 transition-all"
-                  onClick={(e) => handleFaceClick(toothNumber, 'oclusal', e)}
-                >
-                  <title>Oclusal (O)</title>
-                </rect>
-              )}
-            </svg>
+            <ToothFaceMiniMap tooth={toothNumber} status={toothStatus} highlighted={isSelected}
+              readOnly={readOnly || viewMode === 'initial' || isCompareInitial}
+              onFaceClick={face => { if (!isCompareInitial) handleFaceClick(toothNumber, face); }} />
           )}
 
           {/* Indicador de Braquete Ortodôntico */}
@@ -405,9 +326,9 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
           aria-pressed={mode === '3d' ? show3D : !show3D}
           onClick={() => { setPresentation(mode); if (viewMode === 'compare') setViewMode('current'); }}
           className={'px-4 py-2 rounded-xl text-xs font-bold border disabled:opacity-40 ' + ((mode === '3d' ? show3D : !show3D) ? 'bg-cyan-600 text-white border-cyan-600' : 'bg-white text-slate-600 border-slate-200')}>
-          {mode === '3d' ? 'Odontograma 3D' : 'Faces 2D'}
+          {mode === '3d' ? 'Odontograma Híbrido' : 'Faces 2D'}
         </button>)}
-        {dentitionType !== 'permanent' && <p className="text-xs text-slate-500">Visualização 3D disponível atualmente para dentição permanente.</p>}
+        {dentitionType !== 'permanent' && <p className="text-xs text-slate-500">Visualização híbrida disponível atualmente para dentição permanente.</p>}
       </div>
       {/* Barra de Ferramentas do Odontograma */}
       <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-white border border-slate-200 rounded-2xl shadow-xs">
@@ -557,7 +478,7 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
         </div>
       )}
 
-      {show3D && <Odontogram3D
+      {show3D && <HybridOdontogram
         currentData={viewMode === 'initial' ? initialData : data}
         activeCondition={activeCondition}
         readOnly={readOnly || viewMode === 'initial'}

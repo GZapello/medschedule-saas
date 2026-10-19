@@ -1,0 +1,167 @@
+{
+  "source": "Reference-derived transparent atlas, built-in image_gen",
+  "width": 192,
+  "height": 256,
+  "teeth": [
+    {
+      "tooth": 18,
+      "opaque": 19025,
+      "transparent": 20852
+    },
+    {
+      "tooth": 17,
+      "opaque": 21039,
+      "transparent": 14434
+    },
+    {
+      "tooth": 16,
+      "opaque": 19915,
+      "transparent": 13342
+    },
+    {
+      "tooth": 15,
+      "opaque": 14194,
+      "transparent": 20240
+    },
+    {
+      "tooth": 14,
+      "opaque": 13915,
+      "transparent": 17608
+    },
+    {
+      "tooth": 13,
+      "opaque": 13400,
+      "transparent": 20454
+    },
+    {
+      "tooth": 12,
+      "opaque": 12779,
+      "transparent": 17684
+    },
+    {
+      "tooth": 11,
+      "opaque": 15551,
+      "transparent": 27157
+    },
+    {
+      "tooth": 21,
+      "opaque": 17495,
+      "transparent": 22688
+    },
+    {
+      "tooth": 22,
+      "opaque": 14458,
+      "transparent": 18233
+    },
+    {
+      "tooth": 23,
+      "opaque": 14621,
+      "transparent": 18164
+    },
+    {
+      "tooth": 24,
+      "opaque": 14600,
+      "transparent": 18322
+    },
+    {
+      "tooth": 25,
+      "opaque": 14407,
+      "transparent": 18919
+    },
+    {
+      "tooth": 26,
+      "opaque": 20010,
+      "transparent": 16390
+    },
+    {
+      "tooth": 27,
+      "opaque": 21360,
+      "transparent": 15798
+    },
+    {
+      "tooth": 28,
+      "opaque": 18808,
+      "transparent": 22961
+    },
+    {
+      "tooth": 48,
+      "opaque": 18423,
+      "transparent": 23875
+    },
+    {
+      "tooth": 47,
+      "opaque": 20281,
+      "transparent": 10816
+    },
+    {
+      "tooth": 46,
+      "opaque": 18968,
+      "transparent": 14585
+    },
+    {
+      "tooth": 45,
+      "opaque": 14138,
+      "transparent": 14785
+    },
+    {
+      "tooth": 44,
+      "opaque": 13122,
+      "transparent": 16011
+    },
+    {
+      "tooth": 43,
+      "opaque": 12545,
+      "transparent": 17473
+    },
+    {
+      "tooth": 42,
+      "opaque": 12273,
+      "transparent": 16647
+    },
+    {
+      "tooth": 41,
+      "opaque": 13684,
+      "transparent": 24530
+    },
+    {
+      "tooth": 31,
+      "opaque": 12028,
+      "transparent": 29092
+    },
+    {
+      "tooth": 32,
+      "opaque": 11802,
+      "transparent": 17482
+    },
+    {
+      "tooth": 33,
+      "opaque": 11499,
+      "transparent": 18378
+    },
+    {
+      "tooth": 34,
+      "opaque": 12206,
+      "transparent": 17341
+    },
+    {
+      "tooth": 35,
+      "opaque": 12663,
+      "transparent": 20025
+    },
+    {
+      "tooth": 36,
+      "opaque": 20695,
+      "transparent": 16044
+    },
+    {
+      "tooth": 37,
+      "opaque": 20535,
+      "transparent": 18271
+    },
+    {
+      "tooth": 38,
+      "opaque": 18735,
+      "transparent": 23724
+    }
+  ]
+}
