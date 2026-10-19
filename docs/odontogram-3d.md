@@ -1,59 +1,61 @@
-# Odontograma 3D — implementação e validação
+# Odontograma anatômico individualizado — relatório de correção
 
-## 1. Arquivos criados
+## 1. Análise do HTML fornecido
 
-- `frontend/src/components/dentistry/Odontogram3D.tsx`: imagem, interação SVG, painel contextual, seleção de faces, zoom, acessibilidade e fallback.
-- `frontend/src/components/dentistry/odontogram3DGeometry.ts`: mapa dos 32 elementos permanentes.
-- `frontend/src/components/dentistry/odontogramModel.ts`: tipos e lista oficial de condições extraídos, sem alteração do formato persistido.
-- `frontend/src/components/dentistry/odontogramClinical.ts`: mutações clínicas e descrições compartilhadas.
-- `frontend/tests/odontogram-3d.tsx`: montagem do workspace real para testes.
-- `frontend/tests/odontogram-3d-browser.cjs`: teste de navegador com servidor HTTP de persistência isolado.
-- Este relatório.
+O HTML usa somente DOM, CSS e JavaScript inline. `createArch` cria duas fileiras flexíveis com 16 wrappers cada. Cada wrapper tem `data-tooth`, uma div de dente, um número e um listener de clique. A seleção é um Set e a classe `selected`. O posicionamento usa fluxo flex, gap e margem na linha média; não há coordenadas 3D.
 
-## 2. Arquivos alterados
+Não existem assets externos, SVG, Canvas, WebGL, Three.js, meshes, modelos, raízes, cervical ou gengiva no HTML. Todos os dentes são o mesmo retângulo arredondado de 35 × 50. Portanto, ele não fornecia anatomia para extrair. Nenhum script externo foi executado ou incorporado.
 
-- `OdontogramCanvas.tsx`: seletor 3D/Faces 2D, integração da nova apresentação e uso dos helpers. SVGs de faces preservados. Tipos e condições continuam reexportados para manter os imports existentes compatíveis. Status textual passou a usar nomes clínicos.
-- `DentistryWorkspace.tsx`: nome da aba atualizado para Odontograma e chave por paciente para reiniciar a seleção visual ao trocar de paciente. Salvamento e autosave mantidos.
-- `ToothDossierDrawer.tsx`: condições exibidas com nomes clínicos em vez de identificadores internos.
+## 2. Referência aproveitada e abordagem escolhida
 
-## 3. Asset
+Foram aproveitados a individualização, as duas arcadas, a ordem FDI, a associação entre número e elemento, e a separação entre estado visual de seleção e dados. O desenho genérico foi substituído por SVG local com gradientes: uma ilustração anatômica estilizada com volume aparente, não um modelo 3D real ou reprodução fotográfica. Não há iframe nem CSS global importado.
 
-`frontend/public/assets/dentistry/odontogram-3d-permanent.png`
+## 3. Individualização e novos arquivos
 
-Cópia da imagem fornecida (1.678.415 bytes), sem base64, edição de pixels ou dependências gráficas adicionais. O fundo escuro pertence à imagem original; controles, painel e card usam o tema claro do Zemda. Não foi gerada uma variante com fundo claro.
+- `frontend/src/components/dentistry/Tooth3D.tsx`: um grupo interativo por FDI, com paths visíveis identificados por `data-part="crown"`, `root` e `cervical`.
+- `frontend/src/components/dentistry/DentalArch3D.tsx`: duas arcadas, gengiva separada, materiais SVG, linha média e posicionamento proporcional à largura dos elementos.
+- `frontend/src/components/dentistry/toothAnatomy.ts`: perfis locais dos oito tipos permanentes, com diferenças entre superior/inferior, coroas e raízes. Incisivos, caninos, pré-molares e molares têm proporções próprias. A morfologia é esquemática, não específica de um paciente; variações anatômicas individuais não são representadas.
 
-## 4. Mapeamento dos dentes
+Cada path desenha a própria estrutura e recebe eventos apenas na área pintada. Não há uma segunda geometria aproximada de hitbox. O grupo pai associa coroa, cervical e todas as raízes ao mesmo toothNumber. Enter/Espaço também selecionam o grupo. Números e marcadores não interceptam eventos.
 
-32 polígonos individuais no `viewBox="0 0 1448 1086"`, alinhados à imagem e redimensionados junto com ela. Cada polígono delimita o envelope da coroa e raízes visíveis, sem vetorizar a anatomia. Numeração já presente no asset: 18–11 / 21–28 e 48–41 / 31–38. Marcadores SVG indicam a linha média. `showDebugHitAreas` fica desativado por padrão.
+## 4. Removidos e refatorados
 
-## 5. Dados e salvamento compartilhados
+- Removido `frontend/src/components/dentistry/odontogram3DGeometry.ts`, incluindo `PERMANENT_3D_HIT_AREAS`.
+- Removido o PNG composto de `frontend/public/assets/dentistry/odontogram-3d-permanent.png`, agora sem uso. O arquivo original fornecido pelo usuário em Downloads não foi alterado.
+- Refatorado `Odontogram3D.tsx`: removidos imagem, polígonos e debug de hitboxes; preservados painel, condições, multisseleção, zoom e callbacks clínicos. Adicionados lazy import, Suspense e error boundary com acesso ao Mapa de Faces 2D.
+- Atualizados `frontend/tests/odontogram-3d.tsx` e `frontend/tests/odontogram-3d-browser.cjs`.
+- Atualizado este relatório e as capturas em `tmp/odontogram-*.png`.
 
-`DentistryWorkspace.odontogramData` continua sendo a fonte clínica. O 3D recebe o mesmo `data/currentData` usado pelo 2D e devolve atualizações pelo mesmo `onChange`. Esse callback atualiza `odontogramData` e acumula `pendingToothChanges`. `handleSaveOdontogram()` continua enviando `statusData` e `toothChanges` para `/v1/dentistry/odontograms`. O autosave existente continua recebendo esses dados. Nenhum estado clínico 3D paralelo, tabela, migration ou endpoint foi criado.
+## 5. Gengiva, seleção e status
 
-## 6. Condições de face
+A gengiva é uma faixa preenchida e ondulada na região cervical, separada por arcada e renderizada atrás dos dentes, com pointer-events desativado. Não participa da seleção. Os dentes preservam proporção por escala uniforme do viewBox; espaços são calculados pela largura anatômica, com margem pequena e intervalo central.
 
-No 3D, clicar em um dente com uma condição de face apenas seleciona o elemento. O profissional escolhe Vestibular, Palatina/Lingual, Mesial, Distal ou Oclusal/Incisal no painel. Na seleção múltipla, a face interna é resolvida por arcada para cada elemento. Não há escolha implícita de oclusal. O campo persistido para incisal continua sendo `oclusal`, conforme o formato existente.
+Hover/seleção alteram somente o contorno dos paths do elemento. As condições continuam usando os indicadores oficiais; ausente reduz a opacidade da anatomia daquele dente a 0,15, com label separado. Não há máscara sobre foto. Implante mantém indicador textual e pode futuramente substituir a estrutura visual dentro de Tooth3D.
 
-O helper compartilhado mantém o gesto de todas as faces do 2D e a alternância das condições. Hígido limpa apenas o alvo escolhido, sem apagar as demais faces. O botão de limpeza do dente inteiro remove apenas `whole`.
+## 6. Dados preservados
 
-## 7. Condições de dente inteiro
+`odontogramClinical.ts`, `odontogramModel.ts`, `OdontogramCanvas.tsx`, `DentistryWorkspace.tsx` e `ToothDossierDrawer.tsx` não foram alterados nesta correção. O 3D continua recebendo os mesmos dados e emitindo o mesmo onChange. `odontogramData`, `pendingToothChanges`, `handleSaveOdontogram()`, autosave, dossiê e endpoints continuam no fluxo existente.
 
-Condições com `affectsWholeTooth` usam `whole` e a regra de alternância já existente ao clicar. A aplicação explícita pelo painel e em lote define a condição. Indicadores usam as cores oficiais; ausente recebe máscara escura e identificação, implante recebe identificação própria. O contorno ciano representa seleção, separado da condição clínica.
+Condições de face continuam exigindo escolha explícita no painel. Coroa/raiz selecionam somente o dente, sem inferir face clínica. Decídua/mista e comparativo permanecem no 2D. Nenhuma mudança de backend, dependência nova, tabela ou estado clínico paralelo.
 
-## 8. Dossiê e histórico
+## 7. Testes
 
-Os botões Abrir dossiê e Histórico chamam o `onOpenToothDossier` existente. O mesmo drawer consulta `/v1/dentistry/teeth/:patientId/:toothNumber/dossier`. Não foi criado outro histórico. Alterações continuam emitindo `toothNumber`, `face`, `condition` e `previousCondition`.
+Comando: `node frontend/tests/odontogram-3d-browser.cjs`.
 
-## 9. Dentição e comparação
+- Clique físico no navegador sobre pontos pintados da coroa, cervical e cada raiz de todos os 32 dentes, na ordem FDI solicitada: passou; exatamente um elemento selecionado por clique em modo simples.
+- Extremos 18/28/38/48, incisivos próximos e raízes de 16/26/36/46 incluídos.
+- Bounding boxes anatômicas vizinhas estritamente separadas nas duas arcadas: passou.
+- Hover no 43 e clique no espaço entre 43/42 sem mudar a seleção: passou.
+- 46: Canal Tratado pela raiz no 3D, indicador no 2D, Restauração Oclusal no 2D refletida no 3D: passou.
+- Ausente: opacidade de 0,15 apenas no elemento: passou.
+- Sincronização 3D/2D no 26, salvamento/recarregamento, auditoria, dossiê, Hígido seletivo, multisseleção, inicial somente leitura, comparativo e dentições infantil/mista: passaram.
+- Desktop 1440, tablet 768 e mobile 390, zoom sem overflow horizontal global: passaram.
+- Error boundary com falha de renderização simulada e callback do fallback: passou.
 
-Permanente abre em 3D por padrão. Decídua e mista exibem automaticamente Faces 2D, com aviso de disponibilidade do 3D. O comparativo continua no 2D. Odontograma Inicial no 3D é somente leitura. Os controles e desenhos anteriores permanecem disponíveis.
+O teste monta o workspace real, mas usa um servidor HTTP de persistência em memória. Não valida autenticação ou banco de produção. Nenhum paciente real foi modificado.
 
-## 10. Verificação
+## 8. Verificação visual e build
 
-- `npm run build`: TypeScript e Vite concluíram com sucesso. Vite informa o aviso de chunk acima de 500 kB no bundle principal da aplicação.
-- `node tests/odontogram-3d-browser.cjs` (na pasta frontend): passou.
-- Cobertura: 32 dentes, ausência de seleção inicial, seleção por teclado, condição inteira, Cárie Oclusal no 26 em 3D e preenchimento vermelho no 2D, Restauração Vestibular pelo 2D refletida no 3D, salvamento pelo workspace e recarga, dossiê correto, limpeza seletiva, multisseleção superior/inferior, decídua/mista, inicial somente leitura, comparativo, zoom, fallback e auditoria.
-- Desktop 1440, tablet 768 e mobile 390: sem overflow horizontal global no teste. Capturas inspecionadas em `tmp/odontogram-1440.png`, `tmp/odontogram-768.png` e `tmp/odontogram-390.png`.
-- Busca por `OdontogramCanvas`, `OdontogramData`, `ToothStatus` e `pendingToothChanges` confirma o fluxo compartilhado.
+`showDebugBoundaries=true` foi ativado apenas na fixture de inspeção. A captura `tmp/odontogram-debug.png` mostra os limites próprios de cada elemento; eles não atravessam vizinhos nem linha média. Produção mantém false por padrão. Capturas responsivas: `tmp/odontogram-1440.png`, `tmp/odontogram-768.png` e `tmp/odontogram-390.png`.
 
-O teste usa componentes reais e o handler real de salvamento, com respostas HTTP e persistência em memória no servidor de teste. Não é uma validação contra o banco de produção nem contra a autenticação do backend real. Os endpoints existentes foram revisados e não foram alterados. Nenhum dado real de paciente foi modificado.
+`npm run build --prefix frontend`: TypeScript e Vite aprovados. O aviso de chunk grande do bundle principal da aplicação permanece. A anatomia é carregada por import dinâmico somente quando o 3D é montado; nenhum asset remoto ou imagem composta é carregado.

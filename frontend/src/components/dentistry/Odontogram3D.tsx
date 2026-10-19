@@ -1,7 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, lazy, Suspense } from 'react';
 import { DENTAL_CONDITIONS, OdontogramData, ToothFace } from './odontogramModel';
 import { conditionLabel, describeToothStatus, faceLabel, toothFaces, toothName, ToothChange, updateToothCondition, isUpperTooth } from './odontogramClinical';
-import { PERMANENT_3D_HIT_AREAS } from './odontogram3DGeometry';
+const DentalArch3D = lazy(() => import('./DentalArch3D'));
+
+export class AnatomicalViewBoundary extends React.Component<{onShowFaces:()=>void;children:React.ReactNode},{failed:boolean}> {
+  state={failed:false};
+  static getDerivedStateFromError(){return {failed:true};}
+  render(){return this.state.failed ? <div role="alert" className="p-6 space-y-3"><p>Não foi possível carregar a visualização anatômica.</p><button type="button" className={button} onClick={this.props.onShowFaces}>Abrir Mapa de Faces 2D</button></div> : this.props.children;}
+}
 
 interface Props {
   currentData: OdontogramData;
@@ -14,15 +20,14 @@ interface Props {
   multiSelectMode: boolean;
   onToggleTooth: (tooth: number) => void;
   readOnly?: boolean;
-  showDebugHitAreas?: boolean;
+  showDebugBoundaries?: boolean;
 }
 const button = 'px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:border-cyan-500 focus-visible:ring-2 focus-visible:ring-cyan-500 disabled:opacity-40';
 
-export function Odontogram3D({ currentData, activeCondition, onChange, onToothClick, onOpenToothDossier, onShowFaces, selectedTeeth, multiSelectMode, onToggleTooth, readOnly = false, showDebugHitAreas = false }: Props) {
+export function Odontogram3D({ currentData, activeCondition, onChange, onToothClick, onOpenToothDossier, onShowFaces, selectedTeeth, multiSelectMode, onToggleTooth, readOnly = false, showDebugBoundaries = false }: Props) {
   const [selected, setSelected] = useState<number | null>(null);
   const [hovered, setHovered] = useState<number | null>(null);
   const [zoom, setZoom] = useState(1);
-  const [failed, setFailed] = useState(false);
   const condition = DENTAL_CONDITIONS.find(c => c.id === activeCondition);
   const targets = multiSelectMode ? selectedTeeth : selected ? [selected] : [];
   const apply = (face: ToothFace) => {
@@ -45,10 +50,6 @@ export function Odontogram3D({ currentData, activeCondition, onChange, onToothCl
       if (result.changes.length) onChange(result.data, result.changes);
     }
   };
-  if (failed) return <div role="alert" className="p-6 bg-white border rounded-2xl space-y-3">
-    <p>Não foi possível carregar a visualização 3D.</p><button type="button" className={button} onClick={onShowFaces}>Abrir Mapa de Faces 2D</button>
-  </div>;
-
   return <section aria-label="Odontograma 3D interativo" className="min-w-0 max-w-full bg-white border border-slate-200 rounded-2xl p-3 sm:p-4 space-y-3">
     <div className="flex flex-wrap justify-between items-center gap-2">
       <p className="text-xs text-slate-500">32 dentes permanentes · Selecione um dente para consultar as faces.</p>
@@ -60,34 +61,14 @@ export function Odontogram3D({ currentData, activeCondition, onChange, onToothCl
       </div>
     </div>
     <div className="max-w-full overflow-auto rounded-xl" style={{ maxHeight: zoom > 1 ? '70vh' : undefined }} tabIndex={0} aria-label="Arcadas; amplie e deslize para navegar">
-      <div className="relative" style={{ width: `${zoom * 100}%`, aspectRatio: '1448 / 1086' }}>
-        <img src="/assets/dentistry/odontogram-3d-permanent.png" alt="Arcadas permanentes com coroas, raízes e gengiva, numeradas pelo sistema FDI" width={1448} height={1086} className="block w-full h-auto object-contain" draggable={false} onError={() => setFailed(true)} />
-        <svg viewBox="0 0 1448 1086" className="absolute inset-0 w-full h-full" aria-label="Seleção dos dentes permanentes">
-          <path d="M724 177 V205 M724 855 V881" stroke="#67e8f9" strokeWidth="2" strokeDasharray="4 4" pointerEvents="none" />
-          {PERMANENT_3D_HIT_AREAS.map(area => {
-            const status = currentData[area.tooth] || {};
-            const selectedHere = multiSelectMode ? selectedTeeth.includes(area.tooth) : selected === area.tooth;
-            const highlighted = selectedHere || hovered === area.tooth;
-            const clinical = (['whole', ...toothFaces(area.tooth)] as ToothFace[]).filter(f => status[f] && status[f] !== 'healthy');
-            return <g key={area.tooth}>
-              <polygon data-tooth={area.tooth} points={area.points} role="button" tabIndex={0}
-                aria-label={`Dente ${area.tooth} — ${toothName(area.tooth)} — ${describeToothStatus(status, area.tooth)}`}
-                aria-pressed={selectedHere} onClick={() => select(area.tooth)}
-                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(area.tooth); } }}
-                onMouseEnter={() => setHovered(area.tooth)} onMouseLeave={() => setHovered(null)}
-                onFocus={() => setHovered(area.tooth)} onBlur={() => setHovered(null)}
-                fill={status.whole === 'missing' ? '#0f172ac9' : showDebugHitAreas ? '#f472b640' : 'transparent'}
-                stroke={highlighted ? '#22d3ee' : showDebugHitAreas ? '#f472b6' : 'transparent'} strokeWidth={selectedHere ? 2 : 1}
-                vectorEffect="non-scaling-stroke" style={{ cursor: 'pointer', outline: 'none', filter: selectedHere ? 'drop-shadow(0 0 3px #22d3ee)' : undefined }}>
-                <title>{`Dente ${area.tooth}\n${toothName(area.tooth)}\n${describeToothStatus(status, area.tooth)}`}</title>
-              </polygon>
-              <g pointerEvents="none">
-                {clinical.map((face, i) => <circle key={face} cx={area.x + (i - (clinical.length - 1) / 2) * 12} cy={area.y + 34} r="5" stroke="white" strokeWidth="1.5" fill={DENTAL_CONDITIONS.find(c => c.id === status[face])?.color || '#64748b'} />)}
-                {(status.whole === 'implant' || status.whole === 'missing') && <text x={area.x} y={area.y} textAnchor="middle" fill={status.whole === 'implant' ? '#6d28d9' : 'white'} fontSize="13" fontWeight="bold">{status.whole === 'implant' ? 'Implante' : 'Ausente'}</text>}
-              </g>
-            </g>;
-          })}
-        </svg>
+      <div className="bg-slate-50 rounded-xl" style={{ width: `${zoom * 100}%`, minHeight: 180 }}>
+        <AnatomicalViewBoundary onShowFaces={onShowFaces}>
+          <Suspense fallback={<p role="status" className="p-6 text-sm text-slate-500">Carregando visualização anatômica...</p>}>
+            <DentalArch3D currentData={currentData} selected={selected} hovered={hovered}
+              selectedTeeth={selectedTeeth} multiSelectMode={multiSelectMode}
+              onSelect={select} onHover={setHovered} showDebugBoundaries={showDebugBoundaries}/>
+          </Suspense>
+        </AnatomicalViewBoundary>
       </div>
     </div>
     <div className="min-h-8 text-xs text-slate-600" role="status">{hovered ? `Dente ${hovered} — ${toothName(hovered)} · ${describeToothStatus(currentData[hovered], hovered)}` : 'Use Tab e Enter para selecionar pelo teclado. O zoom permite navegar pelas arcadas em telas menores.'}</div>
