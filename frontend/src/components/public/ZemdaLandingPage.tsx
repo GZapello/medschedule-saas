@@ -1,9 +1,10 @@
 import { LANDING_HERO, LANDING_HERO_TITLE_LINES } from '../../../../backend/src/seo/landingContent';
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Activity, Apple, ArrowDown, ArrowRight, Brain, CalendarDays, Check, CheckCheck, ChevronDown, CloudUpload, Crosshair, DollarSign, Dumbbell, FileText, Files, GraduationCap, Heart, Layers3, LockKeyhole, Mic, ShieldCheck, Smile, Sparkles, Stethoscope, Users, type LucideIcon } from 'lucide-react';
 import { PublicHeader } from './PublicHeader';
 import { PublicFooter } from './PublicFooter';
 import { RevealSection, RevealItem } from './RevealOnScroll';
+import { AnimatedStat } from './AnimatedStat';
 import { LANDING_MODULES, LANDING_PLANS, LANDING_STEPS, LANDING_LAYERS, LANDING_FAQS, moduleHref } from '../../../../backend/src/seo/landingContent';
 import { LandingProductDemo } from './LandingProductDemo';
 import './zemda-landing.css';
@@ -25,18 +26,57 @@ const results: { impact: string; title: string; description: string; icon: Lucid
   { impact: '+70%', title: 'Mais organização da equipe', description: 'Agenda, profissionais e processos centralizados.', icon: Users },
   { impact: '+80%', title: 'Mais controle da jornada do paciente', description: 'Informações e histórico acompanhados em um único ambiente.', icon: Heart }
 ];
-const ResultsCarousel = () => (
-  <div className="zl-results-viewport" tabIndex={0} role="region" aria-label="Potencial de impacto na rotina">
-    <div className="zl-results-track">
-      {[false, true].map(copy => <div key={String(copy)} className="zl-results-group" aria-hidden={copy || undefined}>
-        {results.map(({ impact, title, description, icon: Icon }) => <article key={title} className="zl-result-card">
-          <div className="zl-result-top"><strong className="zl-result-impact">{impact}</strong><span className="zl-result-icon"><Icon size={16} strokeWidth={1.7} aria-hidden="true" /></span></div>
-          <h3>{title}</h3><p>{description}</p>
-        </article>)}
-      </div>)}
+const ResultsCarousel = () => {
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const [hasEnteredViewport, setHasEnteredViewport] = useState(false);
+
+  useEffect(() => {
+    if (
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ) {
+      setHasEnteredViewport(true);
+      return;
+    }
+
+    const el = viewportRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') {
+      setHasEnteredViewport(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) {
+          setHasEnteredViewport(true);
+          observer.unobserve(el);
+          observer.disconnect();
+        }
+      },
+      {
+        threshold: 0.2,
+        rootMargin: '0px 0px -24px 0px'
+      }
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div ref={viewportRef} className="zl-results-viewport" tabIndex={0} role="region" aria-label="Potencial de impacto na rotina">
+      <div className="zl-results-track">
+        {[false, true].map(copy => <div key={String(copy)} className="zl-results-group" aria-hidden={copy || undefined}>
+          {results.map(({ impact, title, description, icon: Icon }) => <article key={title} className="zl-result-card">
+            <div className="zl-result-top"><AnimatedStat value={impact} active={hasEnteredViewport} className="zl-result-impact" /><span className="zl-result-icon"><Icon size={16} strokeWidth={1.7} aria-hidden="true" /></span></div>
+            <h3>{title}</h3><p>{description}</p>
+          </article>)}
+        </div>)}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 const moduleIcons: Record<string, LucideIcon> = {
   med: Stethoscope,
   estetic: Sparkles,
