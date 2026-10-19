@@ -12,56 +12,11 @@ import {
   RotateCcw
 } from 'lucide-react';
 
-export type ToothFace = 'vestibular' | 'lingual' | 'palatina' | 'mesial' | 'distal' | 'oclusal' | 'whole';
-
-export interface ToothCondition {
-  id: string;
-  label: string;
-  color: string;
-  bgColor: string;
-  borderColor: string;
-  description: string;
-  affectsFace?: boolean;
-  affectsWholeTooth?: boolean;
-}
-
-export const DENTAL_CONDITIONS: ToothCondition[] = [
-  { id: 'healthy', label: 'Hígido', color: '#64748b', bgColor: 'bg-white', borderColor: 'border-slate-300', description: 'Sem alterações patológicas' },
-  { id: 'decay', label: 'Cárie Ativa', color: '#ef4444', bgColor: 'bg-red-500', borderColor: 'border-red-600', description: 'Lesão cariosa ativa necessitando restauração', affectsFace: true },
-  { id: 'restoration_resin', label: 'Restauração Resina', color: '#3b82f6', bgColor: 'bg-blue-500', borderColor: 'border-blue-600', description: 'Restauração estética em compósito', affectsFace: true },
-  { id: 'restoration_amalgam', label: 'Restauração Amálgama', color: '#475569', bgColor: 'bg-slate-700', borderColor: 'border-slate-800', description: 'Restauração metálica em amálgama', affectsFace: true },
-  { id: 'endodontics', label: 'Canal Tratado (Endo)', color: '#10b981', bgColor: 'bg-emerald-500', borderColor: 'border-emerald-600', description: 'Tratamento endodôntico realizado / obturado', affectsWholeTooth: true },
-  { id: 'endo_indicated', label: 'Canal a Tratar', color: '#f59e0b', bgColor: 'bg-amber-500', borderColor: 'border-amber-600', description: 'Polpa necrosada ou pulpite irreversível', affectsWholeTooth: true },
-  { id: 'crown_prosthesis', label: 'Coroa / Bloco Prótese', color: '#d97706', bgColor: 'bg-amber-600', borderColor: 'border-amber-700', description: 'Prótese fixa, jaqueta, inlay/onlay', affectsWholeTooth: true },
-  { id: 'implant', label: 'Implante Dentário', color: '#8b5cf6', bgColor: 'bg-purple-600', borderColor: 'border-purple-700', description: 'Implante de titânio osseointegrado', affectsWholeTooth: true },
-  { id: 'missing', label: 'Dente Ausente', color: '#1e293b', bgColor: 'bg-slate-900', borderColor: 'border-slate-950', description: 'Dente perdido ou previamente extraído', affectsWholeTooth: true },
-  { id: 'extract_indicated', label: 'Indicação Extração', color: '#dc2626', bgColor: 'bg-rose-600', borderColor: 'border-rose-700', description: 'Exodontia indicada', affectsWholeTooth: true },
-  { id: 'orthodontic_bracket', label: 'Aparelho / Braquete', color: '#ea580c', bgColor: 'bg-orange-500', borderColor: 'border-orange-600', description: 'Acessório ortodôntico instalado', affectsWholeTooth: true },
-  { id: 'fracture', label: 'Dente Fraturado', color: '#e11d48', bgColor: 'bg-rose-500', borderColor: 'border-rose-600', description: 'Trinca ou fratura de esmalte/raiz', affectsFace: true },
-  { id: 'sealant', label: 'Selante Preventivo', color: '#06b6d4', bgColor: 'bg-cyan-500', borderColor: 'border-cyan-600', description: 'Selamento de fóssulas e fissuras', affectsFace: true },
-  { id: 'veneer', label: 'Faceta / Lente', color: '#0d9488', bgColor: 'bg-teal-600', borderColor: 'border-teal-700', description: 'Laminado cerâmico ou resina direta', affectsFace: true },
-  { id: 'periapical_lesion', label: 'Lesão Periapical', color: '#b91c1c', bgColor: 'bg-red-700', borderColor: 'border-red-800', description: 'Radiolucência periapical / granuloma / cisto', affectsWholeTooth: true },
-  // Condições Odontopediátricas e Especiais
-  { id: 'amelogenesis', label: 'Amelogênese Imperfeita', color: '#c084fc', bgColor: 'bg-purple-400', borderColor: 'border-purple-500', description: 'Defeito estrutural de mineralização do esmalte', affectsWholeTooth: true },
-  { id: 'hmi', label: 'HMI (Hipomineralização)', color: '#f97316', bgColor: 'bg-orange-500', borderColor: 'border-orange-600', description: 'Hipomineralização molar-incisivo', affectsFace: true },
-  { id: 'natal_tooth', label: 'Dente Natal / Neonatal', color: '#06b6d4', bgColor: 'bg-cyan-500', borderColor: 'border-cyan-600', description: 'Dente irrompido ao nascimento ou dias após', affectsWholeTooth: true },
-  { id: 'anodontia', label: 'Agenesia / Anodontia', color: '#64748b', bgColor: 'bg-slate-500', borderColor: 'border-slate-600', description: 'Ausência congênita do elemento dental', affectsWholeTooth: true },
-  { id: 'supernumerary', label: 'Dente Supranumerário', color: '#a855f7', bgColor: 'bg-purple-600', borderColor: 'border-purple-700', description: 'Elemento dental supranumerário / mesiodens', affectsWholeTooth: true },
-  { id: 'trauma', label: 'Traumatismo Dental', color: '#ef4444', bgColor: 'bg-red-500', borderColor: 'border-red-600', description: 'Subluxação, intrusão, extrusão ou fratura por trauma infantil', affectsFace: true }
-];
-
-export interface ToothStatus {
-  whole?: string; // condition id
-  vestibular?: string;
-  lingual?: string;
-  palatina?: string;
-  mesial?: string;
-  distal?: string;
-  oclusal?: string;
-  notes?: string;
-}
-
-export type OdontogramData = Record<number, ToothStatus>;
+import { DENTAL_CONDITIONS, OdontogramData, ToothStatus, ToothFace } from './odontogramModel';
+export { DENTAL_CONDITIONS } from './odontogramModel';
+export type { OdontogramData, ToothStatus, ToothFace, ToothCondition } from './odontogramModel';
+import { updateToothCondition, describeToothStatus } from './odontogramClinical';
+import { Odontogram3D } from './Odontogram3D';
 
 interface OdontogramCanvasProps {
   initialData?: OdontogramData;
@@ -92,6 +47,7 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
   onOpenToothDossier,
   readOnly = false
 }) => {
+  const [presentation, setPresentation] = useState<'3d' | '2d'>('3d');
   const [data, setData] = useState<OdontogramData>(currentData);
   const [dentitionType, setDentitionType] = useState<'permanent' | 'deciduous' | 'mixed'>('permanent');
   const [activeCondition, setActiveCondition] = useState<string>('decay');
@@ -99,6 +55,8 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
   const [selectedTeeth, setSelectedTeeth] = useState<number[]>([]);
   const [multiSelectMode, setMultiSelectMode] = useState<boolean>(false);
   const [selectedToothHistory, setSelectedToothHistory] = useState<number | null>(null);
+
+  const show3D = presentation === '3d' && dentitionType === 'permanent' && viewMode !== 'compare';
 
   // Sincronizar estado interno com currentData sempre que atualizado externamente ou via API
   useEffect(() => {
@@ -130,78 +88,7 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
       return;
     }
 
-    const currentTooth = data[toothNumber] || {};
-    const cond = DENTAL_CONDITIONS.find(c => c.id === activeCondition);
-    const isUpperTooth = isUpper(toothNumber);
-    const innerFaceKey: ToothFace = isUpperTooth ? 'palatina' : 'lingual';
-
-    let updatedTooth: ToothStatus = { ...currentTooth };
-    let emittedChanges: any[] = [];
-
-    if (cond?.affectsWholeTooth) {
-      // Condição de dente inteiro (canal, implante, coroa, ausente, etc.)
-      if (updatedTooth.whole === activeCondition) {
-        delete updatedTooth.whole;
-      } else {
-        updatedTooth.whole = activeCondition;
-      }
-      emittedChanges.push({
-        toothNumber,
-        face: 'whole',
-        condition: updatedTooth.whole || 'healthy',
-        previousCondition: currentTooth.whole
-      });
-    } else if (face === 'whole') {
-      // Usuário clicou no botão "Faces/Dente" com uma condição de FACE selecionada (cárie, restauração, selante, etc.)
-      // NUNCA salvar no 'whole' - aplicar nas 5 faces anatômicas
-      const faces: ToothFace[] = ['vestibular', innerFaceKey, 'mesial', 'distal', 'oclusal'];
-      const allActive = faces.every(f => (updatedTooth as any)[f] === activeCondition);
-
-      // Limpar whole caso existisse por erro anterior
-      if (updatedTooth.whole === activeCondition) {
-        delete updatedTooth.whole;
-      }
-
-      faces.forEach(f => {
-        const prev = (currentTooth as any)[f];
-        if (allActive) {
-          delete (updatedTooth as any)[f];
-        } else {
-          (updatedTooth as any)[f] = activeCondition;
-        }
-        emittedChanges.push({
-          toothNumber,
-          face: f,
-          condition: allActive ? 'healthy' : activeCondition,
-          previousCondition: prev
-        });
-      });
-    } else {
-      // Clique em face específica (vestibular, lingual/palatina, mesial, distal, oclusal)
-      const currentFaceVal = (updatedTooth as any)[face];
-      if (currentFaceVal === activeCondition) {
-        delete (updatedTooth as any)[face];
-      } else {
-        (updatedTooth as any)[face] = activeCondition;
-      }
-
-      // Garantir que a condição de face nunca corrompa o 'whole'
-      if (updatedTooth.whole === activeCondition) {
-        delete updatedTooth.whole;
-      }
-
-      emittedChanges.push({
-        toothNumber,
-        face,
-        condition: (updatedTooth as any)[face] || 'healthy',
-        previousCondition: currentFaceVal
-      });
-    }
-
-    const updatedData: OdontogramData = {
-      ...data,
-      [toothNumber]: updatedTooth
-    };
+    const { data: updatedData, changes: emittedChanges } = updateToothCondition(data, toothNumber, face, activeCondition);
 
     setData(updatedData);
 
@@ -221,10 +108,10 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
   };
 
   const applyConditionToSelected = () => {
-    if (selectedTeeth.length === 0 || !activeCondition) return;
+    if (readOnly || viewMode === 'initial' || selectedTeeth.length === 0 || !activeCondition) return;
 
     const cond = DENTAL_CONDITIONS.find(c => c.id === activeCondition);
-    const updatedData = { ...data };
+    let updatedData = data;
     const changes: any[] = [];
 
     // Determina a face real de destino: 'whole' somente para condições de dente inteiro;
@@ -234,26 +121,9 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
       : (cond?.id === 'veneer' ? 'vestibular' : 'oclusal');
 
     for (const tooth of selectedTeeth) {
-      const toothStatus = { ...(updatedData[tooth] || {}) };
-      const prevVal = targetFace === 'whole' ? toothStatus.whole : (toothStatus as any)[targetFace];
-
-      if (cond?.affectsWholeTooth) {
-        toothStatus.whole = activeCondition;
-      } else {
-        (toothStatus as any)[targetFace] = activeCondition;
-        // Previne qualquer presença indevida no campo 'whole'
-        if (toothStatus.whole === activeCondition) {
-          delete toothStatus.whole;
-        }
-      }
-
-      updatedData[tooth] = toothStatus;
-      changes.push({
-        toothNumber: tooth,
-        face: targetFace,
-        condition: activeCondition,
-        previousCondition: prevVal
-      });
+      const result = updateToothCondition(updatedData, tooth, targetFace, activeCondition, false);
+      updatedData = result.data;
+      changes.push(...result.changes);
     }
 
     setData(updatedData);
@@ -458,11 +328,11 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
           {!readOnly && viewMode !== 'initial' && (
             <button
               type="button"
-              title={cond?.affectsWholeTooth ? "Aplicar condição no dente inteiro" : "Aplicar condição em todas as faces"}
+              title={activeCondition === 'healthy' ? 'Limpar somente a condição do dente inteiro' : cond?.affectsWholeTooth ? "Aplicar condição no dente inteiro" : "Aplicar condição em todas as faces"}
               onClick={(e) => handleFaceClick(toothNumber, 'whole', e)}
               className="text-[9px] font-bold text-slate-500 hover:text-cyan-600 hover:underline px-0.5 py-0.5"
             >
-              {cond?.affectsWholeTooth ? 'Dente' : 'Faces'}
+              {cond?.affectsWholeTooth || activeCondition === 'healthy' ? 'Dente' : 'Faces'}
             </button>
           )}
           {onOpenToothDossier && (
@@ -529,6 +399,16 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2" aria-label="Visualização do odontograma">
+        {(['3d', '2d'] as const).map(mode => <button type="button" key={mode}
+          disabled={mode === '3d' && dentitionType !== 'permanent'}
+          aria-pressed={mode === '3d' ? show3D : !show3D}
+          onClick={() => { setPresentation(mode); if (viewMode === 'compare') setViewMode('current'); }}
+          className={'px-4 py-2 rounded-xl text-xs font-bold border disabled:opacity-40 ' + ((mode === '3d' ? show3D : !show3D) ? 'bg-cyan-600 text-white border-cyan-600' : 'bg-white text-slate-600 border-slate-200')}>
+          {mode === '3d' ? 'Odontograma 3D' : 'Faces 2D'}
+        </button>)}
+        {dentitionType !== 'permanent' && <p className="text-xs text-slate-500">Visualização 3D disponível atualmente para dentição permanente.</p>}
+      </div>
       {/* Barra de Ferramentas do Odontograma */}
       <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-white border border-slate-200 rounded-2xl shadow-xs">
         {/* Modos de visualização: Atual vs Inicial vs Comparativo */}
@@ -624,7 +504,7 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
               {multiSelectMode ? '✓ Seleção Múltipla Ativa' : 'Modo Seleção Múltipla'}
             </button>
 
-            {multiSelectMode && selectedTeeth.length > 0 && (
+            {!show3D && multiSelectMode && selectedTeeth.length > 0 && (
               <button
                 type="button"
                 onClick={applyConditionToSelected}
@@ -677,6 +557,17 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
         </div>
       )}
 
+      {show3D && <Odontogram3D
+        currentData={viewMode === 'initial' ? initialData : data}
+        activeCondition={activeCondition}
+        readOnly={readOnly || viewMode === 'initial'}
+        selectedTeeth={selectedTeeth} multiSelectMode={multiSelectMode}
+        onToggleTooth={toggleToothSelection}
+        onChange={(updated, changes) => { setData(updated); onChange?.(updated, changes); }}
+        onToothClick={onToothClick} onOpenToothDossier={onOpenToothDossier}
+        onShowFaces={() => setPresentation('2d')}
+      />}
+      <div hidden={show3D}>
       {/* Exibição Odontograma: Arcada Superior e Inferior */}
       <div className="bg-slate-50/70 border border-slate-200 rounded-3xl p-4 sm:p-6 space-y-6 sm:space-y-8 shadow-xs">
         {/* ARCADA SUPERIOR */}
@@ -742,6 +633,8 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
         </div>
       </div>
 
+      </div>
+
       {/* MODO COMPARATIVO (Mostra lado a lado com a mesma unificação de arcada) */}
       {viewMode === 'compare' && (
         <div className="p-5 bg-cyan-50/50 border border-cyan-200 rounded-3xl space-y-4">
@@ -760,7 +653,7 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
       )}
 
       {/* Histórico do Dente Selecionado */}
-      {selectedToothHistory && (
+      {!show3D && selectedToothHistory && (
         <div className="p-4 bg-white border border-slate-200 rounded-2xl space-y-3 shadow-xs">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -780,7 +673,7 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
 
           <div className="text-xs text-slate-600 space-y-1">
             <p>
-              <strong>Status Atual:</strong> {JSON.stringify(data[selectedToothHistory] || 'Hígido')}
+              <strong>Status Atual:</strong> {describeToothStatus(data[selectedToothHistory], selectedToothHistory)}
             </p>
             <p className="text-[11px] text-slate-500">
               Clique nas faces geométricas acima para adicionar restaurações, cáries ou tratamentos endodônticos.

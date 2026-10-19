@@ -56,7 +56,7 @@ import { ClinicalInventorySelector, ClinicalInventorySelection } from '../clinic
 import { ClinicalModuleShell, ClinicalModuleTabItem } from '../clinical/ClinicalModuleShell';
 
 const DENTAL_TABS: ClinicalModuleTabItem[] = [
-  { id: 'odontogram', label: 'Odontograma 2D', icon: Smile },
+  { id: 'odontogram', label: 'Odontograma', icon: Smile },
   { id: 'treatment_plans', label: 'Planos & Orçamento', icon: DollarSign },
   { id: 'perio', label: 'Periodontia (PERIO)', icon: Activity },
   { id: 'endo', label: 'Endodontia (ENDO)', icon: Scissors },
@@ -1178,6 +1178,7 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
               </div>
 
               <OdontogramCanvas
+                key={selectedPatientId}
                 initialData={initialOdontogramData}
                 currentData={odontogramData}
                 onOpenToothDossier={(toothNum) => {

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Clock, FileText, Camera, Activity, Scissors, Package, AlertCircle, Plus, Calendar, CheckCircle2 } from 'lucide-react';
 import { ApiClient } from '../../api/client';
 import { DENTAL_CONDITIONS } from './OdontogramCanvas';
+import { conditionLabel } from './odontogramClinical';
 
 export interface ToothDossierDrawerProps {
   isOpen: boolean;
@@ -103,14 +104,14 @@ export const ToothDossierDrawer: React.FC<ToothDossierDrawerProps> = ({
             <div className="space-y-0.5">
               <span className="text-[10px] text-slate-400 font-bold uppercase">Estado Inicial</span>
               <div className="font-semibold text-slate-700 dark:text-slate-300">
-                {initialStatus?.whole || 'Hígido / Não registrado'}
+                {conditionLabel(initialStatus?.whole)}
               </div>
             </div>
             <div className="h-6 w-px bg-slate-200 dark:bg-slate-700" />
             <div className="space-y-0.5 text-right">
               <span className="text-[10px] text-cyan-600 dark:text-cyan-400 font-bold uppercase">Estado Atual</span>
               <div className="font-bold text-cyan-700 dark:text-cyan-300">
-                {currentStatus?.whole || 'Hígido'}
+                {conditionLabel(currentStatus?.whole)}
               </div>
             </div>
           </div>
@@ -128,7 +129,7 @@ export const ToothDossierDrawer: React.FC<ToothDossierDrawerProps> = ({
                       : 'bg-white dark:bg-slate-800 text-slate-400'
                   }`}
                 >
-                  {face.slice(0, 1).toUpperCase()}: {currentStatus[face] || 'OK'}
+                  {face.slice(0, 1).toUpperCase()}: {conditionLabel(currentStatus[face])}
                 </span>
               ))}
             </div>
@@ -167,7 +168,7 @@ export const ToothDossierDrawer: React.FC<ToothDossierDrawerProps> = ({
                           {item.type === 'implant' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />}
                           {item.type === 'photo' && <Camera className="w-3.5 h-3.5 text-indigo-600" />}
                           {item.type === 'exam' && <Calendar className="w-3.5 h-3.5 text-blue-600" />}
-                          {item.title || item.type}
+                          {item.type === 'tooth_record' && item.condition ? conditionLabel(item.condition) : item.title || 'Registro clínico'}
                         </span>
                         <span className="text-[10px] text-slate-400">
                           {item.date ? new Date(item.date).toLocaleDateString('pt-BR') : '-'}
