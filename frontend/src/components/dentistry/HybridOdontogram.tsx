@@ -6,7 +6,7 @@ const HybridDentalArch = lazy(() => import('./HybridDentalArch'));
 export class AnatomicalViewBoundary extends React.Component<{onShowFaces:()=>void;children:React.ReactNode},{failed:boolean}> {
   state={failed:false};
   static getDerivedStateFromError(){return {failed:true};}
-  render(){return this.state.failed ? <div role="alert" className="p-6 space-y-3"><p>Não foi possível carregar a visualização anatômica.</p><button type="button" className={button} onClick={this.props.onShowFaces}>Abrir Mapa de Faces 2D</button></div> : this.props.children;}
+  render(){return this.state.failed ? <div role="alert" className="p-6 space-y-3"><p>Não foi possível carregar a visualização anatômica.</p><button type="button" className={button} onClick={this.props.onShowFaces}>Continuar no odontograma</button></div> : this.props.children;}
 }
 
 interface Props {
@@ -58,7 +58,7 @@ export function HybridOdontogram({ currentData, activeCondition, onChange, onToo
     const result = updateToothCondition(currentData, tooth, face, activeCondition);
     if (result.changes.length) onChange(result.data, result.changes);
   };
-  return <section aria-label="Odontograma híbrido interativo" className="min-w-0 max-w-full bg-white border border-slate-200 rounded-2xl p-3 sm:p-4 space-y-3">
+  return <section aria-label="Odontograma" className="min-w-0 max-w-full bg-white border border-slate-200 rounded-2xl p-3 sm:p-4 space-y-3">
     <div className="flex flex-wrap justify-between items-center gap-2">
       <p className="text-xs text-slate-500">Anatomia e faces do mesmo dente · Clique nas faces para registrar a condição.</p>
       <div className="flex gap-1 items-center">
@@ -86,7 +86,7 @@ export function HybridOdontogram({ currentData, activeCondition, onChange, onToo
       {selected && <dl className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
         {([...toothFaces(selected), 'whole'] as ToothFace[]).map(face => <div key={face}><dt className="text-slate-500">{faceLabel(face, selected)}</dt><dd className="font-semibold text-slate-700">{conditionLabel(currentData[selected]?.[face])}</dd></div>)}
       </dl>}
-      {!readOnly && targets.length > 0 && <div className="space-y-2">
+      {!readOnly && multiSelectMode && targets.length > 0 && <div className="space-y-2">
         <p className="text-xs font-semibold text-slate-600">{condition?.affectsWholeTooth ? condition.label : `${conditionLabel(activeCondition)} — selecione a face${multiSelectMode ? ' para os dentes selecionados' : ''}:`}</p>
         <div className="flex flex-wrap gap-2">
           {condition?.affectsWholeTooth ? <button type="button" className={button} onClick={() => apply('whole')}>Aplicar condição</button> : <>
@@ -96,7 +96,7 @@ export function HybridOdontogram({ currentData, activeCondition, onChange, onToo
         </div>
       </div>}
       <div className="flex flex-wrap gap-2">
-        <button type="button" className={button} onClick={onShowFaces}>Ampliar somente faces</button>
+        {!readOnly && !multiSelectMode && selected && activeCondition === 'healthy' && <button type="button" className={button} onClick={() => apply('whole')}>Limpar condição do dente inteiro</button>}
         {selected && onOpenToothDossier && <><button type="button" className={button} onClick={() => onOpenToothDossier(selected)}>Abrir dossiê</button><button type="button" className={button} onClick={() => onOpenToothDossier(selected)}>Histórico</button></>}
       </div>
     </div>}

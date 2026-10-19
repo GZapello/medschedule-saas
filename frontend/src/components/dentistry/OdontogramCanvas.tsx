@@ -48,7 +48,7 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
   onOpenToothDossier,
   readOnly = false
 }) => {
-  const [presentation, setPresentation] = useState<'3d' | '2d'>('3d');
+  const [anatomyUnavailable, setAnatomyUnavailable] = useState(false);
   const [data, setData] = useState<OdontogramData>(currentData);
   const [dentitionType, setDentitionType] = useState<'permanent' | 'deciduous' | 'mixed'>('permanent');
   const [activeCondition, setActiveCondition] = useState<string>('decay');
@@ -57,7 +57,7 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
   const [multiSelectMode, setMultiSelectMode] = useState<boolean>(false);
   const [selectedToothHistory, setSelectedToothHistory] = useState<number | null>(null);
 
-  const show3D = presentation === '3d' && dentitionType === 'permanent' && viewMode !== 'compare';
+  const show3D = !anatomyUnavailable && dentitionType === 'permanent' && viewMode !== 'compare';
 
   // Sincronizar estado interno com currentData sempre que atualizado externamente ou via API
   useEffect(() => {
@@ -320,16 +320,6 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2" aria-label="Visualização do odontograma">
-        {(['3d', '2d'] as const).map(mode => <button type="button" key={mode}
-          disabled={mode === '3d' && dentitionType !== 'permanent'}
-          aria-pressed={mode === '3d' ? show3D : !show3D}
-          onClick={() => { setPresentation(mode); if (viewMode === 'compare') setViewMode('current'); }}
-          className={'px-4 py-2 rounded-xl text-xs font-bold border disabled:opacity-40 ' + ((mode === '3d' ? show3D : !show3D) ? 'bg-cyan-600 text-white border-cyan-600' : 'bg-white text-slate-600 border-slate-200')}>
-          {mode === '3d' ? 'Odontograma Híbrido' : 'Faces 2D'}
-        </button>)}
-        {dentitionType !== 'permanent' && <p className="text-xs text-slate-500">Visualização híbrida disponível atualmente para dentição permanente.</p>}
-      </div>
       {/* Barra de Ferramentas do Odontograma */}
       <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-white border border-slate-200 rounded-2xl shadow-xs">
         {/* Modos de visualização: Atual vs Inicial vs Comparativo */}
@@ -486,9 +476,9 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
         onToggleTooth={toggleToothSelection}
         onChange={(updated, changes) => { setData(updated); onChange?.(updated, changes); }}
         onToothClick={onToothClick} onOpenToothDossier={onOpenToothDossier}
-        onShowFaces={() => setPresentation('2d')}
+        onShowFaces={() => setAnatomyUnavailable(true)}
       />}
-      <div hidden={show3D}>
+      {!show3D && <div>
       {/* Exibição Odontograma: Arcada Superior e Inferior */}
       <div className="bg-slate-50/70 border border-slate-200 rounded-3xl p-4 sm:p-6 space-y-6 sm:space-y-8 shadow-xs">
         {/* ARCADA SUPERIOR */}
@@ -554,7 +544,7 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
         </div>
       </div>
 
-      </div>
+      </div>}
 
       {/* MODO COMPARATIVO (Mostra lado a lado com a mesma unificação de arcada) */}
       {viewMode === 'compare' && (

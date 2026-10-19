@@ -11,8 +11,10 @@ const order=[[18,17,16,15,14,13,12,11],[21,22,23,24,25,26,27,28],[48,47,46,45,44
   const img=new Image();img.src=data;await img.decode();
   const results=[];
   for(let row=0;row<4;row++)for(let col=0;col<8;col++){
-   const canvas=document.createElement('canvas');canvas.width=img.width/8;canvas.height=img.height/4;
-   const ctx=canvas.getContext('2d');ctx.drawImage(img,col*canvas.width,row*canvas.height,canvas.width,canvas.height,0,0,canvas.width,canvas.height);
+   const cellWidth=img.width/8,cellHeight=img.height/4;
+   // 48 extends beyond the nominal first column; include its entire crown.
+   const canvas=document.createElement('canvas');canvas.width=order[row][col]===48?240:cellWidth;canvas.height=cellHeight;
+   const ctx=canvas.getContext('2d');ctx.drawImage(img,col*cellWidth,row*cellHeight,canvas.width,canvas.height,0,0,canvas.width,canvas.height);
    const pixels=ctx.getImageData(0,0,canvas.width,canvas.height);let opaque=0,transparent=0;
    for(let i=3;i<pixels.data.length;i+=4){if(pixels.data[i]>128)opaque++;if(pixels.data[i]===0)transparent++;}
    if(opaque<1000||transparent<1000)throw Error('Invalid transparent tooth cell '+order[row][col]);

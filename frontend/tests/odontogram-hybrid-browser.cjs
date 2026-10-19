@@ -63,11 +63,11 @@ let browser;
  assert.match(await anatomy(46).getAttribute('aria-label'),/Canal Tratado/);
  await page.getByRole('button',{name:'Restauração Resina',exact:true}).click();await face(46,'oclusal').click();
  assert.equal(await face(46,'oclusal').getAttribute('fill'),'#3b82f6');assert.match(await anatomy(46).getAttribute('aria-label'),/Oclusal: Restauração Resina/);
- // Legacy focused map uses the same mini-map and shared data.
- await page.getByRole('button',{name:'Faces 2D',exact:true}).click();
- const focused=page.locator('[data-face-map="46"]:visible');assert.equal(await focused.locator('[data-face="oclusal"]').getAttribute('fill'),'#3b82f6');
- await focused.locator('[data-face="distal"]').click();
- await page.getByRole('button',{name:'Odontograma Híbrido',exact:true}).click();await page.waitForFunction(()=>document.querySelectorAll('canvas[data-ready="true"]').length===32);
+ assert.equal(await page.getByRole('button',{name:/Faces 2D|Odontograma Híbrido|Ampliar somente faces/}).count(),0);
+ assert.doesNotMatch(await page.locator('body').innerText(),/híbrido|2D/i);
+ assert.equal(await page.locator('[data-face-map]').count(),32);
+ assert.equal(await panel().getByRole('button',{name:'Oclusal',exact:true}).count(),0);
+ await face(46,'distal').click();
  assert.match(await anatomy(46).getAttribute('aria-label'),/Distal: Restauração Resina/);
  await page.getByRole('button',{name:'Salvar Odontograma',exact:true}).click();await page.getByText('Odontograma salvo com sucesso!',{exact:true}).waitFor();
  assert.equal(data[46].whole,'endodontics');assert.equal(data[46].oclusal,'restoration_resin');assert.ok(changes.some(c=>c.toothNumber===46&&c.face==='oclusal'));
@@ -84,10 +84,10 @@ let browser;
  await page.getByRole('button',{name:'Permanente',exact:true}).click();await anatomy(46).waitFor();
  await page.getByRole('button',{name:'Odontograma Inicial',exact:true}).click();await face(46,'oclusal').click();assert.equal(await face(46,'oclusal').getAttribute('fill'),'#fff');
  await page.getByRole('button',{name:'Comparativo',exact:true}).click();await page.getByText('Comparativo: Odontograma Inicial (Registro de Entrada)',{exact:true}).waitFor();
- await page.getByRole('button',{name:'Odontograma Híbrido',exact:true}).click();
+ await page.getByRole('button',{name:'Odontograma Atual',exact:true}).click();
  for(const width of [1440,768,390]){
   await page.setViewportSize({width,height:1100});await page.getByRole('button',{name:'Reset',exact:true}).click();
-  await page.getByLabel('Odontograma híbrido interativo').scrollIntoViewIfNeeded();
+  await page.getByRole('region',{name:'Odontograma',exact:true}).scrollIntoViewIfNeeded();
   await page.screenshot({path:path.join(__dirname,`../../tmp/odontogram-hybrid-${width}.png`)});
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'overflow '+width);
  }
