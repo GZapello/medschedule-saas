@@ -88,6 +88,57 @@ let server,checks=0;const check=(a,b,msg)=>{assert.deepEqual(a,b,msg);checks++;}
  const pendingDocument=await call('/pending-exams/'+pending.data.id+'/document');check(pendingDocument.status,200);
  check(pendingDocument.data.document.patient_name,'Paciente A');check(pendingDocument.data.document.attendance_time,undefined);
  check((await call('/pending-exams',{patientId:'patient-A',professionalId:'prof-B',examName:'Exame QA'})).status,400);
+ const callMethod=async(method,url,body,auth=token(),tenant='A')=>{
+  const r=await fetch(base+url,{method,headers:{Authorization:'Bearer '+auth,'Content-Type':'application/json','X-Tenant-ID':tenant},body:body?JSON.stringify(body):undefined});
+  return {status:r.status,data:await r.json()};
+ };
+ // TESTE 1: Paciente agendado 14:00-14:50, ajustado para 13:40 antes de iniciar
+ db.prepare("INSERT INTO appointments(id,tenant_id,appointment_number,patient_id,professional_id,service_id,start_time,end_time,status,modality) VALUES('early-appt','A','AG-EARLY','patient-A','prof-A','service-A','2026-10-21T14:00:00','2026-10-21T14:50:00','scheduled','presential')").run();
+ const adjusted=await callMethod('PUT','/appointments/early-appt/attendance-time',{attendanceDate:'2026-10-21',attendanceStartTime:'13:40'});
+ check(adjusted.status,200,JSON.stringify(adjusted));
+ check(adjusted.data.start_time,'2026-10-21T14:00:00');
+ check(adjusted.data.end_time,'2026-10-21T14:50:00');
+ check(adjusted.data.attendance_start_at,'2026-10-21T13:40:00');
+ check(adjusted.data.attendance_expected_end_at,'2026-10-21T14:30:00');
+ const started=await callMethod('PUT','/appointments/early-appt/status',{status:'in_progress'});
+ check(started.status,200,JSON.stringify(started));
+ check(started.data.attendance_start_at,'2026-10-21T13:40:00');
+ check(started.data.attendance_expected_end_at,'2026-10-21T14:30:00');
+ // TESTE 6: Documento emitido antes de finalizar usa apenas horário de início (nunca previsão 14:30)
+ const preFinishCert=await call('/clinical/certificates',{patientId:'patient-A',appointmentId:'early-appt',certificateType:'attendance'});
+ check(preFinishCert.status,201);
+ const preFinishDoc=(await call('/clinical/certificates/'+preFinishCert.data.id)).data.document;
+ check(preFinishDoc.attendance_date,'2026-10-21');
+ check(preFinishDoc.attendance_time,'13:40');
+ check(preFinishDoc.attendance_end_time,null);
+ // TESTE 2 & 3: Finalizar às 14:37 grava attendance_end_at, session_end_time e congela documento
+ const earlyFinished=await call('/appointments/early-appt/finish',{evolution:{clinicalEvolution:'Atendimento adiantado concluído'},certificate:{certificateType:'attendance'},attendanceEndTime:'14:37',saveOnly:true});
+ check(earlyFinished.status,200,JSON.stringify(earlyFinished));
+ const earlyApptAfter=db.prepare("SELECT * FROM appointments WHERE id='early-appt'").get();
+ check(earlyApptAfter.start_time,'2026-10-21T14:00:00');
+ check(earlyApptAfter.attendance_start_at,'2026-10-21T13:40:00');
+ check(earlyApptAfter.attendance_expected_end_at,'2026-10-21T14:30:00');
+ check(earlyApptAfter.attendance_end_at,'2026-10-21T14:37:00');
+ const earlyRecord=db.prepare("SELECT * FROM records WHERE appointment_id='early-appt'").get();
+ check(earlyRecord.session_date,'2026-10-21');
+ check(earlyRecord.session_time,'13:40');
+ check(earlyRecord.session_end_time,'14:37');
+ const finishCertDoc=(await call('/clinical/certificates/'+earlyFinished.data.generatedDocs.certificateId)).data.document;
+ check(finishCertDoc.attendance_date,'2026-10-21');
+ check(finishCertDoc.attendance_time,'13:40');
+ check(finishCertDoc.attendance_end_time,'14:37');
+ check((await call('/clinical/certificates/'+preFinishCert.data.id)).data.document.attendance_end_time,null);
+ // TESTE 4: Atendimento retroativo criado para data passada
+ const retroCreated=await call('/appointments',{patientId:'patient-A',professionalId:'prof-A',serviceId:'service-A',startTime:'2026-10-20T14:00:00',endTime:'2026-10-20T14:50:00',isRetroactive:true,modality:'presential'});
+ check(retroCreated.status,201,JSON.stringify(retroCreated));
+ check(retroCreated.data.status,'in_progress');
+ check(retroCreated.data.attendance_start_at,'2026-10-20T14:00:00');
+ check(retroCreated.data.attendance_expected_end_at,'2026-10-20T14:50:00');
+ const retroEvo=await call('/clinical-records',{patientId:'patient-A',appointmentId:retroCreated.data.id,professionalId:'prof-A',title:'Evolução Retroativa',clinicalEvolution:'Evolução registrada retroativamente'});
+ check(retroEvo.status,201,JSON.stringify(retroEvo));
+ const retroRec=db.prepare('SELECT * FROM records WHERE id=?').get(retroEvo.data.id);
+ check(retroRec.session_date,'2026-10-20');
+ check(retroRec.session_time,'14:00');
  check(db.prepare('PRAGMA foreign_key_check').all(),[]);
  console.log(`PASS: ${checks} document API assertions (time snapshots, imported/missing time, date, professional, tenant, roles, standalone issuance and consultation completion).`);
 })().catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>server?.close());

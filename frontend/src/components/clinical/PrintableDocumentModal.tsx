@@ -368,7 +368,12 @@ export const PrintableDocumentModal: React.FC<PrintableDocumentModalProps> = ({
 
             {doc.attendance_date && <div className="text-xs flex flex-wrap gap-x-6 gap-y-2" data-testid="document-attendance">
               <p><strong>Data do atendimento:</strong> {formatClinicalDate(doc.attendance_date)}</p>
-              {doc.attendance_time && <p><strong>Horário do atendimento:</strong> {doc.attendance_time}</p>}
+              {doc.attendance_time && (
+                <p>
+                  <strong>Horário do atendimento:</strong>{' '}
+                  {doc.attendance_end_time ? `${doc.attendance_time} às ${doc.attendance_end_time}` : doc.attendance_time}
+                </p>
+              )}
             </div>}
 
             {/* Body */}
@@ -378,7 +383,7 @@ export const PrintableDocumentModal: React.FC<PrintableDocumentModalProps> = ({
                   <p className="indent-8 text-justify">
                     {doc.certificate_type==='attendance' ? 'Declaro' : 'Atesto'} para os devidos fins que o(a) paciente <strong>{doc.patient_name}</strong> esteve sob meus cuidados profissionais
                     {doc.attendance_date ? ` em ${formatClinicalDate(doc.attendance_date)}` : ''}
-                    {doc.attendance_time ? `, às ${doc.attendance_time}` : ''}
+                    {doc.attendance_time ? (doc.attendance_end_time ? `, das ${doc.attendance_time} às ${doc.attendance_end_time}` : `, às ${doc.attendance_time}`) : ''}
                     {doc.certificate_type==='rest' && doc.days_off ? `, devendo permanecer em repouso e afastado(a) de suas atividades por ${doc.days_off} dia(s)${doc.start_date ? `, a contar de ${formatClinicalDate(doc.start_date)}` : ''}.` : '.'}
 
                   </p>

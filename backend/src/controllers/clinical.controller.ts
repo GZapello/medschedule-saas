@@ -1,4 +1,5 @@
 import { clinicalPatientIdentity } from '../middlewares/shared-patient.middleware';
+import { extractDatePart, extractTimePart, getClinicLocalNowIso } from '../services/document-context.service';
 import { canAccessPatient, sharedOrigins, canReadSharedRecord } from '../services/patient-sharing.service';
 import { isPrimaryClinicalModule, resolveClinicalModule } from '../utils/clinical-module';
 import { Request, Response } from 'express';
@@ -233,7 +234,7 @@ export class ClinicalController {
       const stmt = db.prepare(`
         SELECT 
           r.id, r.tenant_id, r.patient_id, r.appointment_id, r.professional_id,
-          r.session_date, r.session_date as consultation_date, r.session_time, r.session_time as consultation_time,
+          r.session_date, r.session_date as consultation_date, r.session_time, r.session_time as consultation_time, r.session_end_time,
           r.procedure_name, r.title, r.clinical_evolution,
           r.technical_notes, r.private_notes, r.conducts, r.conducts as conduct_plan,
           COALESCE(r.module_type, p.practice_areas, 'Geral') as specialty_or_module,
@@ -338,12 +339,12 @@ export class ClinicalController {
     try {
       const tenantId = req.tenantId;
       const {
-        patientId, appointmentId, professionalId, sessionDate, sessionTime,
+        patientId, appointmentId, professionalId, sessionDate, sessionTime, sessionEndTime,
         title, clinicalEvolution, technicalNotes, privateNotes, isSealed,
         procedureName, conducts, clinicalData, moduleType, moduleData
       } = req.body;
 
-      if (!patientId || !sessionDate || !title) {
+      if (!patientId || (!sessionDate && !appointmentId) || !title) {
         res.status(400).json({ error: 'Paciente, data da sessão e título são obrigatórios' });
         return;
       }
@@ -407,11 +408,62 @@ export class ClinicalController {
       const moduleDataJson = moduleData ? (typeof moduleData === 'string' ? moduleData : JSON.stringify(moduleData)) : null;
 
       const now = new Date();
-      const effectiveSessionDate = sessionDate ? String(sessionDate).trim() : now.toISOString().split('T')[0];
+      const localNowIso = getClinicLocalNowIso(now);
+      const apptTimeRow = appointmentId
+        ? (db.prepare('SELECT start_time, attendance_start_at, attendance_end_at FROM appointments WHERE id = ? AND tenant_id = ?').get(appointmentId, tenantId) as any)
+        : null;
+      const existingApptRec = appointmentId
+        ? (db.prepare('SELECT session_date, session_time, session_end_time FROM records WHERE appointment_id = ? AND tenant_id = ? ORDER BY created_at DESC LIMIT 1').get(appointmentId, tenantId) as any)
+        : null;
+
+      // Prioridade (Item 22):
+      // 1. horário real do atendimento (attendance_start_at ou sessionDate/sessionTime explícitos)
+      // 2. horário do prontuário já existente
+      // 3. horário agendado (appointment.start_time)
+      // 4. horário atual somente quando não houver contexto anterior
+      const realApptDate = extractDatePart(apptTimeRow?.attendance_start_at);
+      const schedApptDate = extractDatePart(apptTimeRow?.start_time);
+      const bodyDate = extractDatePart(sessionDate);
+      const effectiveSessionDate =
+        (realApptDate && (!bodyDate || bodyDate === schedApptDate) ? realApptDate : bodyDate) ||
+        realApptDate ||
+        extractDatePart(existingApptRec?.session_date) ||
+        schedApptDate ||
+        extractDatePart(localNowIso) ||
+        now.toISOString().split('T')[0];
+
+      let effectiveSessionTime: string | null;
+      if (sessionTime === null) {
+        effectiveSessionTime = null;
+      } else if (sessionTime !== undefined && String(sessionTime).trim() !== '') {
+        effectiveSessionTime = extractTimePart(sessionTime) || String(sessionTime).trim();
+      } else {
+        effectiveSessionTime =
+          extractTimePart(apptTimeRow?.attendance_start_at) ||
+          extractTimePart(existingApptRec?.session_time) ||
+          extractTimePart(apptTimeRow?.start_time) ||
+          extractTimePart(localNowIso);
+      }
+
+      const rawSessionEndTime = req.body.sessionEndTime !== undefined ? req.body.sessionEndTime : req.body.session_end_time;
+      let effectiveSessionEndTime: string | null = null;
+      if (rawSessionEndTime === null) {
+        effectiveSessionEndTime = null;
+      } else if (rawSessionEndTime !== undefined && String(rawSessionEndTime).trim() !== '') {
+        effectiveSessionEndTime = extractTimePart(rawSessionEndTime) || String(rawSessionEndTime).trim();
+      } else {
+        effectiveSessionEndTime =
+          extractTimePart(apptTimeRow?.attendance_end_at) ||
+          extractTimePart(existingApptRec?.session_end_time) ||
+          null;
+      }
+      if (false) {
+        const effectiveSessionDate = sessionDate ? String(sessionDate).trim() : now.toISOString().split('T')[0];
       const effectiveSessionTime = sessionTime !== undefined
         ? (sessionTime && String(sessionTime).trim() ? String(sessionTime).trim() : null)
         : now.toTimeString().slice(0, 5);
 
+      }
       // Assinatura eletrônica e integridade criptográfica
       let signatureHash: string | null = null;
       let signedAt: string | null = null;
@@ -437,13 +489,13 @@ export class ClinicalController {
       const insertStmt = db.prepare(`
         INSERT INTO records (
           id, tenant_id, patient_id, appointment_id, professional_id,
-          session_date, session_time, procedure_name, title, clinical_evolution,
+          session_date, session_time, session_end_time, procedure_name, title, clinical_evolution,
           technical_notes, private_notes, conducts, clinical_data_json, module_type,
           module_data_json, is_sealed, signature_hash, signed_at, signed_by_user_id,
           signer_name, signer_registration, sealed_at, amendments_json,
           created_by, updated_by, created_at, updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, datetime('now'), datetime('now'))
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, datetime('now'), datetime('now'))
       `);
 
       insertStmt.run(
@@ -454,6 +506,7 @@ export class ClinicalController {
         resolvedProfId,
         effectiveSessionDate,
         effectiveSessionTime,
+        effectiveSessionEndTime,
         procedureName || null,
         title,
         clinicalEvolution || null,
@@ -488,7 +541,7 @@ export class ClinicalController {
     try {
       const { id } = req.params;
       const tenantId = req.tenantId;
-      const { title, clinicalEvolution, technicalNotes, privateNotes, isSealed, sessionDate, sessionTime, reason, amendmentReason, notes } = req.body;
+      const { title, clinicalEvolution, technicalNotes, privateNotes, isSealed, sessionDate, sessionTime, sessionEndTime, reason, amendmentReason, notes } = req.body;
 
       const record = db.prepare('SELECT * FROM records WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
       if (!record) {
@@ -544,7 +597,9 @@ export class ClinicalController {
         amendments.push(newAmendment);
 
         // Histórico de trilha
-        let history: any[] = [];
+        if (true) {
+        }
+      let history: any[] = [];
         try {
           if (record.edit_history_json) history = JSON.parse(record.edit_history_json);
         } catch (_) {}
@@ -580,7 +635,13 @@ export class ClinicalController {
       // Constrói histórico de versionamento (Item 11) com rastreamento de data e horário
       const effectiveSessionDate = sessionDate !== undefined ? (sessionDate && String(sessionDate).trim() ? String(sessionDate).trim() : null) : record.session_date;
       const effectiveSessionTime = sessionTime !== undefined ? (sessionTime && String(sessionTime).trim() ? String(sessionTime).trim() : null) : record.session_time;
+      const rawUpdateEndTime = sessionEndTime !== undefined ? sessionEndTime : req.body.session_end_time;
+      const effectiveSessionEndTime = rawUpdateEndTime !== undefined ? (rawUpdateEndTime && String(rawUpdateEndTime).trim() ? String(rawUpdateEndTime).trim() : null) : (record.session_end_time ?? null);
+      if (false) {
+        // legacy
+      const effectiveSessionTime = sessionTime !== undefined ? (sessionTime && String(sessionTime).trim() ? String(sessionTime).trim() : null) : record.session_time;
 
+      }
       let history: any[] = [];
       try {
         if (record.edit_history_json) {
@@ -594,7 +655,11 @@ export class ClinicalController {
         previous_title: record.title,
         previous_evolution: record.clinical_evolution,
         previous_session_date: record.session_date,
-        previous_session_time: record.session_time
+        previous_session_time: record.session_time,
+        previous_session_end_time: record.session_end_time ?? null,
+        new_session_date: effectiveSessionDate,
+        new_session_time: effectiveSessionTime,
+        new_session_end_time: effectiveSessionEndTime
       };
       if (sessionDate !== undefined && effectiveSessionDate !== record.session_date) {
         historyEntry.new_session_date = effectiveSessionDate;
@@ -628,7 +693,9 @@ export class ClinicalController {
         newSignatureHash = crypto.createHash('sha256').update(payloadToHash).digest('hex');
       }
 
-      const updateStmt = db.prepare(`
+      const updateStmt = db.prepare(`UPDATE records SET title = COALESCE(?, title), clinical_evolution = COALESCE(?, clinical_evolution), technical_notes = COALESCE(?, technical_notes), private_notes = COALESCE(?, private_notes), session_date = ?, session_time = ?, session_end_time = ?, is_sealed = COALESCE(?, is_sealed), signature_hash = COALESCE(?, signature_hash), signed_at = COALESCE(?, signed_at), signed_by_user_id = COALESCE(?, signed_by_user_id), signer_name = COALESCE(?, signer_name), signer_registration = COALESCE(?, signer_registration), sealed_at = COALESCE(?, sealed_at), updated_by = ?, edit_history_json = ?, updated_at = datetime('now') WHERE id = ? AND tenant_id = ?`);
+      if (false) {
+        const updateStmt = db.prepare(`
         UPDATE records SET
           title = COALESCE(?, title),
           clinical_evolution = COALESCE(?, clinical_evolution),
@@ -636,6 +703,9 @@ export class ClinicalController {
           private_notes = COALESCE(?, private_notes),
           session_date = ?,
           session_time = ?,
+          session_date = ?,
+          session_time = ?,
+          session_end_time = ?,
           is_sealed = COALESCE(?, is_sealed),
           signature_hash = COALESCE(?, signature_hash),
           signed_at = COALESCE(?, signed_at),
@@ -649,6 +719,7 @@ export class ClinicalController {
         WHERE id = ? AND tenant_id = ?
       `);
 
+      }
       updateStmt.run(
         title !== undefined ? title : null,
         clinicalEvolution !== undefined ? clinicalEvolution : null,
@@ -656,6 +727,7 @@ export class ClinicalController {
         privateNotes !== undefined ? privateNotes : null,
         effectiveSessionDate,
         effectiveSessionTime,
+        effectiveSessionEndTime,
         isSealed !== undefined ? (isSealed ? 1 : 0) : null,
         newSignatureHash || null,
         newSignedAt || null,
@@ -969,7 +1041,7 @@ export class ClinicalController {
 
             <div class="patient-box">
               <p><strong>Paciente:</strong> ${record.patient_name} | <strong>CPF:</strong> ${record.patient_cpf || 'Não informado'} | <strong>Nascimento:</strong> ${record.patient_birth_date || '-'}</p>
-              <p><strong>Data do Atendimento:</strong> ${new Date(record.session_date + 'T12:00:00').toLocaleDateString('pt-BR')} | <strong>Horário:</strong> ${record.session_time ? record.session_time.slice(0, 5) : 'Não informado'} | <strong>Profissional:</strong> ${formattedProfName} (${record.registration_type || 'Conselho'} ${record.registration_number || ''})</p>
+              <p><strong>Data do Atendimento:</strong> ${new Date(record.session_date + 'T12:00:00').toLocaleDateString('pt-BR')} | <strong>Horário:</strong> ${record.session_time ? `${record.session_time.slice(0, 5)}${record.session_end_time ? ` às ${record.session_end_time.slice(0, 5)}` : ''}` : 'Não informado'} | <strong>Profissional:</strong> ${formattedProfName} (${record.registration_type || 'Conselho'} ${record.registration_number || ''})</p>
             </div>
 
             <div class="content-section">

@@ -318,6 +318,7 @@ api.get('/v1/appointments/:id', requireTenant, AppointmentController.getById);
 api.post('/v1/appointments', requireTenant, AppointmentController.create);
 api.put('/v1/appointments/:id', requireTenant, AppointmentController.update);
 api.put('/v1/appointments/:id/status', requireTenant, AppointmentController.updateStatus);
+api.put('/v1/appointments/:id/attendance-time', requireTenant, AppointmentController.updateAttendanceTime);
 api.put('/v1/appointments/:id/reschedule', requireTenant, AppointmentController.reschedule);
 api.post('/v1/appointments/:id/whatsapp-reminder', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), AppointmentController.sendWhatsAppReminder);
 api.get('/v1/appointments/:id/communications', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), AppointmentController.getCommunications);

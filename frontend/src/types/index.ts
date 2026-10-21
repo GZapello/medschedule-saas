@@ -308,6 +308,12 @@ export interface Appointment {
   room_name?: string;
   start_time: string;
   end_time: string;
+  attendance_start_at?: string | null;
+  attendance_expected_end_at?: string | null;
+  attendance_end_at?: string | null;
+  attendance_date?: string | null;
+  attendance_time?: string | null;
+  attendance_end_time?: string | null;
   status: AppointmentStatus;
   modality: 'presential' | 'online' | 'home';
   meeting_url?: string | null;
@@ -333,7 +339,8 @@ export interface ClinicalRecord {
   registration_number?: string;
   registration_type?: string;
   session_date: string;
-  session_time?: string;
+  session_time?: string | null;
+  session_end_time?: string | null;
   procedure_name?: string;
   title: string;
   clinical_evolution?: string;
@@ -600,7 +607,8 @@ export interface PhysiotherapyEvolution {
   appointment_id?: string;
   specialty_id?: string;
   session_date: string;
-  session_time?: string;
+  session_time?: string | null;
+  session_end_time?: string | null;
   patient_condition?: string;
   procedures_performed?: string;
   exercises_performed?: string;

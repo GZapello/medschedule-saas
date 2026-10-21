@@ -1,5 +1,6 @@
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
+import { extractDatePart, extractTimePart, getClinicLocalNowIso } from './document-context.service';
 
 export interface ClinicalRecordInput {
   tenantId: string;
@@ -12,6 +13,7 @@ export interface ClinicalRecordInput {
   title: string;
   sessionDate?: string | null;
   sessionTime?: string | null;
+  sessionEndTime?: string | null;
   procedureName?: string | null;
   clinicalEvolution: string;
   technicalNotes?: string | null;
@@ -48,10 +50,50 @@ export class ClinicalRecordService {
     } = input;
 
     const now = new Date();
-    const sessionDate = input.sessionDate || now.toISOString().split('T')[0];
-    const sessionTime = input.sessionTime === undefined
-      ? now.toTimeString().slice(0, 5)
-      : ((input.sessionTime && String(input.sessionTime).trim()) ? String(input.sessionTime).trim() : null);
+    const localNowIso = getClinicLocalNowIso(now);
+
+    const existing = db.prepare(`
+      SELECT id, is_sealed, session_date, session_time, session_end_time, edit_history_json FROM records
+      WHERE tenant_id = ? AND patient_id = ? AND source_id = ?
+      LIMIT 1
+    `).get(tenantId, patientId, sourceId) as any;
+
+    const apptRow = appointmentId
+      ? (db.prepare('SELECT start_time, attendance_start_at, attendance_end_at FROM appointments WHERE id = ? AND tenant_id = ?').get(appointmentId, tenantId) as any)
+      : null;
+
+    const sessionDate =
+      extractDatePart(input.sessionDate) ||
+      extractDatePart(apptRow?.attendance_start_at) ||
+      extractDatePart(existing?.session_date) ||
+      extractDatePart(apptRow?.start_time) ||
+      extractDatePart(localNowIso) ||
+      now.toISOString().split('T')[0];
+
+    let sessionTime: string | null;
+    if (input.sessionTime === null) {
+      sessionTime = null;
+    } else if (input.sessionTime !== undefined && String(input.sessionTime).trim() !== '') {
+      sessionTime = extractTimePart(input.sessionTime) || String(input.sessionTime).trim();
+    } else {
+      sessionTime =
+        extractTimePart(apptRow?.attendance_start_at) ||
+        extractTimePart(existing?.session_time) ||
+        extractTimePart(apptRow?.start_time) ||
+        extractTimePart(localNowIso);
+    }
+
+    let sessionEndTime: string | null = null;
+    if (input.sessionEndTime === null) {
+      sessionEndTime = null;
+    } else if (input.sessionEndTime !== undefined && String(input.sessionEndTime).trim() !== '') {
+      sessionEndTime = extractTimePart(input.sessionEndTime) || String(input.sessionEndTime).trim();
+    } else {
+      sessionEndTime =
+        extractTimePart(apptRow?.attendance_end_at) ||
+        extractTimePart(existing?.session_end_time) ||
+        null;
+    }
 
     // Garante que professional_id nunca viole constraint NOT NULL da tabela records
     let effectiveProfId = professionalId || null;
@@ -76,13 +118,6 @@ export class ClinicalRecordService {
     const moduleDataJson = moduleData ? (typeof moduleData === 'string' ? moduleData : JSON.stringify(moduleData)) : null;
     const clinicalDataJson = clinicalData ? (typeof clinicalData === 'string' ? clinicalData : JSON.stringify(clinicalData)) : null;
 
-    // 1. Verifica se já existe registro com este source_id para este paciente no tenant
-    const existing = db.prepare(`
-      SELECT id, is_sealed, edit_history_json FROM records
-      WHERE tenant_id = ? AND patient_id = ? AND source_id = ?
-      LIMIT 1
-    `).get(tenantId, patientId, sourceId) as any;
-
     if (existing) {
       if (existing.is_sealed === 1) {
         // Prontuário lacrado não pode ser modificado (validade jurídica)
@@ -97,14 +132,34 @@ export class ClinicalRecordService {
         }
       } catch (_) {}
 
+      const timeAudit: Record<string, any> = {};
+      if (
+        existing.session_date !== sessionDate ||
+        (existing.session_time || null) !== (sessionTime || null) ||
+        (existing.session_end_time || null) !== (sessionEndTime || null)
+      ) {
+        timeAudit.previous_session_date = existing.session_date || null;
+        timeAudit.previous_session_time = existing.session_time || null;
+        timeAudit.previous_session_end_time = existing.session_end_time || null;
+        timeAudit.new_session_date = sessionDate;
+        timeAudit.new_session_time = sessionTime;
+        timeAudit.new_session_end_time = sessionEndTime;
+        timeAudit.edited_by = createdBy || 'Sistema';
+        timeAudit.edited_at = now.toISOString();
+      }
+
       history.push({
         updated_at: now.toISOString(),
         updated_by: createdBy || 'Sistema',
-        reason: `Atualização clínica sincronizada via módulo ${moduleType}`
+        reason: `Atualização clínica sincronizada via módulo ${moduleType}`,
+        ...timeAudit
       });
 
       db.prepare(`
         UPDATE records SET
+          session_date = ?,
+          session_time = ?,
+          session_end_time = COALESCE(?, session_end_time),
           title = ?,
           procedure_name = COALESCE(?, procedure_name),
           clinical_evolution = ?,
@@ -119,6 +174,9 @@ export class ClinicalRecordService {
           updated_at = datetime('now')
         WHERE id = ? AND tenant_id = ?
       `).run(
+        sessionDate,
+        sessionTime,
+        sessionEndTime,
         title,
         procedureName,
         clinicalEvolution,
@@ -142,7 +200,7 @@ export class ClinicalRecordService {
     db.prepare(`
       INSERT INTO records (
         id, tenant_id, patient_id, appointment_id, professional_id,
-        session_date, session_time, procedure_name, title, clinical_evolution,
+        session_date, session_time, session_end_time, procedure_name, title, clinical_evolution,
         technical_notes, conducts, clinical_data_json, module_type, module_data_json,
         source_id, source_type, is_sealed, created_by, updated_by, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
@@ -154,6 +212,7 @@ export class ClinicalRecordService {
       effectiveProfId,
       sessionDate,
       sessionTime,
+      sessionEndTime,
       procedureName,
       title,
       clinicalEvolution,

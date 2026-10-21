@@ -16,7 +16,7 @@ import { QuickConsultationModal } from './QuickConsultationModal';
 import { ZemdaBodyWorkspace } from '../zemda-body/ZemdaBodyWorkspace';
 import { GeneralClinicalWorkspace } from './GeneralClinicalWorkspace';
 import { ZemdaEsteticWorkspace } from '../estetic/ZemdaEsteticWorkspace';
-import { Activity, FileText, Stethoscope, ChevronLeft, Dumbbell, Sparkles } from 'lucide-react';
+import { Activity, FileText, Stethoscope, ChevronLeft, Dumbbell, Sparkles, X } from 'lucide-react';
 
 export function AppointmentConsultation({
   appointment,
@@ -89,6 +89,7 @@ export function AppointmentConsultation({
 
   // FLUXO DE ATENDIMENTO: "Iniciar atendimento" DEVE SEMPRE abrir o Prontuário / Evolução Clínica primeiro ('records')
   const [activeTab, setActiveTab] = useState<'records' | 'specialized' | 'zemda_body'>('records');
+  const [returnWorkspaceTab, setReturnWorkspaceTab] = useState<'resumo' | 'evolucao' | 'modulo' | 'documentos' | 'finalizacao'>('evolucao');
 
   useEffect(() => {
     ApiClient.get(`/v1/appointments/${appointment.id}/completion`)
@@ -148,53 +149,89 @@ export function AppointmentConsultation({
     effectiveModuleType === 'general' ? GeneralClinicalWorkspace :
     null;
 
+  const renderUnifiedTopBar = (currentView: 'specialized' | 'zemda_body', ariaLabel?: string) => (
+    <div className="flex flex-wrap items-center justify-between px-3.5 sm:px-6 py-2.5 bg-white border-b border-slate-200 sticky top-0 z-20 shadow-2xs gap-2">
+      <div className="flex items-center gap-2.5 min-w-0">
+        <button
+          type="button"
+          onClick={onClose}
+          className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer shrink-0 min-h-[36px]"
+        >
+          <ChevronLeft className="w-4 h-4" /> Voltar à agenda
+        </button>
+        <span className="font-bold text-xs sm:text-sm text-slate-900 border-l pl-2.5 sm:pl-3 border-slate-200 truncate">
+          {appointment.patient_name || 'Paciente'}
+        </span>
+      </div>
+
+      <nav aria-label={ariaLabel || 'Navegação do atendimento'} className="flex items-center gap-1 bg-slate-100/90 p-1 rounded-xl border border-slate-200 overflow-x-auto max-w-full mobile-wrap">
+        {[
+          { id: 'resumo', label: 'Resumo' },
+          { id: 'evolucao', label: 'Evolução' },
+          { id: 'modulo', label: 'Módulo especializado' },
+          { id: 'documentos', label: 'Documentos' },
+          { id: 'finalizacao', label: 'Finalização' }
+        ].map(tab => {
+          const isActive = currentView === 'specialized' && tab.id === 'modulo';
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => {
+                if (tab.id === 'modulo') {
+                  setActiveTab('specialized');
+                } else {
+                  setReturnWorkspaceTab(tab.id as any);
+                  setActiveTab('records');
+                }
+              }}
+              className={`px-2.5 sm:px-3.5 py-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer shrink-0 whitespace-nowrap min-h-[32px] ${
+                isActive
+                  ? 'bg-white text-teal-700 shadow-2xs border border-slate-200/90'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+              }`}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
+
+        {isZemdaBody && (
+          <button
+            type="button"
+            onClick={() => setActiveTab('zemda_body')}
+            className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer shrink-0 whitespace-nowrap min-h-[32px] ${
+              currentView === 'zemda_body'
+                ? 'bg-teal-600 text-white shadow-2xs'
+                : 'text-teal-800 hover:bg-teal-50'
+            }`}
+          >
+            <Activity className="w-3.5 h-3.5" />
+            <span>Zemda360</span>
+          </button>
+        )}
+      </nav>
+
+      <button
+        type="button"
+        aria-label="Fechar atendimento"
+        onClick={onClose}
+        className="hidden sm:inline-flex items-center justify-center w-9 h-9 rounded-xl text-slate-500 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer shrink-0"
+        title="Fechar atendimento"
+      >
+        <X className="w-4 h-4" />
+      </button>
+    </div>
+  );
+
   // Se o profissional estiver visualizando o ZemdaBody dentro do mesmo atendimento:
   if (activeTab === 'zemda_body') {
     return (
-      <div className="fixed inset-0 z-50 bg-slate-100 flex flex-col overflow-auto mobile-modal" role="dialog" aria-modal="true" aria-label="Atendimento com Zemda360">
-        {/* Barra superior de alternância */}
-        <div className="flex flex-wrap items-center justify-between px-3 sm:px-5 py-2.5 sm:py-3 bg-white border-b border-slate-200 sticky top-0 z-20 shadow-xs gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <button
-              onClick={onClose}
-              className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer mr-1 sm:mr-2 shrink-0 min-h-[36px]"
-            >
-              <ChevronLeft className="w-4 h-4" /> Voltar à agenda
-            </button>
-            <span className="font-bold text-xs text-slate-900 border-l pl-2 sm:pl-3 border-slate-200 truncate">
-              {appointment.patient_name || 'Paciente'}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200 overflow-x-auto max-w-full mobile-wrap">
-            <button
-              type="button"
-              onClick={() => setActiveTab('records')}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg text-slate-600 hover:text-slate-900 cursor-pointer shrink-0 whitespace-nowrap min-h-[36px]"
-            >
-              <FileText className="w-3.5 h-3.5" /> Prontuário & Evolução
-            </button>
-
-            {Workspace && (
-              <button
-                type="button"
-                onClick={() => setActiveTab('specialized')}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg text-slate-600 hover:text-slate-900 cursor-pointer shrink-0 whitespace-nowrap min-h-[36px]"
-              >
-                <Stethoscope className="w-3.5 h-3.5" /> Módulo Clínico
-              </button>
-            )}
-
-            <button
-              type="button"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-extrabold rounded-lg bg-teal-600 text-white shadow-xs cursor-default shrink-0 whitespace-nowrap min-h-[36px]"
-            >
-              <Activity className="w-3.5 h-3.5" /> Zemda360 (Mapeamento)
-            </button>
-          </div>
+      <div className="fixed inset-0 z-50 bg-slate-50 flex flex-col overflow-auto mobile-modal" role="dialog" aria-modal="true" aria-label="Atendimento com Zemda360">
+        {renderUnifiedTopBar('zemda_body', 'Navegação Zemda360')}
+        <div className="px-4 sm:px-6 pt-3 max-w-6xl mx-auto w-full">
+          <OnlineConsultationTools appointment={{ ...onlineAppointment, clinical_module: effectiveModuleType }} onRequestEvolution={() => { setReturnWorkspaceTab('evolucao'); setActiveTab('records'); }} onMeetingUrlSaved={onMeetingUrlSaved} onDriveUrlSaved={onDriveUrlSaved} />
         </div>
-
-        <OnlineConsultationTools appointment={{ ...onlineAppointment, clinical_module: effectiveModuleType }} onRequestEvolution={() => setActiveTab('records')} onMeetingUrlSaved={onMeetingUrlSaved} onDriveUrlSaved={onDriveUrlSaved} />
         {/* Área do Workspace */}
         <div className="p-4 sm:p-6 max-w-6xl mx-auto w-full flex-1">
           <ZemdaBodyWorkspace
@@ -214,42 +251,10 @@ export function AppointmentConsultation({
     if (effectiveModuleType === 'ZemdaPersonal') {
       return (
         <div className="fixed inset-0 z-50 bg-slate-50 overflow-auto mobile-modal" role="dialog" aria-modal="true" aria-label="Atendimento Personal Trainer">
-          <div className="flex flex-wrap items-center justify-between px-3 sm:px-5 py-2.5 sm:py-3 bg-white border-b border-slate-200 sticky top-0 z-10 gap-2">
-            <div className="flex items-center gap-2 min-w-0">
-              <button onClick={onClose} className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-900 font-semibold cursor-pointer shrink-0 min-h-[36px]">
-                Voltar à agenda
-              </button>
-              <span className="font-bold text-xs text-slate-800 border-l pl-2 sm:pl-3 border-slate-200 truncate">
-                {appointment.patient_name || 'Aluno'}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200 overflow-x-auto max-w-full mobile-wrap">
-              <button
-                type="button"
-                onClick={() => setActiveTab('records')}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg text-slate-600 hover:text-slate-900 cursor-pointer shrink-0 whitespace-nowrap min-h-[36px]"
-              >
-                <FileText className="w-3.5 h-3.5" /> Prontuário
-              </button>
-              <button
-                type="button"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-extrabold rounded-lg bg-orange-600 text-white shadow-xs cursor-default shrink-0 whitespace-nowrap min-h-[36px]"
-              >
-                <Dumbbell className="w-3.5 h-3.5" /> ZemdaPersonal
-              </button>
-              {isZemdaBody && (
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('zemda_body')}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg text-teal-800 hover:bg-teal-50 cursor-pointer shrink-0 whitespace-nowrap min-h-[36px]"
-                >
-                  <Activity className="w-3.5 h-3.5" /> Zemda360
-                </button>
-              )}
-            </div>
+          {renderUnifiedTopBar('specialized', 'Navegação ZemdaPersonal')}
+          <div className="px-4 sm:px-6 pt-3 max-w-7xl mx-auto w-full">
+            <OnlineConsultationTools appointment={{ ...onlineAppointment, clinical_module: effectiveModuleType }} onRequestEvolution={() => { setReturnWorkspaceTab('evolucao'); setActiveTab('records'); }} onMeetingUrlSaved={onMeetingUrlSaved} onDriveUrlSaved={onDriveUrlSaved} />
           </div>
-          <OnlineConsultationTools appointment={{ ...onlineAppointment, clinical_module: effectiveModuleType }} onRequestEvolution={() => setActiveTab('records')} onMeetingUrlSaved={onMeetingUrlSaved} onDriveUrlSaved={onDriveUrlSaved} />
           <div className="p-4 sm:p-6 max-w-7xl mx-auto">
             <ZemdaPersonalView
               key={appointment.id}
@@ -265,42 +270,10 @@ export function AppointmentConsultation({
 
     return (
       <div className="fixed inset-0 z-50 bg-slate-50 overflow-auto mobile-modal" role="dialog" aria-modal="true" aria-label="Atendimento clínico especializado">
-        <div className="flex flex-wrap items-center justify-between px-3 sm:px-5 py-2.5 sm:py-3 bg-white border-b border-slate-200 sticky top-0 z-10 gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <button onClick={onClose} className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-900 font-semibold cursor-pointer shrink-0 min-h-[36px]">
-              Voltar à agenda
-            </button>
-            <span className="font-bold text-xs text-slate-800 border-l pl-2 sm:pl-3 border-slate-200 truncate">
-              {appointment.patient_name || 'Paciente'}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200 overflow-x-auto max-w-full mobile-wrap">
-            <button
-              type="button"
-              onClick={() => setActiveTab('records')}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg text-slate-600 hover:text-slate-900 cursor-pointer shrink-0 whitespace-nowrap min-h-[36px]"
-            >
-              <FileText className="w-3.5 h-3.5" /> Prontuário
-            </button>
-            <button
-              type="button"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-extrabold rounded-lg bg-indigo-600 text-white shadow-xs cursor-default shrink-0 whitespace-nowrap min-h-[36px]"
-            >
-              <Stethoscope className="w-3.5 h-3.5" /> Módulo Clínico
-            </button>
-            {isZemdaBody && (
-              <button
-                type="button"
-                onClick={() => setActiveTab('zemda_body')}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg text-teal-800 hover:bg-teal-50 cursor-pointer shrink-0 whitespace-nowrap min-h-[36px]"
-              >
-                <Activity className="w-3.5 h-3.5" /> Zemda360
-              </button>
-            )}
-          </div>
+        {renderUnifiedTopBar('specialized', 'Navegação do módulo clínico')}
+        <div className="px-4 sm:px-6 pt-3 max-w-7xl mx-auto w-full">
+          <OnlineConsultationTools appointment={{ ...onlineAppointment, clinical_module: effectiveModuleType }} onRequestEvolution={() => { setReturnWorkspaceTab('evolucao'); setActiveTab('records'); }} onMeetingUrlSaved={onMeetingUrlSaved} onDriveUrlSaved={onDriveUrlSaved} />
         </div>
-        <OnlineConsultationTools appointment={{ ...onlineAppointment, clinical_module: effectiveModuleType }} onRequestEvolution={() => setActiveTab('records')} onMeetingUrlSaved={onMeetingUrlSaved} onDriveUrlSaved={onDriveUrlSaved} />
         <Workspace
           key={appointment.id}
           initialPatientId={appointment.patient_id}
@@ -319,6 +292,7 @@ export function AppointmentConsultation({
           ...onlineAppointment,
           clinical_module: effectiveModuleType
         }}
+        initialWorkspaceTab={returnWorkspaceTab}
         onMeetingUrlSaved={onMeetingUrlSaved}
         onDriveUrlSaved={onDriveUrlSaved}
         moduleType={effectiveModuleType || 'general'}

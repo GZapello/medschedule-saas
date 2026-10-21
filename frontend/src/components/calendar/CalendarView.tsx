@@ -11,6 +11,8 @@ import { Appointment, Professional, Room, Service } from '../../types';
 import {
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Plus,
   Filter,
   Clock,
@@ -23,10 +25,16 @@ import {
   AlertTriangle,
   RotateCcw,
   Stethoscope,
-  Ban
+  Ban,
+  Phone,
+  History,
+  FileText,
+  Settings2
 } from 'lucide-react';
 import { FinishConsultationModal } from '../clinical/FinishConsultationModal';
 import { AppointmentConsultation } from '../clinical/AppointmentConsultation';
+import { OnlineConsultationTools } from '../clinical/OnlineConsultationTools';
+import { PatientPreviousRecordsModal } from '../clinical/PatientPreviousRecordsModal';
 import { SelectConsultationModuleModal, getCompatibleClinicalModules, getModuleForProfession } from '../clinical/SelectConsultationModuleModal';
 import { WhatsAppReminderModal, WhatsAppIcon } from '../common/WhatsAppReminderModal';
 import { isValidPhoneNumber, formatPhoneDisplay } from '../../utils/phone.utils';
@@ -327,11 +335,88 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
   // Modal de Detalhes
   const [teleAppt, setTeleAppt] = useState<Appointment | null>(null);
   const [selectedAppt, setSelectedAppt] = useState<Appointment | null>(null);
+  const [showManageMenu, setShowManageMenu] = useState<boolean>(false);
+  const [showCommsHistory, setShowCommsHistory] = useState<boolean>(false);
+  const [viewingRecordsAppt, setViewingRecordsAppt] = useState<Appointment | null>(null);
   const [isRescheduling, setIsRescheduling] = useState<boolean>(false);
   const [rescheduleDate, setRescheduleDate] = useState<string>('');
   const [rescheduleTime, setRescheduleTime] = useState<string>('');
   const [rescheduleSlots, setRescheduleSlots] = useState<any[]>([]);
   const [loadingRescheduleSlots, setLoadingRescheduleSlots] = useState<boolean>(false);
+
+  // Ajuste de Horário Real do Atendimento
+  const [isEditingAttendanceTime, setIsEditingAttendanceTime] = useState<boolean>(false);
+  const [editAttendanceDate, setEditAttendanceDate] = useState<string>('');
+  const [editAttendanceStartTime, setEditAttendanceStartTime] = useState<string>('');
+  const [editAttendanceExpectedEndTime, setEditAttendanceExpectedEndTime] = useState<string>('');
+  const [editAttendanceEndTime, setEditAttendanceEndTime] = useState<string>('');
+  const [savingAttendanceTime, setSavingAttendanceTime] = useState<boolean>(false);
+
+  const extractDateFromIso = (iso?: string | null): string => {
+    if (!iso) return '';
+    return String(iso).trim().replace(' ', 'T').split('T')[0] || '';
+  };
+
+  const extractTimeFromIso = (iso?: string | null): string => {
+    if (!iso) return '';
+    const trimmed = String(iso).trim();
+    if (/^\d{2}:\d{2}/.test(trimmed)) return trimmed.slice(0, 5);
+    const parts = trimmed.replace(' ', 'T').split('T');
+    return parts[1] ? parts[1].slice(0, 5) : '';
+  };
+
+  const addMinutesToTimeStr = (timeStr: string, minutesToAdd: number): string => {
+    if (!timeStr || !/^\d{2}:\d{2}/.test(timeStr)) return '';
+    const [h, m] = timeStr.slice(0, 5).split(':').map(Number);
+    const total = ((h * 60 + m + (Number(minutesToAdd) || 50)) % (24 * 60) + 24 * 60) % (24 * 60);
+    const outH = String(Math.floor(total / 60)).padStart(2, '0');
+    const outM = String(total % 60).padStart(2, '0');
+    return `${outH}:${outM}`;
+  };
+
+  const openAttendanceTimeEditor = (appt: Appointment) => {
+    const duration = Number(appt.duration_minutes) > 0 ? Number(appt.duration_minutes) : 50;
+    const baseDate = extractDateFromIso(appt.attendance_start_at) || extractDateFromIso(appt.start_time);
+    const startT = extractTimeFromIso(appt.attendance_start_at) || extractTimeFromIso(appt.start_time) || '14:00';
+    const expectedEndT = extractTimeFromIso(appt.attendance_expected_end_at) || addMinutesToTimeStr(startT, duration);
+    const actualEndT = extractTimeFromIso(appt.attendance_end_at);
+
+    setEditAttendanceDate(baseDate);
+    setEditAttendanceStartTime(startT);
+    setEditAttendanceExpectedEndTime(expectedEndT);
+    setEditAttendanceEndTime(actualEndT);
+    setIsEditingAttendanceTime(true);
+  };
+
+  const handleSaveAttendanceTime = async () => {
+    if (!selectedAppt || !editAttendanceDate || !editAttendanceStartTime) {
+      showToast('Informe a data e o horário real de início do atendimento', 'error');
+      return;
+    }
+    try {
+      setSavingAttendanceTime(true);
+      const res = await ApiClient.put<any>(`/v1/appointments/${selectedAppt.id}/attendance-time`, {
+        attendanceDate: editAttendanceDate,
+        attendanceStartTime: editAttendanceStartTime,
+        attendanceExpectedEndTime: editAttendanceExpectedEndTime || undefined,
+        attendanceEndTime: (selectedAppt.status === 'completed' || selectedAppt.attendance_end_at) ? (editAttendanceEndTime || null) : undefined
+      });
+      const updatedFields = {
+        attendance_start_at: res.attendance_start_at,
+        attendance_expected_end_at: res.attendance_expected_end_at,
+        attendance_end_at: res.attendance_end_at
+      };
+      setAppointments(prev => prev.map(a => a.id === selectedAppt.id ? { ...a, ...updatedFields } : a));
+      setSelectedAppt(prev => prev ? { ...prev, ...updatedFields } : null);
+      setIsEditingAttendanceTime(false);
+      showToast('Horário real do atendimento salvo!', 'success');
+      notifyAppointmentChange();
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao salvar horário do atendimento', 'error');
+    } finally {
+      setSavingAttendanceTime(false);
+    }
+  };
 
   useEffect(() => {
     if (isRescheduling && selectedAppt && rescheduleDate) {
@@ -396,6 +481,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
       refreshCommunications(selectedAppt.id);
     } else {
       setCommunications([]);
+      setShowManageMenu(false);
+      setShowCommsHistory(false);
+      setIsEditingAttendanceTime(false);
     }
   }, [selectedAppt]);
 
@@ -419,6 +507,33 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
       });
       setProfessionals(profsData);
       setRooms(roomsData);
+
+      const pendingRetroRaw = sessionStorage.getItem('zemda_open_retroactive_appt');
+      if (pendingRetroRaw) {
+        sessionStorage.removeItem('zemda_open_retroactive_appt');
+        try {
+          const parsedRetro = JSON.parse(pendingRetroRaw);
+          const targetAppt = apptsData.find(a => a.id === parsedRetro?.id) || parsedRetro;
+          if (targetAppt) {
+            const rawDate = targetAppt.start_time || targetAppt.attendance_start_at;
+            if (rawDate) {
+              const datePart = String(rawDate).slice(0, 10);
+              const [y, m, d] = datePart.split('-').map(Number);
+              if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+                setCurrentDate(new Date(y, m - 1, d, 12, 0, 0));
+              }
+            }
+            const autoModule = getModuleForProfession(auth);
+            const chosenModule = targetAppt.service_clinical_module || targetAppt.clinical_module || (autoModule && autoModule !== 'general' ? autoModule : 'general');
+            setActiveConsultationModule(chosenModule);
+            setActiveConsultationAppt({
+              ...targetAppt,
+              status: 'in_progress',
+              clinical_module: chosenModule
+            });
+          }
+        } catch (_) {}
+      }
     } catch (err: any) {
       showToast(err.message || 'Erro ao carregar dados da agenda', 'error');
     } finally {
@@ -529,14 +644,18 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
       if (selectedModule) {
         payload.clinicalModule = selectedModule;
       }
-      await ApiClient.put(`/v1/appointments/${appointment.id}/status`, payload);
+      const statusRes = await ApiClient.put<any>(`/v1/appointments/${appointment.id}/status`, payload);
+      const nextRealStart = statusRes?.attendance_start_at || appointment.attendance_start_at || null;
+      const nextExpectedEnd = statusRes?.attendance_expected_end_at || appointment.attendance_expected_end_at || null;
       const chosenModule = selectedModule || (appointment as any).service_clinical_module || (appointment as any).clinical_module || 'general';
-      setAppointments(prev => prev.map(a => a.id === appointment.id ? { ...a, status: 'in_progress' as any, clinical_module: chosenModule } : a));
+      setAppointments(prev => prev.map(a => a.id === appointment.id ? { ...a, status: 'in_progress' as any, clinical_module: chosenModule, attendance_start_at: nextRealStart, attendance_expected_end_at: nextExpectedEnd } : a));
       setActiveConsultationModule(chosenModule);
       setActiveConsultationAppt({
         ...appointment,
         status: 'in_progress',
-        clinical_module: chosenModule
+        clinical_module: chosenModule,
+        attendance_start_at: nextRealStart,
+        attendance_expected_end_at: nextExpectedEnd
       });
       setSelectedAppt(null);
       setSelectingModuleAppt(null);
@@ -1164,7 +1283,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 overflow-y-auto mobile-modal">
           {/* Backdrop cobrindo 100vw/100vh */}
           <div
-            className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs mobile-modal"
+            className="fixed inset-0 bg-slate-900/45 backdrop-blur-xs mobile-modal"
             onClick={() => {
               setSelectedAppt(null);
               setIsRescheduling(false);
@@ -1172,273 +1291,588 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
             aria-hidden="true"
           />
 
-          {/* Modal posicionado acima do backdrop */}
-          <div className="relative z-10 bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-4 sm:p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-200 my-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
-              <div>
-                <span className="text-xs font-bold text-indigo-600 uppercase tracking-wider">{selectedAppt.appointment_number}</span>
-                <h3 className="text-lg sm:text-xl font-bold text-slate-900">{selectedAppt.patient_name}</h3>
-                <button type="button" className="text-xs text-indigo-600" onClick={() => setTeleAppt(selectedAppt)}>Editar modalidade</button>
-                {selectedAppt.modality === 'online' && <span className="text-xs inline-flex items-center gap-1 ml-2"><Video className="w-3 h-3" /> Online</span>}
+          {/* Modal clean centralizado (760px-900px no desktop) */}
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Detalhes do agendamento ${selectedAppt.appointment_number || ''}`}
+            className="relative z-10 bg-white rounded-3xl max-w-[860px] w-full max-h-[90vh] overflow-y-auto p-4 sm:p-6 shadow-xl border border-slate-200/90 animate-in fade-in zoom-in-95 duration-200 my-auto space-y-4"
+          >
+            {/* CABEÇALHO CLARO */}
+            <header className="flex items-start justify-between gap-3 pb-4 border-b border-slate-100">
+              <div className="flex items-start gap-3 sm:gap-3.5 min-w-0 flex-1">
+                <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-teal-50 border border-teal-200/80 text-teal-700 flex items-center justify-center font-bold text-sm sm:text-base shrink-0 shadow-2xs">
+                  {(selectedAppt.patient_name || 'PA').slice(0, 2).toUpperCase()}
+                </div>
+
+                <div className="min-w-0 flex-1 space-y-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-bold text-teal-700 bg-teal-50 border border-teal-200/70 px-2 py-0.5 rounded-md uppercase tracking-wider">
+                      {selectedAppt.appointment_number}
+                    </span>
+                    <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${getStatusColor(selectedAppt.status)}`}>
+                      {getStatusLabel(selectedAppt.status)}
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                      {selectedAppt.modality === 'online' ? (
+                        <>
+                          <Video className="w-3 h-3 text-indigo-600" />
+                          <span>Online</span>
+                        </>
+                      ) : selectedAppt.modality === 'home' ? (
+                        <>
+                          <MapPin className="w-3 h-3 text-teal-600" />
+                          <span>Domiciliar</span>
+                        </>
+                      ) : (
+                        <>
+                          <MapPin className="w-3 h-3 text-teal-600" />
+                          <span>Presencial</span>
+                        </>
+                      )}
+                    </span>
+                    <button
+                      type="button"
+                      className="text-xs font-medium text-slate-500 hover:text-teal-700 underline underline-offset-2 cursor-pointer"
+                      onClick={() => setTeleAppt(selectedAppt)}
+                    >
+                      Editar modalidade
+                    </button>
+                  </div>
+
+                  <h3 className="text-lg sm:text-xl font-bold text-slate-900 leading-snug truncate">
+                    {selectedAppt.patient_name}
+                  </h3>
+
+                  <div className="flex items-center gap-3 flex-wrap text-xs text-slate-600 pt-0.5">
+                    {isValidPhoneNumber(selectedAppt.patient_phone) ? (
+                      <>
+                        <span className="inline-flex items-center gap-1.5 font-medium text-slate-700">
+                          <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span>{formatPhoneDisplay(selectedAppt.patient_phone)}</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setWhatsappReminderAppt(selectedAppt)}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200/80 text-[11px] font-semibold transition-colors cursor-pointer"
+                        >
+                          <WhatsAppIcon className="w-3 h-3 fill-emerald-600 shrink-0" />
+                          <span>WhatsApp</span>
+                        </button>
+                      </>
+                    ) : (
+                      <span className="text-slate-400 italic text-xs">Paciente sem telefone cadastrado</span>
+                    )}
+                  </div>
+                </div>
               </div>
-              <button aria-label="Fechar"
+
+              <button
+                type="button"
+                aria-label="Fechar"
                 onClick={() => {
                   setSelectedAppt(null);
                   setIsRescheduling(false);
                 }}
-                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
+                className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer shrink-0"
               >
                 <X className="w-5 h-5" />
               </button>
-            </div>
-
-            {auth.canAccessConsents && selectedAppt.patient_id && (
-              <div className="flex gap-2 items-center p-3 border-b border-slate-100 bg-slate-50/50">
-                <ConsentPendingAlert
-                  compact
-                  patientId={selectedAppt.patient_id}
-                  serviceId={selectedAppt.service_id}
-                  onOpen={() => {
-                    setConsentPatientId(selectedAppt.patient_id);
-                    setSelectedAppt(null);
-                    setIsRescheduling(false);
-                  }}
-                />
-              </div>
-            )}
+            </header>
 
             {!isRescheduling ? (
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                    <span className="text-slate-400 font-medium">Serviço:</span>
-                    <p className="font-bold text-slate-800 text-sm mt-0.5">{selectedAppt.service_name}</p>
-                  </div>
-                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                    <span className="text-slate-400 font-medium">Valor da consulta:</span>
-                    <p className="font-bold text-slate-800 text-sm mt-0.5">
-                      {(() => {
-                        const amt = selectedAppt.display_amount !== null && selectedAppt.display_amount !== undefined
-                          ? selectedAppt.display_amount
-                          : (selectedAppt.payment_amount !== null && selectedAppt.payment_amount !== undefined
-                              ? selectedAppt.payment_amount
-                              : (selectedAppt.service_price !== null && selectedAppt.service_price !== undefined ? selectedAppt.service_price : null));
-                        return (amt !== null && amt !== undefined)
-                          ? Number(amt).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-                          : 'R$ 0,00';
-                      })()}
-                    </p>
-                  </div>
-                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                    <span className="text-slate-400 font-medium">Profissional:</span>
-                    <p className="font-bold text-slate-800 text-sm mt-0.5">{selectedAppt.professional_name}</p>
-                  </div>
-                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                    <span className="text-slate-400 font-medium">Horário:</span>
-                    <p className="font-bold text-slate-800 text-sm mt-0.5">
-                      {selectedAppt.start_time.split('T')[0]} • {selectedAppt.start_time.split('T')[1].slice(0, 5)}
-                    </p>
-                  </div>
-                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                    <span className="text-slate-400 font-medium">Status Atual:</span>
-                    <div className="mt-1">
-                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${getStatusColor(selectedAppt.status)}`}>
-                        {getStatusLabel(selectedAppt.status)}
+              <div className="space-y-3.5">
+                {/* 5. RESUMO PRINCIPAL EM UMA FAIXA HORIZONTAL */}
+                {(() => {
+                  const amt = selectedAppt.display_amount !== null && selectedAppt.display_amount !== undefined
+                    ? selectedAppt.display_amount
+                    : (selectedAppt.payment_amount !== null && selectedAppt.payment_amount !== undefined
+                        ? selectedAppt.payment_amount
+                        : (selectedAppt.service_price !== null && selectedAppt.service_price !== undefined ? selectedAppt.service_price : null));
+                  const formattedAmount = (amt !== null && amt !== undefined)
+                    ? Number(amt).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                    : 'R$ 0,00';
+
+                  const rawDate = (selectedAppt.start_time || '').split('T')[0];
+                  const formattedDate = rawDate
+                    ? new Date(rawDate + 'T12:00:00').toLocaleDateString('pt-BR')
+                    : '-';
+                  const formattedTime = ((selectedAppt.start_time || '').replace(' ', 'T').split('T')[1] || '').slice(0, 5);
+                  const matchedProf = professionals.find(p => p.id === selectedAppt.professional_id);
+                  const profSpecialty = (matchedProf as any)?.specialty || (matchedProf as any)?.profession_name || '';
+
+                  return (
+                    <div className="bg-slate-50/90 border border-slate-200/80 rounded-2xl p-3.5 sm:p-4 grid grid-cols-1 sm:grid-cols-5 gap-3 sm:gap-0 sm:divide-x sm:divide-slate-200/80">
+                      <div className="sm:pr-3.5 min-w-0">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                          Serviço
+                        </span>
+                        <p className="text-xs sm:text-sm font-bold text-slate-900 mt-0.5 truncate" title={selectedAppt.service_name}>
+                          {selectedAppt.service_name || 'Consulta'}
+                        </p>
+                      </div>
+
+                      <div className="sm:px-3.5 min-w-0">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                          Valor da Consulta
+                        </span>
+                        <p className="text-xs sm:text-sm font-bold text-emerald-700 mt-0.5 truncate">
+                          {formattedAmount}
+                        </p>
+                      </div>
+
+                      <div className="sm:px-3.5 min-w-0">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                          {selectedAppt.attendance_start_at ? 'Data e Horário Agendado' : 'Data e Horário'}
+                        </span>
+                        <p className="text-xs sm:text-sm font-bold text-slate-900 mt-0.5 truncate">
+                          {formattedDate}
+                        </p>
+                        <p className="text-[11px] font-semibold text-teal-700">
+                          {formattedTime ? `às ${formattedTime}` : ''}
+                        {!selectedAppt.attendance_start_at && !['cancelled', 'no_show'].includes(selectedAppt.status) && !isEditingAttendanceTime && (
+                          <button
+                            type="button"
+                            onClick={() => openAttendanceTimeEditor(selectedAppt)}
+                            className="mt-1 text-[10px] font-semibold text-teal-700 hover:text-teal-900 underline underline-offset-2 cursor-pointer block text-left"
+                          >
+                            Ajustar horário do atendimento
+                          </button>
+                        )}
+                        </p>
+                      </div>
+
+                      <div className="sm:px-3.5 min-w-0">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                          Profissional
+                        </span>
+                        <p className="text-xs sm:text-sm font-bold text-slate-900 mt-0.5 truncate" title={selectedAppt.professional_name}>
+                          {selectedAppt.professional_name}
+                        </p>
+                        {profSpecialty && (
+                          <p className="text-[11px] text-slate-500 truncate">{profSpecialty}</p>
+                        )}
+                      </div>
+
+                      <div className="sm:pl-3.5 min-w-0">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                          Modalidade
+                        </span>
+                        <p className="text-xs sm:text-sm font-bold text-slate-900 mt-0.5 truncate">
+                          {selectedAppt.modality === 'online'
+                            ? 'Online'
+                            : selectedAppt.modality === 'home'
+                              ? 'Domiciliar'
+                              : 'Presencial'}
+                        </p>
+                        <p className="text-[11px] text-slate-500 truncate">
+                          {selectedAppt.modality === 'online' ? 'Teleconsulta' : 'Consultório'}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* FAIXA COMPACTA DE ATENDIMENTO REAL E EDITOR CONTEXTUAL DE HORÁRIO */}
+                {selectedAppt.attendance_start_at && !isEditingAttendanceTime && (() => {
+                  const realDateRaw = extractDateFromIso(selectedAppt.attendance_start_at);
+                  const schedDateRaw = extractDateFromIso(selectedAppt.start_time);
+                  const realDateFormatted = realDateRaw && realDateRaw !== schedDateRaw
+                    ? new Date(realDateRaw + 'T12:00:00').toLocaleDateString('pt-BR') + ' • '
+                    : '';
+                  const realStartT = extractTimeFromIso(selectedAppt.attendance_start_at);
+                  const expectedEndT = extractTimeFromIso(selectedAppt.attendance_expected_end_at);
+                  const realEndT = extractTimeFromIso(selectedAppt.attendance_end_at);
+                  return (
+                    <div className="bg-teal-50/70 border border-teal-200/80 rounded-xl px-3.5 py-2 flex items-center justify-between gap-2 flex-wrap text-xs">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-teal-800 bg-teal-100/80 px-2 py-0.5 rounded-md">
+                          Atendimento Real
+                        </span>
+                        <span className="font-semibold text-slate-800">
+                          {realDateFormatted}Início: <strong className="text-teal-800">{realStartT || '-'}</strong>
+                          {expectedEndT && !realEndT ? (
+                            <> • Previsão: <strong className="text-slate-700">{expectedEndT}</strong></>
+                          ) : null}
+                          {realEndT ? (
+                            <> • Término: <strong className="text-teal-800">{realEndT}</strong></>
+                          ) : null}
+                        </span>
+                      </div>
+                      {!['cancelled', 'no_show'].includes(selectedAppt.status) && (
+                        <button
+                          type="button"
+                          onClick={() => openAttendanceTimeEditor(selectedAppt)}
+                          className="text-xs font-semibold text-teal-700 hover:text-teal-900 underline underline-offset-2 cursor-pointer"
+                        >
+                          Editar
+                        </button>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {isEditingAttendanceTime && (
+                  <div className="bg-slate-50 border border-teal-200 rounded-2xl p-3.5 space-y-3 animate-in fade-in duration-150">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-800">
+                        Ajustar horário real do atendimento
+                      </span>
+                      <span className="text-[11px] text-slate-500">
+                        O horário agendado ({((selectedAppt.start_time || '').replace(' ', 'T').split('T')[1] || '').slice(0, 5)}) será preservado no histórico
                       </span>
                     </div>
-                  </div>
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 col-span-1 sm:col-span-2 flex items-center justify-between">
-                    <div>
-                      <span className="text-slate-400 font-medium text-[11px] block">Telefone do Paciente:</span>
-                      <p className="font-bold text-slate-800 text-xs mt-0.5 flex items-center gap-1.5">
-                        {isValidPhoneNumber(selectedAppt.patient_phone) ? (
-                          <>
-                            <WhatsAppIcon className="w-3.5 h-3.5 fill-emerald-600 inline shrink-0" />
-                            <span>{formatPhoneDisplay(selectedAppt.patient_phone)}</span>
-                          </>
-                        ) : (
-                          <span className="text-rose-500 font-medium italic text-[11px]">Paciente sem telefone cadastrado</span>
-                        )}
-                      </p>
+                    <div className={`grid grid-cols-1 ${selectedAppt.status === 'completed' || selectedAppt.attendance_end_at ? 'sm:grid-cols-4' : 'sm:grid-cols-3'} gap-2.5 text-xs`}>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                          Data do atendimento real
+                        </label>
+                        <input
+                          type="date"
+                          value={editAttendanceDate}
+                          onChange={e => setEditAttendanceDate(e.target.value)}
+                          className="w-full border border-slate-200 bg-white rounded-xl px-3 py-1.5 text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                          Horário real de início
+                        </label>
+                        <input
+                          type="time"
+                          value={editAttendanceStartTime}
+                          onChange={e => {
+                            const newStart = e.target.value;
+                            setEditAttendanceStartTime(newStart);
+                            const dur = Number(selectedAppt.duration_minutes) > 0 ? Number(selectedAppt.duration_minutes) : 50;
+                            if (newStart) {
+                              setEditAttendanceExpectedEndTime(addMinutesToTimeStr(newStart, dur));
+                            }
+                          }}
+                          className="w-full border border-slate-200 bg-white rounded-xl px-3 py-1.5 text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                          Previsão de término
+                        </label>
+                        <input
+                          type="time"
+                          value={editAttendanceExpectedEndTime}
+                          onChange={e => setEditAttendanceExpectedEndTime(e.target.value)}
+                          className="w-full border border-slate-200 bg-white rounded-xl px-3 py-1.5 text-xs"
+                        />
+                      </div>
+                      {(selectedAppt.status === 'completed' || selectedAppt.attendance_end_at) && (
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                            Horário real de término
+                          </label>
+                          <input
+                            type="time"
+                            value={editAttendanceEndTime}
+                            onChange={e => setEditAttendanceEndTime(e.target.value)}
+                            className="w-full border border-slate-200 bg-white rounded-xl px-3 py-1.5 text-xs"
+                          />
+                        </div>
+                      )}
                     </div>
-                  </div>
-                </div>
-
-                {selectedAppt.patient_notes && (
-                  <div className="text-xs bg-amber-50 text-amber-900 p-3 rounded-xl border border-amber-200">
-                    <span className="font-bold">Observações do cliente:</span> {selectedAppt.patient_notes}
+                    <div className="flex items-center justify-end gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingAttendanceTime(false)}
+                        className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-200/70 rounded-xl transition-colors cursor-pointer"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        disabled={savingAttendanceTime}
+                        onClick={handleSaveAttendanceTime}
+                        className="px-3.5 py-1.5 text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-xl shadow-2xs transition-colors disabled:opacity-50 cursor-pointer"
+                      >
+                        {savingAttendanceTime ? 'Salvando...' : 'Salvar horário'}
+                      </button>
+                    </div>
                   </div>
                 )}
 
-                {/* Atendimento Rápido e Status Action Buttons */}
-                <div className="pt-3 border-t border-slate-100 space-y-3">
-                  <button
-                    onClick={() => {
-                      startConsultation(selectedAppt);
+                {/* 8-11. ATENDIMENTO ONLINE (Apenas se modality === 'online') */}
+                {selectedAppt.modality === 'online' && (
+                  <OnlineConsultationTools
+                    appointment={selectedAppt}
+                    onMeetingUrlSaved={newUrl => {
+                      const update = (appt: Appointment): Appointment =>
+                        appt.id === selectedAppt.id ? { ...appt, meeting_url: newUrl } : appt;
+                      setAppointments(prev => prev.map(update));
+                      setSelectedAppt(prev => (prev ? update(prev) : null));
+                      notifyAppointmentChange();
                     }}
-                    className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 shadow-md shadow-teal-500/20 transition-all cursor-pointer"
-                  >
-                    <Stethoscope className="w-4 h-4" />
-                    <span>INICIAR ATENDIMENTO</span>
-                  </button>
+                    onDriveUrlSaved={newDriveUrl => {
+                      const update = (appt: Appointment): Appointment =>
+                        appt.id === selectedAppt.id ? ({ ...appt, google_drive_url: newDriveUrl } as Appointment) : appt;
+                      setAppointments(prev => prev.map(update));
+                      setSelectedAppt(prev => (prev ? update(prev) : null));
+                      notifyAppointmentChange();
+                    }}
+                  />
+                )}
 
-                  {selectedAppt.modality === 'online' && (
+                {/* 6. TERMOS DE CONSENTIMENTO — OPCIONAL (Nunca bloqueia o atendimento) */}
+                {auth.canAccessConsents && selectedAppt.patient_id && (
+                  <ConsentPendingAlert
+                    variant="optional-card"
+                    patientId={selectedAppt.patient_id}
+                    serviceId={selectedAppt.service_id}
+                    onOpen={() => {
+                      setConsentPatientId(selectedAppt.patient_id);
+                    }}
+                  />
+                )}
+
+                {/* 7. OBSERVAÇÕES DO CLIENTE (Apenas se existir observação) */}
+                {selectedAppt.patient_notes && (
+                  <div className="text-xs bg-amber-50/80 text-amber-950 px-3.5 py-2.5 rounded-xl border border-amber-200/80">
+                    <span className="font-bold block text-[11px] uppercase tracking-wider text-amber-800 mb-0.5">
+                      Observações do cliente
+                    </span>
+                    <p className="leading-relaxed">{selectedAppt.patient_notes}</p>
+                  </div>
+                )}
+
+                {/* 13-14. AÇÃO PRINCIPAL BASEADA NO STATUS + AÇÕES SECUNDÁRIAS */}
+                <div className="pt-2 border-t border-slate-100 space-y-2.5">
+                  {selectedAppt.status === 'completed' ? (
                     <button
                       type="button"
-                      onClick={() => setTeleAppt(selectedAppt)}
-                      className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 transition-all cursor-pointer"
+                      onClick={() => {
+                        setViewingRecordsAppt(selectedAppt);
+                      }}
+                      className="w-full flex items-center justify-center gap-2 py-3 px-5 rounded-xl text-sm font-bold text-white bg-teal-600 hover:bg-teal-700 shadow-sm transition-all cursor-pointer"
                     >
-                      <span aria-hidden="true">📹</span>
-                      <span>Configurar teleconsulta</span>
+                      <FileText className="w-4 h-4" />
+                      <span>Ver evolução</span>
+                    </button>
+                  ) : selectedAppt.status === 'cancelled' || selectedAppt.status === 'no_show' ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setViewingRecordsAppt(selectedAppt);
+                      }}
+                      className="w-full flex items-center justify-center gap-2 py-3 px-5 rounded-xl text-sm font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 transition-all cursor-pointer"
+                    >
+                      <FileText className="w-4 h-4" />
+                      <span>Ver prontuário do paciente</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        startConsultation(selectedAppt);
+                      }}
+                      className="w-full flex items-center justify-center gap-2 py-3 px-5 rounded-xl text-sm font-bold text-white bg-teal-600 hover:bg-teal-700 shadow-sm shadow-teal-600/15 transition-all cursor-pointer"
+                    >
+                      <Stethoscope className="w-4 h-4" />
+                      <span>
+                        {selectedAppt.status === 'in_progress' ? 'Continuar atendimento' : 'Iniciar atendimento'}
+                      </span>
                     </button>
                   )}
 
-                  {/* Botão de Envio de Lembrete pelo WhatsApp */}
-                  {(() => {
-                    const hasPhone = isValidPhoneNumber(selectedAppt.patient_phone);
-                    return (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (hasPhone) {
-                            setWhatsappReminderAppt(selectedAppt);
-                          }
-                        }}
-                        disabled={!hasPhone}
-                        title={hasPhone ? 'Abrir no WhatsApp' : 'Paciente sem telefone cadastrado'}
-                        className={`w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold transition-all ${
-                          hasPhone
-                            ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300/80 shadow-xs cursor-pointer'
-                            : 'bg-slate-100 text-slate-400 border border-slate-200 opacity-60 cursor-not-allowed'
-                        }`}
-                      >
-                        <WhatsAppIcon className={`w-4 h-4 ${hasPhone ? 'fill-emerald-600' : 'fill-slate-400'}`} />
-                        <span>Abrir no WhatsApp</span>
-                      </button>
-                    );
-                  })()}
+                  {/* Linha de Ações Secundárias: Abrir no WhatsApp + Gerenciar agendamento */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {(() => {
+                      const hasPhone = isValidPhoneNumber(selectedAppt.patient_phone);
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (hasPhone) {
+                              setWhatsappReminderAppt(selectedAppt);
+                            }
+                          }}
+                          disabled={!hasPhone}
+                          title={hasPhone ? 'Abrir no WhatsApp' : 'Paciente sem telefone cadastrado'}
+                          className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold transition-all ${
+                            hasPhone
+                              ? 'bg-white hover:bg-emerald-50 text-emerald-700 border border-slate-200 hover:border-emerald-300 shadow-2xs cursor-pointer'
+                              : 'bg-slate-50 text-slate-400 border border-slate-200 opacity-60 cursor-not-allowed'
+                          }`}
+                        >
+                          <WhatsAppIcon className={`w-4 h-4 ${hasPhone ? 'fill-emerald-600' : 'fill-slate-400'}`} />
+                          <span>Abrir no WhatsApp</span>
+                        </button>
+                      );
+                    })()}
 
-                  <div>
-                    <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Alterar Status</h4>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        onClick={() => handleUpdateStatus(selectedAppt.id, 'confirmed')}
-                        className="px-3 py-1.5 text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg"
-                      >
-                        Confirmar
-                      </button>
-                      <button
-                        onClick={() => startConsultation(selectedAppt)}
-                        className="px-3 py-1.5 text-xs font-semibold bg-purple-50 text-purple-700 hover:bg-purple-100 rounded-lg"
-                      >
-                        Iniciar
-                      </button>
-                      <button
-                        onClick={() => {
-                          setFinishingAppt(selectedAppt);
-                          setSelectedAppt(null);
-                        }}
-                        className="px-3 py-1.5 text-xs font-semibold bg-teal-600 text-white hover:bg-teal-700 rounded-lg shadow-xs"
-                      >
-                        Concluir Atendimento
-                      </button>
                     <button
-                      onClick={() => handleUpdateStatus(selectedAppt.id, 'no_show')}
-                      className="px-3 py-1.5 text-xs font-semibold bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-lg"
+                      type="button"
+                      onClick={() => setShowManageMenu(prev => !prev)}
+                      aria-expanded={showManageMenu}
+                      className="flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 shadow-2xs transition-all cursor-pointer"
                     >
-                      Marcar Falta
-                    </button>
-                    <button
-                      onClick={() => {
-                        setCancellingAppt(selectedAppt);
-                        setCancellationReason('');
-                        setCancellationCategory('Desistência do paciente');
-                      }}
-                      className="px-3 py-1.5 text-xs font-semibold bg-rose-50 text-rose-700 hover:bg-rose-100 rounded-lg"
-                    >
-                      Cancelar
+                      <Settings2 className="w-4 h-4 text-slate-500" />
+                      <span>Gerenciar agendamento</span>
+                      {showManageMenu ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
                     </button>
                   </div>
-                </div>
-              </div>
 
-                <div className="pt-2 flex justify-between">
-                  <button
-                    onClick={() => {
-                      setIsRescheduling(true);
-                      setRescheduleDate(selectedAppt.start_time.split('T')[0]);
-                      setRescheduleTime(selectedAppt.start_time.split('T')[1].slice(0, 5));
-                    }}
-                    className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    Remarcar este atendimento
-                  </button>
-                </div>
-
-                {/* Histórico de Lembretes / Comunicações */}
-                <div className="pt-3 border-t border-slate-100 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                      Histórico de Comunicações & Lembretes
-                    </h4>
-                    {loadingComms && (
-                      <span className="text-[10px] text-slate-400">Carregando...</span>
-                    )}
-                  </div>
-
-                  {communications.length === 0 && !loadingComms ? (
-                    <p className="text-[11px] text-slate-400 italic">
-                      Nenhum lembrete registrado para este agendamento até o momento.
-                    </p>
-                  ) : (
-                    <div className="max-h-32 overflow-y-auto space-y-1.5 pr-1">
-                      {communications.map((comm) => {
-                        const sentDate = comm.sent_at || comm.created_at;
-                        const dateFormatted = sentDate
-                          ? new Date(sentDate).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
-                          : '';
-                        const isManual = comm.mode === 'manual' || comm.type === 'reminder_manual';
-
-                        return (
-                          <div
-                            key={comm.id}
-                            className="bg-slate-50 border border-slate-200/80 rounded-lg p-2 text-[11px] flex items-center justify-between gap-2"
+                  {/* 15-17. MENU COLAPSÁVEL: GERENCIAR AGENDAMENTO + HISTÓRICO DE COMUNICAÇÕES */}
+                  {showManageMenu && (
+                    <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-3.5 space-y-3 animate-in fade-in duration-150">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {(selectedAppt.status === 'scheduled' || selectedAppt.status === 'rescheduled') && (
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateStatus(selectedAppt.id, 'confirmed')}
+                            className="px-3 py-1.5 text-xs font-semibold bg-white text-emerald-700 hover:bg-emerald-50 border border-emerald-200 rounded-xl transition-colors cursor-pointer"
                           >
-                            <div className="flex items-center gap-1.5 min-w-0">
-                              <WhatsAppIcon className="w-3.5 h-3.5 fill-emerald-600 shrink-0" />
-                              <div className="truncate">
-                                <span className="font-semibold text-slate-700">
-                                  {isManual ? 'WhatsApp Manual' : 'WhatsApp Automático'}
-                                </span>
-                                {comm.sent_by_name && (
-                                  <span className="text-slate-500 ml-1">por {comm.sent_by_name}</span>
-                                )}
-                                <span className="text-slate-400 ml-1">• {dateFormatted}</span>
-                              </div>
-                            </div>
-                            <span
-                              className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                                comm.delivery_status === 'delivered' || comm.status === 'sent'
-                                  ? 'bg-emerald-100 text-emerald-800'
-                                  : comm.delivery_status === 'manual_opened'
-                                  ? 'bg-blue-100 text-blue-800'
-                                  : comm.status === 'failed'
-                                  ? 'bg-rose-100 text-rose-800'
-                                  : 'bg-amber-100 text-amber-800'
-                              }`}
-                            >
-                              {comm.delivery_status === 'delivered'
-                                ? 'Enviado'
-                                : comm.delivery_status === 'manual_opened'
-                                ? 'Aberto'
-                                : comm.status === 'failed'
-                                ? 'Falhou'
-                                : 'Pendente'}
-                            </span>
+                            Confirmar presença
+                          </button>
+                        )}
+
+                        {['scheduled', 'confirmed', 'rescheduled'].includes(selectedAppt.status) && (
+                          <button
+                            type="button"
+                            onClick={() => startConsultation(selectedAppt)}
+                            className="px-3 py-1.5 text-xs font-semibold bg-white text-teal-700 hover:bg-teal-50 border border-teal-200 rounded-xl transition-colors cursor-pointer"
+                          >
+                            Iniciar atendimento
+                          </button>
+                        )}
+
+                        {['in_progress', 'confirmed', 'scheduled', 'rescheduled'].includes(selectedAppt.status) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setFinishingAppt(selectedAppt);
+                              setSelectedAppt(null);
+                            }}
+                            className="px-3 py-1.5 text-xs font-semibold bg-white text-teal-800 hover:bg-teal-50 border border-teal-300 rounded-xl transition-colors cursor-pointer"
+                          >
+                            Concluir atendimento
+                          </button>
+                        )}
+
+                        {!['completed', 'cancelled'].includes(selectedAppt.status) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsRescheduling(true);
+                              setRescheduleDate(selectedAppt.start_time.split('T')[0]);
+                              setRescheduleTime(selectedAppt.start_time.split('T')[1].slice(0, 5));
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-white text-indigo-700 hover:bg-indigo-50 border border-indigo-200 rounded-xl transition-colors cursor-pointer"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            <span>Remarcar</span>
+                          </button>
+                        )}
+
+                        {!['completed', 'cancelled', 'no_show'].includes(selectedAppt.status) && (
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateStatus(selectedAppt.id, 'no_show')}
+                            className="px-3 py-1.5 text-xs font-semibold bg-white text-amber-800 hover:bg-amber-50 border border-amber-200 rounded-xl transition-colors cursor-pointer"
+                          >
+                            Marcar falta
+                          </button>
+                        )}
+
+                        {!['completed', 'cancelled'].includes(selectedAppt.status) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCancellingAppt(selectedAppt);
+                              setCancellationReason('');
+                              setCancellationCategory('Desistência do paciente');
+                            }}
+                            className="px-3 py-1.5 text-xs font-semibold bg-white text-rose-700 hover:bg-rose-50 border border-rose-200 rounded-xl transition-colors cursor-pointer"
+                          >
+                            Cancelar agendamento
+                          </button>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => setShowCommsHistory(prev => !prev)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-white text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer ml-auto"
+                        >
+                          <History className="w-3.5 h-3.5 text-slate-400" />
+                          <span>
+                            Histórico de comunicações{communications.length > 0 ? ` (${communications.length})` : ''}
+                          </span>
+                          {showCommsHistory ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+
+                      {showCommsHistory && (
+                        <div className="pt-2.5 border-t border-slate-200/70 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                              Histórico de Comunicações & Lembretes
+                            </h4>
+                            {loadingComms && (
+                              <span className="text-[10px] text-slate-400">Carregando...</span>
+                            )}
                           </div>
-                        );
-                      })}
+
+                          {communications.length === 0 && !loadingComms ? (
+                            <p className="text-[11px] text-slate-400 italic">
+                              Nenhum lembrete registrado para este agendamento até o momento.
+                            </p>
+                          ) : (
+                            <div className="max-h-32 overflow-y-auto space-y-1.5 pr-1">
+                              {communications.map((comm) => {
+                                const sentDate = comm.sent_at || comm.created_at;
+                                const dateFormatted = sentDate
+                                  ? new Date(sentDate).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+                                  : '';
+                                const isManual = comm.mode === 'manual' || comm.type === 'reminder_manual';
+
+                                return (
+                                  <div
+                                    key={comm.id}
+                                    className="bg-white border border-slate-200/80 rounded-lg p-2 text-[11px] flex items-center justify-between gap-2"
+                                  >
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                      <WhatsAppIcon className="w-3.5 h-3.5 fill-emerald-600 shrink-0" />
+                                      <div className="truncate">
+                                        <span className="font-semibold text-slate-700">
+                                          {isManual ? 'WhatsApp Manual' : 'WhatsApp Automático'}
+                                        </span>
+                                        {comm.sent_by_name && (
+                                          <span className="text-slate-500 ml-1">por {comm.sent_by_name}</span>
+                                        )}
+                                        <span className="text-slate-400 ml-1">• {dateFormatted}</span>
+                                      </div>
+                                    </div>
+                                    <span
+                                      className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                        comm.delivery_status === 'delivered' || comm.status === 'sent'
+                                          ? 'bg-emerald-100 text-emerald-800'
+                                          : comm.delivery_status === 'manual_opened'
+                                          ? 'bg-blue-100 text-blue-800'
+                                          : comm.status === 'failed'
+                                          ? 'bg-rose-100 text-rose-800'
+                                          : 'bg-amber-100 text-amber-800'
+                                      }`}
+                                    >
+                                      {comm.delivery_status === 'delivered'
+                                        ? 'Enviado'
+                                        : comm.delivery_status === 'manual_opened'
+                                        ? 'Aberto'
+                                        : comm.status === 'failed'
+                                        ? 'Falhou'
+                                        : 'Pendente'}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1675,6 +2109,17 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
         document.body
       )}
       {consentPatientId && <PatientConsentsDialog patientId={consentPatientId} onClose={() => setConsentPatientId(null)} />}
+      {viewingRecordsAppt && createPortal(
+        <div className="relative z-[10050]">
+          <PatientPreviousRecordsModal
+            isOpen={Boolean(viewingRecordsAppt)}
+            onClose={() => setViewingRecordsAppt(null)}
+            patientId={viewingRecordsAppt.patient_id}
+            patientName={viewingRecordsAppt.patient_name || 'Paciente'}
+          />
+        </div>,
+        document.body
+      )}
     </div>
   );
 };

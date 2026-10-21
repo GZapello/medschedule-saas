@@ -114,6 +114,10 @@ interface FinishConsultationModalProps {
     service_id: string;
     service_name?: string;
     start_time: string;
+    end_time?: string;
+    attendance_start_at?: string | null;
+    attendance_expected_end_at?: string | null;
+    attendance_end_at?: string | null;
     display_amount?: number;
     payment_amount?: number;
     service_price?: number;
@@ -212,6 +216,17 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
     }).catch((err: any) => showToast(err.message || 'Erro ao consultar atendimento.', 'error'));
   }, [appointment.id]);
   const [submitting, setSubmitting] = useState<boolean>(false);
+  const realStartIso = appointment.attendance_start_at || appointment.start_time || '';
+  const realStartDisplay = realStartIso ? (realStartIso.replace(' ', 'T').split('T')[1]?.slice(0, 5) || '') : '';
+  const [attendanceEndTime, setAttendanceEndTime] = useState<string>(() => {
+    if (appointment.attendance_end_at) {
+      const t = appointment.attendance_end_at.replace(' ', 'T').split('T')[1]?.slice(0, 5);
+      if (t) return t;
+    }
+    const now = new Date();
+    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  });
+  const [editingFinishTime, setEditingFinishTime] = useState<boolean>(false);
 
   // Seções ativas
   const [includeEvolution, setIncludeEvolution] = useState<boolean>(true);
@@ -232,7 +247,7 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
   const [certificate, setCertificate] = useState({
     certificateType: 'rest', // rest, attendance, fitness
     daysOff: 1,
-    startDate: appointment.start_time?.slice(0,10) || '',
+    startDate: (appointment.attendance_start_at || appointment.start_time)?.slice(0,10) || '',
     cidCode: '',
     notes: ''
   });
@@ -332,7 +347,15 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
     setSubmitting(true);
 
     try {
-      const payload: any = {};
+      if (realStartDisplay && attendanceEndTime && attendanceEndTime < realStartDisplay) {
+        showToast('O horário real de término não pode ser anterior ao horário de início do atendimento.', 'error');
+        finishingRef.current = false;
+        setSubmitting(false);
+        return;
+      }
+      const payload: any = {
+        attendanceEndTime: attendanceEndTime || undefined
+      };
 
       if (evolution.clinicalEvolution.trim() || evolution.technicalNotes.trim()) {
         payload.evolution = {
@@ -689,6 +712,54 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
 
           {/* Form */}
           <form onSubmit={handleFinish} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-6 bg-slate-50/50">
+            {/* Horário Real de Término do Atendimento */}
+            <div className="bg-white px-4 py-3 rounded-2xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2 text-slate-700 flex-wrap">
+                <Clock className="w-4 h-4 text-teal-600 shrink-0" />
+                {realStartDisplay && (
+                  <>
+                    <span>
+                      Início: <strong>{realStartDisplay}</strong>
+                    </span>
+                    <span className="text-slate-300">•</span>
+                  </>
+                )}
+                {!editingFinishTime ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    <span>Horário real de término: <strong>{attendanceEndTime}</strong></span>
+                    <button
+                      type="button"
+                      onClick={() => setEditingFinishTime(true)}
+                      className="text-[11px] font-bold text-teal-600 hover:text-teal-800 hover:underline cursor-pointer ml-1"
+                    >
+                      [ editar ]
+                    </button>
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5">
+                    <label htmlFor="finish-attendance-end-time" className="font-semibold text-slate-700">Horário real de término:</label>
+                    <input
+                      id="finish-attendance-end-time"
+                      type="time"
+                      value={attendanceEndTime}
+                      onChange={e => setAttendanceEndTime(e.target.value)}
+                      className="px-2 py-1 border border-teal-300 rounded-lg text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setEditingFinishTime(false)}
+                      className="text-[11px] font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 px-2 py-0.5 rounded-lg cursor-pointer"
+                    >
+                      OK
+                    </button>
+                  </span>
+                )}
+              </div>
+              <span className="text-[11px] text-slate-400">
+                Horário real do atendimento
+              </span>
+            </div>
+
             {/* Checklist de Itens para Finalizar */}
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
               <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">

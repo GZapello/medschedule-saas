@@ -1,4 +1,4 @@
-import { resolveDocumentContext, saveDocumentContext, DocumentContextError, recordedAttendance, appointmentRecord } from '../services/document-context.service';
+import { resolveDocumentContext, saveDocumentContext, DocumentContextError, recordedAttendance, appointmentRecord, extractDatePart, extractTimePart, normalizeLocalDateTimeIso, getClinicLocalNowIso } from '../services/document-context.service';
 import { isPrimaryClinicalModule, resolveClinicalModule, getAvailableModulesForProfessional } from '../utils/clinical-module';
 import { Request, Response } from 'express';
 import { db } from '../config/database';
@@ -714,7 +714,44 @@ export class DocumentsController {
         ? evolution.moduleType
         : (appt.clinical_module || null);
 
-      db.prepare("UPDATE appointments SET clinical_module = COALESCE(?, NULLIF(NULLIF(clinical_module, 'ZemdaBody'), 'Zemda360')) WHERE id=? AND tenant_id=?")
+      const preFinishRecord = appointmentRecord(tenantId!, appt.patient_id, appointmentId);
+      const initialRecorded = recordedAttendance(appt, preFinishRecord);
+      const spDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+      const resolvedSessionDate = extractDatePart(evolution?.sessionDate) || initialRecorded.sessionDate || spDateStr;
+      const resolvedSessionTime = evolution?.sessionTime !== undefined
+        ? (evolution.sessionTime ? extractTimePart(evolution.sessionTime) : null)
+        : initialRecorded.sessionTime;
+
+      let effectiveEndAt: string | null = appt.attendance_end_at || null;
+      const rawReqEnd = req.body.attendanceEndAt || req.body.attendance_end_at || req.body.attendanceEndTime || evolution?.sessionEndTime || evolution?.session_end_time;
+      if (resolvedSessionTime !== null) {
+        if (rawReqEnd) {
+          effectiveEndAt = normalizeLocalDateTimeIso(rawReqEnd) || (extractTimePart(rawReqEnd) ? `${resolvedSessionDate}T${extractTimePart(rawReqEnd)}:00` : null);
+        }
+        if (!effectiveEndAt) {
+          effectiveEndAt = getClinicLocalNowIso();
+        }
+      } else {
+        effectiveEndAt = null;
+      }
+      const resolvedSessionEndTime = resolvedSessionTime !== null ? extractTimePart(effectiveEndAt) : null;
+      const effectiveStartAt = appt.attendance_start_at || (resolvedSessionTime ? `${resolvedSessionDate}T${resolvedSessionTime}:00` : null);
+
+      db.prepare(`
+        UPDATE appointments SET
+          clinical_module = COALESCE(?, NULLIF(NULLIF(clinical_module, 'ZemdaBody'), 'Zemda360')),
+          attendance_start_at = COALESCE(attendance_start_at, ?),
+          attendance_end_at = COALESCE(?, attendance_end_at)
+        WHERE id=? AND tenant_id=?
+      `).run(targetModule, effectiveStartAt, effectiveEndAt, appointmentId, tenantId);
+      appt.attendance_start_at = appt.attendance_start_at || effectiveStartAt;
+      appt.attendance_end_at = effectiveEndAt || appt.attendance_end_at;
+
+      if (preFinishRecord && resolvedSessionEndTime && !preFinishRecord.session_end_time) {
+        db.prepare('UPDATE records SET session_end_time = ? WHERE id = ? AND tenant_id = ?').run(resolvedSessionEndTime, preFinishRecord.id, tenantId);
+      }
+
+      if (false) db.prepare("UPDATE appointments SET clinical_module = COALESCE(?, NULLIF(NULLIF(clinical_module, 'ZemdaBody'), 'Zemda360')) WHERE id=? AND tenant_id=?")
         .run(targetModule, appointmentId, tenantId);
 
       if (!saved) {
@@ -743,10 +780,15 @@ export class DocumentsController {
         currentStage = 'SAVE_EVOLUTION';
         const recId = 'rec-' + uuidv4().slice(0, 8);
         const srvName = (db.prepare('SELECT name FROM services WHERE id = ?').get(appt.service_id) as any)?.name || 'Atendimento Geral';
+        const sessionDate = resolvedSessionDate;
+        const sessionTime = resolvedSessionTime;
+        const sessionEndTime = resolvedSessionEndTime;
+        if (false) {
         const spDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
         const recorded=recordedAttendance(appt,appointmentRecord(tenantId!,appt.patient_id,appointmentId));
         const sessionDate = recorded.sessionDate || spDateStr;
         const sessionTime = recorded.sessionTime;
+        }
         const clinicalDataJson = evolution.clinicalData ? (typeof evolution.clinicalData === 'string' ? evolution.clinicalData : JSON.stringify(evolution.clinicalData)) : null;
         const snapshot = typeof evolution.moduleData === 'string' ? JSON.parse(evolution.moduleData) : { ...evolution.moduleData };
         if (evolution.assessmentData && !snapshot.assessmentData && !snapshot.assessment) snapshot.assessment = evolution.assessmentData;
@@ -806,16 +848,16 @@ export class DocumentsController {
         db.prepare(`
           INSERT INTO records (
             id, tenant_id, patient_id, appointment_id, professional_id,
-            session_date, session_time, procedure_name, title, clinical_evolution,
+            session_date, session_time, session_end_time, procedure_name, title, clinical_evolution,
             technical_notes, conducts, clinical_data_json, module_type, module_data_json,
             is_sealed, signature_hash, signed_at, signed_by_user_id, signer_name,
             signer_registration, sealed_at, amendments_json,
             created_by, updated_by, created_at, updated_at
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, datetime('now'), datetime('now'))
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, datetime('now'), datetime('now'))
         `).run(
           recId, tenantId, appt.patient_id, appointmentId, resolvedProfId,
-          sessionDate, sessionTime, evolution.procedureName || srvName,
+          sessionDate, sessionTime, sessionEndTime, evolution.procedureName || srvName,
           evolution.title || `Consulta de ${srvName}`,
           evolution.clinicalEvolution,
           evolution.technicalNotes || null,
@@ -1022,7 +1064,7 @@ export class DocumentsController {
 
       const documentContext = (certificate?.certificateType || prescription?.content || examRequest?.examsList)
         ? resolveDocumentContext(req,{patientId:appt.patient_id,professionalId:resolvedProfId,appointmentId})
-        : {sessionDate:null,sessionTime:null,recordId:null,professionalId:resolvedProfId};
+        : {sessionDate:null,sessionTime:null,sessionEndTime:null,recordId:null,professionalId:resolvedProfId};
 
       // 2. Emite Atestado, se preenchido
       if (certificate && certificate.certificateType) {

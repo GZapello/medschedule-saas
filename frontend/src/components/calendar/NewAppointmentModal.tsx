@@ -43,6 +43,16 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
 
   const [isCustomTime, setIsCustomTime] = useState<boolean>(false);
   const [customTime, setCustomTime] = useState<string>('18:30');
+  const [isRetroactive, setIsRetroactive] = useState<boolean>(false);
+  const [retroStartTime, setRetroStartTime] = useState<string>('14:00');
+  const [retroEndTime, setRetroEndTime] = useState<string>('14:50');
+
+  const computeEndTimeStr = (startStr: string, durationMin: number): string => {
+    const clean = (startStr || '14:00').trim().slice(0, 5);
+    const [hh, mm] = clean.split(':').map(Number);
+    const total = (((hh || 0) * 60 + (mm || 0) + (Number(durationMin) || 50)) % (24 * 60) + 24 * 60) % (24 * 60);
+    return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+  };
 
   const [isNewServiceModalOpen, setIsNewServiceModalOpen] = useState(false);
   const [isNewInsuranceModalOpen, setIsNewInsuranceModalOpen] = useState(false);
@@ -88,6 +98,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
       setMeetingUrl('');
       setIsConfiguringTele(false);
       setIsCustomTime(false);
+      setIsRetroactive(false);
       setCustomTime(initialPrefill?.time || '18:30');
     } else {
       setPatientId('');
@@ -96,6 +107,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
       setNewPatientSearchQuery('');
       setIsConfiguringTele(false);
       setIsCustomTime(false);
+      setIsRetroactive(false);
       setCustomTime('18:30');
       setIsNewServiceModalOpen(false);
       setIsNewInsuranceModalOpen(false);
@@ -215,6 +227,10 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
     if (priceEdited.current) return;
     priceServiceId.current = serviceId;
     setAppointmentPrice(selectedService ? formatAppointmentPrice(Number(selectedService.price)) : '');
+    if (selectedService) {
+      const dur = selectedService.duration_minutes || (selectedService as any).duration || 50;
+      setRetroEndTime(prevEnd => computeEndTimeStr(retroStartTime, dur) || prevEnd);
+    }
   }, [isOpen, serviceId, services]);
 
   // Consulta slots livres imediatamente ao alterar profissional, serviço, data ou sala
@@ -278,7 +294,12 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
       return;
     }
 
-    if (!isCustomTime && !selectedSlot) {
+    if (isRetroactive) {
+      if (!date || !retroStartTime || !retroEndTime) {
+        showToast('Informe a data, o horário de início e o horário de término do atendimento realizado', 'error');
+        return;
+      }
+    } else if (!isCustomTime && !selectedSlot) {
       showToast('Selecione um horário disponível ou agende em horário avulso', 'error');
       return;
     }
@@ -296,7 +317,12 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
     let startIso = '';
     let endIso = '';
 
-    if (isCustomTime) {
+    if (isRetroactive) {
+      const startClean = retroStartTime.trim().slice(0, 5);
+      const endClean = retroEndTime.trim().slice(0, 5);
+      startIso = `${date}T${startClean}:00`;
+      endIso = `${date}T${endClean}:00`;
+    } else if (isCustomTime) {
       const selectedService = services.find(s => s.id === serviceId);
       const duration = selectedService?.duration_minutes || (selectedService as any)?.duration || 30;
       const { startStr, endStr } = computeStartAndEnd(date, customTime, duration);
@@ -322,10 +348,18 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
         modality,
         meeting_url: modality === 'online' ? meetingUrl.trim() || null : null,
         internalNotes: notes || null,
-        isCustomTime: isCustomTime ? true : undefined
+        isCustomTime: isCustomTime ? true : undefined,
+        isRetroactive: isRetroactive ? true : undefined
       });
 
-      showToast('Atendimento agendado com sucesso!', 'success');
+      if (isRetroactive) {
+        try {
+          sessionStorage.setItem('zemda_open_retroactive_appt', JSON.stringify(createdAppt));
+        } catch (_) {}
+        showToast('Atendimento registrado! Abrindo atendimento clínico...', 'success');
+      } else {
+        showToast('Atendimento agendado com sucesso!', 'success');
+      }
       onSuccess(createdAppt);
       onClose();
     } catch (err: any) {
@@ -360,7 +394,20 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
     <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto mobile-modal">
       <div className="bg-white rounded-2xl sm:rounded-3xl max-w-lg sm:max-w-xl w-full p-4 sm:p-5 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 mb-3">
-          <h3 className="text-base sm:text-lg font-bold text-slate-900">Novo Agendamento</h3>
+          <div>
+            <h3 className="text-base sm:text-lg font-bold text-slate-900">
+              {isRetroactive ? 'Registrar Atendimento Realizado' : 'Novo Agendamento'}
+            </h3>
+            {isRetroactive && (
+              <button
+                type="button"
+                onClick={() => setIsRetroactive(false)}
+                className="text-xs font-medium text-teal-700 hover:text-teal-900 underline underline-offset-2 mt-0.5 cursor-pointer block"
+              >
+                ← Voltar para novo agendamento
+              </button>
+            )}
+          </div>
           <button aria-label="Fechar" onClick={onClose} className="p-1 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer">
             <X className="w-5 h-5" />
           </button>
@@ -473,11 +520,36 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             <div>
-              <label className="block font-semibold text-slate-700 mb-0.5">Data *</label>
+              <div className="flex items-center justify-between gap-2 mb-0.5">
+                <label className="block font-semibold text-slate-700">
+                  {isRetroactive ? 'Data do atendimento *' : 'Data *'}
+                </label>
+                {!isRetroactive && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const todayStr = new Date().toISOString().split('T')[0];
+                      setIsRetroactive(true);
+                      setIsCustomTime(false);
+                      if (!date || date > todayStr) {
+                        setDate(todayStr);
+                      }
+                      const selectedService = services.find(s => s.id === serviceId);
+                      const dur = selectedService?.duration_minutes || (selectedService as any)?.duration || 50;
+                      const startT = initialPrefill?.time || '14:00';
+                      setRetroStartTime(startT);
+                      setRetroEndTime(computeEndTimeStr(startT, dur));
+                    }}
+                    className="text-[11px] font-semibold text-teal-700 hover:text-teal-900 underline underline-offset-2 cursor-pointer"
+                  >
+                    Registrar atendimento já realizado
+                  </button>
+                )}
+              </div>
               <input
                 type="date"
                 value={date}
-                min={new Date().toISOString().split('T')[0]}
+                min={isRetroactive ? undefined : new Date().toISOString().split('T')[0]}
                 onChange={e => setDate(e.target.value)}
                 className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50"
               />
@@ -563,7 +635,68 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
           )}
 
           {/* Horários disponíveis / Horário Avulso */}
-          {isCustomTime ? (
+          {isRetroactive ? (
+            <div className="p-3 bg-teal-50/60 border border-teal-200/80 rounded-xl space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-teal-600" />
+                  <span className="font-bold text-teal-900 text-xs">Horário Real do Atendimento Realizado</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsRetroactive(false)}
+                  className="text-[11px] text-slate-600 hover:text-slate-900 underline cursor-pointer"
+                >
+                  ← Voltar para novo agendamento
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-0.5 text-[11px]">Data do atendimento *</label>
+                  <input
+                    type="date"
+                    value={date}
+                    onChange={e => setDate(e.target.value)}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-xs bg-white"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-0.5 text-[11px]">Horário de início *</label>
+                  <input
+                    type="time"
+                    value={retroStartTime}
+                    onChange={e => {
+                      const nextStart = e.target.value;
+                      setRetroStartTime(nextStart);
+                      const selectedService = services.find(s => s.id === serviceId);
+                      const dur = selectedService?.duration_minutes || (selectedService as any)?.duration || 50;
+                      if (nextStart) {
+                        setRetroEndTime(computeEndTimeStr(nextStart, dur));
+                      }
+                    }}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-xs bg-white"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-0.5 text-[11px]">Horário de término *</label>
+                  <input
+                    type="time"
+                    value={retroEndTime}
+                    onChange={e => setRetroEndTime(e.target.value)}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-xs bg-white"
+                    required
+                  />
+                </div>
+              </div>
+
+              <p className="text-[10px] text-slate-600">
+                Permite registrar atendimentos ocorridos no passado ou fora da escala habitual e abre imediatamente o prontuário clínico.
+              </p>
+            </div>
+          ) : isCustomTime ? (
             <div className="p-2.5 bg-amber-50/70 border border-amber-200 rounded-xl space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
@@ -574,6 +707,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                   type="button"
                   onClick={() => {
                     setIsCustomTime(false);
+      setIsRetroactive(false);
                     setSelectedSlot(null);
                   }}
                   className="text-[11px] text-slate-500 hover:text-slate-800 underline cursor-pointer"
@@ -588,7 +722,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                   <input
                     type="date"
                     value={date}
-                    min={new Date().toISOString().split('T')[0]}
+                    min={isRetroactive ? undefined : new Date().toISOString().split('T')[0]}
                     onChange={e => setDate(e.target.value)}
                     className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-xs bg-white"
                   />
@@ -679,10 +813,10 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
             <button
               type="button"
               onClick={handleBook}
-              disabled={(!isCustomTime ? !selectedSlot : (!date || !customTime)) || !patientId || !professionalId || !serviceId || loading}
+              disabled={(isRetroactive ? (!date || !retroStartTime || !retroEndTime) : (!isCustomTime ? !selectedSlot : (!date || !customTime))) || !patientId || !professionalId || !serviceId || loading}
               className="w-full sm:w-auto px-5 py-2 font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs disabled:opacity-50 cursor-pointer text-xs"
             >
-              {loading ? 'Agendando...' : 'Confirmar Agendamento'}
+              {isRetroactive ? (loading ? 'Registrando...' : 'Registrar e abrir atendimento') : (loading ? 'Agendando...' : 'Confirmar Agendamento')}
             </button>
           </div>
         </div>

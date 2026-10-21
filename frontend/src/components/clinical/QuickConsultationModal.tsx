@@ -71,6 +71,8 @@ import { BodyPainMapCanvas } from '../physiotherapy/BodyPainMapCanvas';
 import { OdontogramCanvas, OdontogramData } from '../dentistry/OdontogramCanvas';
 import { OnlineConsultationTools } from './OnlineConsultationTools';
 import { ZemdaBodyModal } from '../zemda-body/ZemdaBodyModal';
+import { ConsentPendingAlert } from '../consents/ConsentPendingAlert';
+import { PatientConsentsDialog } from '../consents/PatientConsentsPanel';
 
 interface QuickConsultationModalProps {
   appointment: {
@@ -93,6 +95,10 @@ interface QuickConsultationModalProps {
     display_amount?: number;
     payment_amount?: number;
     service_price?: number;
+    duration_minutes?: number;
+    attendance_start_at?: string | null;
+    attendance_expected_end_at?: string | null;
+    attendance_end_at?: string | null;
   };
   onMeetingUrlSaved?: (url: string | null) => void;
   onDriveUrlSaved?: (url: string | null) => void;
@@ -102,6 +108,7 @@ interface QuickConsultationModalProps {
   onOpenZemdaBody?: () => void;
   onOpenSpecializedModule?: () => void;
   specializedModuleName?: string;
+  initialWorkspaceTab?: 'resumo' | 'evolucao' | 'modulo' | 'documentos' | 'finalizacao';
 }
 
 export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
@@ -113,7 +120,8 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
   onFinished,
   onOpenZemdaBody,
   onOpenSpecializedModule,
-  specializedModuleName
+  specializedModuleName,
+  initialWorkspaceTab
 }) => {
   const {
     currentTenant,
@@ -126,10 +134,92 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
     isPsychopedagogue,
     isZemdaPP,
     isZemdaBody,
+    canAccessConsents,
     currentUser,
     hasCapability
   } = useAuth();
   const { showToast } = useToast();
+  const [showConsentsDialog, setShowConsentsDialog] = useState<boolean>(false);
+  const [realStartAt, setRealStartAt] = useState<string | null>(appointment.attendance_start_at || null);
+  const [expectedEndAt, setExpectedEndAt] = useState<string | null>(appointment.attendance_expected_end_at || null);
+  const [realEndAt, setRealEndAt] = useState<string | null>(appointment.attendance_end_at || null);
+  const [editingRealTime, setEditingRealTime] = useState<boolean>(false);
+  const [savingRealTime, setSavingRealTime] = useState<boolean>(false);
+  const [editRealDate, setEditRealDate] = useState<string>('');
+  const [editRealStartTime, setEditRealStartTime] = useState<string>('');
+  const [editExpectedEndTime, setEditExpectedEndTime] = useState<string>('');
+  const [expectedEndManuallyEdited, setExpectedEndManuallyEdited] = useState<boolean>(false);
+
+  useEffect(() => {
+    setRealStartAt(appointment.attendance_start_at || null);
+    setExpectedEndAt(appointment.attendance_expected_end_at || null);
+    setRealEndAt(appointment.attendance_end_at || null);
+    setEditingRealTime(false);
+  }, [appointment.id, appointment.attendance_start_at, appointment.attendance_expected_end_at, appointment.attendance_end_at]);
+
+  const computeExpectedEndHHMM = (startHHMM: string): string => {
+    const m = startHHMM.match(/^(\d{2}):(\d{2})/);
+    if (!m) return '';
+    let duration = Number(appointment.duration_minutes) || 0;
+    if (duration <= 0 && appointment.start_time && appointment.end_time) {
+      const diff = Math.round((new Date(appointment.end_time).getTime() - new Date(appointment.start_time).getTime()) / 60000);
+      if (diff > 0 && diff <= 720) duration = diff;
+    }
+    if (duration <= 0) duration = 50;
+    const totalMin = parseInt(m[1], 10) * 60 + parseInt(m[2], 10) + duration;
+    const endH = String(Math.floor((totalMin / 60) % 24)).padStart(2, '0');
+    const endMin = String(totalMin % 60).padStart(2, '0');
+    return `${endH}:${endMin}`;
+  };
+
+  const openEditRealTime = () => {
+    const baseStartIso = realStartAt || appointment.start_time || '';
+    const baseDate = baseStartIso ? baseStartIso.replace(' ', 'T').split('T')[0] : new Date().toISOString().split('T')[0];
+    const baseStartHHMM = baseStartIso ? (baseStartIso.replace(' ', 'T').split('T')[1]?.slice(0, 5) || '08:00') : '08:00';
+    const baseExpectedIso = expectedEndAt || appointment.end_time || '';
+    const baseExpectedHHMM = expectedEndAt
+      ? (expectedEndAt.replace(' ', 'T').split('T')[1]?.slice(0, 5) || computeExpectedEndHHMM(baseStartHHMM))
+      : (computeExpectedEndHHMM(baseStartHHMM) || (baseExpectedIso ? baseExpectedIso.replace(' ', 'T').split('T')[1]?.slice(0, 5) : '08:50'));
+    setEditRealDate(baseDate);
+    setEditRealStartTime(baseStartHHMM);
+    setEditExpectedEndTime(baseExpectedHHMM);
+    setExpectedEndManuallyEdited(false);
+    setEditingRealTime(true);
+  };
+
+  const handleSaveRealAttendanceTime = async () => {
+    if (!editRealDate || !editRealStartTime) {
+      showToast('Informe a data e o horário real de início.', 'error');
+      return;
+    }
+    if (editExpectedEndTime && editExpectedEndTime <= editRealStartTime) {
+      showToast('A previsão de término não pode ser anterior ou igual ao horário de início.', 'error');
+      return;
+    }
+    try {
+      setSavingRealTime(true);
+      const res = await ApiClient.put<any>(`/v1/appointments/${appointment.id}/attendance-time`, {
+        attendanceDate: editRealDate,
+        attendanceStartTime: editRealStartTime,
+        attendanceExpectedEndTime: editExpectedEndTime || undefined
+      });
+      if (res?.appointment) {
+        setRealStartAt(res.appointment.attendance_start_at || null);
+        setExpectedEndAt(res.appointment.attendance_expected_end_at || null);
+        setRealEndAt(res.appointment.attendance_end_at || null);
+      } else {
+        setRealStartAt(`${editRealDate}T${editRealStartTime}:00`);
+        if (editExpectedEndTime) setExpectedEndAt(`${editRealDate}T${editExpectedEndTime}:00`);
+      }
+      setEditingRealTime(false);
+      showToast('Horário real do atendimento atualizado!', 'success');
+      window.dispatchEvent(new CustomEvent('zemda-appointment-updated'));
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao atualizar horário real do atendimento.', 'error');
+    } finally {
+      setSavingRealTime(false);
+    }
+  };
 
   const effectiveModule = (moduleType && moduleType !== 'general' ? moduleType : undefined) ||
     (appointment.clinical_module && appointment.clinical_module !== 'general' && appointment.clinical_module !== 'ZemdaBody' ? appointment.clinical_module : undefined);
@@ -709,7 +799,13 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
   };
 
   // Estados de interface do Workspace Clínico (exclusivamente visuais/frontend)
-  const [workspaceTab, setWorkspaceTab] = useState<'resumo' | 'evolucao' | 'modulo' | 'documentos' | 'finalizacao'>('evolucao');
+  const [workspaceTab, setWorkspaceTab] = useState<'resumo' | 'evolucao' | 'modulo' | 'documentos' | 'finalizacao'>(initialWorkspaceTab || 'evolucao');
+
+  useEffect(() => {
+    if (initialWorkspaceTab) {
+      setWorkspaceTab(initialWorkspaceTab);
+    }
+  }, [initialWorkspaceTab]);
   const [showTemplateMenu, setShowTemplateMenu] = useState<boolean>(false);
   const [editorAlign, setEditorAlign] = useState<'left' | 'center' | 'right'>('left');
   const [paragraphStyle, setParagraphStyle] = useState<string>('paragraph');
@@ -940,13 +1036,25 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
 
     try {
       setSavingRecord(true);
-      const sessionDate = appointment.start_time ? appointment.start_time.split('T')[0] : new Date().toISOString().split('T')[0];
+      const effectiveStartIso = realStartAt || appointment.attendance_start_at || appointment.start_time || '';
+      const normalizedStart = effectiveStartIso.replace(' ', 'T');
+      const nowLocal = new Date();
+      const fallbackDate = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth() + 1).padStart(2, '0')}-${String(nowLocal.getDate()).padStart(2, '0')}`;
+      const fallbackTime = `${String(nowLocal.getHours()).padStart(2, '0')}:${String(nowLocal.getMinutes()).padStart(2, '0')}`;
+      const sessionDate = normalizedStart ? normalizedStart.split('T')[0] : fallbackDate;
+      const sessionTime = normalizedStart && normalizedStart.includes('T') ? normalizedStart.split('T')[1]?.slice(0, 5) : fallbackTime;
+      const effectiveEndIso = realEndAt || appointment.attendance_end_at || '';
+      const sessionEndTime = effectiveEndIso && effectiveEndIso.replace(' ', 'T').includes('T')
+        ? effectiveEndIso.replace(' ', 'T').split('T')[1]?.slice(0, 5)
+        : undefined;
 
       await ApiClient.post('/v1/clinical-records', {
         patientId: appointment.patient_id,
         appointmentId: appointment.id,
         professionalId: appointment.professional_id,
         sessionDate,
+        sessionTime,
+        sessionEndTime,
         title: title.trim() || `Consulta de ${appointment.service_name || 'Rotina'}`,
         clinicalEvolution: clinicalEvolution.trim(),
         technicalNotes: technicalNotes.trim() || null,
@@ -1019,8 +1127,14 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
   const patientAge = calculateAge(patientBirth);
   const cleanPhone = patientPhone.replace(/\D/g, '');
 
-  const appointmentDate = appointment.start_time ? appointment.start_time.split('T')[0] : '';
-  const appointmentTime = appointment.start_time ? appointment.start_time.split('T')[1]?.slice(0, 5) : '';
+  const effectiveStartIsoForHeader = realStartAt || appointment.attendance_start_at || appointment.start_time || '';
+  const effectiveExpectedEndIsoForHeader = expectedEndAt || appointment.attendance_expected_end_at || appointment.end_time || '';
+  const effectiveRealEndIsoForHeader = realEndAt || appointment.attendance_end_at || '';
+  const appointmentDate = effectiveStartIsoForHeader ? effectiveStartIsoForHeader.replace(' ', 'T').split('T')[0] : '';
+  const appointmentTime = effectiveStartIsoForHeader ? effectiveStartIsoForHeader.replace(' ', 'T').split('T')[1]?.slice(0, 5) : '';
+  const expectedEndTimeStr = effectiveExpectedEndIsoForHeader ? effectiveExpectedEndIsoForHeader.replace(' ', 'T').split('T')[1]?.slice(0, 5) : '';
+  const realEndTimeStr = effectiveRealEndIsoForHeader ? effectiveRealEndIsoForHeader.replace(' ', 'T').split('T')[1]?.slice(0, 5) : '';
+
 
   // Alertas de alergias
   const hasAllergies = (allergiesList && allergiesList.length > 0) || (patientData?.allergies && patientData.allergies.trim().length > 0);
@@ -1199,6 +1313,16 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
           </p>
         </div>
       </div>
+
+      {/* Card 4: Termos de Consentimento (Opcional — nunca bloqueia o atendimento) */}
+      {canAccessConsents && appointment.patient_id && (
+        <ConsentPendingAlert
+          variant="optional-card"
+          patientId={appointment.patient_id}
+          serviceId={appointment.service_id}
+          onOpen={() => setShowConsentsDialog(true)}
+        />
+      )}
     </div>
   );
 
@@ -1210,22 +1334,22 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
         aria-label="Iniciar atendimento"
         className="bg-white w-screen h-[100dvh] sm:w-[96vw] sm:h-[94vh] lg:w-[min(94vw,1500px)] lg:h-[92vh] max-w-full !max-h-none rounded-none sm:rounded-2xl lg:rounded-3xl shadow-2xl border-0 sm:border border-slate-200/90 flex flex-col !overflow-hidden min-w-0 animate-in zoom-in-95 duration-150"
       >
-        {/* 1. HEADER FIXO (Azul-marinho escuro, compacto, X sempre visível no canto superior direito) */}
-        <header className="shrink-0 sticky top-0 z-30 bg-[#0f172a] text-white px-3.5 sm:px-6 py-2.5 min-h-[64px] max-h-[76px] flex items-center justify-between gap-3 border-b border-slate-800">
+        {/* 1. HEADER FIXO (Claro, limpo, identidade Zemda, X sempre visível no canto superior direito) */}
+        <header className="shrink-0 sticky top-0 z-30 bg-white text-slate-900 px-3.5 sm:px-6 py-2.5 min-h-[60px] max-h-[72px] flex items-center justify-between gap-3 border-b border-slate-200">
           <div className="flex items-center gap-3 min-w-0 flex-1">
             <div
-              className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border shadow-xs ${
+              className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border shadow-2xs ${
                 isAppointmentDentist
-                  ? 'bg-cyan-500/15 border-cyan-400/30 text-cyan-300'
+                  ? 'bg-cyan-50 border-cyan-200 text-cyan-700'
                   : isAppointmentPhysio
-                    ? 'bg-emerald-500/15 border-emerald-400/30 text-emerald-300'
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
                     : isAppointmentNutri
-                      ? 'bg-lime-500/15 border-lime-400/30 text-lime-300'
+                      ? 'bg-lime-50 border-lime-200 text-lime-700'
                       : isAppointmentTO
-                        ? 'bg-amber-500/15 border-amber-400/30 text-amber-300'
+                        ? 'bg-amber-50 border-amber-200 text-amber-700'
                         : isAppointmentFono
-                          ? 'bg-purple-500/15 border-purple-400/30 text-purple-300'
-                          : 'bg-teal-500/15 border-teal-400/30 text-teal-300'
+                          ? 'bg-purple-50 border-purple-200 text-purple-700'
+                          : 'bg-teal-50 border-teal-200 text-teal-700'
               }`}
             >
               {isAppointmentDentist ? (
@@ -1245,15 +1369,15 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
 
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 min-w-0">
-                <h2 className="text-sm sm:text-base font-bold text-white leading-tight truncate">
-                  Iniciar atendimento
+                <h2 className="text-sm sm:text-base font-bold text-slate-900 leading-tight truncate">
+                  Atendimento clínico
                 </h2>
-                <span className="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-800 text-slate-300 border border-slate-700 shrink-0">
+                <span className="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200 shrink-0">
                   <Building2 className="w-3 h-3 text-slate-400" />
                   <span>{currentTenant?.trade_name || currentTenant?.name || 'Clínica'}</span>
                 </span>
               </div>
-              <p className="text-xs font-semibold text-slate-300 truncate mt-0.5">
+              <p className="text-xs font-semibold text-teal-700 truncate mt-0.5">
                 {headerModuleSubtitle}
               </p>
             </div>
@@ -1271,10 +1395,10 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
                     setShowZemdaBodyModal(true);
                   }
                 }}
-                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-teal-600/90 hover:bg-teal-500 text-white border border-teal-400/30 shadow-2xs transition-colors cursor-pointer shrink-0"
+                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 shadow-2xs transition-colors cursor-pointer shrink-0"
                 title="Abrir mapeamento anatômico Zemda360"
               >
-                <Activity className="w-3.5 h-3.5" />
+                <Activity className="w-3.5 h-3.5 text-teal-600" />
                 <span>Zemda360</span>
               </button>
             )}
@@ -1284,7 +1408,7 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
               type="button"
               aria-label="Fechar atendimento"
               onClick={onClose}
-              className="close-modal relative z-40 shrink-0 inline-flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 !min-h-[36px] !min-w-[36px] rounded-xl text-slate-200 hover:text-white bg-white/10 hover:bg-white/20 border border-white/15 transition-colors cursor-pointer"
+              className="close-modal relative z-40 shrink-0 inline-flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 !min-h-[36px] !min-w-[36px] rounded-xl text-slate-500 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer"
               title="Fechar atendimento (seu rascunho está seguro)"
             >
               <X className="w-5 h-5" />
@@ -1348,12 +1472,20 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
                 </div>
 
                 {/* Resumo compacto em linha para mobile (<640px) */}
-                <div className="sm:hidden flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11px] text-slate-600 mt-1 pt-1 border-t border-slate-100">
+                <div className="sm:hidden flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11px] text-slate-600 mt-1 pt-1 border-t border-slate-100" title="Horário real do atendimento.">
                   <span className="inline-flex items-center gap-1 font-semibold text-slate-700">
                     <Calendar className="w-3 h-3 text-indigo-500 shrink-0" />
                     {appointmentDate ? new Date(appointmentDate + 'T12:00:00').toLocaleDateString('pt-BR') : '-'}
-                    {appointmentTime ? ` às ${appointmentTime}` : ''}
+                    {appointmentTime ? ` • Início: ${appointmentTime}` : ''}
+                    {realEndTimeStr ? ` • Término: ${realEndTimeStr}` : expectedEndTimeStr ? ` • Previsão: ${expectedEndTimeStr}` : ''}
                   </span>
+                  <button
+                    type="button"
+                    onClick={openEditRealTime}
+                    className="text-[10px] font-bold text-teal-600 hover:text-teal-800 hover:underline cursor-pointer"
+                  >
+                    [ editar ]
+                  </button>
                   <span className="text-slate-300">•</span>
                   <span className="inline-flex items-center gap-1 font-medium text-slate-600 truncate max-w-[150px]">
                     <User className="w-3 h-3 text-teal-600 shrink-0" />
@@ -1369,18 +1501,98 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
 
             {/* METADADOS DA SESSÃO: DATA E HORÁRIO | PROFISSIONAL | PROCEDIMENTO | MODALIDADE */}
             <div className="hidden sm:grid lg:col-span-8 sm:grid-cols-4 gap-2 lg:gap-0 lg:divide-x lg:divide-slate-200/80 pt-1.5 lg:pt-0 border-t lg:border-t-0 border-slate-100 min-w-0">
-              {/* DATA E HORÁRIO */}
-              <div className="lg:px-4 min-w-0">
-                <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 flex items-center gap-1">
-                  <Calendar className="w-3 h-3 text-indigo-500 shrink-0" />
-                  <span>Data e Horário</span>
-                </span>
+              {/* DATA E HORÁRIO (Horário real do atendimento) */}
+              <div className="lg:px-4 min-w-0 relative" title="Horário real do atendimento.">
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 flex items-center gap-1">
+                    <Calendar className="w-3 h-3 text-indigo-500 shrink-0" />
+                    <span>Data e Horário</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={openEditRealTime}
+                    className="text-[10px] font-bold text-teal-600 hover:text-teal-800 hover:underline cursor-pointer shrink-0"
+                    title="Horário real do atendimento."
+                  >
+                    [ editar ]
+                  </button>
+                </div>
                 <p className="text-xs font-bold text-slate-800 truncate mt-0.5">
                   {appointmentDate ? new Date(appointmentDate + 'T12:00:00').toLocaleDateString('pt-BR') : '-'}
                 </p>
                 <p className="text-[11px] font-semibold text-indigo-600 truncate">
-                  {appointmentTime ? `às ${appointmentTime}` : 'Horário livre'}
+                  {appointmentTime ? `Início: ${appointmentTime}` : 'Horário livre'}
                 </p>
+                {realEndTimeStr ? (
+                  <p className="text-[10px] font-medium text-emerald-700 truncate">
+                    Término: {realEndTimeStr}
+                  </p>
+                ) : expectedEndTimeStr ? (
+                  <p className="text-[10px] font-medium text-slate-500 truncate">
+                    Previsão de término: {expectedEndTimeStr}
+                  </p>
+                ) : null}
+
+                {editingRealTime && (
+                  <div className="mt-2 p-2.5 rounded-xl bg-slate-50 border border-teal-200 shadow-md space-y-2 z-30">
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-600 mb-0.5">Data do atendimento</label>
+                      <input
+                        type="date"
+                        value={editRealDate}
+                        onChange={e => setEditRealDate(e.target.value)}
+                        className="w-full px-2 py-1 text-xs rounded-lg border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <div>
+                        <label className="block text-[10px] font-semibold text-slate-600 mb-0.5">Horário de início</label>
+                        <input
+                          type="time"
+                          value={editRealStartTime}
+                          onChange={e => {
+                            const val = e.target.value;
+                            setEditRealStartTime(val);
+                            if (!expectedEndManuallyEdited && val) {
+                              setEditExpectedEndTime(computeExpectedEndHHMM(val));
+                            }
+                          }}
+                          className="w-full px-2 py-1 text-xs rounded-lg border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-semibold text-slate-600 mb-0.5">Previsão de término</label>
+                        <input
+                          type="time"
+                          value={editExpectedEndTime}
+                          onChange={e => {
+                            setExpectedEndManuallyEdited(true);
+                            setEditExpectedEndTime(e.target.value);
+                          }}
+                          className="w-full px-2 py-1 text-xs rounded-lg border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-end gap-1.5 pt-1">
+                      <button
+                        type="button"
+                        disabled={savingRealTime}
+                        onClick={() => setEditingRealTime(false)}
+                        className="px-2 py-1 rounded-lg text-[10px] font-semibold text-slate-600 hover:bg-slate-200/70 transition-colors cursor-pointer"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        disabled={savingRealTime}
+                        onClick={handleSaveRealAttendanceTime}
+                        className="px-2.5 py-1 rounded-lg text-[10px] font-bold text-white bg-teal-600 hover:bg-teal-700 transition-colors cursor-pointer disabled:opacity-50"
+                      >
+                        {savingRealTime ? 'Salvando...' : 'Salvar horário'}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* PROFISSIONAL */}
@@ -1432,7 +1644,7 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
           </div>
         </div>
 
-        {/* 3. BARRA DE NAVEGAÇÃO POR ABAS + ATALHO ÚNICO DO MÓDULO ESPECIALIZADO */}
+        {/* 3. BARRA DE NAVEGAÇÃO POR ABAS */}
         <div className="shrink-0 bg-slate-100/80 border-b border-slate-200 px-3 sm:px-6 py-1 sm:py-1.5 flex flex-wrap items-center justify-between gap-1.5 sm:gap-2 min-w-0">
           <nav aria-label="Navegação do atendimento" className="flex flex-wrap items-center gap-1 min-w-0">
             {[
@@ -1447,7 +1659,13 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
                 <button
                   key={tab.id}
                   type="button"
-                  onClick={() => setWorkspaceTab(tab.id as any)}
+                  onClick={() => {
+                    if (tab.id === 'modulo' && onOpenSpecializedModule) {
+                      onOpenSpecializedModule();
+                      return;
+                    }
+                    setWorkspaceTab(tab.id as any);
+                  }}
                   className={`px-2.5 sm:px-3.5 py-1 sm:py-1.5 !min-h-[30px] sm:!min-h-[34px] rounded-xl text-[11px] sm:text-xs font-bold transition-all cursor-pointer ${
                     isActive
                       ? 'bg-white text-teal-700 shadow-2xs border border-slate-200/90'
@@ -1459,20 +1677,6 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
               );
             })}
           </nav>
-
-          {/* Atalho compacto único para o Módulo Especializado (sem duplicar no header + banner) */}
-          {onOpenSpecializedModule && resolvedSpecializedName && workspaceTab !== 'modulo' && (
-            <button
-              type="button"
-              onClick={onOpenSpecializedModule}
-              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1 sm:py-1.5 !min-h-[30px] sm:!min-h-[34px] rounded-xl text-[11px] sm:text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-2xs transition-colors cursor-pointer shrink-0"
-              title={`Abrir módulo especializado ${resolvedSpecializedName}`}
-            >
-              <Stethoscope className="w-3.5 h-3.5" />
-              <span>Abrir {resolvedSpecializedName}</span>
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          )}
         </div>
 
         {/* 4. ÁREA DE CONTEÚDO CENTRAL SCROLLÁVEL (Único scroll principal do modal) */}
@@ -1549,26 +1753,26 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
             </div>
           )}
 
-          {/* ABA: MÓDULO ESPECIALIZADO */}
+          {/* ABA: MÓDULO ESPECIALIZADO (Fallback claro quando aberto fora do AppointmentConsultation) */}
           {workspaceTab === 'modulo' && (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 items-start max-w-full min-w-0">
               <div className="lg:col-span-8 space-y-4 min-w-0">
-                <div className="bg-gradient-to-r from-indigo-950 via-slate-900 to-indigo-950 text-white rounded-2xl p-5 sm:p-6 border border-indigo-800/60 shadow-md space-y-4">
+                <div className="bg-white text-slate-900 rounded-2xl p-5 sm:p-6 border border-slate-200 shadow-2xs space-y-4">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex items-start gap-3.5">
-                      <div className="w-12 h-12 rounded-2xl bg-indigo-600/80 border border-indigo-400/40 text-white flex items-center justify-center shrink-0">
+                      <div className="w-12 h-12 rounded-2xl bg-teal-50 border border-teal-200 text-teal-700 flex items-center justify-center shrink-0">
                         <Stethoscope className="w-6 h-6" />
                       </div>
                       <div>
                         <div className="flex items-center gap-2 flex-wrap">
-                          <h4 className="text-base font-bold text-white">
+                          <h4 className="text-base font-bold text-slate-900">
                             {resolvedSpecializedName ? `Módulo Especializado: ${resolvedSpecializedName}` : 'Módulo Clínico Especializado'}
                           </h4>
-                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/30 text-indigo-200 border border-indigo-400/30">
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-200">
                             Sincronizado ao atendimento
                           </span>
                         </div>
-                        <p className="text-xs text-indigo-200/90 mt-1 leading-relaxed">
+                        <p className="text-xs text-slate-500 mt-1 leading-relaxed">
                           Acesse avaliações estruturadas, escalas clínicas, testes específicos da especialidade e planejamento terapêutico mantendo o atendimento sincronizado.
                         </p>
                       </div>
@@ -1578,7 +1782,7 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
                       <button
                         type="button"
                         onClick={onOpenSpecializedModule}
-                        className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-indigo-500 hover:bg-indigo-400 text-white shadow-md transition-all cursor-pointer shrink-0"
+                        className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white shadow-xs transition-all cursor-pointer shrink-0"
                       >
                         <Stethoscope className="w-4 h-4" />
                         <span>Abrir {resolvedSpecializedName}</span>
@@ -1588,9 +1792,9 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
                   </div>
 
                   {isZemdaBody && (
-                    <div className="pt-3 border-t border-white/10 flex flex-wrap items-center justify-between gap-3">
-                      <div className="text-xs text-slate-300">
-                        <strong className="text-teal-300">Zemda360 (Mapeamento Anatômico):</strong> registre marcações corporais e faciais vinculadas a esta sessão.
+                    <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
+                      <div className="text-xs text-slate-600">
+                        <strong className="text-teal-700">Zemda360 (Mapeamento Anatômico):</strong> registre marcações corporais e faciais vinculadas a esta sessão.
                       </div>
                       <button
                         type="button"
@@ -1601,9 +1805,9 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
                             setShowZemdaBodyModal(true);
                           }
                         }}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-teal-600 hover:bg-teal-500 text-white transition-colors cursor-pointer"
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 transition-colors cursor-pointer"
                       >
-                        <Activity className="w-3.5 h-3.5" />
+                        <Activity className="w-3.5 h-3.5 text-teal-600" />
                         <span>Abrir Zemda360</span>
                       </button>
                     </div>
@@ -2638,7 +2842,10 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
         <FinishConsultationModal
           appointment={{
             ...appointment,
-            patient_name: patientName
+            patient_name: patientName,
+            attendance_start_at: realStartAt || appointment.attendance_start_at || null,
+            attendance_expected_end_at: expectedEndAt || appointment.attendance_expected_end_at || null,
+            attendance_end_at: realEndAt || appointment.attendance_end_at || null
           }}
           clinicalData={{
             title,
@@ -3438,6 +3645,14 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
           onClose={() => setShowPreviousRecordsModal(false)}
           patientId={appointment.patient_id}
           patientName={patientName}
+        />
+      )}
+
+      {/* Modal de Termos de Consentimento (Opcional) */}
+      {showConsentsDialog && appointment.patient_id && (
+        <PatientConsentsDialog
+          patientId={appointment.patient_id}
+          onClose={() => setShowConsentsDialog(false)}
         />
       )}
 

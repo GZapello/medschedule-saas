@@ -403,6 +403,9 @@ CREATE TABLE IF NOT EXISTS appointments (
   room_id TEXT,
   start_time TEXT NOT NULL, -- ISO 8601
   end_time TEXT NOT NULL,   -- ISO 8601
+  attendance_start_at TEXT,
+  attendance_expected_end_at TEXT,
+  attendance_end_at TEXT,
   status TEXT NOT NULL DEFAULT 'scheduled' CHECK(status IN ('scheduled', 'confirmed', 'in_progress', 'completed', 'cancelled', 'no_show', 'rescheduled')),
   modality TEXT NOT NULL DEFAULT 'presential' CHECK(modality IN ('presential', 'online', 'home')),
   meeting_url TEXT NULL,
@@ -445,6 +448,8 @@ CREATE TABLE IF NOT EXISTS records (
   appointment_id TEXT,
   professional_id TEXT NOT NULL,
   session_date TEXT NOT NULL,
+  session_time TEXT,
+  session_end_time TEXT,
   title TEXT NOT NULL,
   clinical_evolution TEXT, -- Anotações clínicas confidenciais
   technical_notes TEXT,    -- Para profissionais não-médicos (briefing, treino, evolução de aluno)

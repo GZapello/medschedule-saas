@@ -1,4 +1,4 @@
-import {recordedAttendance,appointmentRecord} from '../services/document-context.service';
+import {recordedAttendance,appointmentRecord,extractDatePart,extractTimePart,normalizeLocalDateTimeIso,getClinicLocalNowIso,addMinutesToLocalIso} from '../services/document-context.service';
 import { canAccessPatient } from '../services/patient-sharing.service';
 import { resolveBookingTenant, publicBookingProfessional, professionalBookingService, validBookingDate } from '../utils/public-booking';
 import { calculateAvailableSlots } from '../utils/slot-calculator';
@@ -185,7 +185,7 @@ export class AppointmentController {
       let query = `
         SELECT 
           a.id, a.tenant_id, a.appointment_number, a.patient_id, a.professional_id,
-          a.service_id, a.room_id, a.start_time, a.end_time, a.status, a.modality, a.meeting_url, a.google_drive_url,
+          a.service_id, a.room_id, a.start_time, a.end_time, a.attendance_start_at, a.attendance_expected_end_at, a.attendance_end_at, a.status, a.modality, a.meeting_url, a.google_drive_url,
           a.patient_notes, a.internal_notes, a.cancellation_reason, a.created_at,
           a.clinical_module,
           s.clinical_module as service_clinical_module,
@@ -301,7 +301,7 @@ export class AppointmentController {
       const displayAmount = (appointment as any).payment_amount !== null && (appointment as any).payment_amount !== undefined
         ? (appointment as any).payment_amount
         : ((appointment as any).service_price !== null && (appointment as any).service_price !== undefined ? (appointment as any).service_price : null);
-      res.json({ appointment:{...appointment,display_amount:displayAmount,attendance_date:attendance.sessionDate,attendance_time:attendance.sessionTime}, statusHistory });
+      res.json({ appointment:{...appointment,display_amount:displayAmount,attendance_date:attendance.sessionDate,attendance_time:attendance.sessionTime,attendance_end_time:attendance.sessionEndTime ?? null}, statusHistory });
     } catch (err: any) {
       console.error('[AppointmentController.getById] Erro:', err);
       res.status(500).json({ error: 'Erro ao buscar agendamento' });
@@ -446,7 +446,8 @@ export class AppointmentController {
       const normalizedStartTime = String(startTime).trim().replace(' ', 'T');
       const normalizedEndTime = String(endTime).trim().replace(' ', 'T');
 
-      const isCustomTime = Boolean(req.body.isCustomTime || req.body.is_custom_time);
+      const isRetroactive = !isPublic && Boolean(req.body.isRetroactive || req.body.is_retroactive);
+      const isCustomTime = Boolean(req.body.isCustomTime || req.body.is_custom_time || isRetroactive);
 
       // 0. Validação dos horários de funcionamento da clínica (Item 3) e escala de trabalho (Item 1)
       // Agendamento em horário avulso (!isPublic && isCustomTime) é exceção pontual que permite horário fora da disponibilidade habitual
@@ -588,17 +589,25 @@ export class AppointmentController {
         hasValidProfessionalServiceLink &&
         oldServicePrice !== agreedAmount;
 
+      const initialStatus = isRetroactive ? 'in_progress' : 'scheduled';
+      const initialAttendanceStartAt = isRetroactive
+        ? (normalizeLocalDateTimeIso(req.body.attendanceStartAt || req.body.attendance_start_at || normalizedStartTime) || normalizedStartTime)
+        : (normalizeLocalDateTimeIso(req.body.attendanceStartAt || req.body.attendance_start_at) || null);
+      const initialAttendanceExpectedEndAt = isRetroactive
+        ? (normalizeLocalDateTimeIso(req.body.attendanceExpectedEndAt || req.body.attendance_expected_end_at || normalizedEndTime) || normalizedEndTime)
+        : (normalizeLocalDateTimeIso(req.body.attendanceExpectedEndAt || req.body.attendance_expected_end_at) || null);
+
       const persistAppointmentAndPrice = db.transaction(() => {
         // Insere agendamento com os novos campos de convênio e encaminhamento
         const insertAppt = db.prepare(`
           INSERT INTO appointments (
             id, tenant_id, appointment_number, patient_id, professional_id, service_id,
-            room_id, start_time, end_time, status, modality, meeting_url, google_drive_url, patient_notes, internal_notes,
+            room_id, start_time, end_time, attendance_start_at, attendance_expected_end_at, status, modality, meeting_url, google_drive_url, patient_notes, internal_notes,
             insurance_id, referred_from_appointment_id, referred_by_professional_id, referral_reason,
             clinical_module, profession_id,
             created_by
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
 
         insertAppt.run(
@@ -611,6 +620,9 @@ export class AppointmentController {
           roomId || null,
           normalizedStartTime,
           normalizedEndTime,
+          initialAttendanceStartAt,
+          initialAttendanceExpectedEndAt,
+          initialStatus,
           modality || 'presential',
           typeof meeting_url === 'string' ? meeting_url.trim() || null : null,
           typeof rawDriveUrl === 'string' ? rawDriveUrl.trim() || null : null,
@@ -620,7 +632,7 @@ export class AppointmentController {
           referredFromAppointmentId || null,
           referredByProfessionalId || null,
           referralReason || null,
-          initialClinicalModule,
+          initialClinicalModule || (isRetroactive ? 'general' : null),
           resolvedProfessionId,
           req.user ? req.user.userId : 'online_booking'
         );
@@ -628,8 +640,10 @@ export class AppointmentController {
         // Insere histórico inicial
         db.prepare(`
           INSERT INTO appointment_status_history (id, appointment_id, previous_status, new_status, changed_by, reason)
-          VALUES (?, ?, NULL, 'scheduled', ?, 'Agendamento criado com sucesso')
-        `).run(uuidv4(), appointmentId, req.user ? req.user.name : 'Cliente Online');
+          VALUES (?, ?, NULL, ?, ?, ?)
+        `).run(uuidv4(), appointmentId, initialStatus, req.user ? req.user.name : 'Cliente Online', isRetroactive ? 'Registro de atendimento já realizado' : 'Agendamento criado com sucesso');
+        if (false) db.prepare(`
+        `).run(uuidv4(), appointmentId, req.user?.name || 'Cliente Online');
 
         // Snapshot: zero explicitamente combinado é isenção, nunca cobrança pendente.
         if (agreedAmount > 0 || suppliedPrice !== undefined) {
@@ -687,7 +701,38 @@ export class AppointmentController {
       }
 
       // Agenda lembrete automático inteligente de 1 hora antes (Item 22)
-      NotificationService.scheduleAppointmentReminder(appointmentId);
+      // Agenda lembrete automático inteligente de 1 hora antes (Item 22)
+      if (!isRetroactive) {
+        NotificationService.scheduleAppointmentReminder(appointmentId);
+      }
+
+      if (isRetroactive) {
+        logAudit(req, 'CREATE_RETROACTIVE_ATTENDANCE', 'appointments', appointmentId, {
+          appointmentId,
+          appointmentNumber,
+          attendanceDate: extractDatePart(initialAttendanceStartAt),
+          attendanceStart: initialAttendanceStartAt,
+          attendanceExpectedEnd: initialAttendanceExpectedEndAt,
+          createdAt: new Date().toISOString(),
+          createdBy: req.user ? req.user.userId : null
+        });
+      } else {
+        logAudit(req, 'CREATE_APPOINTMENT', 'appointments', appointmentId, { appointmentNumber, startTime, endTime });
+      }
+
+      res.status(201).json({
+        id: appointmentId,
+        appointmentNumber,
+        startTime: normalizedStartTime,
+        endTime: normalizedEndTime,
+        attendance_start_at: initialAttendanceStartAt,
+        attendance_expected_end_at: initialAttendanceExpectedEndAt,
+        status: initialStatus,
+        clinical_module: initialClinicalModule || (isRetroactive ? 'general' : null),
+        isRetroactive,
+        message: isRetroactive ? 'Atendimento retroativo registrado com sucesso!' : 'Atendimento agendado com sucesso!'
+      });
+      return;
 
       logAudit(req, 'CREATE_APPOINTMENT', 'appointments', appointmentId, { appointmentNumber, startTime, endTime });
 
@@ -717,7 +762,27 @@ export class AppointmentController {
         return;
       }
 
-      const current = db.prepare('SELECT id, patient_id, status, clinical_module, professional_id, profession_id, service_id FROM appointments WHERE id = ? AND tenant_id = ?').get(id, tenantId) as { patient_id: string; status: string; clinical_module?: string; professional_id?: string; profession_id?: string; service_id?: string } | undefined;
+      const current = db.prepare(`
+        SELECT a.id, a.patient_id, a.status, a.clinical_module, a.professional_id, a.profession_id, a.service_id,
+               a.start_time, a.end_time, a.attendance_start_at, a.attendance_expected_end_at, a.attendance_end_at,
+               s.duration_minutes
+        FROM appointments a
+        LEFT JOIN services s ON s.id = a.service_id AND s.tenant_id = a.tenant_id
+        WHERE a.id = ? AND a.tenant_id = ?
+      `).get(id, tenantId) as {
+        patient_id: string;
+        status: string;
+        clinical_module?: string;
+        professional_id?: string;
+        profession_id?: string;
+        service_id?: string;
+        start_time: string;
+        end_time: string;
+        attendance_start_at?: string | null;
+        attendance_expected_end_at?: string | null;
+        attendance_end_at?: string | null;
+        duration_minutes?: number | null;
+      } | undefined;
       if (!current) {
         res.status(404).json({ error: 'Agendamento não encontrado' });
         return;
@@ -803,29 +868,28 @@ export class AppointmentController {
         return;
       }
 
-      const updateStmt = db.prepare(`
-        UPDATE appointments SET
-          status = ?,
-          cancellation_reason = CASE WHEN ? = 'cancelled' THEN ? ELSE cancellation_reason END,
-          cancellation_reason_category = CASE WHEN ? = 'cancelled' THEN ? ELSE cancellation_reason_category END,
-          cancelled_by = CASE WHEN ? = 'cancelled' THEN ? ELSE cancelled_by END,
-          cancelled_at = CASE WHEN ? = 'cancelled' THEN datetime('now') ELSE cancelled_at END,
-          clinical_module = COALESCE(?, NULLIF(NULLIF(clinical_module, 'ZemdaBody'), 'Zemda360')),
-          profession_id = COALESCE(?, profession_id),
-          updated_at = datetime('now')
-        WHERE id = ? AND tenant_id = ?
-      `);
-      updateStmt.run(
-        status,
-        status, reason || null,
-        status, cancellationReasonCategory || (status === 'cancelled' ? 'Outro' : null),
-        status, status === 'cancelled' ? cancelledBy : null,
-        status,
-        clinicalModule || null,
-        resolvedProfessionId || null,
-        id, tenantId
-      );
+      // Cálculo/preservação do horário real ao iniciar atendimento (Itens 7 e 8)
+      let nextAttendanceStartAt: string | null = current.attendance_start_at || null;
+      let nextAttendanceExpectedEndAt: string | null = current.attendance_expected_end_at || null;
+      if (status === 'in_progress') {
+        const requestedStart = normalizeLocalDateTimeIso(req.body.attendanceStartAt || req.body.attendance_start_at);
+        const requestedExpectedEnd = normalizeLocalDateTimeIso(req.body.attendanceExpectedEndAt || req.body.attendance_expected_end_at);
+        // Se o profissional já tiver ajustado attendance_start_at antes de clicar Iniciar, PRESERVAR esse valor.
+        if (!nextAttendanceStartAt) {
+          nextAttendanceStartAt = requestedStart || getClinicLocalNowIso();
+        }
+        const durationMin = Number(current.duration_minutes) > 0 ? Number(current.duration_minutes) : 50;
+        if (!nextAttendanceExpectedEndAt) {
+          nextAttendanceExpectedEndAt = requestedExpectedEnd || addMinutesToLocalIso(nextAttendanceStartAt, durationMin);
+        }
+      }
+      if (status === 'completed' && current.status !== 'completed') {
+        res.status(409).json({ error: 'Finalize pelo atendimento para salvar o prontuário e registrar o recebimento.' });
+        return;
+      }
 
+      const updateStmt = db.prepare(`UPDATE appointments SET status = ?, cancellation_reason = CASE WHEN ? = 'cancelled' THEN ? ELSE cancellation_reason END, cancellation_reason_category = CASE WHEN ? = 'cancelled' THEN ? ELSE cancellation_reason_category END, cancelled_by = CASE WHEN ? = 'cancelled' THEN ? ELSE cancelled_by END, cancelled_at = CASE WHEN ? = 'cancelled' THEN datetime('now') ELSE cancelled_at END, clinical_module = COALESCE(?, NULLIF(NULLIF(clinical_module, 'ZemdaBody'), 'Zemda360')), profession_id = COALESCE(?, profession_id), attendance_start_at = COALESCE(?, attendance_start_at), attendance_expected_end_at = COALESCE(?, attendance_expected_end_at), updated_at = datetime('now') WHERE id = ? AND tenant_id = ?`);
+      updateStmt.run(status, status, reason || null, status, cancellationReasonCategory || (status === 'cancelled' ? 'Outro' : null), status, status === 'cancelled' ? cancelledBy : null, status, clinicalModule || null, resolvedProfessionId || null, nextAttendanceStartAt, nextAttendanceExpectedEndAt, id, tenantId);
       // Registra histórico
       db.prepare(`
         INSERT INTO appointment_status_history (id, appointment_id, previous_status, new_status, changed_by, reason)
@@ -848,11 +912,213 @@ export class AppointmentController {
       res.json({
         message: `Status alterado para ${status}`,
         status,
-        clinicalModule: clinicalModule || current.clinical_module || null
+        clinicalModule: clinicalModule || current.clinical_module || null,
+        attendance_start_at: nextAttendanceStartAt,
+        attendance_expected_end_at: nextAttendanceExpectedEndAt,
+        attendance_end_at: current.attendance_end_at || null
       });
     } catch (err: any) {
       console.error('[AppointmentController.updateStatus] Erro:', err);
       res.status(500).json({ error: 'Erro ao atualizar status do agendamento' });
+    }
+  }
+
+  static updateAttendanceTime(req: Request, res: Response): void {
+    try {
+      const { id } = req.params;
+      const tenantId = req.tenantId;
+      if (!tenantId) {
+        res.status(400).json({ error: 'Identificação da clínica obrigatória' });
+        return;
+      }
+
+      const current = db.prepare(`
+        SELECT a.id, a.patient_id, a.professional_id, a.service_id, a.status,
+               a.start_time, a.end_time,
+               a.attendance_start_at, a.attendance_expected_end_at, a.attendance_end_at,
+               s.duration_minutes
+        FROM appointments a
+        LEFT JOIN services s ON s.id = a.service_id AND s.tenant_id = a.tenant_id
+        WHERE a.id = ? AND a.tenant_id = ?
+      `).get(id, tenantId) as any;
+
+      if (!current) {
+        res.status(404).json({ error: 'Agendamento não encontrado' });
+        return;
+      }
+
+      const {
+        attendanceDate,
+        attendanceStartTime,
+        attendanceExpectedEndTime,
+        attendanceEndTime,
+        attendanceStartAt,
+        attendanceExpectedEndAt,
+        attendanceEndAt
+      } = req.body || {};
+
+      const baseDate =
+        extractDatePart(attendanceDate) ||
+        extractDatePart(attendanceStartAt) ||
+        extractDatePart(current.attendance_start_at) ||
+        extractDatePart(current.start_time);
+
+      if (!baseDate) {
+        res.status(400).json({ error: 'Data do atendimento inválida' });
+        return;
+      }
+
+      let newStartAt: string | null = null;
+      if (attendanceStartAt) {
+        newStartAt = normalizeLocalDateTimeIso(attendanceStartAt);
+      } else if (attendanceStartTime) {
+        const t = extractTimePart(attendanceStartTime);
+        if (!t) {
+          res.status(400).json({ error: 'Horário real de início inválido' });
+          return;
+        }
+        newStartAt = `${baseDate}T${t}:00`;
+      } else if (current.attendance_start_at) {
+        const t = extractTimePart(current.attendance_start_at);
+        newStartAt = t ? `${baseDate}T${t}:00` : current.attendance_start_at;
+      } else {
+        const t = extractTimePart(current.start_time);
+        newStartAt = t ? `${baseDate}T${t}:00` : current.start_time;
+      }
+
+      if (!newStartAt) {
+        res.status(400).json({ error: 'Horário real de início obrigatório' });
+        return;
+      }
+
+      const durationMin = Number(current.duration_minutes) > 0 ? Number(current.duration_minutes) : 50;
+
+      let newExpectedEndAt: string | null = null;
+      if (attendanceExpectedEndAt) {
+        newExpectedEndAt = normalizeLocalDateTimeIso(attendanceExpectedEndAt);
+      } else if (attendanceExpectedEndTime) {
+        const t = extractTimePart(attendanceExpectedEndTime);
+        if (!t) {
+          res.status(400).json({ error: 'Previsão de término inválida' });
+          return;
+        }
+        newExpectedEndAt = `${baseDate}T${t}:00`;
+      } else if (current.attendance_expected_end_at && newStartAt === current.attendance_start_at) {
+        newExpectedEndAt = current.attendance_expected_end_at;
+      } else {
+        newExpectedEndAt = addMinutesToLocalIso(newStartAt, durationMin);
+      }
+
+      let newEndAt: string | null = current.attendance_end_at || null;
+      if (attendanceEndAt === null || attendanceEndTime === null || attendanceEndTime === '') {
+        newEndAt = null;
+      } else if (attendanceEndAt) {
+        newEndAt = normalizeLocalDateTimeIso(attendanceEndAt);
+      } else if (attendanceEndTime) {
+        const t = extractTimePart(attendanceEndTime);
+        if (!t) {
+          res.status(400).json({ error: 'Horário de término inválido' });
+          return;
+        }
+        newEndAt = `${baseDate}T${t}:00`;
+      }
+
+      const editedBy = req.user ? `${req.user.name} (${req.user.role})` : 'Sistema';
+      const nowIso = new Date().toISOString();
+
+      db.transaction(() => {
+        // Atualiza SOMENTE os horários reais; start_time e end_time agendados permanecem intactos
+        db.prepare(`
+          UPDATE appointments SET
+            attendance_start_at = ?,
+            attendance_expected_end_at = ?,
+            attendance_end_at = ?,
+            updated_at = datetime('now')
+          WHERE id = ? AND tenant_id = ?
+        `).run(newStartAt, newExpectedEndAt, newEndAt, id, tenantId);
+
+        // Se já existir prontuário vinculado a este agendamento, sincroniza data/horário clínico real e registra trilha de auditoria (Item 25)
+        const linkedRecords = db.prepare(`
+          SELECT id, session_date, session_time, session_end_time, edit_history_json
+          FROM records
+          WHERE appointment_id = ? AND tenant_id = ?
+        `).all(id, tenantId) as any[];
+
+        const newSessionDate = extractDatePart(newStartAt);
+        const newSessionTime = extractTimePart(newStartAt);
+        const newSessionEndTime = newEndAt ? extractTimePart(newEndAt) : null;
+
+        for (const rec of linkedRecords) {
+          const prevDate = rec.session_date || null;
+          const prevTime = rec.session_time || null;
+          const prevEnd = rec.session_end_time || null;
+          const targetEnd = newSessionEndTime !== null ? newSessionEndTime : prevEnd;
+
+          if (prevDate !== newSessionDate || prevTime !== newSessionTime || prevEnd !== targetEnd) {
+            let history: any[] = [];
+            try {
+              if (rec.edit_history_json) {
+                history = JSON.parse(rec.edit_history_json);
+              }
+            } catch (_) {}
+
+            history.push({
+              previous_session_date: prevDate,
+              previous_session_time: prevTime,
+              previous_session_end_time: prevEnd,
+              new_session_date: newSessionDate,
+              new_session_time: newSessionTime,
+              new_session_end_time: targetEnd,
+              edited_by: req.user?.userId || editedBy,
+              edited_at: nowIso,
+              reason: 'Ajuste de horário real do atendimento'
+            });
+
+            db.prepare(`
+              UPDATE records SET
+                session_date = COALESCE(?, session_date),
+                session_time = ?,
+                session_end_time = ?,
+                edit_history_json = ?,
+                updated_by = ?,
+                updated_at = datetime('now')
+              WHERE id = ? AND tenant_id = ?
+            `).run(
+              newSessionDate,
+              newSessionTime,
+              targetEnd,
+              JSON.stringify(history),
+              req.user?.userId || editedBy,
+              rec.id,
+              tenantId
+            );
+          }
+        }
+      })();
+
+      logAudit(req, 'UPDATE_ATTENDANCE_TIME', 'appointments', String(id), {
+        appointmentId: id,
+        previousStart: current.attendance_start_at || null,
+        newStart: newStartAt,
+        previousExpectedEnd: current.attendance_expected_end_at || null,
+        newExpectedEnd: newExpectedEndAt,
+        previousEnd: current.attendance_end_at || null,
+        newEnd: newEndAt,
+        changedBy: req.user ? req.user.userId : null
+      });
+
+      res.json({
+        message: 'Horário real do atendimento atualizado com sucesso',
+        appointmentId: id,
+        start_time: current.start_time,
+        end_time: current.end_time,
+        attendance_start_at: newStartAt,
+        attendance_expected_end_at: newExpectedEndAt,
+        attendance_end_at: newEndAt
+      });
+    } catch (err: any) {
+      console.error('[AppointmentController.updateAttendanceTime] Erro:', err);
+      res.status(500).json({ error: 'Erro ao ajustar horário do atendimento' });
     }
   }
 
