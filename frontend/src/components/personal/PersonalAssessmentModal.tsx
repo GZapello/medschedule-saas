@@ -1317,7 +1317,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                 <div className="text-xs text-slate-700 bg-slate-50 p-3 rounded-xl border border-slate-200 leading-relaxed">
                   <strong>Atenção às unidades:</strong> Selecione <strong>Área em cm²</strong> para tomografia, ressonância, DXA ou InBody VFA. Selecione <strong>Nível / Grau</strong> para escalas proprietárias de bioimpedância (Omron 1–30, Tanita 1–59, InBody nível 1–20). O nível <em>não</em> é uma área em cm².
                 </div>
-                <div><label className="block text-xs font-medium text-slate-700 mb-1.5">Método de medição (opcional)</label><input value={tavMethod} onChange={e=>setTavMethod(e.target.value)} placeholder="Tomografia, ressonância, DXA, bioimpedância…" className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white outline-none"/></div>
+                <div><label className="block text-xs font-medium text-slate-700 mb-1.5">Método / fonte da medida (opcional)</label><input value={tavMethod} onChange={e=>setTavMethod(e.target.value)} placeholder="Bioimpedância (InBody/Tanita) ou método informado em avaliação externa" className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white outline-none"/></div>
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                   {/* Catálogo de Protocolos & Equipamentos */}
                   <div>
@@ -1426,7 +1426,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                   </label>
                   <input
                     type="text"
-                    placeholder="Ex: Nível 5 dentro da faixa normal para o protocolo InBody; manter controle alimentar..."
+                    placeholder="Ex: Nível 5 dentro da faixa normal para o protocolo InBody; acompanhar evolução da composição corporal, manter o planejamento de exercícios e considerar acompanhamento nutricional quando aplicável."
                     value={tavNotes}
                     onChange={(e) => setTavNotes(e.target.value)}
                     className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl outline-none"

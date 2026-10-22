@@ -15,6 +15,7 @@ import {
   Award
 } from 'lucide-react';
 import { ApiClient } from '../../api/client';
+import { resolveClinicalCopyProfile } from '../clinical/clinicalModuleCopy';
 
 export interface ClinicalGoalHistoryItem {
   date: string;
@@ -67,6 +68,7 @@ export const MeasurableGoalsManager: React.FC<MeasurableGoalsManagerProps> = ({
   readOnly = false
 }) => {
   const effectiveModule = moduleType || specialty || initialDomain || 'geral';
+  const copyProfile = resolveClinicalCopyProfile(moduleType, specialty, initialDomain);
 
   const [goals, setGoals] = useState<ClinicalGoalItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -75,12 +77,12 @@ export const MeasurableGoalsManager: React.FC<MeasurableGoalsManagerProps> = ({
 
   // New Goal form state
   const [title, setTitle] = useState('');
-  const [domain, setDomain] = useState('Funcional');
+  const [domain, setDomain] = useState(copyProfile.goals.defaultDomain);
   const [description, setDescription] = useState('');
   const [baselineValue, setBaselineValue] = useState('');
   const [currentValue, setCurrentValue] = useState('');
   const [targetValue, setTargetValue] = useState('');
-  const [unit, setUnit] = useState('%');
+  const [unit, setUnit] = useState('');
   const [deadline, setDeadline] = useState('');
   const [notes, setNotes] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
@@ -193,9 +195,11 @@ export const MeasurableGoalsManager: React.FC<MeasurableGoalsManagerProps> = ({
       await ApiClient.post('/v1/clinical/goals', payload);
       setTitle('');
       setDescription('');
+      setDomain(copyProfile.goals.defaultDomain);
       setBaselineValue('');
       setCurrentValue('');
       setTargetValue('');
+      setUnit('');
       setNotes('');
       setDeadline('');
       setFormError(null);
@@ -271,8 +275,18 @@ export const MeasurableGoalsManager: React.FC<MeasurableGoalsManagerProps> = ({
     const targetNum = parseFloat(goal.target_value || '');
     const baselineNum = parseFloat(goal.baseline_value || '0');
 
-    if (!isNaN(currentNum) && !isNaN(targetNum) && targetNum > baselineNum) {
-      const pct = ((currentNum - baselineNum) / (targetNum - baselineNum)) * 100;
+    if (!isNaN(currentNum) && !isNaN(targetNum) && !isNaN(baselineNum)) {
+      const totalDistance = Math.abs(targetNum - baselineNum);
+      if (totalDistance === 0) {
+        return currentNum === targetNum ? 100 : 0;
+      }
+      let progress = 0;
+      if (targetNum > baselineNum) {
+        progress = currentNum - baselineNum;
+      } else {
+        progress = baselineNum - currentNum;
+      }
+      const pct = (progress / totalDistance) * 100;
       return Math.min(100, Math.max(0, Math.round(pct)));
     }
 
@@ -335,10 +349,10 @@ export const MeasurableGoalsManager: React.FC<MeasurableGoalsManagerProps> = ({
         <div>
           <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
             <Target className="w-5 h-5 text-teal-600" />
-            {sectionTitle || 'Metas Terapêuticas Mensuráveis'}
+            {sectionTitle || copyProfile.goals.sectionTitle}
           </h3>
           <p className="text-xs text-slate-500">
-            Acompanhamento longitudinal de objetivos clínicos, metas funcionais e linha do tempo de evolução
+            {copyProfile.goals.sectionSubtitle}
           </p>
         </div>
         {!readOnly && (
@@ -372,7 +386,7 @@ export const MeasurableGoalsManager: React.FC<MeasurableGoalsManagerProps> = ({
                 required
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="Ex: Amplitude de flexão do joelho direito até 110 graus"
+                placeholder={copyProfile.goals.placeholderTitle}
                 className="w-full text-xs px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 outline-none transition-all shadow-xs"
               />
             </div>
@@ -384,7 +398,7 @@ export const MeasurableGoalsManager: React.FC<MeasurableGoalsManagerProps> = ({
                 type="text"
                 value={domain}
                 onChange={(e) => setDomain(e.target.value)}
-                placeholder="Ex: Motor, Nutricional, Linguagem, AVD"
+                placeholder={copyProfile.goals.placeholderDomain}
                 className="w-full text-xs px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 outline-none transition-all shadow-xs"
               />
             </div>
@@ -399,7 +413,7 @@ export const MeasurableGoalsManager: React.FC<MeasurableGoalsManagerProps> = ({
                 type="text"
                 value={baselineValue}
                 onChange={(e) => setBaselineValue(sanitizeNumericInput(e.target.value))}
-                placeholder="Ex: 60"
+                placeholder={copyProfile.goals.placeholderBaseline}
                 className="w-full text-xs px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 outline-none transition-all shadow-xs"
               />
             </div>
@@ -411,7 +425,7 @@ export const MeasurableGoalsManager: React.FC<MeasurableGoalsManagerProps> = ({
                 type="text"
                 value={currentValue}
                 onChange={(e) => setCurrentValue(sanitizeNumericInput(e.target.value))}
-                placeholder="Ex: 75"
+                placeholder={copyProfile.goals.placeholderCurrent}
                 className="w-full text-xs px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 outline-none transition-all shadow-xs"
               />
             </div>
@@ -424,7 +438,7 @@ export const MeasurableGoalsManager: React.FC<MeasurableGoalsManagerProps> = ({
                 required
                 value={targetValue}
                 onChange={(e) => setTargetValue(sanitizeNumericInput(e.target.value))}
-                placeholder="Ex: 110 ou 100%"
+                placeholder={copyProfile.goals.placeholderTarget}
                 className="w-full text-xs px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 outline-none transition-all shadow-xs"
               />
             </div>
@@ -436,7 +450,7 @@ export const MeasurableGoalsManager: React.FC<MeasurableGoalsManagerProps> = ({
                 type="text"
                 value={unit}
                 onChange={(e) => setUnit(e.target.value)}
-                placeholder="Ex: graus, %, kg, repetições"
+                placeholder={copyProfile.goals.placeholderUnit}
                 className="w-full text-xs px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 outline-none transition-all shadow-xs"
               />
             </div>
@@ -462,7 +476,7 @@ export const MeasurableGoalsManager: React.FC<MeasurableGoalsManagerProps> = ({
                 type="text"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="Ex: Medição por goniometria ativa sem dor aguda"
+                placeholder={copyProfile.goals.placeholderCriteria}
                 className="w-full text-xs px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 outline-none transition-all shadow-xs"
               />
             </div>
@@ -743,7 +757,7 @@ export const MeasurableGoalsManager: React.FC<MeasurableGoalsManagerProps> = ({
                   rows={3}
                   value={progressForm.notes}
                   onChange={(e) => setProgressForm({ ...progressForm, notes: e.target.value })}
-                  placeholder="Descreva a evolução do paciente, intervenções aplicadas ou ajustes de conduta..."
+                  placeholder={copyProfile.goals.progressNotesPlaceholder || "Descreva a evolução do paciente, intervenções aplicadas ou ajustes de conduta..."}
                   className="w-full text-xs p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none"
                 />
               </div>

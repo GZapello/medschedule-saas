@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { resolveClinicalCopyProfile } from '../clinical/clinicalModuleCopy';
 import { ClinicalFileUploader, FileUploadedInfo } from './ClinicalFileUploader';
 import {
   Plus,
@@ -81,13 +82,18 @@ export const ExternalTestsManager: React.FC<ExternalTestsManagerProps> = ({
   moduleType,
   appointmentId,
   accentColor = 'sky',
-  title = 'Testes Externos, Protocolos & Anexos',
-  subtitle = 'Anexe testes escaneados, relatórios externos, protocolos, planilhas ou documentos recebidos de outras instituições.',
+  title,
+  subtitle,
   readOnly = false,
   className = ''
 }) => {
   const { currentUser } = useAuth();
   const { showToast } = useToast();
+  const copyProfile = resolveClinicalCopyProfile(moduleType);
+  const testCopy = copyProfile.externalTests;
+
+  const resolvedTitle = title || testCopy.titleDefault || 'Testes Externos, Protocolos & Anexos';
+  const resolvedSubtitle = subtitle || testCopy.subtitleDefault || 'Anexe testes escaneados, relatórios externos, protocolos, planilhas ou documentos recebidos de outras instituições.';
 
   const [tests, setTests] = useState<ExternalTest[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -139,7 +145,7 @@ export const ExternalTestsManager: React.FC<ExternalTestsManagerProps> = ({
   const handleOpenNewModal = () => {
     setEditingTestId(null);
     setFormTestName('');
-    setFormCategory('Teste/Instrumento Externo');
+    setFormCategory(testCopy.categoryDefault || 'Teste/Instrumento Externo');
     setFormTestDate(
       new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date())
     );
@@ -296,9 +302,9 @@ export const ExternalTestsManager: React.FC<ExternalTestsManagerProps> = ({
         <div>
           <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
             <FileText className={`w-5 h-5 ${colors.headerIcon}`} />
-            <span>{title}</span>
+            <span>{resolvedTitle}</span>
           </h3>
-          <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>
+          <p className="text-xs text-slate-500 mt-0.5">{resolvedSubtitle}</p>
         </div>
 
         {!readOnly && (
@@ -482,7 +488,7 @@ export const ExternalTestsManager: React.FC<ExternalTestsManagerProps> = ({
                   <input
                     type="text"
                     required
-                    placeholder="Ex: Escala Vineland, TDE-II, Relatório Neuropsicológico, Protocolo Pollock..."
+                    placeholder={testCopy.testNamePlaceholder}
                     value={formTestName}
                     onChange={e => setFormTestName(e.target.value)}
                     className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 bg-white focus:border-sky-500 focus:outline-none"
@@ -557,7 +563,7 @@ export const ExternalTestsManager: React.FC<ExternalTestsManagerProps> = ({
                 </label>
                 <input
                   type="text"
-                  placeholder="Ex: Escore Z -1.5, Percentil 70, Dentro dos limites esperados, TAV Nível 4..."
+                  placeholder={testCopy.resultSummaryPlaceholder}
                   value={formResultSummary}
                   onChange={e => setFormResultSummary(e.target.value)}
                   className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 bg-white focus:border-sky-500 focus:outline-none"
@@ -571,7 +577,7 @@ export const ExternalTestsManager: React.FC<ExternalTestsManagerProps> = ({
                 </label>
                 <textarea
                   rows={2}
-                  placeholder="Anotações contextuais sobre a aplicação ou interpretação do documento..."
+                  placeholder={testCopy.notesPlaceholder}
                   value={formNotes}
                   onChange={e => setFormNotes(e.target.value)}
                   className="w-full p-2.5 text-xs rounded-xl border border-slate-300 bg-white focus:border-sky-500 focus:outline-none"

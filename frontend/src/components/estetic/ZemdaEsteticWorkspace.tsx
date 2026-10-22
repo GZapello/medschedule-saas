@@ -3227,7 +3227,7 @@ interface EsteticPlanItemForm {
                   value={evolutionForm.conduct}
                       aria-label="Conduta" name="conduct" aria-invalid={invalidField === 'conduct'} style={{ borderColor: invalidField === 'conduct' ? '#dc2626' : undefined }}
                   onChange={e => setEvolutionForm({ ...evolutionForm, conduct: e.target.value })}
-                  placeholder="Orientações prestadas, prescrição tópica ou conduta clínica..."
+                  placeholder="Orientações domiciliares, cuidados tópicos quando aplicáveis à habilitação profissional e conduta registrada..."
                   className="w-full p-2.5 rounded-xl border border-slate-200"
                 />
               </div>

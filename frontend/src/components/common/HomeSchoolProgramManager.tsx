@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Home, School, BookOpen, Plus, X, Trash2, CheckCircle2, Clock, Copy, Printer } from 'lucide-react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import { resolveClinicalCopyProfile } from '../clinical/clinicalModuleCopy';
 
 export interface HomeProgramItem {
   id: string;
@@ -28,6 +29,17 @@ export const HomeSchoolProgramManager: React.FC<HomeSchoolProgramManagerProps> =
   readOnly = false
 }) => {
   const { currentTenant } = useAuth();
+  const copyProfile = resolveClinicalCopyProfile(undefined, specialty);
+  const hsCopy = copyProfile.homeSchool || {
+    sectionTitle: 'Programa de Atividades e Orientações (Casa / Escola)',
+    sectionSubtitle: 'Orientações estruturadas para continuidade do tratamento na rotina diária',
+    titlePlaceholder: 'Ex: Treino de abotoamento na rotina matinal',
+    frequencyPlaceholder: 'Ex: Diário ao acordar, 2x por semana',
+    defaultFrequency: 'Diário (15 minutos)',
+    materialsPlaceholder: 'Ex: Quadro de rotina visual, adaptador de lápis',
+    instructionsPlaceholder: 'Descreva passo a passo como realizar o estímulo, quando intervir e como incentivar a autonomia...'
+  };
+
   const [programs, setPrograms] = useState<HomeProgramItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
@@ -37,7 +49,7 @@ export const HomeSchoolProgramManager: React.FC<HomeSchoolProgramManagerProps> =
   const [setting, setSetting] = useState<HomeProgramItem['setting']>('home');
   const [instructions, setInstructions] = useState('');
   const [materialsNeeded, setMaterialsNeeded] = useState('');
-  const [frequency, setFrequency] = useState('Diário (15 minutos)');
+  const [frequency, setFrequency] = useState(hsCopy.defaultFrequency);
 
   const loadPrograms = async () => {
     if (!patientId) return;
@@ -126,10 +138,10 @@ ${prog.instructions}
         <div>
           <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
             <BookOpen className="w-5 h-5 text-teal-600" />
-            Programa de Atividades e Orientações (Casa / Escola)
+            {hsCopy.sectionTitle}
           </h3>
           <p className="text-xs text-slate-500">
-            Orientações estruturadas para continuidade do tratamento na rotina diária
+            {hsCopy.sectionSubtitle}
           </p>
         </div>
         {!readOnly && (
@@ -156,7 +168,7 @@ ${prog.instructions}
                 required
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="Ex: Treino de abotoamento na rotina matinal"
+                placeholder={hsCopy.titlePlaceholder}
                 className="w-full text-xs px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 outline-none transition-all shadow-xs"
               />
             </div>
@@ -186,7 +198,7 @@ ${prog.instructions}
                 type="text"
                 value={frequency}
                 onChange={(e) => setFrequency(e.target.value)}
-                placeholder="Ex: Diário ao acordar, 2x por semana"
+                placeholder={hsCopy.frequencyPlaceholder}
                 className="w-full text-xs px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 outline-none transition-all shadow-xs"
               />
             </div>
@@ -198,7 +210,7 @@ ${prog.instructions}
                 type="text"
                 value={materialsNeeded}
                 onChange={(e) => setMaterialsNeeded(e.target.value)}
-                placeholder="Ex: Quadro de rotina visual, adaptador de lápis"
+                placeholder={hsCopy.materialsPlaceholder}
                 className="w-full text-xs px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 outline-none transition-all shadow-xs"
               />
             </div>
@@ -213,7 +225,7 @@ ${prog.instructions}
               required
               value={instructions}
               onChange={(e) => setInstructions(e.target.value)}
-              placeholder="Descreva passo a passo como realizar o estímulo, quando intervir e como incentivar a autonomia..."
+              placeholder={hsCopy.instructionsPlaceholder}
               className="w-full text-xs px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 outline-none transition-all shadow-xs resize-none"
             />
           </div>
