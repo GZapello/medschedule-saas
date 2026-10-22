@@ -130,6 +130,7 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({ onLogin, onR
             </div>
             <div className="zl-hero-grid">
               <div className="zl-hero-text">
+                <p className="zl-hero-kicker">Zemda · software de gestão em saúde</p>
                 <h1>{LANDING_HERO_TITLE_LINES[0]}<br />{' '}<span>{LANDING_HERO_TITLE_LINES[1]}</span></h1>
                 <div className="zl-hero-copy">
                   <p>{LANDING_HERO.description}</p>

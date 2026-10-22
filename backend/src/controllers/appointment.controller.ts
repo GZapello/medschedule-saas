@@ -1262,7 +1262,20 @@ export class AppointmentController {
         res.status(401).json({ error: 'Tenant ID required' });
         return;
       }
-      const { serviceId, professionalId, roomId, startTime, endTime, notes, modality, meeting_url } = req.body;
+      const {
+        serviceId,
+        professionalId,
+        roomId,
+        insuranceId,
+        startTime,
+        endTime,
+        notes,
+        internalNotes,
+        modality,
+        meeting_url,
+        reason
+      } = req.body;
+      const isCustomTime = Boolean(req.body.isCustomTime || req.body.is_custom_time);
       const rawDriveUrl = req.body.google_drive_url !== undefined ? req.body.google_drive_url : req.body.googleDriveUrl;
       if (!validMeetingUrl(meeting_url) || !validMeetingUrl(rawDriveUrl) || (modality !== undefined && !['presential', 'online', 'home'].includes(modality))) {
         res.status(400).json({ error: 'Modalidade ou link HTTPS da teleconsulta inválido.' }); return;
@@ -1274,8 +1287,16 @@ export class AppointmentController {
         return;
       }
 
-      let newStart = appt.start_time;
-      let newEnd = appt.end_time;
+      if (appt.status === 'completed' || appt.status === 'cancelled') {
+        res.status(400).json({ error: 'Não é permitido editar ou remarcar um atendimento concluído ou cancelado.' });
+        return;
+      }
+
+      const origStart = String(appt.start_time || '').trim().replace(' ', 'T');
+      const origEnd = String(appt.end_time || '').trim().replace(' ', 'T');
+
+      let newStart = origStart;
+      let newEnd = origEnd;
 
       if (startTime) {
         newStart = String(startTime).trim().replace(' ', 'T');
@@ -1287,43 +1308,126 @@ export class AppointmentController {
       const safeProfId = String(professionalId || appt.professional_id || '');
       const safeStart = String(newStart || '');
       const safeEnd = String(newEnd || '');
+      const safeRoomId = roomId !== undefined ? (roomId || null) : (appt.room_id || null);
 
-      if (startTime || endTime || professionalId) {
-        const hoursCheck = validateClinicBusinessHours(tenantId, safeStart, safeEnd);
-        if (!hoursCheck.valid) {
-          res.status(400).json({ error: hoursCheck.error });
+      const startChanged = safeStart.slice(0, 16) !== origStart.slice(0, 16);
+      const endChanged = safeEnd.slice(0, 16) !== origEnd.slice(0, 16);
+      const profChanged = Boolean(professionalId && String(professionalId) !== String(appt.professional_id));
+      const serviceChanged = Boolean(serviceId && String(serviceId) !== String(appt.service_id));
+      const roomChanged = roomId !== undefined && (roomId || null) !== (appt.room_id || null);
+
+      if (appt.status === 'in_progress' && (startChanged || profChanged || serviceChanged)) {
+        res.status(400).json({ error: 'Não é permitido alterar data, horário agendado, profissional ou serviço de um atendimento em andamento.' });
+        return;
+      }
+
+      if (startChanged || endChanged || profChanged) {
+        if (!isCustomTime) {
+          const hoursCheck = validateClinicBusinessHours(tenantId, safeStart, safeEnd);
+          if (!hoursCheck.valid) {
+            res.status(400).json({ error: hoursCheck.error });
+            return;
+          }
+
+          const scheduleCheck = validateProfessionalSchedule(tenantId, safeProfId, safeStart, safeEnd);
+          if (!scheduleCheck.valid) {
+            res.status(400).json({ error: scheduleCheck.error });
+            return;
+          }
+        }
+
+        const profConflict = db.prepare(`
+          SELECT a.id, a.start_time, a.end_time, p.name as professional_name, s.name as service_name
+          FROM appointments a
+          JOIN professionals p ON p.id = a.professional_id
+          JOIN services s ON s.id = a.service_id
+          WHERE a.tenant_id = ?
+            AND a.professional_id = ?
+            AND a.id != ?
+            AND a.status NOT IN ('cancelled')
+            AND REPLACE(a.start_time, ' ', 'T') < ? AND REPLACE(a.end_time, ' ', 'T') > ?
+        `).get(tenantId, safeProfId, id, safeEnd, safeStart) as any;
+
+        if (profConflict) {
+          res.status(409).json({
+            error: 'Este horário não está mais disponível. Escolha outro horário.',
+            code: 'PROFESSIONAL_SLOT_OCCUPIED',
+            conflict: {
+              startTime: profConflict.start_time,
+              endTime: profConflict.end_time,
+              professionalName: profConflict.professional_name,
+              serviceName: profConflict.service_name
+            }
+          });
           return;
         }
 
-        const scheduleCheck = validateProfessionalSchedule(tenantId, safeProfId, safeStart, safeEnd);
-        if (!scheduleCheck.valid) {
-          res.status(400).json({ error: scheduleCheck.error });
-          return;
+        if (appt.patient_id) {
+          const patientConflict = db.prepare(`
+            SELECT a.id, a.start_time, a.end_time, p.name as professional_name, s.name as service_name
+            FROM appointments a
+            JOIN professionals p ON p.id = a.professional_id
+            JOIN services s ON s.id = a.service_id
+            WHERE a.tenant_id = ?
+              AND a.patient_id = ?
+              AND a.id != ?
+              AND a.status NOT IN ('cancelled')
+              AND REPLACE(a.start_time, ' ', 'T') < ? AND REPLACE(a.end_time, ' ', 'T') > ?
+          `).get(tenantId, appt.patient_id, id, safeEnd, safeStart) as any;
+
+          if (patientConflict) {
+            res.status(409).json({
+              error: 'Este paciente já possui outro atendimento neste horário.',
+              code: 'PATIENT_APPOINTMENT_CONFLICT',
+              conflict: {
+                startTime: patientConflict.start_time,
+                endTime: patientConflict.end_time,
+                professionalName: patientConflict.professional_name,
+                serviceName: patientConflict.service_name
+              }
+            });
+            return;
+          }
         }
+      }
 
-        const conflict = db.prepare(`
-          SELECT id FROM appointments
-          WHERE tenant_id = ?
-            AND professional_id = ?
-            AND id != ?
-            AND status NOT IN ('cancelled')
-            AND REPLACE(start_time, ' ', 'T') < ? AND REPLACE(end_time, ' ', 'T') > ?
-        `).get(tenantId, safeProfId, id, safeEnd, safeStart);
+      if ((startChanged || endChanged || roomChanged) && safeRoomId) {
+        const roomConflict = db.prepare(`
+          SELECT a.id, a.start_time, a.end_time, r.name as room_name, p.name as professional_name
+          FROM appointments a
+          JOIN rooms r ON r.id = a.room_id
+          JOIN professionals p ON p.id = a.professional_id
+          WHERE a.tenant_id = ?
+            AND a.room_id = ?
+            AND a.id != ?
+            AND a.status NOT IN ('cancelled')
+            AND REPLACE(a.start_time, ' ', 'T') < ? AND REPLACE(a.end_time, ' ', 'T') > ?
+        `).get(tenantId, safeRoomId, id, safeEnd, safeStart) as any;
 
-        if (conflict) {
-          res.status(409).json({ error: 'Este horário não está mais disponível. Escolha outro horário.' });
+        if (roomConflict) {
+          res.status(409).json({
+            error: `A sala ${roomConflict.room_name} já está ocupada neste horário por ${roomConflict.professional_name}.`,
+            code: 'ROOM_CONFLICT'
+          });
           return;
         }
       }
+
+      const nextStatus = (startChanged && ['scheduled', 'confirmed', 'no_show', 'rescheduled'].includes(appt.status))
+        ? 'rescheduled'
+        : appt.status;
 
       db.prepare(`
         UPDATE appointments SET
           service_id = COALESCE(?, service_id),
           professional_id = COALESCE(?, professional_id),
-          room_id = CASE WHEN ? IS NOT NULL THEN ? ELSE room_id END,
+          room_id = CASE WHEN ? THEN ? ELSE room_id END,
+          insurance_id = CASE WHEN ? THEN ? ELSE insurance_id END,
           start_time = ?,
           end_time = ?,
+          status = ?,
           patient_notes = COALESCE(?, patient_notes),
+          internal_notes = CASE WHEN ? THEN ? ELSE internal_notes END,
           modality = COALESCE(?, modality),
           meeting_url = CASE WHEN ? THEN ? ELSE meeting_url END,
           google_drive_url = CASE WHEN ? THEN ? ELSE google_drive_url END,
@@ -1332,11 +1436,16 @@ export class AppointmentController {
       `).run(
         serviceId || null,
         professionalId || null,
-        roomId !== undefined ? roomId : null,
+        roomId !== undefined ? 1 : 0,
         roomId || null,
-        newStart,
-        newEnd,
+        insuranceId !== undefined ? 1 : 0,
+        insuranceId || null,
+        safeStart,
+        safeEnd,
+        nextStatus,
         notes !== undefined ? notes : null,
+        internalNotes !== undefined ? 1 : 0,
+        typeof internalNotes === 'string' ? internalNotes.trim() || null : null,
         modality || null,
         meeting_url !== undefined ? 1 : 0,
         typeof meeting_url === 'string' ? meeting_url.trim() || null : null,
@@ -1346,8 +1455,18 @@ export class AppointmentController {
         tenantId
       );
 
-      logAudit(req, 'UPDATE_APPOINTMENT', 'appointments', id, { serviceId, professionalId, newStart, newEnd });
-      res.json({ message: 'Dados do atendimento atualizados com sucesso' });
+      if (startChanged) {
+        db.prepare(`
+          INSERT INTO appointment_status_history (id, appointment_id, previous_status, new_status, changed_by, reason)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(uuidv4(), id, appt.status, nextStatus, req.user ? req.user.name : 'Sistema', reason || 'Horário remarcado');
+
+        NotificationService.cancelAppointmentReminders(id as string);
+        NotificationService.scheduleAppointmentReminder(id as string);
+      }
+
+      logAudit(req, 'UPDATE_APPOINTMENT', 'appointments', id, { serviceId, professionalId, roomId, insuranceId, newStart: safeStart, newEnd: safeEnd });
+      res.json({ message: startChanged ? 'Atendimento remarcado com sucesso' : 'Dados do atendimento atualizados com sucesso' });
     } catch (err: any) {
       console.error('[AppointmentController.update] Erro:', err);
       res.status(500).json({ error: 'Erro ao atualizar dados do atendimento' });

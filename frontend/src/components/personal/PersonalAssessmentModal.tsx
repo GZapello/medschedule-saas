@@ -765,10 +765,10 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
               <ClipboardCheck className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-slate-800">
+              <h3 className="text-lg font-bold text-slate-900 tracking-tight">
                 {postureOnly ? 'Avaliação Postural' : shared ? 'Avaliação Clínica' : 'Avaliação Física Completa & Composição Corporal'}
               </h3>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-600 mt-0.5">
                 {shared ? 'Recursos disponíveis para seu atendimento.' : postureOnly ? 'Fotos, marcações e observações por região.' : 'Antropometria, Composição, TAV, Dobras, Cardiovascular, Força 1RM e Fotos.'}
               </p>
             </div>
@@ -788,9 +788,9 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
         </div>
 
         {/* Top Info Strip: Aluno e Data */}
-        <div className="bg-slate-50 px-6 py-3 border-b border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+        <div className="bg-slate-50/80 px-6 py-3 border-b border-slate-200/80 grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs items-center">
           <div>
-            <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">{effectiveTermLabel} *</label>
+            <label className="block text-xs font-semibold text-slate-700 mb-1.5">{effectiveTermLabel} <span className="text-purple-600">*</span></label>
             <PatientSearchSelect
               isStudent={!postureOnly && !shared}
               clientTermLabel={effectiveTermLabel}
@@ -807,21 +807,21 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
           </div>
 
           <div>
-            <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Data da Avaliação *</label>
+            <label className="block text-xs font-semibold text-slate-700 mb-1.5">Data da Avaliação <span className="text-purple-600">*</span></label>
             <input
               type="date"
               required
               value={assessmentDate}
               onChange={(e) => setAssessmentDate(e.target.value)}
-              className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none font-semibold text-slate-800"
+              className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none text-xs font-semibold text-slate-800"
             />
           </div>
 
           <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0">
             <div className="text-right">
-              <span className="text-[10px] uppercase font-bold text-slate-400 block">{effectiveTermLabel} / Idade</span>
-              <strong className="text-xs text-slate-800">
-                {currentStudent?.name || (currentStudent as any)?.full_name || '—'} • {age !== null ? `${age} anos` : 'Idade não informada'}
+              <span className="text-xs font-medium text-slate-500 block mb-0.5">{effectiveTermLabel} e Idade</span>
+              <strong className="text-sm font-semibold text-slate-900">
+                {currentStudent?.name || (currentStudent as any)?.full_name || '—'} <span className="text-slate-400 font-normal">·</span> {age !== null ? `${age} anos` : 'Idade não informada'}
               </strong>
             </div>
           </div>
@@ -829,44 +829,51 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
 
         {!postureOnly && !shared && <>
         {/* Mini KPI Preview Flutuante */}
-        <div className="bg-gradient-to-r from-purple-950 via-indigo-950 to-slate-900 text-white px-6 py-2.5 flex items-center justify-around text-xs flex-wrap gap-2">
-          <div className="flex items-center gap-2">
-            <span className="text-purple-300 text-[11px]">IMC:</span>
-            <strong className="text-amber-300 font-bold">{bmi > 0 ? `${bmi} kg/m²` : '—'}</strong>
-            {bmiClassification && <span className="text-[10px] text-slate-300">({bmiClassification})</span>}
+        <div className="bg-gradient-to-r from-purple-950 via-indigo-950 to-slate-900 text-white px-6 py-2.5 flex items-center justify-around text-xs flex-wrap gap-2.5 border-y border-purple-900/30">
+          <div className="flex items-center gap-1.5">
+            <span className="text-purple-200 text-xs font-medium">IMC:</span>
+            <strong className="text-amber-300 font-bold text-xs">{bmi > 0 ? `${bmi} kg/m²` : '—'}</strong>
+            {bmiClassification && <span className="text-xs text-slate-300">({bmiClassification})</span>}
           </div>
           <div className="h-4 w-px bg-white/20 hidden sm:block" />
-          <div className="flex items-center gap-2">
-            <span className="text-purple-300 text-[11px]">% Gordura:</span>
-            <strong className="text-amber-300 font-bold">{calculatedFatPct != null ? `${calculatedFatPct}%` : '—'}</strong><span className="text-[10px] text-slate-300">{calculationPreview?.values?.body_fat_classification}</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-purple-200 text-xs font-medium">% Gordura:</span>
+            <strong className="text-amber-300 font-bold text-xs">{calculatedFatPct != null ? `${calculatedFatPct}%` : '—'}</strong>
+            {calculationPreview?.values?.body_fat_classification && <span className="text-xs text-slate-300">({calculationPreview?.values?.body_fat_classification})</span>}
           </div>
           <div className="h-4 w-px bg-white/20 hidden sm:block" />
-          <div className="flex items-center gap-2">
-            <span className="text-purple-300 text-[11px]">Massa Magra:</span>
-            <strong className="text-emerald-300 font-bold">{leanMassKg > 0 ? `${leanMassKg} kg` : '—'}</strong>
+          <div className="flex items-center gap-1.5">
+            <span className="text-purple-200 text-xs font-medium">Massa Magra:</span>
+            <strong className="text-emerald-300 font-bold text-xs">{leanMassKg > 0 ? `${leanMassKg} kg` : '—'}</strong>
           </div>
           <div className="h-4 w-px bg-white/20 hidden sm:block" />
           {calculationPreview?.values?.tav_estimated_value!=null && (
             <div className="flex items-center gap-1.5 text-xs">
-              <span className="text-purple-300 text-[11px]">eVAT (Bonora):</span>
-              <strong className="text-cyan-300 font-bold">{`${Number(calculationPreview.values.tav_estimated_value).toLocaleString('pt-BR',{maximumFractionDigits:2})} cm²`}</strong>
+              <span className="text-purple-200 text-xs font-medium">eVAT (Bonora):</span>
+              <strong className="text-cyan-300 font-bold text-xs">{`${Number(calculationPreview.values.tav_estimated_value).toLocaleString('pt-BR',{maximumFractionDigits:2})} cm²`}</strong>
             </div>
           )}
-          {tavValue!=='' && <div className="flex items-center gap-2">
-            <span className="text-purple-300 text-[11px]">{tavUnit==='cm²'?'Área medida:':tavUnit==='nível'?'Nível BIA:':'Medição:'}</span>
-            <strong className="text-cyan-300 font-bold">{`${tavValue} ${tavUnit}`}</strong>
+          {tavValue!=='' && <div className="flex items-center gap-1.5">
+            <span className="text-purple-200 text-xs font-medium">{tavUnit==='cm²'?'Área medida:':tavUnit==='nível'?'Nível BIA:':'Medição:'}</span>
+            <strong className="text-cyan-300 font-bold text-xs">{`${tavValue} ${tavUnit}`}</strong>
             {tavClassification && (
-              <span className="text-[10px] px-1.5 py-0.2 rounded bg-white/10 text-cyan-200">
+              <span className="text-xs px-2 py-0.5 rounded bg-white/10 text-cyan-200 font-medium">
                 {tavClassification}
               </span>
             )}
           </div>}
-          {calculationPreview?.values?.vai_value!=null && <div className="text-xs"><span className="text-purple-300">VAI: </span><strong>{Number(calculationPreview.values.vai_value).toLocaleString('pt-BR',{maximumFractionDigits:2})}</strong><span className="text-[10px] text-slate-300"> · Adimensional</span></div>}
+          {calculationPreview?.values?.vai_value!=null && (
+            <div className="flex items-center gap-1.5 text-xs">
+              <span className="text-purple-200 text-xs font-medium">VAI:</span>
+              <strong className="text-white font-bold text-xs">{Number(calculationPreview.values.vai_value).toLocaleString('pt-BR',{maximumFractionDigits:2})}</strong>
+              <span className="text-xs text-slate-300">· Adimensional</span>
+            </div>
+          )}
         </div>
 
         </>}
-        {!postureOnly && <div className="flex gap-2 px-6 py-2 border-b overflow-x-auto mobile-wrap">
-          {availableTabs.map(tab=><button type="button" key={tab.id} disabled={photosUploading || postureBusy} onClick={()=>setActiveTab(tab.id as typeof activeTab)} className={`px-3 py-2 text-xs rounded-xl whitespace-nowrap ${activeTab===tab.id?'bg-teal-600 text-white':'bg-slate-100 text-slate-700'}`}>{tab.label}</button>)}
+        {!postureOnly && <div className="flex gap-2 px-6 py-2.5 border-b border-slate-200 bg-slate-50/60 overflow-x-auto mobile-wrap">
+          {availableTabs.map(tab=><button type="button" key={tab.id} disabled={photosUploading || postureBusy} onClick={()=>setActiveTab(tab.id as typeof activeTab)} className={`px-3.5 py-2 text-xs font-semibold rounded-xl whitespace-nowrap transition-all ${activeTab===tab.id?'bg-teal-600 text-white shadow-sm':'bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200/80'}`}>{tab.label}</button>)}
         </div>}
         {/* Formulário Principal */}
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto flex-1 space-y-6">
@@ -877,14 +884,14 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
             <div className="space-y-6 animate-fadeIn">
               {/* Peso, Altura e Índices de Risco */}
               <div>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-3 flex items-center gap-1.5">
+                <h4 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
                   <Scale className="w-4 h-4 text-purple-600" />
                   <span>Dados Básicos e Índices de Risco</span>
                 </h4>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-slate-50/80 p-4 rounded-2xl border border-slate-200">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Peso Corporal (kg) *</label>
+                    <label className="block text-xs font-medium text-slate-700 mb-1.5">Peso Corporal (kg) <span className="text-purple-600">*</span></label>
                     <input
                       type="number"
                       step="0.1"
@@ -892,11 +899,11 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                       placeholder="Ex: 75.5"
                       value={weight}
                       onChange={(e) => setWeight(e.target.value ? Number(e.target.value) : '')}
-                      className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none font-bold"
+                      className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none font-bold text-slate-800"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Estatura (cm) *</label>
+                    <label className="block text-xs font-medium text-slate-700 mb-1.5">Estatura (cm) <span className="text-purple-600">*</span></label>
                     <input
                       type="number"
                       step="0.5"
@@ -904,17 +911,17 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                       placeholder="Ex: 178"
                       value={height}
                       onChange={(e) => setHeight(e.target.value ? Number(e.target.value) : '')}
-                      className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none font-bold"
+                      className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none font-bold text-slate-800"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-500 mb-1">IMC (kg/m²)</label>
+                    <label className="block text-xs font-medium text-slate-700 mb-1.5">IMC (kg/m²)</label>
                     <div className="px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl font-bold text-slate-800">
                       {bmi > 0 ? `${bmi} (${bmiClassification})` : '—'}
                     </div>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-500 mb-1">RCQ / RCE</label>
+                    <label className="block text-xs font-medium text-slate-700 mb-1.5">RCQ / RCE</label>
                     <div className="px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl font-bold text-slate-800">
                       {whr > 0 ? `RCQ: ${whr} (${whrRisk})` : '—'} {whtr > 0 ? `| RCE: ${whtr} (${whtrRisk})` : ''}
                     </div>
@@ -924,17 +931,17 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
 
               {/* Perímetros com Lateralidade Completa */}
               <div>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-3 flex items-center gap-1.5">
+                <h4 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
                   <Ruler className="w-4 h-4 text-purple-600" />
-                  <span>Perímetros / Circunferências com Lateralidade Completa (cm)</span>
+                  <span>Perímetros e Circunferências com Lateralidade Completa (cm)</span>
                 </h4>
 
                 {/* Tronco Central */}
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3 mb-4">
-                  <span className="text-[11px] font-bold text-purple-800 uppercase block">Tronco & Cabeça</span>
+                <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200 space-y-3 mb-4">
+                  <span className="text-xs font-bold text-purple-900 tracking-wide block mb-2.5">Tronco & Cabeça</span>
                   <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Pescoço</label>
+                      <label className="block text-xs font-medium text-slate-700 mb-1.5">Pescoço</label>
                       <input
                         type="number"
                         step="0.5"
@@ -945,7 +952,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Ombros</label>
+                      <label className="block text-xs font-medium text-slate-700 mb-1.5">Ombros</label>
                       <input
                         type="number"
                         step="0.5"
@@ -956,7 +963,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Tórax</label>
+                      <label className="block text-xs font-medium text-slate-700 mb-1.5">Tórax</label>
                       <input
                         type="number"
                         step="0.5"
@@ -967,7 +974,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Cintura</label>
+                      <label className="block text-xs font-medium text-slate-700 mb-1.5">Cintura</label>
                       <input
                         type="number"
                         step="0.5"
@@ -978,18 +985,18 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Abdômen</label>
+                      <label className="block text-xs font-medium text-slate-700 mb-1.5">Abdômen</label>
                       <input
                         type="number"
                         step="0.5"
                         placeholder="cm"
                         value={abdomenCm}
                         onChange={(e) => setAbdomenCm(e.target.value ? Number(e.target.value) : '')}
-                        className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl outline-none font-semibold"
+                        className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl outline-none font-semibold text-slate-800"
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Quadril</label>
+                      <label className="block text-xs font-medium text-slate-700 mb-1.5">Quadril</label>
                       <input
                         type="number"
                         step="0.5"
@@ -1003,13 +1010,13 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                 </div>
 
                 {/* Membros Superiores (D / E) */}
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3 mb-4">
-                  <span className="text-[11px] font-bold text-purple-800 uppercase block">
+                <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200 space-y-3 mb-4">
+                  <span className="text-xs font-bold text-purple-900 tracking-wide block mb-2.5">
                     Membros Superiores (Braços, Antebraços e Punhos D / E)
                   </span>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Braço Relaxado Dir.</label>
+                      <label className="block text-xs font-medium text-slate-700 mb-1.5">Braço Relaxado Dir.</label>
                       <input
                         type="number"
                         step="0.5"
@@ -1020,7 +1027,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Braço Relaxado Esq.</label>
+                      <label className="block text-xs font-medium text-slate-700 mb-1.5">Braço Relaxado Esq.</label>
                       <input
                         type="number"
                         step="0.5"
@@ -1031,29 +1038,29 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Braço Contraído Dir.</label>
+                      <label className="block text-xs font-medium text-slate-700 mb-1.5">Braço Contraído Dir.</label>
                       <input
                         type="number"
                         step="0.5"
                         placeholder="cm"
                         value={armRightFlexed}
                         onChange={(e) => setArmRightFlexed(e.target.value ? Number(e.target.value) : '')}
-                        className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl outline-none font-semibold"
+                        className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl outline-none font-semibold text-slate-800"
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Braço Contraído Esq.</label>
+                      <label className="block text-xs font-medium text-slate-700 mb-1.5">Braço Contraído Esq.</label>
                       <input
                         type="number"
                         step="0.5"
                         placeholder="cm"
                         value={armLeftFlexed}
                         onChange={(e) => setArmLeftFlexed(e.target.value ? Number(e.target.value) : '')}
-                        className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl outline-none font-semibold"
+                        className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl outline-none font-semibold text-slate-800"
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Antebraço Dir.</label>
+                      <label className="block text-xs font-medium text-slate-700 mb-1.5">Antebraço Dir.</label>
                       <input
                         type="number"
                         step="0.5"
@@ -1064,7 +1071,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Antebraço Esq.</label>
+                      <label className="block text-xs font-medium text-slate-700 mb-1.5">Antebraço Esq.</label>
                       <input
                         type="number"
                         step="0.5"
@@ -1075,7 +1082,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Punho Dir.</label>
+                      <label className="block text-xs font-medium text-slate-700 mb-1.5">Punho Dir.</label>
                       <input
                         type="number"
                         step="0.5"
@@ -1086,7 +1093,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Punho Esq.</label>
+                      <label className="block text-xs font-medium text-slate-700 mb-1.5">Punho Esq.</label>
                       <input
                         type="number"
                         step="0.5"
@@ -1100,13 +1107,13 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                 </div>
 
                 {/* Membros Inferiores (D / E) */}
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                  <span className="text-[11px] font-bold text-purple-800 uppercase block">
-                    Membros Inferiores (Coxas Proximal/Medial/Distal e Panturrilhas D / E)
+                <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200 space-y-3">
+                  <span className="text-xs font-bold text-purple-900 tracking-wide block mb-2.5">
+                    Membros Inferiores (Coxas Proximal, Medial, Distal e Panturrilhas D / E)
                   </span>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Coxa Proximal Dir.</label>
+                      <label className="block text-xs font-medium text-slate-700 mb-1.5">Coxa Proximal Dir.</label>
                       <input
                         type="number"
                         step="0.5"
@@ -1117,7 +1124,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Coxa Proximal Esq.</label>
+                      <label className="block text-xs font-medium text-slate-700 mb-1.5">Coxa Proximal Esq.</label>
                       <input
                         type="number"
                         step="0.5"
@@ -1128,29 +1135,29 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Coxa Medial Dir.</label>
+                      <label className="block text-xs font-medium text-slate-700 mb-1.5">Coxa Medial Dir.</label>
                       <input
                         type="number"
                         step="0.5"
                         placeholder="cm"
                         value={thighRightMed}
                         onChange={(e) => setThighRightMed(e.target.value ? Number(e.target.value) : '')}
-                        className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl outline-none font-semibold"
+                        className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl outline-none font-semibold text-slate-800"
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Coxa Medial Esq.</label>
+                      <label className="block text-xs font-medium text-slate-700 mb-1.5">Coxa Medial Esq.</label>
                       <input
                         type="number"
                         step="0.5"
                         placeholder="cm"
                         value={thighLeftMed}
                         onChange={(e) => setThighLeftMed(e.target.value ? Number(e.target.value) : '')}
-                        className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl outline-none font-semibold"
+                        className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl outline-none font-semibold text-slate-800"
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Coxa Distal Dir.</label>
+                      <label className="block text-xs font-medium text-slate-700 mb-1.5">Coxa Distal Dir.</label>
                       <input
                         type="number"
                         step="0.5"
@@ -1161,7 +1168,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Coxa Distal Esq.</label>
+                      <label className="block text-xs font-medium text-slate-700 mb-1.5">Coxa Distal Esq.</label>
                       <input
                         type="number"
                         step="0.5"
@@ -1172,7 +1179,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Panturrilha Dir.</label>
+                      <label className="block text-xs font-medium text-slate-700 mb-1.5">Panturrilha Dir.</label>
                       <input
                         type="number"
                         step="0.5"
@@ -1183,7 +1190,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Panturrilha Esq.</label>
+                      <label className="block text-xs font-medium text-slate-700 mb-1.5">Panturrilha Esq.</label>
                       <input
                         type="number"
                         step="0.5"
@@ -1205,13 +1212,13 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
           {activeTab === 'composition' && can('BODY_COMPOSITION') && (
             <div className="space-y-6 animate-fadeIn">
               {/* Método de Avaliação de Composição */}
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
+              <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200 space-y-4">
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <div>
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                    <h4 className="text-sm font-bold text-slate-800">
                       Método de Composição Corporal
                     </h4>
-                    <p className="text-[11px] text-slate-500">Selecione o método utilizado na coleta dos dados.</p>
+                    <p className="text-xs text-slate-600 mt-0.5">Selecione o método utilizado na coleta dos dados.</p>
                   </div>
 
                   <select
@@ -1228,7 +1235,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-2">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">% de Gordura (%)</label>
+                    <label className="block text-xs font-medium text-slate-700 mb-1.5">% de Gordura (%)</label>
                     <input
                       type="number"
                       step="0.1"
@@ -1240,7 +1247,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Massa Muscular (kg)</label>
+                    <label className="block text-xs font-medium text-slate-700 mb-1.5">Massa Muscular (kg)</label>
                     <input
                       type="number"
                       step="0.1"
@@ -1251,7 +1258,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Água Corporal Total (L)</label>
+                    <label className="block text-xs font-medium text-slate-700 mb-1.5">Água Corporal Total (L)</label>
                     <input
                       type="number"
                       step="0.1"
@@ -1262,7 +1269,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">TMB Estimada (kcal)</label>
+                    <label className="block text-xs font-medium text-slate-700 mb-1.5">TMB Estimada (kcal)</label>
                     <input
                       type="number"
                       step="1"
@@ -1287,13 +1294,13 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                       <h4 className="text-sm font-bold text-slate-800">
                         Adiposidade Visceral — Estimativa (eVAT), Medição e VAI
                       </h4>
-                      <p className="text-[11px] text-slate-500">
+                      <p className="text-xs text-slate-600 mt-0.5">
                         Área visceral estimada (Bonora), medição real por exame/equipamento e índice indireto apresentados separadamente.
                       </p>
                     </div>
                   </div>
 
-                  <span className="text-[10px] font-bold text-indigo-700 bg-indigo-100 px-2.5 py-1 rounded-full border border-indigo-200">
+                  <span className="text-xs font-semibold text-indigo-700 bg-indigo-100/80 px-2.5 py-1 rounded-full border border-indigo-200">
                     eVAT (Bonora) ≠ Medição / Nível ≠ VAI
                   </span>
                 </div>
@@ -1303,18 +1310,18 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                 </div>
                 <div className="space-y-2">
                   <PersonalAssessmentIndicator item={calculationPreview?.classifications?.vai}/>
-                  <p className="text-[11px] text-slate-500">Índice adimensional de adiposidade visceral indireta. Atualizado automaticamente a partir de cintura, IMC, triglicerídeos e HDL.</p>
-                  <button type="button" onClick={()=>setActiveTab('cardio_tests')} className="text-xs font-semibold text-indigo-700 hover:underline">Preencher dados bioquímicos</button>
+                  <p className="text-xs text-slate-600 leading-relaxed">Índice adimensional de adiposidade visceral indireta. Atualizado automaticamente a partir de cintura, IMC, triglicerídeos e HDL.</p>
+                  <button type="button" onClick={()=>setActiveTab('cardio_tests')} className="text-xs font-semibold text-indigo-700 hover:text-indigo-800 hover:underline">Preencher dados bioquímicos</button>
                 </div>
                 <details className="border-t border-indigo-100 pt-4 space-y-3"><summary className="text-xs font-semibold text-indigo-700 cursor-pointer">Informar medição de área (cm²) ou nível de bioimpedância</summary>
-                <div className="text-[11px] text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-200 leading-relaxed">
+                <div className="text-xs text-slate-700 bg-slate-50 p-3 rounded-xl border border-slate-200 leading-relaxed">
                   <strong>Atenção às unidades:</strong> Selecione <strong>Área em cm²</strong> para tomografia, ressonância, DXA ou InBody VFA. Selecione <strong>Nível / Grau</strong> para escalas proprietárias de bioimpedância (Omron 1–30, Tanita 1–59, InBody nível 1–20). O nível <em>não</em> é uma área em cm².
                 </div>
-                <div><label className="block text-xs font-semibold text-slate-700 mb-1">Método de medição (opcional)</label><input value={tavMethod} onChange={e=>setTavMethod(e.target.value)} placeholder="Tomografia, ressonância, DXA, bioimpedância…" className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white"/></div>
+                <div><label className="block text-xs font-medium text-slate-700 mb-1.5">Método de medição (opcional)</label><input value={tavMethod} onChange={e=>setTavMethod(e.target.value)} placeholder="Tomografia, ressonância, DXA, bioimpedância…" className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white outline-none"/></div>
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                   {/* Catálogo de Protocolos & Equipamentos */}
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    <label className="block text-xs font-medium text-slate-700 mb-1.5">
                       Equipamento / Protocolo (opcional)
                     </label>
                     <select
@@ -1342,7 +1349,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
 
                   {/* Nome do Equipamento Manual ou Customizado */}
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    <label className="block text-xs font-medium text-slate-700 mb-1.5">
                       Equipamento Utilizado
                     </label>
                     <input
@@ -1356,7 +1363,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
 
                   {/* Escala / Unidade */}
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    <label className="block text-xs font-medium text-slate-700 mb-1.5">
                       Unidade / Escala
                     </label>
                     <select
@@ -1373,7 +1380,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
 
                   {/* Valor medido do TAV */}
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    <label className="block text-xs font-medium text-slate-700 mb-1.5">
                       Valor medido do TAV
                     </label>
                     <input
@@ -1382,7 +1389,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                       placeholder="Ex: 5 ou 75.0"
                       value={tavValue}
                       onChange={(e) => setTavValue(e.target.value ? Number(e.target.value) : '')}
-                      className="w-full px-3 py-2 text-xs bg-white border border-indigo-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-black text-indigo-900 text-sm"
+                      className="w-full px-3 py-2 text-xs bg-white border border-indigo-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-indigo-900 text-sm"
                     />
                   </div>
                 </div>
@@ -1390,10 +1397,10 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                 {/* Exibição da Classificação em Tempo Real ou Aviso de Indisponibilidade */}
                 <div className="bg-white p-3.5 rounded-2xl border border-indigo-100 flex items-center justify-between flex-wrap gap-3">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-slate-600">Classificação Clínica do TAV:</span>
+                    <span className="text-xs font-semibold text-slate-700">Classificação Clínica do TAV:</span>
                     {tavClassification ? (
                       <span
-                        className="px-3 py-1 rounded-xl text-xs font-black text-white shadow-sm"
+                        className="px-3 py-1 rounded-xl text-xs font-bold text-white shadow-sm"
                         style={{ backgroundColor: tavColorCode || '#10B981' }}
                       >
                         {tavClassification}
@@ -1414,7 +1421,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                 <IndicatorDetails item={calculationPreview?.classifications?.tav}/>
                 {/* Observação Clínica do TAV */}
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                  <label className="block text-xs font-medium text-slate-700 mb-1.5">
                     Observação Clínica sobre o TAV
                   </label>
                   <input
@@ -1437,11 +1444,11 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
             <div className="space-y-6 animate-fadeIn">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <div>
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                  <h4 className="text-sm font-bold text-slate-800">
                     Protocolo de Dobras Cutâneas
                   </h4>
-                  <p className="text-[11px] text-slate-500">
-                    Preencha as dobras exigidas pelo protocolo selecionado. A fórmula calcula automaticamente com base no protocolo.
+                  <p className="text-xs text-slate-600 mt-0.5">
+                    Preencha as dobras exigidas pelo protocolo selecionado. O sistema calcula automaticamente com base no protocolo.
                   </p>
                 </div>
 
@@ -1457,39 +1464,39 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                     <option value="guedes">Guedes</option>
                   </select>
 
-                  <div className="px-3 py-2 bg-purple-50 border border-purple-200 rounded-xl text-xs font-black text-purple-900">
+                  <div className="px-3.5 py-2 bg-purple-50/80 border border-purple-200 rounded-xl text-xs font-bold text-purple-900">
                     Soma: {sumSkinfolds} mm
                   </div>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Tríceps (mm)</label>
+                <div className="p-3.5 bg-slate-50/80 rounded-2xl border border-slate-200">
+                  <label className="block text-xs font-medium text-slate-700 mb-1.5">Tríceps (mm)</label>
                   <input
                     type="number"
                     step="0.5"
                     placeholder="mm"
                     value={foldTriceps}
                     onChange={(e) => setFoldTriceps(e.target.value ? Number(e.target.value) : '')}
-                    className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl outline-none font-semibold"
+                    className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl outline-none font-semibold text-slate-800"
                   />
                 </div>
 
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Subescapular (mm)</label>
+                <div className="p-3.5 bg-slate-50/80 rounded-2xl border border-slate-200">
+                  <label className="block text-xs font-medium text-slate-700 mb-1.5">Subescapular (mm)</label>
                   <input
                     type="number"
                     step="0.5"
                     placeholder="mm"
                     value={foldSubscapular}
                     onChange={(e) => setFoldSubscapular(e.target.value ? Number(e.target.value) : '')}
-                    className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl outline-none font-semibold"
+                    className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl outline-none font-semibold text-slate-800"
                   />
                 </div>
 
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Bíceps (mm)</label>
+                <div className="p-3.5 bg-slate-50/80 rounded-2xl border border-slate-200">
+                  <label className="block text-xs font-medium text-slate-700 mb-1.5">Bíceps (mm)</label>
                   <input
                     type="number"
                     step="0.5"
@@ -1500,75 +1507,75 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                   />
                 </div>
 
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Peitoral (mm)</label>
+                <div className="p-3.5 bg-slate-50/80 rounded-2xl border border-slate-200">
+                  <label className="block text-xs font-medium text-slate-700 mb-1.5">Peitoral (mm)</label>
                   <input
                     type="number"
                     step="0.5"
                     placeholder="mm"
                     value={foldChest}
                     onChange={(e) => setFoldChest(e.target.value ? Number(e.target.value) : '')}
-                    className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl outline-none font-semibold"
+                    className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl outline-none font-semibold text-slate-800"
                   />
                 </div>
 
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Axilar Média (mm)</label>
+                <div className="p-3.5 bg-slate-50/80 rounded-2xl border border-slate-200">
+                  <label className="block text-xs font-medium text-slate-700 mb-1.5">Axilar Média (mm)</label>
                   <input
                     type="number"
                     step="0.5"
                     placeholder="mm"
                     value={foldAxillary}
                     onChange={(e) => setFoldAxillary(e.target.value ? Number(e.target.value) : '')}
-                    className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl outline-none font-semibold"
+                    className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl outline-none font-semibold text-slate-800"
                   />
                 </div>
 
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Suprailíaca (mm)</label>
+                <div className="p-3.5 bg-slate-50/80 rounded-2xl border border-slate-200">
+                  <label className="block text-xs font-medium text-slate-700 mb-1.5">Suprailíaca (mm)</label>
                   <input
                     type="number"
                     step="0.5"
                     placeholder="mm"
                     value={foldSuprailiac}
                     onChange={(e) => setFoldSuprailiac(e.target.value ? Number(e.target.value) : '')}
-                    className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl outline-none font-semibold"
+                    className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl outline-none font-semibold text-slate-800"
                   />
                 </div>
 
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Abdominal (mm)</label>
+                <div className="p-3.5 bg-slate-50/80 rounded-2xl border border-slate-200">
+                  <label className="block text-xs font-medium text-slate-700 mb-1.5">Abdominal (mm)</label>
                   <input
                     type="number"
                     step="0.5"
                     placeholder="mm"
                     value={foldAbdominal}
                     onChange={(e) => setFoldAbdominal(e.target.value ? Number(e.target.value) : '')}
-                    className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl outline-none font-semibold"
+                    className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl outline-none font-semibold text-slate-800"
                   />
                 </div>
 
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Coxa (mm)</label>
+                <div className="p-3.5 bg-slate-50/80 rounded-2xl border border-slate-200">
+                  <label className="block text-xs font-medium text-slate-700 mb-1.5">Coxa (mm)</label>
                   <input
                     type="number"
                     step="0.5"
                     placeholder="mm"
                     value={foldThigh}
                     onChange={(e) => setFoldThigh(e.target.value ? Number(e.target.value) : '')}
-                    className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl outline-none font-semibold"
+                    className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl outline-none font-semibold text-slate-800"
                   />
                 </div>
 
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Panturrilha Medial (mm)</label>
+                <div className="p-3.5 bg-slate-50/80 rounded-2xl border border-slate-200">
+                  <label className="block text-xs font-medium text-slate-700 mb-1.5">Panturrilha Medial (mm)</label>
                   <input
                     type="number"
                     step="0.5"
                     placeholder="mm"
                     value={foldCalf}
                     onChange={(e) => setFoldCalf(e.target.value ? Number(e.target.value) : '')}
-                    className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl outline-none font-semibold"
+                    className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl outline-none font-semibold text-slate-800"
                   />
                 </div>
               </div>
@@ -1582,15 +1589,15 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
           {activeTab === 'cardio_tests' && (
             <div className="space-y-6 animate-fadeIn">
               {/* Avaliação Cardiovascular */}
-              {can('MEDICAL_VITAL_SIGNS') && (              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+              {can('MEDICAL_VITAL_SIGNS') && (              <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200 space-y-3">
+                <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2">
                   <Heart className="w-4 h-4 text-rose-600" />
                   <span>Avaliação Cardiovascular & Hemodinâmica</span>
                 </h4>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    <label className="block text-xs font-medium text-slate-700 mb-1.5">
                       FC Repouso (bpm)
                     </label>
                     <input
@@ -1598,12 +1605,12 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                       placeholder="Ex: 62"
                       value={restingHeartRate}
                       onChange={(e) => setRestingHeartRate(e.target.value ? Number(e.target.value) : '')}
-                      className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl outline-none font-semibold"
+                      className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl outline-none font-semibold text-slate-800"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    <label className="block text-xs font-medium text-slate-700 mb-1.5">
                       PA Sistólica (mmHg)
                     </label>
                     <input
@@ -1611,12 +1618,12 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                       placeholder="Ex: 120"
                       value={bloodPressureSystolic}
                       onChange={(e) => setBloodPressureSystolic(e.target.value ? Number(e.target.value) : '')}
-                      className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl outline-none font-semibold"
+                      className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl outline-none font-semibold text-slate-800"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    <label className="block text-xs font-medium text-slate-700 mb-1.5">
                       PA Diastólica (mmHg)
                     </label>
                     <input
@@ -1624,22 +1631,22 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                       placeholder="Ex: 80"
                       value={bloodPressureDiastolic}
                       onChange={(e) => setBloodPressureDiastolic(e.target.value ? Number(e.target.value) : '')}
-                      className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl outline-none font-semibold"
+                      className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl outline-none font-semibold text-slate-800"
                     />
                   </div>
                 </div>
               </div>)}
 
               {/* Capacidade Cardiorrespiratória & VO2 Máx */}
-              {can('FUNCTIONAL_TESTS') && (              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+              {can('FUNCTIONAL_TESTS') && (              <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200 space-y-3">
+                <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2">
                   <Activity className="w-4 h-4 text-emerald-600" />
                   <span>Cardiorrespiratório — VO₂ Máximo</span>
                 </h4>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    <label className="block text-xs font-medium text-slate-700 mb-1.5">
                       VO₂ Máx (ml/kg/min)
                     </label>
                     <input
@@ -1653,13 +1660,13 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    <label className="block text-xs font-medium text-slate-700 mb-1.5">
                       Tipo de Medição
                     </label>
                     <select
                       value={vo2MethodType}
                       onChange={(e) => setVo2MethodType(e.target.value)}
-                      className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl outline-none"
+                      className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl outline-none font-semibold text-slate-800"
                     >
                       <option value="Teste Submáximo">Teste Submáximo</option>
                       <option value="Teste Máximo">Teste Máximo de Campo</option>
@@ -1669,7 +1676,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    <label className="block text-xs font-medium text-slate-700 mb-1.5">
                       Protocolo / Teste Utilizado
                     </label>
                     <input
@@ -1677,27 +1684,27 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                       placeholder="Ex: Teste de Cooper, Caminhada 1 Milha..."
                       value={vo2Protocol}
                       onChange={(e) => setVo2Protocol(e.target.value)}
-                      className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl outline-none"
+                      className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl outline-none font-semibold text-slate-800"
                     />
                   </div>
                 </div>
               </div>)}
 
               {/* Testes de Força 1RM Dinâmicos (Fórmula Epley) */}
-              {can('MUSCLE_STRENGTH') && (              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+              {can('MUSCLE_STRENGTH') && (              <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200 space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                    <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2">
                       <Dumbbell className="w-4 h-4 text-indigo-600" />
                       <span>Testes de Força / Carga Máxima Estimada (1RM - Epley)</span>
                     </h4>
-                    <p className="text-[11px] text-slate-500">Fórmula de Epley: 1RM = Carga × (1 + Reps / 30)</p>
+                    <p className="text-xs text-slate-600 mt-0.5">Fórmula de Epley: 1RM = Carga × (1 + Reps / 30)</p>
                   </div>
 
                   <button
                     type="button"
                     onClick={handleAddStrengthTest}
-                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center gap-1 shadow-sm"
+                    className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1 shadow-sm transition-colors"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     Adicionar Teste
@@ -1720,7 +1727,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                           placeholder="Carga (kg)"
                           value={t.load_kg || ''}
                           onChange={(e) => handleUpdateStrengthTest(idx, 'load_kg', Number(e.target.value))}
-                          className="w-full px-2 py-1 text-xs border border-slate-200 rounded-lg outline-none text-center font-bold"
+                          className="w-full px-2 py-1 text-xs border border-slate-200 rounded-lg outline-none text-center font-bold text-slate-800"
                         />
                       </div>
                       <div className="w-20">
@@ -1729,16 +1736,16 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                           placeholder="Reps"
                           value={t.reps || ''}
                           onChange={(e) => handleUpdateStrengthTest(idx, 'reps', Number(e.target.value))}
-                          className="w-full px-2 py-1 text-xs border border-slate-200 rounded-lg outline-none text-center font-bold"
+                          className="w-full px-2 py-1 text-xs border border-slate-200 rounded-lg outline-none text-center font-bold text-slate-800"
                         />
                       </div>
-                      <div className="w-28 text-center bg-indigo-50 border border-indigo-100 rounded-lg py-1 text-xs font-black text-indigo-700">
+                      <div className="w-28 text-center bg-indigo-50 border border-indigo-100 rounded-lg py-1 text-xs font-bold text-indigo-700">
                         1RM: {t.one_rm_kg || 0} kg
                       </div>
                       <button
                         type="button"
                         onClick={() => handleRemoveStrengthTest(idx)}
-                        className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg"
+                        className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -1750,61 +1757,61 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
               {/* Resistência Muscular & Flexibilidade */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Resistência Muscular */}
-                {can('FUNCTIONAL_TESTS') && (                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                {can('FUNCTIONAL_TESTS') && (                <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200 space-y-3">
+                  <h4 className="text-sm font-bold text-slate-800 mb-3">
                     Testes de Resistência Muscular
                   </h4>
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Flexão de Braço (reps)</label>
+                      <label className="block text-xs font-medium text-slate-700 mb-1.5">Flexão de Braço (reps)</label>
                       <input
                         type="number"
                         placeholder="Reps"
                         value={endurancePushups}
                         onChange={(e) => setEndurancePushups(e.target.value ? Number(e.target.value) : '')}
-                        className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl outline-none"
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl outline-none font-medium text-slate-800"
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Abdominal (reps)</label>
+                      <label className="block text-xs font-medium text-slate-700 mb-1.5">Abdominal (reps)</label>
                       <input
                         type="number"
                         placeholder="Reps em 1 min"
                         value={enduranceSitups}
                         onChange={(e) => setEnduranceSitups(e.target.value ? Number(e.target.value) : '')}
-                        className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl outline-none"
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl outline-none font-medium text-slate-800"
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Agachamento (reps)</label>
+                      <label className="block text-xs font-medium text-slate-700 mb-1.5">Agachamento (reps)</label>
                       <input
                         type="number"
                         placeholder="Reps"
                         value={enduranceSquats}
                         onChange={(e) => setEnduranceSquats(e.target.value ? Number(e.target.value) : '')}
-                        className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl outline-none"
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl outline-none font-medium text-slate-800"
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Prancha Isométrica (s)</label>
+                      <label className="block text-xs font-medium text-slate-700 mb-1.5">Prancha Isométrica (s)</label>
                       <input
                         type="number"
                         placeholder="Segundos"
                         value={endurancePlankSeconds}
                         onChange={(e) => setEndurancePlankSeconds(e.target.value ? Number(e.target.value) : '')}
-                        className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl outline-none"
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl outline-none font-medium text-slate-800"
                       />
                     </div>
                   </div>
                 </div>)}
 
                 {/* Flexibilidade (Banco de Wells) */}
-                {can('MOBILITY_ASSESSMENT') && (                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                {can('MOBILITY_ASSESSMENT') && (                <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200 space-y-3">
+                  <h4 className="text-sm font-bold text-slate-800 mb-3">
                     Flexibilidade — Banco de Wells
                   </h4>
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                    <label className="block text-xs font-medium text-slate-700 mb-1.5">
                       Sentar e Alcançar (cm)
                     </label>
                     <input
@@ -1815,7 +1822,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                       onChange={(e) => setFlexibilityWellsCm(e.target.value ? Number(e.target.value) : '')}
                       className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl outline-none font-bold text-slate-800 text-xs"
                     />
-                    <p className="text-[10px] text-slate-400 mt-1.5">
+                    <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
                       Medido na escala padrão do Banco de Wells com pés apoiados na marca de 23 cm ou 0 cm conforme protocolo.
                     </p>
                   </div>
@@ -1830,18 +1837,18 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
           {activeTab === 'photos_notes' && (
             <div className="space-y-6 animate-fadeIn">
               {!postureOnly && can('POSTURE_GAIT') && (
-                <label className="flex items-center gap-2 text-sm font-semibold text-indigo-800">
+                <label className="flex items-center gap-2 text-sm font-semibold text-indigo-900 cursor-pointer">
                   <input type="checkbox" checked={postureMode} disabled={postureBusy} onChange={e=>{setPostureMode(e.target.checked);if(e.target.checked&&!posture)setPosture(emptyPosture());}} />
                   Modo Avaliação Postural
                 </label>
               )}
-              {can('POSTURE_GAIT') && postureMode && posture && <Suspense fallback={<p className="text-xs">Carregando ferramentas posturais…</p>}><PersonalPostureEditor key={[selectedStudentId,photoFrontFileId,photoBackFileId,photoRightFileId,photoLeftFileId].join(':')} value={posture} onChange={setPosture} onBusy={setPostureBusy} patientId={selectedStudentId} photos={[
+              {can('POSTURE_GAIT') && postureMode && posture && <Suspense fallback={<p className="text-xs text-slate-600">Carregando ferramentas posturais…</p>}><PersonalPostureEditor key={[selectedStudentId,photoFrontFileId,photoBackFileId,photoRightFileId,photoLeftFileId].join(':')} value={posture} onChange={setPosture} onBusy={setPostureBusy} patientId={selectedStudentId} photos={[
                 {view:'front',fileId:photoFrontFileId,url:photoFront},{view:'back',fileId:photoBackFileId,url:photoBack},
                 {view:'right',fileId:photoRightFileId,url:photoRight},{view:'left',fileId:photoLeftFileId,url:photoLeft}
               ]} /></Suspense>}
               {can('PHOTO_MONITORING') && (              <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                  <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2">
                     <Camera className="w-4 h-4 text-purple-600" />
                     <span>Fotos da Avaliação Corporal</span>
                   </h4>
@@ -1947,7 +1954,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
 
               {/* Parecer Técnico do Treinador */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
                   {shared ? 'Observações clínicas' : 'Parecer Técnico e Recomendações do Treinador'}
                 </label>
                 <textarea
@@ -1955,21 +1962,21 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                   placeholder="Ex: Aluno apresentou melhora substancial na densidade muscular e redução de 2 níveis de gordura visceral. Recomenda-se manter o ciclo de hipertrofia com cardio moderado..."
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none"
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none text-slate-800 focus:bg-white focus:ring-2 focus:ring-purple-500 leading-relaxed"
                 />
               </div>
             </div>
           )}
 
           {activeTab === 'clinical' && <div className="space-y-4">
-            {(['mobility_json','pain_json','functional_json','gait_json'] as const).filter(key=>can(fieldCapability(key)!)).map(key=><label key={key} className="block text-sm font-semibold">
+            {(['mobility_json','pain_json','functional_json','gait_json'] as const).filter(key=>can(fieldCapability(key)!)).map(key=><label key={key} className="block text-sm font-semibold text-slate-800">
               {{mobility_json:'Mobilidade',pain_json:'Dor',functional_json:'Avaliação funcional',gait_json:'Postura e marcha'}[key]}
-              <textarea className="block w-full border rounded-xl p-3 mt-2" rows={4} value={clinicalFields[key] || ''} onChange={event=>setClinicalFields({...clinicalFields,[key]:event.target.value})}/>
+              <textarea className="block w-full border border-slate-200 rounded-xl p-3 mt-2 text-xs text-slate-800 outline-none focus:ring-2 focus:ring-purple-500" rows={4} value={clinicalFields[key] || ''} onChange={event=>setClinicalFields({...clinicalFields,[key]:event.target.value})}/>
             </label>)}
           </div>}
           {/* Footer com Botões */}
           <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
-            <div className="text-[11px] text-slate-400">
+            <div className="text-xs text-slate-500">
               Campos em branco são salvos com segurança sem alterar histórico prévio.
             </div>
 

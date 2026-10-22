@@ -161,33 +161,33 @@ export function ConsentPendingAlert({
         <button
           type="button"
           onClick={onOpen}
-          className="text-xs px-2.5 py-1 rounded-lg bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200 transition-all cursor-pointer font-medium shadow-2xs"
-          title="Termos & Consentimentos do paciente (opcional)"
+          className="text-[11px] px-2 py-0.5 rounded-md bg-slate-50 text-slate-500 hover:text-slate-700 hover:bg-slate-100 border border-slate-200/80 transition-colors cursor-pointer font-medium"
+          title="Termos de consentimento do paciente (opcional)"
         >
-          Termos
+          Termos: opcional
         </button>
       );
     }
 
-    let style = 'bg-slate-50 text-slate-700 hover:bg-slate-100 border-slate-200 font-medium';
-    let labelText = data.label || 'Termos';
-    if (data.status === 'missing_terms') {
-      style = 'bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200 font-medium';
-      labelText = 'Termos (opcional)';
-    } else if (data.status === 'waiting_signature') {
-      style = 'bg-amber-50 text-amber-800 hover:bg-amber-100 border-amber-300 font-semibold';
-    } else if (data.status === 'invalid_term') {
-      style = 'bg-amber-50 text-amber-800 hover:bg-amber-100 border-amber-300 font-semibold';
+    let style = 'bg-slate-50 text-slate-500 hover:text-slate-700 hover:bg-slate-100 border-slate-200/80 font-medium';
+    let labelText = 'Termos: opcional';
+    if (data.status === 'missing_terms' || data.status === 'default') {
+      style = 'bg-slate-50 text-slate-500 hover:text-slate-700 hover:bg-slate-100 border-slate-200/80 font-medium';
+      labelText = 'Termos: opcional';
+    } else if (data.status === 'waiting_signature' || data.status === 'invalid_term') {
+      style = 'bg-amber-50/80 text-amber-700 hover:bg-amber-100 border-amber-200/90 font-semibold';
+      labelText = 'Termo pendente';
     } else if (data.status === 'ok') {
-      style = 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border-emerald-300 font-semibold';
+      style = 'bg-emerald-50/80 text-emerald-700 hover:bg-emerald-100 border-emerald-200/90 font-semibold';
+      labelText = 'Termo assinado';
     }
 
     return (
       <button
         type="button"
         onClick={onOpen}
-        className={`text-xs px-2.5 py-1 rounded-lg transition-all cursor-pointer border shadow-2xs ${style}`}
-        title="Abrir Termos & Consentimentos do paciente"
+        className={`text-[11px] px-2 py-0.5 rounded-md transition-colors cursor-pointer border ${style}`}
+        title="Abrir termos de consentimento do paciente"
       >
         {labelText}
       </button>

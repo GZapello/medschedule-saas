@@ -135,7 +135,7 @@ export function renderPreRenderedHtml(baseIndexHtml: string, reqPath: string): s
     // Reuse public copy so the indexable HTML reflects the actual landing.
     bodyContent = `
       <article id="inicio">
-        <header><p>Ecossistema de Saúde &amp; Gestão</p><h1>${LANDING_HERO.title}</h1><p>${LANDING_HERO.description}</p><a href="/login">Começar agora</a> <a href="#profissoes">Conhecer os módulos</a></header>
+        <header><p class="zl-hero-kicker">Zemda · software de gestão em saúde</p><p>Ecossistema de Saúde &amp; Gestão</p><h1>${LANDING_HERO.title}</h1><p>${LANDING_HERO.description}</p><a href="/login">Começar agora</a> <a href="#profissoes">Conhecer os módulos</a></header>
         <section id="produto"><h2>O ecossistema Zemda</h2><p>Painel, Agenda Interativa, prontuário, módulos especializados e painel financeiro conectam a rotina da clínica.</p></section>
         <section id="como-funciona"><h2>Como o Zemda funciona</h2>${LANDING_STEPS.map(step => `<h3>${step.title}</h3><p>${step.description}</p>`).join('')}<p>O plano define quantos usuários sua clínica possui. A profissão define quais ferramentas clínicas cada profissional acessa, respeitando suas permissões.</p></section>
         <section id="profissoes"><h2>Ecossistema profissional</h2>${LANDING_MODULES.map(module => `<article id="modulo-${module.id}"><h3>${module.name} — ${module.profession}</h3><ul>${module.features.map(feature => `<li>${feature}</li>`).join('')}</ul><a href="${moduleHref(module)}">Conhecer módulo ${module.name}</a></article>`).join('')}</section>
@@ -169,8 +169,9 @@ export function renderPreRenderedHtml(baseIndexHtml: string, reqPath: string): s
     ${bodyContent}
   </main>
   <footer>
-    <p>© ${new Date().getFullYear()} Zemda Tecnologia em Saúde • Ecossistema multiprofissional de saúde e gestão.</p>
+    <p>© ${new Date().getFullYear()} Zemda Tecnologia em Saúde • Zemda é uma plataforma de gestão em saúde para profissionais, consultórios e clínicas multiprofissionais.</p>
     <ul>
+      <li><a href="/sobre-o-zemda">Sobre o Zemda</a></li>
       <li><a href="/termos-de-uso">Termos de Uso</a></li>
       <li><a href="/privacidade">Privacidade</a></li>
     </ul>

@@ -35,12 +35,17 @@ export class DashboardController {
       // 1. Atendimentos de hoje (inclui completed, in_progress, scheduled, etc. - nunca exclui atendimentos finalizados)
       const todayApptsStmt = db.prepare(`
         SELECT 
-          a.id, a.patient_id, a.professional_id, a.service_id, a.appointment_number, a.start_time, a.end_time, a.status, a.modality, a.meeting_url, a.google_drive_url, a.clinical_module,
+          a.id, a.patient_id, a.professional_id, a.service_id, a.room_id, a.insurance_id, a.appointment_number,
+          a.start_time, a.end_time, a.attendance_start_at, a.attendance_expected_end_at, a.attendance_end_at,
+          a.status, a.modality, a.meeting_url, a.google_drive_url, a.clinical_module,
+          a.internal_notes, a.patient_notes,
           s.clinical_module as service_clinical_module,
           pat.full_name as patient_name, pat.phone as patient_phone,
           p.name as professional_name,
           s.name as service_name,
+          s.duration_minutes,
           s.price as service_price,
+          r.name as room_name,
           (SELECT pay.amount FROM payments pay WHERE pay.appointment_id = a.id AND pay.tenant_id = a.tenant_id ORDER BY pay.created_at ASC LIMIT 1) as payment_amount,
           (SELECT pay.status FROM payments pay WHERE pay.appointment_id = a.id AND pay.tenant_id = a.tenant_id ORDER BY pay.created_at ASC LIMIT 1) as payment_status,
           (SELECT id FROM records WHERE appointment_id = a.id LIMIT 1) as record_id,
@@ -52,6 +57,7 @@ export class DashboardController {
         LEFT JOIN patients pat ON pat.id = a.patient_id
         LEFT JOIN professionals p ON p.id = a.professional_id
         LEFT JOIN services s ON s.id = a.service_id
+        LEFT JOIN rooms r ON r.id = a.room_id
         WHERE a.tenant_id = ? AND a.start_time LIKE ? ${profFilterToday}
         ORDER BY a.start_time ASC
       `);

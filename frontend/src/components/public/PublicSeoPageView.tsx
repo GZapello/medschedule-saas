@@ -18,7 +18,7 @@ export const PublicSeoPageView: React.FC<PublicSeoPageViewProps> = ({pageData,on
    const href=a.getAttribute('href');
    if(href==='/'){event.preventDefault();onNavigateHome();}
    else if(href=== '/login'){event.preventDefault();onLogin();}
-   else if(href && (href.startsWith('/sistema-') || href.startsWith('/blog') || ['/agenda-online','/prontuario','/gestao-financeira','/mapa-corporal-clinico'].includes(href))){event.preventDefault();onNavigatePage(href.slice(1));}
+   else if(href && (href.startsWith('/sistema-') || href.startsWith('/blog') || ['/agenda-online','/prontuario','/gestao-financeira','/mapa-corporal-clinico','/sobre-o-zemda'].includes(href))){event.preventDefault();onNavigatePage(href.slice(1));}
   }} dangerouslySetInnerHTML={{__html:renderEditorialContent(pageData)}}/>
   <PublicFooter onLogin={onLogin} onRegisterClinic={onRegisterClinic} onNavigateSeoPage={onNavigatePage} onNavigateHome={onNavigateHome}/>
  </div>;

@@ -192,3 +192,19 @@ Nenhum desses comandos de staging/commit/push foi executado nesta tarefa.
 A consistência do canonical entre HTML inicial e JavaScript segue a orientação do [Google sobre SEO em JavaScript](https://developers.google.com/search/docs/crawling-indexing/javascript/javascript-seo-basics). O uso de datas editoriais em lastmod segue a [documentação de sitemaps](https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap).
 
 BlogPosting e autoria foram conferidos na [documentação de Article do Google](https://developers.google.com/search/docs/appearance/structured-data/article). O carregamento sob demanda segue a [documentação de React.lazy](https://react.dev/reference/react/lazy).
+
+## 12. Fortalecimento de Marca e Entidade SEO (Zemda)
+
+Implementação realizada para consolidar a autoridade da marca Zemda como plataforma de tecnologia/gestão em saúde e eliminar ambiguidade fonética em buscas isoladas.
+
+- **Constantes de marca:** `BRAND_NAME = "Zemda"`, `BRAND_ALTERNATE_NAMES = ["Zemda Software", "zemda.com.br"]`, `BRAND_DESCRIPTION` padronizada institucionalmente.
+- **WebSite Schema:** Mantido `@id: https://zemda.com.br/#website`, adicionados `alternateName` e `description`.
+- **Organization Schema:** Mantido `@id: https://zemda.com.br/#organization`, atualizado para `BRAND_NAME`, `BRAND_ALTERNATE_NAMES`, `BRAND_DESCRIPTION`, e `logo: https://zemda.com.br/brand/zemda-icon.png` (512x512px). `BRAND_SAME_AS` documentado e estruturado para receber perfis sociais oficiais futuramente.
+- **SoftwareApplication Schema:** Categoria atualizada de `BusinessApplication` para `HealthApplication` (`@type: ["SoftwareApplication", "WebApplication"]`).
+- **Home Title & Description:** Title atualizado para `Zemda | Software para Clínicas e Prontuário Eletrônico` (53 chars) e Meta Description iniciada com a marca `Zemda é um software de gestão em saúde...` (153 chars).
+- **Home Eyebrow/Kicker:** Adicionado kicker minimalista visível acima do H1: `Zemda · software de gestão em saúde`.
+- **Nova página institucional:** `/sobre-o-zemda` com H1 `O que é o Zemda?`, conteúdo institucional detalhando ecossistema, módulos especializados (ZemdaMed, ZemdaPsico, ZemdaFono, etc.) e Zemda360.
+- **Breadcrumbs:** Raiz padronizada para `Zemda` apontando para `https://zemda.com.br/`, criando âncoras de marca naturais nas páginas internas.
+- **Links internos do Blog:** Adicionados links contextuais naturais com a âncora `Zemda, plataforma de gestão em saúde` para a Home.
+- **Footer:** Descrição institucional adicionada ao lado do logo e link para `/sobre-o-zemda` na seção "Empresa & conteúdo".
+- **Sitemap & Pre-render:** 24 URLs canônicas indexáveis verificadas com paridade total entre SSR e React.

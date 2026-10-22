@@ -1,6 +1,14 @@
 import { LANDING_HERO } from './landingContent';
 import { BLOG_ARTICLES } from './blogContent';
 export const OFFICIAL_DOMAIN = 'https://zemda.com.br';
+export const BRAND_NAME = 'Zemda';
+export const BRAND_ALTERNATE_NAMES = [
+  'Zemda Software',
+  'zemda.com.br'
+] as const;
+export const BRAND_DESCRIPTION =
+  'Zemda é uma plataforma de gestão em saúde para profissionais, consultórios, equipes e clínicas multiprofissionais, com agenda, prontuário eletrônico, documentos, financeiro e módulos clínicos especializados.';
+export const BRAND_SAME_AS: string[] = [];
 export interface SeoSection { heading: string; paragraphs: string[]; links?: string[] }
 export interface SeoRoute {
  path: string; slug?: string; title: string; metaDescription: string; canonical: string;
@@ -893,10 +901,119 @@ const PROFESSIONAL_PAGES: RouteInput[] = [
 const BASE_PAGES: RouteInput[] = [
   {
     "path": "/",
-    "title": "Zemda | Gestão para Clínicas e Profissionais da Saúde",
-    "metaDescription": "Gestão de clínicas e profissionais da saúde com agenda, prontuário eletrônico, financeiro e módulos especializados em uma única plataforma.",
+    "title": "Zemda | Software para Clínicas e Prontuário Eletrônico",
+    "metaDescription": "Zemda é um software de gestão em saúde para profissionais, consultórios e clínicas, com agenda, prontuário eletrônico, financeiro e módulos especializados.",
     "h1": LANDING_HERO.title,
     "summary": LANDING_HERO.description
+  },
+  {
+    "path": "/sobre-o-zemda",
+    "slug": "sobre-o-zemda",
+    "title": "Sobre o Zemda | Software de Gestão em Saúde",
+    "metaDescription": "Conheça o Zemda: software de gestão em saúde que integra agenda, prontuário eletrônico, financeiro e módulos clínicos especializados para clínicas e consultórios.",
+    "badge": "Sobre o Zemda",
+    "h1": "O que é o Zemda?",
+    "h2": "Uma plataforma integrada para atendimento e gestão em saúde",
+    "summary": "O Zemda é uma plataforma de tecnologia em saúde desenvolvida para profissionais, consultórios e clínicas multiprofissionais. O sistema centraliza a operação do dia a dia — conectando recepção, agenda, prontuário eletrônico, documentos clínicos e gestão financeira a ambientes especializados para cada área de atuação.",
+    "features": [
+      {
+        "title": "Gestão operacional e financeira unificada",
+        "description": "Centralize a administração do consultório ou da clínica: organização de agenda, horários, fluxo de pacientes e acompanhamento de receitas, despesas, caixa e repasses profissionais com transparência."
+      },
+      {
+        "title": "Prontuário eletrônico e continuidade do cuidado",
+        "description": "Histórico longitudinal com anamnese, evoluções clínicas, registro de autoria, anexos e modelos de documentos como atestados, receituários e pedidos de exame."
+      },
+      {
+        "title": "Módulos clínicos especializados por profissão",
+        "description": "Cada profissional dispõe de ferramentas desenhadas para a sua especialidade, convivendo na mesma base integrada da clínica sem formulários genéricos improvisados."
+      }
+    ],
+    "sections": [
+      {
+        "heading": "Para quem foi criado o Zemda",
+        "paragraphs": [
+          "O Zemda foi projetado tanto para profissionais de saúde autônomos que atendem em consultório próprio quanto para equipes e clínicas multiprofissionais que precisam coordenar recepção, múltiplos profissionais e setores administrativos.",
+          "Em clínicas com mais de um profissional ou especialidade, cada membro da equipe acessa as ferramentas necessárias à sua função, mantendo os registros de pacientes protegidos por permissões de acesso e autoria."
+        ],
+        "links": [
+          "/sistema-para-clinicas",
+          "/planos"
+        ]
+      },
+      {
+        "heading": "Atendimento clínico e gestão em uma única plataforma",
+        "paragraphs": [
+          "Frequentemente, clínicas utilizam sistemas separados para finanças, planilhas para agendamento e anotações isoladas para os atendimentos. Essa dispersão gera retrabalho e inconsistência de informações.",
+          "No Zemda, a recepção opera a agenda online e a chegada de pacientes; o profissional conduz a consulta com prontuário eletrônico e ferramentas clínicas específicas; e a administração acompanha os atendimentos concluídos e a movimentação financeira correspondente."
+        ],
+        "links": [
+          "/agenda-online",
+          "/prontuario",
+          "/gestao-financeira"
+        ]
+      },
+      {
+        "heading": "O ecossistema de módulos especializados",
+        "paragraphs": [
+          "A prática clínica varia significativamente entre especialidades. O Zemda respeita essas particularidades oferecendo módulos especializados para cada profissão da saúde: ZemdaMed (Medicina), ZemdaPsico (Psicologia), ZemdaFono (Fonoaudiologia), ZemdaOdonto (Odontologia), ZemdaFisio (Fisioterapia), ZemdaNutri (Nutrição), ZemdaTO (Terapia Ocupacional), ZemdaPersonal (Educação Física), ZemdaPP (Psicopedagogia) e ZemdaEstetic (Estética).",
+          "Complementando os módulos, o Zemda360 atua como recurso transversal de mapeamento anatômico visual, permitindo marcações corporais e faciais interativas integradas ao prontuário de diferentes especialidades."
+        ],
+        "links": [
+          "/sistema-para-medicos",
+          "/sistema-para-psicologos",
+          "/sistema-para-fonoaudiologos",
+          "/sistema-para-dentistas",
+          "/sistema-para-fisioterapeutas",
+          "/sistema-para-nutricionistas",
+          "/sistema-para-terapeutas-ocupacionais",
+          "/sistema-para-personal-trainers",
+          "/sistema-para-estetica",
+          "/sistema-para-psicopedagogos",
+          "/mapa-corporal-clinico"
+        ]
+      },
+      {
+        "heading": "Segurança, privacidade e responsabilidade profissional",
+        "paragraphs": [
+          "O acesso à plataforma é individualizado por credenciais e perfis de permissão, garantindo isolamento entre clínicas e respeito às atribuições de cada usuário. Todos os registros clínicos preservam a autoria de quem os realizou.",
+          "Os recursos tecnológicos e assistências do sistema apoiam a rotina e a documentação, sem jamais substituir o julgamento clínico, a interpretação técnica e a responsabilidade ética do profissional de saúde."
+        ],
+        "links": [
+          "/privacidade",
+          "/termos-de-uso"
+        ]
+      }
+    ],
+    "benefits": [
+      "Ambiente integrado que reduz a fragmentação entre agenda, prontuário e financeiro.",
+      "Módulos com instrumentos clínicos específicos para dez profissões da saúde.",
+      "Controle de acesso por usuário com preservação de autoria e privacidade.",
+      "Organização escalável: do atendimento individual à clínica multiprofissional."
+    ],
+    "faqs": [
+      {
+        "question": "O que diferencia o Zemda de sistemas genéricos de gestão?",
+        "answer": "O Zemda combina a gestão administrativa e financeira da clínica com módulos clínicos desenhados especificamente para a prática de cada profissão da saúde, além do Zemda360 para mapeamento visual, evitando soluções genéricas que não atendem às necessidades do atendimento."
+      },
+      {
+        "question": "Como funciona a divisão por módulos profissionais?",
+        "answer": "Cada profissional cadastrado na clínica acessa o módulo correspondente à sua área de atuação (como ZemdaMed, ZemdaPsico, ZemdaFono, entre outros) conforme as permissões atribuídas, mantendo a gestão administrativa centralizada na clínica."
+      },
+      {
+        "question": "O Zemda atende consultórios individuais e clínicas?",
+        "answer": "Sim. Os planos são dimensionados pelo número de acessos de usuários, atendendo desde o profissional que atua sozinho no plano Solo até equipes e clínicas de maior porte nos planos Equipe e Clínica."
+      }
+    ],
+    "relatedLinks": [
+      "/sistema-para-clinicas",
+      "/agenda-online",
+      "/prontuario",
+      "/gestao-financeira",
+      "/planos"
+    ],
+    "ctaHeadline": "Conheça o Zemda para a sua prática",
+    "ctaSubheadline": "Escolha o plano adequado para você ou sua equipe e experimente a plataforma."
   },
   {
     "path": "/planos",

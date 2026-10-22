@@ -39,7 +39,7 @@ export const BLOG_ARTICLES: Omit<SeoRoute, "canonical" | "indexable" | "inSitema
         "heading": "Use lembretes como parte de um processo",
         "paragraphs": [
           "Lembretes podem ajudar o paciente a lembrar do compromisso, mas o envio não comprova leitura nem presença. Defina o momento de envio e quem acompanha respostas e falhas. Evite enviar várias mensagens com o mesmo conteúdo sem avaliar se isso realmente melhora a comunicação.",
-          "No Zemda, o acompanhamento dos estados da agenda e os lembretes manuais ou automáticos, quando configurados, apoiam essa rotina. A equipe ainda precisa tratar pedidos de remarcação e revisar horários liberados. Não há uma porcentagem de redução de faltas que possa ser garantida somente pela adoção de um software."
+          "No [Zemda, plataforma de gestão em saúde](/), o acompanhamento dos estados da agenda e os lembretes manuais ou automáticos, quando configurados, apoiam essa rotina. A equipe ainda precisa tratar pedidos de remarcação e revisar horários liberados. Não há uma porcentagem de redução de faltas que possa ser garantida somente pela adoção de um software."
         ],
         "links": [
           "/sistema-para-clinicas"
@@ -106,7 +106,7 @@ export const BLOG_ARTICLES: Omit<SeoRoute, "canonical" | "indexable" | "inSitema
         "heading": "Defina acesso e responsabilidade",
         "paragraphs": [
           "Uma gaveta trancada e uma conta de usuário são mecanismos diferentes, mas ambos exigem definição de responsabilidade. Quem precisa consultar informações clínicas? Quem apenas agenda? Quem revisa acessos quando alguém deixa a equipe? Essas perguntas devem fazer parte da escolha e do uso do prontuário.",
-          "No Zemda, usuários e permissões organizam o acesso e as ferramentas disponíveis. Isso não elimina a necessidade de configurar os perfis e revisar a rotina. Não compartilhe credenciais para contornar permissões e não trate o uso de uma plataforma como certificado automático de conformidade jurídica."
+          "No [Zemda, plataforma de gestão em saúde](/), usuários e permissões organizam o acesso e as ferramentas disponíveis. Isso não elimina a necessidade de configurar os perfis e revisar a rotina. Não compartilhe credenciais para contornar permissões e não trate o uso de uma plataforma como certificado automático de conformidade jurídica."
         ],
         "links": [
           "/privacidade"
@@ -178,7 +178,7 @@ export const BLOG_ARTICLES: Omit<SeoRoute, "canonical" | "indexable" | "inSitema
         "heading": "Preserve as diferenças entre os registros profissionais",
         "paragraphs": [
           "Compartilhar uma base de pacientes não significa usar o mesmo formulário clínico para todas as áreas. Psicologia, fonoaudiologia, nutrição e outras profissões têm necessidades distintas de documentação. Os recursos específicos precisam conviver com a identificação correta do paciente e o histórico de atendimentos.",
-          "O Zemda reúne módulos profissionais conectados à gestão comum. A profissão e as permissões definem as ferramentas disponíveis. Ao configurar a equipe, diferencie o acesso administrativo do clínico e revise quais informações cada função realmente precisa consultar."
+          "O [Zemda, plataforma de gestão em saúde](/), reúne módulos profissionais conectados à gestão comum. A profissão e as permissões definem as ferramentas disponíveis. Ao configurar a equipe, diferencie o acesso administrativo do clínico e revise quais informações cada função realmente precisa consultar."
         ],
         "links": [
           "/sistema-para-psicologos",

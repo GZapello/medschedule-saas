@@ -2,6 +2,7 @@ import { PatientConsentsDialog } from '../consents/PatientConsentsPanel';
 import { ConsentPendingAlert } from '../consents/ConsentPendingAlert';
 import { TodayWorklist } from './TodayWorklist';
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -21,14 +22,18 @@ import {
   Stethoscope,
   FileText,
   ExternalLink,
-  Filter
+  Filter,
+  MoreHorizontal,
+  XCircle,
+  Eye
 } from 'lucide-react';
 import { AppointmentConsultation } from '../clinical/AppointmentConsultation';
 import { PrintableDocumentModal } from '../clinical/PrintableDocumentModal';
 import { PatientProfileModal } from '../patients/PatientProfileModal';
 import { SelectConsultationModuleModal, getCompatibleClinicalModules, getModuleForProfession } from '../clinical/SelectConsultationModuleModal';
 import { WhatsAppReminderModal, WhatsAppIcon } from '../common/WhatsAppReminderModal';
-import { isValidPhoneNumber } from '../../utils/phone.utils';
+import { AppointmentEditModal } from '../calendar/AppointmentEditModal';
+import { isValidPhoneNumber, generateWhatsAppUrl } from '../../utils/phone.utils';
 
 interface DashboardViewProps {
   onNavigate: (view: string) => void;
@@ -57,6 +62,119 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [consentPatientId,setConsentPatientId]=useState<string|null>(null);
   const [viewPatientId, setViewPatientId] = useState<string | null>(null);
   const [whatsappReminderAppt, setWhatsappReminderAppt] = useState<any | null>(null);
+  const [editingAppt, setEditingAppt] = useState<any | null>(null);
+  const [openMenuState, setOpenMenuState] = useState<{
+    appt: any;
+    top?: number;
+    bottom?: number;
+    left: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!openMenuState) return;
+    const handleOutsideClick = () => setOpenMenuState(null);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpenMenuState(null);
+    };
+    const handleScrollOrResize = () => setOpenMenuState(null);
+
+    document.addEventListener('click', handleOutsideClick);
+    document.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('scroll', handleScrollOrResize, true);
+    window.addEventListener('resize', handleScrollOrResize);
+    return () => {
+      document.removeEventListener('click', handleOutsideClick);
+      document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('scroll', handleScrollOrResize, true);
+      window.removeEventListener('resize', handleScrollOrResize);
+    };
+  }, [openMenuState]);
+
+  useEffect(() => {
+    setOpenMenuState(null);
+  }, [filterTab, quickConsultAppt, viewPatientId, consentPatientId, editingAppt]);
+
+  const handleToggleActionMenu = (e: React.MouseEvent<HTMLButtonElement>, appt: any) => {
+    e.stopPropagation();
+    if (openMenuState?.appt?.id === appt.id) {
+      setOpenMenuState(null);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const menuWidth = 216;
+    const estimatedMenuHeight = 250;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    const left = Math.max(8, Math.min(viewportWidth - menuWidth - 8, rect.right - menuWidth));
+    const spaceBelow = viewportHeight - rect.bottom;
+
+    if (spaceBelow < estimatedMenuHeight && rect.top > estimatedMenuHeight) {
+      setOpenMenuState({
+        appt,
+        bottom: viewportHeight - rect.top + 6,
+        left
+      });
+    } else {
+      setOpenMenuState({
+        appt,
+        top: rect.bottom + 6,
+        left
+      });
+    }
+  };
+
+  const buildTodayWhatsAppReminderText = (appt: any): string => {
+    const rawPatientName = (appt.patient_name || '').trim();
+    const firstPatientName = rawPatientName ? rawPatientName.split(/\s+/)[0] : 'Paciente';
+    const clinicDisplayName = (auth.currentTenant?.trade_name || auth.currentTenant?.name || '').trim();
+
+    const rawStart = String(appt.start_time || '').replace(' ', 'T');
+    const datePart = rawStart.includes('T') ? rawStart.split('T')[0] : rawStart.slice(0, 10);
+    const timePart = rawStart.includes('T') ? rawStart.split('T')[1]?.slice(0, 5) : '';
+    const [y, m, d] = datePart.split('-');
+    const formattedDate = d && m && y ? `${d}/${m}/${y}` : datePart;
+
+    const modalityLabel =
+      appt.modality === 'online'
+        ? 'Online'
+        : appt.modality === 'home_care' || appt.modality === 'domiciliar'
+          ? 'Domiciliar'
+          : 'Presencial';
+
+    const lines: string[] = [
+      `Olá, ${firstPatientName}! 😊`,
+      '',
+      clinicDisplayName
+        ? `Passando para lembrar do seu atendimento na ${clinicDisplayName}.`
+        : 'Passando para lembrar do seu atendimento.',
+      ''
+    ];
+
+    if (formattedDate) lines.push(`📅 Data: ${formattedDate}`);
+    if (timePart) lines.push(`🕒 Horário: ${timePart}`);
+    if (appt.professional_name && String(appt.professional_name).trim()) {
+      lines.push(`👩‍⚕️ Profissional: ${String(appt.professional_name).trim()}`);
+    }
+    if (modalityLabel) lines.push(`📍 Modalidade: ${modalityLabel}`);
+
+    lines.push('', 'Qualquer imprevisto, nos avise.');
+    return lines.join('\n');
+  };
+
+  const handleOpenWhatsAppReminder = (appt: any) => {
+    if (!isValidPhoneNumber(appt.patient_phone)) return;
+    const message = buildTodayWhatsAppReminderText(appt);
+    const url = generateWhatsAppUrl(appt.patient_phone, message);
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const getInitials = (name?: string) => {
+    if (!name) return 'P';
+    const parts = name.trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  };
 
   const fetchMetrics = async () => {
     try {
@@ -157,19 +275,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'confirmed':
-        return <span className="bg-emerald-100 text-emerald-800 text-xs font-semibold px-2.5 py-1 rounded-full">Confirmado</span>;
+        return <span className="bg-emerald-50 text-emerald-700 border border-emerald-200/80 text-[11px] font-semibold px-2 py-0.5 rounded-full">Confirmado</span>;
       case 'in_progress':
-        return <span className="bg-purple-100 text-purple-800 text-xs font-semibold px-2.5 py-1 rounded-full animate-pulse">Em Atendimento</span>;
+        return <span className="bg-teal-50 text-teal-700 border border-teal-200/80 text-[11px] font-semibold px-2 py-0.5 rounded-full">Em atendimento</span>;
       case 'completed':
-        return <span className="bg-teal-100 text-teal-800 text-xs font-semibold px-2.5 py-1 rounded-full">Concluído</span>;
+        return <span className="bg-slate-100 text-slate-700 border border-slate-200 text-[11px] font-semibold px-2 py-0.5 rounded-full">Concluído</span>;
       case 'cancelled':
-        return <span className="bg-rose-100 text-rose-800 text-xs font-semibold px-2.5 py-1 rounded-full">Cancelado</span>;
+        return <span className="bg-rose-50 text-rose-700 border border-rose-200/80 text-[11px] font-semibold px-2 py-0.5 rounded-full">Cancelado</span>;
       case 'no_show':
-        return <span className="bg-amber-100 text-amber-800 text-xs font-semibold px-2.5 py-1 rounded-full">Faltou</span>;
+        return <span className="bg-amber-50 text-amber-700 border border-amber-200/80 text-[11px] font-semibold px-2 py-0.5 rounded-full">Faltou</span>;
       case 'rescheduled':
-        return <span className="bg-sky-100 text-sky-800 text-xs font-semibold px-2.5 py-1 rounded-full">Reagendado</span>;
+        return <span className="bg-sky-50 text-sky-700 border border-sky-200/80 text-[11px] font-semibold px-2 py-0.5 rounded-full">Reagendado</span>;
       default:
-        return <span className="bg-blue-100 text-blue-800 text-xs font-semibold px-2.5 py-1 rounded-full">Agendado</span>;
+        return <span className="bg-blue-50 text-blue-700 border border-blue-200/80 text-[11px] font-semibold px-2 py-0.5 rounded-full">Agendado</span>;
     }
   };
 
@@ -362,8 +480,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </button>
           </div>
 
-          {/* Filtros Rápidos (Item 3) */}
-          <div className="flex items-center gap-1 flex-wrap pb-2 mb-2 text-xs border-b border-slate-100 no-scrollbar">
+          {/* Filtros Rápidos */}
+          <div className="flex items-center gap-1.5 flex-wrap pb-2.5 mb-2.5 text-xs border-b border-slate-100 no-scrollbar">
             {[
               { id: 'all', label: `Todos (${allTodayAppts.length})` },
               { id: 'scheduled', label: `Agendados (${countScheduled})` },
@@ -376,10 +494,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 key={tab.id}
                 type="button"
                 onClick={() => setFilterTab(tab.id as any)}
-                className={`px-2 py-1 rounded-lg font-semibold whitespace-nowrap transition-all cursor-pointer shrink-0 ${
+                className={`px-2.5 py-1 rounded-lg font-semibold whitespace-nowrap transition-all cursor-pointer shrink-0 ${
                   filterTab === tab.id
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    ? 'bg-teal-600 text-white shadow-2xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200/80'
                 }`}
               >
                 {tab.label}
@@ -388,107 +506,172 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           {todayList.length === 0 ? (
-            <div className="py-4 text-center text-slate-400 border border-dashed border-slate-200 rounded-xl">
+            <div className="py-6 text-center text-slate-400 border border-dashed border-slate-200 rounded-xl">
               <CalendarIcon className="w-8 h-8 mx-auto mb-1.5 opacity-40 text-slate-400" />
               <p className="font-medium text-xs sm:text-sm">Nenhum atendimento encontrado com o filtro selecionado.</p>
               {canCreateAppointment && (
                 <button
                   onClick={onOpenNewAppointment}
-                  className="mt-2 text-xs font-semibold text-indigo-600 hover:underline cursor-pointer"
+                  className="mt-2 text-xs font-semibold text-teal-600 hover:underline cursor-pointer"
                 >
                   + Criar agendamento agora
                 </button>
               )}
             </div>
           ) : (
-            <div className="divide-y divide-slate-100 max-h-[480px] overflow-y-auto overflow-x-hidden pr-1.5 [scrollbar-width:thin] [scrollbar-color:#cbd5e1_transparent]">
+            <div className="space-y-2 max-h-[500px] overflow-y-auto overflow-x-hidden pr-1 [scrollbar-width:thin] [scrollbar-color:#cbd5e1_transparent]">
               {todayList.map((appt: any) => {
                 const startTime = appt.start_time?.split('T')[1]?.slice(0, 5) || '00:00';
                 const endTime = appt.end_time?.split('T')[1]?.slice(0, 5) || '00:00';
+                const hasPhone = isValidPhoneNumber(appt.patient_phone);
+
+                const amount = appt.payment_amount !== null && appt.payment_amount !== undefined
+                  ? appt.payment_amount
+                  : (appt.display_amount !== null && appt.display_amount !== undefined
+                      ? appt.display_amount
+                      : (appt.service_price !== null && appt.service_price !== undefined ? appt.service_price : null));
+                const formattedPrice = amount !== null && amount !== undefined
+                  ? Number(amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                  : null;
+
+                const canStart = appt.status === 'scheduled' || appt.status === 'confirmed' || appt.status === 'rescheduled';
+                const isInProgress = appt.status === 'in_progress';
+                const isCompleted = appt.status === 'completed';
+                const canMarkNoShow = appt.status === 'scheduled' || appt.status === 'confirmed' || appt.status === 'rescheduled';
+                const canCancel = appt.status === 'scheduled' || appt.status === 'confirmed' || appt.status === 'rescheduled';
+                const canConfirm = appt.status === 'scheduled' || appt.status === 'rescheduled';
+                const canFinish = appt.status === 'in_progress' || appt.status === 'confirmed';
 
                 return (
-                  <div key={appt.id} className="py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 hover:bg-slate-50/70 p-2 rounded-lg transition-colors">
-                    <div className="flex items-start gap-2.5">
-                      <div className="w-11 h-11 rounded-lg bg-indigo-50 border border-indigo-100 text-indigo-700 flex flex-col items-center justify-center flex-shrink-0 font-bold">
-                        <span className="text-xs leading-none">{startTime}</span>
-                        <span className="text-[10px] text-indigo-400 leading-none mt-0.5">{endTime}</span>
+                  <div
+                    key={appt.id}
+                    className="bg-white border border-slate-200/80 hover:border-slate-300/90 rounded-xl px-3.5 py-2.5 shadow-2xs transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3"
+                  >
+                    {/* Esquerda + Centro: Horário e Informações do Paciente / Atendimento */}
+                    <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
+                      {/* 1. Horário compacto à esquerda */}
+                      <div className="w-13 shrink-0 pr-3 border-r border-slate-100 flex flex-col items-center justify-center text-center">
+                        <span className="text-sm font-bold text-slate-900 leading-tight tracking-tight">{startTime}</span>
+                        <span className="text-[11px] font-medium text-slate-400 leading-tight mt-0.5">{endTime}</span>
                       </div>
 
-                      <div className="space-y-0.5">
+                      {/* 2. Informações do Paciente e Atendimento */}
+                      <div className="min-w-0 flex-1 space-y-1">
+                        {/* Linha do Paciente + Badges aplicáveis */}
                         <div className="flex items-center gap-1.5 flex-wrap">
+                          <div className="w-6 h-6 rounded-full bg-teal-50 text-teal-700 border border-teal-200/70 flex items-center justify-center text-[10px] font-bold shrink-0">
+                            {getInitials(appt.patient_name)}
+                          </div>
                           <h4
                             onClick={() => setViewPatientId(appt.patient_id)}
-                            className="font-bold text-slate-900 text-sm hover:text-indigo-600 cursor-pointer transition-colors"
-                            title="Clique para abrir prontuário do paciente"
+                            className="font-bold text-slate-900 text-sm hover:text-teal-700 cursor-pointer transition-colors truncate max-w-full"
+                            title="Clique para abrir o prontuário do paciente"
                           >
                             {appt.patient_name}
                           </h4>
                           {getStatusBadge(appt.status)}
 
-                          {/* Indicador de Evolução Clínica do Dia */}
-                          {appt.has_evolution > 0 ? (
-                            <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-200">
-                              <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Evolução Realizada
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-500 text-[10px] font-semibold px-2 py-0.5 rounded-full border border-slate-200">
-                              <Clock className="w-3 h-3 text-slate-400" /> Pendente de Evolução
+                          {appt.has_evolution > 0 && (
+                            <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 text-[11px] font-medium px-2 py-0.5 rounded-full border border-emerald-200/80">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Evolução realizada
                             </span>
                           )}
                         </div>
 
-                        {(() => {
-                          const amount = appt.payment_amount !== null && appt.payment_amount !== undefined
-                            ? appt.payment_amount
-                            : (appt.display_amount !== null && appt.display_amount !== undefined
-                                ? appt.display_amount
-                                : (appt.service_price !== null && appt.service_price !== undefined ? appt.service_price : null));
-                          const formattedPrice = amount !== null && amount !== undefined
-                            ? Number(amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-                            : null;
-                          return (
-                            <p className="text-xs text-slate-500">
-                              {appt.service_name}
-                              {formattedPrice && (
-                                <>
-                                  <span> · </span>
-                                  <span className="font-semibold text-slate-700">{formattedPrice}</span>
-                                </>
-                              )}
-                              <span> • </span>
-                              <span className="font-medium text-slate-700">{appt.professional_name}</span>
-                              {appt.clinical_module && appt.clinical_module !== 'general' && <span> · {appt.clinical_module === 'ZemdaBody' ? 'Zemda360' : appt.clinical_module}</span>}
-                            </p>
-                          );
-                        })()}
-
-                        <div className="flex items-center gap-2.5 text-[11px] text-slate-400 flex-wrap">
-                          {appt.modality === 'online' ? (
-                            <span className="flex items-center gap-1 text-teal-600"><Video className="w-3 h-3" /> Online</span>
-                          ) : (
-                            <span className="flex items-center gap-1 text-slate-500"><MapPin className="w-3 h-3" /> Presencial</span>
+                        {/* Linha 1: Serviço • Valor • Profissional • Sala */}
+                        <p className="text-xs text-slate-600 truncate">
+                          <span className="font-medium text-slate-700">{appt.service_name}</span>
+                          {formattedPrice && (
+                            <>
+                              <span className="text-slate-300 mx-1.5">•</span>
+                              <span className="font-semibold text-slate-700">{formattedPrice}</span>
+                            </>
                           )}
-                          <span>Tel: {appt.patient_phone}</span>
+                          {appt.professional_name && (
+                            <>
+                              <span className="text-slate-300 mx-1.5">•</span>
+                              <span className="text-slate-600">{appt.professional_name}</span>
+                            </>
+                          )}
+                          {appt.room_name && (
+                            <>
+                              <span className="text-slate-300 mx-1.5">•</span>
+                              <span className="text-slate-500">{appt.room_name}</span>
+                            </>
+                          )}
+                          {appt.clinical_module && appt.clinical_module !== 'general' && (
+                            <span className="text-slate-400"> ({appt.clinical_module === 'ZemdaBody' ? 'Zemda360' : appt.clinical_module})</span>
+                          )}
+                        </p>
 
-                          {/* Link para Prontuário */}
+                        {/* Linha 2: Modalidade | Telefone + WhatsApp | Prontuário vinculado | Termos */}
+                        <div className="flex items-center gap-2 text-[11px] text-slate-500 flex-wrap">
+                          {appt.modality === 'online' ? (
+                            <span className="inline-flex items-center gap-1 text-teal-700 font-medium">
+                              <Video className="w-3 h-3" /> Online
+                            </span>
+                          ) : appt.modality === 'home_care' || appt.modality === 'domiciliar' ? (
+                            <span className="inline-flex items-center gap-1 text-slate-600 font-medium">
+                              <MapPin className="w-3 h-3 text-slate-400" /> Domiciliar
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-slate-600 font-medium">
+                              <MapPin className="w-3 h-3 text-slate-400" /> Presencial
+                            </span>
+                          )}
+
+                          {appt.patient_phone && (
+                            <>
+                              <span className="text-slate-300">|</span>
+                              <span className="inline-flex items-center gap-1.5 text-slate-600 flex-wrap">
+                                <span>{appt.patient_phone}</span>
+                                {hasPhone && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenWhatsAppReminder(appt)}
+                                    title="Abrir WhatsApp com lembrete preenchido"
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white hover:bg-emerald-50/80 text-teal-700 hover:text-emerald-800 border border-emerald-200/80 font-semibold text-[11px] transition-colors cursor-pointer shadow-2xs"
+                                  >
+                                    <WhatsAppIcon className="w-3 h-3 fill-emerald-600 shrink-0" />
+                                    <span className="hidden sm:inline">Enviar lembrete</span>
+                                    <span className="sm:hidden">Lembrete</span>
+                                  </button>
+                                )}
+                              </span>
+                            </>
+                          )}
+
+                          <span className="text-slate-300">|</span>
                           <button
                             type="button"
                             onClick={() => setViewPatientId(appt.patient_id)}
-                            className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-800 font-semibold cursor-pointer"
+                            className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-800 hover:underline font-medium cursor-pointer"
                           >
-                            <ExternalLink className="w-3 h-3" /> Prontuário Vinculado
+                            <ExternalLink className="w-3 h-3" /> Prontuário vinculado
                           </button>
+
+                          {auth.canAccessConsents && appt.patient_id && (
+                            <>
+                              <span className="text-slate-300">|</span>
+                              <ConsentPendingAlert
+                                compact
+                                patientId={appt.patient_id}
+                                serviceId={appt.service_id}
+                                onOpen={() => setConsentPatientId(appt.patient_id)}
+                              />
+                            </>
+                          )}
                         </div>
 
-                        {/* Documentos Gerados no Atendimento (Item 3 & 5) */}
+                        {/* Documentos emitidos no atendimento */}
                         {(appt.certificate_id || appt.prescription_id || appt.exam_request_id) && (
                           <div className="flex items-center gap-1.5 pt-0.5 flex-wrap">
-                            <span className="text-[10px] font-bold text-slate-400">Documentos:</span>
+                            <span className="text-[10px] font-semibold text-slate-400">Documentos:</span>
                             {appt.certificate_id && (
                               <button
                                 type="button"
                                 onClick={() => setPrintDoc({ type: 'certificate', id: appt.certificate_id })}
-                                className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-50 hover:bg-amber-100 text-amber-800 text-[10px] font-bold rounded-md border border-amber-200 transition-all cursor-pointer shadow-2xs"
+                                className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-50 hover:bg-amber-100 text-amber-800 text-[10px] font-semibold rounded-md border border-amber-200/80 transition-colors cursor-pointer"
                                 title="Visualizar e Imprimir Atestado"
                               >
                                 <FileText className="w-3 h-3" /> Atestado
@@ -498,7 +681,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                               <button
                                 type="button"
                                 onClick={() => setPrintDoc({ type: 'prescription', id: appt.prescription_id })}
-                                className="inline-flex items-center gap-1 px-2 py-0.5 bg-teal-50 hover:bg-teal-100 text-teal-800 text-[10px] font-bold rounded-md border border-teal-200 transition-all cursor-pointer shadow-2xs"
+                                className="inline-flex items-center gap-1 px-2 py-0.5 bg-teal-50 hover:bg-teal-100 text-teal-800 text-[10px] font-semibold rounded-md border border-teal-200/80 transition-colors cursor-pointer"
                                 title="Visualizar e Imprimir Receituário"
                               >
                                 <FileText className="w-3 h-3" /> Receita
@@ -508,7 +691,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                               <button
                                 type="button"
                                 onClick={() => setPrintDoc({ type: 'exam_request', id: appt.exam_request_id })}
-                                className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-800 text-[10px] font-bold rounded-md border border-blue-200 transition-all cursor-pointer shadow-2xs"
+                                className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-800 text-[10px] font-semibold rounded-md border border-blue-200/80 transition-colors cursor-pointer"
                                 title="Visualizar e Imprimir Solicitação de Exames"
                               >
                                 <FileText className="w-3 h-3" /> Pedido Exames
@@ -519,95 +702,209 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       </div>
                     </div>
 
-                    {/* Quick Status Action Buttons */}
-                    <div className="flex items-center gap-1.5 flex-wrap sm:flex-wrap">
-                      {auth.canAccessConsents && appt.patient_id && (
-                        <ConsentPendingAlert
-                          compact
-                          patientId={appt.patient_id}
-                          serviceId={appt.service_id}
-                          onOpen={() => setConsentPatientId(appt.patient_id)}
-                        />
-                      )}
-                      {appt.status !== 'completed' && appt.status !== 'cancelled' && (
+                    {/* 3. Direita: Ação Principal + [ Faltou ] + [ ••• ] */}
+                    <div className="pt-2 sm:pt-0 sm:pl-3 border-t sm:border-t-0 sm:border-l border-slate-100 flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-1.5 shrink-0">
+                      {canStart && (
                         <button
+                          type="button"
                           onClick={() => handleUpdateStatus(appt.id, 'in_progress')}
-                          className="flex items-center gap-1 px-2.5 py-1 text-xs font-bold bg-teal-600 text-white hover:bg-teal-700 rounded-lg transition-all shadow-xs cursor-pointer"
-                          title="Iniciar Atendimento Rápido"
+                          className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-teal-600 text-white hover:bg-teal-700 rounded-lg transition-colors shadow-2xs cursor-pointer whitespace-nowrap"
                         >
                           <Stethoscope className="w-3.5 h-3.5" />
-                          <span>Atender</span>
+                          <span>Iniciar atendimento</span>
                         </button>
                       )}
-                      {appt.status === 'scheduled' && (
+                      {isInProgress && (
                         <button
-                          onClick={() => handleUpdateStatus(appt.id, 'confirmed')}
-                          className="px-2 py-1 text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg transition-colors cursor-pointer"
-                        >
-                          Confirmar
-                        </button>
-                      )}
-                      {appt.status === 'confirmed' && (
-                        <button
+                          type="button"
                           onClick={() => handleUpdateStatus(appt.id, 'in_progress')}
-                          className="px-2 py-1 text-xs font-semibold bg-purple-50 text-purple-700 hover:bg-purple-100 rounded-lg transition-colors cursor-pointer"
+                          className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-teal-600 text-white hover:bg-teal-700 rounded-lg transition-colors shadow-2xs cursor-pointer whitespace-nowrap"
                         >
-                          Iniciar
+                          <Stethoscope className="w-3.5 h-3.5" />
+                          <span>Continuar atendimento</span>
                         </button>
                       )}
-                      {(appt.status === 'in_progress' || appt.status === 'confirmed') && (
+                      {isCompleted && (
                         <button
-                          onClick={() => handleUpdateStatus(appt.id, 'completed')}
-                          className="px-2 py-1 text-xs font-semibold bg-teal-600 text-white hover:bg-teal-700 rounded-lg transition-colors shadow-xs cursor-pointer"
+                          type="button"
+                          onClick={() => setViewPatientId(appt.patient_id)}
+                          className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 rounded-lg transition-colors cursor-pointer whitespace-nowrap"
                         >
-                          Concluir
-                        </button>
-                      )}
-                      {appt.status !== 'completed' && appt.status !== 'cancelled' && (
-                        <button
-                          onClick={() => handleUpdateStatus(appt.id, 'no_show')}
-                          className="px-2 py-1 text-xs font-medium text-amber-600 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
-                          title="Marcar falta"
-                        >
-                          Faltou
+                          <Eye className="w-3.5 h-3.5 text-slate-500" />
+                          <span>Ver atendimento</span>
                         </button>
                       )}
 
-                      {/* Botão de Envio Manual de Lembrete pelo WhatsApp */}
-                      {['scheduled', 'confirmed', 'rescheduled'].includes(appt.status) && (
-                        <button type="button" onClick={() => handleUpdateStatus(appt.id, 'cancelled')}
-                          className="px-2 py-1 text-xs font-medium text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer">
-                          Cancelar
-                        </button>
-                      )}
-                      {(() => {
-                        const hasPhone = isValidPhoneNumber(appt.patient_phone);
-                        return (
+                      <div className="flex items-center gap-1.5">
+                        {canMarkNoShow && (
                           <button
                             type="button"
-                            onClick={() => {
-                              if (hasPhone) {
-                                setWhatsappReminderAppt(appt);
-                              }
-                            }}
-                            disabled={!hasPhone}
-                            title={hasPhone ? 'Abrir no WhatsApp' : 'Paciente sem telefone cadastrado'}
-                            className={`flex items-center gap-1 px-2 py-1 text-xs font-semibold rounded-lg transition-all ${
-                              hasPhone
-                                ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/80 cursor-pointer shadow-2xs'
-                                : 'bg-slate-100 text-slate-400 border border-slate-200/60 opacity-60 cursor-not-allowed'
-                            }`}
+                            onClick={() => handleUpdateStatus(appt.id, 'no_show')}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-amber-700 bg-amber-50/90 hover:bg-amber-100 border border-amber-200/80 rounded-lg transition-colors cursor-pointer whitespace-nowrap"
+                            title="Marcar falta"
                           >
-                            <WhatsAppIcon className={`w-3.5 h-3.5 ${hasPhone ? 'fill-emerald-600' : 'fill-slate-400'}`} />
-                            <span>WhatsApp</span>
+                            <UserX className="w-3 h-3 text-amber-600" />
+                            <span>Faltou</span>
                           </button>
-                        );
-                      })()}
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={(e) => handleToggleActionMenu(e, appt)}
+                          aria-label="Mais ações do atendimento"
+                          aria-expanded={openMenuState?.appt?.id === appt.id}
+                          title="Mais ações"
+                          className="inline-flex items-center justify-center w-7 h-7 rounded-lg text-slate-500 hover:text-slate-800 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 transition-colors cursor-pointer"
+                        >
+                          <MoreHorizontal className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
               })}
             </div>
+          )}
+
+          {/* Dropdown de Ações Secundárias renderizado via Portal em document.body (fora do fluxo/scroll do card) */}
+          {openMenuState?.appt && typeof document !== 'undefined' && createPortal(
+            (() => {
+              const menuAppt = openMenuState.appt;
+              const menuHasPhone = isValidPhoneNumber(menuAppt.patient_phone);
+              const menuCanConfirm = menuAppt.status === 'scheduled' || menuAppt.status === 'rescheduled';
+              const menuCanFinish = menuAppt.status === 'in_progress' || menuAppt.status === 'confirmed';
+              const menuCanEdit = !['completed', 'cancelled'].includes(menuAppt.status);
+              const menuCanMarkNoShow = menuAppt.status === 'scheduled' || menuAppt.status === 'confirmed' || menuAppt.status === 'rescheduled';
+              const menuCanCancel = menuAppt.status === 'scheduled' || menuAppt.status === 'confirmed' || menuAppt.status === 'rescheduled';
+
+              return (
+                <div
+                  role="menu"
+                  aria-label="Ações do atendimento"
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    top: openMenuState.top !== undefined ? `${openMenuState.top}px` : undefined,
+                    bottom: openMenuState.bottom !== undefined ? `${openMenuState.bottom}px` : undefined,
+                    left: `${openMenuState.left}px`
+                  }}
+                  className="fixed z-[9999] w-[216px] bg-white rounded-xl border border-slate-200 shadow-xl py-1.5 text-xs animate-in fade-in duration-100"
+                >
+                  {menuCanConfirm && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpenMenuState(null);
+                        handleUpdateStatus(menuAppt.id, 'confirmed');
+                      }}
+                      className="w-full px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer font-medium"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span>Confirmar presença</span>
+                    </button>
+                  )}
+
+                  {menuCanFinish && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpenMenuState(null);
+                        handleUpdateStatus(menuAppt.id, 'completed');
+                      }}
+                      className="w-full px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer font-medium"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                      <span>Concluir atendimento</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpenMenuState(null);
+                      setViewPatientId(menuAppt.patient_id);
+                    }}
+                    className="w-full px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                    <span>Abrir prontuário</span>
+                  </button>
+
+                  {menuCanEdit && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpenMenuState(null);
+                        setEditingAppt(menuAppt);
+                      }}
+                      className="w-full px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
+                    >
+                      <CalendarIcon className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                      <span>Editar / Remarcar</span>
+                    </button>
+                  )}
+
+                  {auth.canAccessConsents && menuAppt.patient_id && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpenMenuState(null);
+                        setConsentPatientId(menuAppt.patient_id);
+                      }}
+                      className="w-full px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
+                    >
+                      <FileText className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                      <span>Termos de consentimento</span>
+                    </button>
+                  )}
+
+                  {menuHasPhone && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpenMenuState(null);
+                        handleOpenWhatsAppReminder(menuAppt);
+                      }}
+                      className="w-full px-3 py-1.5 text-left text-teal-700 hover:bg-emerald-50/60 flex items-center gap-2 cursor-pointer font-medium"
+                    >
+                      <WhatsAppIcon className="w-3.5 h-3.5 fill-emerald-600 shrink-0" />
+                      <span>Enviar lembrete</span>
+                    </button>
+                  )}
+
+                  {menuCanMarkNoShow && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpenMenuState(null);
+                        handleUpdateStatus(menuAppt.id, 'no_show');
+                      }}
+                      className="w-full px-3 py-1.5 text-left text-amber-700 hover:bg-amber-50/70 flex items-center gap-2 cursor-pointer font-medium"
+                    >
+                      <UserX className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                      <span>Marcar falta</span>
+                    </button>
+                  )}
+
+                  {menuCanCancel && (
+                    <>
+                      <div className="my-1 border-t border-slate-100" />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOpenMenuState(null);
+                          handleUpdateStatus(menuAppt.id, 'cancelled');
+                        }}
+                        className="w-full px-3 py-1.5 text-left text-rose-600 hover:bg-rose-50 flex items-center gap-2 cursor-pointer font-medium"
+                      >
+                        <XCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                        <span>Cancelar agendamento</span>
+                      </button>
+                    </>
+                  )}
+                </div>
+              );
+            })(),
+            document.body
           )}
         </div>
 
@@ -751,6 +1048,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           }}
         />
       )}
+
+      {/* Modal de Editar / Remarcar Atendimento sobre o Painel */}
+      <AppointmentEditModal
+        isOpen={Boolean(editingAppt)}
+        appointment={editingAppt}
+        onClose={() => setEditingAppt(null)}
+        onSuccess={() => {
+          setEditingAppt(null);
+          fetchMetrics();
+          notifyAppointmentChange();
+        }}
+      />
     </div>
   );
 };
