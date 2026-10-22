@@ -2,6 +2,7 @@ import { takeReviewedEvolution } from '../../utils/teleconsultation';
 import { generateWhatsAppUrl } from '../../utils/phone.utils';
 import { ClinicalPainScale } from './ClinicalPainScale';
 import { useClinicalFormReset } from '../../hooks/useClinicalFormReset';
+import { resolveClinicalModuleInfo } from './clinicalModuleResolver';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -123,6 +124,7 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
   specializedModuleName,
   initialWorkspaceTab
 }) => {
+  const auth = useAuth();
   const {
     currentTenant,
     clientTermLabel,
@@ -133,11 +135,19 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
     isSpeechTherapist,
     isPsychopedagogue,
     isZemdaPP,
+    isPersonalTrainer,
+    isZemdaPersonal,
+    isPsychologist,
+    isZemdaPsico,
+    isDoctor,
+    isZemdaMed,
+    isEsthetician,
+    isZemdaEstetic,
     isZemdaBody,
     canAccessConsents,
     currentUser,
     hasCapability
-  } = useAuth();
+  } = auth;
   const { showToast } = useToast();
   const [showConsentsDialog, setShowConsentsDialog] = useState<boolean>(false);
   const [realStartAt, setRealStartAt] = useState<string | null>(appointment.attendance_start_at || null);
@@ -303,15 +313,17 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
     'general'
   );
 
-  const resolvedSpecializedName = specializedModuleName || (
-    isAppointmentPP ? 'ZemdaPP' :
-    isSpeechTherapist || effectiveModule === 'ZemdaFono' ? 'ZemdaFono' :
-    isDentist || effectiveModule === 'ZemdaOdonto' ? 'ZemdaOdonto' :
-    isOccupationalTherapist || effectiveModule === 'ZemdaTO' ? 'ZemdaTO' :
-    isNutritionist || effectiveModule === 'ZemdaNutri' ? 'ZemdaNutri' :
-    isPhysiotherapist || effectiveModule === 'ZemdaFisio' ? 'ZemdaFisio' :
-    undefined
-  );
+  const resolvedModule = resolveClinicalModuleInfo({
+    moduleType: effectiveModule,
+    clinicalModule: appointment.clinical_module,
+    serviceName: appointment.service_name,
+    currentUser,
+    auth
+  });
+
+  const specializedName = specializedModuleName || resolvedModule.name;
+  const ModuleIcon = resolvedModule.icon;
+  const resolvedSpecializedName = specializedName;
 
   const [showZemdaBodyModal, setShowZemdaBodyModal] = useState<boolean>(false);
   const [showPreviousRecordsModal, setShowPreviousRecordsModal] = useState<boolean>(false);
@@ -1650,7 +1662,12 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
             {[
               { id: 'resumo', label: 'Resumo' },
               { id: 'evolucao', label: 'Evolução' },
-              { id: 'modulo', label: 'Módulo especializado' },
+              {
+                id: 'modulo',
+                label: specializedName,
+                tooltip: `Abrir módulo completo ${specializedName}`,
+                Icon: ModuleIcon
+              },
               { id: 'documentos', label: 'Documentos' },
               { id: 'finalizacao', label: 'Finalização' }
             ].map(tab => {
@@ -1666,13 +1683,18 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
                     }
                     setWorkspaceTab(tab.id as any);
                   }}
-                  className={`px-2.5 sm:px-3.5 py-1 sm:py-1.5 !min-h-[30px] sm:!min-h-[34px] rounded-xl text-[11px] sm:text-xs font-bold transition-all cursor-pointer ${
+                  title={tab.tooltip}
+                  aria-label={tab.tooltip || tab.label}
+                  className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1 sm:py-1.5 !min-h-[30px] sm:!min-h-[34px] rounded-xl text-[11px] sm:text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
                     isActive
                       ? 'bg-white text-teal-700 shadow-2xs border border-slate-200/90'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
                   }`}
                 >
-                  {tab.label}
+                  {tab.Icon && (
+                    <tab.Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-teal-700' : 'text-slate-500'}`} />
+                  )}
+                  <span>{tab.label}</span>
                 </button>
               );
             })}
@@ -1734,11 +1756,24 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
                     </div>
                   </div>
 
-                  <div className="pt-2 flex items-center justify-end">
+                  <div className="pt-2 flex flex-wrap items-center justify-between gap-2.5">
+                    {onOpenSpecializedModule && (
+                      <button
+                        type="button"
+                        onClick={onOpenSpecializedModule}
+                        title={`Abrir módulo completo ${specializedName}`}
+                        aria-label={`Abrir módulo completo ${specializedName}`}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-teal-800 bg-teal-50 hover:bg-teal-100 border border-teal-200/90 transition-colors cursor-pointer"
+                      >
+                        <ModuleIcon className="w-3.5 h-3.5 text-teal-700 shrink-0" />
+                        <span>Abrir {specializedName}</span>
+                      </button>
+                    )}
+
                     <button
                       type="button"
                       onClick={() => setWorkspaceTab('evolucao')}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 transition-colors cursor-pointer"
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 transition-colors cursor-pointer ml-auto"
                     >
                       <Edit3 className="w-3.5 h-3.5" />
                       <span>Ir para Evolução Clínica</span>

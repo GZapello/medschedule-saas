@@ -16,6 +16,7 @@ import { QuickConsultationModal } from './QuickConsultationModal';
 import { ZemdaBodyWorkspace } from '../zemda-body/ZemdaBodyWorkspace';
 import { GeneralClinicalWorkspace } from './GeneralClinicalWorkspace';
 import { ZemdaEsteticWorkspace } from '../estetic/ZemdaEsteticWorkspace';
+import { resolveClinicalModuleInfo } from './clinicalModuleResolver';
 import { Activity, FileText, Stethoscope, ChevronLeft, Dumbbell, Sparkles, X } from 'lucide-react';
 
 export function AppointmentConsultation({
@@ -29,6 +30,7 @@ export function AppointmentConsultation({
   onClose: () => void;
   onFinished: () => void;
 }) {
+  const auth = useAuth();
   const {
     isDoctor,
     isZemdaMed,
@@ -53,7 +55,7 @@ export function AppointmentConsultation({
     isZemdaBody,
     currentUser,
     hasCapability
-  } = useAuth();
+  } = auth;
   const [status, setStatus] = useState<any>(null);
   const [error, setError] = useState('');
   const [meetingLink, setMeetingLink] = useState<{ id: string; url: string | null } | null>(null);
@@ -66,26 +68,20 @@ export function AppointmentConsultation({
   const onMeetingUrlSaved = (url: string | null) => setMeetingLink({ id: appointment.id, url });
   const onDriveUrlSaved = (url: string | null) => setDriveLink({ id: appointment.id, url });
 
-  const deducedModuleFromProfession =
-    (isDoctor || isZemdaMed || (currentUser?.professionName || '').toLowerCase().includes('médic') || (currentUser?.professionName || '').toLowerCase().includes('medic') || (appointment.service_name || '').toLowerCase().includes('médic')) ? 'ZemdaMed' :
-    (isPsychopedagogue || isZemdaPP || (currentUser?.professionName || '').toLowerCase().includes('psicopedag') || (appointment.service_name || '').toLowerCase().includes('psicopedag')) ? 'ZemdaPP' :
-    (isPsychologist || isZemdaPsico || (currentUser?.professionName || '').toLowerCase().includes('psicolog')) ? 'ZemdaPsico' :
-    (isSpeechTherapist || isZemdaFono || (currentUser?.professionName || '').toLowerCase().includes('fono')) ? 'ZemdaFono' :
-    (isDentist || isZemdaOdonto || (currentUser?.professionName || '').toLowerCase().includes('odonto') || (currentUser?.professionName || '').toLowerCase().includes('dentis')) ? 'ZemdaOdonto' :
-    (isOccupationalTherapist || isZemdaTO || (currentUser?.professionName || '').toLowerCase().includes('ocupacional')) ? 'ZemdaTO' :
-    (isNutritionist || isZemdaNutri || (currentUser?.professionName || '').toLowerCase().includes('nutri')) ? 'ZemdaNutri' :
-    (isPersonalTrainer || isZemdaPersonal || (currentUser?.professionName || '').toLowerCase().includes('personal') || (currentUser?.professionName || '').toLowerCase().includes('educa')) ? 'ZemdaPersonal' :
-    (isEsthetician || isZemdaEstetic || currentUser?.commercialModule === 'ZemdaEstetic' || (currentUser?.professionName || '').toLowerCase().includes('estet') || (currentUser?.professionName || '').toLowerCase().includes('estét')) ? 'ZemdaEstetic' :
-    (isPhysiotherapist || isZemdaFisio || (currentUser?.professionName || '').toLowerCase().includes('fisio') || (appointment.service_name || '').toLowerCase().includes('fisio')) ? 'ZemdaFisio' :
-    undefined;
+  const resolvedModule = resolveClinicalModuleInfo({
+    moduleType:
+      status?.moduleType && status.moduleType !== 'general'
+        ? status.moduleType
+        : initialModuleType && initialModuleType !== 'general' && initialModuleType !== 'ZemdaBody' && initialModuleType !== 'Zemda360'
+        ? initialModuleType
+        : undefined,
+    clinicalModule: appointment.clinical_module,
+    serviceName: appointment.service_name,
+    currentUser,
+    auth
+  });
 
-  const effectiveModuleType =
-    (status?.moduleType && status.moduleType !== 'general' ? status.moduleType : undefined) ||
-    (appointment.clinical_module && appointment.clinical_module !== 'ZemdaBody' && appointment.clinical_module !== 'Zemda360' && appointment.clinical_module !== 'general' ? appointment.clinical_module : undefined) ||
-    (initialModuleType && initialModuleType !== 'ZemdaBody' && initialModuleType !== 'Zemda360' && initialModuleType !== 'general' ? initialModuleType : undefined) ||
-    deducedModuleFromProfession ||
-    (status?.moduleType === 'general' ? 'general' : undefined) ||
-    'general';
+  const effectiveModuleType = resolvedModule.id;
 
   // FLUXO DE ATENDIMENTO: "Iniciar atendimento" DEVE SEMPRE abrir o Prontuário / Evolução Clínica primeiro ('records')
   const [activeTab, setActiveTab] = useState<'records' | 'specialized' | 'zemda_body'>('records');
@@ -168,7 +164,12 @@ export function AppointmentConsultation({
         {[
           { id: 'resumo', label: 'Resumo' },
           { id: 'evolucao', label: 'Evolução' },
-          { id: 'modulo', label: 'Módulo especializado' },
+          {
+            id: 'modulo',
+            label: resolvedModule.name,
+            tooltip: resolvedModule.tooltip,
+            Icon: resolvedModule.icon
+          },
           { id: 'documentos', label: 'Documentos' },
           { id: 'finalizacao', label: 'Finalização' }
         ].map(tab => {
@@ -185,13 +186,18 @@ export function AppointmentConsultation({
                   setActiveTab('records');
                 }
               }}
-              className={`px-2.5 sm:px-3.5 py-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer shrink-0 whitespace-nowrap min-h-[32px] ${
+              title={tab.tooltip}
+              aria-label={tab.tooltip || tab.label}
+              className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer shrink-0 whitespace-nowrap min-h-[32px] ${
                 isActive
                   ? 'bg-white text-teal-700 shadow-2xs border border-slate-200/90'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
               }`}
             >
-              {tab.label}
+              {tab.Icon && (
+                <tab.Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-teal-700' : 'text-slate-500'}`} />
+              )}
+              <span>{tab.label}</span>
             </button>
           );
         })}
@@ -300,20 +306,7 @@ export function AppointmentConsultation({
         onFinished={onFinished}
         onOpenZemdaBody={isZemdaBody ? () => setActiveTab('zemda_body') : undefined}
         onOpenSpecializedModule={Workspace ? () => setActiveTab('specialized') : undefined}
-        specializedModuleName={
-          effectiveModuleType === 'ZemdaMed' ? 'ZemdaMed' :
-          effectiveModuleType === 'ZemdaPsico' ? 'ZemdaPsico' :
-          effectiveModuleType === 'ZemdaPP' ? 'ZemdaPP' :
-          effectiveModuleType === 'ZemdaFono' ? 'ZemdaFono' :
-          effectiveModuleType === 'ZemdaOdonto' ? 'ZemdaOdonto' :
-          effectiveModuleType === 'ZemdaTO' ? 'ZemdaTO' :
-          effectiveModuleType === 'ZemdaNutri' ? 'ZemdaNutri' :
-          effectiveModuleType === 'ZemdaFisio' ? 'ZemdaFisio' :
-          effectiveModuleType === 'ZemdaPersonal' ? 'ZemdaPersonal' :
-          effectiveModuleType === 'ZemdaEstetic' ? 'ZemdaEstetic' :
-          effectiveModuleType === 'general' ? `Atendimento Clínico • ${currentUser?.canonicalProfessionName || currentUser?.professionName || 'Geral'}` :
-          (isDoctor || isZemdaMed ? 'ZemdaMed' : isPersonalTrainer || isZemdaPersonal ? 'ZemdaPersonal' : isEsthetician || isZemdaEstetic ? 'ZemdaEstetic' : isPsychologist || isZemdaPsico ? 'ZemdaPsico' : isPsychopedagogue || isZemdaPP ? 'ZemdaPP' : isSpeechTherapist ? 'ZemdaFono' : isDentist ? 'ZemdaOdonto' : isOccupationalTherapist ? 'ZemdaTO' : isNutritionist ? 'ZemdaNutri' : undefined)
-        }
+        specializedModuleName={resolvedModule.name}
       />
     </>
   );
