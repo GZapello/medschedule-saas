@@ -121,13 +121,6 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({ onLogin, onR
       <section id="inicio" className="zl-hero">
         <div className="zl-container">
           <RevealItem autoAnimate distancePx={14} durationMs={650}>
-            <div className="zl-hero-top">
-              <div className="zl-hero-badges">
-                <span className="zl-pill"><span />Ecossistema de Saúde &amp; Gestão</span>
-                <span className="zl-hero-badge"><Sparkles size={13} /> 7 dias grátis</span>
-              </div>
-              <span className="zl-hero-note">Médicos, consultórios individuais, equipes e clínicas multiprofissionais.</span>
-            </div>
             <div className="zl-hero-grid">
               <div className="zl-hero-text">
                 <p className="zl-hero-kicker">Zemda · software de gestão em saúde</p>

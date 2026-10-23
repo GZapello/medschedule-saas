@@ -1,5 +1,5 @@
 /* Hero mockup: geometry belongs to the frame, never to its contents. */
-.zemda-landing .zl-hero{position:relative;overflow:hidden;padding:24px 0 32px}
+.zemda-landing .zl-hero{position:relative;overflow:hidden;padding:36px 0 32px}
 .zemda-landing .zl-hero>.zl-container{width:min(1320px,calc(100% - 64px))}
 .zemda-landing .zl-hero-grid{display:block}
 .zemda-landing .zl-hero-text{position:relative;z-index:1;width:390px;padding:10px 0 15px}
@@ -34,7 +34,7 @@
 .zd-display .zd-scrim:hover{background:#132e4052}
 .zd-demo .zd-demo-note{position:absolute;left:16%;right:12%;top:94%;margin:0!important;font-size:10px!important;color:#61776f;line-height:1.5}
 .zd-demo-note span{display:none}
-@media(min-width:1101px) and (max-height:800px){.zemda-landing .zl-hero{padding-top:12px}.zemda-landing .zl-hero-top{margin-bottom:6px}.zemda-landing .zl-hero h1{font-size:36px;margin-bottom:18px}.zemda-landing .zl-hero-copy>p:first-child{font-size:13px;line-height:1.6;margin-bottom:16px}.zemda-landing .zl-hero .zl-actions{gap:10px}.zemda-landing .zl-hero-text{padding-top:0;width:370px}}
+@media(min-width:1101px) and (max-height:800px){.zemda-landing .zl-hero{padding-top:20px}.zemda-landing h1{font-size:36px;margin-bottom:18px}.zemda-landing .zl-hero-copy>p:first-child{font-size:13px;line-height:1.6;margin-bottom:16px}.zemda-landing .zl-hero .zl-actions{gap:10px}.zemda-landing .zl-hero-text{padding-top:0;width:370px}}
 @media(max-width:1100px){.zemda-landing .zl-hero-text{width:350px}.zemda-landing .zl-hero h1{font-size:35px}.zd-demo{width:700px;right:-80px}}
 @media(max-width:1050px){.zemda-landing .zl-hero-grid{display:grid;grid-template-columns:1fr;gap:14px}.zemda-landing .zl-hero-text{width:auto;max-width:640px}.zemda-landing .zl-hero .zl-actions{flex-direction:row;align-items:center}.zd-demo{position:relative;inset:auto;transform:none;width:min(760px,100%);justify-self:center}.zd-screen{right:10%}.zemda-landing .zl-hero-trial-copy,.zemda-landing .zl-hero-text .zl-small{max-width:none}}
 @media(max-width:540px){.zemda-landing .zl-hero>.zl-container{width:calc(100% - 36px)}.zemda-landing .zl-hero h1{font-size:33px}.zemda-landing .zl-hero .zl-actions{flex-direction:column;align-items:stretch}.zd-demo .zd-demo-note{font-size:8px!important;left:0;right:0}.zd-screen{border-radius:1px}}

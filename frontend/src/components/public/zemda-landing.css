@@ -51,7 +51,7 @@
 .zl-pill>span { width:6px; height:6px; border-radius:50%; background:#0d9488; }
 .zl-hero-note { font-size:11px; color:#6a7e76; }
 .zl-hero-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); align-items:center; gap:48px; }
-.zl-hero-kicker { font-size:13px; font-weight:650; color:var(--zl-teal); letter-spacing:.02em; margin:0 0 10px; line-height:1.4; display:block; }
+.zl-hero-kicker { font-size:13.5px; font-weight:700; color:var(--zl-teal); letter-spacing:.025em; margin:0 0 12px; line-height:1.4; display:block; }
 .zl-hero h1 { font-size:clamp(37px,4.4vw,61px); line-height:1.1; font-weight:650; letter-spacing:-.045em; text-wrap:balance; }
 .zl-hero h1>span { color:var(--zl-teal); }
 .zl-hero-copy>p:first-child { font-size:17px; line-height:1.8; color:var(--zl-muted); margin-bottom:18px; }
@@ -267,7 +267,7 @@
 
 /* Put the trial action within the first mobile screen, directly after the headline. */
 @media (max-width:540px) {
-  .zl-hero { padding-top:16px; }
+  .zl-hero { padding-top:20px; }
   .zl-hero-top { margin-bottom:14px; }
   .zl-hero-badges { gap:7px; }
   .zl-hero h1 { font-size:clamp(31px,8.4vw,36px); line-height:1.08; }
