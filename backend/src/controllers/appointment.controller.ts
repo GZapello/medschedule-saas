@@ -9,6 +9,7 @@ import { canOperate, BillingService } from '../services/billing.service';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '../middlewares/audit.middleware';
+import { GoogleCalendarService } from '../services/google-calendar.service';
 import { NotificationService } from '../services/notification.service';
 import { WhatsAppService } from '../services/whatsapp.service';
 import { isValidPhoneNumber, normalizePhoneWithDDI, buildWhatsAppReminderMessage } from '../utils/phone.utils';
@@ -194,6 +195,8 @@ export class AppointmentController {
           p.name as professional_name, p.photo_url as professional_photo,
           s.name as service_name, s.duration_minutes, s.price as service_price,
           r.name as room_name,
+          (SELECT gel.sync_status FROM google_calendar_event_links gel WHERE gel.appointment_id = a.id LIMIT 1) as google_sync_status,
+          (SELECT gel.google_event_id FROM google_calendar_event_links gel WHERE gel.appointment_id = a.id LIMIT 1) as google_event_id,
           (SELECT pay.amount FROM payments pay WHERE pay.appointment_id = a.id AND pay.tenant_id = a.tenant_id ORDER BY pay.created_at ASC LIMIT 1) as payment_amount,
           (SELECT pay.status FROM payments pay WHERE pay.appointment_id = a.id AND pay.tenant_id = a.tenant_id ORDER BY pay.created_at ASC LIMIT 1) as payment_status,
           (SELECT pay.payment_method FROM payments pay WHERE pay.appointment_id = a.id AND pay.tenant_id = a.tenant_id ORDER BY pay.created_at ASC LIMIT 1) as payment_method
@@ -265,6 +268,8 @@ export class AppointmentController {
           p.name as professional_name, p.registration_number, p.registration_type,
           s.name as service_name, s.price as service_price, s.duration_minutes,
           r.name as room_name,
+          (SELECT gel.sync_status FROM google_calendar_event_links gel WHERE gel.appointment_id = a.id LIMIT 1) as google_sync_status,
+          (SELECT gel.google_event_id FROM google_calendar_event_links gel WHERE gel.appointment_id = a.id LIMIT 1) as google_event_id,
           (SELECT pay.id FROM payments pay WHERE pay.appointment_id = a.id AND pay.tenant_id = a.tenant_id ORDER BY pay.created_at ASC LIMIT 1) as payment_id,
           (SELECT pay.status FROM payments pay WHERE pay.appointment_id = a.id AND pay.tenant_id = a.tenant_id ORDER BY pay.created_at ASC LIMIT 1) as payment_status,
           (SELECT pay.amount FROM payments pay WHERE pay.appointment_id = a.id AND pay.tenant_id = a.tenant_id ORDER BY pay.created_at ASC LIMIT 1) as payment_amount,
@@ -720,6 +725,11 @@ export class AppointmentController {
         logAudit(req, 'CREATE_APPOINTMENT', 'appointments', appointmentId, { appointmentNumber, startTime, endTime });
       }
 
+      // Sincroniza de forma resiliente com o Google Calendar (sem travar a criação caso haja falha externa)
+      GoogleCalendarService.syncAppointmentCreated(appointmentId, tenantId).catch(err => {
+        console.warn('[AppointmentController] Falha assíncrona ao sincronizar criação com Google Calendar:', err?.message || err);
+      });
+
       res.status(201).json({
         id: appointmentId,
         appointmentNumber,
@@ -907,6 +917,17 @@ export class AppointmentController {
 
       if (status === 'cancelled') {
         NotificationService.cancelAppointmentReminders(id as string);
+        if (tenantId) {
+          GoogleCalendarService.syncAppointmentCancelled(id as string, tenantId).catch(err => {
+            console.warn('[AppointmentController] Falha ao cancelar no Google Calendar:', err?.message || err);
+          });
+        }
+      } else if (current.status === 'cancelled' && ['scheduled', 'confirmed'].includes(status)) {
+        if (tenantId) {
+          GoogleCalendarService.syncAppointmentCreated(id as string, tenantId).catch(err => {
+            console.warn('[AppointmentController] Falha ao reativar no Google Calendar:', err?.message || err);
+          });
+        }
       }
 
       res.json({
@@ -1465,6 +1486,11 @@ export class AppointmentController {
         NotificationService.scheduleAppointmentReminder(id as string);
       }
 
+      if (tenantId) {
+        GoogleCalendarService.syncAppointmentUpdated(id as string, tenantId).catch(err => {
+          console.warn('[AppointmentController] Falha ao atualizar no Google Calendar:', err?.message || err);
+        });
+      }
       logAudit(req, 'UPDATE_APPOINTMENT', 'appointments', id, { serviceId, professionalId, roomId, insuranceId, newStart: safeStart, newEnd: safeEnd });
       res.json({ message: startChanged ? 'Atendimento remarcado com sucesso' : 'Dados do atendimento atualizados com sucesso' });
     } catch (err: any) {

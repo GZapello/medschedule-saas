@@ -49,7 +49,8 @@ export function calculateAvailableSlots(
   serviceId: string,
   dateStr: string, // 'YYYY-MM-DD'
   roomId?: string,
-  mockNow?: Date
+  mockNow?: Date,
+  externalBusyIntervals?: Array<{ startMin: number; endMin: number }>
 ): AvailableSlot[] {
   // 1. Busca dados do serviço
   const serviceStmt = db.prepare(`
@@ -275,6 +276,14 @@ export function calculateAvailableSlots(
         return current < blk.endMin && slotEndMin > blk.startMin;
       });
       if (hasBlockConflict) continue;
+
+      // Checa conflito com compromissos externos da Google Agenda (FreeBusy)
+      if (externalBusyIntervals && externalBusyIntervals.length > 0) {
+        const hasExternalConflict = externalBusyIntervals.some(ext => {
+          return current < ext.endMin && slotEndMin > ext.startMin;
+        });
+        if (hasExternalConflict) continue;
+      }
 
       const slotStartIso = `${dateStr}T${minutesToTime(current)}:00`;
       const slotEndIso = `${dateStr}T${minutesToTime(slotEndMin)}:00`;

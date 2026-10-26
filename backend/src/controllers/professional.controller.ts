@@ -12,11 +12,16 @@ import { resolveProfessionModule, cleanPracticeAreasForNewProfession } from '../
 import { ProfessionTaxonomyService } from '../services/profession-taxonomy.service';
 import { REGISTRATION_PROFESSION_ALIASES } from '../types/registration-professions';
 import { getAvailableModulesForProfessional } from '../utils/clinical-module';
+import { GoogleCalendarService } from '../services/google-calendar.service';
 
 export class ProfessionalController {
   static list(req: Request, res: Response): void {
     try {
       const tenantId = req.tenantId;
+      if (!tenantId) {
+        res.status(400).json({ error: 'Tenant não informado' });
+        return;
+      }
       if (!tenantId) {
         res.status(400).json({ error: 'Tenant não informado' });
         return;
@@ -88,10 +93,14 @@ export class ProfessionalController {
     }
   }
 
-  static getById(req: Request, res: Response): void {
+  static async getById(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
       const tenantId = req.tenantId;
+      if (!tenantId) {
+        res.status(400).json({ error: 'Tenant não informado' });
+        return;
+      }
 
       const stmt = db.prepare(`
         SELECT 
@@ -135,7 +144,23 @@ export class ProfessionalController {
         WHERE professional_id = ? AND tenant_id = ? AND end_datetime >= datetime('now')
         ORDER BY start_datetime ASC
       `);
-      const blockedTimes = blockStmt.all(id, tenantId);
+      const blockedTimes: any[] = blockStmt.all(id, tenantId);
+
+      // Consulta bloqueios de indisponibilidade da Google Agenda (FreeBusy)
+      try {
+        const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+        const busyRanges = await GoogleCalendarService.getBusyIntervals(tenantId, String(id), todayStr);
+        for (const b of busyRanges) {
+          blockedTimes.push({
+            id: `gcal-${b.start}`,
+            title: 'Indisponível por compromisso externo',
+            reason: 'Indisponível por compromisso externo',
+            start_datetime: b.start.replace('T', ' ').slice(0, 19),
+            end_datetime: b.end.replace('T', ' ').slice(0, 19),
+            type: 'google_busy'
+          });
+        }
+      } catch (_) {}
 
       res.json({
         professional,
@@ -159,6 +184,10 @@ export class ProfessionalController {
     try {
       const { id } = req.params;
       const tenantId = req.tenantId;
+      if (!tenantId) {
+        res.status(400).json({ error: 'Tenant não informado' });
+        return;
+      }
       const {
         name, professionId, specialtyId, specialtyName, specialtyCustom, registrationType, registrationNumber,
         bio, practiceAreas, bufferMinutes, photoUrl, gender, active,
@@ -348,6 +377,10 @@ export class ProfessionalController {
     try {
       const { id } = req.params;
       const tenantId = req.tenantId;
+      if (!tenantId) {
+        res.status(400).json({ error: 'Tenant não informado' });
+        return;
+      }
       const { schedules } = req.body; // Array de { day_of_week, start_time, end_time, break_start, break_end, is_active }
 
       if (!tenantId) {
@@ -682,6 +715,10 @@ export class ProfessionalController {
       }
 
       const tenantId = req.tenantId;
+      if (!tenantId) {
+        res.status(400).json({ error: 'Tenant não informado' });
+        return;
+      }
       const { professionalId, roomId, title, startDatetime, endDatetime, reason, type } = req.body;
 
       if (!title || !startDatetime || !endDatetime) {
@@ -725,6 +762,10 @@ export class ProfessionalController {
 
       const { blockId } = req.params;
       const tenantId = req.tenantId;
+      if (!tenantId) {
+        res.status(400).json({ error: 'Tenant não informado' });
+        return;
+      }
 
       db.prepare('DELETE FROM blocked_times WHERE id = ? AND tenant_id = ?').run(blockId, tenantId);
       logAudit(req, 'DELETE_BLOCKED_TIME', 'blocked_times', blockId);
@@ -740,6 +781,10 @@ export class ProfessionalController {
     try {
       const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
       const tenantId = req.tenantId;
+      if (!tenantId) {
+        res.status(400).json({ error: 'Tenant não informado' });
+        return;
+      }
       if (!tenantId) {
         res.status(400).json({ error: 'Tenant não informado' });
         return;

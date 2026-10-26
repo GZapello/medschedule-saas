@@ -47,6 +47,7 @@ import { PersonalController } from '../controllers/personal.controller';
 import { PersonalAIController } from '../controllers/personal-ai.controller';
 import { PersonalStudentLinkController } from '../controllers/personal-student-link.controller';
 import { IntegrationsController } from '../controllers/integrations.controller';
+import { GoogleCalendarController } from '../controllers/google-calendar.controller';
 import { FreeTrialController } from '../controllers/free-trial.controller';
 import { FileController } from '../controllers/file.controller';
 import { ClinicalReassessmentController } from '../controllers/clinical-reassessment.controller';
@@ -178,6 +179,12 @@ api.get('/v1/public/download-android', (req, res) => {
 // 2. ROTAS AUTENTICADAS (COM JWT + TENANT)
 // ==========================================
 mountPublicConsentRoutes(api);
+
+// Google Calendar OAuth 2.0 Callback e Webhook público de push
+api.get('/v1/integrations/google-calendar/callback', GoogleCalendarController.callback);
+api.get('/api/v1/integrations/google-calendar/callback', GoogleCalendarController.callback);
+api.post('/v1/integrations/google-calendar/webhook', GoogleCalendarController.webhook);
+api.post('/api/v1/integrations/google-calendar/webhook', GoogleCalendarController.webhook);
 
 api.use(authMiddleware);
 api.use(tenantMiddleware);
@@ -323,6 +330,17 @@ api.put('/v1/appointments/:id/reschedule', requireTenant, AppointmentController.
 api.post('/v1/appointments/:id/whatsapp-reminder', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), AppointmentController.sendWhatsAppReminder);
 api.get('/v1/appointments/:id/communications', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), AppointmentController.getCommunications);
 api.get('/v1/whatsapp/status', requireTenant, InfobipController.getClientStatus);
+
+// ==========================================
+// INTEGRAÇÃO GOOGLE CALENDAR ↔ AGENDA ZEMDA
+// ==========================================
+api.get('/v1/integrations/google-calendar/connect', requireTenant, GoogleCalendarController.connect);
+api.get('/v1/integrations/google-calendar/status', requireTenant, GoogleCalendarController.getStatus);
+api.get('/v1/integrations/google-calendar/calendars', requireTenant, GoogleCalendarController.getCalendars);
+api.put('/v1/integrations/google-calendar/settings', requireTenant, GoogleCalendarController.updateSettings);
+api.post('/v1/integrations/google-calendar/sync', requireTenant, GoogleCalendarController.sync);
+api.delete('/v1/integrations/google-calendar/disconnect', requireTenant, GoogleCalendarController.disconnect);
+api.post('/v1/integrations/google-calendar/divergence/:appointmentId/resolve', requireTenant, GoogleCalendarController.resolveDivergence);
 api.get('/v1/slots/available', requireTenant, SlotController.getAvailableSlots);
 
 // Prontuário & Evolução Clínica (Restrito estritamente a Profissionais e Admins Clínicos - LGPD)

@@ -1,10 +1,11 @@
 import { resolveBookingTenant, publicBookingProfessional, professionalBookingService, validBookingDate } from '../utils/public-booking';
 import { Request, Response } from 'express';
 import { calculateAvailableSlots } from '../utils/slot-calculator';
+import { GoogleCalendarService } from '../services/google-calendar.service';
 import { db } from '../config/database';
 
 export class SlotController {
-  static getAvailableSlots(req: Request, res: Response): void {
+  static async getAvailableSlots(req: Request, res: Response): Promise<void> {
     try {
       let tenantId = req.tenantId;
       const { tenantSlug, professionalId, serviceId, date, roomId } = req.query;
@@ -27,12 +28,23 @@ export class SlotController {
         return;
       }
 
+      // Consulta FreeBusy da Google Agenda com cache em memória e fallback resiliente
+      let externalBusyIntervals: Array<{ startMin: number; endMin: number }> = [];
+      try {
+        const busyRanges = await GoogleCalendarService.getBusyIntervals(tenantId, String(professionalId), String(date));
+        externalBusyIntervals = busyRanges.map(b => ({ startMin: b.startMin, endMin: b.endMin }));
+      } catch (fbErr) {
+        console.warn('[SlotController] Falha ao consultar FreeBusy Google Calendar:', fbErr);
+      }
+
       const slots = calculateAvailableSlots(
         tenantId,
         String(professionalId),
         String(serviceId),
         String(date),
-        roomId ? String(roomId) : undefined
+        roomId ? String(roomId) : undefined,
+        undefined,
+        externalBusyIntervals
       );
 
       res.json({

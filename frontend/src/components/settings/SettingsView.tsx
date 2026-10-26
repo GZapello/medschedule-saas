@@ -12,6 +12,7 @@ import { ServicesView } from '../services/ServicesView';
 import { ProfileSpecialties } from '../profile/ProfileSpecialties';
 import { ImportDataView } from '../import/ImportDataView';
 import { ProfessionalPayrollView } from '../payroll/ProfessionalPayrollView';
+import { GoogleCalendarIntegrationCard } from './integrations/GoogleCalendarIntegrationCard';
 import {
   Settings,
   Building2,
@@ -95,7 +96,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
       if (['clinic', 'clinica'].includes(initialSection)) return 'clinic';
       if (['account', 'profile', 'minha-conta'].includes(initialSection)) return 'account';
       if (['legal', 'privacidade'].includes(initialSection)) return 'legal';
-      if (['integrations', 'integracoes'].includes(initialSection)) return 'hub';
+      if (['integrations', 'integracoes', 'google-calendar'].includes(initialSection)) return 'integrations';
     }
     return 'hub';
   });
@@ -113,7 +114,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
       else if (['clinic', 'clinica'].includes(initialSection)) setActiveSection('clinic');
       else if (['account', 'profile', 'minha-conta'].includes(initialSection)) setActiveSection('account');
       else if (['legal', 'privacidade'].includes(initialSection)) setActiveSection('legal');
-      else if (['integrations', 'integracoes'].includes(initialSection)) setActiveSection('hub');
+      else if (['integrations', 'integracoes', 'google-calendar'].includes(initialSection)) setActiveSection('integrations');
       else if (initialSection === 'hub') setActiveSection('hub');
     }
   }, [initialSection]);
@@ -752,6 +753,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
       defaultTab: 'profile'
     },
     {
+      id: 'integrations',
+      title: 'Integrações',
+      desc: 'Sincronize sua Google Agenda (individual por profissional) e gerencie o WhatsApp oficial (Infobip).',
+      icon: Share2,
+      iconBg: 'bg-blue-50',
+      iconColor: 'text-blue-600',
+      tags: ['Google Agenda', 'WhatsApp', 'Infobip']
+    },
+    {
       id: 'billing',
       title: 'Assinatura & Plano',
       desc: 'Gerenciamento do plano ativo, limites de capacidade da clínica, faturas e opções de upgrade.',
@@ -790,6 +800,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
       iconBg: 'bg-cyan-50',
       iconColor: 'text-cyan-600',
       tags: ['Link Público', 'Agendamento Online']
+    },
+    {
+      id: 'integrations',
+      title: 'Integrações & Google Agenda',
+      desc: 'Sincronize seus atendimentos com sua Google Agenda pessoal e evite conflitos de horário.',
+      icon: Share2,
+      iconBg: 'bg-blue-50',
+      iconColor: 'text-blue-600',
+      tags: ['Google Agenda', 'Sincronização', 'Meet']
     },
     {
       id: 'legal',
@@ -1008,6 +1027,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
       {/* SEÇÃO: INTEGRAÇÕES (WhatsApp & Infobip) */}
       {activeSection === 'integrations' && (
         <div className="space-y-6">
+          <GoogleCalendarIntegrationCard />
           <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xs space-y-5 text-xs">
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
               <div className="flex items-center gap-3">

@@ -23,6 +23,7 @@ import {
   X,
   CheckCircle2,
   AlertTriangle,
+  AlertCircle,
   RotateCcw,
   Stethoscope,
   Ban,
@@ -638,6 +639,17 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
     }
   };
 
+  const handleResolveDivergence = async (apptId: string, action: 'apply_google' | 'keep_zemda') => {
+    try {
+      const res = await ApiClient.post<{ success: boolean; message: string }>(`/v1/integrations/google-calendar/divergence/${apptId}/resolve`, { action });
+      showToast(res.message || 'Divergência resolvida com sucesso', 'success');
+      fetchCalendarData();
+      setSelectedAppt(prev => prev ? { ...prev, google_sync_status: 'synced' } : null);
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao resolver divergência', 'error');
+    }
+  };
+
   const executeStartConsultation = async (appointment: Appointment, selectedModule?: string) => {
     try {
       const payload: any = { status: 'in_progress' };
@@ -1085,7 +1097,29 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                                 <Clock className="w-2.5 h-2.5" />
                                 {((appt.start_time || '').replace(' ', 'T').split('T')[1] || '').slice(0, 5)}
                               </span>
-                              {appt.status === 'in_progress' && <span className="font-semibold">Em atendimento</span>}
+                              <div className="flex items-center gap-1.5">
+                                {appt.google_sync_status === 'synced' && (
+                                  <span title="Sincronizado com Google Agenda" className="text-emerald-700 inline-flex items-center gap-0.5 font-bold">
+                                    <CalendarIcon className="w-2.5 h-2.5 text-emerald-600" /> ✓
+                                  </span>
+                                )}
+                                {appt.google_sync_status === 'pending' && (
+                                  <span title="Sincronização pendente com Google Agenda" className="text-amber-700 inline-flex items-center gap-0.5 font-bold">
+                                    <CalendarIcon className="w-2.5 h-2.5 text-amber-600" /> ⟳
+                                  </span>
+                                )}
+                                {appt.google_sync_status === 'error' && (
+                                  <span title="Erro na sincronização com Google Agenda" className="text-rose-700 inline-flex items-center gap-0.5 font-bold">
+                                    <CalendarIcon className="w-2.5 h-2.5 text-rose-600" /> !
+                                  </span>
+                                )}
+                                {appt.google_sync_status === 'divergent' && (
+                                  <span title="Horário alterado no Google Agenda" className="text-amber-800 bg-amber-200/80 px-1 py-0.2 rounded inline-flex items-center gap-0.5 font-bold">
+                                    <AlertCircle className="w-2.5 h-2.5 text-amber-700" /> !
+                                  </span>
+                                )}
+                                {appt.status === 'in_progress' && <span className="font-semibold">Em atendimento</span>}
+                              </div>
                             </div>
                           </div>
                         ))}
@@ -1229,8 +1263,30 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                                 })()}
                               </div>
                             </div>
-                            <div className={`text-xs font-semibold px-2.5 py-1 rounded-full ${getStatusColor(appt.status)}`}>
-                              {getStatusLabel(appt.status)}
+                            <div className="flex items-center gap-2">
+                              {appt.google_sync_status === 'synced' && (
+                                <span title="Sincronizado com Google Agenda" className="text-emerald-700 inline-flex items-center gap-1 text-[11px] font-bold">
+                                  <CalendarIcon className="w-3 h-3 text-emerald-600" /> ✓
+                                </span>
+                              )}
+                              {appt.google_sync_status === 'pending' && (
+                                <span title="Sincronização pendente com Google Agenda" className="text-amber-700 inline-flex items-center gap-1 text-[11px] font-bold">
+                                  <CalendarIcon className="w-3 h-3 text-amber-600" /> ⟳
+                                </span>
+                              )}
+                              {appt.google_sync_status === 'error' && (
+                                <span title="Erro na sincronização com Google Agenda" className="text-rose-700 inline-flex items-center gap-1 text-[11px] font-bold">
+                                  <CalendarIcon className="w-3 h-3 text-rose-600" /> !
+                                </span>
+                              )}
+                              {appt.google_sync_status === 'divergent' && (
+                                <span title="Horário alterado no Google Agenda" className="text-amber-800 bg-amber-100 border border-amber-300 px-1.5 py-0.5 rounded inline-flex items-center gap-1 text-[10px] font-bold">
+                                  <AlertCircle className="w-3 h-3 text-amber-700" /> Horário alterado no Google
+                                </span>
+                              )}
+                              <div className={`text-xs font-semibold px-2.5 py-1 rounded-full ${getStatusColor(appt.status)}`}>
+                                {getStatusLabel(appt.status)}
+                              </div>
                             </div>
                           </div>
                         ))}
@@ -1313,6 +1369,24 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                     <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${getStatusColor(selectedAppt.status)}`}>
                       {getStatusLabel(selectedAppt.status)}
                     </span>
+                    {selectedAppt.google_sync_status === 'synced' && (
+                      <span title="Sincronizado com Google Agenda" className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        <CalendarIcon className="w-3 h-3 text-emerald-600" />
+                        Google Agenda ✓
+                      </span>
+                    )}
+                    {selectedAppt.google_sync_status === 'pending' && (
+                      <span title="Sincronização pendente com Google Agenda" className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                        <CalendarIcon className="w-3 h-3 text-amber-600" />
+                        Google Agenda ⟳
+                      </span>
+                    )}
+                    {selectedAppt.google_sync_status === 'error' && (
+                      <span title="Erro na sincronização com Google Agenda" className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
+                        <CalendarIcon className="w-3 h-3 text-rose-600" />
+                        Google Agenda !
+                      </span>
+                    )}
                     <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
                       {selectedAppt.modality === 'online' ? (
                         <>
