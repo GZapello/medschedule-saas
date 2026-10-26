@@ -30,7 +30,8 @@ import {
   Phone,
   History,
   FileText,
-  Settings2
+  Settings2,
+  Loader2
 } from 'lucide-react';
 import { FinishConsultationModal } from '../clinical/FinishConsultationModal';
 import { AppointmentConsultation } from '../clinical/AppointmentConsultation';
@@ -40,13 +41,21 @@ import { SelectConsultationModuleModal, getCompatibleClinicalModules, getModuleF
 import { WhatsAppReminderModal, WhatsAppIcon } from '../common/WhatsAppReminderModal';
 import { isValidPhoneNumber, formatPhoneDisplay } from '../../utils/phone.utils';
 import { useMobileLayout } from '../../hooks/useMobileLayout';
+import { GoogleIcon } from '../auth/GoogleAuthButton';
+import { useGoogleCalendarStatus } from '../../hooks/useGoogleCalendarStatus';
 
 interface CalendarViewProps {
   onOpenNewAppointment: (prefill?: { date?: string; time?: string; professionalId?: string }) => void;
+  onNavigate?: (view: string, subId?: string | null) => void;
 }
 
-export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment }) => {
+export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment, onNavigate }) => {
   const mobile = useMobileLayout();
+  const {
+    googleCalendarConnected,
+    connecting: connectingGoogle,
+    connectGoogleCalendar
+  } = useGoogleCalendarStatus();
   const [consentPatientId, setConsentPatientId] = useState<string | null>(null);
   const auth = useAuth();
   const { currentTenant, clientTermLabel } = auth;
@@ -981,6 +990,24 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
               Semana
             </button>
           </div>
+
+          {!googleCalendarConnected && (
+            <button
+              type="button"
+              onClick={() => connectGoogleCalendar(onNavigate)}
+              disabled={connectingGoogle}
+              className="flex-1 sm:flex-initial justify-center flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 active:bg-slate-100 border border-slate-200 hover:border-slate-300 rounded-xl shadow-2xs transition-all cursor-pointer min-h-[38px] disabled:opacity-60"
+              title="Sincronizar seus atendimentos do Zemda com o Google Agenda"
+            >
+              {connectingGoogle ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" />
+              ) : (
+                <GoogleIcon className="w-3.5 h-3.5 shrink-0" />
+              )}
+              <span className="hidden sm:inline">Conectar Google Agenda</span>
+              <span className="sm:hidden">Google Agenda</span>
+            </button>
+          )}
 
           <button
             data-tour="btn-new-appointment"

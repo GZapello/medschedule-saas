@@ -1320,7 +1320,10 @@ const AppContent: React.FC = () => {
 
           {currentView === 'calendar' && (
             (isClinicAdmin || isProfessional || isReceptionist || hasPermission('view_schedule')) ? (
-              <CalendarView onOpenNewAppointment={handleOpenNewAppointment} />
+              <CalendarView
+                onOpenNewAppointment={handleOpenNewAppointment}
+                onNavigate={handleNavigateView}
+              />
             ) : (
               <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
                 <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mb-4">
