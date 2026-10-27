@@ -1017,112 +1017,173 @@ interface EsteticPlanItemForm {
         );
       })()}
       {dataError && <div role="alert" className="m-4 p-3 rounded-xl bg-red-50 text-red-800">{dataError} <button type="button" onClick={() => loadPatientData(selectedPatientId, activeArea)}>Tentar novamente</button></div>}
-      {/* 1. CABEÇALHO PROFISSIONAL COM SELETOR DE ÁREA E BUSCA DE PACIENTE (LINHA 1) */}
-      <ProfessionalModuleHeader
-        icon={Sparkles}
-        iconGradient={areaTheme.gradient}
-        iconShadow={areaTheme.shadow}
-        title="ZemdaEstetic"
-        badgeLabel={areaTheme.title}
-        badgeVariant={areaTheme.badge}
-        secondaryBadge={
-          isDentist ? (
-            <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200 flex items-center gap-1">
-              <ShieldCheck className="w-3 h-3" /> HOF Integrado
-            </span>
-          ) : undefined
-        }
-        description="Avaliação estruturada por área, rastreabilidade de produtos, fotos clínicas e motor anatômico Zemda360."
-      >
-        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-          {/* SELETOR DE ÁREA DE ATUAÇÃO (FACIAL, CORPORAL, CAPILAR) */}
-          <div className="relative">
-            <button
-              type="button"
-              data-tour="estetic-area-selector"
-              onClick={() => setIsAreaDropdownOpen(!isAreaDropdownOpen)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 text-xs font-bold transition-all shadow-xs cursor-pointer"
-            >
-              <span>Área: <strong>{areaTheme.title}</strong></span>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
-            </button>
+      {/* 1. CABEÇALHO PROFISSIONAL COM SELETOR DE ÁREA E BUSCA DE PACIENTE (Exibido apenas fora do atendimento agendado) */}
+      {!initialAppointmentId && (
+        <ProfessionalModuleHeader
+          icon={Sparkles}
+          iconGradient={areaTheme.gradient}
+          iconShadow={areaTheme.shadow}
+          title="ZemdaEstetic"
+          badgeLabel={areaTheme.title}
+          badgeVariant={areaTheme.badge}
+          secondaryBadge={
+            isDentist ? (
+              <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200 flex items-center gap-1">
+                <ShieldCheck className="w-3 h-3" /> HOF Integrado
+              </span>
+            ) : undefined
+          }
+          description="Avaliação estruturada por área, rastreabilidade de produtos, fotos clínicas e motor anatômico Zemda360."
+        >
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+            {/* SELETOR DE ÁREA DE ATUAÇÃO (FACIAL, CORPORAL, CAPILAR) */}
+            <div className="relative">
+              <button
+                type="button"
+                data-tour="estetic-area-selector"
+                onClick={() => setIsAreaDropdownOpen(!isAreaDropdownOpen)}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 text-xs font-bold transition-all shadow-xs cursor-pointer"
+              >
+                <span>Área: <strong>{areaTheme.title}</strong></span>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
+              </button>
 
-            {isAreaDropdownOpen && (
-              <div className="absolute right-0 mt-1 w-56 bg-white rounded-2xl shadow-xl border border-slate-200 py-1.5 z-30 animate-in fade-in zoom-in-95 duration-150">
-                <div className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  Áreas Clínicas Disponíveis
+              {isAreaDropdownOpen && (
+                <div className="absolute right-0 mt-1 w-56 bg-white rounded-2xl shadow-xl border border-slate-200 py-1.5 z-30 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    Áreas Clínicas Disponíveis
+                  </div>
+                  {(['FACIAL', 'CORPORAL', 'CAPILAR'] as EsteticArea[]).map((area) => {
+                    const isAllowed = allowedAreas.includes(area) || isSuperAdmin;
+                    const label = area === 'FACIAL' ? 'Estética Facial' : area === 'CORPORAL' ? 'Estética Corporal' : 'Estética Capilar';
+                    return (
+                      <button
+                        key={area}
+                        type="button"
+                        disabled={!isAllowed}
+                        onClick={() => {
+                          if (isAllowed) {
+                            changeArea(area);
+                            setIsAreaDropdownOpen(false);
+                          }
+                        }}
+                        className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between transition-colors ${
+                          activeArea === area
+                            ? 'bg-slate-100 font-extrabold text-slate-900'
+                            : isAllowed
+                            ? 'text-slate-700 hover:bg-slate-50 cursor-pointer'
+                            : 'text-slate-300 bg-slate-50/50 cursor-not-allowed'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full ${
+                            area === 'FACIAL' ? 'bg-rose-500' : area === 'CORPORAL' ? 'bg-teal-500' : 'bg-amber-500'
+                          }`} />
+                          <span>{label}</span>
+                        </div>
+                        {!isAllowed && (
+                          <span className="flex items-center gap-1 text-[10px] text-slate-400 font-medium">
+                            <Lock className="w-3 h-3" /> Bloqueado
+                          </span>
+                        )}
+                        {activeArea === area && <Check className="w-3.5 h-3.5 text-emerald-600" />}
+                      </button>
+                    );
+                  })}
                 </div>
-                {(['FACIAL', 'CORPORAL', 'CAPILAR'] as EsteticArea[]).map((area) => {
-                  const isAllowed = allowedAreas.includes(area) || isSuperAdmin;
-                  const label = area === 'FACIAL' ? 'Estética Facial' : area === 'CORPORAL' ? 'Estética Corporal' : 'Estética Capilar';
-                  return (
-                    <button
-                      key={area}
-                      type="button"
-                      disabled={!isAllowed}
-                      onClick={() => {
-                        if (isAllowed) {
-                          changeArea(area);
-                          setIsAreaDropdownOpen(false);
-                        }
-                      }}
-                      className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between transition-colors ${
-                        activeArea === area
-                          ? 'bg-slate-100 font-extrabold text-slate-900'
-                          : isAllowed
-                          ? 'text-slate-700 hover:bg-slate-50 cursor-pointer'
-                          : 'text-slate-300 bg-slate-50/50 cursor-not-allowed'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className={`w-2 h-2 rounded-full ${
-                          area === 'FACIAL' ? 'bg-rose-500' : area === 'CORPORAL' ? 'bg-teal-500' : 'bg-amber-500'
-                        }`} />
-                        <span>{label}</span>
-                      </div>
-                      {!isAllowed && (
-                        <span className="flex items-center gap-1 text-[10px] text-slate-400 font-medium">
-                          <Lock className="w-3 h-3" /> Bloqueado
-                        </span>
-                      )}
-                      {activeArea === area && <Check className="w-3.5 h-3.5 text-emerald-600" />}
-                    </button>
-                  );
-                })}
+              )}
+            </div>
+
+            <div className="w-64 sm:w-72 lg:w-80" data-tour="estetic-patient-select">
+              <PatientSearchSelect
+                value={selectedPatientId}
+                selectedPatient={selectedPatient}
+                onChange={handleSelectPatient}
+                placeholder="Buscar paciente para atendimento estético..."
+                compact
+              />
+            </div>
+          </div>
+        </ProfessionalModuleHeader>
+      )}
+
+      {/* 2. FAIXA HORIZONTAL COMPACTA DE AÇÕES DO ATENDIMENTO (LINHA 2) */}
+      {Boolean(selectedPatientId) && (
+        <div className="bg-white border-b border-slate-200 px-3.5 sm:px-6 py-1.5 shrink-0 shadow-2xs">
+          <div className="max-w-7xl mx-auto flex items-center gap-1.5 sm:gap-2 flex-wrap">
+            {/* Seletor compacto de área quando em atendimento agendado */}
+            {Boolean(initialAppointmentId) && (
+              <div className="relative">
+                <button
+                  type="button"
+                  data-tour="estetic-area-selector"
+                  onClick={() => setIsAreaDropdownOpen(!isAreaDropdownOpen)}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-800 text-xs font-bold transition-all cursor-pointer"
+                >
+                  <span>Área: <strong>{areaTheme.title}</strong></span>
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
+                </button>
+                {isAreaDropdownOpen && (
+                  <div className="absolute left-0 mt-1 w-56 bg-white rounded-2xl shadow-xl border border-slate-200 py-1.5 z-30 animate-in fade-in zoom-in-95 duration-150">
+                    <div className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      Áreas Clínicas Disponíveis
+                    </div>
+                    {(['FACIAL', 'CORPORAL', 'CAPILAR'] as EsteticArea[]).map((area) => {
+                      const isAllowed = allowedAreas.includes(area) || isSuperAdmin;
+                      const label = area === 'FACIAL' ? 'Estética Facial' : area === 'CORPORAL' ? 'Estética Corporal' : 'Estética Capilar';
+                      return (
+                        <button
+                          key={area}
+                          type="button"
+                          disabled={!isAllowed}
+                          onClick={() => {
+                            if (isAllowed) {
+                              changeArea(area);
+                              setIsAreaDropdownOpen(false);
+                            }
+                          }}
+                          className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between transition-colors ${
+                            activeArea === area
+                              ? 'bg-slate-100 font-extrabold text-slate-900'
+                              : isAllowed
+                              ? 'text-slate-700 hover:bg-slate-50 cursor-pointer'
+                              : 'text-slate-300 bg-slate-50/50 cursor-not-allowed'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className={`w-2 h-2 rounded-full ${
+                              area === 'FACIAL' ? 'bg-rose-500' : area === 'CORPORAL' ? 'bg-teal-500' : 'bg-amber-500'
+                            }`} />
+                            <span>{label}</span>
+                          </div>
+                          {!isAllowed && (
+                            <span className="flex items-center gap-1 text-[10px] text-slate-400 font-medium">
+                              <Lock className="w-3 h-3" /> Bloqueado
+                            </span>
+                          )}
+                          {activeArea === area && <Check className="w-3.5 h-3.5 text-emerald-600" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
-          </div>
 
-          <div className="w-64 sm:w-72 lg:w-80" data-tour="estetic-patient-select">
-            <PatientSearchSelect
-              value={selectedPatientId}
-              selectedPatient={selectedPatient}
-              onChange={handleSelectPatient}
-              placeholder="Buscar paciente para atendimento estético..."
-              compact
-            />
-          </div>
-        </div>
-      </ProfessionalModuleHeader>
-
-      {/* 2. FAIXA HORIZONTAL DO ATENDIMENTO (LINHA 2 — SOMENTE SE PACIENTE ESTIVER SELECIONADO) */}
-      {Boolean(selectedPatientId) && (
-        <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-2.5 shrink-0 shadow-2xs">
-          <div className="max-w-7xl mx-auto flex items-center gap-2.5 sm:gap-3 flex-wrap">
-            {/* Paciente selecionado com chip visual com "X" para desmarcar */}
-            <div className="inline-flex items-center gap-2 bg-slate-100 hover:bg-slate-200/70 border border-slate-200 rounded-xl px-2.5 py-1 transition-colors shrink-0">
-              <div className="w-6 h-6 rounded-lg bg-white border border-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center shrink-0">
-                <User className="w-3.5 h-3.5" />
-              </div>
-              <span className="font-bold text-xs text-slate-900 truncate max-w-[160px] sm:max-w-[240px]">
-                {overviewData?.patient?.full_name || selectedPatient?.full_name || selectedPatient?.name || 'Paciente Selecionado'}
-              </span>
-              {(overviewData?.patient?.birth_date || selectedPatient?.birth_date) && (
-                <span className="text-[10px] text-slate-500 hidden sm:inline">
-                  ({new Date(overviewData?.patient?.birth_date || selectedPatient?.birth_date!).toLocaleDateString('pt-BR')})
+            {/* Chip de paciente exibido apenas fora do atendimento agendado (evita duplicação com o cabeçalho compacto) */}
+            {!initialAppointmentId && (
+              <div className="inline-flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200/70 border border-slate-200 rounded-lg px-2 py-0.5 transition-colors shrink-0">
+                <div className="w-5 h-5 rounded-md bg-white border border-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center shrink-0">
+                  <User className="w-3.5 h-3.5" />
+                </div>
+                <span className="font-bold text-xs text-slate-900 truncate max-w-[160px] sm:max-w-[240px]">
+                  {overviewData?.patient?.full_name || selectedPatient?.full_name || selectedPatient?.name || 'Paciente Selecionado'}
                 </span>
-              )}
-              {!initialAppointmentId && (
+                {(overviewData?.patient?.birth_date || selectedPatient?.birth_date) && (
+                  <span className="text-[10px] text-slate-500 hidden sm:inline">
+                    ({new Date(overviewData?.patient?.birth_date || selectedPatient?.birth_date!).toLocaleDateString('pt-BR')})
+                  </span>
+                )}
                 <button
                   type="button"
                   onClick={() => handleSelectPatient('')}
@@ -1131,17 +1192,34 @@ interface EsteticPlanItemForm {
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
-              )}
-            </div>
+              </div>
+            )}
 
             {/* Autosave */}
             <ClinicalAutosaveIndicator status={autosave.autosaveStatus} lastSavedTime={autosave.lastSavedTime} />
 
-            {/* Ferramentas e Ações Rápidas */}
+            {/* Ferramentas e Ações Rápidas em linha compacta */}
+            <button
+              type="button"
+              onClick={() => changeTab('history')}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-bold shadow-2xs cursor-pointer whitespace-nowrap"
+            >
+              <RefreshCw className="w-3.5 h-3.5 text-sky-600" />
+              <span>Prontuários Anteriores</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => void loadPatientData(selectedPatientId, activeArea)}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-bold shadow-2xs cursor-pointer whitespace-nowrap"
+            >
+              <span>Carregar últimos dados salvos</span>
+            </button>
+
             <button
               type="button"
               onClick={() => setActiveTab('assessment')}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-bold shadow-xs cursor-pointer whitespace-nowrap"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-bold shadow-2xs cursor-pointer whitespace-nowrap"
             >
               <Plus className="w-3.5 h-3.5 text-rose-600" />
               <span>Nova Avaliação</span>
@@ -1150,7 +1228,7 @@ interface EsteticPlanItemForm {
             <button
               type="button"
               onClick={() => setIsNewPhotoModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-bold shadow-xs cursor-pointer whitespace-nowrap"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-bold shadow-2xs cursor-pointer whitespace-nowrap"
             >
               <Camera className="w-3.5 h-3.5 text-sky-600" />
               <span>Fotografias</span>
@@ -1159,7 +1237,7 @@ interface EsteticPlanItemForm {
             <button
               type="button"
               onClick={() => setIsNewProcedureModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs cursor-pointer transition-colors whitespace-nowrap"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-2xs cursor-pointer transition-colors whitespace-nowrap"
             >
               <Scissors className="w-3.5 h-3.5" />
               <span>Procedimento</span>
@@ -1168,7 +1246,7 @@ interface EsteticPlanItemForm {
             <button
               type="button"
               onClick={async () => { if (!mapSave.current || await mapSave.current()) setIsZemda360ModalOpen(true); }}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold shadow-xs cursor-pointer transition-colors whitespace-nowrap"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold shadow-2xs cursor-pointer transition-colors whitespace-nowrap"
             >
               <Activity className="w-3.5 h-3.5" />
               <span>Zemda360</span>
@@ -1182,10 +1260,10 @@ interface EsteticPlanItemForm {
         </div>
       )}
 
-      {/* 3. MENU HORIZONTAL DE ABAS CLÍNICAS (LINHA 3) */}
+      {/* 3. MENU HORIZONTAL DE ABAS CLÍNICAS COMPACTO (LINHA 3) */}
       <div className="bg-white border-b border-slate-200 shrink-0 sticky top-0 z-10 shadow-2xs">
         <HorizontalTabNav scroll={tabScroll}>
-          <div {...tabScrollProps} className={`${tabScrollProps.className} max-w-7xl mx-auto flex items-center gap-1 py-2`}>
+          <div {...tabScrollProps} className={`${tabScrollProps.className} max-w-7xl mx-auto flex items-center gap-1 py-1`}>
             {[
               { id: 'overview', label: 'Visão Geral', icon: Layers },
               { id: 'assessment', label: 'Avaliação Estética', icon: FileText },
@@ -1196,7 +1274,7 @@ interface EsteticPlanItemForm {
               { id: 'evolutions', label: `Evoluções (${evolutions.length})`, icon: CheckCircle2 },
               { id: 'returns', label: `Retornos (${returnsList.length})`, icon: Clock },
               { id: 'before_after', label: 'Antes × Depois', icon: ArrowLeftRight },
-              { id: 'history', label: 'Histórico Completo', icon: RefreshCw }
+              { id: 'history', label: 'Histórico Completo', icon: RefreshCw }, ...(selectedPatientId && !appointmentCompleted ? [{ id: 'finish', label: 'Finalizar', icon: CheckCircle2 }] : [])
             ].map(tab => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -1206,14 +1284,14 @@ interface EsteticPlanItemForm {
                   type="button"
                   data-active={isActive ? 'true' : 'false'}
                   data-tour={`tab-${tab.id}`}
-                  onClick={() => changeTab(tab.id as any)}
-                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                  onClick={() => tab.id === 'finish' ? void requestFinish() : changeTab(tab.id as any)}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer ${
                     isActive
                       ? areaTheme.activeTab
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                   }`}
                 >
-                  <Icon className="w-4 h-4" />
+                  <Icon className="w-3.5 h-3.5" />
                   <span>{tab.label}</span>
                 </button>
               );
@@ -1223,7 +1301,7 @@ interface EsteticPlanItemForm {
       </div>
 
       {/* 4. CONTEÚDO PRINCIPAL DO WORKSPACE */}
-      <div className="flex-1 p-4 md:p-6 overflow-y-auto">
+      <div className="flex-1 pt-3 pb-5 px-3.5 md:px-6 overflow-y-auto">
         <div className="max-w-7xl mx-auto">
           {!selectedPatientId ? (
             <ClinicalModuleEmptyState

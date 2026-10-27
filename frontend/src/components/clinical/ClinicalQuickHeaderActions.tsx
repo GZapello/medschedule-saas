@@ -47,7 +47,7 @@ export const ClinicalQuickHeaderActions: React.FC<ClinicalQuickHeaderActionsProp
   toolsVariant = 'slate'
 }) => {
   return (
-    <div className={`flex items-center gap-2.5 flex-wrap ${className}`}>
+    <div className={`flex items-center gap-1.5 sm:gap-2 flex-wrap flex-1 ${className}`}>
       {/* 1. Indicador Discreto de Autosave Universal */}
       {autosaveStatus && (
         <div data-tour="clinical-autosave" className="inline-flex">
@@ -61,7 +61,7 @@ export const ClinicalQuickHeaderActions: React.FC<ClinicalQuickHeaderActionsProp
           type="button"
           data-tour="clinical-previous-records"
           onClick={onViewPreviousRecords}
-          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 shadow-xs transition-all cursor-pointer whitespace-nowrap"
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 shadow-2xs transition-all cursor-pointer whitespace-nowrap"
           title="Visualizar histórico completo de prontuários e atendimentos anteriores"
         >
           <FileText className="w-3.5 h-3.5 text-sky-600" />
@@ -76,7 +76,7 @@ export const ClinicalQuickHeaderActions: React.FC<ClinicalQuickHeaderActionsProp
           disabled={isSubmitting}
           onClick={onLoadSavedClinicalData}
           title="Carregar os últimos registros clínicos nos campos atuais para revisão e edição"
-          className="px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 shadow-xs transition-all cursor-pointer whitespace-nowrap disabled:opacity-50"
+          className="px-2.5 py-1 rounded-lg text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 shadow-2xs transition-all cursor-pointer whitespace-nowrap disabled:opacity-50"
         >
           Carregar últimos dados salvos
         </button>
@@ -88,7 +88,7 @@ export const ClinicalQuickHeaderActions: React.FC<ClinicalQuickHeaderActionsProp
           type="button"
           data-tour="clinical-reports"
           onClick={onViewReports}
-          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 shadow-xs transition-all cursor-pointer whitespace-nowrap"
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 shadow-2xs transition-all cursor-pointer whitespace-nowrap"
           title="Visualizar relatórios clínicos, gráficos e histórico longitudinal do paciente"
         >
           <ReportsIcon className="w-3.5 h-3.5 text-indigo-600" />

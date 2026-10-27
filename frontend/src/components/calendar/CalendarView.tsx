@@ -1428,11 +1428,12 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                         </span>
                         <button
                           type="button"
-                          onClick={() => setWhatsappReminderAppt(selectedAppt)}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200/80 text-[11px] font-semibold transition-colors cursor-pointer"
+                          disabled
+                          title="Integração com WhatsApp em breve"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100/70 text-slate-400 border border-slate-200/80 text-[11px] font-medium cursor-not-allowed select-none opacity-80"
                         >
-                          <WhatsAppIcon className="w-3 h-3 fill-emerald-600 shrink-0" />
-                          <span>WhatsApp</span>
+                          <WhatsAppIcon className="w-3 h-3 fill-slate-400 shrink-0" />
+                          <span>Em breve</span>
                         </button>
                       </>
                     ) : (
@@ -1756,29 +1757,15 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
 
                   {/* Linha de Ações Secundárias: Abrir no WhatsApp + Gerenciar agendamento */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {(() => {
-                      const hasPhone = isValidPhoneNumber(selectedAppt.patient_phone);
-                      return (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (hasPhone) {
-                              setWhatsappReminderAppt(selectedAppt);
-                            }
-                          }}
-                          disabled={!hasPhone}
-                          title={hasPhone ? 'Abrir no WhatsApp' : 'Paciente sem telefone cadastrado'}
-                          className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold transition-all ${
-                            hasPhone
-                              ? 'bg-white hover:bg-emerald-50 text-emerald-700 border border-slate-200 hover:border-emerald-300 shadow-2xs cursor-pointer'
-                              : 'bg-slate-50 text-slate-400 border border-slate-200 opacity-60 cursor-not-allowed'
-                          }`}
-                        >
-                          <WhatsAppIcon className={`w-4 h-4 ${hasPhone ? 'fill-emerald-600' : 'fill-slate-400'}`} />
-                          <span>Abrir no WhatsApp</span>
-                        </button>
-                      );
-                    })()}
+                    <button
+                      type="button"
+                      disabled
+                      title="Integração com WhatsApp em breve"
+                      className="flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-medium bg-slate-50 text-slate-400 border border-slate-200/80 opacity-80 cursor-not-allowed select-none"
+                    >
+                      <WhatsAppIcon className="w-4 h-4 fill-slate-400 shrink-0" />
+                      <span>Em breve</span>
+                    </button>
 
                     <button
                       type="button"

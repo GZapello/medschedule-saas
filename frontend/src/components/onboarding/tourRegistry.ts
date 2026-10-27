@@ -573,8 +573,8 @@ export const MODULE_TOURS: Record<string, TourDefinition> = {
         id: 'fisio_pain',
         target: '[data-tour="tab-pain_zemdabody"]',
         route: 'zemda-fisio',
-        title: 'Mapa da Dor & Zemda360',
-        description: 'Localização anatômica precisa da dor (EVA) integrada ao mapeamento corporal interativo.',
+        title: 'Mapa & Histórico (Zemda360)',
+        description: 'Mapeamento corporal interativo para avaliações regionais e acompanhamento longitudinal.',
         position: 'bottom'
       },
       {

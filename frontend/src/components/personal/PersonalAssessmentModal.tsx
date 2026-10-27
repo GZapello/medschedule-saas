@@ -757,9 +757,9 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn mobile-modal">
-      <div className="bg-white rounded-3xl max-w-5xl w-full max-h-[94vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
+      <div className={`bg-white rounded-3xl ${postureOnly || activeTab === 'photos_notes' ? 'max-w-7xl' : 'max-w-5xl'} w-full max-h-[95vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden`}>
         {/* Header */}
-        <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
+        <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-purple-600 text-white flex items-center justify-center shadow-md shadow-purple-600/20">
               <ClipboardCheck className="w-5 h-5" />

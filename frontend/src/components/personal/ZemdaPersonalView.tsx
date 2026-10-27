@@ -315,175 +315,177 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
         onClose={() => setFinishAppointment(null)}
         onCompleted={() => { setAppointmentCompleted(true); }}
         onFinished={() => { setFinishAppointment(null); onFinishConsultation?.(); }} />}
-      <ProfessionalModuleHeader
-        icon={Dumbbell}
-        iconGradient="from-emerald-600 to-teal-700"
-        iconShadow="shadow-emerald-600/20"
-        title="ZemdaPersonal"
-        badgeLabel="Treinamento & Prescrição"
-        badgeVariant="bg-emerald-100 text-emerald-800 border-emerald-200"
-        description="Gestão de alunos, dobras cutâneas (Pollock), periodização e mapa 3D de sobrecarga muscular."
-      >
-        {/* Barra de Busca Rápida Global */}
-        <div ref={searchContainerRef} className="relative flex-1 min-w-0 lg:min-w-[220px] max-w-xs md:max-w-sm">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Buscar aluno, exercício ou treino..."
-            value={searchQuery}
-            onFocus={() => setIsSearchOpen(true)}
-            onChange={(e) => {
-              setIsSearchOpen(true);
-              handleGlobalSearch(e.target.value);
-            }}
-            className="w-full pl-10 pr-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:bg-white outline-none transition-all"
-          />
+      {!(initialAppointmentId || lockStudentContext) && (
+        <ProfessionalModuleHeader
+          icon={Dumbbell}
+          iconGradient="from-emerald-600 to-teal-700"
+          iconShadow="shadow-emerald-600/20"
+          title="ZemdaPersonal"
+          badgeLabel="Treinamento & Prescrição"
+          badgeVariant="bg-emerald-100 text-emerald-800 border-emerald-200"
+          description="Gestão de alunos, dobras cutâneas (Pollock), periodização e mapa 3D de sobrecarga muscular."
+        >
+          {/* Barra de Busca Rápida Global */}
+          <div ref={searchContainerRef} className="relative flex-1 min-w-0 lg:min-w-[220px] max-w-xs md:max-w-sm">
+            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Buscar aluno, exercício ou treino..."
+              value={searchQuery}
+              onFocus={() => setIsSearchOpen(true)}
+              onChange={(e) => {
+                setIsSearchOpen(true);
+                handleGlobalSearch(e.target.value);
+              }}
+              className="w-full pl-10 pr-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:bg-white outline-none transition-all"
+            />
 
-          {/* Dropdown de Resultados da Busca */}
-          {(isSearchOpen || searchResults) && (
-            <div className="absolute top-full right-0 mt-2 w-[min(20rem,calc(100vw-3rem))] lg:w-80 bg-white rounded-2xl shadow-xl border border-slate-200 p-3 z-50 max-h-80 overflow-y-auto space-y-3 animate-slideDown">
-              {/* Botão + Cadastrar novo paciente */}
-              <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-xs border-b border-slate-100 p-1 mb-2">
-                <button
-                  type="button"
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setNewPatientSearchQuery(searchQuery.trim());
-                    setIsNewPatientModalOpen(true);
-                    setIsSearchOpen(false);
-                    setSearchResults(null);
-                  }}
-                  className="w-full text-left px-3 py-2 flex items-center gap-2.5 rounded-xl text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100/90 transition-colors cursor-pointer border border-teal-200/70 shadow-2xs"
-                >
-                  <div className="w-5 h-5 rounded-lg bg-teal-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-                    <Plus className="w-3.5 h-3.5" />
+            {/* Dropdown de Resultados da Busca */}
+            {(isSearchOpen || searchResults) && (
+              <div className="absolute top-full right-0 mt-2 w-[min(20rem,calc(100vw-3rem))] lg:w-80 bg-white rounded-2xl shadow-xl border border-slate-200 p-3 z-50 max-h-80 overflow-y-auto space-y-3 animate-slideDown">
+                {/* Botão + Cadastrar novo paciente */}
+                <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-xs border-b border-slate-100 p-1 mb-2">
+                  <button
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setNewPatientSearchQuery(searchQuery.trim());
+                      setIsNewPatientModalOpen(true);
+                      setIsSearchOpen(false);
+                      setSearchResults(null);
+                    }}
+                    className="w-full text-left px-3 py-2 flex items-center gap-2.5 rounded-xl text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100/90 transition-colors cursor-pointer border border-teal-200/70 shadow-2xs"
+                  >
+                    <div className="w-5 h-5 rounded-lg bg-teal-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <Plus className="w-3.5 h-3.5" />
+                    </div>
+                    <span className="truncate">
+                      + Cadastrar novo paciente{searchQuery.trim() ? ` "${searchQuery.trim()}"` : ''}
+                    </span>
+                  </button>
+                </div>
+
+                {searchResults?.students && searchResults.students.length > 0 && (
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block px-2 mb-1">Alunos</span>
+                    {searchResults.students.map((s) => (
+                      <div
+                        key={s.id}
+                        onClick={() => {
+                          handleSelectStudent(s.id);
+                          setSearchResults(null);
+                          setIsSearchOpen(false);
+                          setSearchQuery('');
+                        }}
+                        className="p-2 hover:bg-slate-50 rounded-xl cursor-pointer text-xs flex items-center justify-between"
+                      >
+                        <strong className="text-slate-800">{s.name}</strong>
+                        <span className="text-[11px] text-slate-400">{s.phone || ''}</span>
+                      </div>
+                    ))}
                   </div>
-                  <span className="truncate">
-                    + Cadastrar novo paciente{searchQuery.trim() ? ` "${searchQuery.trim()}"` : ''}
-                  </span>
-                </button>
+                )}
+
+                {searchResults?.exercises && searchResults.exercises.length > 0 && (
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block px-2 mb-1">Exercícios</span>
+                    {searchResults.exercises.map((e) => (
+                      <div
+                        key={e.id}
+                        onClick={() => {
+                          setIsExerciseLibraryOpen(true);
+                          setSearchResults(null);
+                          setIsSearchOpen(false);
+                          setSearchQuery('');
+                        }}
+                        className="p-2 hover:bg-slate-50 rounded-xl cursor-pointer text-xs flex items-center justify-between"
+                      >
+                        <span className="text-slate-800">{e.name}</span>
+                        <span className="text-[10px] uppercase text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.5 rounded">
+                          {e.muscle_group}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {searchResults?.workouts && searchResults.workouts.length > 0 && (
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block px-2 mb-1">Treinos</span>
+                    {searchResults.workouts.map((w) => (
+                      <div
+                        key={w.id}
+                        onClick={() => {
+                          handleSelectStudent(w.patient_id);
+                          setSearchResults(null);
+                          setIsSearchOpen(false);
+                          setSearchQuery('');
+                        }}
+                        className="p-2 hover:bg-slate-50 rounded-xl cursor-pointer text-xs flex items-center justify-between"
+                      >
+                        <span className="text-slate-800">
+                          {w.division ? `[${w.division}] ` : ''}{w.title}
+                        </span>
+                        <span className="text-[11px] text-slate-400">{w.patient_name}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {searchResults && (!searchResults.students?.length && !searchResults.exercises?.length && !searchResults.workouts?.length) && (
+                  <div className="text-center py-4 text-xs text-slate-400">
+                    Nenhum resultado encontrado.
+                  </div>
+                )}
               </div>
+            )}
+          </div>
 
-              {searchResults?.students && searchResults.students.length > 0 && (
-                <div>
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block px-2 mb-1">Alunos</span>
-                  {searchResults.students.map((s) => (
-                    <div
-                      key={s.id}
-                      onClick={() => {
-                        handleSelectStudent(s.id);
-                        setSearchResults(null);
-                        setIsSearchOpen(false);
-                        setSearchQuery('');
-                      }}
-                      className="p-2 hover:bg-slate-50 rounded-xl cursor-pointer text-xs flex items-center justify-between"
-                    >
-                      <strong className="text-slate-800">{s.name}</strong>
-                      <span className="text-[11px] text-slate-400">{s.phone || ''}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
+          {/* Ferramentas Rápidas no Cabeçalho */}
+          <div className="shrink-0 flex items-center gap-2">
+            <button
+              type="button"
+              data-tour="personal-exercises-tab"
+              onClick={() => setIsExerciseLibraryOpen(true)}
+              className="px-3.5 py-2 text-xs font-bold rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 shadow-xs flex items-center gap-2 transition-all whitespace-nowrap cursor-pointer"
+              title="Abrir acervo completo e biblioteca de exercícios"
+            >
+              <Dumbbell className="w-4 h-4 text-emerald-600" />
+              <span className="hidden sm:inline">Biblioteca de Exercícios</span>
+            </button>
+            <button
+              type="button"
+              data-tour="personal-ai-btn"
+              onClick={() => setIsAIAssistantOpen(true)}
+              className="px-3.5 py-2 text-xs font-bold rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-xs flex items-center gap-2 transition-all whitespace-nowrap cursor-pointer"
+              title="Assistente IA ZemdaPersonal"
+            >
+              <Sparkles className="w-4 h-4 text-amber-300" />
+              <span>Assistente IA</span>
+            </button>
+          </div>
+        </ProfessionalModuleHeader>
+      )}
 
-              {searchResults?.exercises && searchResults.exercises.length > 0 && (
-                <div>
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block px-2 mb-1">Exercícios</span>
-                  {searchResults.exercises.map((e) => (
-                    <div
-                      key={e.id}
-                      onClick={() => {
-                        setIsExerciseLibraryOpen(true);
-                        setSearchResults(null);
-                        setIsSearchOpen(false);
-                        setSearchQuery('');
-                      }}
-                      className="p-2 hover:bg-slate-50 rounded-xl cursor-pointer text-xs flex items-center justify-between"
-                    >
-                      <span className="text-slate-800">{e.name}</span>
-                      <span className="text-[10px] uppercase text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.5 rounded">
-                        {e.muscle_group}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {searchResults?.workouts && searchResults.workouts.length > 0 && (
-                <div>
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block px-2 mb-1">Treinos</span>
-                  {searchResults.workouts.map((w) => (
-                    <div
-                      key={w.id}
-                      onClick={() => {
-                        handleSelectStudent(w.patient_id);
-                        setSearchResults(null);
-                        setIsSearchOpen(false);
-                        setSearchQuery('');
-                      }}
-                      className="p-2 hover:bg-slate-50 rounded-xl cursor-pointer text-xs flex items-center justify-between"
-                    >
-                      <span className="text-slate-800">
-                        {w.division ? `[${w.division}] ` : ''}{w.title}
-                      </span>
-                      <span className="text-[11px] text-slate-400">{w.patient_name}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {searchResults && (!searchResults.students?.length && !searchResults.exercises?.length && !searchResults.workouts?.length) && (
-                <div className="text-center py-4 text-xs text-slate-400">
-                  Nenhum resultado encontrado.
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Ferramentas Rápidas no Cabeçalho */}
-        <div className="shrink-0 flex items-center gap-2">
-          <button
-            type="button"
-            data-tour="personal-exercises-tab"
-            onClick={() => setIsExerciseLibraryOpen(true)}
-            className="px-3.5 py-2 text-xs font-bold rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 shadow-xs flex items-center gap-2 transition-all whitespace-nowrap cursor-pointer"
-            title="Abrir acervo completo e biblioteca de exercícios"
-          >
-            <Dumbbell className="w-4 h-4 text-emerald-600" />
-            <span className="hidden sm:inline">Biblioteca de Exercícios</span>
-          </button>
-          <button
-            type="button"
-            data-tour="personal-ai-btn"
-            onClick={() => setIsAIAssistantOpen(true)}
-            className="px-3.5 py-2 text-xs font-bold rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-xs flex items-center gap-2 transition-all whitespace-nowrap cursor-pointer"
-            title="Assistente IA ZemdaPersonal"
-          >
-            <Sparkles className="w-4 h-4 text-amber-300" />
-            <span>Assistente IA</span>
-          </button>
-        </div>
-      </ProfessionalModuleHeader>
-
-      {/* LINHA 2 — FAIXA HORIZONTAL DO ATENDIMENTO (SOMENTE SE ALUNO ESTIVER SELECIONADO) */}
+      {/* LINHA 2 — FAIXA HORIZONTAL COMPACTA DE AÇÕES DO ATENDIMENTO */}
       {Boolean(selectedStudentId) && (
-        <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-2.5 shrink-0 shadow-2xs">
-          <div className="max-w-6xl mx-auto flex items-center gap-2.5 sm:gap-3 flex-wrap">
-            {/* Aluno selecionado com chip visual com "X" para desmarcar */}
-            <div className="inline-flex items-center gap-2 bg-slate-100 hover:bg-slate-200/70 border border-slate-200 rounded-xl px-2.5 py-1 transition-colors shrink-0">
-              <div className="w-6 h-6 rounded-lg bg-white border border-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center shrink-0">
-                <Users className="w-3.5 h-3.5" />
-              </div>
-              <span className="font-bold text-xs text-slate-900 truncate max-w-[180px] sm:max-w-[240px]">
-                {selectedStudentObj?.name || 'Aluno Selecionado'}
-              </span>
-              {selectedStudentObj?.phone && (
-                <span className="text-[10px] text-slate-500 font-mono hidden sm:inline">
-                  {selectedStudentObj.phone}
+        <div className="bg-white border-b border-slate-200 px-3.5 sm:px-6 py-1.5 shrink-0 shadow-2xs">
+          <div className="max-w-6xl mx-auto flex items-center gap-1.5 sm:gap-2 flex-wrap">
+            {/* Fora do atendimento agendado, mostra o chip do aluno com opção de desmarcar */}
+            {!(initialAppointmentId || lockStudentContext) && (
+              <div className="inline-flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200/70 border border-slate-200 rounded-lg px-2 py-0.5 transition-colors shrink-0">
+                <div className="w-5 h-5 rounded-md bg-white border border-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center shrink-0">
+                  <Users className="w-3 h-3" />
+                </div>
+                <span className="font-bold text-xs text-slate-900 truncate max-w-[180px] sm:max-w-[240px]">
+                  {selectedStudentObj?.name || 'Aluno Selecionado'}
                 </span>
-              )}
-              {!lockStudentContext && (
+                {selectedStudentObj?.phone && (
+                  <span className="text-[10px] text-slate-500 font-mono hidden sm:inline">
+                    {selectedStudentObj.phone}
+                  </span>
+                )}
                 <button aria-label="Fechar"
                   type="button"
                   onClick={() => handleSelectStudent(null)}
@@ -492,8 +494,38 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
-              )}
-            </div>
+              </div>
+            )}
+
+            {/* Em atendimento agendado, exibe os atalhos rápidos do módulo na linha de ações */}
+            {Boolean(initialAppointmentId || lockStudentContext) && (
+              <>
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 bg-slate-50 px-2 py-0.5 rounded-lg border border-slate-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  <span>Autosave ativo</span>
+                </span>
+                <button
+                  type="button"
+                  data-tour="personal-exercises-tab"
+                  onClick={() => setIsExerciseLibraryOpen(true)}
+                  className="px-2.5 py-1 text-xs font-bold rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 shadow-2xs flex items-center gap-1.5 transition-all whitespace-nowrap cursor-pointer"
+                  title="Abrir acervo completo e biblioteca de exercícios"
+                >
+                  <Dumbbell className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Biblioteca de Exercícios</span>
+                </button>
+                <button
+                  type="button"
+                  data-tour="personal-ai-btn"
+                  onClick={() => setIsAIAssistantOpen(true)}
+                  className="px-2.5 py-1 text-xs font-bold rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-2xs flex items-center gap-1.5 transition-all whitespace-nowrap cursor-pointer"
+                  title="Assistente IA ZemdaPersonal"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                  <span>Assistente IA</span>
+                </button>
+              </>
+            )}
 
             {/* Finalizar Atendimento */}
             {!appointmentCompleted && (
@@ -503,46 +535,48 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
         </div>
       )}
 
-      {/* NAVEGAÇÃO POR ABAS PADRONIZADA (Trilha Horizontal com Scroll Suave) */}
-      <div className="bg-white border-b border-slate-200 shrink-0">
-        <HorizontalTabNav scroll={tabScroll}>
-          <div {...tabScrollProps} className={`${tabScrollProps.className} flex items-center gap-1 py-1`}>
-            {[
-              { id: 'dashboard', label: 'Painel de Treinamento', icon: LayoutDashboard },
-              { id: 'students', label: `Alunos & Prescrições (${students.length})`, icon: Users },
-              { id: 'templates', label: 'Modelos de Treino (Templates)', icon: Layers },
-            ].map(tab => {
-              const Icon = tab.icon;
-              const isActive = currentTab === tab.id && !selectedStudentId;
-              return (
-                <button
-                  key={tab.id}
-                  data-tour={`personal-${tab.id}-tab`}
-                  data-active={isActive ? 'true' : 'false'}
-                  type="button"
-                  onClick={() => {
-                    if (selectedStudentId) {
-                      handleSelectStudent(null);
-                    }
-                    setCurrentTab(tab.id as any);
-                  }}
-                  className={`flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap transition-colors cursor-pointer shrink-0 ${
-                    isActive
-                      ? 'border-emerald-600 text-emerald-700 bg-emerald-50/50'
-                      : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'
-                  }`}
-                >
-                  <Icon className={`w-4 h-4 ${isActive ? 'text-emerald-600' : 'text-slate-400'}`} />
-                  <span>{tab.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </HorizontalTabNav>
-      </div>
+      {/* NAVEGAÇÃO POR ABAS GERAIS (Exibida apenas fora do atendimento agendado bloqueado) */}
+      {!(initialAppointmentId || lockStudentContext) && (
+        <div className="bg-white border-b border-slate-200 shrink-0">
+          <HorizontalTabNav scroll={tabScroll}>
+            <div {...tabScrollProps} className={`${tabScrollProps.className} flex items-center gap-1 py-1`}>
+              {[
+                { id: 'dashboard', label: 'Painel de Treinamento', icon: LayoutDashboard },
+                { id: 'students', label: `Alunos & Prescrições (${students.length})`, icon: Users },
+                { id: 'templates', label: 'Modelos de Treino (Templates)', icon: Layers },
+              ].map(tab => {
+                const Icon = tab.icon;
+                const isActive = currentTab === tab.id && !selectedStudentId;
+                return (
+                  <button
+                    key={tab.id}
+                    data-tour={`personal-${tab.id}-tab`}
+                    data-active={isActive ? 'true' : 'false'}
+                    type="button"
+                    onClick={() => {
+                      if (selectedStudentId) {
+                        handleSelectStudent(null);
+                      }
+                      setCurrentTab(tab.id as any);
+                    }}
+                    className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold border-b-2 whitespace-nowrap transition-colors cursor-pointer shrink-0 ${
+                      isActive
+                        ? 'border-emerald-600 text-emerald-700 bg-emerald-50/50'
+                        : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Icon className={`w-4 h-4 ${isActive ? 'text-emerald-600' : 'text-slate-400'}`} />
+                    <span>{tab.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </HorizontalTabNav>
+        </div>
+      )}
 
       {/* CONTEÚDO PRINCIPAL */}
-      <div className="flex-1 p-3 sm:p-6 overflow-y-auto">
+      <div className="flex-1 pt-3 pb-5 px-3.5 sm:px-6 overflow-y-auto">
         <div className="max-w-6xl mx-auto space-y-6">
           {/* Se o perfil do aluno estiver ativo, renderiza o perfil detalhado */}
           {selectedStudentId ? (

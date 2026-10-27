@@ -15,12 +15,25 @@ export function validatePosture(input: any): string | null {
     const v = input.views[view]; if (!v) continue;
     if (typeof v.fileId !== 'string' || v.fileId.length > 150 || typeof v.guides !== 'boolean' || !Array.isArray(v.strokes) || v.strokes.length > 100) return invalid();
     const strokes = v.strokes.map((s: any) => {
-      if (!s || !['pen','line'].includes(s.tool) || !Array.isArray(s.points) || s.points.length < 2 || s.points.length > 300) return invalid();
+      if (!s || !['pen','line'].includes(s.tool) || !Array.isArray(s.points) || s.points.length < 2 || s.points.length > 600) return invalid();
       const points = s.points.map((p: any) => {
         if (!Array.isArray(p) || p.length !== 2 || p.some(n => typeof n !== 'number' || !Number.isFinite(n) || n < 0 || n > 1)) return invalid();
         return p.map(n => Math.round(n * 10000) / 10000);
       });
-      return {tool:s.tool,points};
+      const out: any = {tool:s.tool,points};
+      if (s.color !== undefined) {
+        if (typeof s.color !== 'string' || !/^#[0-9a-fA-F]{3,8}$/.test(s.color)) return invalid();
+        out.color = s.color;
+      }
+      if (s.size !== undefined) {
+        if (!['thin','medium','thick'].includes(s.size)) return invalid();
+        out.size = s.size;
+      }
+      if (s.region !== undefined) {
+        if (!POSTURE_REGIONS.includes(s.region)) return invalid();
+        out.region = s.region;
+      }
+      return out;
     });
     views[view] = {fileId:v.fileId,guides:v.guides,strokes};
   }

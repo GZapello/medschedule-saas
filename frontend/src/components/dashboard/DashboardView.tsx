@@ -652,13 +652,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                               <span className="inline-flex items-center gap-1.5 text-slate-600 flex-wrap">
                                 <span>{appt.patient_phone}</span>
                                 {hasPhone && (
-                                  <span
-                                    title="Integração de lembretes via WhatsApp em breve"
-                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100/70 text-slate-400 border border-slate-200/80 font-medium text-[11px] cursor-not-allowed select-none transition-colors"
+                                  <button
+                                    type="button"
+                                    disabled
+                                    title="Integração com WhatsApp em breve"
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100/70 text-slate-400 border border-slate-200/80 font-medium text-[11px] cursor-not-allowed select-none opacity-80"
                                   >
                                     <WhatsAppIcon className="w-3 h-3 fill-slate-400 shrink-0" />
                                     <span>Em breve</span>
-                                  </span>
+                                  </button>
                                 )}
                               </span>
                             </>
@@ -881,16 +883,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   )}
 
                   {menuHasPhone && (
-                    <div
-                      title="Integração de lembretes via WhatsApp em breve"
+                    <button
+                      type="button"
+                      disabled
+                      title="Integração com WhatsApp em breve"
                       className="w-full px-3 py-1.5 text-left text-slate-400 flex items-center gap-2 font-normal text-xs cursor-not-allowed select-none opacity-80"
                     >
                       <WhatsAppIcon className="w-3.5 h-3.5 fill-slate-400 shrink-0" />
-                      <span className="flex items-center gap-1.5">
-                        <span>WhatsApp</span>
-                        <span className="text-[10px] px-1.5 py-0.2 bg-slate-100 text-slate-500 rounded font-medium">Em breve</span>
-                      </span>
-                    </div>
+                      <span>Em breve</span>
+                    </button>
                   )}
 
                   {menuCanMarkNoShow && (

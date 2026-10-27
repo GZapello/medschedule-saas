@@ -17,7 +17,7 @@ import { ZemdaBodyWorkspace } from '../zemda-body/ZemdaBodyWorkspace';
 import { GeneralClinicalWorkspace } from './GeneralClinicalWorkspace';
 import { ZemdaEsteticWorkspace } from '../estetic/ZemdaEsteticWorkspace';
 import { resolveClinicalModuleInfo } from './clinicalModuleResolver';
-import { Activity, FileText, Stethoscope, ChevronLeft, Dumbbell, Sparkles, X } from 'lucide-react';
+import { Activity, FileText, Stethoscope, ChevronLeft, Dumbbell, Sparkles, X, Calendar, User } from 'lucide-react';
 
 export function AppointmentConsultation({
   appointment,
@@ -145,88 +145,135 @@ export function AppointmentConsultation({
     effectiveModuleType === 'general' ? GeneralClinicalWorkspace :
     null;
 
+  const startIso = (appointment.attendance_start_at || appointment.start_time || '').replace(' ', 'T');
+  const endIso = (appointment.attendance_end_at || appointment.attendance_expected_end_at || appointment.end_time || '').replace(' ', 'T');
+  const datePart = startIso ? startIso.split('T')[0] : '';
+  const formattedDate = datePart ? new Date(datePart + 'T12:00:00').toLocaleDateString('pt-BR') : '';
+  const startTimeStr = startIso && startIso.includes('T') ? startIso.split('T')[1]?.slice(0, 5) : '';
+  const endTimeStr = endIso && endIso.includes('T') ? endIso.split('T')[1]?.slice(0, 5) : '';
+  const timeRangeChip = [
+    formattedDate,
+    startTimeStr ? (endTimeStr ? `${startTimeStr}–${endTimeStr}` : startTimeStr) : ''
+  ].filter(Boolean).join(' • ');
+  const professionalChip = appointment.professional_name || currentUser?.name || 'Profissional';
+  const serviceChip = appointment.service_name || 'Atendimento Clínico';
+  const specialtyChip = resolvedModule.profession || resolvedModule.badge || currentUser?.canonicalProfessionName || currentUser?.professionName || 'Especialidade';
+
   const renderUnifiedTopBar = (currentView: 'specialized' | 'zemda_body', ariaLabel?: string) => (
-    <div className="flex flex-wrap items-center justify-between px-3.5 sm:px-6 py-2.5 bg-white border-b border-slate-200 sticky top-0 z-20 shadow-2xs gap-2">
-      <div className="flex items-center gap-2.5 min-w-0">
-        <button
-          type="button"
-          onClick={onClose}
-          className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer shrink-0 min-h-[36px]"
-        >
-          <ChevronLeft className="w-4 h-4" /> Voltar à agenda
-        </button>
-        <span className="font-bold text-xs sm:text-sm text-slate-900 border-l pl-2.5 sm:pl-3 border-slate-200 truncate">
-          {appointment.patient_name || 'Paciente'}
-        </span>
-      </div>
-
-      <nav aria-label={ariaLabel || 'Navegação do atendimento'} className="flex items-center gap-1 bg-slate-100/90 p-1 rounded-xl border border-slate-200 overflow-x-auto max-w-full mobile-wrap">
-        {[
-          { id: 'resumo', label: 'Resumo' },
-          { id: 'evolucao', label: 'Evolução' },
-          {
-            id: 'modulo',
-            label: resolvedModule.name,
-            tooltip: resolvedModule.tooltip,
-            Icon: resolvedModule.icon
-          },
-          { id: 'documentos', label: 'Documentos' },
-          { id: 'finalizacao', label: 'Finalização' }
-        ].map(tab => {
-          const isActive = currentView === 'specialized' && tab.id === 'modulo';
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => {
-                if (tab.id === 'modulo') {
-                  setActiveTab('specialized');
-                } else {
-                  setReturnWorkspaceTab(tab.id as any);
-                  setActiveTab('records');
-                }
-              }}
-              title={tab.tooltip}
-              aria-label={tab.tooltip || tab.label}
-              className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer shrink-0 whitespace-nowrap min-h-[32px] ${
-                isActive
-                  ? 'bg-white text-teal-700 shadow-2xs border border-slate-200/90'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
-              }`}
-            >
-              {tab.Icon && (
-                <tab.Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-teal-700' : 'text-slate-500'}`} />
-              )}
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
-
-        {isZemdaBody && (
+    <div className="px-3.5 sm:px-6 py-2 bg-white border-b border-slate-200 sticky top-0 z-20 shadow-2xs space-y-1.5">
+      {/* LINHA 1: Voltar + Paciente + Badge do Módulo | Abas Principais + Fechar */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
           <button
             type="button"
-            onClick={() => setActiveTab('zemda_body')}
-            className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer shrink-0 whitespace-nowrap min-h-[32px] ${
-              currentView === 'zemda_body'
-                ? 'bg-teal-600 text-white shadow-2xs'
-                : 'text-teal-800 hover:bg-teal-50'
-            }`}
+            onClick={onClose}
+            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors cursor-pointer shrink-0"
           >
-            <Activity className="w-3.5 h-3.5" />
-            <span>Zemda360</span>
+            <ChevronLeft className="w-3.5 h-3.5" /> Voltar à agenda
           </button>
-        )}
-      </nav>
+          <span className="font-bold text-xs sm:text-sm text-slate-900 truncate">
+            {appointment.patient_name || 'Paciente'}
+          </span>
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-teal-50 text-teal-800 border border-teal-200 shrink-0">
+            {resolvedModule.icon && <resolvedModule.icon className="w-3 h-3 text-teal-600 shrink-0" />}
+            <span>{resolvedModule.name}</span>
+          </span>
+        </div>
 
-      <button
-        type="button"
-        aria-label="Fechar atendimento"
-        onClick={onClose}
-        className="hidden sm:inline-flex items-center justify-center w-9 h-9 rounded-xl text-slate-500 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer shrink-0"
-        title="Fechar atendimento"
-      >
-        <X className="w-4 h-4" />
-      </button>
+        <div className="flex items-center gap-1.5 max-w-full">
+          <nav aria-label={ariaLabel || 'Navegação do atendimento'} className="flex items-center gap-1 bg-slate-100/90 p-0.5 rounded-lg border border-slate-200 overflow-x-auto max-w-full mobile-wrap">
+            {[
+              { id: 'resumo', label: 'Resumo' },
+              { id: 'evolucao', label: 'Evolução' },
+              {
+                id: 'modulo',
+                label: resolvedModule.name,
+                tooltip: resolvedModule.tooltip,
+                Icon: resolvedModule.icon
+              },
+              { id: 'documentos', label: 'Documentos' },
+              { id: 'finalizacao', label: 'Finalização' }
+            ].map(tab => {
+              const isActive = currentView === 'specialized' && tab.id === 'modulo';
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => {
+                    if (tab.id === 'modulo') {
+                      setActiveTab('specialized');
+                    } else {
+                      setReturnWorkspaceTab(tab.id as any);
+                      setActiveTab('records');
+                    }
+                  }}
+                  title={tab.tooltip}
+                  aria-label={tab.tooltip || tab.label}
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] sm:text-xs font-bold transition-all cursor-pointer shrink-0 whitespace-nowrap ${
+                    isActive
+                      ? 'bg-white text-teal-700 shadow-2xs border border-slate-200/90'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                  }`}
+                >
+                  {tab.Icon && (
+                    <tab.Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-teal-700' : 'text-slate-500'}`} />
+                  )}
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+
+            {isZemdaBody && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('zemda_body')}
+                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] sm:text-xs font-bold transition-all cursor-pointer shrink-0 whitespace-nowrap ${
+                  currentView === 'zemda_body'
+                    ? 'bg-teal-600 text-white shadow-2xs'
+                    : 'text-teal-800 hover:bg-teal-50'
+                }`}
+              >
+                <Activity className="w-3.5 h-3.5" />
+                <span>Zemda360</span>
+              </button>
+            )}
+          </nav>
+
+          <button
+            type="button"
+            aria-label="Fechar atendimento"
+            onClick={onClose}
+            className="hidden sm:inline-flex items-center justify-center w-7 h-7 rounded-lg text-slate-500 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer shrink-0"
+            title="Fechar atendimento"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {/* CHIPS DE INFORMAÇÕES DO ATENDIMENTO */}
+      <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-600">
+        {timeRangeChip && (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100/90 border border-slate-200/80 font-medium text-slate-700">
+            <Calendar className="w-3 h-3 text-indigo-500 shrink-0" />
+            <span>{timeRangeChip}</span>
+          </span>
+        )}
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100/90 border border-slate-200/80 font-medium text-slate-700">
+          <User className="w-3 h-3 text-teal-600 shrink-0" />
+          <span>{professionalChip}</span>
+        </span>
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100/90 border border-slate-200/80 font-medium text-slate-700">
+          <Stethoscope className="w-3 h-3 text-slate-500 shrink-0" />
+          <span>{serviceChip}</span>
+        </span>
+        {specialtyChip && (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100/90 border border-slate-200/80 font-medium text-slate-600">
+            <Sparkles className="w-3 h-3 text-teal-600 shrink-0" />
+            <span>{specialtyChip}</span>
+          </span>
+        )}
+      </div>
     </div>
   );
 
@@ -235,11 +282,11 @@ export function AppointmentConsultation({
     return (
       <div className="fixed inset-0 z-50 bg-slate-50 flex flex-col overflow-auto mobile-modal" role="dialog" aria-modal="true" aria-label="Atendimento com Zemda360">
         {renderUnifiedTopBar('zemda_body', 'Navegação Zemda360')}
-        <div className="px-4 sm:px-6 pt-3 max-w-6xl mx-auto w-full">
+        <div className="px-4 sm:px-6 pt-2 max-w-6xl mx-auto w-full">
           <OnlineConsultationTools appointment={{ ...onlineAppointment, clinical_module: effectiveModuleType }} onRequestEvolution={() => { setReturnWorkspaceTab('evolucao'); setActiveTab('records'); }} onMeetingUrlSaved={onMeetingUrlSaved} onDriveUrlSaved={onDriveUrlSaved} />
         </div>
         {/* Área do Workspace */}
-        <div className="p-4 sm:p-6 max-w-6xl mx-auto w-full flex-1">
+        <div className="p-3 sm:p-5 max-w-6xl mx-auto w-full flex-1">
           <ZemdaBodyWorkspace
             patientId={appointment.patient_id}
             appointmentId={appointment.id}
@@ -258,18 +305,16 @@ export function AppointmentConsultation({
       return (
         <div className="fixed inset-0 z-50 bg-slate-50 overflow-auto mobile-modal" role="dialog" aria-modal="true" aria-label="Atendimento Personal Trainer">
           {renderUnifiedTopBar('specialized', 'Navegação ZemdaPersonal')}
-          <div className="px-4 sm:px-6 pt-3 max-w-7xl mx-auto w-full">
+          <div className="px-4 sm:px-6 pt-2 max-w-7xl mx-auto w-full">
             <OnlineConsultationTools appointment={{ ...onlineAppointment, clinical_module: effectiveModuleType }} onRequestEvolution={() => { setReturnWorkspaceTab('evolucao'); setActiveTab('records'); }} onMeetingUrlSaved={onMeetingUrlSaved} onDriveUrlSaved={onDriveUrlSaved} />
           </div>
-          <div className="p-4 sm:p-6 max-w-7xl mx-auto">
-            <ZemdaPersonalView
-              key={appointment.id}
-              initialStudentId={appointment.patient_id}
-              initialAppointmentId={appointment.id}
-              onFinishConsultation={onFinished}
-              lockStudentContext={true}
-            />
-          </div>
+          <ZemdaPersonalView
+            key={appointment.id}
+            initialStudentId={appointment.patient_id}
+            initialAppointmentId={appointment.id}
+            onFinishConsultation={onFinished}
+            lockStudentContext={true}
+          />
         </div>
       );
     }
@@ -277,7 +322,7 @@ export function AppointmentConsultation({
     return (
       <div className="fixed inset-0 z-50 bg-slate-50 overflow-auto mobile-modal" role="dialog" aria-modal="true" aria-label="Atendimento clínico especializado">
         {renderUnifiedTopBar('specialized', 'Navegação do módulo clínico')}
-        <div className="px-4 sm:px-6 pt-3 max-w-7xl mx-auto w-full">
+        <div className="px-4 sm:px-6 pt-2 max-w-7xl mx-auto w-full">
           <OnlineConsultationTools appointment={{ ...onlineAppointment, clinical_module: effectiveModuleType }} onRequestEvolution={() => { setReturnWorkspaceTab('evolucao'); setActiveTab('records'); }} onMeetingUrlSaved={onMeetingUrlSaved} onDriveUrlSaved={onDriveUrlSaved} />
         </div>
         <Workspace

@@ -26,6 +26,7 @@ import {
   MessageCircle,
   Building2,
   Stethoscope,
+  ChevronLeft,
   ChevronRight,
   Mic,
   MicOff,
@@ -1346,207 +1347,145 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
         aria-label="Iniciar atendimento"
         className="bg-white w-screen h-[100dvh] sm:w-[96vw] sm:h-[94vh] lg:w-[min(94vw,1500px)] lg:h-[92vh] max-w-full !max-h-none rounded-none sm:rounded-2xl lg:rounded-3xl shadow-2xl border-0 sm:border border-slate-200/90 flex flex-col !overflow-hidden min-w-0 animate-in zoom-in-95 duration-150"
       >
-        {/* 1. HEADER FIXO (Claro, limpo, identidade Zemda, X sempre visível no canto superior direito) */}
-        <header className="shrink-0 sticky top-0 z-30 bg-white text-slate-900 px-3.5 sm:px-6 py-2.5 min-h-[60px] max-h-[72px] flex items-center justify-between gap-3 border-b border-slate-200">
-          <div className="flex items-center gap-3 min-w-0 flex-1">
-            <div
-              className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border shadow-2xs ${
-                isAppointmentDentist
-                  ? 'bg-cyan-50 border-cyan-200 text-cyan-700'
-                  : isAppointmentPhysio
-                    ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                    : isAppointmentNutri
-                      ? 'bg-lime-50 border-lime-200 text-lime-700'
-                      : isAppointmentTO
-                        ? 'bg-amber-50 border-amber-200 text-amber-700'
-                        : isAppointmentFono
-                          ? 'bg-purple-50 border-purple-200 text-purple-700'
-                          : 'bg-teal-50 border-teal-200 text-teal-700'
-              }`}
-            >
-              {isAppointmentDentist ? (
-                <Smile className="w-5 h-5" />
-              ) : isAppointmentPhysio ? (
-                <Activity className="w-5 h-5" />
-              ) : isAppointmentNutri ? (
-                <Apple className="w-5 h-5" />
-              ) : isAppointmentTO ? (
-                <Hand className="w-5 h-5" />
-              ) : isAppointmentFono ? (
-                <Mic className="w-5 h-5" />
-              ) : (
-                <Stethoscope className="w-5 h-5" />
-              )}
-            </div>
+        {/* 1. CABEÇALHO COMPACTO DO ATENDIMENTO CLÍNICO */}
+        <header className="shrink-0 sticky top-0 z-30 bg-white text-slate-900 border-b border-slate-200 shadow-2xs">
+          {/* PRIMEIRA LINHA + CHIPS DO ATENDIMENTO */}
+          <div className="px-3.5 sm:px-6 py-2 space-y-1.5">
+            <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
+              {/* Esquerda: Voltar à agenda + Nome do Paciente + Badge do Módulo */}
+              <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors cursor-pointer shrink-0"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                  <span>Voltar à agenda</span>
+                </button>
 
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 min-w-0">
-                <h2 className="text-sm sm:text-base font-bold text-slate-900 leading-tight truncate">
-                  Atendimento clínico
+                <h2 className="text-xs sm:text-sm font-bold text-slate-900 truncate max-w-[240px] sm:max-w-[360px]">
+                  {patientName}
                 </h2>
-                <span className="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200 shrink-0">
-                  <Building2 className="w-3 h-3 text-slate-400" />
-                  <span>{currentTenant?.trade_name || currentTenant?.name || 'Clínica'}</span>
+
+                {patientAge && (
+                  <span className="text-[11px] font-semibold text-slate-500 shrink-0">
+                    ({patientAge})
+                  </span>
+                )}
+
+                {patientData?.is_child === 1 && (
+                  <span className="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 shrink-0">
+                    Pediátrico
+                  </span>
+                )}
+
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-teal-50 text-teal-800 border border-teal-200 shrink-0">
+                  {ModuleIcon && <ModuleIcon className="w-3 h-3 text-teal-600 shrink-0" />}
+                  <span>{specializedName}</span>
                 </span>
               </div>
-              <p className="text-xs font-semibold text-teal-700 truncate mt-0.5">
-                {headerModuleSubtitle}
-              </p>
-            </div>
-          </div>
 
-          <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
-            {/* Botão de Acesso Rápido ao ZemdaBody (quando autorizado) */}
-            {isZemdaBody && (
-              <button
-                type="button"
-                onClick={() => {
-                  if (onOpenZemdaBody) {
-                    onOpenZemdaBody();
-                  } else {
-                    setShowZemdaBodyModal(true);
-                  }
-                }}
-                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 shadow-2xs transition-colors cursor-pointer shrink-0"
-                title="Abrir mapeamento anatômico Zemda360"
-              >
-                <Activity className="w-3.5 h-3.5 text-teal-600" />
-                <span>Zemda360</span>
-              </button>
-            )}
+              {/* Direita: Abas Principais (Resumo, Evolução, Módulo, Documentos, Finalização, Zemda360) + Botão X */}
+              <div className="flex items-center gap-1.5 max-w-full">
+                <nav aria-label="Navegação do atendimento" className="flex items-center gap-1 bg-slate-100/90 p-0.5 rounded-lg border border-slate-200 overflow-x-auto max-w-full mobile-wrap">
+                  {[
+                    { id: 'resumo', label: 'Resumo' },
+                    { id: 'evolucao', label: 'Evolução' },
+                    {
+                      id: 'modulo',
+                      label: specializedName,
+                      tooltip: `Abrir módulo completo ${specializedName}`,
+                      Icon: ModuleIcon
+                    },
+                    { id: 'documentos', label: 'Documentos' },
+                    { id: 'finalizacao', label: 'Finalização' }
+                  ].map(tab => {
+                    const isActive = workspaceTab === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => {
+                          if (tab.id === 'modulo' && onOpenSpecializedModule) {
+                            onOpenSpecializedModule();
+                            return;
+                          }
+                          setWorkspaceTab(tab.id as any);
+                        }}
+                        title={tab.tooltip}
+                        aria-label={tab.tooltip || tab.label}
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] sm:text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                          isActive
+                            ? 'bg-white text-teal-700 shadow-2xs border border-slate-200/90'
+                            : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                        }`}
+                      >
+                        {tab.Icon && (
+                          <tab.Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-teal-700' : 'text-slate-500'}`} />
+                        )}
+                        <span>{tab.label}</span>
+                      </button>
+                    );
+                  })}
 
-            {/* Botão X SEMPRE visível no canto superior direito */}
-            <button
-              type="button"
-              aria-label="Fechar atendimento"
-              onClick={onClose}
-              className="close-modal relative z-40 shrink-0 inline-flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 !min-h-[36px] !min-w-[36px] rounded-xl text-slate-500 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer"
-              title="Fechar atendimento (seu rascunho está seguro)"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        </header>
+                  {isZemdaBody && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (onOpenZemdaBody) {
+                          onOpenZemdaBody();
+                        } else {
+                          setShowZemdaBodyModal(true);
+                        }
+                      }}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] sm:text-xs font-bold text-teal-800 hover:bg-teal-50 transition-all cursor-pointer whitespace-nowrap shrink-0"
+                      title="Abrir mapeamento anatômico Zemda360"
+                    >
+                      <Activity className="w-3.5 h-3.5 text-teal-600" />
+                      <span>Zemda360</span>
+                    </button>
+                  )}
+                </nav>
 
-        {/* 2. FAIXA HORIZONTAL DE INFORMAÇÕES DO PACIENTE E ATENDIMENTO */}
-        <div className="shrink-0 bg-white border-b border-slate-200 px-3.5 sm:px-6 py-2 sm:py-2.5">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-2 lg:gap-0 lg:divide-x lg:divide-slate-200/80 items-center min-w-0">
-            {/* PACIENTE */}
-            <div className="lg:col-span-4 lg:pr-4 flex items-center gap-2.5 sm:gap-3 min-w-0">
-              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-indigo-600 to-teal-500 text-white flex items-center justify-center font-bold text-xs sm:text-sm shadow-2xs shrink-0">
-                {patientName.slice(0, 2).toUpperCase()}
+                <button
+                  type="button"
+                  aria-label="Fechar atendimento"
+                  onClick={onClose}
+                  className="close-modal relative z-40 shrink-0 inline-flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg text-slate-500 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer"
+                  title="Fechar atendimento (seu rascunho está seguro)"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    Paciente
-                  </span>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">
-                    {clientTermLabel}
-                  </span>
-                  {patientData?.is_child === 1 && (
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                      Pediátrico
-                    </span>
-                  )}
-                  {patientAge && (
-                    <span className="text-[11px] font-semibold text-slate-500">
-                      • {patientAge}
-                    </span>
-                  )}
-                </div>
+            </div>
 
-                <div className="flex items-center gap-2 flex-wrap mt-0.5">
-                  <h3 className="text-sm sm:text-base font-bold text-slate-900 leading-tight truncate max-w-full">
-                    {patientName}
-                  </h3>
-
-                  {patientPhone && (
-                    <div className="inline-flex items-center gap-1.5 text-xs text-slate-600 flex-wrap">
-                      <span className="inline-flex items-center gap-1 font-medium">
-                        <Phone className="w-3 h-3 text-slate-400 shrink-0" />
-                        <span>{patientPhone}</span>
-                      </span>
-                      {cleanPhone.length >= 10 && (
-                        <a
-                          href={generateWhatsAppUrl(patientPhone, '')}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200/80 text-[11px] font-bold transition-colors"
-                          title="Abrir no WhatsApp"
-                        >
-                          <MessageCircle className="w-3 h-3 shrink-0" />
-                          <span>WhatsApp</span>
-                        </a>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Resumo compacto em linha para mobile (<640px) */}
-                <div className="sm:hidden flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11px] text-slate-600 mt-1 pt-1 border-t border-slate-100" title="Horário real do atendimento.">
-                  <span className="inline-flex items-center gap-1 font-semibold text-slate-700">
-                    <Calendar className="w-3 h-3 text-indigo-500 shrink-0" />
+            {/* INFORMAÇÕES DO ATENDIMENTO EM CHIPS COMPACTOS */}
+            <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-600 relative">
+              {/* Chip Data e Horário + Editar */}
+              <div className="relative inline-flex items-center">
+                <span
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100/90 border border-slate-200/80 font-medium text-slate-700"
+                  title="Horário real do atendimento."
+                >
+                  <Calendar className="w-3 h-3 text-indigo-500 shrink-0" />
+                  <span>
                     {appointmentDate ? new Date(appointmentDate + 'T12:00:00').toLocaleDateString('pt-BR') : '-'}
-                    {appointmentTime ? ` • Início: ${appointmentTime}` : ''}
-                    {realEndTimeStr ? ` • Término: ${realEndTimeStr}` : expectedEndTimeStr ? ` • Previsão: ${expectedEndTimeStr}` : ''}
+                    {appointmentTime
+                      ? ` • ${appointmentTime}${realEndTimeStr ? `–${realEndTimeStr}` : expectedEndTimeStr ? `–${expectedEndTimeStr}` : ''}`
+                      : ''}
                   </span>
                   <button
                     type="button"
                     onClick={openEditRealTime}
-                    className="text-[10px] font-bold text-teal-600 hover:text-teal-800 hover:underline cursor-pointer"
+                    className="ml-1 text-[10px] font-bold text-teal-600 hover:text-teal-800 hover:underline cursor-pointer"
+                    title="Editar horário real do atendimento"
                   >
                     [ editar ]
                   </button>
-                  <span className="text-slate-300">•</span>
-                  <span className="inline-flex items-center gap-1 font-medium text-slate-600 truncate max-w-[150px]">
-                    <User className="w-3 h-3 text-teal-600 shrink-0" />
-                    {appointment.professional_name || currentUser?.name || 'Profissional'}
-                  </span>
-                  <span className="text-slate-300">•</span>
-                  <span className="inline-flex items-center gap-1 font-semibold text-teal-700">
-                    {appointment.modality === 'online' ? 'Online' : 'Presencial'}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* METADADOS DA SESSÃO: DATA E HORÁRIO | PROFISSIONAL | PROCEDIMENTO | MODALIDADE */}
-            <div className="hidden sm:grid lg:col-span-8 sm:grid-cols-4 gap-2 lg:gap-0 lg:divide-x lg:divide-slate-200/80 pt-1.5 lg:pt-0 border-t lg:border-t-0 border-slate-100 min-w-0">
-              {/* DATA E HORÁRIO (Horário real do atendimento) */}
-              <div className="lg:px-4 min-w-0 relative" title="Horário real do atendimento.">
-                <div className="flex items-center justify-between gap-1">
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 flex items-center gap-1">
-                    <Calendar className="w-3 h-3 text-indigo-500 shrink-0" />
-                    <span>Data e Horário</span>
-                  </span>
-                  <button
-                    type="button"
-                    onClick={openEditRealTime}
-                    className="text-[10px] font-bold text-teal-600 hover:text-teal-800 hover:underline cursor-pointer shrink-0"
-                    title="Horário real do atendimento."
-                  >
-                    [ editar ]
-                  </button>
-                </div>
-                <p className="text-xs font-bold text-slate-800 truncate mt-0.5">
-                  {appointmentDate ? new Date(appointmentDate + 'T12:00:00').toLocaleDateString('pt-BR') : '-'}
-                </p>
-                <p className="text-[11px] font-semibold text-indigo-600 truncate">
-                  {appointmentTime ? `Início: ${appointmentTime}` : 'Horário livre'}
-                </p>
-                {realEndTimeStr ? (
-                  <p className="text-[10px] font-medium text-emerald-700 truncate">
-                    Término: {realEndTimeStr}
-                  </p>
-                ) : expectedEndTimeStr ? (
-                  <p className="text-[10px] font-medium text-slate-500 truncate">
-                    Previsão de término: {expectedEndTimeStr}
-                  </p>
-                ) : null}
+                </span>
 
                 {editingRealTime && (
-                  <div className="mt-2 p-2.5 rounded-xl bg-slate-50 border border-teal-200 shadow-md space-y-2 z-30">
+                  <div className="absolute left-0 top-full mt-1.5 w-64 p-2.5 rounded-xl bg-white border border-teal-200 shadow-xl space-y-2 z-40">
                     <div>
                       <label className="block text-[10px] font-semibold text-slate-600 mb-0.5">Data do atendimento</label>
                       <input
@@ -1607,102 +1546,142 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
                 )}
               </div>
 
-              {/* PROFISSIONAL */}
-              <div className="lg:px-4 min-w-0">
-                <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 flex items-center gap-1">
-                  <User className="w-3 h-3 text-teal-600 shrink-0" />
-                  <span>Profissional</span>
-                </span>
-                <p className="text-xs font-bold text-slate-800 truncate mt-0.5">
-                  {appointment.professional_name || currentUser?.name || 'Profissional'}
-                </p>
-                <p className="text-[11px] text-slate-500 truncate">
-                  {professionDisplayLabel}
-                </p>
-              </div>
+              {/* Chip Profissional */}
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100/90 border border-slate-200/80 font-medium text-slate-700">
+                <User className="w-3 h-3 text-teal-600 shrink-0" />
+                <span>{appointment.professional_name || currentUser?.name || 'Profissional'}</span>
+              </span>
 
-              {/* PROCEDIMENTO */}
-              <div className="lg:px-4 min-w-0">
-                <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 flex items-center gap-1">
-                  <FileText className="w-3 h-3 text-slate-400 shrink-0" />
-                  <span>Procedimento</span>
-                </span>
-                <p className="text-xs font-bold text-slate-800 truncate mt-0.5">
+              {/* Chip Procedimento / Atendimento */}
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100/90 border border-slate-200/80 font-medium text-slate-700">
+                <FileText className="w-3 h-3 text-slate-400 shrink-0" />
+                <span>
                   {appointment.service_name || 'Atendimento Geral'}
-                </p>
-                <p className="text-[11px] font-semibold text-emerald-700 truncate">
-                  {formattedProcedurePrice || 'Sessão clínica'}
-                </p>
-              </div>
-
-              {/* MODALIDADE */}
-              <div className="lg:pl-4 min-w-0">
-                <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 flex items-center gap-1">
-                  {appointment.modality === 'online' ? (
-                    <Video className="w-3 h-3 text-indigo-500 shrink-0" />
-                  ) : (
-                    <MapPin className="w-3 h-3 text-teal-600 shrink-0" />
-                  )}
-                  <span>Modalidade</span>
+                  {formattedProcedurePrice ? ` • ${formattedProcedurePrice}` : ''}
                 </span>
-                <p className="text-xs font-bold text-slate-800 truncate mt-0.5">
-                  {appointment.modality === 'online' ? 'Online' : 'Presencial'}
-                </p>
-                <p className="text-[11px] text-slate-500 truncate">
-                  {appointment.modality === 'online' ? 'Teleconsulta' : 'Consultório'}
-                </p>
-              </div>
+              </span>
+
+              {/* Chip Especialidade */}
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100/90 border border-slate-200/80 font-medium text-slate-600">
+                <Sparkles className="w-3 h-3 text-teal-600 shrink-0" />
+                <span>{professionDisplayLabel}</span>
+              </span>
+
+              {/* Chip Modalidade */}
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100/90 border border-slate-200/80 font-medium text-slate-600">
+                {appointment.modality === 'online' ? (
+                  <Video className="w-3 h-3 text-indigo-500 shrink-0" />
+                ) : (
+                  <MapPin className="w-3 h-3 text-teal-600 shrink-0" />
+                )}
+                <span>{appointment.modality === 'online' ? 'Online' : 'Presencial'}</span>
+              </span>
+
+              {/* Chip Telefone + WhatsApp Em breve */}
+              {patientPhone && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100/90 border border-slate-200/80 font-medium text-slate-600">
+                  <Phone className="w-3 h-3 text-slate-400 shrink-0" />
+                  <span>{patientPhone}</span>
+                  {cleanPhone.length >= 10 && (
+                    <button
+                      type="button"
+                      disabled
+                      aria-disabled="true"
+                      className="ml-0.5 inline-flex items-center gap-1 px-1.5 py-0.2 rounded bg-slate-200/70 text-slate-400 text-[10px] font-semibold cursor-not-allowed select-none"
+                      title="Integração com WhatsApp em breve"
+                    >
+                      <MessageCircle className="w-2.5 h-2.5 shrink-0" />
+                      <span>Em breve</span>
+                    </button>
+                  )}
+                </span>
+              )}
             </div>
           </div>
-        </div>
 
-        {/* 3. BARRA DE NAVEGAÇÃO POR ABAS */}
-        <div className="shrink-0 bg-slate-100/80 border-b border-slate-200 px-3 sm:px-6 py-1 sm:py-1.5 flex flex-wrap items-center justify-between gap-1.5 sm:gap-2 min-w-0">
-          <nav aria-label="Navegação do atendimento" className="flex flex-wrap items-center gap-1 min-w-0">
-            {[
-              { id: 'resumo', label: 'Resumo' },
-              { id: 'evolucao', label: 'Evolução' },
-              {
-                id: 'modulo',
-                label: specializedName,
-                tooltip: `Abrir módulo completo ${specializedName}`,
-                Icon: ModuleIcon
-              },
-              { id: 'documentos', label: 'Documentos' },
-              { id: 'finalizacao', label: 'Finalização' }
-            ].map(tab => {
-              const isActive = workspaceTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => {
-                    if (tab.id === 'modulo' && onOpenSpecializedModule) {
-                      onOpenSpecializedModule();
-                      return;
-                    }
-                    setWorkspaceTab(tab.id as any);
-                  }}
-                  title={tab.tooltip}
-                  aria-label={tab.tooltip || tab.label}
-                  className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1 sm:py-1.5 !min-h-[30px] sm:!min-h-[34px] rounded-xl text-[11px] sm:text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                    isActive
-                      ? 'bg-white text-teal-700 shadow-2xs border border-slate-200/90'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
-                  }`}
-                >
-                  {tab.Icon && (
-                    <tab.Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-teal-700' : 'text-slate-500'}`} />
-                  )}
-                  <span>{tab.label}</span>
-                </button>
-              );
-            })}
-          </nav>
-        </div>
+          {/* SEGUNDA LINHA — AÇÕES EM UMA ÚNICA LINHA COMPACTA */}
+          <div className="px-3.5 sm:px-6 py-1.5 bg-slate-50/90 border-t border-slate-200/80 flex flex-wrap items-center gap-1.5 sm:gap-2">
+            {/* Autosave ativo */}
+            <div className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-0.5 rounded-lg border bg-white border-slate-200 text-slate-600">
+              {autosaveStatus === 'saving' ? (
+                <>
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping shrink-0" />
+                  <span className="text-amber-700">Salvando...</span>
+                </>
+              ) : autosaveStatus === 'error' ? (
+                <>
+                  <AlertTriangle className="w-3 h-3 text-rose-500 shrink-0" />
+                  <span className="text-rose-600">Erro no autosave</span>
+                </>
+              ) : (
+                <>
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                  <span>
+                    {lastSavedAt ? `Autosave (${lastSavedAt.toLocaleTimeString().slice(0, 5)})` : 'Autosave ativo'}
+                  </span>
+                </>
+              )}
+            </div>
+
+            {/* Prontuários Anteriores */}
+            <button
+              type="button"
+              onClick={() => setShowPreviousRecordsModal(true)}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 shadow-2xs transition-colors cursor-pointer whitespace-nowrap"
+              title="Visualizar prontuários e evoluções anteriores deste paciente"
+            >
+              <History className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+              <span>Prontuários Anteriores</span>
+            </button>
+
+            {/* Salvar rascunho */}
+            <button
+              type="button"
+              onClick={handleManualSaveDraft}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 shadow-2xs transition-colors cursor-pointer whitespace-nowrap"
+              title="Salvar rascunho manualmente"
+            >
+              <Save className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+              <span>Salvar rascunho</span>
+            </button>
+
+            {/* Relatórios & Guias / Acompanhamento */}
+            <button
+              type="button"
+              onClick={() => setShowFollowUpDocModal(true)}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 shadow-2xs transition-colors cursor-pointer whitespace-nowrap"
+              title="Gerar documento de acompanhamento e orientações para o paciente"
+            >
+              <Heart className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+              <span>Relatórios & Guias</span>
+            </button>
+
+            {/* Documentos / Atestado */}
+            <button
+              type="button"
+              onClick={() => setShowFinishModal(true)}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 shadow-2xs transition-colors cursor-pointer whitespace-nowrap"
+              title="Emitir atestados, prescrições ou encaminhamentos"
+            >
+              <FileText className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+              <span>Documentos / Atestado</span>
+            </button>
+
+            {/* Finalizar Atendimento (alinhado à direita com destaque principal) */}
+            <button
+              type="button"
+              disabled={savingRecord}
+              onClick={handleFinalizeAttendance}
+              className="ml-auto inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-extrabold text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 shadow-xs shadow-teal-500/20 transition-all cursor-pointer whitespace-nowrap disabled:opacity-50"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+              <span>{savingRecord ? 'Finalizando...' : 'Finalizar Atendimento'}</span>
+            </button>
+          </div>
+        </header>
 
         {/* 4. ÁREA DE CONTEÚDO CENTRAL SCROLLÁVEL (Único scroll principal do modal) */}
-        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden bg-slate-50/60 p-3 sm:p-5 lg:p-6">
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden bg-slate-50/60 pt-3 pb-5 px-3.5 sm:px-5 lg:px-6">
           {/* Ferramentas de Atendimento Online (exibidas apenas quando modalidade === 'online') */}
           {appointment.modality === 'online' && (
             <div className="mb-4">
@@ -1866,18 +1845,156 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
                 )}
 
                 {isAppointmentPhysio && (
-                  <div className="bg-white border border-teal-200 rounded-2xl p-4 sm:p-5 shadow-2xs space-y-3">
-                    <h5 className="text-xs font-bold uppercase tracking-wider text-teal-800">
-                      Mapa de Dor & Escala EVA (ZemdaFisio)
-                    </h5>
-                    <ClinicalPainScale value={painScore} onChange={value => setPainScore(value ?? '')} />
-                    <BodyPainMapCanvas
-                      initialDataJson={bodyMapJson}
-                      onSave={(dataJson: string, dataImage: string) => {
-                        setBodyMapJson(dataJson);
-                        setBodyMapImage(dataImage);
-                      }}
-                    />
+                  <div className="bg-gradient-to-br from-teal-50/70 via-emerald-50/40 to-slate-50 border border-teal-200/80 rounded-2xl p-4 sm:p-5 shadow-2xs transition-all">
+                    <div className="flex items-center justify-between pb-3 border-b border-teal-100 flex-wrap gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-xl bg-teal-600 text-white flex items-center justify-center shadow-2xs">
+                          <Activity className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className="text-sm font-bold text-slate-800">ZemdaFisio: Avaliação & Mapa de Dor</h4>
+                            <span className="text-[10px] uppercase font-extrabold px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 border border-teal-200">
+                              Exclusivo Fisioterapia
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-500">
+                            Mapa anatômico interativo para marcação de queixas álgicas, escala EVA e condutas motoras.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {physioAssessments.length > 0 && (
+                          <select
+                            value={viewingHistoricalId || ''}
+                            onChange={e => {
+                              const val = e.target.value;
+                              setViewingHistoricalId(val || null);
+                              if (val) {
+                                const found = physioAssessments.find(a => a.id === val);
+                                if (found) {
+                                  setPainScore(found.pain_score ?? '');
+                                  setPainLocation(found.pain_location || '');
+                                  setPainCharacteristics(found.pain_characteristics || '');
+                                  setConductsExercises(found.conducts_exercises || '');
+                                  if (found.body_map_json) setBodyMapJson(found.body_map_json);
+                                  if (found.body_map_image) setBodyMapImage(found.body_map_image);
+                                  showToast(`Carregada sessão anterior de ${found.created_at ? new Date(found.created_at).toLocaleDateString('pt-BR') : ''}`, 'info');
+                                }
+                              }
+                            }}
+                            className="text-xs py-1.5 px-2.5 rounded-xl border border-teal-200 bg-white text-teal-900 font-medium cursor-pointer"
+                          >
+                            <option value="">Consultar Sessão Anterior ({physioAssessments.length})</option>
+                            {physioAssessments.map((pa, idx) => (
+                              <option key={pa.id} value={pa.id}>
+                                Sessão {physioAssessments.length - idx}: {pa.created_at ? new Date(pa.created_at).toLocaleDateString('pt-BR') : ''} {pa.pain_score ? `(EVA ${pa.pain_score})` : ''}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => setZemdaFisioExpanded(!zemdaFisioExpanded)}
+                          className="p-1.5 rounded-xl text-teal-700 hover:bg-teal-100 transition-colors cursor-pointer"
+                          title={zemdaFisioExpanded ? 'Recolher módulo' : 'Expandir módulo'}
+                        >
+                          {zemdaFisioExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    {zemdaFisioExpanded && (
+                      <div className="pt-4 space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          <div className="md:col-span-1 bg-white p-3 rounded-xl border border-teal-100">
+                            <ClinicalPainScale value={painScore} onChange={value => setPainScore(value ?? '')} />
+                          </div>
+
+                          <div className="md:col-span-2 bg-white p-3 rounded-xl border border-teal-100">
+                            <label className="block text-xs font-bold text-slate-700 mb-1">
+                              Localização Principal da Queixa / Região
+                            </label>
+                            <input
+                              type="text"
+                              value={painLocation}
+                              onChange={e => setPainLocation(e.target.value)}
+                              placeholder="Ex: Joelho direito compartimento medial, Lombar L4-L5, Trapézio bilateral..."
+                              className="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:ring-2 focus:ring-teal-500"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="bg-white p-4 rounded-2xl border border-teal-100">
+                          <div className="flex items-center justify-between mb-2 flex-wrap gap-1">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs font-bold text-slate-800">Mapa Anatômico de Dor Corporal</span>
+                              <span className="text-[11px] text-slate-500">(Anterior, Posterior e Lateral)</span>
+                            </div>
+                            {viewingHistoricalId && (
+                              <span className="text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200">
+                                Exibindo sessão histórica
+                              </span>
+                            )}
+                          </div>
+
+                          <BodyPainMapCanvas
+                            initialDataJson={bodyMapJson}
+                            onSave={(dataJson: string, dataImage: string) => {
+                              setBodyMapJson(dataJson);
+                              setBodyMapImage(dataImage);
+                            }}
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1">
+                              Características da Dor & Fatores Agravantes
+                            </label>
+                            <textarea
+                              rows={2}
+                              value={painCharacteristics}
+                              onChange={e => setPainCharacteristics(e.target.value)}
+                              placeholder="Ex: Queimação contínua, piora ao agachar ou descer escadas, melhora com repouso..."
+                              className="w-full p-2.5 text-xs border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-teal-500 resize-none"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1">
+                              Condutas Motoras, Exercícios & Recursos Fisioterapêuticos
+                            </label>
+                            <textarea
+                              rows={2}
+                              value={conductsExercises}
+                              onChange={e => setConductsExercises(e.target.value)}
+                              placeholder="Ex: Cinesioterapia ativa-assistida, mobilização Maitland grau II, TENS 100Hz 20min..."
+                              className="w-full p-2.5 text-xs border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-teal-500 resize-none"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-2 border-t border-teal-100/80 flex-wrap gap-2">
+                          <p className="text-[11px] text-slate-400 flex items-center gap-1">
+                            <ShieldCheck className="w-3.5 h-3.5 text-teal-600" />
+                            Marcações anatômicas salvas permanentemente no histórico deste paciente.
+                          </p>
+
+                          <button
+                            type="button"
+                            disabled={savingPhysio}
+                            onClick={handleSavePhysioData}
+                            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-teal-900 bg-teal-100 hover:bg-teal-200 border border-teal-300 transition-colors cursor-pointer disabled:opacity-50"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5 text-teal-700" />
+                            <span>{savingPhysio ? 'Salvando...' : 'Salvar Mapa e Avaliação ZemdaFisio'}</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -2558,206 +2675,6 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
                     </div>
                   </div>
                 </div>
-
-                {/* ZEMDAODONTO: MÓDULO EXCLUSIVO DE ODONTOLOGIA & ODONTOGRAMA */}
-                {isAppointmentDentist && (
-                  <div className="bg-gradient-to-br from-cyan-50/80 via-sky-50/40 to-slate-50 border border-cyan-200/90 rounded-2xl p-4 sm:p-5 shadow-2xs transition-all">
-                    <div className="flex items-center justify-between pb-3 border-b border-cyan-100">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-xl bg-cyan-600 text-white flex items-center justify-center shadow-2xs">
-                          <Smile className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h4 className="text-sm font-bold text-slate-800">ZemdaOdonto: Odontograma & Procedimentos</h4>
-                            <span className="text-[10px] uppercase font-extrabold px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-800 border border-cyan-200">
-                              Exclusivo Odontologia
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-slate-500">
-                            Odontograma FDI interativo com marcação de faces (V, L/P, M, D, O), cáries, restaurações e tratamentos.
-                          </p>
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => setZemdaOdontoExpanded(!zemdaOdontoExpanded)}
-                        className="p-1.5 rounded-xl text-cyan-700 hover:bg-cyan-100 transition-colors cursor-pointer"
-                        title={zemdaOdontoExpanded ? 'Recolher módulo' : 'Expandir módulo'}
-                      >
-                        {zemdaOdontoExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-                      </button>
-                    </div>
-
-                    {zemdaOdontoExpanded && (
-                      <div className="pt-4 space-y-4">
-                        <OdontogramCanvas
-                          currentData={odontogramData}
-                          onChange={(updated, changes) => {
-                            setOdontogramData(updated);
-                            setPendingToothChanges(prev => [...prev, ...changes]);
-                          }}
-                        />
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* ZEMDAFISIO: MÓDULO EXCLUSIVO DE FISIOTERAPIA & MAPA DE DOR */}
-                {isAppointmentPhysio && (
-                  <div className="bg-gradient-to-br from-teal-50/70 via-emerald-50/40 to-slate-50 border border-teal-200/80 rounded-2xl p-4 sm:p-5 shadow-2xs transition-all">
-                    <div className="flex items-center justify-between pb-3 border-b border-teal-100 flex-wrap gap-2">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-xl bg-teal-600 text-white flex items-center justify-center shadow-2xs">
-                          <Activity className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h4 className="text-sm font-bold text-slate-800">ZemdaFisio: Avaliação & Mapa de Dor</h4>
-                            <span className="text-[10px] uppercase font-extrabold px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 border border-teal-200">
-                              Exclusivo Fisioterapia
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-slate-500">
-                            Mapa anatômico interativo para marcação de queixas álgicas, escala EVA e condutas motoras.
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        {physioAssessments.length > 0 && (
-                          <select
-                            value={viewingHistoricalId || ''}
-                            onChange={e => {
-                              const val = e.target.value;
-                              setViewingHistoricalId(val || null);
-                              if (val) {
-                                const found = physioAssessments.find(a => a.id === val);
-                                if (found) {
-                                  setPainScore(found.pain_score ?? '');
-                                  setPainLocation(found.pain_location || '');
-                                  setPainCharacteristics(found.pain_characteristics || '');
-                                  setConductsExercises(found.conducts_exercises || '');
-                                  if (found.body_map_json) setBodyMapJson(found.body_map_json);
-                                  if (found.body_map_image) setBodyMapImage(found.body_map_image);
-                                  showToast(`Carregada sessão anterior de ${found.created_at ? new Date(found.created_at).toLocaleDateString('pt-BR') : ''}`, 'info');
-                                }
-                              }
-                            }}
-                            className="text-xs py-1.5 px-2.5 rounded-xl border border-teal-200 bg-white text-teal-900 font-medium cursor-pointer"
-                          >
-                            <option value="">Consultar Sessão Anterior ({physioAssessments.length})</option>
-                            {physioAssessments.map((pa, idx) => (
-                              <option key={pa.id} value={pa.id}>
-                                Sessão {physioAssessments.length - idx}: {pa.created_at ? new Date(pa.created_at).toLocaleDateString('pt-BR') : ''} {pa.pain_score ? `(EVA ${pa.pain_score})` : ''}
-                              </option>
-                            ))}
-                          </select>
-                        )}
-
-                        <button
-                          type="button"
-                          onClick={() => setZemdaFisioExpanded(!zemdaFisioExpanded)}
-                          className="p-1.5 rounded-xl text-teal-700 hover:bg-teal-100 transition-colors cursor-pointer"
-                          title={zemdaFisioExpanded ? 'Recolher módulo' : 'Expandir módulo'}
-                        >
-                          {zemdaFisioExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-                        </button>
-                      </div>
-                    </div>
-
-                    {zemdaFisioExpanded && (
-                      <div className="pt-4 space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                          <div className="md:col-span-1 bg-white p-3 rounded-xl border border-teal-100">
-                            <ClinicalPainScale value={painScore} onChange={value => setPainScore(value ?? '')} />
-                          </div>
-
-                          <div className="md:col-span-2 bg-white p-3 rounded-xl border border-teal-100">
-                            <label className="block text-xs font-bold text-slate-700 mb-1">
-                              Localização Principal da Queixa / Região
-                            </label>
-                            <input
-                              type="text"
-                              value={painLocation}
-                              onChange={e => setPainLocation(e.target.value)}
-                              placeholder="Ex: Joelho direito compartimento medial, Lombar L4-L5, Trapézio bilateral..."
-                              className="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:ring-2 focus:ring-teal-500"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="bg-white p-4 rounded-2xl border border-teal-100">
-                          <div className="flex items-center justify-between mb-2 flex-wrap gap-1">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-xs font-bold text-slate-800">Mapa Anatômico de Dor Corporal</span>
-                              <span className="text-[11px] text-slate-500">(Anterior, Posterior e Lateral)</span>
-                            </div>
-                            {viewingHistoricalId && (
-                              <span className="text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200">
-                                Exibindo sessão histórica
-                              </span>
-                            )}
-                          </div>
-
-                          <BodyPainMapCanvas
-                            initialDataJson={bodyMapJson}
-                            onSave={(dataJson: string, dataImage: string) => {
-                              setBodyMapJson(dataJson);
-                              setBodyMapImage(dataImage);
-                            }}
-                          />
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          <div>
-                            <label className="block text-xs font-bold text-slate-700 mb-1">
-                              Características da Dor & Fatores Agravantes
-                            </label>
-                            <textarea
-                              rows={2}
-                              value={painCharacteristics}
-                              onChange={e => setPainCharacteristics(e.target.value)}
-                              placeholder="Ex: Queimação contínua, piora ao agachar ou descer escadas, melhora com repouso..."
-                              className="w-full p-2.5 text-xs border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-teal-500 resize-none"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-xs font-bold text-slate-700 mb-1">
-                              Condutas Motoras, Exercícios & Recursos Fisioterapêuticos
-                            </label>
-                            <textarea
-                              rows={2}
-                              value={conductsExercises}
-                              onChange={e => setConductsExercises(e.target.value)}
-                              placeholder="Ex: Cinesioterapia ativa-assistida, mobilização Maitland grau II, TENS 100Hz 20min..."
-                              className="w-full p-2.5 text-xs border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-teal-500 resize-none"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="flex items-center justify-between pt-2 border-t border-teal-100/80 flex-wrap gap-2">
-                          <p className="text-[11px] text-slate-400 flex items-center gap-1">
-                            <ShieldCheck className="w-3.5 h-3.5 text-teal-600" />
-                            Marcações anatômicas salvas permanentemente no histórico deste paciente.
-                          </p>
-
-                          <button
-                            type="button"
-                            disabled={savingPhysio}
-                            onClick={handleSavePhysioData}
-                            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-teal-900 bg-teal-100 hover:bg-teal-200 border border-teal-300 transition-colors cursor-pointer disabled:opacity-50"
-                          >
-                            <CheckCircle2 className="w-3.5 h-3.5 text-teal-700" />
-                            <span>{savingPhysio ? 'Salvando...' : 'Salvar Mapa e Avaliação ZemdaFisio'}</span>
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
 
               {/* COLUNA DIREITA (~33% no desktop, passa para baixo do editor no mobile): Alergias, Medicamentos, Observações */}
@@ -2767,72 +2684,6 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
             </div>
           )}
         </div>
-
-        {/* 5. FOOTER FIXO (Compacto, sempre visível na parte inferior do modal) */}
-        <footer className="shrink-0 bg-white border-t border-slate-200 px-3 sm:px-6 py-2 sm:py-2.5 min-h-[56px] sm:min-h-[64px] flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2 z-20">
-          {/* Lado Esquerdo: Salvar rascunho + Ver prontuários anteriores */}
-          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-            <button
-              type="button"
-              onClick={handleManualSaveDraft}
-              className="inline-flex items-center justify-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 sm:py-2 !min-h-[32px] sm:!min-h-[40px] rounded-xl text-[11px] sm:text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
-            >
-              <Save className="w-3.5 h-3.5 text-slate-600 shrink-0" />
-              <span>Salvar rascunho</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setShowPreviousRecordsModal(true)}
-              className="inline-flex items-center justify-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 sm:py-2 !min-h-[32px] sm:!min-h-[40px] rounded-xl text-[11px] sm:text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer"
-              title="Visualizar prontuários e evoluções anteriores deste paciente"
-            >
-              <History className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-              <span>Ver prontuários anteriores</span>
-            </button>
-          </div>
-
-          {/* Centro / Direita: Fechar + Acompanhamento + Documentos / Atestado + Finalizar atendimento */}
-          <div className="flex flex-wrap items-center justify-between sm:justify-end gap-1.5 sm:gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 !min-h-[32px] sm:!min-h-[40px] text-[11px] sm:text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
-            >
-              Fechar
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setShowFollowUpDocModal(true)}
-              className="inline-flex items-center justify-center gap-1 sm:gap-1.5 px-2.5 sm:px-3.5 py-1.5 sm:py-2 !min-h-[32px] sm:!min-h-[40px] text-[11px] sm:text-xs font-bold text-teal-800 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-xl transition-colors cursor-pointer"
-              title="Gerar documento de acompanhamento e orientações para o paciente"
-            >
-              <Heart className="w-3.5 h-3.5 text-teal-600 shrink-0" />
-              <span>Acompanhamento</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setShowFinishModal(true)}
-              className="inline-flex items-center justify-center gap-1 sm:gap-1.5 px-2.5 sm:px-3.5 py-1.5 sm:py-2 !min-h-[32px] sm:!min-h-[40px] text-[11px] sm:text-xs font-semibold text-teal-700 bg-white hover:bg-teal-50 border border-teal-200 rounded-xl transition-colors cursor-pointer"
-              title="Emitir atestados, prescrições ou encaminhamentos"
-            >
-              <FileText className="w-3.5 h-3.5 text-teal-600 shrink-0" />
-              <span>Documentos / Atestado</span>
-            </button>
-
-            <button
-              type="button"
-              disabled={savingRecord}
-              onClick={handleFinalizeAttendance}
-              className="inline-flex items-center justify-center gap-1.5 sm:gap-2 px-3.5 sm:px-6 py-1.5 sm:py-2.5 !min-h-[34px] sm:!min-h-[42px] rounded-xl text-[11px] sm:text-xs font-bold text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 shadow-md shadow-teal-500/20 transition-all cursor-pointer disabled:opacity-50"
-            >
-              <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
-              <span>{savingRecord ? 'Finalizando...' : 'Finalizar atendimento'}</span>
-            </button>
-          </div>
-        </footer>
       </div>
 
       {/* MODAL DE ENCAMINHAMENTO INTERPROFISSIONAL */}

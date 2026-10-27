@@ -65,12 +65,22 @@ const PersonalAssessmentComparisonModal = lazy(() =>
   import('../personal/PersonalAssessmentComparisonModal').then(m => ({ default: m.PersonalAssessmentComparisonModal }))
 );
 
+const formatEvalDatePtBr = (dateStr?: string | null): string => {
+  if (!dateStr) return '—';
+  const clean = String(dateStr).split('T')[0];
+  const parts = clean.split('-');
+  if (parts.length === 3) {
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  }
+  return dateLabel(dateStr);
+};
+
 const FISIO_TABS: ClinicalModuleTabItem[] = [
   { id: 'evolution', label: '1. Evolução', icon: Activity },
   { id: 'anamnesis', label: '2. Anamnese', icon: FileText },
   { id: 'kinetic_functional', label: '3. Cinético-Funcional', icon: Sliders },
-  { id: 'pain_zemdabody', label: '4. Dor & Zemda360', icon: AlertCircle },
-  { id: 'evaluations', label: '5. Avaliações', icon: Target },
+  { id: 'pain_zemdabody', label: '4. Mapa & Histórico', icon: Target },
+  { id: 'evaluations', label: '5. Avaliações', icon: Award },
   { id: 'posture_gait', label: '6. Postura & Marcha', icon: User },
   { id: 'cbdf', label: '7. CBDF COFFITO', icon: ShieldCheck },
   { id: 'treatment_plan', label: '8. Plano RBPF', icon: Calendar },
@@ -238,7 +248,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
   const [showRegionPickerModal, setShowRegionPickerModal] = useState<boolean>(false);
   const [customRegionName, setCustomRegionName] = useState<string>('');
   const [customRegionSide, setCustomRegionSide] = useState<'right' | 'left' | 'midline'>('midline');
-  const [bodyCanvasViewMode, setBodyCanvasViewMode] = useState<'all' | 'front' | 'back'>('all');
+  const [bodyCanvasViewMode, setBodyCanvasViewMode] = useState<'all' | 'front' | 'back' | 'left' | 'right'>('all');
   const [bodyModel, setBodyModel] = useState<'male' | 'female'>('male');
 
   // 5. ADM / Goniometria Estruturada
@@ -468,7 +478,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
   }, [selectedPatientId]);
 
   useEffect(() => {
-    if (activeTab === 'evaluations' && selectedPatientId) {
+    if ((activeTab === 'pain_zemdabody' || activeTab === 'evaluations' || activeTab === 'finish') && selectedPatientId) {
       loadRegionalEvaluations(selectedPatientId);
       loadRegionalSummary(selectedPatientId);
     }
@@ -862,13 +872,9 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
             <RegionalPhysioAssessmentModal
               isOpen={showRegionalAssessmentModal}
               onClose={() => setShowRegionalAssessmentModal(false)}
-              onSaved={(saved) => {
+              onSaved={() => {
                 loadRegionalSummary(selectedPatientId);
                 loadRegionalEvaluations(selectedPatientId);
-                if (saved.pain_json) {
-                  const p = typeof saved.pain_json === 'string' ? JSON.parse(saved.pain_json) : saved.pain_json;
-                  if (p?.score !== undefined) setPainScore(p.score);
-                }
               }}
               patientId={selectedPatientId}
               patientName={selectedPatient?.full_name || 'Paciente'}
@@ -950,6 +956,10 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
               onCompareRequested={() => {
                 setShowRegionalListModal(false);
                 setShowComparisonModal(true);
+              }}
+              onDeleted={() => {
+                loadRegionalSummary(selectedPatientId);
+                loadRegionalEvaluations(selectedPatientId);
               }}
             />
           )}
@@ -1168,577 +1178,466 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
               </div>
             )}
 
-            {/* ABA 4: DOR & ZEMDABODY */}
+            {/* ABA 4: MAPA & HISTÓRICO (ZEMDA360 REGIONAL) */}
             {activeTab === 'pain_zemdabody' && (
-              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
-                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 border-b pb-3">
-                  <AlertCircle className="w-4 h-4 text-rose-600" /> Avaliação da Dor & Mapa Corporal
-                </h3>
-
-                {/* Escala EVA */}
-                <div className="p-4 bg-rose-50/50 border border-rose-100 rounded-xl space-y-2">
-                  <ClinicalPainScale value={painScore} onChange={value => setPainScore(value ?? '')} />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Localização e Irradiação</label>
-                    <input
-                      type="text"
-                      value={painLocation}
-                      onChange={e => setPainLocation(e.target.value)}
-                      placeholder="Ex: Face anterior do ombro D irradiando para o braço"
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Características da Dor</label>
-                    <input
-                      type="text"
-                      value={painCharacteristics}
-                      onChange={e => setPainCharacteristics(e.target.value)}
-                      placeholder="Ex: Pontada, queimação, peso, latejante"
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
-                    />
-                  </div>
-                </div>
-
-                {/* Mapa Anatômico Interativo Zemda360 */}
-                <div className="space-y-4 pt-2">
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
-                    <div>
-                      <label className="block text-xs font-extrabold text-slate-800">
-                        Mapa Corporal Anatômico Zemda360
-                      </label>
-                      <p className="text-[11px] text-slate-500">
-                        Selecione qualquer articulação ou região anatômica para realizar a avaliação fisioterapêutica regional e acompanhar a evolução longitudinal.
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {/* Seletor de Modelo Anatômico */}
-                      <div className="flex items-center bg-slate-100 p-0.5 rounded-xl text-[11px] font-bold">
-                        <button
-                          type="button"
-                          onClick={() => setBodyModel('male')}
-                          className={`px-2.5 py-1 rounded-lg transition-all ${
-                            bodyModel === 'male' ? 'bg-white shadow-xs text-teal-800' : 'text-slate-500 hover:text-slate-800'
-                          }`}
-                        >
-                          Masculino
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setBodyModel('female')}
-                          className={`px-2.5 py-1 rounded-lg transition-all ${
-                            bodyModel === 'female' ? 'bg-white shadow-xs text-teal-800' : 'text-slate-500 hover:text-slate-800'
-                          }`}
-                        >
-                          Feminino
-                        </button>
-                      </div>
-
-                      {/* Seletor de Vista */}
-                      <div className="flex items-center bg-slate-100 p-0.5 rounded-xl text-[11px] font-bold">
-                        <button
-                          type="button"
-                          onClick={() => setBodyCanvasViewMode('all')}
-                          className={`px-2.5 py-1 rounded-lg transition-all ${
-                            bodyCanvasViewMode === 'all' ? 'bg-white shadow-xs text-teal-800' : 'text-slate-500 hover:text-slate-800'
-                          }`}
-                        >
-                          Frente + Verso
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setBodyCanvasViewMode('front')}
-                          className={`px-2.5 py-1 rounded-lg transition-all ${
-                            bodyCanvasViewMode === 'front' ? 'bg-white shadow-xs text-teal-800' : 'text-slate-500 hover:text-slate-800'
-                          }`}
-                        >
-                          Frente
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setBodyCanvasViewMode('back')}
-                          className={`px-2.5 py-1 rounded-lg transition-all ${
-                            bodyCanvasViewMode === 'back' ? 'bg-white shadow-xs text-teal-800' : 'text-slate-500 hover:text-slate-800'
-                          }`}
-                        >
-                          Costas
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Badges Discretos de Regiões com Histórico */}
-                  {Array.isArray(regionalSummary) && regionalSummary.length > 0 && (
-                    <div className="p-3 bg-teal-50/50 border border-teal-100 rounded-xl space-y-1.5">
-                      <span className="text-[11px] font-bold text-teal-900 flex items-center gap-1.5">
-                        <Sparkles className="w-3.5 h-3.5 text-teal-600" /> Regiões com Histórico de Avaliação:
-                      </span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {regionalSummary.map(reg => {
-                          const isSelected = selectedRegionId === reg.region_id;
-                          return (
-                            <button
-                              key={reg.region_id}
-                              type="button"
-                              onClick={() => setSelectedRegionId(reg.region_id)}
-                              className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 border transition-all ${
-                                isSelected
-                                  ? 'bg-teal-600 text-white border-teal-600 shadow-xs'
-                                  : 'bg-white text-slate-700 border-teal-200 hover:bg-teal-100/60'
-                              }`}
-                            >
-                              <span>{reg.region_label}</span>
-                              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-teal-800/10 font-bold">
-                                {reg.evaluation_count} aval.
-                              </span>
-                              {reg.latest_pain_score !== null && (
-                                <span className={`text-[10px] font-black ${isSelected ? 'text-white' : 'text-rose-600'}`}>
-                                  Dor {reg.latest_pain_score}/10
-                                </span>
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Container do Canvas Anatômico Zemda360 */}
-                  <div className="border border-slate-200 rounded-2xl p-4 bg-slate-50/30 overflow-hidden">
-                    <ZemdaBodyCanvas
-                      bodyModel={bodyModel}
-                      initialViewMode={bodyCanvasViewMode}
-                      controlledView={bodyCanvasViewMode}
-                      selectedRegions={
-                        Array.isArray(regionalSummary)
-                          ? (selectedRegionId
-                              ? [selectedRegionId, ...regionalSummary.map(r => r.region_id)]
-                              : regionalSummary.map(r => r.region_id))
-                          : (selectedRegionId ? [selectedRegionId] : [])
-                      }
-                      onToggleRegion={(regId: string) => {
-                        setSelectedRegionId(regId);
-                      }}
-                      tool="select"
-                      readOnly={false}
-                    />
-                  </div>
-
-                  {/* PAINEL DE AÇÃO REGIONAL INTERATIVO */}
-                  {selectedRegionId ? (
-                    (() => {
-                      const summaryItem = Array.isArray(regionalSummary)
-                        ? regionalSummary.find(r => r.region_id === selectedRegionId)
-                        : undefined;
-                      const regLabel = summaryItem?.region_label || getRegionLabel(selectedRegionId, bodyModel);
-                      const regSide = summaryItem?.side || detectSideFromRegionId(selectedRegionId);
-                      const evalCount = summaryItem?.evaluation_count || 0;
-                      const latestPain = summaryItem?.latest_pain_score;
-
-                      return (
-                        <div className="p-4 bg-white border-2 border-teal-500 rounded-2xl shadow-sm space-y-3 animate-in fade-in">
-                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
-                            <div className="flex items-center gap-2">
-                              <span className="p-1.5 rounded-lg bg-teal-100 text-teal-700">
-                                <Activity className="w-4 h-4" />
-                              </span>
-                              <div>
-                                <h4 className="text-sm font-extrabold text-slate-800">
-                                  {regLabel}
-                                </h4>
-                                <span className="text-[11px] text-slate-500">
-                                  Lateralidade: <strong className="text-slate-700">{formatLaterality(regSide)}</strong>
-                                </span>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                              {evalCount > 0 ? (
-                                <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-teal-50 text-teal-800 border border-teal-200">
-                                  {evalCount} avaliação(ões) registrada(s) {latestPain !== null && `• Dor: ${latestPain}/10`}
-                                </span>
-                              ) : (
-                                <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600">
-                                  Nenhuma avaliação para esta região
-                                </span>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Botões de Ação da Região */}
-                          <div className="flex flex-wrap items-center gap-2 pt-1">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditingRegionalEval(null);
-                                setShowRegionalAssessmentModal(true);
-                              }}
-                              className="flex items-center gap-1.5 px-4 py-2 text-xs font-extrabold text-white bg-teal-600 hover:bg-teal-700 rounded-xl shadow-xs transition-all"
-                            >
-                              <Plus className="w-3.5 h-3.5" />
-                              <span>+ Nova Avaliação da Região</span>
-                            </button>
-
-                            {evalCount >= 1 && (
-                              <button
-                                type="button"
-                                onClick={() => setShowComparisonModal(true)}
-                                className="flex items-center gap-1.5 px-4 py-2 text-xs font-extrabold text-teal-900 bg-teal-100 hover:bg-teal-200 rounded-xl border border-teal-200 transition-all"
-                              >
-                                <Activity className="w-3.5 h-3.5 text-teal-700" />
-                                <span>Comparar Linha do Tempo (Baseline × Atual)</span>
-                              </button>
-                            )}
-
-                            {evalCount >= 1 && (
-                              <button
-                                type="button"
-                                onClick={() => setShowRegionalListModal(true)}
-                                className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all"
-                              >
-                                <span>Ver Histórico ({evalCount})</span>
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })()
-                  ) : (
-                    <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-center text-xs text-slate-500 font-medium">
-                      👉 Clique em qualquer região ou articulação no mapa acima (ex: Ombro, Joelho, Coluna Lombar) para abrir a avaliação regional, goniometria, testes e evolução longitudinal.
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* ABA 5: AVALIAÇÕES FISIOTERAPÊUTICAS */}
-            {activeTab === 'evaluations' && (
-              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
-                {/* Cabeçalho do Card da Aba */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-5">
+                {/* Cabeçalho da Aba */}
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
                   <div>
                     <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
                       <Target className="w-4 h-4 text-teal-600" />
-                      Avaliações Fisioterapêuticas
+                      Mapa Corporal & Avaliações Regionais
                     </h3>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      Registre avaliações regionais, acompanhe evolução e compare resultados ao longo do tempo.
+                      Selecione uma região para consultar o histórico ou registrar uma nova avaliação.
                     </p>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowRegionPickerModal(true)}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Nova Avaliação</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      disabled={regionalEvaluationsList.length === 0}
-                      onClick={() => {
-                        const targetRegion = selectedRegionId || regionalEvaluationsList[0]?.region_id || regionalSummary[0]?.region_id;
-                        if (targetRegion) {
-                          setSelectedRegionId(targetRegion);
-                          setShowRegionalListModal(true);
-                        } else {
-                          showToast('Nenhuma avaliação registrada para visualizar histórico.', 'info');
-                        }
-                      }}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
-                    >
-                      <Clock className="w-3.5 h-3.5 text-slate-500" />
-                      <span>Histórico</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      disabled={regionalEvaluationsList.length === 0}
-                      onClick={() => {
-                        const targetRegion = selectedRegionId || regionalEvaluationsList[0]?.region_id || regionalSummary[0]?.region_id;
-                        if (targetRegion) {
-                          setSelectedRegionId(targetRegion);
-                          setShowComparisonModal(true);
-                        } else {
-                          showToast('Nenhuma avaliação registrada para comparar.', 'info');
-                        }
-                      }}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 bg-teal-50 hover:bg-teal-100 disabled:opacity-50 disabled:cursor-not-allowed text-teal-800 border border-teal-200 rounded-xl text-xs font-bold transition-all cursor-pointer"
-                    >
-                      <GitCompare className="w-3.5 h-3.5 text-teal-600" />
-                      <span>Comparar</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Resumo por Região (Chips Rápidos de Regiões Avaliadas) */}
-                {regionalSummary.length > 0 && (
-                  <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200/80 space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                        <Sparkles className="w-3.5 h-3.5 text-teal-600" />
-                        Regiões com Histórico ({regionalSummary.length}):
-                      </span>
+                    {/* Seletor de Modelo Anatômico */}
+                    <div className="flex items-center bg-slate-100 p-0.5 rounded-xl text-[11px] font-bold">
                       <button
                         type="button"
-                        onClick={() => setActiveTab('pain_zemdabody')}
-                        className="text-[11px] font-bold text-teal-700 hover:text-teal-800 hover:underline flex items-center gap-1 cursor-pointer"
+                        onClick={() => setBodyModel('male')}
+                        className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                          bodyModel === 'male' ? 'bg-white shadow-xs text-teal-800' : 'text-slate-500 hover:text-slate-800'
+                        }`}
                       >
-                        <span>Abrir no Mapa 360</span>
-                        <ArrowRight className="w-3 h-3" />
+                        Masculino
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBodyModel('female')}
+                        className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                          bodyModel === 'female' ? 'bg-white shadow-xs text-teal-800' : 'text-slate-500 hover:text-slate-800'
+                        }`}
+                      >
+                        Feminino
                       </button>
                     </div>
 
-                    <div className="flex flex-wrap gap-2">
-                      {regionalSummary.map(reg => (
-                        <div
-                          key={reg.region_id}
-                          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white border border-slate-200 shadow-2xs text-xs"
-                        >
-                          <span className="font-extrabold text-slate-800">{reg.region_label}</span>
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600 font-semibold">
-                            {formatLaterality(reg.side)}
-                          </span>
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-teal-50 text-teal-700 font-bold border border-teal-100">
-                            {reg.evaluation_count} aval.
-                          </span>
-                          {reg.latest_pain_score !== null && (
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold ${
-                              reg.latest_pain_score <= 3
-                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                : reg.latest_pain_score <= 6
-                                ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                                : 'bg-rose-50 text-rose-700 border border-rose-200'
-                            }`}>
-                              EVA {reg.latest_pain_score}/10
-                            </span>
-                          )}
-                          <div className="flex items-center gap-1 ml-1 border-l border-slate-100 pl-1.5">
-                            <button
-                              type="button"
-                              title="Nova avaliação desta região"
-                              onClick={() => {
-                                setSelectedRegionId(reg.region_id);
-                                setEditingRegionalEval(null);
-                                setShowRegionalAssessmentModal(true);
-                              }}
-                              className="p-1 hover:bg-teal-50 text-teal-600 rounded-lg transition-colors cursor-pointer"
-                            >
-                              <Plus className="w-3 h-3" />
-                            </button>
-                            <button
-                              type="button"
-                              title="Comparar evolução longitudinal"
-                              onClick={() => {
-                                setSelectedRegionId(reg.region_id);
-                                setShowComparisonModal(true);
-                              }}
-                              className="p-1 hover:bg-teal-50 text-teal-600 rounded-lg transition-colors cursor-pointer"
-                            >
-                              <GitCompare className="w-3 h-3" />
-                            </button>
-                            <button
-                              type="button"
-                              title="Ver histórico desta região"
-                              onClick={() => {
-                                setSelectedRegionId(reg.region_id);
-                                setShowRegionalListModal(true);
-                              }}
-                              className="p-1 hover:bg-slate-100 text-slate-500 rounded-lg transition-colors cursor-pointer"
-                            >
-                              <Clock className="w-3 h-3" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
+                    {/* Seletor de Vista */}
+                    <div className="flex items-center bg-slate-100 p-0.5 rounded-xl text-[11px] font-bold">
+                      <button
+                        type="button"
+                        onClick={() => setBodyCanvasViewMode('all')}
+                        className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                          bodyCanvasViewMode === 'all' ? 'bg-white shadow-xs text-teal-800' : 'text-slate-500 hover:text-slate-800'
+                        }`}
+                      >
+                        Frente + Verso
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBodyCanvasViewMode('front')}
+                        className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                          bodyCanvasViewMode === 'front' ? 'bg-white shadow-xs text-teal-800' : 'text-slate-500 hover:text-slate-800'
+                        }`}
+                      >
+                        Frente
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBodyCanvasViewMode('back')}
+                        className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                          bodyCanvasViewMode === 'back' ? 'bg-white shadow-xs text-teal-800' : 'text-slate-500 hover:text-slate-800'
+                        }`}
+                      >
+                        Costas
+                      </button>
                     </div>
                   </div>
-                )}
+                </div>
 
-                {/* Lista de Avaliações Registradas */}
-                {loadingRegionalEvaluations ? (
-                  <div className="p-8 text-center bg-slate-50 rounded-2xl border border-slate-200 text-xs text-slate-500 font-medium">
-                    Carregando avaliações fisioterapêuticas...
-                  </div>
-                ) : regionalEvaluationsList.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center p-12 text-center bg-slate-50/60 rounded-2xl border border-dashed border-slate-200">
-                    <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center mb-3 shadow-2xs">
-                      <Target className="w-6 h-6" />
-                    </div>
-                    <h4 className="text-sm font-bold text-slate-800 mb-1">
-                      Nenhuma avaliação registrada
-                    </h4>
-                    <p className="text-xs text-slate-500 max-w-md mb-4">
-                      Registre avaliações regionais, goniometria, testes especiais e acompanhe a evolução clínica do paciente.
-                    </p>
+                {/* Container do Mapa Anatômico Zemda360 (Elemento Principal no Início da Aba) */}
+                <div className="border border-slate-200 rounded-2xl p-4 bg-slate-50/30 overflow-hidden space-y-2">
+                  <div className="flex items-center justify-between gap-2 px-1">
+                    <span className="text-xs font-semibold text-slate-600">
+                      Clique em uma região do corpo.
+                    </span>
                     <button
                       type="button"
                       onClick={() => setShowRegionPickerModal(true)}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
+                      className="text-xs font-semibold text-teal-700 hover:text-teal-800 hover:underline cursor-pointer"
                     >
-                      <Plus className="w-4 h-4" />
-                      <span>Nova Avaliação</span>
+                      Selecionar região por lista
                     </button>
                   </div>
-                ) : (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between text-xs text-slate-500 font-semibold px-1">
-                      <span>Avaliações Registradas ({regionalEvaluationsList.length})</span>
-                      <span>Ordenadas por data mais recente</span>
-                    </div>
 
-                    <div className="grid gap-3">
-                      {regionalEvaluationsList.map(evalItem => {
-                        let painData: any = null;
-                        if (evalItem.pain_json) {
-                          try {
-                            painData = typeof evalItem.pain_json === 'string' ? JSON.parse(evalItem.pain_json) : evalItem.pain_json;
-                          } catch {
-                            painData = null;
-                          }
-                        }
-                        const painScore = painData?.score;
-                        const painColor =
-                          painScore === undefined || painScore === null
-                            ? 'bg-slate-100 text-slate-600'
-                            : painScore <= 3
-                            ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                            : painScore <= 6
-                            ? 'bg-amber-50 text-amber-800 border border-amber-200'
-                            : 'bg-rose-50 text-rose-800 border border-rose-200';
+                  <ZemdaBodyCanvas
+                    bodyModel={bodyModel}
+                    initialViewMode={bodyCanvasViewMode}
+                    controlledView={bodyCanvasViewMode}
+                    onViewChange={v => setBodyCanvasViewMode(v)}
+                    selectedRegions={
+                      Array.isArray(regionalSummary)
+                        ? (selectedRegionId
+                            ? [selectedRegionId, ...regionalSummary.map(r => r.region_id)]
+                            : regionalSummary.map(r => r.region_id))
+                        : (selectedRegionId ? [selectedRegionId] : [])
+                    }
+                    onToggleRegion={(regId: string) => {
+                      setSelectedRegionId(regId);
+                    }}
+                    tool="select"
+                    readOnly={false}
+                  />
+                </div>
 
-                        let admList: any[] = [];
-                        if (evalItem.adm_json) {
-                          try {
-                            admList = typeof evalItem.adm_json === 'string' ? JSON.parse(evalItem.adm_json) : evalItem.adm_json;
-                          } catch {}
-                        }
-                        let strengthList: any[] = [];
-                        if (evalItem.strength_json) {
-                          try {
-                            strengthList = typeof evalItem.strength_json === 'string' ? JSON.parse(evalItem.strength_json) : evalItem.strength_json;
-                          } catch {}
-                        }
-                        let testsList: any[] = [];
-                        if (evalItem.tests_json) {
-                          try {
-                            testsList = typeof evalItem.tests_json === 'string' ? JSON.parse(evalItem.tests_json) : evalItem.tests_json;
-                          } catch {}
-                        }
+                {/* Painel Compacto da Região Selecionada */}
+                {selectedRegionId ? (
+                  (() => {
+                    const summaryItem = Array.isArray(regionalSummary)
+                      ? regionalSummary.find(r => r.region_id === selectedRegionId)
+                      : undefined;
+                    const regionEvals = regionalEvaluationsList.filter(e => e.region_id === selectedRegionId);
+                    const regLabel =
+                      summaryItem?.region_label ||
+                      regionEvals[0]?.region_label ||
+                      REGIONAL_OPTIONS.find(o => o.id === selectedRegionId)?.label ||
+                      customRegionName ||
+                      getRegionLabel(selectedRegionId, bodyModel);
+                    const regSide =
+                      summaryItem?.side ||
+                      regionEvals[0]?.side ||
+                      REGIONAL_OPTIONS.find(o => o.id === selectedRegionId)?.side ||
+                      customRegionSide ||
+                      detectSideFromRegionId(selectedRegionId);
+                    const evalCount = summaryItem?.evaluation_count ?? regionEvals.length;
+                    const latestDateRaw = summaryItem?.latest_evaluation_date || regionEvals[0]?.evaluation_date || '';
+                    const latestDateFormatted = formatEvalDatePtBr(latestDateRaw);
 
-                        const admCount = Array.isArray(admList) ? admList.length : 0;
-                        const strengthCount = Array.isArray(strengthList) ? strengthList.length : 0;
-                        const testsCount = Array.isArray(testsList) ? testsList.length : 0;
-
-                        return (
-                          <div
-                            key={evalItem.id}
-                            className="p-4 bg-white rounded-2xl border border-slate-200/90 hover:border-slate-300 shadow-2xs hover:shadow-xs transition-all flex flex-col md:flex-row md:items-center justify-between gap-4"
-                          >
-                            <div className="space-y-2">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span className="font-extrabold text-sm text-slate-900">
-                                  {evalItem.region_label || getRegionLabel(evalItem.region_id, bodyModel)}
+                    if (evalCount > 0) {
+                      return (
+                        <div className="p-4 bg-white border border-teal-300 rounded-2xl shadow-2xs space-y-3 animate-in fade-in">
+                          <div className="flex flex-wrap items-start justify-between gap-4">
+                            <div className="space-y-1.5">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <h4 className="text-base font-extrabold text-slate-900">
+                                  {regLabel}
+                                </h4>
+                                <span className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-700">
+                                  {formatLaterality(regSide)}
                                 </span>
-                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700">
-                                  {formatLaterality(evalItem.side)}
-                                </span>
-                                <span className="text-[11px] text-slate-500 flex items-center gap-1">
-                                  <Calendar className="w-3 h-3 text-slate-400" />
-                                  {new Date(evalItem.evaluation_date + 'T12:00:00').toLocaleDateString('pt-BR')}
-                                </span>
-                                {painScore !== undefined && painScore !== null && (
-                                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${painColor}`}>
-                                    Dor (EVA): {painScore}/10
-                                  </span>
-                                )}
                               </div>
-
-                              <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
-                                {admCount > 0 && (
-                                  <span className="inline-flex items-center gap-1 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100">
-                                    <Activity className="w-3 h-3 text-teal-600" />
-                                    {admCount} mov. ADM
-                                  </span>
-                                )}
-                                {strengthCount > 0 && (
-                                  <span className="inline-flex items-center gap-1 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100">
-                                    <Dumbbell className="w-3 h-3 text-indigo-600" />
-                                    {strengthCount} testes força
-                                  </span>
-                                )}
-                                {testsCount > 0 && (
-                                  <span className="inline-flex items-center gap-1 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100">
-                                    <Award className="w-3 h-3 text-purple-600" />
-                                    {testsCount} testes clínicos
-                                  </span>
-                                )}
-                                <span className="text-slate-400">·</span>
-                                <span>Profissional: <strong className="text-slate-700">{evalItem.professional_name || 'Fisioterapeuta'}</strong></span>
+                              <div className="flex flex-wrap items-center gap-4 text-xs text-slate-600">
+                                <span>
+                                  Última avaliação: <strong className="text-slate-800">{latestDateFormatted}</strong>
+                                </span>
+                                <span>
+                                  Avaliações registradas: <strong className="text-slate-800">{evalCount}</strong>
+                                </span>
                               </div>
-
-                              {evalItem.notes && (
-                                <p className="text-xs text-slate-600 line-clamp-1 italic">
-                                  "{evalItem.notes}"
-                                </p>
-                              )}
                             </div>
 
-                            <div className="flex items-center gap-2 shrink-0">
+                            <div className="flex flex-wrap items-center gap-2">
                               <button
                                 type="button"
                                 onClick={() => {
-                                  setSelectedRegionId(evalItem.region_id);
-                                  setEditingRegionalEval(evalItem);
+                                  setEditingRegionalEval(null);
                                   setShowRegionalAssessmentModal(true);
                                 }}
-                                className="px-3 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-xl shadow-2xs transition-colors cursor-pointer"
                               >
-                                Ver / Editar
+                                <Plus className="w-3.5 h-3.5" />
+                                <span>Nova avaliação</span>
                               </button>
+
                               <button
                                 type="button"
-                                onClick={() => {
-                                  setSelectedRegionId(evalItem.region_id);
-                                  setShowComparisonModal(true);
-                                }}
-                                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                                onClick={() => setShowRegionalListModal(true)}
+                                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
                               >
-                                Comparar
+                                <Clock className="w-3.5 h-3.5 text-slate-500" />
+                                <span>Ver histórico</span>
                               </button>
+
                               <button
                                 type="button"
-                                onClick={() => {
-                                  setSelectedRegionId(evalItem.region_id);
-                                  setShowRegionalListModal(true);
-                                }}
-                                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                                onClick={() => setShowComparisonModal(true)}
+                                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-teal-800 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-xl transition-colors cursor-pointer"
                               >
-                                Histórico
-                              </button>
-                              <button
-                                type="button"
-                                title="Excluir avaliação"
-                                onClick={e => handleDeleteEvaluation(evalItem.id, e)}
-                                className="p-1.5 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-xl transition-all cursor-pointer"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
+                                <GitCompare className="w-3.5 h-3.5 text-teal-600" />
+                                <span>Comparar evolução</span>
                               </button>
                             </div>
                           </div>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="p-4 bg-white border border-slate-200 rounded-2xl shadow-2xs flex flex-wrap items-center justify-between gap-3 animate-in fade-in">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className="text-base font-extrabold text-slate-900">
+                              {regLabel}
+                            </h4>
+                            <span className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-700">
+                              {formatLaterality(regSide)}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-500">
+                            Nenhuma avaliação registrada.
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingRegionalEval(null);
+                            setShowRegionalAssessmentModal(true);
+                          }}
+                          className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-xl shadow-2xs transition-colors cursor-pointer"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Registrar primeira avaliação</span>
+                        </button>
+                      </div>
+                    );
+                  })()
+                ) : (
+                  <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-center text-xs text-slate-500 font-medium">
+                    Selecione uma região no mapa acima para visualizar o histórico ou registrar uma avaliação.
+                  </div>
+                )}
+
+                {/* Regiões com Histórico de Avaliação (Chips/Cards Simples e Discretos) */}
+                {Array.isArray(regionalSummary) && regionalSummary.length > 0 && (
+                  <div className="space-y-2.5 pt-1">
+                    <span className="text-xs font-bold text-slate-700 block">
+                      Regiões com Histórico de Avaliação
+                    </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5">
+                      {regionalSummary.map(reg => {
+                        const isSelected = selectedRegionId === reg.region_id;
+                        return (
+                          <button
+                            key={`${reg.region_id}-${reg.side}`}
+                            type="button"
+                            onClick={() => setSelectedRegionId(reg.region_id)}
+                            className={`p-3 rounded-xl text-left border transition-all cursor-pointer flex flex-col justify-between gap-1 ${
+                              isSelected
+                                ? 'bg-teal-50/70 border-teal-500 ring-1 ring-teal-500/30 shadow-2xs'
+                                : 'bg-slate-50/70 border-slate-200 hover:border-teal-300 hover:bg-white'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-xs font-bold text-slate-800 truncate">
+                                {reg.region_label}
+                              </span>
+                              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-white border border-slate-200 text-slate-700 shrink-0">
+                                {reg.evaluation_count} {reg.evaluation_count === 1 ? 'avaliação' : 'avaliações'}
+                              </span>
+                            </div>
+                            <span className="text-[11px] text-slate-500">
+                              Última: {formatEvalDatePtBr(reg.latest_evaluation_date)}
+                            </span>
+                          </button>
                         );
                       })}
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* ABA 5: AVALIAÇÕES FISIOTERAPÊUTICAS INDEPENDENTES */}
+            {activeTab === 'evaluations' && (
+              <div className="space-y-6">
+                {/* Atalho discreto para Avaliações Regionais (Mapa & Histórico) */}
+                <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-800">
+                      Avaliações Regionais & Histórico por Articulação
+                    </h4>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Para selecionar uma região anatômica, consultar histórico regional ou comparar evolução longitudinal, acesse o mapa interativo.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('pain_zemdabody')}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-teal-800 bg-white hover:bg-teal-50 border border-teal-200 transition-colors cursor-pointer shrink-0"
+                  >
+                    <span>Abrir Mapa & Histórico</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {/* 1. ADM / Goniometria Bilateral Geral */}
+                <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                      <Activity className="w-4 h-4 text-teal-600" />
+                      Goniometria & Amplitude de Movimento (Triagem Bilateral)
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Registro comparativo global entre lado direito e esquerdo para a sessão atual.
+                    </p>
+                  </div>
+
+                  <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
+                          <th className="py-2.5 px-3">Articulação</th>
+                          <th className="py-2.5 px-3">Movimento</th>
+                          <th className="py-2.5 px-3">Referência</th>
+                          <th className="py-2.5 px-3">Direito (°)</th>
+                          <th className="py-2.5 px-3">Esquerdo (°)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {goniometryList.map((row, idx) => (
+                          <tr key={`${row.joint}-${row.movement}-${idx}`} className="hover:bg-slate-50/60">
+                            <td className="py-2 px-3 font-semibold text-slate-800">{row.joint}</td>
+                            <td className="py-2 px-3 text-slate-700">{row.movement}</td>
+                            <td className="py-2 px-3 text-slate-400 font-mono text-[11px]">{row.normalRange}</td>
+                            <td className="py-1.5 px-3">
+                              <input
+                                type="text"
+                                value={row.right}
+                                placeholder="Ex: 165°"
+                                onChange={e => {
+                                  const next = [...goniometryList];
+                                  next[idx] = { ...next[idx], right: e.target.value };
+                                  setGoniometryList(next);
+                                }}
+                                className="w-24 px-2 py-1 text-xs rounded-lg border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:outline-none"
+                              />
+                            </td>
+                            <td className="py-1.5 px-3">
+                              <input
+                                type="text"
+                                value={row.left}
+                                placeholder="Ex: 170°"
+                                onChange={e => {
+                                  const next = [...goniometryList];
+                                  next[idx] = { ...next[idx], left: e.target.value };
+                                  setGoniometryList(next);
+                                }}
+                                className="w-24 px-2 py-1 text-xs rounded-lg border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:outline-none"
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* 2. Força Muscular Geral (Escala de Oxford 0-5) */}
+                <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                      <Dumbbell className="w-4 h-4 text-indigo-600" />
+                      Força Muscular Global (Escala de Oxford 0 a 5)
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Graduação bilateral de força por principais grupos musculares.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {muscleStrengthList.map((item, idx) => (
+                      <div
+                        key={`${item.group}-${idx}`}
+                        className="p-3 rounded-xl border border-slate-200 bg-slate-50/50 flex items-center justify-between gap-3"
+                      >
+                        <span className="text-xs font-semibold text-slate-800">{item.group}</span>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <label className="flex items-center gap-1 text-[11px] text-slate-500 font-semibold">
+                            <span>D:</span>
+                            <select
+                              value={item.rightGrade}
+                              onChange={e => {
+                                const next = [...muscleStrengthList];
+                                next[idx] = {
+                                  ...next[idx],
+                                  rightGrade: e.target.value === '' ? '' : Number(e.target.value)
+                                };
+                                setMuscleStrengthList(next);
+                              }}
+                              className="px-2 py-1 text-xs rounded-lg border border-slate-200 bg-white font-bold text-slate-700"
+                            >
+                              <option value="">—</option>
+                              {[0, 1, 2, 3, 4, 5].map(g => (
+                                <option key={g} value={g}>Grau {g}</option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="flex items-center gap-1 text-[11px] text-slate-500 font-semibold">
+                            <span>E:</span>
+                            <select
+                              value={item.leftGrade}
+                              onChange={e => {
+                                const next = [...muscleStrengthList];
+                                next[idx] = {
+                                  ...next[idx],
+                                  leftGrade: e.target.value === '' ? '' : Number(e.target.value)
+                                };
+                                setMuscleStrengthList(next);
+                              }}
+                              className="px-2 py-1 text-xs rounded-lg border border-slate-200 bg-white font-bold text-slate-700"
+                            >
+                              <option value="">—</option>
+                              {[0, 1, 2, 3, 4, 5].map(g => (
+                                <option key={g} value={g}>Grau {g}</option>
+                              ))}
+                            </select>
+                          </label>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 3. Testes Funcionais Ortopédicos (Triagem Geral) */}
+                <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                      <Award className="w-4 h-4 text-teal-600" />
+                      Testes Funcionais Ortopédicos
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Checklist rápido de testes especiais realizados na sessão.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {functionalTests.map((test, idx) => (
+                      <div
+                        key={test.id}
+                        className="p-3 rounded-xl border border-slate-200 bg-white flex items-center justify-between gap-3"
+                      >
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-bold text-slate-800">{test.name}</span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-semibold">
+                              {test.region}
+                            </span>
+                          </div>
+                          <span className="text-[11px] text-slate-500">{test.targetStructure}</span>
+                        </div>
+                        <select
+                          value={test.result}
+                          onChange={e => {
+                            const next = [...functionalTests];
+                            next[idx] = { ...next[idx], result: e.target.value as any };
+                            setFunctionalTests(next);
+                          }}
+                          className="px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 bg-slate-50 font-semibold text-slate-700"
+                        >
+                          <option value="not_tested">Não testado</option>
+                          <option value="negative">Negativo (-)</option>
+                          <option value="positive">Positivo (+)</option>
+                          <option value="doubtful">Inconclusivo</option>
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
 
@@ -1798,10 +1697,10 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
                         type="button"
                         onClick={() => setActiveTab('pain_zemdabody')}
                         className="px-3.5 py-1.5 bg-slate-50 text-slate-600 hover:bg-slate-100 rounded-xl text-xs font-semibold flex items-center gap-1.5 border border-slate-200 transition cursor-pointer"
-                        title="Correlacionar postura com dor e mapeamento 3D corporal"
+                        title="Abrir Mapa & Histórico Regional"
                       >
-                        <AlertCircle className="w-3.5 h-3.5 text-amber-500" />
-                        Mapeamento Zemda360
+                        <Target className="w-3.5 h-3.5 text-teal-600" />
+                        Abrir Mapa & Histórico
                       </button>
                     </div>
                   </div>
@@ -2178,51 +2077,79 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="p-3.5 bg-teal-50/50 border border-teal-200 rounded-xl text-xs">
-                    <span className="font-bold text-teal-900 block mb-1">Dor & EVA</span>
-                    <p className="text-teal-700">{painScore === '' ? 'EVA não avaliada' : `EVA ${painScore}/10`} ({painLocation || 'Sem localização'})</p>
+                    <span className="font-bold text-teal-900 block mb-1">Avaliações Regionais</span>
+                    {Array.isArray(regionalSummary) && regionalSummary.length > 0 ? (
+                      <div className="space-y-0.5 text-teal-800">
+                        {regionalSummary.map(reg => (
+                          <p key={`${reg.region_id}-${reg.side}`}>
+                            {reg.region_label} · {reg.evaluation_count} {reg.evaluation_count === 1 ? 'avaliação' : 'avaliações'}
+                          </p>
+                        ))}
+                      </div>
+                    ) : painScore !== '' ? (
+                      <p className="text-teal-700">
+                        Registro anterior: EVA {painScore}/10 {painLocation ? `(${painLocation})` : ''}
+                      </p>
+                    ) : (
+                      <p className="text-teal-700">Nenhuma avaliação regional registrada</p>
+                    )}
                   </div>
                   <div className="p-3.5 bg-teal-50/50 border border-teal-200 rounded-xl text-xs">
                     <span className="font-bold text-teal-900 block mb-1">Plano RBPF</span>
-                    <p className="text-teal-700">{sessionFrequency} ({estimatedSessions} sessões)</p>
+                    <p className="text-teal-700">
+                      {sessionFrequency || 'Frequência não definida'} {estimatedSessions !== '' ? `(${estimatedSessions} sessões)` : ''}
+                    </p>
                   </div>
                   <div className="p-3.5 bg-teal-50/50 border border-teal-200 rounded-xl text-xs">
                     <span className="font-bold text-teal-900 block mb-1">Exercícios Domiciliares</span>
-                    <p className="text-teal-700">{homeExercises.length} exercícios prescritos</p>
+                    <p className="text-teal-700">{homeExercises.length} {homeExercises.length === 1 ? 'exercício prescrito' : 'exercícios prescritos'}</p>
                   </div>
                 </div>
 
                 {Array.isArray(regionalSummary) && regionalSummary.length > 0 && (
-                  <div className="p-4 bg-teal-50/40 border border-teal-100 rounded-xl space-y-2">
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-teal-900 flex items-center gap-1.5">
-                        <Activity className="w-4 h-4 text-teal-600" /> Avaliações Regionais Integradas (Zemda360):
+                      <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                        <Target className="w-4 h-4 text-teal-600" /> Regiões Avaliadas no Mapa & Histórico:
                       </span>
-                      <span className="text-[11px] text-teal-700 font-semibold">
-                        {regionalSummary.length} região(ões) avaliada(s)
+                      <span className="text-[11px] text-slate-500 font-semibold">
+                        {regionalSummary.length} {regionalSummary.length === 1 ? 'região' : 'regiões'}
                       </span>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {regionalSummary.map(reg => (
                         <div
-                          key={reg.region_id}
-                          className="px-3 py-1.5 bg-white border border-teal-200 rounded-lg text-xs flex items-center gap-2"
+                          key={`${reg.region_id}-${reg.side}`}
+                          className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs flex items-center gap-2"
                         >
                           <span className="font-bold text-slate-800">{reg.region_label}</span>
-                          <span className="text-[10px] text-slate-500">({reg.evaluation_count} aval.)</span>
-                          {reg.latest_pain_score !== null && (
-                            <span className="text-[10px] font-black text-rose-600">
-                              Dor {reg.latest_pain_score}/10
+                          <span className="text-[11px] text-slate-500">
+                            · {reg.evaluation_count} {reg.evaluation_count === 1 ? 'avaliação' : 'avaliações'}
+                          </span>
+                          {reg.latest_evaluation_date && (
+                            <span className="text-[11px] text-slate-400">
+                              (Última: {formatEvalDatePtBr(reg.latest_evaluation_date)})
                             </span>
                           )}
                           <button
                             type="button"
                             onClick={() => {
                               setSelectedRegionId(reg.region_id);
+                              setShowRegionalListModal(true);
+                            }}
+                            className="text-[11px] font-bold text-slate-600 hover:text-slate-900 hover:underline ml-1 cursor-pointer"
+                          >
+                            Ver histórico
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedRegionId(reg.region_id);
                               setShowComparisonModal(true);
                             }}
-                            className="text-[10px] font-bold text-teal-700 hover:underline ml-1"
+                            className="text-[11px] font-bold text-teal-700 hover:underline cursor-pointer"
                           >
-                            Comparar
+                            Comparar evolução
                           </button>
                         </div>
                       ))}

@@ -897,16 +897,18 @@ export class PhysiotherapyController {
       });
 
       // Variações de Força Muscular
+      const getMuscleKey = (s: any) => s?.movementOrMuscle || s?.muscleGroup || s?.movement;
       const allMuscleGroups = Array.from(new Set([
-        ...(current.strength || []).map((s: any) => s.muscleGroup),
-        ...(baseline.strength || []).map((s: any) => s.muscleGroup)
-      ]));
+        ...(current.strength || []).map(getMuscleKey),
+        ...(baseline.strength || []).map(getMuscleKey)
+      ])).filter(Boolean);
 
       const strengthDiffs = allMuscleGroups.map(groupName => {
-        const currStr = (current.strength || []).find((s: any) => s.muscleGroup === groupName) || {};
-        const baseStr = (baseline.strength || []).find((s: any) => s.muscleGroup === groupName) || {};
+        const currStr = (current.strength || []).find((s: any) => getMuscleKey(s) === groupName) || {};
+        const baseStr = (baseline.strength || []).find((s: any) => getMuscleKey(s) === groupName) || {};
         return {
           muscleGroup: groupName,
+          movement: groupName,
           side: currStr.side || baseStr.side || currentRow.side,
           baselineGrade: baseStr.grade || '-',
           currentGrade: currStr.grade || '-',

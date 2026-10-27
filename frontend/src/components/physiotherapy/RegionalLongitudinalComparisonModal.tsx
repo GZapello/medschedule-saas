@@ -261,17 +261,22 @@ export const RegionalLongitudinalComparisonModal: React.FC<RegionalLongitudinalC
                     </span>
                   </div>
                   <div className="space-y-1 max-h-20 overflow-y-auto pr-1">
-                    {(data.variations?.admDiffs || []).map((m, idx) => (
-                      <div key={idx} className="flex justify-between text-[11px]">
-                        <span className="text-slate-600 font-medium truncate max-w-[120px]">{m.movement}:</span>
-                        <span className="font-mono font-bold text-slate-800">
-                          {m.baselineRom ?? '—'}° → {m.currentRom ?? '—'}°{' '}
-                          {m.gain !== null && m.gain > 0 && (
-                            <span className="text-emerald-600">(+{m.gain}°)</span>
-                          )}
-                        </span>
-                      </div>
-                    ))}
+                    {(data.variations?.admDiffs || []).map((m: any, idx) => {
+                      const baseRom = m.baselineActive !== undefined && m.baselineActive !== '-' ? m.baselineActive : (m.baselineRom ?? '—');
+                      const currRom = m.currentActive !== undefined && m.currentActive !== '-' ? m.currentActive : (m.currentRom ?? '—');
+                      const gain = m.activeDiff !== undefined ? m.activeDiff : m.gain;
+                      return (
+                        <div key={idx} className="flex justify-between text-[11px]">
+                          <span className="text-slate-600 font-medium truncate max-w-[120px]">{m.movement}:</span>
+                          <span className="font-mono font-bold text-slate-800">
+                            {baseRom}° → {currRom}°{' '}
+                            {gain !== null && gain !== undefined && gain > 0 && (
+                              <span className="text-emerald-600">(+{gain}°)</span>
+                            )}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -286,14 +291,17 @@ export const RegionalLongitudinalComparisonModal: React.FC<RegionalLongitudinalC
                     </span>
                   </div>
                   <div className="space-y-1 max-h-20 overflow-y-auto pr-1">
-                    {(data.variations?.strengthDiffs || []).map((s, idx) => (
-                      <div key={idx} className="flex justify-between text-[11px]">
-                        <span className="text-slate-600 font-medium truncate max-w-[120px]">{s.movement}:</span>
-                        <span className="font-bold text-slate-800">
-                          G{s.baselineGrade ?? '—'} → G{s.currentGrade ?? '—'}
-                        </span>
-                      </div>
-                    ))}
+                    {(data.variations?.strengthDiffs || []).map((s: any, idx) => {
+                      const label = s.movement || s.movementOrMuscle || s.muscleGroup || `Grupo ${idx + 1}`;
+                      return (
+                        <div key={idx} className="flex justify-between text-[11px]">
+                          <span className="text-slate-600 font-medium truncate max-w-[120px]">{label}:</span>
+                          <span className="font-bold text-slate-800">
+                            G{s.baselineGrade ?? '—'} → G{s.currentGrade ?? '—'}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -304,7 +312,7 @@ export const RegionalLongitudinalComparisonModal: React.FC<RegionalLongitudinalC
                 <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                      <Clock className="w-4 h-4 text-slate-500" /> Linha do Tempo e Tendência de Dor (EVA)
+                      <Clock className="w-4 h-4 text-slate-500" /> Linha do Tempo da Região
                     </span>
                     <span className="text-[11px] text-slate-400 font-medium">
                       {data.timeline.length} registro(s) no total
@@ -312,35 +320,38 @@ export const RegionalLongitudinalComparisonModal: React.FC<RegionalLongitudinalC
                   </div>
 
                   <div className="flex items-center gap-2 overflow-x-auto py-2 mobile-wrap">
-                    {data.timeline.map((point, idx) => (
-                      <div
-                        key={idx}
-                        className="flex-1 min-w-0 lg:min-w-[90px] bg-white p-2.5 rounded-lg border border-slate-200 text-center relative"
-                      >
-                        <div className="text-[10px] text-slate-400 font-semibold mb-1">
-                          {point.date}
+                    {data.timeline.map((point: any, idx) => {
+                      const scoreVal = point.painScore ?? point.pain_score;
+                      return (
+                        <div
+                          key={idx}
+                          className="flex-1 min-w-0 lg:min-w-[90px] bg-white p-2.5 rounded-lg border border-slate-200 text-center relative"
+                        >
+                          <div className="text-[10px] text-slate-400 font-semibold mb-1">
+                            {point.date}
+                          </div>
+                          <div className="text-base font-black text-slate-800">
+                            {scoreVal !== undefined && scoreVal !== null ? `${scoreVal} / 10` : '—'}
+                          </div>
+                          <div className="text-[9px] text-slate-500 uppercase tracking-wider font-bold">
+                            {idx === 0 ? 'Primeira avaliação' : idx === data.timeline.length - 1 ? 'Atual' : `Sessão ${idx + 1}`}
+                          </div>
                         </div>
-                        <div className="text-base font-black text-rose-600">
-                          {point.pain_score} / 10
-                        </div>
-                        <div className="text-[9px] text-slate-500 uppercase tracking-wider font-bold">
-                          {idx === 0 ? 'Baseline' : idx === data.timeline.length - 1 ? 'Atual' : `Sessão ${idx + 1}`}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
 
-              {/* TABELA COMPARATIVA LADO A LADO: BASELINE × ATUAL */}
+              {/* TABELA COMPARATIVA LADO A LADO: PRIMEIRA AVALIAÇÃO × ATUAL */}
               <div className="border border-slate-200 rounded-xl overflow-hidden">
                 <div className="grid grid-cols-2 bg-slate-100/80 border-b border-slate-200 text-xs font-extrabold text-slate-700">
                   <div className="p-3 border-r border-slate-200 flex items-center justify-between">
-                    <span>1ª AVALIAÇÃO (BASELINE)</span>
+                    <span>PRIMEIRA AVALIAÇÃO</span>
                     <span className="text-[11px] font-normal text-slate-500">{baseline.evaluation_date}</span>
                   </div>
                   <div className="p-3 flex items-center justify-between bg-teal-50/60 text-teal-900">
-                    <span>AVALIAÇÃO ATUAL (REAVALIAÇÃO)</span>
+                    <span>AVALIAÇÃO ATUAL</span>
                     <span className="text-[11px] font-normal text-teal-700">{current.evaluation_date}</span>
                   </div>
                 </div>

@@ -1291,13 +1291,6 @@ const AppContent: React.FC = () => {
         </div>
       )}
 
-      {/* Top Navbar */}
-      <Navbar
-        onToggleSidebar={() => setSidebarOpen(prev => !prev)}
-        onOpenAI={() => setIsAIOpen(true)}
-        onNavigate={handleNavigateView}
-      />
-
       <div className="app-shell flex-1 flex overflow-hidden">
         {/* Responsive Sidebar */}
         <Sidebar
@@ -1308,7 +1301,7 @@ const AppContent: React.FC = () => {
         />
 
         {/* Main View Container */}
-        <main data-tour-page={currentView} className="flex-1 overflow-y-auto p-3 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full min-w-0">
+        <main data-tour-page={currentView} className="flex-1 overflow-y-auto pt-2 sm:pt-3 lg:pt-4 px-3 sm:px-6 lg:px-8 pb-3 sm:pb-6 lg:pb-8 max-w-7xl mx-auto w-full min-w-0"><Navbar onToggleSidebar={() => setSidebarOpen(prev => !prev)} onOpenAI={() => setIsAIOpen(true)} onNavigate={handleNavigateView} />
           <SectionErrorBoundary key={currentView} sectionName={`Tela: ${currentView}`}>
           {currentView === 'dashboard' && (
             <DashboardView

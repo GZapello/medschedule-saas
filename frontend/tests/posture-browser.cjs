@@ -10,9 +10,22 @@ const base=process.env.TEST_BASE_URL||'http://127.0.0.1:5173';const out=process.
  else if(url.pathname.endsWith('/assessments/assessment-2')&&route.request().method()==='PUT'){saved=route.request().postDataJSON();data={id:'assessment-2'};}
  else if(url.pathname.endsWith('/tav/protocols'))data={protocols:[]};return route.fulfill({json:data});});
  await page.goto(`${base}/tests/posture.html`);await page.getByRole('button',{name:/Fotos.*Parecer/}).click();await page.getByLabel('Modo Avaliação Postural').check();
- await page.getByRole('button',{name:'Caneta',exact:true}).click();const canvas=page.getByLabel('Área de marcação postural');await canvas.waitFor();const box=await canvas.boundingBox();await page.mouse.move(box.x+70,box.y+60);await page.mouse.down();await page.mouse.move(box.x+180,box.y+120,{steps:8});await page.mouse.up();
- await page.getByRole('button',{name:'Desfazer',exact:true}).click();await page.getByRole('button',{name:'Linha',exact:true}).click();await page.mouse.move(box.x+100,box.y+80);await page.mouse.down();await page.mouse.move(box.x+170,box.y+160);await page.mouse.up();
+ await page.getByRole('button',{name:'Caneta',exact:true}).click();
+ await page.getByRole('button',{name:'Grossa',exact:true}).click();
+ await page.getByRole('button',{name:'Fina',exact:true}).click();
+ await page.getByRole('button',{name:'Média',exact:true}).click();
+ await page.getByRole('button',{name:'Cor Azul',exact:true}).click();
+ await page.getByRole('button',{name:'Cor Vermelho',exact:true}).click();
+ const canvas=page.getByLabel('Área de marcação postural');await canvas.waitFor();const box=await canvas.boundingBox();await page.mouse.move(box.x+70,box.y+60);await page.mouse.down();await page.mouse.move(box.x+180,box.y+120,{steps:8});await page.mouse.up();
+ await page.getByRole('button',{name:'Desfazer',exact:true}).click();
+ await page.getByRole('button',{name:'Refazer',exact:true}).click();
+ await page.getByRole('button',{name:'Limpar desenho',exact:true}).click();
+ await page.getByRole('button',{name:'Aumentar zoom',exact:true}).click();
+ await page.getByRole('button',{name:'Ajustar à tela',exact:true}).click();
+ await page.getByRole('button',{name:'Linha',exact:true}).click();await page.mouse.move(box.x+100,box.y+80);await page.mouse.down();await page.mouse.move(box.x+170,box.y+160);await page.mouse.up();
  await page.getByRole('button',{name:'Borracha',exact:true}).click();const strokesBefore=await canvas.locator('path[data-stroke]').count();assert.equal(strokesBefore,1);await canvas.locator('path[data-stroke]').dispatchEvent('pointerdown',{bubbles:true,pointerId:1});assert.equal(await canvas.locator('path[data-stroke]').count(),0);await page.getByRole('button',{name:'Desfazer',exact:true}).click();assert.equal(await canvas.locator('path[data-stroke]').count(),1);
+ await page.getByRole('button',{name:/Posterior/}).click();
+ await page.getByRole('button',{name:/Anterior/}).click();
  await page.getByLabel('Guias',{exact:true}).check();await page.getByRole('button',{name:'Adicionar observação: Ombros',exact:true}).click();await page.getByLabel('Observação postural',{exact:true}).fill('Ombro direito visualmente elevado; confirmar na avaliação.');await page.getByLabel('Evolução em relação à inicial').selectOption('stable');assert.equal(aiCalls,0);
  await page.getByRole('button',{name:'Analisar postura com IA',exact:true}).click();await page.getByText('aguarda revisão',{exact:false}).waitFor();assert.equal(aiCalls,1);await page.getByRole('button',{name:'Confirmar revisão',exact:true}).click();await page.getByLabel('Evolução em relação à inicial').nth(1).selectOption('improved');
  await page.screenshot({path:path.join(out,'editor.png'),fullPage:true});await page.getByRole('button',{name:/Salvar Avaliação/}).click();await page.getByRole('status').filter({hasText:'Avaliação salva'}).waitFor();assert.equal(saved.posture.views.front.strokes.length,1);assert.equal(saved.posture.views.front.strokes[0].tool,'line');assert.equal(saved.posture.observations.length,2);assert(saved.posture.observations.every(o=>o.reviewed));
@@ -20,5 +33,5 @@ const base=process.env.TEST_BASE_URL||'http://127.0.0.1:5173';const out=process.
 
  await page.goto(`${base}/tests/posture.html?mode=edit-posture`);await page.getByRole('button',{name:'Salvar Avaliação Postural',exact:true}).click();await page.getByRole('status').filter({hasText:'Avaliação salva'}).waitFor();assert(!('weight' in saved));assert(!('body_fat_percentage' in saved));assert(saved.posture.observations.length===2);
  await page.goto(`${base}/tests/posture.html?mode=compare`);await page.getByRole('button',{name:/Avaliação Postural.*referência inicial/}).click();await page.getByRole('heading',{name:'Evolução postural',exact:true}).waitFor();assert(comparisons.includes('?posture_baseline=1'));await page.getByText(/Referência: primeira avaliação postural/).waitFor();await page.screenshot({path:path.join(out,'comparacao.png'),fullPage:true});await page.getByLabel('Sobreposição',{exact:true}).check();await page.getByLabel('Transparência da avaliação atual').fill('35');await page.screenshot({path:path.join(out,'sobreposicao.png'),fullPage:true});
- await page.setViewportSize({width:390,height:844});await page.screenshot({path:path.join(out,'mobile.png'),fullPage:true});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);assert.deepEqual(errors,[]);console.log('PASS drawing/undo/guides/region notes/AI only on click/review/save/reload/baseline/overlay/mobile; HTTP and AI mocked.');
+ await page.setViewportSize({width:390,height:844});await page.screenshot({path:path.join(out,'mobile.png'),fullPage:true});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);assert.deepEqual(errors,[]);console.log('PASS drawing/undo/redo/clear/zoom/guides/region notes/AI only on click/review/save/reload/baseline/overlay/mobile; HTTP and AI mocked.');
  }finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1});

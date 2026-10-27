@@ -148,50 +148,56 @@ export const ClinicalModuleShell: React.FC<ClinicalModuleShellProps> = ({
       {/* Modais Globais / Slots */}
       {modalsSlot}
 
-      {/* LINHA 1 — CABEÇALHO DO MÓDULO (Ícone, Nome, Badges, Descrição, Filtros da Área e Busca de Paciente) */}
-      <ProfessionalModuleHeader
-        icon={ModuleIcon}
-        iconGradient={iconGradient}
-        iconShadow={iconShadow}
-        title={title}
-        badgeLabel={badgeLabel}
-        badgeVariant={badgeVariant}
-        secondaryBadge={secondaryBadge}
-        description={description}
-      >
-        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-          {filterSlot}
-          <div className="w-64 sm:w-72 lg:w-80" data-tour="clinical-patient-select">
-            <PatientSearchSelect
-              value={selectedPatientId || ''}
-              selectedPatient={selectedPatient as any}
-              onChange={onSelectPatient}
-              placeholder={patientSearchPlaceholder}
-              compact
-            />
+      {/* LINHA 1 — CABEÇALHO DO MÓDULO (Exibido apenas fora de um atendimento agendado bloqueado) */}
+      {!isLockedContext && (
+        <ProfessionalModuleHeader
+          icon={ModuleIcon}
+          iconGradient={iconGradient}
+          iconShadow={iconShadow}
+          title={title}
+          badgeLabel={badgeLabel}
+          badgeVariant={badgeVariant}
+          secondaryBadge={secondaryBadge}
+          description={description}
+        >
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+            {filterSlot}
+            <div className="w-64 sm:w-72 lg:w-80" data-tour="clinical-patient-select">
+              <PatientSearchSelect
+                value={selectedPatientId || ''}
+                selectedPatient={selectedPatient as any}
+                onChange={onSelectPatient}
+                placeholder={patientSearchPlaceholder}
+                compact
+              />
+            </div>
+            {headerActions}
           </div>
-          {headerActions}
-        </div>
-      </ProfessionalModuleHeader>
+        </ProfessionalModuleHeader>
+      )}
 
-      {/* LINHA 2 — FAIXA HORIZONTAL DO ATENDIMENTO (SOMENTE SE PACIENTE ESTIVER SELECIONADO) */}
+      {/* LINHA 2 — FAIXA HORIZONTAL COMPACTA DE AÇÕES DO ATENDIMENTO */}
       {Boolean(selectedPatientId) && (
-        <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-2.5 shrink-0 shadow-2xs">
-          <div className={`${contentMaxWidth} flex items-center gap-2.5 sm:gap-3 flex-wrap`}>
-            {/* Paciente selecionado com chip visual com "X" para desmarcar */}
-            <div className="max-w-full inline-flex items-center gap-2 bg-slate-100 hover:bg-slate-200/70 border border-slate-200 rounded-xl px-2.5 py-1 transition-colors shrink-0">
-              <div className="w-6 h-6 rounded-lg bg-white border border-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center shrink-0">
-                <User className="w-3.5 h-3.5" />
-              </div>
-              <span className="font-bold text-xs text-slate-900 truncate max-w-[160px] sm:max-w-[240px]">
-                {patientDisplayName || 'Paciente Selecionado'}
-              </span>
-              {selectedPatient?.birth_date && (
-                <span className="text-[10px] text-slate-500 hidden md:inline">
-                  ({new Date(selectedPatient.birth_date).toLocaleDateString('pt-BR')})
+        <div className="bg-white border-b border-slate-200 px-3.5 sm:px-6 py-1.5 shrink-0 shadow-2xs">
+          <div className={`${contentMaxWidth} flex items-center gap-1.5 sm:gap-2 flex-wrap`}>
+            {/* Quando em atendimento (isLockedContext), filtros de área/especialidade ficam compactos na linha de ações */}
+            {isLockedContext && filterSlot}
+            {isLockedContext && headerActions}
+
+            {/* Fora do atendimento agendado, mostra chip do paciente com opção de desmarcar */}
+            {!isLockedContext && (
+              <div className="max-w-full inline-flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200/70 border border-slate-200 rounded-lg px-2 py-0.5 transition-colors shrink-0">
+                <div className="w-5 h-5 rounded-md bg-white border border-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center shrink-0">
+                  <User className="w-3 h-3" />
+                </div>
+                <span className="font-bold text-xs text-slate-900 truncate max-w-[160px] sm:max-w-[240px]">
+                  {patientDisplayName || 'Paciente Selecionado'}
                 </span>
-              )}
-              {!isLockedContext && (
+                {selectedPatient?.birth_date && (
+                  <span className="text-[10px] text-slate-500 hidden md:inline">
+                    ({new Date(selectedPatient.birth_date).toLocaleDateString('pt-BR')})
+                  </span>
+                )}
                 <button
                   type="button"
                   onClick={handleClear}
@@ -200,10 +206,10 @@ export const ClinicalModuleShell: React.FC<ClinicalModuleShellProps> = ({
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
-              )}
-            </div>
+              </div>
+            )}
 
-            {/* Demais itens da linha contínua: Autosave, Prontuários Anteriores, Carregar últimos dados, Relatórios/Guia, Ferramentas, Finalizar Atendimento */}
+            {/* Ações em linha única compacta: Autosave, Prontuários Anteriores, Carregar últimos dados, Relatórios/Guia, Ferramentas, Finalizar Atendimento */}
             <ClinicalQuickHeaderActions
               autosaveStatus={autosaveStatus}
               lastSavedTime={lastSavedTime}
@@ -226,13 +232,13 @@ export const ClinicalModuleShell: React.FC<ClinicalModuleShellProps> = ({
         </div>
       )}
 
-      {/* LINHA 3 — ABAS DO MÓDULO (HorizontalTabNav com scroll horizontal e setas) */}
+      {/* LINHA 3 — ABAS INTERNAS DO MÓDULO (HorizontalTabNav compacto com scroll horizontal) */}
       {tabs.length > 0 && onTabChange && (
         <div className="bg-white border-b border-slate-200 shrink-0 sticky top-0 z-10 shadow-2xs">
           <HorizontalTabNav scroll={tabScroll}>
             <div
               {...tabScrollProps}
-              className={`${tabScrollProps.className} ${contentMaxWidth} px-4 sm:px-6 flex items-center gap-1.5 py-2`}
+              className={`${tabScrollProps.className} ${contentMaxWidth} px-3.5 sm:px-6 flex items-center gap-1 py-1`}
             >
               {tabs.map((tab) => {
                 const TabIcon = tab.icon;
@@ -245,13 +251,13 @@ export const ClinicalModuleShell: React.FC<ClinicalModuleShellProps> = ({
                     data-active={isActive ? 'true' : 'false'}
                     data-tour={tab.dataTour || `tab-${tab.id}`}
                     onClick={() => onTabChange(tab.id)}
-                    className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
                       isActive
                         ? tabActiveVariant
                         : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                     }`}
                   >
-                    {TabIcon && <TabIcon className="w-4 h-4 shrink-0" />}
+                    {TabIcon && <TabIcon className="w-3.5 h-3.5 shrink-0" />}
                     <span>{tab.label}</span>
                     {typeof tab.count === 'number' && (
                       <span
@@ -273,7 +279,7 @@ export const ClinicalModuleShell: React.FC<ClinicalModuleShellProps> = ({
       )}
 
       {/* CONTEÚDO: ABA ATIVA OU ESTADO VAZIO */}
-      <main className="flex-1 p-4 sm:p-6 overflow-y-auto">
+      <main className="flex-1 pt-3 pb-5 px-3.5 sm:px-6 overflow-y-auto">
         <div className={contentMaxWidth}>
           {!selectedPatientId ? (
             <ClinicalModuleEmptyState

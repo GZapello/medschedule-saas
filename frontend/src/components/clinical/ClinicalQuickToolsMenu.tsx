@@ -116,7 +116,7 @@ export const ClinicalQuickToolsMenu: React.FC<ClinicalQuickToolsMenuProps> = ({
         aria-expanded={isOpen}
         aria-haspopup="true"
         title="Abrir menu de ferramentas clínicas rápidas"
-        className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border shadow-xs transition-all cursor-pointer whitespace-nowrap ${currentVariant.button}`}
+        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border shadow-2xs transition-all cursor-pointer whitespace-nowrap ${currentVariant.button}`}
       >
         <Wrench className={`w-3.5 h-3.5 ${currentVariant.icon}`} />
         <span>{label}</span>

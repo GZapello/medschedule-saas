@@ -76,8 +76,12 @@ export function resolveClinicalModuleId(ctx: ClinicalModuleContext): string {
     return explicit;
   }
 
-  // 2. Módulo comercial explícito do usuário logado
-  const userComm = ctx.currentUser?.commercialModule || ctx.auth?.currentUser?.commercialModule;
+  // 2. Módulo comercial ou workspace clínico explícito do usuário logado
+  const userComm =
+    ctx.currentUser?.commercialModule ||
+    ctx.auth?.currentUser?.commercialModule ||
+    (ctx.currentUser as any)?.clinicalWorkspace ||
+    ctx.auth?.currentUser?.clinicalWorkspace;
   if (userComm && userComm !== 'general' && ALL_CLINICAL_MODULES[userComm]) {
     return userComm;
   }
@@ -173,11 +177,11 @@ export function resolveClinicalModuleInfo(ctx: ClinicalModuleContext): ResolvedC
 
   return {
     id: 'general',
-    name: 'Módulo especializado',
-    tooltip: 'Abrir módulo especializado',
+    name: 'Atendimento Clínico',
+    tooltip: 'Abrir Atendimento Clínico',
     icon: Stethoscope,
     isSpecialized: false,
-    badge: 'Geral',
+    badge: 'Clínico',
     profession: 'Atendimento Clínico'
   };
 }
