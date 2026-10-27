@@ -171,7 +171,7 @@ export class BillingService {
     try { assertTrialEligibility({clinicId:clinic}); trialEligible=true; } catch (e) { if (!(e instanceof BillingError)) throw e; }
     const confirmedPurchase=s?.managed && s.status==='ACTIVE' ? db.prepare("SELECT id AS transaction_id,amount AS value FROM subscription_payments WHERE subscription_id=? AND status IN ('CONFIRMED','RECEIVED') ORDER BY due_date DESC LIMIT 1").get(s.id) : null;
     return {clinicName:tenant?.name,administrativeTrial,billingRequired:!!tenant?.billing_required,trialEligible,selectedPlan,confirmedPurchase,plan,status:s?.managed?s.status:'NOT_SUBSCRIBED',activeUsers:activeUsers(clinic),maxUsers:s?.contracted_users ?? plan?.max_users ?? null,
-      contractedUsers:s?.contracted_users ?? plan?.max_users ?? null,additionalUsers:plan ? Math.max(0,(s?.contracted_users ?? plan.max_users)-plan.max_users):0,
+      contractedUsers:s?.contracted_users ?? plan?.max_users ?? null,additionalUsers:plan ? Math.max(0,(s?.contracted_users ?? plan.max_users)-plan.max_users):0,basePrice:plan ? Number(plan.monthly_price):null,includedSeats:plan ? Number(plan.max_users):null,totalSeats:s?.contracted_users ?? plan?.max_users ?? null,extraSeats:plan ? Math.max(0,(s?.contracted_users ?? plan.max_users)-plan.max_users):0,extraSeatPrice:plan ? Number(plan.extra_user_price || 0):null,
       monthlyTotal:plan ? contractPrice(plan,s?.contracted_users ?? plan.max_users):null,pendingContractedUsers:s?.pending_contracted_users ?? null,
       pendingMonthlyTotal:pending ? contractPrice(pending,s?.pending_contracted_users ?? pending.max_users):null,
       nextDueDate:s?.next_due_date || null,gracePeriodUntil:s?.grace_period_until || null,currentPeriodEnd:s?.current_period_end || null,

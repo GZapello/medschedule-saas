@@ -92,8 +92,8 @@ export function mountBillingRoutes(api:Router) {
     if(!canManage) { summary.payments=[]; summary.confirmedPurchase=null; }
     res.json({...summary,canManage});
   }));
-  api.post(['/subscriptions/checkout','/v1/subscriptions/checkout'],...guard,manager,handler(async(req,res)=>res.json(await BillingService.checkout(req.tenantId!,req.body.planCode,req.user!.userId,req.body.contractedUsers))));
-  api.post(['/subscriptions/change-plan','/v1/subscriptions/change-plan'],...guard,manager,handler(async(req,res)=>res.json(await BillingService.changePlan(req.tenantId!,req.body.planCode,req.user!.userId,req.body.contractedUsers))));
+  api.post(['/subscriptions/checkout','/v1/subscriptions/checkout'],...guard,manager,handler(async(req,res)=>res.json(await BillingService.checkout(req.tenantId!,req.body.planCode,req.user!.userId,req.body.totalSeats ?? req.body.contractedUsers))));
+  api.post(['/subscriptions/change-plan','/v1/subscriptions/change-plan'],...guard,manager,handler(async(req,res)=>res.json(await BillingService.changePlan(req.tenantId!,req.body.planCode,req.user!.userId,req.body.totalSeats ?? req.body.contractedUsers))));
   api.post(['/subscriptions/cancel','/v1/subscriptions/cancel'],...guard,manager,handler(async(req,res)=>{
     if(req.body.confirmation!=='CANCELAR') throw new BillingError('CONFIRMATION_REQUIRED','Digite CANCELAR para confirmar.',400);
     try { res.json(await BillingService.cancel(req.tenantId!,req.user!.userId,typeof req.body.reason==='string'?req.body.reason.slice(0,1000):'')); }
