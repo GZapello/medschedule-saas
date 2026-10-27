@@ -28,7 +28,7 @@ function bootstrap(scenario) {
       return {clinicName:'QA clinic',canOperate:allowed && !window.qaBlocked,status,managed:status!=='NOT_SUBSCRIBED',isTrial:status==='TRIAL',trialDaysRemaining:7,
         trialEligible:false,trialUsed:status==='TRIAL_EXPIRED',canManage:true,activeUsers:1,maxUsers:5,payments:[]};
     }
-    if(endpoint==='/v1/plans')return ['SOLO','TEAM','CLINIC'].map((code,i)=>({id:code,code,name:['Zemda Solo','Zemda Equipe','Zemda Clínica'][i],monthly_price:[69.9,249.9,619.9][i],max_users:[1,5,20][i],trial_days:i===0?7:0}));
+    if(endpoint==='/v1/plans')return ['SOLO','TEAM','CLINIC'].map((code,i)=>({id:code,code,name:['Zemda Solo','Zemda Equipe','Zemda Clínica'][i],monthly_price:[69.9,249.9,619.9][i],max_users:[1,5,15][i],trial_days:i===0?7:0}));
     if(endpoint==='/v1/subscriptions/profile')return {name:'QA',cpfCnpj:'12345678909',email:user.email,phone:'',postalCode:'01310930',address:'Rua QA',addressNumber:'1',province:'Centro',complement:''};
     if(endpoint.includes('user-onboarding'))return {onboardingStatus:'completed',onboardingDismissed:true,moduleToursCompleted:[],whatsNewDismissed:[]};
     if(endpoint.includes('appointments'))return [];

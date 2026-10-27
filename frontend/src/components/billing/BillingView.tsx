@@ -67,6 +67,8 @@ export const BillingView: React.FC<BillingViewProps> = ({
   const { summary, loading: billingLoading, error: summaryError, reload } = useBillingSummary(true);
   const [plans, setPlans] = useState<any[]>([]), [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
   const [showPlans, setShowPlans] = useState(publicPage), [cancelOpen, setCancelOpen] = useState(false), [confirmation, setConfirmation] = useState(''), [reason, setReason] = useState('');
+  const [seatChoices,setSeatChoices]=useState<Record<string,number>>({});
+  const seatsFor=(plan:any)=>seatChoices[plan.code] ?? Math.max(plan.max_users,summary?.contractedUsers ?? plan.max_users);
   const [historyOpen, setHistoryOpen] = useState(false);
   const checkoutRequested = useRef(new URLSearchParams(window.location.search).get('checkout') === '1');
   const [registrationCheckout, setRegistrationCheckout] = useState(false);
@@ -89,7 +91,7 @@ export const BillingView: React.FC<BillingViewProps> = ({
     } catch (e: any) { setError(e.message); } finally { setBusy(false); }
   };
   const openCheckout = async (code: string) => {
-    const result = await ApiClient.post<{ url: string }>('/v1/subscriptions/checkout', { planCode: code });
+    const result = await ApiClient.post<{ url: string }>('/v1/subscriptions/checkout', { planCode: code, contractedUsers: seatsFor(plans.find(p=>p.code===code) || {code,max_users:1}) });
     // The backend validates and returns only an Asaas HTTPS URL.
     await navigateToUrl(result.url);
   };
@@ -99,7 +101,7 @@ export const BillingView: React.FC<BillingViewProps> = ({
     if (busy) return; setBusy(true); setError(''); setNotice('');
     try {
       if (summary?.managed && summary.status === 'ACTIVE') {
-        const result = await ApiClient.post<any>('/v1/subscriptions/change-plan', { planCode: code }); setNotice(result.message); await refresh(); setShowPlans(false);
+        const result = await ApiClient.post<any>('/v1/subscriptions/change-plan', { planCode: code, contractedUsers: seatsFor(plans.find(p=>p.code===code) || {code,max_users:1}) }); setNotice(result.message); await refresh(); setShowPlans(false);
       } else {
         await openCheckout(code);
       }
@@ -212,6 +214,17 @@ export const BillingView: React.FC<BillingViewProps> = ({
     {notice && <p className="rounded-xl p-4 bg-emerald-50 text-emerald-800" role="status">{notice}</p>}
     {summary?.status==='ACTIVE' && callback==='sucesso' && <div className="p-4 rounded-xl bg-emerald-50 text-emerald-800 flex gap-3 items-center"><CheckCircle2 />Assinatura ativada com sucesso.<button className="underline ml-auto font-semibold hover:text-emerald-950 cursor-pointer" onClick={async()=>{await reloadSession();navigateToDashboard();}}>Acessar Zemda</button></div>}
     {summary?.selectedPlan && !summary?.managed && !registrationCheckout && canManage && <div className="p-4 bg-teal-50 rounded-xl text-sm">Plano escolhido: <strong>{summary.selectedPlan.name}</strong><button className="ml-3 underline" onClick={()=>{setRegistrationCheckout(true);setProfileOpen(true);}}>Continuar contratação</button></div>}
+    {canManage && plans.length>0 && <div className="rounded-2xl border bg-white p-5 space-y-3">
+      <h2 className="font-bold">Acessos contratados</h2>
+      <p className="text-sm text-slate-600">Escolha o total de acessos. Alterações de uma assinatura ativa valem no próximo ciclo, após confirmação do pagamento. Desative usuários antes de reduzir abaixo do uso atual.</p>
+      <div className="grid gap-4 sm:grid-cols-3">{plans.map(plan=><label key={plan.code} className="text-sm">{plan.name}
+        <input aria-label={`Acessos ${plan.name}`} type="number" min={plan.max_users} max={plan.total_user_limit ?? undefined} step="1" value={seatsFor(plan)} disabled={busy || !!summary?.pendingPlan}
+          onChange={e=>setSeatChoices(previous=>({...previous,[plan.code]:Number(e.target.value)}))} className="border rounded-lg p-2 block w-full"/>
+        <strong className="block">{money((Math.round(plan.monthly_price*100)+Math.max(0,seatsFor(plan)-plan.max_users)*Math.round((plan.extra_user_price || 0)*100))/100)}/mês</strong>
+        <span>{plan.max_users} incluídos · adicional {money(plan.extra_user_price || 0)}/mês · {plan.total_user_limit ? `máximo ${plan.total_user_limit}` : 'expansão acima de 15'}</span>
+        {summary?.status==='ACTIVE' && summary.plan?.code===plan.code && <button disabled={busy || !!summary.pendingPlan} className="block underline mt-2" onClick={()=>void choose(plan.code)}>Atualizar acessos</button>}
+      </label>)}</div>
+    </div>}
     {pending && <div className="bg-amber-50 text-amber-900 p-4 rounded-xl flex gap-3"><AlertCircle className="shrink-0"/><p>Há uma pendência na sua assinatura. Regularize o pagamento para evitar a suspensão do acesso. Prazo: {date(summary.gracePeriodUntil)}.</p></div>}
     {summary?.isTrial && (
       <div className="bg-gradient-to-r from-teal-50 via-emerald-50/50 to-teal-50 border border-teal-200/90 text-teal-950 p-5 rounded-3xl flex flex-wrap items-center justify-between gap-4 shadow-xs">
@@ -263,7 +276,7 @@ export const BillingView: React.FC<BillingViewProps> = ({
         <div>
           <p className="text-xs text-slate-500">Plano atual</p>
           <h2 className="font-bold text-lg text-slate-900">{summary.isTrial ? 'Zemda Solo (Trial)' : (summary.plan?.name || 'Sem assinatura Asaas')}</h2>
-          <p className="text-teal-700 font-semibold">{summary.isTrial ? 'R$ 0,00 (7 dias grátis)' : (summary.plan ? money(summary.plan.monthly_price)+'/mês' : 'Escolha um dos planos abaixo')}</p>
+          <p className="text-teal-700 font-semibold">{summary.isTrial ? 'R$ 0,00 (7 dias grátis)' : (summary.plan ? money(summary.monthlyTotal ?? summary.plan.monthly_price)+'/mês' : 'Escolha um dos planos abaixo')}</p>
         </div>
         <div>
           <p className="text-xs text-slate-500">Status</p>
@@ -271,14 +284,14 @@ export const BillingView: React.FC<BillingViewProps> = ({
         </div>
         <div>
           <p className="text-xs text-slate-500">Usuários ativos</p>
-          <p className="font-bold text-slate-800">{summary.activeUsers} / {summary.maxUsers ?? '—'}</p>
+          <p className="font-bold text-slate-800">{summary.activeUsers} / {summary.maxUsers ?? '—'} acessos utilizados</p>
         </div>
         <div>
           <p className="text-xs text-slate-500">{summary.isTrial ? 'Término do teste' : 'Próxima cobrança'}</p>
           <p className="font-bold text-slate-800">{summary.isTrial ? date(summary.trialEndsAt) : summary.status==='CANCELED'?'Renovação cancelada':date(summary.nextDueDate)}</p>
         </div>
       </div>
-      {summary.pendingPlan && <p className="text-teal-800 bg-teal-50 border border-teal-200/60 rounded-xl p-3 text-sm">Mudança para {summary.pendingPlan.name} no ciclo de {date(summary.changeEffectiveOn)}, após confirmação do pagamento.</p>}
+      {summary.pendingPlan && <p className="text-teal-800 bg-teal-50 border border-teal-200/60 rounded-xl p-3 text-sm">Mudança para {summary.pendingPlan.name}, {summary.pendingContractedUsers ?? summary.pendingPlan.max_users} acessos por {money(summary.pendingMonthlyTotal ?? summary.pendingPlan.monthly_price)}/mês, no ciclo de {date(summary.changeEffectiveOn)}, após confirmação do pagamento.</p>}
       {summary.status==='CANCELED' && summary.currentPeriodEnd && <p>Acesso pago até {date(summary.currentPeriodEnd)}. Seus dados serão preservados.</p>}
       {canManage && <div className="flex flex-wrap gap-3"><button className="px-4 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer transition-all" onClick={()=>{setRegistrationCheckout(false);setShowPlans(v=>!v);}}>Alterar plano</button>
         <button className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-xl cursor-pointer transition-all" onClick={()=>setProfileOpen(v=>!v)}>Dados de cobrança</button>
@@ -323,10 +336,10 @@ export const BillingView: React.FC<BillingViewProps> = ({
           {plans.map(plan => {
             const isSolo = (plan.code || '').toUpperCase() === 'SOLO' || plan.max_users === 1;
             const isFeatured = (plan.code || '').toLowerCase().includes('equipe') || (plan.name || '').toLowerCase().includes('equipe');
-            const userLimitLabel = plan.max_users === 1 ? '1 acesso' : `${plan.max_users} acessos`;
+            const userLimitLabel = `${plan.max_users} ${plan.max_users===1 ? 'acesso incluído' : 'acessos incluídos'}`;
 
             let topBadge = isFeatured ? 'Mais Escolhido' : null;
-            let subDescription = plan.max_users === 1 ? 'Para atendimento autônomo individual.' : plan.max_users <= 5 ? 'Para clínicas e consultórios com até 5 acessos.' : 'Para clínicas consolidadas com até 20 acessos.';
+            let subDescription = plan.max_users === 1 ? 'Para atendimento autônomo individual.' : plan.max_users <= 5 ? 'Para clínicas com 5 acessos incluídos e até 12 contratados.' : 'Para clínicas com 15 acessos incluídos e expansão disponível.';
 
             const planButtonLabel = isSolo
               ? 'Assinar Zemda Solo'
@@ -392,7 +405,7 @@ export const BillingView: React.FC<BillingViewProps> = ({
                   </div>
                   <div>
                     <p className="text-3xl font-black text-slate-900 tracking-tight">
-                      {money(plan.monthly_price)}
+                      {money((Math.round(plan.monthly_price*100)+Math.max(0,seatsFor(plan)-plan.max_users)*Math.round((plan.extra_user_price || 0)*100))/100)}
                       <span className="text-xs text-slate-500 font-normal"> /mês</span>
                     </p>
                     <p className="text-xs text-slate-600 mt-2 leading-relaxed">

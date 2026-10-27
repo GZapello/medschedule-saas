@@ -8,6 +8,8 @@ export interface RegistrationPlan {
   name: string;
   monthly_price: number;
   max_users: number;
+  extra_user_price?: number;
+  total_user_limit?: number | null;
   cycle: string;
   trial_days: number;
 }
@@ -128,7 +130,7 @@ export function RegistrationPlans({
                 <div className="mt-1 flex items-center gap-1.5 text-xs font-bold text-slate-700">
                   <Users className="w-3.5 h-3.5 text-slate-400" />
                   <span>
-                    {plan.max_users === 1 ? '1 acesso profissional' : `Até ${plan.max_users} acessos profissionais`}
+                    {plan.max_users} acessos incluídos · adicional {Number(plan.extra_user_price || 0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}/mês · {plan.total_user_limit ? `até ${plan.total_user_limit} acessos` : 'expansão disponível'}
                   </span>
                 </div>
               </div>

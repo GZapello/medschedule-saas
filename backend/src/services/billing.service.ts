@@ -105,9 +105,18 @@ function chosenPlan(code: unknown): any {
   const p=typeof code==='string' ? db.prepare('SELECT * FROM plans WHERE code=? AND active=1').get(code) : null;
   if (!p) throw new BillingError('PLAN_INVALID','Selecione um plano válido.',400); return p;
 }
-function checkPlanSize(clinic: string, plan: any) {
+export function contractPrice(plan: any, users: number): number {
+  return (Math.round(plan.monthly_price*100) + Math.max(0,users-plan.max_users)*Math.round((plan.extra_user_price || 0)*100))/100;
+}
+function contractUsers(plan: any, requested: unknown): number {
+  const total=requested === undefined ? plan.max_users : requested;
+  if(typeof total!=='number' || !Number.isSafeInteger(total) || total<plan.max_users || (plan.total_user_limit && total>plan.total_user_limit))
+    throw new BillingError('PLAN_USER_LIMIT_REACHED',`Escolha pelo menos ${plan.max_users} acessos${plan.total_user_limit ? ` e no máximo ${plan.total_user_limit}` : ''}.`,422);
+  return total;
+}
+function checkPlanSize(clinic: string, total: number) {
   const count=activeUsers(clinic);
-  if (count>plan.max_users) throw new BillingError('PLAN_USER_LIMIT_REACHED',`Você possui ${count} usuários ativos. O plano escolhido permite até ${plan.max_users}. Desative ${count-plan.max_users} usuários antes de continuar.`);
+  if(count>total) throw new BillingError('PLAN_USER_LIMIT_REACHED',`Você possui ${count} usuários ativos. Desative ${count-total} usuários antes de reduzir os acessos.`);
 }
 async function customer(t: any): Promise<string> {
   if (t?.id && String(t.id).startsWith('sbx-tenant-')) {
@@ -140,15 +149,15 @@ async function customer(t: any): Promise<string> {
 }
 
 export class BillingService {
-  static plans() { return db.prepare('SELECT id,code,name,monthly_price,max_users FROM plans WHERE code IS NOT NULL AND active=1 ORDER BY monthly_price').all().map(p=>({...p,cycle:BILLING_CYCLE,trial_days:p.code==='SOLO'?SOLO_TRIAL_DAYS:0})); }
+  static plans() { return db.prepare('SELECT id,code,name,monthly_price,max_users,extra_user_price,total_user_limit FROM plans WHERE code IS NOT NULL AND active=1 ORDER BY monthly_price').all().map(p=>({...p,cycle:BILLING_CYCLE,trial_days:p.code==='SOLO'?SOLO_TRIAL_DAYS:0})); }
   static summary(clinic: string) {
     this.expireGrace();
     this.expireTrials();
     const s=currentSubscription(clinic);
     const tenant=db.prepare('SELECT name, trial_used, plan_id, billing_required FROM tenants WHERE id=?').get(clinic);
     const selectedPlan=tenant?.plan_id ? this.plans().find(p=>p.id===tenant.plan_id) || null : null;
-    const plan=s?.managed ? db.prepare('SELECT code,name,monthly_price,max_users FROM plans WHERE id=?').get(s.plan_id) : null;
-    const pending=s?.pending_plan_id ? db.prepare('SELECT code,name,monthly_price,max_users FROM plans WHERE id=?').get(s.pending_plan_id) : null;
+    const plan=s?.managed ? db.prepare('SELECT code,name,monthly_price,max_users,extra_user_price,total_user_limit FROM plans WHERE id=?').get(s.plan_id) : null;
+    const pending=s?.pending_plan_id ? db.prepare('SELECT code,name,monthly_price,max_users,extra_user_price,total_user_limit FROM plans WHERE id=?').get(s.pending_plan_id) : null;
     const administrativeTrial=s?.managed ? null : db.prepare(`SELECT f.trial_end_at AS endsAt,f.duration_days AS durationDays,p.name AS planName
       FROM free_trials f LEFT JOIN plans p ON p.id=? WHERE f.tenant_id=? AND f.activated_at IS NOT NULL
       ORDER BY f.activated_at DESC LIMIT 1`).get(s?.plan_id,clinic) || null;
@@ -161,28 +170,31 @@ export class BillingService {
     let trialEligible=false;
     try { assertTrialEligibility({clinicId:clinic}); trialEligible=true; } catch (e) { if (!(e instanceof BillingError)) throw e; }
     const confirmedPurchase=s?.managed && s.status==='ACTIVE' ? db.prepare("SELECT id AS transaction_id,amount AS value FROM subscription_payments WHERE subscription_id=? AND status IN ('CONFIRMED','RECEIVED') ORDER BY due_date DESC LIMIT 1").get(s.id) : null;
-    return {clinicName:tenant?.name,administrativeTrial,billingRequired:!!tenant?.billing_required,trialEligible,selectedPlan,confirmedPurchase,plan,status:s?.managed?s.status:'NOT_SUBSCRIBED',activeUsers:activeUsers(clinic),maxUsers:plan?.max_users || null,
+    return {clinicName:tenant?.name,administrativeTrial,billingRequired:!!tenant?.billing_required,trialEligible,selectedPlan,confirmedPurchase,plan,status:s?.managed?s.status:'NOT_SUBSCRIBED',activeUsers:activeUsers(clinic),maxUsers:s?.contracted_users ?? plan?.max_users ?? null,
+      contractedUsers:s?.contracted_users ?? plan?.max_users ?? null,additionalUsers:plan ? Math.max(0,(s?.contracted_users ?? plan.max_users)-plan.max_users):0,
+      monthlyTotal:plan ? contractPrice(plan,s?.contracted_users ?? plan.max_users):null,pendingContractedUsers:s?.pending_contracted_users ?? null,
+      pendingMonthlyTotal:pending ? contractPrice(pending,s?.pending_contracted_users ?? pending.max_users):null,
       nextDueDate:s?.next_due_date || null,gracePeriodUntil:s?.grace_period_until || null,currentPeriodEnd:s?.current_period_end || null,
       pendingPlan:pending,changeEffectiveOn:s?.pending_plan_effective_on || null,canOperate:canOperate(clinic),
       environment:s?.gateway_environment || AsaasService.getEnvironment(),managed:!!s?.managed,
       isTrial,trialStartedAt:s?.trial_started_at || null,trialEndsAt:s?.trial_ends_at || null,trialDaysRemaining,trialUsed:!!tenant?.trial_used,
       payments:db.prepare('SELECT id,amount,billing_type,status,due_date,confirmed_at,received_at,invoice_url FROM subscription_payments WHERE clinic_id=? ORDER BY due_date DESC LIMIT 100').all(clinic)};
   }
-  static async checkout(clinic:string,code:unknown,user:string):Promise<{url:string}> {
-    const plan=chosenPlan(code);
+  static async checkout(clinic:string,code:unknown,user:string,requestedUsers?:unknown):Promise<{url:string}> {
+    const plan=chosenPlan(code),total=contractUsers(plan,requestedUsers);
     let s=currentSubscription(clinic);
     AsaasService.config(); const app=AsaasService.appUrl();
     if ((process.env.ASAAS_WEBHOOK_TOKEN || '').length<32) throw new BillingError('WEBHOOK_NOT_CONFIGURED','Configure a autenticação do webhook antes de iniciar assinaturas.',503);
     return withOperation(clinic,async()=> {
-      const t=clinicForBilling(clinic);checkPlanSize(clinic,plan);
+      const t=clinicForBilling(clinic);checkPlanSize(clinic,total);
       const environment=AsaasService.getEnvironment();
       s=currentSubscription(clinic);
-      if (s?.managed && s.gateway_environment!==environment) throw new BillingError('ENVIRONMENT_MISMATCH','Esta assinatura pertence a outro ambiente. A migração exige uma nova contratação controlada.');
+      if (s?.managed && (s.gateway_environment || s.asaas_subscription_id || s.asaas_checkout_id || s.asaas_customer_id) && s.gateway_environment!==environment) throw new BillingError('ENVIRONMENT_MISMATCH','Esta assinatura pertence a outro ambiente. A migração exige uma nova contratação controlada.');
       if (s?.managed && s.status==='CANCELED' && s.current_period_end>today()) throw new BillingError('PAID_PERIOD_REMAINS',`Seu acesso pago permanece até ${s.current_period_end}. Inicie uma nova assinatura após esse período.`);
       if (s?.managed && s.asaas_subscription_id && s.status!=='CANCELED') throw new BillingError('SUBSCRIPTION_EXISTS','Use Alterar plano ou regularize a cobrança atual, sem criar uma assinatura duplicada.');
       const open=db.prepare("SELECT * FROM billing_checkouts WHERE clinic_id=? AND state IN ('REQUESTED','OPEN','UNKNOWN')").get(clinic);
       if (open) {
-        if (open.plan_id===plan.id && open.state==='OPEN' && open.expires_at>new Date().toISOString()) return {url:AsaasService.safeUrl(open.url)};
+        if (open.environment===environment && open.plan_id===plan.id && (s?.contracted_users ?? plan.max_users)===total && open.state==='OPEN' && open.expires_at>new Date().toISOString()) return {url:AsaasService.safeUrl(open.url)};
         throw new BillingError('CHECKOUT_PENDING','Há um checkout pendente. Cancele-o ou aguarde a confirmação antes de iniciar outro.');
       }
       const address=billingAddress(t,true);
@@ -190,7 +202,7 @@ export class BillingService {
       // Existing customers may predate address collection. Keep the same gateway ID.
       const updatedCustomer=await AsaasService.request(`/customers/${encodeURIComponent(customerId)}`,{method:'PUT',body:address});
       if(!updatedCustomer.city) throw new BillingError('BILLING_ADDRESS_REQUIRED','O Asaas não identificou a cidade. Confira o CEP e o endereço nos Dados de cobrança.',422);
-      clinicForBilling(clinic);checkPlanSize(clinic,plan);
+      clinicForBilling(clinic);checkPlanSize(clinic,total);
       const start=s?.status==='CANCELED' && s.current_period_end>today() ? s.current_period_end : today();
       const sid=randomUUID(),cid=randomUUID(),reference=`ZEMDA_CLINIC_${clinic}_SUB_${sid}`;
       db.transaction(()=>{
@@ -199,13 +211,14 @@ export class BillingService {
           asaas_customer_id,gateway_environment,next_due_date,external_reference,updated_at)
           VALUES(?,?,?,?,'PENDING_PAYMENT',?,'',1,1,?,?,?,?,datetime('now'))`).run(sid,clinic,clinic,plan.id,start,customerId,environment,start,reference);
         db.prepare("INSERT INTO billing_checkouts(id,clinic_id,subscription_id,environment,external_reference,plan_id,state) VALUES(?,?,?,?,?,?,'REQUESTED')").run(cid,clinic,sid,environment,reference,plan.id);
+        db.prepare('UPDATE subscriptions SET contracted_users=? WHERE id=?').run(total,sid);
         s=db.prepare('SELECT * FROM subscriptions WHERE id=?').get(sid);
-        billingAudit(s,'SUBSCRIPTION_CREATED',null,'PENDING_PAYMENT',user,{planCode:plan.code});
+        billingAudit(s,'SUBSCRIPTION_CREATED',null,'PENDING_PAYMENT',user,{planCode:plan.code,contractedUsers:total,monthlyTotal:contractPrice(plan,total)});
       })();
       try {
         const result=await AsaasService.request('/checkouts',{method:'POST',body:{customer:customerId,externalReference:reference,billingTypes:['CREDIT_CARD'],chargeTypes:['RECURRENT'],minutesToExpire:60,
           subscription:{cycle:BILLING_CYCLE,nextDueDate:start+' 12:00:00'},
-          items:[{name:plan.name,description:`Assinatura mensal Zemda - até ${plan.max_users} usuários`,quantity:1,value:plan.monthly_price}],
+          items:[{name:plan.name,description:`Assinatura mensal Zemda - ${total} acessos`,quantity:1,value:contractPrice(plan,total)}],
           callback:{successUrl:app+'/assinatura/sucesso',cancelUrl:app+'/assinatura/cancelada',expiredUrl:app+'/assinatura/expirada'}}});
         if (typeof result.id!=='string') throw new AsaasError(0,true);
         const url=AsaasService.checkoutUrl(result.id,result.link);
@@ -220,27 +233,31 @@ export class BillingService {
       }
     });
   }
-  static async changePlan(clinic:string,code:unknown,user:string) {
+  static async changePlan(clinic:string,code:unknown,user:string,requestedUsers?:unknown) {
     return withOperation(clinic,async()=>{
-      clinicForBilling(clinic);const s=currentSubscription(clinic),plan=chosenPlan(code);checkPlanSize(clinic,plan);
+      clinicForBilling(clinic);const s=currentSubscription(clinic),plan=chosenPlan(code);
+      const previousPlan=s ? db.prepare('SELECT * FROM plans WHERE id=?').get(s.plan_id):null;
+      const total=contractUsers(plan,requestedUsers ?? Math.max(plan.max_users,s?.contracted_users ?? previousPlan?.max_users ?? plan.max_users));
+      checkPlanSize(clinic,total);
       if (!s?.managed || s.status!=='ACTIVE' || !s.asaas_subscription_id || s.cancelled_at) throw new BillingError('SUBSCRIPTION_NOT_ACTIVE','Regularize ou inicie uma assinatura antes de alterar o plano.');
       if(s.gateway_environment!==AsaasService.getEnvironment()) throw new BillingError('ENVIRONMENT_MISMATCH','Ambiente da assinatura incompatível.');
-      if(s.plan_id===plan.id && !s.pending_plan_id) return {message:'Este já é o plano atual.'};
-      if(s.pending_plan_id && s.pending_plan_id!==plan.id) throw new BillingError('PLAN_CHANGE_PENDING','Já existe uma mudança programada. Aguarde sua conclusão.');
+      if(s.plan_id===plan.id && (s.contracted_users ?? plan.max_users)===total && !s.pending_plan_id) return {message:'Este já é o plano atual.'};
+      if(s.pending_plan_id) throw new BillingError('PLAN_CHANGE_PENDING','Já existe uma mudança programada. Aguarde sua conclusão.');
       const due=s.current_period_end;
       if(!due || due<=today()) throw new BillingError('RENEWAL_PENDING','Aguarde a confirmação da renovação para alterar o plano.');
       // Do not alter an overdue invoice. All open charges must be future renewals.
       const charges=await AsaasService.request(`/subscriptions/${encodeURIComponent(s.asaas_subscription_id)}/payments?limit=100`);
       if(charges.hasMore || (charges.data || []).some((p:any)=>!['CONFIRMED','RECEIVED','REFUNDED','DELETED'].includes(p.status) && p.dueDate<due)) throw new BillingError('PAYMENTS_REVIEW_REQUIRED','Há cobranças pendentes que precisam ser regularizadas antes da mudança.');
-      db.prepare("UPDATE subscriptions SET pending_plan_id=?,pending_plan_effective_on=?,plan_change_state='REQUESTED' WHERE id=?").run(plan.id,due,s.id);
+      checkPlanSize(clinic,total);
+      db.prepare("UPDATE subscriptions SET pending_plan_id=?,pending_plan_effective_on=?,pending_contracted_users=?,plan_change_state='REQUESTED' WHERE id=?").run(plan.id,due,total,s.id);
       try {
-        await AsaasService.request(`/subscriptions/${encodeURIComponent(s.asaas_subscription_id)}`,{method:'PUT',body:{value:plan.monthly_price,description:plan.name,updatePendingPayments:true}});
+        await AsaasService.request(`/subscriptions/${encodeURIComponent(s.asaas_subscription_id)}`,{method:'PUT',body:{value:contractPrice(plan,total),description:`${plan.name} - ${total} acessos`,updatePendingPayments:true}});
         db.transaction(()=>{
           db.prepare("UPDATE subscriptions SET plan_change_state='SCHEDULED',updated_at=datetime('now') WHERE id=?").run(s.id);
-          billingAudit(s,'PLAN_CHANGE_SCHEDULED',s.status,s.status,user,{planCode:plan.code,effectiveOn:due});
+          billingAudit(s,'PLAN_CHANGE_SCHEDULED',s.status,s.status,user,{planCode:plan.code,contractedUsers:total,monthlyTotal:contractPrice(plan,total),effectiveOn:due});
         })();
       } catch(e) {
-        if(e instanceof AsaasError && !e.ambiguous) db.prepare('UPDATE subscriptions SET pending_plan_id=NULL,pending_plan_effective_on=NULL,plan_change_state=NULL WHERE id=?').run(s.id);
+        if(e instanceof AsaasError && !e.ambiguous) db.prepare('UPDATE subscriptions SET pending_plan_id=NULL,pending_plan_effective_on=NULL,pending_contracted_users=NULL,plan_change_state=NULL WHERE id=?').run(s.id);
         throw e;
       }
       return {message:'Mudança programada para o próximo ciclo. O limite será atualizado após a confirmação do pagamento.',effectiveOn:due};
@@ -289,14 +306,15 @@ export class BillingService {
   }
   static async syncActiveSubscriptionPrices(): Promise<{ synced: number; skipped: number; errors: number }> {
     const activeSubs = db.prepare(`
-      SELECT s.id, s.clinic_id, s.asaas_subscription_id, s.status, s.plan_id, p.code, p.name, p.monthly_price
+      SELECT s.id, s.clinic_id, s.asaas_subscription_id, s.status, s.plan_id, s.contracted_users, p.code, p.name, p.monthly_price,p.max_users,p.extra_user_price
       FROM subscriptions s
       JOIN plans p ON p.id = s.plan_id
-      WHERE s.managed = 1 AND s.is_current = 1 AND s.status = 'ACTIVE' AND s.asaas_subscription_id IS NOT NULL
-    `).all() as any[];
+      WHERE s.managed = 1 AND s.is_current = 1 AND s.status = 'ACTIVE' AND s.asaas_subscription_id IS NOT NULL AND s.pending_plan_id IS NULL AND s.gateway_environment=?
+    `).all(AsaasService.getEnvironment()) as any[];
 
     let synced = 0, skipped = 0, errors = 0;
     for (const sub of activeSubs) {
+      sub.monthly_price=contractPrice(sub,sub.contracted_users ?? sub.max_users);
       try {
         const remote = await AsaasService.request(`/subscriptions/${encodeURIComponent(sub.asaas_subscription_id)}`);
         if (remote && remote.value !== undefined && Math.abs(remote.value - sub.monthly_price) > 0.005) {
@@ -332,7 +350,7 @@ export class BillingService {
 
       for (const sub of expired) {
         db.prepare("UPDATE subscriptions SET status = 'TRIAL_EXPIRED', updated_at = datetime('now') WHERE id = ?").run(sub.id);
-        db.prepare("UPDATE trial_history SET status = 'EXPIRED', updated_at = datetime('now') WHERE subscription_id = ?").run(sub.id);
+        db.prepare("UPDATE trial_history SET status = 'EXPIRED', updated_at = datetime('now') WHERE subscription_id = ? AND status = 'ACTIVE'").run(sub.id);
         billingAudit(sub, 'TRIAL_EXPIRED', 'TRIAL', 'TRIAL_EXPIRED', null, {
           trialStartedAt: sub.trial_started_at,
           trialEndsAt: sub.trial_ends_at
@@ -351,7 +369,7 @@ export class BillingService {
   static createSoloTrialInTransaction(clinicId: string, userId: string) {
     assertTrialEligibility({clinicId,userId});
     const tenant=clinicForBilling(clinicId),plan=chosenPlan('SOLO');
-    checkPlanSize(clinicId,plan);
+    checkPlanSize(clinicId,plan.max_users);
     const started=new Date(),trialStartedAt=started.toISOString();
     const trialEndsAt=new Date(started.getTime()+SOLO_TRIAL_DAYS*86400000).toISOString();
     const sid=randomUUID();

@@ -21,7 +21,9 @@ const actualFetch=global.fetch,calls=[],customers=new Map(),checkouts=new Map(),
 let customerCounter=0,checkoutCounter=0,failCheckout=false,rejectCheckout=false;
 const testAddress={address:'Rua de Teste',addressNumber:'100',province:'Centro',postalCode:'01310930',complement:''};
 global.fetch=async(url,options={})=>{
-  if(!String(url).startsWith('https://api-sandbox.asaas.com/v3')) return actualFetch(url,options);
+  if(!String(url).startsWith('https://api-sandbox.asaas.com/v3')) {
+    assert.equal(new URL(url).hostname,'127.0.0.1','External network forbidden in billing tests');return actualFetch(url,options);
+  }
   assert.equal(options.headers.access_token,process.env.ASAAS_API_KEY);assert.equal(options.headers['User-Agent'],'Zemda/1.0');
   const u=new URL(url),resource=u.pathname.slice(3),body=options.body?JSON.parse(options.body):null;calls.push({resource,method:options.method,body});
   const reply=(value,status=200)=>new Response(JSON.stringify(value),{status,headers:{'Content-Type':'application/json'}});
@@ -67,7 +69,7 @@ let server,eventCounter=0;
     for(let i=0;i<100;i++) {await BillingWebhookService.processPending();if(!BillingWebhookService.running)break;await new Promise(r=>setTimeout(r,5));}
     return {id,...r};
   };
-  assert.deepEqual(BillingService.plans().map(p=>[p.code,p.monthly_price,p.max_users]),[['SOLO',69.9,1],['TEAM',249.9,5],['CLINIC',619.9,20]]);
+  assert.deepEqual(BillingService.plans().map(p=>[p.code,p.monthly_price,p.max_users]),[['SOLO',69.9,1],['TEAM',249.9,5],['CLINIC',619.9,15]]);
   const verificationId = 'verif_test_1';
   db.prepare(`
     INSERT INTO email_verifications (id, email, purpose, code_hash, status, verified_at, expires_at)
@@ -128,9 +130,9 @@ let server,eventCounter=0;
   assert.equal(activeUsers('C'),5);assert.throws(()=>account('team-six','C'),/PLAN_USER_LIMIT_REACHED/);
   assert.equal((await call('/subscriptions/checkout',{planCode:'TEAM'},token('team-1','C','receptionist'))).status,403);
   db.prepare("UPDATE subscriptions SET plan_id='zemda-CLINIC' WHERE id='team'").run();
-  for(let i=5;i<=19;i++)account('clinic-'+i,'C','professional');assert.equal(activeUsers('C'),20);assert.throws(()=>account('clinic-21','C'),/PLAN_USER_LIMIT_REACHED/);
-  account('global-local','C','superadmin');assert.equal(activeUsers('C'),20);
-  assert.equal((await call('/subscriptions/change-plan',{planCode:'TEAM'})).status,409);
+  for(let i=5;i<=14;i++)account('clinic-'+i,'C','professional');assert.equal(activeUsers('C'),15);assert.throws(()=>account('clinic-21','C'),/PLAN_USER_LIMIT_REACHED/);
+  account('global-local','C','superadmin');assert.equal(activeUsers('C'),15);
+  assert.equal((await call('/subscriptions/change-plan',{planCode:'TEAM'})).status,422);
   // Upgrade is scheduled; no local entitlement is changed without payment.
   r=await call('/subscriptions/change-plan',{planCode:'TEAM'},signupToken);assert.equal(r.status,200,JSON.stringify(r));assert.equal(sub().plan_id,'zemda-SOLO');assert.equal(sub().pending_plan_id,'zemda-TEAM');
   clock=new OriginalDate(end+'T12:00:00Z').getTime();
@@ -222,5 +224,102 @@ let server,eventCounter=0;
     const confirmed=BillingService.summary(cid);assert.equal(confirmed.plan.code,plan.code);assert.equal(confirmed.confirmedPurchase.value,plan.monthly_price);assert.deepEqual(Object.keys(confirmed.confirmedPurchase).sort(),['transaction_id','value']);
   }
   assert.equal(db.prepare('PRAGMA foreign_key_check').all().length,0);
-  console.log('PASS: registration → hosted checkout → authenticated webhook → activation; prices, 1/5/20 seats, duplicate events, grace/suspension/reactivation, next-cycle upgrade, downgrade, cancellation, ban isolation, ambiguous retries, admin metrics, environment and secret isolation. Sandbox live validation remains required.');
+  // Contracted seats: exercise HTTP, database guards and authoritative gateway reads.
+  async function seatClinic(code,total,expected,trial=false) {
+    const cid=`seats-${code}-${total}`,uid=`owner-${cid}`,auth=token(uid,cid);
+    db.prepare("INSERT INTO tenants(id,slug,name,email,status,cnpj_cpf,billing_address_json) VALUES(?,?,?,?,'active',?,?)")
+      .run(cid,cid,cid,`${cid}@test.invalid`,String(10000000000+checkoutCounter),JSON.stringify(testAddress));
+    account(uid,cid);
+    if(trial) {
+      db.prepare('INSERT INTO patients(id,tenant_id,full_name,phone) VALUES(?,?,?,?)').run(`patient-${cid}`,cid,'Paciente preservado','11999999999');
+      await BillingService.startSoloTrial(cid,uid);
+      const local=db.prepare('SELECT * FROM subscriptions WHERE clinic_id=? AND is_current=1').get(cid);
+      assert.equal(local.gateway_environment,null);
+      assert.equal(Date.parse(local.trial_ends_at)-Date.parse(local.trial_started_at),7*86400000);
+    }
+    let result=await call('/subscriptions/checkout',{planCode:code,contractedUsers:total,price:0.01,monthlyTotal:0.01},auth);
+    assert.equal(result.status,200,JSON.stringify(result));
+    const getSub=()=>db.prepare('SELECT * FROM subscriptions WHERE clinic_id=? AND is_current=1').get(cid);
+    let local=getSub();assert.equal(checkouts.get(local.asaas_checkout_id).items[0].value,expected);
+    const before=checkoutCounter;
+    assert.equal((await call('/subscriptions/checkout',{planCode:code,contractedUsers:total},auth)).status,200);
+    assert.equal(checkoutCounter,before);
+    assert.equal(local.status,'PENDING_PAYMENT');
+    if(trial) {
+      assert.equal(db.prepare('SELECT status FROM trial_history WHERE tenant_id=?').get(cid).status,'ACTIVE');
+      await event('CHECKOUT_CANCELED',{checkout:{id:local.asaas_checkout_id,customer:local.asaas_customer_id}});
+      assert.notEqual(getSub().status,'ACTIVE');
+      assert.equal(db.prepare('SELECT converted_at FROM trial_history WHERE tenant_id=?').get(cid).converted_at,null);
+      assert.equal((await call('/subscriptions/checkout',{planCode:code,contractedUsers:total},auth)).status,200);
+      local=getSub();
+    }
+    const remote={id:`sub-${cid}`,customer:local.asaas_customer_id,value:expected,status:'ACTIVE',cycle:'MONTHLY',externalReference:local.external_reference};
+    remoteSubscriptions.set(remote.id,remote);
+    const pay={id:`pay-${cid}`,customer:remote.customer,subscription:remote.id,checkoutSession:local.asaas_checkout_id,status:'CONFIRMED',billingType:'CREDIT_CARD',value:expected,dueDate:currentDay()};
+    payments.set(pay.id,pay);
+    if(total===2 && code==='SOLO') { pay.value=69.9;await event('PAYMENT_CONFIRMED',{payment:pay});assert.equal(getSub().status,'PENDING_PAYMENT');pay.value=expected; }
+    await event('PAYMENT_CONFIRMED',{payment:pay});assert.equal(getSub().status,'ACTIVE');
+    if(trial) {
+      assert.equal(db.prepare('SELECT status FROM trial_history WHERE tenant_id=?').get(cid).status,'CONVERTED');
+      assert.equal(db.prepare('SELECT full_name FROM patients WHERE id=?').get(`patient-${cid}`).full_name,'Paciente preservado');
+      assert.ok(db.prepare('SELECT id FROM users WHERE id=?').get(uid));
+    }
+    for(let n=1;n<total;n++)account(`${cid}-${n}`,cid,'professional');
+    assert.equal(activeUsers(cid),total);
+    assert.equal((await call('/v1/staff/invites',{role:'professional'},auth)).body.code,'PLAN_USER_LIMIT_REACHED');
+    assert.throws(()=>account(`${cid}-overflow`,cid),/PLAN_USER_LIMIT_REACHED/);
+    if(total>1) {
+      db.prepare("UPDATE users SET status='inactive' WHERE id=?").run(`${cid}-1`);
+      assert.equal(activeUsers(cid),total-1);
+      account(`${cid}-replacement`,cid,'professional');assert.equal(activeUsers(cid),total);
+      assert.throws(()=>db.prepare("UPDATE users SET status='active' WHERE id=?").run(`${cid}-1`),/PLAN_USER_LIMIT_REACHED/);
+    }
+    assert.equal(BillingService.summary(cid).monthlyTotal,expected);
+    assert.equal(BillingService.summary(cid).maxUsers,total);
+    return {cid,uid,auth,getSub,remote};
+  }
+  const seatSolo=await seatClinic('SOLO',1,69.9,true);
+  await seatClinic('SOLO',2,129.8);await seatClinic('SOLO',3,189.7);
+  const seatTeam=await seatClinic('TEAM',7,339.7);await seatClinic('TEAM',12,564.2);
+  await seatClinic('CLINIC',15,619.9);await seatClinic('CLINIC',18,709.6);
+  for(const [code,total] of [['SOLO',4],['TEAM',13],['SOLO',1.5],['SOLO','2'],['CLINIC',14]]) {
+    assert.equal((await call('/subscriptions/checkout',{planCode:code,contractedUsers:total},seatSolo.auth)).status,422);
+  }
+  async function renewSeats(fixture,code,total,price,omitQuantity=false) {
+    const previous=fixture.getSub(),due=previous.current_period_end;
+    const result=await call('/subscriptions/change-plan',{planCode:code,...(omitQuantity?{}:{contractedUsers:total}),price:0.01},fixture.auth);
+    assert.equal(result.status,200,JSON.stringify(result));
+    assert.equal(fixture.remote.value,price);
+    assert.equal(fixture.getSub().pending_contracted_users,total);
+    if(total<(previous.contracted_users || 1) && activeUsers(fixture.cid)===total) assert.throws(()=>account(`pending-reduction-${eventCounter}`,fixture.cid),/PLAN_USER_LIMIT_REACHED/);
+    assert.equal((await call('/subscriptions/change-plan',{planCode:code,contractedUsers:total},fixture.auth)).body.code,'PLAN_CHANGE_PENDING');
+    clock=Date.parse(due+'T13:00:00Z');fixture.auth=token(fixture.uid,fixture.cid);
+    const payment={id:`renew-${fixture.cid}-${eventCounter}`,customer:fixture.remote.customer,subscription:fixture.remote.id,status:'CONFIRMED',billingType:'CREDIT_CARD',value:price,dueDate:due};
+    payments.set(payment.id,payment);await event('PAYMENT_CONFIRMED',{payment});
+    assert.equal(fixture.getSub().contracted_users,total);assert.equal(fixture.getSub().pending_plan_id,null);
+    assert.equal(BillingService.summary(fixture.cid).monthlyTotal,price);
+    if(fixture===seatSolo) assert.equal(db.prepare('SELECT status FROM trial_history WHERE tenant_id=?').get(fixture.cid).status,'CONVERTED');
+  }
+  await renewSeats(seatSolo,'SOLO',3,189.7);
+  account('solo-renew-extra',seatSolo.cid,'professional');
+  assert.equal((await call('/subscriptions/change-plan',{planCode:'SOLO',contractedUsers:1},seatSolo.auth)).status,409);
+  db.prepare("UPDATE users SET status='inactive' WHERE id='solo-renew-extra'").run();
+  await renewSeats(seatSolo,'SOLO',1,69.9);
+  await renewSeats(seatSolo,'TEAM',7,339.7);
+  // Omitted quantity preserves the seven contracted seats when possible.
+  assert.equal((await call('/subscriptions/change-plan',{planCode:'SOLO'},seatSolo.auth)).status,422);
+  await renewSeats(seatSolo,'CLINIC',15,619.9,true);
+  await renewSeats(seatSolo,'CLINIC',18,709.6);
+  assert.equal((await call('/subscriptions/change-plan',{planCode:'CLINIC'},seatSolo.auth)).status,200);
+  assert.equal(seatSolo.getSub().contracted_users,18);
+  const bound=seatSolo.getSub();
+  db.prepare("UPDATE subscriptions SET gateway_environment='production' WHERE id=?").run(bound.id);
+  assert.equal((await call('/subscriptions/checkout',{planCode:'CLINIC',contractedUsers:18},seatSolo.auth)).body.code,'ENVIRONMENT_MISMATCH');
+  assert.equal((await call('/subscriptions/change-plan',{planCode:'CLINIC',contractedUsers:19},seatSolo.auth)).body.code,'ENVIRONMENT_MISMATCH');
+  db.prepare("UPDATE subscriptions SET gateway_environment='sandbox' WHERE id=?").run(bound.id);
+  require('./dist/config/billing-migration').migrateBilling(db);
+  assert.equal(seatSolo.getSub().contracted_users,18);
+  assert.equal(BillingService.summary(seatSolo.cid).monthlyTotal,709.6);
+  assert.equal(db.prepare('PRAGMA foreign_key_check').all().length,0);
+  console.log('PASS: billing, local trial checkout/cancellation/confirmed conversion, exact 7 days, 1/5/15 included + contracted seats, exact server prices, caps 3/12, clinic expansion, recurring increases/reductions, deactivation, plan changes, duplicate protection and gateway environment isolation (mock Asaas only).');
 })().catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>{global.fetch=actualFetch;global.Date=OriginalDate;BillingWebhookService.stop();server?.close();});

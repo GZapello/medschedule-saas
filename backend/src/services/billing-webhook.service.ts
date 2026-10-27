@@ -1,7 +1,7 @@
 import { db } from '../config/database';
 import { randomUUID } from 'crypto';
 import { AsaasError, AsaasService } from './asaas.service';
-import { activeUsers, addDays, addMonth, billingAudit, BillingService, today } from './billing.service';
+import { contractPrice,activeUsers, addDays, addMonth, billingAudit, BillingService, today } from './billing.service';
 import { RegistrationCleanupService } from './registration-cleanup.service';
 import { TrialNotificationService } from './trial-notification.service';
 import { ErrorMonitor } from './error-monitor.service';
@@ -146,12 +146,13 @@ export class BillingWebhookService {
     const historical=existing && ['CONFIRMED','RECEIVED','REFUNDED','DELETED'].includes(existing.status);
     const plan=db.prepare('SELECT * FROM plans WHERE id=?').get(historical?existing.plan_id:s.pending_plan_id && due>=s.pending_plan_effective_on ? s.pending_plan_id:s.plan_id);
     // Asaas may add interest to value; originalValue is the contract price.
-    const contractAmount=historical?existing.contract_amount:plan.monthly_price;
+    const total=s.pending_plan_id && due>=s.pending_plan_effective_on ? (s.pending_contracted_users ?? plan.max_users):(s.contracted_users ?? plan.max_users);
+    const contractAmount=historical?existing.contract_amount:contractPrice(plan,total);
     const legacyPrices: Record<string, number> = { SOLO: 59.90, TEAM: 119.90, CLINIC: 359.90 };
     const legacyPrice = legacyPrices[plan.code];
     const val = p.originalValue ?? p.value;
     const matchesCurrent = Math.abs(val - contractAmount) <= 0.005;
-    const matchesLegacy = legacyPrice !== undefined && Math.abs(val - legacyPrice) <= 0.005;
+    const matchesLegacy = s.contracted_users == null && legacyPrice !== undefined && Math.abs(val - legacyPrice) <= 0.005;
     if ((!matchesCurrent && !matchesLegacy) || p.billingType!=='CREDIT_CARD') throw new Error('PAYMENT_CONTRACT_MISMATCH');
     const effectiveContractAmount = matchesCurrent ? contractAmount : (legacyPrice || contractAmount);
     if(existing && existing.subscription_id!==s.id) throw new Error('PAYMENT_ALREADY_ASSIGNED');
@@ -179,8 +180,8 @@ export class BillingWebhookService {
       if(overdue) {status='PAST_DUE';grace=addDays(overdue.due_date,5);}
       if(s.pending_plan_id && paid.due_date>=s.pending_plan_effective_on) {
         const plan=db.prepare('SELECT * FROM plans WHERE id=?').get(s.pending_plan_id);
-        if(activeUsers(s.clinic_id)>plan.max_users) throw new Error('DOWNGRADE_LIMIT_CHANGED');
-        db.prepare('UPDATE subscriptions SET plan_id=?,pending_plan_id=NULL,pending_plan_effective_on=NULL,plan_change_state=NULL WHERE id=?').run(plan.id,id);s.plan_id=plan.id;
+        if(activeUsers(s.clinic_id)>(s.pending_contracted_users ?? plan.max_users)) throw new Error('DOWNGRADE_LIMIT_CHANGED');
+        db.prepare('UPDATE subscriptions SET plan_id=?,contracted_users=COALESCE(pending_contracted_users,?),pending_contracted_users=NULL,pending_plan_id=NULL,pending_plan_effective_on=NULL,plan_change_state=NULL WHERE id=?').run(plan.id,plan.max_users,id);s.plan_id=plan.id;
         billingAudit(s,'PLAN_CHANGED',s.status,status,null,{planCode:plan.code});
       }
     } else if(s.current_period_end) {status='SUSPENDED';end='';}

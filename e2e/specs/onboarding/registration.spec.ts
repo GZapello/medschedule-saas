@@ -8,8 +8,8 @@ test('@critical cadastro → verificação → plano → perfil → acesso opera
   expect(result.onboardingStatus).toBe('pending_verification');
   const headers = {Authorization: 'Bearer '+result.token};
   const blocked = await request.get('/api/v1/patients',{headers});
-  expect(blocked.status()).toBe(403);
-  expect((await blocked.json()).code).toBe('ONBOARDING_INCOMPLETE');
+  expect(blocked.status()).toBe(402);
+  expect((await blocked.json()).code).toBe('BILLING_ACCESS_REQUIRED');
   expect((await request.post('/api/v1/public/tenants/register',{data})).status()).toBe(409);
   expect((await request.post('/api/v1/onboarding/verify-email',{headers,data:{code:'000000'}})).status()).toBe(400);
   const verified = await request.post('/api/v1/onboarding/verify-email',{headers,data:{code:'123456'}});

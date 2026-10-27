@@ -1073,7 +1073,7 @@ export class TenantController {
           t.responsible_name, t.responsible_email, t.created_at,
           p.name as plan_name, p.slug as plan_slug, p.code AS selected_plan_code,
           t.billing_required, s.status AS subscription_status, s.managed,
-          sp.code AS subscription_plan_code, sp.name AS subscription_plan_name, sp.max_users AS subscription_max_users,
+          sp.code AS subscription_plan_code, sp.name AS subscription_plan_name, COALESCE(s.contracted_users,sp.max_users) AS subscription_max_users,
           COALESCE(s.trial_ends_at,CASE WHEN upper(s.status)='TRIAL' THEN s.current_period_end END) AS trial_ends_at,s.current_period_end,
           CASE WHEN s.managed=0 AND EXISTS(SELECT 1 FROM free_trials ft WHERE ft.tenant_id=t.id AND ft.activated_at IS NOT NULL) THEN 1 ELSE 0 END AS administrative_trial,
           (SELECT COUNT(*) FROM billing_active_users bau WHERE bau.clinic_id=t.id) AS active_users,

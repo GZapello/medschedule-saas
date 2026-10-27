@@ -484,6 +484,7 @@ export class StaffController {
         return;
       }
 
+      requireCapacity(tenantId);
       // Gera token seguro e imprevisível de 48 caracteres hexadecimais
       const token = crypto.randomBytes(24).toString('hex');
       const inviteId = 'cinv-' + uuidv4().slice(0, 8);

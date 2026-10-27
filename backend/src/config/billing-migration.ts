@@ -34,7 +34,8 @@ export function migrateBilling(db: DatabaseSync): void {
     add('plans','code','TEXT'); add('plans','monthly_price','REAL'); add('plans','max_users','INTEGER');
     add('plans','active','INTEGER NOT NULL DEFAULT 1'); add('plans','updated_at','TEXT');
     db.exec('CREATE UNIQUE INDEX IF NOT EXISTS plans_code_unique ON plans(code)');
-    for (const [code,name,price,max] of [['SOLO','Zemda Solo',69.90,1],['TEAM','Zemda Equipe',249.90,5],['CLINIC','Zemda Clínica',619.90,20]]) {
+    add('plans','extra_user_price','REAL'); add('plans','total_user_limit','INTEGER');
+    for (const [code,name,price,max] of [['SOLO','Zemda Solo',69.90,1],['TEAM','Zemda Equipe',249.90,5],['CLINIC','Zemda Clínica',619.90,15]]) {
       db.prepare(`INSERT INTO plans(id,code,name,slug,price_monthly,monthly_price,max_users,max_professionals,max_patients,max_rooms,active,updated_at)
         VALUES (?,?,?,?,?,?,?,?,1000000,1000000,1,datetime('now'))
         ON CONFLICT(code) DO UPDATE SET
@@ -49,8 +50,10 @@ export function migrateBilling(db: DatabaseSync): void {
     db.exec(`UPDATE plans SET
       price_monthly = CASE code WHEN 'SOLO' THEN 69.90 WHEN 'TEAM' THEN 249.90 WHEN 'CLINIC' THEN 619.90 ELSE price_monthly END,
       monthly_price = CASE code WHEN 'SOLO' THEN 69.90 WHEN 'TEAM' THEN 249.90 WHEN 'CLINIC' THEN 619.90 ELSE monthly_price END,
-      max_users = CASE code WHEN 'SOLO' THEN 1 WHEN 'TEAM' THEN 5 WHEN 'CLINIC' THEN 20 ELSE max_users END,
-      max_professionals = CASE code WHEN 'SOLO' THEN 1 WHEN 'TEAM' THEN 5 WHEN 'CLINIC' THEN 20 ELSE max_professionals END,
+      max_users = CASE code WHEN 'SOLO' THEN 1 WHEN 'TEAM' THEN 5 WHEN 'CLINIC' THEN 15 ELSE max_users END,
+      max_professionals = CASE code WHEN 'SOLO' THEN 1 WHEN 'TEAM' THEN 5 WHEN 'CLINIC' THEN 15 ELSE max_professionals END,
+      extra_user_price = CASE code WHEN 'SOLO' THEN 59.90 WHEN 'TEAM' THEN 44.90 WHEN 'CLINIC' THEN 29.90 END,
+      total_user_limit = CASE code WHEN 'SOLO' THEN 3 WHEN 'TEAM' THEN 12 ELSE NULL END,
       updated_at = datetime('now')
       WHERE code IN ('SOLO','TEAM','CLINIC');`);
     add('tenants','billing_required','INTEGER NOT NULL DEFAULT 0');
@@ -61,6 +64,7 @@ export function migrateBilling(db: DatabaseSync): void {
       billing_cycle:"TEXT NOT NULL DEFAULT 'MONTHLY'", next_due_date:'TEXT',grace_period_until:'TEXT',updated_at:'TEXT',
       gateway_environment:'TEXT',managed:'INTEGER NOT NULL DEFAULT 0',is_current:'INTEGER NOT NULL DEFAULT 1',checkout_url:'TEXT',external_reference:'TEXT',
       pending_plan_id:'TEXT',pending_plan_effective_on:'TEXT',plan_change_state:'TEXT',cancelled_at:'TEXT',cancelled_by:'TEXT',cancel_reason:'TEXT',
+      contracted_users:'INTEGER CHECK(contracted_users IS NULL OR contracted_users > 0)',pending_contracted_users:'INTEGER',
       trial_started_at:'TEXT',trial_ends_at:'TEXT'})) add('subscriptions',name,def);
     db.exec(`UPDATE subscriptions SET clinic_id=tenant_id WHERE clinic_id IS NULL;
       CREATE UNIQUE INDEX IF NOT EXISTS subscriptions_one_current ON subscriptions(clinic_id) WHERE is_current=1;
@@ -133,7 +137,7 @@ export function migrateBilling(db: DatabaseSync): void {
           CASE 
             WHEN s.status='TRIAL' AND (s.trial_ends_at IS NULL OR s.trial_ends_at > datetime('now')) THEN p.max_users
             WHEN s.status='ACTIVE' OR (s.status='PAST_DUE' AND s.current_period_end!='') OR (s.status='CANCELED' AND s.current_period_end>date('now')) THEN
-              MIN(p.max_users,COALESCE(pp.max_users,p.max_users)) 
+              MIN(COALESCE(s.contracted_users,p.max_users),COALESCE(s.pending_contracted_users,pp.max_users,s.contracted_users,p.max_users))
             ELSE 0 
           END AS max_users
         FROM subscriptions s JOIN plans p ON p.id=s.plan_id LEFT JOIN plans pp ON pp.id=s.pending_plan_id
@@ -153,7 +157,7 @@ export function migrateBilling(db: DatabaseSync): void {
         BEGIN SELECT RAISE(ABORT,'PLAN_USER_LIMIT_REACHED'); END;`);
       const updateOf = `status,tenant_id,role${table==='clinic_users'?',user_id':''}`;
       db.exec(`CREATE TRIGGER billing_limit_${table}_UPDATE AFTER UPDATE OF ${updateOf} ON ${table}
-        WHEN NEW.status='active' AND (OLD.status!='active' OR OLD.tenant_id IS NOT NEW.tenant_id)
+        WHEN NEW.status='active' AND (OLD.status!='active' OR OLD.tenant_id IS NOT NEW.tenant_id OR OLD.role IS NOT NEW.role${table==='clinic_users'?' OR OLD.user_id IS NOT NEW.user_id':''})
           AND EXISTS(SELECT 1 FROM billing_user_limits l WHERE
           ${affectedClinics}
           AND (SELECT COUNT(*) FROM billing_active_users a WHERE a.clinic_id=l.clinic_id)>l.max_users)

@@ -92,8 +92,8 @@ export function mountBillingRoutes(api:Router) {
     if(!canManage) { summary.payments=[]; summary.confirmedPurchase=null; }
     res.json({...summary,canManage});
   }));
-  api.post(['/subscriptions/checkout','/v1/subscriptions/checkout'],...guard,manager,handler(async(req,res)=>res.json(await BillingService.checkout(req.tenantId!,req.body.planCode,req.user!.userId))));
-  api.post(['/subscriptions/change-plan','/v1/subscriptions/change-plan'],...guard,manager,handler(async(req,res)=>res.json(await BillingService.changePlan(req.tenantId!,req.body.planCode,req.user!.userId))));
+  api.post(['/subscriptions/checkout','/v1/subscriptions/checkout'],...guard,manager,handler(async(req,res)=>res.json(await BillingService.checkout(req.tenantId!,req.body.planCode,req.user!.userId,req.body.contractedUsers))));
+  api.post(['/subscriptions/change-plan','/v1/subscriptions/change-plan'],...guard,manager,handler(async(req,res)=>res.json(await BillingService.changePlan(req.tenantId!,req.body.planCode,req.user!.userId,req.body.contractedUsers))));
   api.post(['/subscriptions/cancel','/v1/subscriptions/cancel'],...guard,manager,handler(async(req,res)=>{
     if(req.body.confirmation!=='CANCELAR') throw new BillingError('CONFIRMATION_REQUIRED','Digite CANCELAR para confirmar.',400);
     try { res.json(await BillingService.cancel(req.tenantId!,req.user!.userId,typeof req.body.reason==='string'?req.body.reason.slice(0,1000):'')); }
@@ -111,11 +111,11 @@ export function mountBillingRoutes(api:Router) {
       where.push(key==='clinic'?`${column} LIKE ?`:`${column}=?`);params.push(key==='clinic'?`%${req.query[key]}%`:req.query[key]);
     }
     for(const [key,operator] of [['from','>='],['to','<=']]) if(typeof req.query[key]==='string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query[key] as string)) {where.push(`date(s.created_at)${operator}?`);params.push(req.query[key]);}
-    const rows=db.prepare(`SELECT s.id,s.clinic_id,t.name AS clinic_name,p.code,p.name AS plan_name,p.monthly_price,p.max_users,s.status,s.next_due_date,s.created_at,s.gateway_environment,
+    const rows=db.prepare(`SELECT s.id,s.clinic_id,t.name AS clinic_name,p.code,p.name AS plan_name,ROUND(p.monthly_price + MAX(0,COALESCE(s.contracted_users,p.max_users)-p.max_users)*p.extra_user_price,2) AS monthly_price,COALESCE(s.contracted_users,p.max_users) AS max_users,p.max_users AS included_users,s.status,s.next_due_date,s.created_at,s.gateway_environment,
       s.pending_plan_id,s.plan_change_state FROM subscriptions s JOIN tenants t ON t.id=s.clinic_id JOIN plans p ON p.id=s.plan_id WHERE ${where.join(' AND ')} ORDER BY s.created_at DESC LIMIT 500`).all(...params);
     const counts=db.prepare('SELECT status,COUNT(*) total FROM subscriptions WHERE managed=1 AND is_current=1 GROUP BY status').all();
     const byPlan=db.prepare('SELECT p.code,COUNT(*) total FROM subscriptions s JOIN plans p ON p.id=s.plan_id WHERE s.managed=1 AND s.is_current=1 GROUP BY p.code').all();
-    const mrr=db.prepare("SELECT COALESCE(SUM(p.monthly_price),0) value FROM subscriptions s JOIN plans p ON p.id=s.plan_id WHERE s.managed=1 AND s.is_current=1 AND s.status='ACTIVE'").get().value;
+    const mrr=db.prepare("SELECT COALESCE(SUM(p.monthly_price + MAX(0,COALESCE(s.contracted_users,p.max_users)-p.max_users)*p.extra_user_price),0) value FROM subscriptions s JOIN plans p ON p.id=s.plan_id WHERE s.managed=1 AND s.is_current=1 AND s.status='ACTIVE'").get().value;
     const pendingEvents=db.prepare("SELECT COUNT(*) n FROM asaas_webhook_events WHERE processing_status IN ('PENDING','RETRY','PROCESSING')").get().n;
     res.json({rows,counts,byPlan,mrr,pendingEvents,total:counts.reduce((n:any,r:any)=>n+r.total,0)});
   }));

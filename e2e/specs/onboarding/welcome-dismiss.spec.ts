@@ -12,7 +12,7 @@ test('@critical Boas-vindas: descarte permanente sobrevive à navegação e ao F
   const reloaded = page.waitForResponse(r => r.url().endsWith('/v1/user-onboarding') && r.request().method() === 'GET');
   await page.reload();
   expect((await reloaded).ok()).toBe(true);
-  await page.getByRole('button', { name: 'Dashboard', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Agenda de Hoje', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Painel', exact: true }).click();
+  await expect(page.getByRole('heading', { name: /^Boa (?:tarde|noite)|^Bom dia/, exact: true })).toBeVisible();
   await expect(page.locator('[aria-labelledby=welcome-modal-title]')).toHaveCount(0);
 });

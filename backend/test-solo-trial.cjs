@@ -120,24 +120,14 @@ async function run() {
 
   console.log('✓ Repetition by duplicate email blocked');
 
-  console.log('--- TEST 7: Block trial upgrade to TEAM / CLINIC without contact ---');
-  await assert.rejects(async () => {
-    await BillingService.checkout(clinicId, 'TEAM');
-  }, (err) => {
-    assert.equal(err.code, 'TRIAL_UPGRADE_CONTACT_REQUIRED');
-    assert.ok(err.message.includes('suporte@zemda.com.br'));
-    return true;
-  });
-
-  await assert.rejects(async () => {
-    await BillingService.checkout(clinicId, 'CLINIC');
-  }, (err) => {
-    assert.equal(err.code, 'TRIAL_UPGRADE_CONTACT_REQUIRED');
-    assert.ok(err.message.includes('suporte@zemda.com.br'));
-    return true;
-  });
-
-  console.log('✓ Direct checkout to TEAM/CLINIC blocked during trial');
+  console.log('--- TEST 7: Local trial is not a foreign gateway subscription ---');
+  process.env.ASAAS_WEBHOOK_TOKEN='local-test-webhook-token-not-a-secret-12345';
+  for(const code of ['SOLO','TEAM','CLINIC']) {
+    await assert.rejects(()=>BillingService.checkout(clinicId,code,userId),err=>{
+      assert.equal(err.code,'BILLING_ADDRESS_REQUIRED');return true;
+    });
+  }
+  assert.equal(db.prepare('SELECT converted_at FROM trial_history WHERE tenant_id=?').get(clinicId).converted_at,null);
 
   console.log('--- TEST 8: Solo Trial Expiration ---');
   // Set trial_ends_at to 1 hour ago
