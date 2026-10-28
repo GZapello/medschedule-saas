@@ -1258,6 +1258,262 @@ export class OccupationalTherapyController {
     }
   }
 
+  static downloadConsolidatedHomeProgramsPdf(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      const patientId = String(req.params.patientId || '').trim();
+
+      if (!patientId) {
+        res.status(400).json({ error: 'ID do paciente é obrigatório.' });
+        return;
+      }
+
+      if (!hasClinicalAccess(req, patientId)) {
+        res.status(403).json({ error: 'Acesso restrito ao prontuário deste paciente.' });
+        return;
+      }
+
+      const rawModule = req.query.module_type || req.query.specialty;
+      const moduleFilter = rawModule && String(rawModule).trim().toLowerCase() !== 'all'
+        ? String(rawModule).trim().toLowerCase()
+        : null;
+
+      const rows = (moduleFilter
+        ? db.prepare(`
+            SELECT hp.*,
+                   pr.name AS professional_name,
+                   pr.registration_type AS registration_type,
+                   pr.registration_number AS registration_number,
+                   pt.full_name AS patient_name
+            FROM clinical_home_programs hp
+            LEFT JOIN professionals pr ON pr.id = hp.professional_id AND pr.tenant_id = hp.tenant_id
+            LEFT JOIN patients pt ON pt.id = hp.patient_id
+            WHERE hp.patient_id = ? AND hp.tenant_id = ?
+              AND (LOWER(COALESCE(hp.module_type, hp.specialty, 'to')) = ? OR LOWER(COALESCE(hp.specialty, hp.module_type, 'to')) = ?)
+            ORDER BY datetime(COALESCE(hp.created_at, '1970-01-01')) DESC, hp.id DESC
+          `).all(patientId, tenantId, moduleFilter, moduleFilter)
+        : db.prepare(`
+            SELECT hp.*,
+                   pr.name AS professional_name,
+                   pr.registration_type AS registration_type,
+                   pr.registration_number AS registration_number,
+                   pt.full_name AS patient_name
+            FROM clinical_home_programs hp
+            LEFT JOIN professionals pr ON pr.id = hp.professional_id AND pr.tenant_id = hp.tenant_id
+            LEFT JOIN patients pt ON pt.id = hp.patient_id
+            WHERE hp.patient_id = ? AND hp.tenant_id = ?
+            ORDER BY datetime(COALESCE(hp.created_at, '1970-01-01')) DESC, hp.id DESC
+          `).all(patientId, tenantId)) as any[];
+
+      if (!rows || rows.length === 0) {
+        res.status(404).json({ error: 'Nenhuma orientação cadastrada para este paciente.' });
+        return;
+      }
+
+      const tenant = db.prepare(`
+        SELECT name, trade_name, cnpj_cpf AS cnpj, phone, email, address, city, state
+        FROM tenants WHERE id = ?
+      `).get(tenantId) as any;
+
+      let patientName = rows[0]?.patient_name;
+      if (!patientName) {
+        const pt = db.prepare('SELECT full_name FROM patients WHERE id = ?').get(patientId) as any;
+        patientName = pt?.full_name || 'Paciente';
+      }
+      patientName = String(patientName).trim();
+
+      const clinicName = String(tenant?.trade_name || tenant?.name || 'Clínica').trim();
+      const issueDate = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+
+      const safePatientName = patientName
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9-_]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .toLowerCase() || 'paciente';
+
+      const safeFilename = `orientacoes-casa-escola-${safePatientName}.pdf`;
+
+      const doc = new PDFDocument({
+        size: 'A4',
+        margins: { top: 48, bottom: 56, left: 48, right: 48 },
+        bufferPages: true,
+        info: {
+          Title: `Orientações Consolidadas - ${patientName}`,
+          Author: `${clinicName} — Zemda`
+        }
+      });
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`);
+      res.setHeader('Cache-Control', 'no-store');
+      doc.pipe(res);
+
+      const pageWidth = doc.page.width - 96;
+
+      // Cabeçalho da Clínica + Identificação Zemda
+      doc.font('Helvetica-Bold').fontSize(15).fillColor('#0f172a').text(clinicName, { width: pageWidth });
+      const clinicDetails: string[] = [];
+      if (tenant?.cnpj) clinicDetails.push(`CNPJ: ${tenant.cnpj}`);
+      const addressParts = [tenant?.address, tenant?.city && tenant?.state ? `${tenant.city}/${tenant.state}` : (tenant?.city || tenant?.state)].filter(Boolean);
+      if (addressParts.length > 0) clinicDetails.push(addressParts.join(' - '));
+      const contactParts = [tenant?.phone ? `Tel: ${tenant.phone}` : null, tenant?.email].filter(Boolean);
+      if (contactParts.length > 0) clinicDetails.push(contactParts.join(' • '));
+
+      if (clinicDetails.length > 0) {
+        doc.moveDown(0.2).font('Helvetica').fontSize(9).fillColor('#475569').text(clinicDetails.join('  |  '), { width: pageWidth });
+      }
+      doc.moveDown(0.2).font('Helvetica-Bold').fontSize(8.5).fillColor('#0d9488').text('ZEMDA — PRONTUÁRIO E GESTÃO CLÍNICA', { width: pageWidth });
+
+      doc.moveDown(0.6);
+      doc.moveTo(48, doc.y).lineTo(doc.page.width - 48, doc.y).lineWidth(1.2).strokeColor('#cbd5e1').stroke();
+      doc.moveDown(0.8);
+
+      // Título do Documento Consolidado
+      doc.font('Helvetica-Bold').fontSize(13).fillColor('#0f172a').text('PROGRAMA DE ATIVIDADES E ORIENTAÇÕES (CASA / ESCOLA)', {
+        width: pageWidth,
+        align: 'center'
+      });
+      doc.moveDown(0.2).font('Helvetica-Bold').fontSize(9.5).fillColor('#0d9488').text('DOCUMENTO CONSOLIDADO COM TODAS AS ORIENTAÇÕES SALVAS', {
+        width: pageWidth,
+        align: 'center'
+      });
+      doc.moveDown(0.7);
+
+      // Bloco de Identificação Geral
+      doc.font('Helvetica-Bold').fontSize(10).fillColor('#1e293b').text('Paciente: ', { continued: true })
+        .font('Helvetica').fillColor('#0f172a').text(patientName);
+      doc.moveDown(0.2).font('Helvetica-Bold').fontSize(10).fillColor('#1e293b').text('Data de Emissão: ', { continued: true })
+        .font('Helvetica').fillColor('#0f172a').text(issueDate);
+      doc.moveDown(0.2).font('Helvetica-Bold').fontSize(10).fillColor('#1e293b').text('Total de Orientações: ', { continued: true })
+        .font('Helvetica').fillColor('#0f172a').text(`${rows.length} orientação(ões) registrada(s)`);
+
+      doc.moveDown(0.8);
+      doc.moveTo(48, doc.y).lineTo(doc.page.width - 48, doc.y).lineWidth(1).strokeColor('#0d9488').stroke();
+      doc.moveDown(0.9);
+
+      const statusLabels: Record<string, string> = {
+        active: 'Ativa',
+        completed: 'Concluída',
+        paused: 'Pausada',
+        revised: 'Revisada',
+        pending: 'Pendente',
+        partially_completed: 'Parcialmente Concluída',
+        not_completed: 'Não Realizada'
+      };
+
+      const settingLabels: Record<string, string> = {
+        home: 'Domiciliar (Casa / Família)',
+        school: 'Escolar (Professor / Mediador)',
+        community: 'Comunitário / Lazer',
+        general: 'Geral (Todos os Ambientes)',
+        other: 'Outro Ambiente'
+      };
+
+      // Loop pelas orientações
+      rows.forEach((row, index) => {
+        // Se restar pouco espaço na folha, inicia nova página antes do cabeçalho da orientação
+        if (doc.y > doc.page.height - 180) {
+          doc.addPage();
+        }
+
+        const titleText = String(row.title || row.activity || 'Orientação Terapêutica').trim();
+        const instructionsText = String(row.instructions || row.instruction || '').trim();
+        const materialsText = String(row.materials_needed || '').trim();
+        const frequencyText = String(row.frequency || '').trim();
+        const settingKey = String(row.setting || row.environment_context || 'home').trim();
+        const settingLabel = settingLabels[settingKey] || settingKey;
+        const statusKey = String(row.status || 'active').trim();
+        const statusLabel = statusLabels[statusKey] || statusKey;
+
+        const rawDate = row.created_at ? new Date(String(row.created_at).replace(' ', 'T')) : new Date();
+        const formattedDate = !isNaN(rawDate.getTime())
+          ? rawDate.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+          : String(row.created_at || '');
+
+        const profName = String(row.professional_name || '').trim();
+        const profReg = row.registration_type && row.registration_number
+          ? `${row.registration_type} ${row.registration_number}`
+          : (row.registration_number ? String(row.registration_number) : '');
+
+        // Faixa de Destaque da Orientação
+        const itemY = doc.y;
+        doc.rect(48, itemY, pageWidth, 24).fill('#f1f5f9');
+        doc.font('Helvetica-Bold').fontSize(10).fillColor('#0f172a').text(
+          `ORIENTAÇÃO #${index + 1}: ${titleText.toUpperCase()}`,
+          56,
+          itemY + 6,
+          { width: pageWidth - 120, ellipsis: true }
+        );
+        doc.font('Helvetica-Bold').fontSize(9).fillColor('#0d9488').text(
+          `Status: ${statusLabel}`,
+          48,
+          itemY + 6,
+          { width: pageWidth - 8, align: 'right' }
+        );
+
+        doc.y = itemY + 30;
+
+        // Metadados da Orientação
+        const metaParts: string[] = [];
+        if (formattedDate) metaParts.push(`Data de Criação: ${formattedDate}`);
+        if (settingLabel) metaParts.push(`Ambiente: ${settingLabel}`);
+        if (frequencyText) metaParts.push(`Frequência: ${frequencyText}`);
+
+        doc.font('Helvetica').fontSize(9.5).fillColor('#334155').text(metaParts.join('  •  '), { width: pageWidth });
+
+        if (profName) {
+          const profDisplay = profReg ? `${profName} (${profReg})` : profName;
+          doc.moveDown(0.25).font('Helvetica-Bold').fontSize(9.5).fillColor('#475569').text('Profissional Responsável: ', { continued: true })
+            .font('Helvetica').fillColor('#1e293b').text(profDisplay);
+        }
+
+        // Materiais ou Adaptações Necessárias (somente se preenchido)
+        if (materialsText) {
+          doc.moveDown(0.45);
+          doc.font('Helvetica-Bold').fontSize(9.5).fillColor('#0d9488').text('Materiais ou Adaptações: ', { continued: true })
+            .font('Helvetica').fillColor('#1e293b').text(materialsText, { width: pageWidth, lineGap: 2 });
+        }
+
+        // Instruções Completas
+        doc.moveDown(0.45);
+        doc.font('Helvetica-Bold').fontSize(9.5).fillColor('#0d9488').text('Instruções e Orientações Detalhadas:');
+        doc.moveDown(0.25).font('Helvetica').fontSize(10).fillColor('#0f172a').text(instructionsText, {
+          width: pageWidth,
+          lineGap: 3.5
+        });
+
+        // Divisória entre itens
+        doc.moveDown(0.8);
+        if (index < rows.length - 1) {
+          doc.moveTo(48, doc.y).lineTo(doc.page.width - 48, doc.y).lineWidth(0.8).dash(3, { space: 3 }).strokeColor('#cbd5e1').stroke();
+          doc.undash();
+          doc.moveDown(1.0);
+        }
+      });
+
+      // Rodapé em todas as páginas
+      const range = doc.bufferedPageRange();
+      for (let i = range.start; i < range.start + range.count; i++) {
+        doc.switchToPage(i);
+        const footerY = doc.page.height - 38;
+        doc.font('Helvetica').fontSize(8).fillColor('#64748b').text(
+          `${clinicName} • Orientações Consolidadas (Casa / Escola) • Página ${i + 1} de ${range.count}`,
+          48,
+          footerY,
+          { width: pageWidth, align: 'center', lineBreak: false }
+        );
+      }
+
+      doc.end();
+    } catch (err: any) {
+      console.error('[OccupationalTherapyController.downloadConsolidatedHomeProgramsPdf] Erro:', err);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Erro ao gerar PDF consolidado das orientações.' });
+      }
+    }
+  }
+
   // 11. DASHBOARD FUNCIONAL DO PACIENTE (Item 24)
   static getFunctionalDashboard(req: Request, res: Response): void {
     try {

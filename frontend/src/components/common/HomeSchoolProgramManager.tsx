@@ -40,6 +40,24 @@ const SETTING_LABELS: Record<string, string> = {
   general: 'Geral (Todos os Ambientes)'
 };
 
+const STATUS_LABELS: Record<string, string> = {
+  active: 'Ativa',
+  completed: 'Concluída',
+  paused: 'Pausada',
+  revised: 'Revisada',
+  pending: 'Pendente',
+  partially_completed: 'Parcialmente Concluída',
+  not_completed: 'Não Realizada'
+};
+
+const STATUS_BADGE_CLASSES: Record<string, string> = {
+  active: 'bg-teal-50 text-teal-700 border-teal-200',
+  completed: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  paused: 'bg-amber-50 text-amber-700 border-amber-200',
+  revised: 'bg-blue-50 text-blue-700 border-blue-200',
+  pending: 'bg-slate-50 text-slate-700 border-slate-200'
+};
+
 export const HomeSchoolProgramManager: React.FC<HomeSchoolProgramManagerProps> = ({
   patientId,
   specialty,
@@ -68,6 +86,8 @@ export const HomeSchoolProgramManager: React.FC<HomeSchoolProgramManagerProps> =
   const [formError, setFormError] = useState<string | null>(null);
   const [downloadingPdfId, setDownloadingPdfId] = useState<string | null>(null);
   const [printPreviewProgram, setPrintPreviewProgram] = useState<HomeProgramItem | null>(null);
+  const [isDownloadingAllPdf, setIsDownloadingAllPdf] = useState(false);
+  const [isConsolidatedPrintModalOpen, setIsConsolidatedPrintModalOpen] = useState(false);
 
   // Form states
   const [title, setTitle] = useState('');
@@ -245,6 +265,77 @@ export const HomeSchoolProgramManager: React.FC<HomeSchoolProgramManagerProps> =
     }
   };
 
+  const resolveRecordProfessional = (prog: HomeProgramItem) => {
+    const name = (prog.professional_name || '').trim();
+    const reg = prog.registration_type && prog.registration_number
+      ? `${prog.registration_type} ${prog.registration_number}`
+      : (prog.registration_number ? String(prog.registration_number).trim() : '');
+    return { name, reg };
+  };
+
+  const handleDownloadAllPdf = async () => {
+    if (!patientId) {
+      showToast('Selecione um paciente antes de exportar.', 'error');
+      return;
+    }
+    if (programs.length === 0) {
+      showToast('Nenhuma orientação salva para exportar.', 'info');
+      return;
+    }
+    if (isDownloadingAllPdf) return;
+
+    try {
+      setIsDownloadingAllPdf(true);
+      const token = localStorage.getItem('auth_token');
+      const tenantId = localStorage.getItem('active_tenant_id');
+      const url = buildApiUrl(
+        getApiBaseUrl(),
+        `/v1/occupational-therapy/home-programs/consolidated-pdf/${patientId}?module_type=${encodeURIComponent(specialty)}`
+      );
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      if (tenantId) headers['X-Tenant-ID'] = tenantId;
+
+      const response = await fetch(url, { method: 'GET', headers });
+      if (!response.ok) {
+        let errMsg = 'Não foi possível gerar o PDF consolidado das orientações.';
+        try {
+          const errData = await response.json();
+          if (errData?.error) errMsg = errData.error;
+        } catch (_) {}
+        throw new Error(errMsg);
+      }
+
+      const blob = await response.blob();
+      const safePatientName = (patientName || 'paciente')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9-_]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .toLowerCase();
+      await downloadBlob(blob, `orientacoes-casa-escola-${safePatientName || 'paciente'}.pdf`);
+      showToast(`PDF consolidado com ${programs.length} orientação(ões) salvo com sucesso!`, 'success');
+    } catch (err: any) {
+      console.error('[HomeSchoolProgramManager] Erro ao baixar PDF consolidado:', err);
+      showToast(err?.message || 'Não foi possível gerar o PDF consolidado das orientações.', 'error');
+    } finally {
+      setIsDownloadingAllPdf(false);
+    }
+  };
+
+  const handleOpenConsolidatedPrintModal = (autoPrint = true) => {
+    if (programs.length === 0) {
+      showToast('Nenhuma orientação salva para imprimir.', 'info');
+      return;
+    }
+    setIsConsolidatedPrintModalOpen(true);
+    if (autoPrint) {
+      setTimeout(() => {
+        triggerPrintDocument(`Orientações Consolidadas - ${patientName || 'Paciente'}`);
+      }, 200);
+    }
+  };
+
   const formatOrientationDate = (raw?: string) => {
     if (!raw) return new Date().toLocaleDateString('pt-BR');
     const parsed = new Date(String(raw).replace(' ', 'T'));
@@ -286,19 +377,51 @@ export const HomeSchoolProgramManager: React.FC<HomeSchoolProgramManagerProps> =
             {hsCopy.sectionSubtitle}
           </p>
         </div>
-        {!readOnly && (
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             type="button"
-            onClick={() => {
-              setFormError(null);
-              setIsAdding(!isAdding);
-            }}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+            disabled={programs.length === 0 || isDownloadingAllPdf || isLoading}
+            onClick={() => handleOpenConsolidatedPrintModal(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl text-xs font-semibold shadow-2xs transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            title={
+              programs.length === 0
+                ? 'Nenhuma orientação salva para imprimir. Cadastre uma orientação primeiro.'
+                : 'Imprimir todas as orientações salvas em um único documento consolidado'
+            }
           >
-            {isAdding ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
-            {isAdding ? 'Cancelar' : '+ Nova Orientação'}
+            <Printer className="w-3.5 h-3.5 text-slate-500" />
+            Imprimir todas
           </button>
-        )}
+
+          <button
+            type="button"
+            disabled={programs.length === 0 || isDownloadingAllPdf || isLoading}
+            onClick={handleDownloadAllPdf}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-xl text-xs font-semibold shadow-2xs transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            title={
+              programs.length === 0
+                ? 'Nenhuma orientação salva para exportar. Cadastre uma orientação primeiro.'
+                : 'Baixar todas as orientações salvas em um único arquivo PDF consolidado'
+            }
+          >
+            <Download className="w-3.5 h-3.5 text-teal-600" />
+            {isDownloadingAllPdf ? 'Gerando PDF...' : 'Salvar todas em PDF'}
+          </button>
+
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={() => {
+                setFormError(null);
+                setIsAdding(!isAdding);
+              }}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+            >
+              {isAdding ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
+              {isAdding ? 'Cancelar' : '+ Nova Orientação'}
+            </button>
+          )}
+        </div>
       </div>
 
       {isAdding && (
@@ -672,6 +795,216 @@ export const HomeSchoolProgramManager: React.FC<HomeSchoolProgramManagerProps> =
                       </div>
                     )}
 
+                    <ClinicDocumentFooter manualOnly />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Modal de Visualização, Impressão e PDF Consolidado de Todas as Orientações */}
+      {isConsolidatedPrintModalOpen && (() => {
+        const displayPatientName = patientName || 'Paciente';
+        const displayIssueDate = new Date().toLocaleDateString('pt-BR');
+
+        return (
+          <div className="fixed inset-0 z-[100] bg-slate-900/75 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto print:static print:inset-auto print:bg-white print:p-0 print:block">
+            <style>{`
+              @media print {
+                @page {
+                  size: A4 portrait;
+                  margin: 15mm;
+                }
+                body * {
+                  visibility: hidden !important;
+                }
+                #zemda-home-programs-consolidated-print-root,
+                #zemda-home-programs-consolidated-print-root * {
+                  visibility: visible !important;
+                }
+                #zemda-home-programs-consolidated-print-root {
+                  position: absolute !important;
+                  left: 0 !important;
+                  top: 0 !important;
+                  width: 100% !important;
+                  max-width: 100% !important;
+                  margin: 0 !important;
+                  padding: 0 !important;
+                  box-shadow: none !important;
+                  border: none !important;
+                  background: #ffffff !important;
+                }
+                .no-print {
+                  display: none !important;
+                }
+                .break-inside-avoid {
+                  break-inside: avoid !important;
+                  page-break-inside: avoid !important;
+                }
+              }
+            `}</style>
+
+            <div className="bg-slate-100 rounded-2xl max-w-4xl w-full max-h-[94vh] flex flex-col shadow-2xl border border-slate-300 overflow-hidden print:max-h-none print:shadow-none print:border-0 print:bg-white">
+              {/* Barra Superior de Ações Consolidada */}
+              <div className="no-print bg-slate-900 text-white px-5 py-3.5 flex items-center justify-between gap-3 flex-wrap shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-xl bg-teal-500/20 text-teal-300">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold">Documento Consolidado de Orientações (Casa / Escola)</h4>
+                    <p className="text-[11px] text-slate-400">
+                      Total: {programs.length} orientação(ões) salva(s) • Formato A4 pronto para impressão ou download em PDF
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => triggerPrintDocument(`Orientações Consolidadas - ${displayPatientName}`)}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    <Printer className="w-4 h-4 text-teal-300" />
+                    Imprimir
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isDownloadingAllPdf}
+                    onClick={handleDownloadAllPdf}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-xl text-xs font-bold shadow-sm transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    <Download className="w-4 h-4" />
+                    {isDownloadingAllPdf ? 'Gerando PDF...' : 'Salvar todas em PDF'}
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Fechar visualização consolidada"
+                    onClick={() => setIsConsolidatedPrintModalOpen(false)}
+                    className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-white/10 transition-colors cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Folha A4 Consolidada */}
+              <div className="flex-1 overflow-y-auto p-4 sm:p-8 flex justify-center print:p-0 print:overflow-visible">
+                <div
+                  id="zemda-home-programs-consolidated-print-root"
+                  className="bg-white w-full max-w-[210mm] min-h-[297mm] p-8 sm:p-12 shadow-lg border border-slate-200 rounded-sm text-slate-900 flex flex-col justify-between print:shadow-none print:border-0 print:p-0 print:min-h-0"
+                >
+                  <div className="space-y-6">
+                    <ClinicDocumentHeader
+                      clinic={clinicDocData.clinic}
+                      loading={clinicDocData.loading}
+                      error={clinicDocData.error}
+                      documentTitle="Programa de Atividades e Orientações (Casa / Escola)"
+                      documentDate={displayIssueDate}
+                    />
+
+                    {/* Resumo do Documento Consolidado */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs">
+                      <div>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Paciente</span>
+                        <span className="font-bold text-slate-900 text-sm">{displayPatientName}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Data de Emissão</span>
+                        <span className="font-semibold text-slate-800">{displayIssueDate}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Total de Registros</span>
+                        <span className="font-semibold text-teal-700">{programs.length} orientação(ões) salva(s)</span>
+                      </div>
+                    </div>
+
+                    {/* Lista Consolidada de Orientações */}
+                    <div className="space-y-6">
+                      {programs.map((prog, idx) => {
+                        const prof = resolveRecordProfessional(prog);
+                        const progDate = formatOrientationDate(prog.created_at);
+                        const settingLabel = SETTING_LABELS[prog.setting] || prog.setting;
+                        const statusLabel = STATUS_LABELS[prog.status] || prog.status;
+                        const statusClass = STATUS_BADGE_CLASSES[prog.status] || 'bg-slate-50 text-slate-700 border-slate-200';
+
+                        return (
+                          <div
+                            key={prog.id || idx}
+                            className="break-inside-avoid border border-slate-200 rounded-xl p-5 bg-white space-y-3"
+                          >
+                            <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-2 flex-wrap">
+                              <div className="flex items-center gap-2">
+                                <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-bold">
+                                  #{idx + 1}
+                                </span>
+                                <h4 className="text-sm font-bold text-slate-900">
+                                  {prog.title}
+                                </h4>
+                              </div>
+                              <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${statusClass}`}>
+                                Status: {statusLabel}
+                              </span>
+                            </div>
+
+                            {/* Metadados */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-slate-600 bg-slate-50/70 p-3 rounded-lg border border-slate-100">
+                              <div>
+                                <span className="font-semibold text-slate-700">Data:</span> {progDate}
+                              </div>
+                              <div>
+                                <span className="font-semibold text-slate-700">Ambiente:</span> {settingLabel}
+                              </div>
+                              {prog.frequency && prog.frequency.trim() !== '' && (
+                                <div className="sm:col-span-2">
+                                  <span className="font-semibold text-slate-700">Frequência:</span> {prog.frequency}
+                                </div>
+                              )}
+                              {prof.name && (
+                                <div className="sm:col-span-2">
+                                  <span className="font-semibold text-slate-700">Profissional Responsável:</span>{' '}
+                                  {prof.name} {prof.reg ? `(${prof.reg})` : ''}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Materiais ou adaptações */}
+                            {prog.materials_needed && prog.materials_needed.trim() !== '' && (
+                              <div className="text-xs text-slate-700 bg-amber-50/60 p-2.5 rounded-lg border border-amber-200/60">
+                                <strong className="text-amber-900">Materiais ou adaptações:</strong> {prog.materials_needed}
+                              </div>
+                            )}
+
+                            {/* Instruções */}
+                            <div className="space-y-1">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-teal-700 block">
+                                Instruções e Orientações Detalhadas
+                              </span>
+                              <div className="p-3 bg-slate-50 border border-slate-100 rounded-lg text-xs sm:text-[13px] text-slate-800 whitespace-pre-wrap leading-relaxed">
+                                {prog.instructions}
+                              </div>
+                            </div>
+
+                            {/* Assinatura do profissional individual (se houver profissional no registro) */}
+                            {prof.name && (
+                              <div className="pt-2 flex justify-end">
+                                <div className="text-right">
+                                  <div className="w-40 border-b border-slate-300 ml-auto mb-1" />
+                                  <p className="text-[11px] font-bold text-slate-800">{prof.name}</p>
+                                  {prof.reg && <p className="text-[10px] text-slate-500">{prof.reg}</p>}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Rodapé Institucional */}
+                  <div className="pt-8 mt-8 space-y-4 break-inside-avoid">
                     <ClinicDocumentFooter manualOnly />
                   </div>
                 </div>
