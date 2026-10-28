@@ -14,7 +14,8 @@ export function requireSharedPatientScope(module: string) {
     if (patient?.tenant_id===req.tenantId) { next(); return; }
     // Reading locally produced history after revocation never authorizes reading source rows.
     const localHistory=req.method==='GET' && db.prepare('SELECT 1 FROM records WHERE tenant_id=? AND patient_id=? LIMIT 1').get(req.tenantId,patientId);
-    if (localHistory || (patient && canReadSharedRecord(req,{patient_id:patientId,tenant_id:patient.tenant_id,module_type:module}))) { next(); return; }
+    const effectiveModule=(module==='ZemdaTO' && (req.query?.module_type==='fono' || req.query?.specialty==='fono' || req.body?.specialty==='fono' || req.body?.moduleType==='fono')) ? 'ZemdaFono' : module;
+    if (localHistory || (patient && canReadSharedRecord(req,{patient_id:patientId,tenant_id:patient.tenant_id,module_type:effectiveModule}))) { next(); return; }
     res.status(403).json({error:'Paciente fora do escopo autorizado para este módulo.',code:'SHARED_PATIENT_SCOPE'});
   };
 }

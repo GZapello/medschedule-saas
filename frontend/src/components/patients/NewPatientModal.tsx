@@ -83,15 +83,18 @@ export const NewPatientModal: React.FC<NewPatientModalProps> = ({
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fullName || !phone) {
-      showToast('Nome completo e telefone são obrigatórios', 'error');
+    if (!fullName.trim()) {
+      showToast('Nome completo é obrigatório', 'error');
       return;
     }
 
-    const phoneVal = validateBrazilianPhone(phone);
-    if (!phoneVal.valid) {
-      showToast(phoneVal.error || 'Telefone inválido', 'error');
-      return;
+    const trimmedPhone = phone.trim();
+    if (trimmedPhone.length > 0) {
+      const phoneVal = validateBrazilianPhone(trimmedPhone);
+      if (!phoneVal.valid) {
+        showToast(phoneVal.error || 'Telefone inválido', 'error');
+        return;
+      }
     }
 
     if (isChild && (!guardianName || !guardianPhone)) {
@@ -131,13 +134,13 @@ export const NewPatientModal: React.FC<NewPatientModalProps> = ({
         : [];
 
       const createdPatient = await ApiClient.post<any>('/v1/patients', {
-        fullName,
+        fullName: fullName.trim(),
         socialName: socialName || null,
         anthropometric_sex:anthropometricSex || null,
         birthDate: birthDate || null,
         cpf: cpf || null,
-        phone,
-        whatsapp: whatsapp || phone,
+        phone: trimmedPhone || null,
+        whatsapp: (whatsapp.trim() || trimmedPhone) || null,
         email: email || null,
         address: address || null,
         city,
@@ -231,7 +234,9 @@ export const NewPatientModal: React.FC<NewPatientModalProps> = ({
               />
             </div>
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">WhatsApp / Telefone *</label>
+              <label className="block font-semibold text-slate-700 mb-1">
+                WhatsApp / Telefone <span className="font-normal text-slate-400">(opcional)</span>
+              </label>
               <input
                 type="tel"
                 value={phone}

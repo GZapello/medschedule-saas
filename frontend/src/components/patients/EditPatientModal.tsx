@@ -139,15 +139,18 @@ export const EditPatientModal: React.FC<EditPatientModalProps> = ({
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fullName || !phone) {
-      showToast('Nome completo e telefone são obrigatórios', 'error');
+    if (!fullName.trim()) {
+      showToast('Nome completo é obrigatório', 'error');
       return;
     }
 
-    const phoneVal = validateBrazilianPhone(phone);
-    if (!phoneVal.valid) {
-      showToast(phoneVal.error || 'Telefone inválido', 'error');
-      return;
+    const trimmedPhone = phone.trim();
+    if (trimmedPhone.length > 0) {
+      const phoneVal = validateBrazilianPhone(trimmedPhone);
+      if (!phoneVal.valid) {
+        showToast(phoneVal.error || 'Telefone inválido', 'error');
+        return;
+      }
     }
 
     if (isChild && (!guardianName || !guardianPhone)) {
@@ -201,13 +204,13 @@ export const EditPatientModal: React.FC<EditPatientModalProps> = ({
         : [];
 
       await ApiClient.put(`/v1/patients/${patientId}`, {
-        fullName,
+        fullName: fullName.trim(),
         socialName: socialName || null,
         anthropometric_sex:anthropometricSex || null,
         birthDate: birthDate || null,
         cpf: cpf || null,
-        phone,
-        whatsapp: whatsapp || phone,
+        phone: trimmedPhone || null,
+        whatsapp: trimmedPhone ? (whatsapp.trim() || trimmedPhone) : null,
         email: email || null,
         address: address || null,
         city: city || null,
@@ -401,10 +404,11 @@ export const EditPatientModal: React.FC<EditPatientModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-slate-700 font-semibold mb-1">Telefone / WhatsApp *</label>
+                <label className="block text-slate-700 font-semibold mb-1">
+                  WhatsApp / Telefone <span className="font-normal text-slate-400">(opcional)</span>
+                </label>
                 <input inputMode="tel"
                   type="text"
-                  required
                   value={phone}
                   onChange={e => setPhone(maskBrazilianPhone(e.target.value))}
                   placeholder="(11) 99999-9999"

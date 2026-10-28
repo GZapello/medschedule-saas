@@ -8,18 +8,35 @@ export function cleanPhoneDigits(phone: string | null | undefined): string {
 }
 
 export function isValidPhoneNumber(phone: string | null | undefined): boolean {
-  const digits = cleanPhoneDigits(phone);
+  let digits = cleanPhoneDigits(phone);
+  if (digits.startsWith('0') && (digits.length === 11 || digits.length === 12)) {
+    digits = digits.slice(1);
+  }
   // Padrão brasileiro: 10 dígitos (fixo com DDD) ou 11 dígitos (celular com DDD).
   // Se contiver DDI 55: 12 ou 13 dígitos. Padrão E.164 aceita até 15 dígitos.
   if (digits.length < 10 || digits.length > 15) {
+    return false;
+  }
+  if (/^(\d)\1+$/.test(digits)) {
+    return false;
+  }
+  const withoutDdi = digits.startsWith('55') && (digits.length === 12 || digits.length === 13) ? digits.slice(2) : digits;
+  const ddd = parseInt(withoutDdi.slice(0, 2), 10);
+  if (isNaN(ddd) || ddd < 11) {
+    return false;
+  }
+  if (/^0+$/.test(withoutDdi.slice(2))) {
     return false;
   }
   return true;
 }
 
 export function normalizePhoneWithDDI(phone: string | null | undefined): string {
-  const digits = cleanPhoneDigits(phone);
+  let digits = cleanPhoneDigits(phone);
   if (!digits) return '';
+  if (digits.startsWith('0') && (digits.length === 11 || digits.length === 12)) {
+    digits = digits.slice(1);
+  }
 
   // Se já começar com 55 e tiver 12 ou 13 dígitos, não duplicar
   if (digits.startsWith('55') && (digits.length === 12 || digits.length === 13)) {

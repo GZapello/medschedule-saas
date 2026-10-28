@@ -628,7 +628,7 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
               <div className="flex items-center gap-2 sm:gap-4 text-xs text-slate-300 mt-1 flex-wrap">
                 <span>CPF: {patient.cpf || 'Não informado'}</span>
                 <span>Nascimento: {patient.birth_date || '—'}</span>
-                <span>Tel: {patient.phone}</span>
+                <span>Tel: {patient.phone || '—'}</span>
                 {patient.email && <span>Email: {patient.email}</span>}
               </div>
             </div>

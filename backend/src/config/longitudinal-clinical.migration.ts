@@ -207,14 +207,19 @@ export function migrateLongitudinalClinical(rawDb: DatabaseSync): void {
       patient_id TEXT NOT NULL,
       professional_id TEXT,
       module_type TEXT NOT NULL,
+      specialty TEXT,
+      setting TEXT DEFAULT 'home',
+      title TEXT,
       activity TEXT NOT NULL,
-      objective TEXT NOT NULL,
+      objective TEXT NOT NULL DEFAULT '',
       instruction TEXT NOT NULL,
+      instructions TEXT,
+      materials_needed TEXT,
       frequency TEXT,
       environment_context TEXT,
       responsible_person TEXT,
       period TEXT,
-      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'completed', 'partially_completed', 'not_completed')),
+      status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'completed', 'paused', 'revised', 'pending', 'partially_completed', 'not_completed')),
       follow_up_notes TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -223,6 +228,41 @@ export function migrateLongitudinalClinical(rawDb: DatabaseSync): void {
     );
     CREATE INDEX IF NOT EXISTS idx_home_prog_patient ON clinical_home_programs(tenant_id, patient_id, module_type);
   `);
+
+  addColumnIfNotExists('clinical_home_programs', 'specialty', 'TEXT');
+  addColumnIfNotExists('clinical_home_programs', 'setting', "TEXT DEFAULT 'home'");
+  addColumnIfNotExists('clinical_home_programs', 'title', 'TEXT');
+  addColumnIfNotExists('clinical_home_programs', 'instructions', 'TEXT');
+  addColumnIfNotExists('clinical_home_programs', 'materials_needed', 'TEXT');
+
+  try {
+    const hpDef = rawDb.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'clinical_home_programs'").get() as { sql: string } | undefined;
+    if (hpDef?.sql && !hpDef.sql.includes("'active'")) {
+      const dependents = rawDb.prepare("SELECT sql FROM sqlite_master WHERE tbl_name = 'clinical_home_programs' AND type IN ('index', 'trigger') AND sql IS NOT NULL").all() as { sql: string }[];
+      const cols = (rawDb.prepare('PRAGMA table_info(clinical_home_programs)').all() as any[]).map(c => `"${c.name}"`).join(', ');
+      const replacement = hpDef.sql
+        .replace(/CREATE TABLE\s+(?:IF NOT EXISTS\s+)?["`\[]?clinical_home_programs["`\]]?/i, 'CREATE TABLE clinical_home_programs_mig')
+        .replace(/CHECK\s*\(\s*status\s+IN\s*\([^)]+\)\s*\)/i, "CHECK(status IN ('active', 'completed', 'paused', 'revised', 'pending', 'partially_completed', 'not_completed'))")
+        .replace(/DEFAULT\s+'pending'/i, "DEFAULT 'active'");
+      rawDb.exec('PRAGMA foreign_keys = OFF');
+      try {
+        rawDb.exec('BEGIN IMMEDIATE');
+        rawDb.exec(replacement);
+        rawDb.exec(`INSERT INTO clinical_home_programs_mig (${cols}) SELECT ${cols} FROM clinical_home_programs`);
+        rawDb.exec('DROP TABLE clinical_home_programs');
+        rawDb.exec('ALTER TABLE clinical_home_programs_mig RENAME TO clinical_home_programs');
+        for (const dep of dependents) rawDb.exec(dep.sql);
+        rawDb.exec('COMMIT');
+      } catch (migErr) {
+        rawDb.exec('ROLLBACK');
+        throw migErr;
+      } finally {
+        rawDb.exec('PRAGMA foreign_keys = ON');
+      }
+    }
+  } catch (e) {
+    console.warn('[Migration] Aviso ao atualizar clinical_home_programs:', e);
+  }
 
   // 10. Processos Fonológicos Estruturados (ZemdaFono)
   rawDb.exec(`

@@ -176,7 +176,7 @@ export const PatientsView: React.FC<PatientsViewProps> = ({
                 <div className="flex items-center justify-between text-xs text-slate-600 flex-wrap gap-2">
                   <div className="flex items-center gap-1.5 text-slate-800 font-medium">
                     <Phone className="w-3.5 h-3.5 text-teal-600" />
-                    <span>{p.phone}</span>
+                    <span>{p.phone || 'Sem telefone'}</span>
                   </div>
                   <span className="text-slate-400 text-[11px]">{p.total_appointments || 0} atendimentos</span>
                 </div>

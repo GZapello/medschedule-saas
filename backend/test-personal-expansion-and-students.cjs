@@ -148,7 +148,7 @@ async function runTests() {
     });
     assert(resStudent1.status === 201, 'POST /v1/personal/students com telefone vazio retorna HTTP 201 (Sucesso atomico)');
     assert(resStudent1.data.student && resStudent1.data.student.id, 'Aluno criado possui ID valido');
-    assert(resStudent1.data.student.phone && resStudent1.data.student.phone.length > 0, 'Telefone de fallback gerado com sucesso para satisfazer restricoes do BD');
+    assert(resStudent1.data.student.phone === null, 'Telefone vazio padronizado como null sem salvar numero ficticio');
     assert(resStudent1.data.student.goal === 'Emagrecimento', 'Objetivo do aluno persistido no perfil de treino');
     const student1Id = resStudent1.data.student.id;
 

@@ -191,15 +191,15 @@ export class PatientController {
         return;
       }
 
-      const phoneValidation = validateAndFormatBrazilianPhone(rawPhone, true);
+      const phoneValidation = validateAndFormatBrazilianPhone(rawPhone, false);
       if (!phoneValidation.isValid) {
         res.status(400).json({ error: phoneValidation.error || 'Telefone brasileiro inválido (verifique o DDD e a quantidade de dígitos)' });
         return;
       }
-      const effectivePhone = phoneValidation.formatted!;
+      const effectivePhone = phoneValidation.formatted || null;
 
       let effectiveWhatsapp = effectivePhone;
-      if (whatsapp && String(whatsapp).trim() !== rawPhone) {
+      if (whatsapp !== undefined && String(whatsapp || '').trim() !== '' && String(whatsapp).trim() !== rawPhone) {
         const wppVal = validateAndFormatBrazilianPhone(whatsapp, false);
         if (!wppVal.isValid) {
           res.status(400).json({ error: wppVal.error || 'WhatsApp inválido' });
@@ -301,28 +301,41 @@ export class PatientController {
       const effectivePhoto = photoUrl !== undefined ? photoUrl : (req.body.avatar_url !== undefined ? req.body.avatar_url : null);
       const effectiveGender = gender !== undefined ? gender : (req.body.sex !== undefined ? req.body.sex : null);
 
-      let effectivePhoneToUpdate = undefined;
-      if (phone !== undefined) {
-        const pVal = validateAndFormatBrazilianPhone(phone, true);
-        if (!pVal.isValid) {
-          res.status(400).json({ error: pVal.error || 'Telefone brasileiro inválido' });
-          return;
+      let shouldUpdatePhone = 0;
+      let effectivePhoneToUpdate: string | null = null;
+      if (phone !== undefined || req.body.telephone !== undefined) {
+        shouldUpdatePhone = 1;
+        const rawUpdatePhone = String(phone ?? req.body.telephone ?? '').trim();
+        if (rawUpdatePhone.length > 0) {
+          const pVal = validateAndFormatBrazilianPhone(rawUpdatePhone, false);
+          if (!pVal.isValid) {
+            res.status(400).json({ error: pVal.error || 'Telefone brasileiro inválido' });
+            return;
+          }
+          effectivePhoneToUpdate = pVal.formatted || null;
+        } else {
+          effectivePhoneToUpdate = null;
         }
-        effectivePhoneToUpdate = pVal.formatted;
       }
 
-      let effectiveWhatsappToUpdate = undefined;
+      let shouldUpdateWhatsapp = 0;
+      let effectiveWhatsappToUpdate: string | null = null;
       if (whatsapp !== undefined) {
-        if (whatsapp) {
-          const wVal = validateAndFormatBrazilianPhone(whatsapp, false);
+        shouldUpdateWhatsapp = 1;
+        const rawUpdateWpp = String(whatsapp ?? '').trim();
+        if (rawUpdateWpp.length > 0) {
+          const wVal = validateAndFormatBrazilianPhone(rawUpdateWpp, false);
           if (!wVal.isValid) {
             res.status(400).json({ error: wVal.error || 'WhatsApp inválido' });
             return;
           }
-          effectiveWhatsappToUpdate = wVal.formatted;
+          effectiveWhatsappToUpdate = wVal.formatted || null;
         } else {
           effectiveWhatsappToUpdate = null;
         }
+      } else if (shouldUpdatePhone === 1 && effectivePhoneToUpdate === null) {
+        shouldUpdateWhatsapp = 1;
+        effectiveWhatsappToUpdate = null;
       }
 
       let effectiveEmergencyPhoneToUpdate = undefined;
@@ -347,8 +360,8 @@ export class PatientController {
           cpf = COALESCE(?, cpf),
           gender = COALESCE(?, gender),
           email = COALESCE(?, email),
-          phone = COALESCE(?, phone),
-          whatsapp = COALESCE(?, whatsapp),
+          phone = CASE WHEN ? = 1 THEN ? ELSE phone END,
+          whatsapp = CASE WHEN ? = 1 THEN ? ELSE whatsapp END,
           address = COALESCE(?, address),
           city = COALESCE(?, city),
           state = COALESCE(?, state),
@@ -376,8 +389,10 @@ export class PatientController {
         cpf || null,
         effectiveGender || null,
         email || null,
-        effectivePhoneToUpdate !== undefined ? effectivePhoneToUpdate : null,
-        effectiveWhatsappToUpdate !== undefined ? effectiveWhatsappToUpdate : null,
+        shouldUpdatePhone,
+        effectivePhoneToUpdate,
+        shouldUpdateWhatsapp,
+        effectiveWhatsappToUpdate,
         address || null,
         city || null,
         state || null,

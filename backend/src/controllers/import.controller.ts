@@ -920,7 +920,7 @@ export class ImportController {
           const rawMedicalRecord = getCombinedTextValue('medical_record');
           const rawNotes = getCombinedTextValue('notes_admin');
 
-          const finalPhone = rawPhone || rawWhatsapp || '(00) 00000-0000';
+          const finalPhone = rawPhone || rawWhatsapp || null;
 
           let combinedNotes = rawNotes;
           if (rawProfession) {
@@ -1654,7 +1654,7 @@ export class ImportController {
         );
       } else {
         patientIdToUse = 'pat-imp-' + uuidv4().slice(0, 10);
-        const finalPhone = (!isIgnored('phone') && patient.phone) || (!isIgnored('whatsapp') && patient.whatsapp) || '(00) 00000-0000';
+        const finalPhone = (!isIgnored('phone') && patient.phone) || (!isIgnored('whatsapp') && patient.whatsapp) || null;
 
         db.prepare(`
           INSERT INTO patients (

@@ -4,6 +4,7 @@ import { FinishConsultationModal } from '../clinical/FinishConsultationModal';
 import { AnthropometricSexField } from './PersonalTechnicalFields';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { NewPatientModal } from '../patients/NewPatientModal';
+import { maskBrazilianPhone, validateBrazilianPhone } from '../../utils/phone-mask';
 import { useHorizontalTabScroll, HorizontalTabNav } from '../../hooks/useHorizontalTabScroll';
 import {
   Dumbbell,
@@ -261,12 +262,21 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
       return;
     }
 
+    const trimmedPhone = newStudentPhone.trim();
+    if (trimmedPhone.length > 0) {
+      const phoneVal = validateBrazilianPhone(trimmedPhone);
+      if (!phoneVal.valid) {
+        showToast(phoneVal.error || 'Telefone inválido', 'error');
+        return;
+      }
+    }
+
     try {
       setSavingStudent(true);
       // Cria o aluno de forma atômica no ZemdaPersonal
       const res = await ApiClient.post<{ success: boolean; student: Student }>('/v1/personal/students', {
         name: newStudentName.trim(),
-        phone: newStudentPhone.trim(),
+        phone: trimmedPhone || null,
         email: newStudentEmail.trim(),
         birth_date:newStudentBirth || null,
         anthropometric_sex:newStudentSex || null,
@@ -843,12 +853,14 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Telefone / WhatsApp</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  WhatsApp / Telefone <span className="font-normal text-slate-400">(opcional)</span>
+                </label>
                 <input
-                  type="text"
+                  type="tel"
                   placeholder="(11) 99999-9999"
                   value={newStudentPhone}
-                  onChange={(e) => setNewStudentPhone(e.target.value)}
+                  onChange={(e) => setNewStudentPhone(maskBrazilianPhone(e.target.value))}
                   className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </div>

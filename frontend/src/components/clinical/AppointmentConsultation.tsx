@@ -17,7 +17,9 @@ import { ZemdaBodyWorkspace } from '../zemda-body/ZemdaBodyWorkspace';
 import { GeneralClinicalWorkspace } from './GeneralClinicalWorkspace';
 import { ZemdaEsteticWorkspace } from '../estetic/ZemdaEsteticWorkspace';
 import { resolveClinicalModuleInfo } from './clinicalModuleResolver';
-import { Activity, FileText, Stethoscope, ChevronLeft, Dumbbell, Sparkles, X, Calendar, User } from 'lucide-react';
+import { openManualWhatsApp, formatPhoneDisplay, isValidPhoneNumber } from '../../utils/phone.utils';
+import { useToast } from '../../context/ToastContext';
+import { Activity, FileText, Stethoscope, ChevronLeft, Dumbbell, Sparkles, X, Calendar, User, Phone, MessageCircle } from 'lucide-react';
 
 export function AppointmentConsultation({
   appointment,
@@ -31,6 +33,7 @@ export function AppointmentConsultation({
   onFinished: () => void;
 }) {
   const auth = useAuth();
+  const { showToast } = useToast();
   const {
     isDoctor,
     isZemdaMed,
@@ -158,121 +161,164 @@ export function AppointmentConsultation({
   const professionalChip = appointment.professional_name || currentUser?.name || 'Profissional';
   const serviceChip = appointment.service_name || 'Atendimento Clínico';
   const specialtyChip = resolvedModule.profession || resolvedModule.badge || currentUser?.canonicalProfessionName || currentUser?.professionName || 'Especialidade';
+  const patientPhone = appointment.patient_phone || appointment.patientPhone || '';
 
   const renderUnifiedTopBar = (currentView: 'specialized' | 'zemda_body', ariaLabel?: string) => (
-    <div className="px-3.5 sm:px-6 py-2 bg-white border-b border-slate-200 sticky top-0 z-20 shadow-2xs space-y-1.5">
-      {/* LINHA 1: Voltar + Paciente + Badge do Módulo | Abas Principais + Fechar */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <button
-            type="button"
-            onClick={onClose}
-            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors cursor-pointer shrink-0"
-          >
-            <ChevronLeft className="w-3.5 h-3.5" /> Voltar à agenda
-          </button>
-          <span className="font-bold text-xs sm:text-sm text-slate-900 truncate">
-            {appointment.patient_name || 'Paciente'}
-          </span>
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-teal-50 text-teal-800 border border-teal-200 shrink-0">
-            {resolvedModule.icon && <resolvedModule.icon className="w-3 h-3 text-teal-600 shrink-0" />}
-            <span>{resolvedModule.name}</span>
-          </span>
-        </div>
-
-        <div className="flex items-center gap-1.5 max-w-full">
-          <nav aria-label={ariaLabel || 'Navegação do atendimento'} className="flex items-center gap-1 bg-slate-100/90 p-0.5 rounded-lg border border-slate-200 overflow-x-auto max-w-full mobile-wrap">
-            {[
-              { id: 'resumo', label: 'Resumo' },
-              { id: 'evolucao', label: 'Evolução' },
-              {
-                id: 'modulo',
-                label: resolvedModule.name,
-                tooltip: resolvedModule.tooltip,
-                Icon: resolvedModule.icon
-              },
-              { id: 'documentos', label: 'Documentos' },
-              { id: 'finalizacao', label: 'Finalização' }
-            ].map(tab => {
-              const isActive = currentView === 'specialized' && tab.id === 'modulo';
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => {
-                    if (tab.id === 'modulo') {
-                      setActiveTab('specialized');
-                    } else {
-                      setReturnWorkspaceTab(tab.id as any);
-                      setActiveTab('records');
-                    }
-                  }}
-                  title={tab.tooltip}
-                  aria-label={tab.tooltip || tab.label}
-                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] sm:text-xs font-bold transition-all cursor-pointer shrink-0 whitespace-nowrap ${
-                    isActive
-                      ? 'bg-white text-teal-700 shadow-2xs border border-slate-200/90'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
-                  }`}
-                >
-                  {tab.Icon && (
-                    <tab.Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-teal-700' : 'text-slate-500'}`} />
-                  )}
-                  <span>{tab.label}</span>
-                </button>
-              );
-            })}
-
-            {isZemdaBody && (
-              <button
-                type="button"
-                onClick={() => setActiveTab('zemda_body')}
-                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] sm:text-xs font-bold transition-all cursor-pointer shrink-0 whitespace-nowrap ${
-                  currentView === 'zemda_body'
-                    ? 'bg-teal-600 text-white shadow-2xs'
-                    : 'text-teal-800 hover:bg-teal-50'
-                }`}
-              >
-                <Activity className="w-3.5 h-3.5" />
-                <span>Zemda360</span>
-              </button>
-            )}
-          </nav>
+    <div className="bg-white border-b border-slate-200 sticky top-0 z-20 shadow-2xs">
+      {/* LINHA 1: Cabeçalho com identificação do paciente, dados do atendimento e contato */}
+      <div className="px-3.5 sm:px-6 py-2 space-y-1.5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors cursor-pointer shrink-0"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" /> Voltar à agenda
+            </button>
+            <span className="font-bold text-xs sm:text-sm text-slate-900 truncate">
+              {appointment.patient_name || 'Paciente'}
+            </span>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-teal-50 text-teal-800 border border-teal-200 shrink-0">
+              {resolvedModule.icon && <resolvedModule.icon className="w-3 h-3 text-teal-600 shrink-0" />}
+              <span>{resolvedModule.name}</span>
+            </span>
+          </div>
 
           <button
             type="button"
             aria-label="Fechar atendimento"
             onClick={onClose}
-            className="hidden sm:inline-flex items-center justify-center w-7 h-7 rounded-lg text-slate-500 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer shrink-0"
+            className="inline-flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg text-slate-500 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer shrink-0"
             title="Fechar atendimento"
           >
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
+
+        {/* CHIPS DE INFORMAÇÕES DO ATENDIMENTO + CONTATO */}
+        <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-600">
+          {timeRangeChip && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100/90 border border-slate-200/80 font-medium text-slate-700">
+              <Calendar className="w-3 h-3 text-indigo-500 shrink-0" />
+              <span>{timeRangeChip}</span>
+            </span>
+          )}
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100/90 border border-slate-200/80 font-medium text-slate-700">
+            <User className="w-3 h-3 text-teal-600 shrink-0" />
+            <span>{professionalChip}</span>
+          </span>
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100/90 border border-slate-200/80 font-medium text-slate-700">
+            <Stethoscope className="w-3 h-3 text-slate-500 shrink-0" />
+            <span>{serviceChip}</span>
+          </span>
+          {specialtyChip && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100/90 border border-slate-200/80 font-medium text-slate-600">
+              <Sparkles className="w-3 h-3 text-teal-600 shrink-0" />
+              <span>{specialtyChip}</span>
+            </span>
+          )}
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100/90 border border-slate-200/80 font-medium text-slate-600">
+            <Phone className="w-3 h-3 text-slate-400 shrink-0" />
+            <span>{patientPhone ? formatPhoneDisplay(patientPhone) : 'Sem telefone'}</span>
+            <button
+              type="button"
+              onClick={() => {
+                openManualWhatsApp({
+                  appointment: {
+                    patient_name: appointment.patient_name || 'Paciente',
+                    patient_phone: patientPhone || null,
+                    start_time: appointment.start_time || '',
+                    professional_name: professionalChip,
+                    service_name: serviceChip
+                  },
+                  clinicName: auth.currentTenant?.trade_name || auth.currentTenant?.name || 'Clínica',
+                  onError: (msg) => showToast(msg, 'info')
+                });
+              }}
+              aria-label="Abrir conversa no WhatsApp com o paciente"
+              title={
+                isValidPhoneNumber(patientPhone)
+                  ? 'Abrir conversa no WhatsApp Web ou aplicativo'
+                  : 'Cadastre um contato válido com DDD para abrir o WhatsApp'
+              }
+              className={`ml-0.5 inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold transition-colors cursor-pointer ${
+                isValidPhoneNumber(patientPhone)
+                  ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200'
+                  : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200'
+              }`}
+            >
+              <MessageCircle className="w-2.5 h-2.5 shrink-0" />
+              <span>WhatsApp</span>
+            </button>
+          </span>
+        </div>
       </div>
 
-      {/* CHIPS DE INFORMAÇÕES DO ATENDIMENTO */}
-      <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-600">
-        {timeRangeChip && (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100/90 border border-slate-200/80 font-medium text-slate-700">
-            <Calendar className="w-3 h-3 text-indigo-500 shrink-0" />
-            <span>{timeRangeChip}</span>
-          </span>
-        )}
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100/90 border border-slate-200/80 font-medium text-slate-700">
-          <User className="w-3 h-3 text-teal-600 shrink-0" />
-          <span>{professionalChip}</span>
-        </span>
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100/90 border border-slate-200/80 font-medium text-slate-700">
-          <Stethoscope className="w-3 h-3 text-slate-500 shrink-0" />
-          <span>{serviceChip}</span>
-        </span>
-        {specialtyChip && (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100/90 border border-slate-200/80 font-medium text-slate-600">
-            <Sparkles className="w-3 h-3 text-teal-600 shrink-0" />
-            <span>{specialtyChip}</span>
-          </span>
-        )}
+      {/* FAIXA DEDICADA DE NAVEGAÇÃO DAS ABAS DO ATENDIMENTO */}
+      <div className="px-3.5 sm:px-6 py-1.5 bg-slate-50/80 border-t border-slate-200">
+        <nav
+          aria-label={ariaLabel || 'Navegação do atendimento'}
+          className="flex items-center gap-1.5 overflow-x-auto no-scrollbar max-w-full py-0.5"
+        >
+          {[
+            { id: 'resumo', label: 'Resumo' },
+            { id: 'evolucao', label: 'Evolução' },
+            {
+              id: 'modulo',
+              label: resolvedModule.name,
+              tooltip: resolvedModule.tooltip,
+              Icon: resolvedModule.icon
+            },
+            { id: 'documentos', label: 'Documentos' },
+            { id: 'finalizacao', label: 'Finalização' }
+          ].map(tab => {
+            const isActive = currentView === 'specialized' && tab.id === 'modulo';
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => {
+                  if (tab.id === 'modulo') {
+                    setActiveTab('specialized');
+                  } else {
+                    setReturnWorkspaceTab(tab.id as any);
+                    setActiveTab('records');
+                  }
+                }}
+                title={tab.tooltip}
+                aria-label={tab.tooltip || tab.label}
+                aria-current={isActive ? 'page' : undefined}
+                className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 min-h-[34px] rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 whitespace-nowrap ${
+                  isActive
+                    ? 'bg-teal-600 text-white shadow-xs border border-teal-600'
+                    : 'bg-white text-slate-700 hover:text-slate-900 hover:bg-slate-100 border border-slate-200/90'
+                }`}
+              >
+                {tab.Icon && (
+                  <tab.Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-white' : 'text-teal-600'}`} />
+                )}
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+
+          {isZemdaBody && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('zemda_body')}
+              aria-current={currentView === 'zemda_body' ? 'page' : undefined}
+              className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 min-h-[34px] rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 whitespace-nowrap ${
+                currentView === 'zemda_body'
+                  ? 'bg-teal-600 text-white shadow-xs border border-teal-600'
+                  : 'bg-teal-50 text-teal-800 hover:bg-teal-100 border border-teal-200'
+              }`}
+            >
+              <Activity className={`w-3.5 h-3.5 ${currentView === 'zemda_body' ? 'text-white' : 'text-teal-600'}`} />
+              <span>Zemda360</span>
+            </button>
+          )}
+        </nav>
       </div>
     </div>
   );

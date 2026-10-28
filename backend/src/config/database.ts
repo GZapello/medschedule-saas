@@ -43,6 +43,8 @@ export interface ISafeStatement {
 }
 
 class SafeDatabase {
+  private inTransaction = false;
+
   exec(sql: string): void {
     rawDb.exec(sql);
   }
@@ -73,6 +75,10 @@ class SafeDatabase {
    */
   transaction<T extends (...args: any[]) => any>(fn: T): T {
     return ((...args: any[]) => {
+      if (this.inTransaction) {
+        return fn(...args);
+      }
+      this.inTransaction = true;
       rawDb.exec('BEGIN IMMEDIATE;');
       try {
         const result = fn(...args);
@@ -91,6 +97,8 @@ class SafeDatabase {
           rawDb.exec('ROLLBACK;');
         } catch (_) {}
         throw error;
+      } finally {
+        this.inTransaction = false;
       }
     }) as T;
   }
@@ -2834,6 +2842,39 @@ export function initializeDatabase(): void {
 
 
   migrateConsultations(rawDb);
+
+  // Allow optional phone number in patients table (rebuild if legacy NOT NULL constraint is present).
+  const patientPhoneCol = rawDb.prepare('PRAGMA table_info(patients)').all().find((c: any) => c.name === 'phone') as any;
+  if (patientPhoneCol && Number(patientPhoneCol.notnull) === 1) {
+    const patientSql = rawDb.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'patients'").get() as { sql: string } | undefined;
+    if (patientSql?.sql) {
+      const dependents = rawDb.prepare("SELECT sql FROM sqlite_master WHERE tbl_name = 'patients' AND type IN ('index', 'trigger') AND sql IS NOT NULL").all() as { sql: string }[];
+      const cols = (rawDb.prepare('PRAGMA table_info(patients)').all() as any[]).map((c: any) => `"${c.name}"`).join(', ');
+      const replacement = patientSql.sql
+        .replace(/CREATE TABLE\s+(?:IF NOT EXISTS\s+)?["`\[]?patients["`\]]?/i, 'CREATE TABLE patients_phone_nullable_mig')
+        .replace(/\bphone\s+TEXT\s+NOT\s+NULL\b/i, 'phone TEXT');
+      rawDb.exec('PRAGMA foreign_keys = OFF');
+      rawDb.exec('PRAGMA legacy_alter_table = ON');
+      try {
+        db.transaction(() => {
+          rawDb.exec(replacement);
+          rawDb.exec(`INSERT INTO patients_phone_nullable_mig (${cols}) SELECT ${cols} FROM patients`);
+          rawDb.exec('DROP TABLE patients');
+          rawDb.exec('ALTER TABLE patients_phone_nullable_mig RENAME TO patients');
+          for (const dep of dependents) rawDb.exec(dep.sql);
+        })();
+      } finally {
+        rawDb.exec('PRAGMA legacy_alter_table = OFF');
+        rawDb.exec('PRAGMA foreign_keys = ON');
+      }
+    }
+  }
+  try {
+    rawDb.exec(`
+      UPDATE patients SET phone = NULL WHERE phone IN ('(00) 00000-0000', '00000000000', 'não informado', 'nao informado', '');
+      UPDATE patients SET whatsapp = NULL WHERE whatsapp IN ('(00) 00000-0000', '00000000000', 'não informado', 'nao informado', '');
+    `);
+  } catch (_) {}
 
   // SQLite requires a table rebuild to extend an existing CHECK constraint.
   const tenantSql = rawDb.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'tenants'").get() as { sql: string };

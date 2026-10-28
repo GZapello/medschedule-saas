@@ -353,7 +353,7 @@ CREATE TABLE IF NOT EXISTS patients (
   anthropometric_sex TEXT,
   cpf TEXT,
   email TEXT,
-  phone TEXT NOT NULL,
+  phone TEXT,
   whatsapp TEXT,
   address TEXT,
   city TEXT,

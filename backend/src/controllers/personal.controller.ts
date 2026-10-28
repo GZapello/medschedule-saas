@@ -15,6 +15,7 @@ import { resolveCanonicalProfession } from '../utils/profession-module';
 import { isPhysiotherapistOrClinicManager } from './physiotherapy.controller';
 import { ClinicalRecordService } from '../services/clinical-record.service';
 import { createDefaultSchedules } from '../utils/schedule-defaults';
+import { validateAndFormatBrazilianPhone } from '../utils/phone-validator';
 
 /**
  * Validação estrita de profissão:
@@ -711,7 +712,16 @@ export class PersonalController {
         return;
       }
 
-      const effectivePhone = String(phone || '').trim() || '(00) 00000-0000';
+      const rawPhone = String(phone || '').trim();
+      let effectivePhone: string | null = null;
+      if (rawPhone.length > 0) {
+        const pVal = validateAndFormatBrazilianPhone(rawPhone, false);
+        if (!pVal.isValid) {
+          res.status(400).json({ error: pVal.error || 'Telefone brasileiro inválido' });
+          return;
+        }
+        effectivePhone = pVal.formatted || null;
+      }
       const effectiveEmail = email ? String(email).trim() : null;
       const effectiveBirth = birth_date || birthDate || null;
       const effectivePhoto = avatar_url || photo_url || null;
@@ -795,6 +805,16 @@ export class PersonalController {
       }
 
       const effectiveName = (name !== undefined || fullName !== undefined) ? String(name || fullName || '').trim() : null;
+      const phoneProvided = phone !== undefined;
+      let cleanPhone: string | null = null;
+      if (phoneProvided && String(phone || '').trim().length > 0) {
+        const pVal = validateAndFormatBrazilianPhone(String(phone).trim(), false);
+        if (!pVal.isValid) {
+          res.status(400).json({ error: pVal.error || 'Telefone brasileiro inválido' });
+          return;
+        }
+        cleanPhone = pVal.formatted || null;
+      }
       const photoProvided = avatar_url !== undefined || photo_url !== undefined;
       const cleanPhoto = photoProvided ? (avatar_url || photo_url || null) : null;
       const isActive = status !== undefined ? (status === 'active' ? 1 : 0) : (active !== undefined ? (active ? 1 : 0) : null);
@@ -803,7 +823,8 @@ export class PersonalController {
         db.prepare(`
           UPDATE patients SET
             full_name = COALESCE(?, full_name),
-            phone = COALESCE(?, phone),
+            phone = CASE WHEN ? = 1 THEN ? ELSE phone END,
+            whatsapp = CASE WHEN ? = 1 THEN ? ELSE whatsapp END,
             email = COALESCE(?, email),
             birth_date = COALESCE(?, birth_date),
             cpf = COALESCE(?, cpf),
@@ -813,7 +834,10 @@ export class PersonalController {
             updated_at = datetime('now')
           WHERE id = ? AND tenant_id = ?
         `).run(
-          effectiveName, phone ? String(phone).trim() : null, email ? String(email).trim() : null,
+          effectiveName,
+          phoneProvided ? 1 : 0, cleanPhone,
+          phoneProvided ? 1 : 0, cleanPhone,
+          email ? String(email).trim() : null,
           birth_date || birthDate || null, cpf || null, gender || null,
           photoProvided ? 1 : 0, cleanPhoto,
           isActive, id, tenantId

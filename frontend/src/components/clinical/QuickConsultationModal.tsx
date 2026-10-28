@@ -1,5 +1,5 @@
 import { takeReviewedEvolution } from '../../utils/teleconsultation';
-import { generateWhatsAppUrl } from '../../utils/phone.utils';
+import { generateWhatsAppUrl, openManualWhatsApp, formatPhoneDisplay, isValidPhoneNumber } from '../../utils/phone.utils';
 import { ClinicalPainScale } from './ClinicalPainScale';
 import { useClinicalFormReset } from '../../hooks/useClinicalFormReset';
 import { resolveClinicalModuleInfo } from './clinicalModuleResolver';
@@ -781,8 +781,20 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
     }
   }, [DRAFT_KEY]);
 
-  // 3. Mecanismo de Autosave com Debounce (garantia absoluta de não perder texto)
+  // 3. Mecanismo de Autosave com persistência imediata e debounce visual (garantia absoluta de não perder texto)
   const triggerAutosave = (newTitle: string, newEvol: string, newNotes: string) => {
+    try {
+      const draftObj = {
+        title: newTitle,
+        clinicalEvolution: newEvol,
+        technicalNotes: newNotes,
+        savedAt: new Date().toISOString()
+      };
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(draftObj));
+    } catch (err) {
+      console.error('Erro na gravação imediata do rascunho:', err);
+    }
+
     setAutosaveStatus('saving');
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
@@ -1385,68 +1397,8 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
                 </span>
               </div>
 
-              {/* Direita: Abas Principais (Resumo, Evolução, Módulo, Documentos, Finalização, Zemda360) + Botão X */}
-              <div className="flex items-center gap-1.5 max-w-full">
-                <nav aria-label="Navegação do atendimento" className="flex items-center gap-1 bg-slate-100/90 p-0.5 rounded-lg border border-slate-200 overflow-x-auto max-w-full mobile-wrap">
-                  {[
-                    { id: 'resumo', label: 'Resumo' },
-                    { id: 'evolucao', label: 'Evolução' },
-                    {
-                      id: 'modulo',
-                      label: specializedName,
-                      tooltip: `Abrir módulo completo ${specializedName}`,
-                      Icon: ModuleIcon
-                    },
-                    { id: 'documentos', label: 'Documentos' },
-                    { id: 'finalizacao', label: 'Finalização' }
-                  ].map(tab => {
-                    const isActive = workspaceTab === tab.id;
-                    return (
-                      <button
-                        key={tab.id}
-                        type="button"
-                        onClick={() => {
-                          if (tab.id === 'modulo' && onOpenSpecializedModule) {
-                            onOpenSpecializedModule();
-                            return;
-                          }
-                          setWorkspaceTab(tab.id as any);
-                        }}
-                        title={tab.tooltip}
-                        aria-label={tab.tooltip || tab.label}
-                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] sm:text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
-                          isActive
-                            ? 'bg-white text-teal-700 shadow-2xs border border-slate-200/90'
-                            : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
-                        }`}
-                      >
-                        {tab.Icon && (
-                          <tab.Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-teal-700' : 'text-slate-500'}`} />
-                        )}
-                        <span>{tab.label}</span>
-                      </button>
-                    );
-                  })}
-
-                  {isZemdaBody && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (onOpenZemdaBody) {
-                          onOpenZemdaBody();
-                        } else {
-                          setShowZemdaBodyModal(true);
-                        }
-                      }}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] sm:text-xs font-bold text-teal-800 hover:bg-teal-50 transition-all cursor-pointer whitespace-nowrap shrink-0"
-                      title="Abrir mapeamento anatômico Zemda360"
-                    >
-                      <Activity className="w-3.5 h-3.5 text-teal-600" />
-                      <span>Zemda360</span>
-                    </button>
-                  )}
-                </nav>
-
+              {/* Direita: Botão Fechar Atendimento */}
+              <div className="flex items-center gap-1.5 shrink-0">
                 <button
                   type="button"
                   aria-label="Fechar atendimento"
@@ -1577,25 +1529,41 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
                 <span>{appointment.modality === 'online' ? 'Online' : 'Presencial'}</span>
               </span>
 
-              {/* Chip Telefone + WhatsApp Em breve */}
-              {patientPhone && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100/90 border border-slate-200/80 font-medium text-slate-600">
-                  <Phone className="w-3 h-3 text-slate-400 shrink-0" />
-                  <span>{patientPhone}</span>
-                  {cleanPhone.length >= 10 && (
-                    <button
-                      type="button"
-                      disabled
-                      aria-disabled="true"
-                      className="ml-0.5 inline-flex items-center gap-1 px-1.5 py-0.2 rounded bg-slate-200/70 text-slate-400 text-[10px] font-semibold cursor-not-allowed select-none"
-                      title="Integração com WhatsApp em breve"
-                    >
-                      <MessageCircle className="w-2.5 h-2.5 shrink-0" />
-                      <span>Em breve</span>
-                    </button>
-                  )}
-                </span>
-              )}
+              {/* Chip Telefone + WhatsApp Manual */}
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100/90 border border-slate-200/80 font-medium text-slate-600">
+                <Phone className="w-3 h-3 text-slate-400 shrink-0" />
+                <span>{patientPhone ? formatPhoneDisplay(patientPhone) : 'Sem telefone'}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    openManualWhatsApp({
+                      appointment: {
+                        patient_name: patientName,
+                        patient_phone: patientPhone || null,
+                        start_time: effectiveStartIsoForHeader || appointment.start_time || '',
+                        professional_name: appointment.professional_name || currentUser?.name || '',
+                        service_name: appointment.service_name || ''
+                      },
+                      clinicName: auth.currentTenant?.trade_name || auth.currentTenant?.name || 'Clínica',
+                      onError: (msg) => showToast(msg, 'info')
+                    });
+                  }}
+                  aria-label="Abrir conversa no WhatsApp com o paciente"
+                  title={
+                    isValidPhoneNumber(patientPhone)
+                      ? 'Abrir conversa no WhatsApp Web ou aplicativo'
+                      : 'Cadastre um contato válido com DDD para abrir o WhatsApp'
+                  }
+                  className={`ml-0.5 inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold transition-colors cursor-pointer ${
+                    isValidPhoneNumber(patientPhone)
+                      ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200'
+                      : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200'
+                  }`}
+                >
+                  <MessageCircle className="w-2.5 h-2.5 shrink-0" />
+                  <span>WhatsApp</span>
+                </button>
+              </span>
             </div>
           </div>
 
@@ -1677,6 +1645,73 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
               <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
               <span>{savingRecord ? 'Finalizando...' : 'Finalizar Atendimento'}</span>
             </button>
+          </div>
+
+          {/* TERCEIRA LINHA — FAIXA DEDICADA DE NAVEGAÇÃO DAS ABAS DO ATENDIMENTO */}
+          <div className="px-3.5 sm:px-6 py-1.5 bg-white border-t border-slate-200">
+            <nav
+              aria-label="Navegação do atendimento"
+              className="flex items-center gap-1.5 overflow-x-auto no-scrollbar max-w-full py-0.5"
+            >
+              {[
+                { id: 'resumo', label: 'Resumo' },
+                { id: 'evolucao', label: 'Evolução' },
+                {
+                  id: 'modulo',
+                  label: specializedName,
+                  tooltip: `Abrir módulo completo ${specializedName}`,
+                  Icon: ModuleIcon
+                },
+                { id: 'documentos', label: 'Documentos' },
+                { id: 'finalizacao', label: 'Finalização' }
+              ].map(tab => {
+                const isActive = workspaceTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => {
+                      if (tab.id === 'modulo' && onOpenSpecializedModule) {
+                        onOpenSpecializedModule();
+                        return;
+                      }
+                      setWorkspaceTab(tab.id as any);
+                    }}
+                    title={tab.tooltip}
+                    aria-label={tab.tooltip || tab.label}
+                    aria-current={isActive ? 'page' : undefined}
+                    className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 min-h-[34px] rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                      isActive
+                        ? 'bg-teal-600 text-white shadow-xs border border-teal-600'
+                        : 'bg-slate-100/90 text-slate-700 hover:text-slate-900 hover:bg-slate-200/70 border border-slate-200/80'
+                    }`}
+                  >
+                    {tab.Icon && (
+                      <tab.Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-white' : 'text-teal-600'}`} />
+                    )}
+                    <span>{tab.label}</span>
+                  </button>
+                );
+              })}
+
+              {isZemdaBody && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onOpenZemdaBody) {
+                      onOpenZemdaBody();
+                    } else {
+                      setShowZemdaBodyModal(true);
+                    }
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 min-h-[34px] rounded-xl text-xs font-bold bg-teal-50 text-teal-800 hover:bg-teal-100 border border-teal-200 transition-all cursor-pointer whitespace-nowrap shrink-0"
+                  title="Abrir mapeamento anatômico Zemda360"
+                >
+                  <Activity className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                  <span>Zemda360</span>
+                </button>
+              )}
+            </nav>
           </div>
         </header>
 

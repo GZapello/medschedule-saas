@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import PDFDocument from 'pdfkit';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '../middlewares/audit.middleware';
@@ -806,24 +807,72 @@ export class OccupationalTherapyController {
   // 10. PROGRAMA DOMICILIAR / ESCOLAR (TO e Fono)
   static listHomePrograms(req: Request, res: Response): void {
     try {
-      const patientId = String(req.params.patientId);
+      const patientId = String(req.params.patientId || req.query.patientId || '').trim();
       const tenantId = req.tenantId;
-      const moduleType = req.query.module_type ? String(req.query.module_type) : 'to';
+      const rawModule = req.query.module_type || req.query.specialty;
+      const moduleFilter = rawModule ? String(rawModule).trim().toLowerCase() : null;
 
-      if (!hasClinicalAccess(req, patientId)) {
+      if (!patientId || !hasClinicalAccess(req, patientId)) {
         res.status(403).json({ error: 'Acesso restrito' });
         return;
       }
 
-      const rows = db.prepare(`
-        SELECT * FROM clinical_home_programs
-        WHERE patient_id = ? AND tenant_id = ? AND module_type = ?
-        ORDER BY created_at DESC
-      `).all(patientId, tenantId, moduleType) as any[];
+      const rows = (moduleFilter
+        ? db.prepare(`
+            SELECT hp.*,
+                   pr.name AS professional_name,
+                   pr.registration_type AS registration_type,
+                   pr.registration_number AS registration_number,
+                   pt.full_name AS patient_name
+            FROM clinical_home_programs hp
+            LEFT JOIN professionals pr ON pr.id = hp.professional_id AND pr.tenant_id = hp.tenant_id
+            LEFT JOIN patients pt ON pt.id = hp.patient_id
+            WHERE hp.patient_id = ? AND hp.tenant_id = ?
+              AND (LOWER(COALESCE(hp.module_type, 'to')) = ? OR LOWER(COALESCE(hp.specialty, '')) = ?)
+            ORDER BY hp.created_at DESC
+          `).all(patientId, tenantId, moduleFilter, moduleFilter)
+        : db.prepare(`
+            SELECT hp.*,
+                   pr.name AS professional_name,
+                   pr.registration_type AS registration_type,
+                   pr.registration_number AS registration_number,
+                   pt.full_name AS patient_name
+            FROM clinical_home_programs hp
+            LEFT JOIN professionals pr ON pr.id = hp.professional_id AND pr.tenant_id = hp.tenant_id
+            LEFT JOIN patients pt ON pt.id = hp.patient_id
+            WHERE hp.patient_id = ? AND hp.tenant_id = ?
+            ORDER BY hp.created_at DESC
+          `).all(patientId, tenantId)) as any[];
 
-      res.json(rows);
+      const normalized = rows.map((r: any) => ({
+        ...r,
+        id: r.id,
+        patient_id: r.patient_id,
+        patient_name: r.patient_name || null,
+        professional_id: r.professional_id || null,
+        professional_name: r.professional_name || null,
+        registration_type: r.registration_type || null,
+        registration_number: r.registration_number || null,
+        specialty: r.specialty || r.module_type || 'to',
+        module_type: r.module_type || r.specialty || 'to',
+        setting: r.setting || r.environment_context || 'home',
+        environment_context: r.environment_context || r.setting || 'home',
+        title: r.title || r.activity || '',
+        activity: r.activity || r.title || '',
+        objective: r.objective || r.title || r.activity || '',
+        instructions: r.instructions || r.instruction || '',
+        instruction: r.instruction || r.instructions || '',
+        materials_needed: r.materials_needed || null,
+        frequency: r.frequency || null,
+        status: r.status === 'pending' ? 'active' : (r.status || 'active'),
+        created_at: r.created_at,
+        updated_at: r.updated_at
+      }));
+
+      res.json(normalized);
     } catch (err: any) {
-      res.status(500).json({ error: 'Erro ao listar programa domiciliar' });
+      console.error('[OccupationalTherapyController.listHomePrograms] Erro:', err);
+      res.status(500).json({ error: 'Erro ao listar programa de orientações' });
     }
   }
 
@@ -831,37 +880,159 @@ export class OccupationalTherapyController {
     try {
       const tenantId = req.tenantId;
       const {
-        patientId, moduleType = 'to', activity, objective, instruction,
-        frequency, environmentContext, responsiblePerson, period
-      } = req.body;
+        patientId,
+        patient_id,
+        specialty,
+        moduleType,
+        module_type,
+        setting,
+        environmentContext,
+        environment_context,
+        title,
+        activity,
+        objective,
+        instructions,
+        instruction,
+        materialsNeeded,
+        materials_needed,
+        frequency,
+        responsiblePerson,
+        responsible_person,
+        period
+      } = req.body || {};
 
-      if (!patientId || !activity || !objective || !instruction) {
-        res.status(400).json({ error: 'patientId, activity, objective e instruction são obrigatórios' });
+      const effectivePatientId = String(patientId || patient_id || '').trim();
+      const effectiveTitle = String(title || activity || '').trim();
+      const effectiveInstructions = String(instructions || instruction || '').trim();
+      const effectiveObjective = String(objective || effectiveTitle || '').trim();
+      const effectiveSetting = String(setting || environmentContext || environment_context || 'home').trim();
+      const effectiveSpecialty = String(specialty || moduleType || module_type || 'to').trim().toLowerCase();
+      const effectiveMaterials = String(materialsNeeded ?? materials_needed ?? '').trim() || null;
+      const effectiveFrequency = String(frequency ?? '').trim() || null;
+      const effectiveResponsible = String(responsiblePerson ?? responsible_person ?? '').trim() || null;
+      const effectivePeriod = String(period ?? '').trim() || null;
+
+      if (!effectivePatientId) {
+        res.status(400).json({ error: 'Selecione um paciente válido para registrar a orientação.' });
+        return;
+      }
+      if (!effectiveTitle) {
+        res.status(400).json({ error: 'Informe o título da orientação ou atividade.' });
+        return;
+      }
+      if (!effectiveInstructions) {
+        res.status(400).json({ error: 'Informe as instruções passo a passo da orientação.' });
         return;
       }
 
-      let profId: string | null = null;
-      if (req.user?.role === 'professional') {
-        const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
-        if (prof) profId = prof.id;
+      const patientRow = db.prepare('SELECT id, full_name, tenant_id FROM patients WHERE id = ?').get(effectivePatientId) as any;
+      if (!patientRow || !hasClinicalAccess(req, effectivePatientId)) {
+        res.status(403).json({ error: 'Sem permissão para registrar orientações para este paciente.' });
+        return;
+      }
+
+      let profRow: any = null;
+      if (req.user?.userId) {
+        profRow = db.prepare('SELECT id, name, registration_type, registration_number FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
+      }
+      if (!profRow) {
+        profRow = db.prepare('SELECT id, name, registration_type, registration_number FROM professionals WHERE tenant_id = ? ORDER BY active DESC, created_at ASC LIMIT 1').get(tenantId) as any;
+      }
+      const profId = profRow?.id || null;
+
+      // Previne duplicidade acidental por cliques repetidos no mesmo intervalo curto
+      const recentDup = db.prepare(`
+        SELECT id, created_at FROM clinical_home_programs
+        WHERE tenant_id = ? AND patient_id = ?
+          AND COALESCE(title, activity) = ?
+          AND COALESCE(instructions, instruction) = ?
+          AND datetime(created_at) >= datetime('now', '-5 seconds')
+        ORDER BY created_at DESC
+        LIMIT 1
+      `).get(tenantId, effectivePatientId, effectiveTitle, effectiveInstructions) as any;
+
+      if (recentDup) {
+        res.status(200).json({
+          id: recentDup.id,
+          patient_id: effectivePatientId,
+          patient_name: patientRow.full_name || null,
+          professional_id: profId,
+          professional_name: profRow?.name || req.user?.name || null,
+          registration_type: profRow?.registration_type || null,
+          registration_number: profRow?.registration_number || null,
+          specialty: effectiveSpecialty,
+          module_type: effectiveSpecialty,
+          setting: effectiveSetting,
+          title: effectiveTitle,
+          activity: effectiveTitle,
+          objective: effectiveObjective,
+          instructions: effectiveInstructions,
+          instruction: effectiveInstructions,
+          materials_needed: effectiveMaterials,
+          frequency: effectiveFrequency,
+          status: 'active',
+          created_at: recentDup.created_at,
+          message: 'Orientação registrada com sucesso'
+        });
+        return;
       }
 
       const id = 'prog-' + uuidv4().slice(0, 8);
       db.prepare(`
         INSERT INTO clinical_home_programs (
-          id, tenant_id, patient_id, professional_id, module_type,
-          activity, objective, instruction, frequency, environment_context,
+          id, tenant_id, patient_id, professional_id, module_type, specialty,
+          setting, title, activity, objective, instruction, instructions,
+          materials_needed, frequency, environment_context,
           responsible_person, period, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')
       `).run(
-        id, tenantId, patientId, profId, moduleType,
-        activity, objective, instruction, frequency || null, environmentContext || null,
-        responsiblePerson || null, period || null
+        id,
+        tenantId,
+        effectivePatientId,
+        profId,
+        effectiveSpecialty,
+        effectiveSpecialty,
+        effectiveSetting,
+        effectiveTitle,
+        effectiveTitle,
+        effectiveObjective,
+        effectiveInstructions,
+        effectiveInstructions,
+        effectiveMaterials,
+        effectiveFrequency,
+        effectiveSetting,
+        effectiveResponsible,
+        effectivePeriod
       );
 
-      res.status(201).json({ id, message: 'Programa domiciliar/escolar prescrito' });
+      const created = db.prepare('SELECT created_at FROM clinical_home_programs WHERE id = ?').get(id) as any;
+      logAudit(req, 'CREATE_HOME_PROGRAM', 'clinical_home_programs', id, { patientId: effectivePatientId, title: effectiveTitle, setting: effectiveSetting });
+
+      res.status(201).json({
+        id,
+        patient_id: effectivePatientId,
+        patient_name: patientRow.full_name || null,
+        professional_id: profId,
+        professional_name: profRow?.name || req.user?.name || null,
+        registration_type: profRow?.registration_type || null,
+        registration_number: profRow?.registration_number || null,
+        specialty: effectiveSpecialty,
+        module_type: effectiveSpecialty,
+        setting: effectiveSetting,
+        title: effectiveTitle,
+        activity: effectiveTitle,
+        objective: effectiveObjective,
+        instructions: effectiveInstructions,
+        instruction: effectiveInstructions,
+        materials_needed: effectiveMaterials,
+        frequency: effectiveFrequency,
+        status: 'active',
+        created_at: created?.created_at || new Date().toISOString(),
+        message: 'Programa domiciliar/escolar prescrito com sucesso'
+      });
     } catch (err: any) {
-      res.status(500).json({ error: 'Erro ao salvar programa domiciliar' });
+      console.error('[OccupationalTherapyController.saveHomeProgram] Erro:', err);
+      res.status(500).json({ error: 'Erro ao salvar programa de orientações' });
     }
   }
 
@@ -869,7 +1040,23 @@ export class OccupationalTherapyController {
     try {
       const tenantId = req.tenantId;
       const { id } = req.params;
-      const { status, followUpNotes } = req.body;
+      const { status, followUpNotes } = req.body || {};
+
+      const existing = db.prepare('SELECT id, patient_id FROM clinical_home_programs WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
+      if (!existing) {
+        res.status(404).json({ error: 'Orientação não encontrada' });
+        return;
+      }
+      if (!hasClinicalAccess(req, existing.patient_id)) {
+        res.status(403).json({ error: 'Acesso restrito' });
+        return;
+      }
+
+      const validStatuses = ['active', 'completed', 'paused', 'revised', 'pending', 'partially_completed', 'not_completed'];
+      if (status && !validStatuses.includes(String(status))) {
+        res.status(400).json({ error: 'Status de orientação inválido' });
+        return;
+      }
 
       db.prepare(`
         UPDATE clinical_home_programs SET
@@ -879,9 +1066,195 @@ export class OccupationalTherapyController {
         WHERE id = ? AND tenant_id = ?
       `).run(status || null, followUpNotes || null, id, tenantId);
 
-      res.json({ message: 'Status do programa atualizado' });
+      res.json({ message: 'Status do programa atualizado', status });
     } catch (err: any) {
+      console.error('[OccupationalTherapyController.updateHomeProgramStatus] Erro:', err);
       res.status(500).json({ error: 'Erro ao atualizar status do programa' });
+    }
+  }
+
+  static downloadHomeProgramPdf(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      const { id } = req.params;
+
+      const row = db.prepare(`
+        SELECT hp.*,
+               pr.name AS professional_name,
+               pr.registration_type AS registration_type,
+               pr.registration_number AS registration_number,
+               pt.full_name AS patient_name
+        FROM clinical_home_programs hp
+        LEFT JOIN professionals pr ON pr.id = hp.professional_id AND pr.tenant_id = hp.tenant_id
+        LEFT JOIN patients pt ON pt.id = hp.patient_id
+        WHERE hp.id = ? AND hp.tenant_id = ?
+      `).get(id, tenantId) as any;
+
+      if (!row) {
+        res.status(404).json({ error: 'Orientação não encontrada.' });
+        return;
+      }
+
+      if (!hasClinicalAccess(req, row.patient_id)) {
+        res.status(403).json({ error: 'Acesso restrito a esta orientação.' });
+        return;
+      }
+
+      const tenant = db.prepare(`
+        SELECT name, trade_name, cnpj_cpf AS cnpj, phone, email, address, city, state
+        FROM tenants WHERE id = ?
+      `).get(tenantId) as any;
+
+      const clinicName = String(tenant?.trade_name || tenant?.name || 'Clínica').trim();
+      const patientName = String(row.patient_name || 'Paciente').trim();
+      const profName = String(row.professional_name || req.user?.name || '').trim();
+      const profReg = row.registration_type && row.registration_number
+        ? `${row.registration_type} ${row.registration_number}`
+        : (row.registration_number ? String(row.registration_number) : '');
+
+      const titleText = String(row.title || row.activity || 'Orientação Terapêutica').trim();
+      const instructionsText = String(row.instructions || row.instruction || '').trim();
+      const materialsText = String(row.materials_needed || '').trim();
+      const frequencyText = String(row.frequency || '').trim();
+      const settingKey = String(row.setting || row.environment_context || 'home').trim();
+      const settingLabels: Record<string, string> = {
+        home: 'Domiciliar (Casa / Família)',
+        school: 'Escolar (Professor / Mediador)',
+        community: 'Comunitário / Lazer',
+        general: 'Geral (Todos os Ambientes)'
+      };
+      const settingLabel = settingLabels[settingKey] || settingKey;
+
+      const rawDate = row.created_at ? new Date(String(row.created_at).replace(' ', 'T')) : new Date();
+      const formattedDate = !isNaN(rawDate.getTime())
+        ? rawDate.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+        : String(row.created_at || '');
+
+      const safeFilename = `orientacao-${row.id}.pdf`;
+      const doc = new PDFDocument({
+        size: 'A4',
+        margins: { top: 48, bottom: 56, left: 48, right: 48 },
+        bufferPages: true,
+        info: {
+          Title: `Orientação - ${titleText}`,
+          Author: `${clinicName} — Zemda`
+        }
+      });
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`);
+      res.setHeader('Cache-Control', 'no-store');
+      doc.pipe(res);
+
+      const pageWidth = doc.page.width - 96;
+
+      // Cabeçalho da Clínica + Identificação Zemda
+      doc.font('Helvetica-Bold').fontSize(15).fillColor('#0f172a').text(clinicName, { width: pageWidth });
+      const clinicDetails: string[] = [];
+      if (tenant?.cnpj) clinicDetails.push(`CNPJ: ${tenant.cnpj}`);
+      const addressParts = [tenant?.address, tenant?.city && tenant?.state ? `${tenant.city}/${tenant.state}` : (tenant?.city || tenant?.state)].filter(Boolean);
+      if (addressParts.length > 0) clinicDetails.push(addressParts.join(' - '));
+      const contactParts = [tenant?.phone ? `Tel: ${tenant.phone}` : null, tenant?.email].filter(Boolean);
+      if (contactParts.length > 0) clinicDetails.push(contactParts.join(' • '));
+
+      if (clinicDetails.length > 0) {
+        doc.moveDown(0.2).font('Helvetica').fontSize(9).fillColor('#475569').text(clinicDetails.join('  |  '), { width: pageWidth });
+      }
+      doc.moveDown(0.2).font('Helvetica-Bold').fontSize(8.5).fillColor('#0d9488').text('ZEMDA — PRONTUÁRIO E GESTÃO CLÍNICA', { width: pageWidth });
+
+      doc.moveDown(0.6);
+      doc.moveTo(48, doc.y).lineTo(doc.page.width - 48, doc.y).lineWidth(1.2).strokeColor('#cbd5e1').stroke();
+      doc.moveDown(0.8);
+
+      // Título do Documento
+      doc.font('Helvetica-Bold').fontSize(13).fillColor('#0f172a').text('PROGRAMA DE ATIVIDADES E ORIENTAÇÕES (CASA / ESCOLA)', {
+        width: pageWidth,
+        align: 'center'
+      });
+      doc.moveDown(0.8);
+
+      // Bloco de Identificação (Paciente, Profissional, Data, Ambiente, Frequência)
+      doc.font('Helvetica-Bold').fontSize(10).fillColor('#1e293b').text('Paciente: ', { continued: true })
+        .font('Helvetica').fillColor('#0f172a').text(patientName);
+
+      if (profName) {
+        const profDisplay = profReg ? `${profName} (${profReg})` : profName;
+        doc.moveDown(0.25).font('Helvetica-Bold').fontSize(10).fillColor('#1e293b').text('Profissional Responsável: ', { continued: true })
+          .font('Helvetica').fillColor('#0f172a').text(profDisplay);
+      }
+
+      if (formattedDate) {
+        doc.moveDown(0.25).font('Helvetica-Bold').fontSize(10).fillColor('#1e293b').text('Data da Orientação: ', { continued: true })
+          .font('Helvetica').fillColor('#0f172a').text(formattedDate);
+      }
+
+      if (settingLabel) {
+        doc.moveDown(0.25).font('Helvetica-Bold').fontSize(10).fillColor('#1e293b').text('Ambiente de Aplicação: ', { continued: true })
+          .font('Helvetica').fillColor('#0f172a').text(settingLabel);
+      }
+
+      if (frequencyText) {
+        doc.moveDown(0.25).font('Helvetica-Bold').fontSize(10).fillColor('#1e293b').text('Frequência Sugerida: ', { continued: true })
+          .font('Helvetica').fillColor('#0f172a').text(frequencyText);
+      }
+
+      doc.moveDown(0.8);
+      doc.moveTo(48, doc.y).lineTo(doc.page.width - 48, doc.y).lineWidth(0.6).strokeColor('#e2e8f0').stroke();
+      doc.moveDown(0.8);
+
+      // Título da Orientação / Atividade
+      doc.font('Helvetica-Bold').fontSize(10).fillColor('#0d9488').text('TÍTULO DA ORIENTAÇÃO / ATIVIDADE');
+      doc.moveDown(0.25).font('Helvetica-Bold').fontSize(12).fillColor('#0f172a').text(titleText, { width: pageWidth, lineGap: 2 });
+
+      // Materiais ou Adaptações Necessárias (somente se preenchido)
+      if (materialsText) {
+        doc.moveDown(0.8);
+        doc.font('Helvetica-Bold').fontSize(10).fillColor('#0d9488').text('MATERIAIS OU ADAPTAÇÕES NECESSÁRIAS');
+        doc.moveDown(0.25).font('Helvetica').fontSize(10.5).fillColor('#1e293b').text(materialsText, { width: pageWidth, lineGap: 3 });
+      }
+
+      // Instruções Completas
+      doc.moveDown(0.8);
+      doc.font('Helvetica-Bold').fontSize(10).fillColor('#0d9488').text('INSTRUÇÕES E ORIENTAÇÕES DETALHADAS');
+      doc.moveDown(0.35).font('Helvetica').fontSize(10.5).fillColor('#0f172a').text(instructionsText, {
+        width: pageWidth,
+        lineGap: 4
+      });
+
+      // Assinatura do Profissional no final
+      if (profName) {
+        if (doc.y > doc.page.height - 130) {
+          doc.addPage();
+        }
+        doc.moveDown(2.2);
+        const lineStart = (doc.page.width - 220) / 2;
+        doc.moveTo(lineStart, doc.y).lineTo(lineStart + 220, doc.y).lineWidth(0.8).strokeColor('#94a3b8').stroke();
+        doc.moveDown(0.3);
+        doc.font('Helvetica-Bold').fontSize(10).fillColor('#0f172a').text(profName, { width: pageWidth, align: 'center' });
+        if (profReg) {
+          doc.font('Helvetica').fontSize(9).fillColor('#475569').text(profReg, { width: pageWidth, align: 'center' });
+        }
+      }
+
+      // Rodapé em todas as páginas
+      const range = doc.bufferedPageRange();
+      for (let i = range.start; i < range.start + range.count; i++) {
+        doc.switchToPage(i);
+        const footerY = doc.page.height - 38;
+        doc.font('Helvetica').fontSize(8).fillColor('#64748b').text(
+          `${clinicName} • Emitido via Zemda — Sistema Clínico • Página ${i + 1} de ${range.count}`,
+          48,
+          footerY,
+          { width: pageWidth, align: 'center', lineBreak: false }
+        );
+      }
+
+      doc.end();
+    } catch (err: any) {
+      console.error('[OccupationalTherapyController.downloadHomeProgramPdf] Erro:', err);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Erro ao gerar PDF da orientação.' });
+      }
     }
   }
 

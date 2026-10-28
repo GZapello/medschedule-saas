@@ -218,36 +218,33 @@ export const QuickAIAssistantShortcut: React.FC<QuickAIAssistantShortcutProps> =
         </div>
       )}
 
-      {/* Botão Flutuante de Atalho — Avatar Circular com a Identidade/Logo do Zemda + Indicador de IA */}
+      {/* Botão Flutuante de Atalho — Símbolo Oficial do Zemda com Fundo Transparente + Indicador Discreto de IA */}
       <button
         ref={buttonRef}
+        type="button"
         onClick={() => setIsOpen(prev => !prev)}
-        className="relative group flex items-center justify-center w-13 h-13 rounded-full bg-transparent active:scale-95 transition-all duration-300 cursor-pointer focus:outline-none focus:ring-2 focus:ring-teal-400/50"
+        className="relative group flex items-center justify-center w-12 h-12 sm:w-13 sm:h-13 rounded-2xl bg-transparent active:scale-95 transition-transform duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2"
         title="Assistente Zemda • Inteligência Clínica & Gestão (Clique para atalhos rápidos)"
         aria-label="Assistente Zemda"
+        aria-expanded={isOpen}
       >
-        {/* Halo / Aura animada de Inteligência Artificial */}
-        <div className="absolute -inset-1 rounded-full bg-gradient-to-tr from-teal-400 via-cyan-400 to-indigo-500 opacity-80 group-hover:opacity-100 blur-xs group-hover:blur-sm transition-all duration-500 animate-pulse pointer-events-none" />
+        {/* Símbolo Oficial do Zemda diretamente sobre a interface (sem fundo escuro e sem aros/bordas decorativas) */}
+        <img
+          src="/brand/zemda-icon.png"
+          alt="Zemda"
+          className="w-10 h-10 sm:w-11 sm:h-11 object-contain drop-shadow-xs transition-transform duration-200 group-hover:scale-105 select-none"
+        />
 
-        {/* Container Central Circular com a Logo Oficial do Zemda */}
-        <div className="relative w-12 h-12 rounded-full bg-slate-900 border-2 border-teal-400/80 group-hover:border-teal-300 shadow-xl shadow-teal-950/50 flex items-center justify-center overflow-hidden transition-all group-hover:scale-105">
-          <img
-            src="/brand/zemda-icon.png"
-            alt="Zemda"
-            className="w-7 h-7 object-contain drop-shadow-sm group-hover:rotate-6 transition-transform"
-          />
-        </div>
-
-        {/* Selo / Chip Superior Indicando ser IA */}
-        <div className="absolute -top-1 -right-1 px-1.5 py-0.5 rounded-full bg-gradient-to-r from-teal-500 to-indigo-600 border border-white/40 shadow-md flex items-center gap-0.5 text-white text-[8.5px] font-black tracking-wider uppercase pointer-events-none">
-          <Sparkles className="w-2 h-2 text-amber-300 fill-amber-300" />
+        {/* Selo Discreto e Legível de IA (sem bordas decorativas) */}
+        <div className="absolute -top-0.5 -right-0.5 px-1.5 py-0.5 rounded-md bg-teal-700 text-white text-[8.5px] font-extrabold tracking-wider uppercase leading-none flex items-center gap-0.5 pointer-events-none shadow-2xs">
           <span>IA</span>
         </div>
 
-        {/* Ponto de Status Online da IA com efeito Radar/Ping */}
-        <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-400 rounded-full border-2 border-slate-900 flex items-center justify-center pointer-events-none shadow-xs">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-        </div>
+        {/* Indicador Funcional de Status Online (sem aro escuro) */}
+        <div
+          className="absolute bottom-0.5 right-0.5 w-2.5 h-2.5 bg-emerald-500 rounded-full flex items-center justify-center pointer-events-none"
+          aria-hidden="true"
+        />
       </button>
     </div>
   );

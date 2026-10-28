@@ -484,6 +484,7 @@ api.get('/v1/occupational-therapy/routine-map/:patientId', requireTenant, requir
 api.post('/v1/occupational-therapy/routine-map', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaTO'), OccupationalTherapyController.saveRoutineMap);
 api.get('/v1/occupational-therapy/participation/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaTO'), OccupationalTherapyController.getParticipation);
 api.post('/v1/occupational-therapy/participation', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaTO'), OccupationalTherapyController.saveParticipation);
+api.get('/v1/occupational-therapy/home-programs/:id/pdf', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.downloadHomeProgramPdf);
 api.get('/v1/occupational-therapy/home-programs/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaTO'), OccupationalTherapyController.listHomePrograms);
 api.post('/v1/occupational-therapy/home-programs', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaTO'), OccupationalTherapyController.saveHomeProgram);
 api.put('/v1/occupational-therapy/home-programs/:id/status', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaTO'), OccupationalTherapyController.updateHomeProgramStatus);
