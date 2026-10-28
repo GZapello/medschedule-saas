@@ -75,7 +75,7 @@ export function useGoogleCalendarStatus() {
     };
   }, [fetchStatus, checkUrlParams]);
 
-  const connectGoogleCalendar = useCallback(async (onNavigateFallback?: (view: string, subId?: string | null) => void) => {
+  const connectGoogleCalendar = useCallback(async () => {
     try {
       setConnecting(true);
       const currentUrl = typeof window !== 'undefined' ? window.location.href : 'https://zemda.com.br';
@@ -84,19 +84,14 @@ export function useGoogleCalendarStatus() {
         window.location.href = res.url;
         return;
       }
+      showToast('Não foi possível obter o link de autorização do Google Agenda.', 'error');
     } catch (err: any) {
-      console.warn('[useGoogleCalendarStatus] Fluxo direto não disponível:', err?.message);
+      console.warn('[useGoogleCalendarStatus] Erro ao conectar Google Calendar:', err?.message);
+      showToast(err?.message || 'Não foi possível conectar ao Google Agenda no momento.', 'error');
     } finally {
       setConnecting(false);
     }
-
-    // Fallback: redireciona para a aba de Integrações nas Configurações
-    if (onNavigateFallback) {
-      onNavigateFallback('settings', 'integrations');
-    } else if (typeof window !== 'undefined') {
-      window.location.href = '/configuracoes?tab=integrations';
-    }
-  }, []);
+  }, [showToast]);
 
   return {
     loading,

@@ -34,7 +34,7 @@ import { PatientProfileModal } from '../patients/PatientProfileModal';
 import { SelectConsultationModuleModal, getCompatibleClinicalModules, getModuleForProfession } from '../clinical/SelectConsultationModuleModal';
 import { WhatsAppReminderModal, WhatsAppIcon } from '../common/WhatsAppReminderModal';
 import { AppointmentEditModal } from '../calendar/AppointmentEditModal';
-import { isValidPhoneNumber, generateWhatsAppUrl } from '../../utils/phone.utils';
+import { isValidPhoneNumber, openManualWhatsApp } from '../../utils/phone.utils';
 import { GoogleIcon } from '../auth/GoogleAuthButton';
 import { useGoogleCalendarStatus } from '../../hooks/useGoogleCalendarStatus';
 
@@ -171,10 +171,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   };
 
   const handleOpenWhatsAppReminder = (appt: any) => {
-    if (!isValidPhoneNumber(appt.patient_phone)) return;
-    const message = buildTodayWhatsAppReminderText(appt);
-    const url = generateWhatsAppUrl(appt.patient_phone, message);
-    window.open(url, '_blank', 'noopener,noreferrer');
+    openManualWhatsApp({
+      appointment: appt,
+      clinicName: auth.currentTenant?.trade_name || auth.currentTenant?.name || 'Clínica',
+      onError: (msg) => showToast(msg, 'error')
+    });
   };
 
   const getInitials = (name?: string) => {
@@ -484,7 +485,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               {!googleCalendarConnected && (
                 <button
                   type="button"
-                  onClick={() => connectGoogleCalendar(onNavigate)}
+                  onClick={() => connectGoogleCalendar()}
                   disabled={connectingGoogle}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-50 active:bg-slate-100 border border-slate-200 hover:border-slate-300 rounded-xl shadow-2xs transition-all cursor-pointer disabled:opacity-60"
                   title="Sincronizar atendimentos do Zemda com o Google Agenda"
@@ -651,17 +652,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                               <span className="text-slate-300">|</span>
                               <span className="inline-flex items-center gap-1.5 text-slate-600 flex-wrap">
                                 <span>{appt.patient_phone}</span>
-                                {hasPhone && (
-                                  <button
-                                    type="button"
-                                    disabled
-                                    title="Integração com WhatsApp em breve"
-                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100/70 text-slate-400 border border-slate-200/80 font-medium text-[11px] cursor-not-allowed select-none opacity-80"
-                                  >
-                                    <WhatsAppIcon className="w-3 h-3 fill-slate-400 shrink-0" />
-                                    <span>Em breve</span>
-                                  </button>
-                                )}
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    e.preventDefault();
+                                    handleOpenWhatsAppReminder(appt);
+                                  }}
+                                  title="Abrir conversa no WhatsApp com lembrete preenchido"
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 text-emerald-700 border border-emerald-200/90 font-semibold text-[11px] transition-colors cursor-pointer shadow-2xs"
+                                >
+                                  <WhatsAppIcon className="w-3 h-3 fill-emerald-600 shrink-0" />
+                                  <span>WhatsApp</span>
+                                </button>
                               </span>
                             </>
                           )}
@@ -885,12 +888,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   {menuHasPhone && (
                     <button
                       type="button"
-                      disabled
-                      title="Integração com WhatsApp em breve"
-                      className="w-full px-3 py-1.5 text-left text-slate-400 flex items-center gap-2 font-normal text-xs cursor-not-allowed select-none opacity-80"
+                      onClick={() => {
+                        setOpenMenuState(null);
+                        handleOpenWhatsAppReminder(menuAppt);
+                      }}
+                      title="Abrir conversa no WhatsApp com lembrete preenchido"
+                      className="w-full px-3 py-1.5 text-left text-teal-700 hover:bg-emerald-50/60 flex items-center gap-2 cursor-pointer font-medium text-xs"
                     >
-                      <WhatsAppIcon className="w-3.5 h-3.5 fill-slate-400 shrink-0" />
-                      <span>Em breve</span>
+                      <WhatsAppIcon className="w-3.5 h-3.5 fill-emerald-600 shrink-0" />
+                      <span>WhatsApp</span>
                     </button>
                   )}
 

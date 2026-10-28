@@ -80,23 +80,24 @@ export function isDateToday(startTime: string): boolean {
 
 export function buildWhatsAppReminderMessage(params: {
   patientName: string;
-  professionalName: string;
-  clinicName: string;
+  professionalName?: string;
+  clinicName?: string;
   startTime: string;
   serviceName?: string;
   isTodayOverride?: boolean;
 }): string {
   const { patientName, professionalName, clinicName, startTime, serviceName, isTodayOverride } = params;
 
-  const isToday = isTodayOverride !== undefined ? isTodayOverride : isDateToday(startTime);
+  const rawStart = String(startTime || '').trim().replace(' ', 'T');
+  const isToday = isTodayOverride !== undefined ? isTodayOverride : isDateToday(rawStart);
 
-  const timeFormatted = startTime.includes('T')
-    ? startTime.split('T')[1].slice(0, 5)
+  const timeFormatted = rawStart.includes('T')
+    ? rawStart.split('T')[1].slice(0, 5)
     : '00:00';
 
   let dateFormatted = '';
-  if (!isToday && startTime) {
-    const datePart = startTime.includes('T') ? startTime.split('T')[0] : startTime.slice(0, 10);
+  if (!isToday && rawStart) {
+    const datePart = rawStart.includes('T') ? rawStart.split('T')[0] : rawStart.slice(0, 10);
     const parts = datePart.split('-');
     if (parts.length === 3) {
       dateFormatted = `${parts[2]}/${parts[1]}/${parts[0]}`;
@@ -106,7 +107,7 @@ export function buildWhatsAppReminderMessage(params: {
   }
 
   const cleanPatientName = (patientName || 'Cliente').trim();
-  const cleanProfName = (professionalName || 'Profissional').trim();
+  const cleanProfName = (professionalName || '').trim();
   const cleanClinicName = (clinicName || 'Clínica').trim();
 
   let serviceLine = '';
@@ -115,10 +116,12 @@ export function buildWhatsAppReminderMessage(params: {
     serviceLine = `\nConsulta: ${sName}`;
   }
 
+  const profPart = cleanProfName ? `, com ${cleanProfName}` : '';
+
   if (isToday) {
     return (
       `Olá, ${cleanPatientName}! 😊\n\n` +
-      `Passando para lembrar da sua consulta marcada para hoje, às ${timeFormatted}, com ${cleanProfName}.${serviceLine}\n\n` +
+      `Passando para lembrar da sua consulta marcada para hoje, às ${timeFormatted}${profPart}.${serviceLine}\n\n` +
       `Se precisar remarcar ou cancelar, entre em contato conosco.\n\n` +
       `— ${cleanClinicName}`
     );
@@ -126,7 +129,7 @@ export function buildWhatsAppReminderMessage(params: {
 
   return (
     `Olá, ${cleanPatientName}! 😊\n\n` +
-    `Passando para lembrar da sua consulta no dia ${dateFormatted}, às ${timeFormatted}, com ${cleanProfName}.${serviceLine}\n\n` +
+    `Passando para lembrar da sua consulta no dia ${dateFormatted}, às ${timeFormatted}${profPart}.${serviceLine}\n\n` +
     `Se precisar remarcar ou cancelar, entre em contato conosco.\n\n` +
     `— ${cleanClinicName}`
   );
@@ -135,6 +138,66 @@ export function buildWhatsAppReminderMessage(params: {
 export function generateWhatsAppUrl(phone: string, message: string): string {
   const normalizedPhone = normalizePhoneWithDDI(phone);
   return `https://wa.me/${normalizedPhone}?text=${encodeURIComponent(message)}`;
+}
+
+export interface OpenManualWhatsAppAppointment {
+  patient_name?: string;
+  patientName?: string;
+  patient_phone?: string | null;
+  patientPhone?: string | null;
+  patient_whatsapp?: string | null;
+  start_time?: string;
+  startTime?: string;
+  professional_name?: string;
+  professionalName?: string;
+  service_name?: string;
+  serviceName?: string;
+}
+
+export interface OpenManualWhatsAppParams {
+  appointment: OpenManualWhatsAppAppointment;
+  clinicName?: string;
+  onError: (message: string) => void;
+}
+
+/**
+ * Abre a conversa no WhatsApp Web ou App com a mensagem de lembrete preenchida.
+ * Valida o telefone, normaliza com DDI (sem duplicar 55) e exibe mensagem orientando cadastro se ausente ou inválido.
+ * Não depende de API externa e não confirma agendamento pelo clique.
+ */
+export function openManualWhatsApp({ appointment, clinicName = 'Clínica', onError }: OpenManualWhatsAppParams): boolean {
+  const phone = appointment.patient_phone ?? appointment.patientPhone ?? appointment.patient_whatsapp ?? '';
+  const cleanPhone = String(phone || '').trim();
+
+  if (!cleanPhone) {
+    onError('Paciente sem telefone cadastrado. Por favor, atualize o cadastro para incluir o número com DDD.');
+    return false;
+  }
+
+  const digits = cleanPhoneDigits(cleanPhone);
+  if (!isValidPhoneNumber(cleanPhone) || digits.length < 10) {
+    onError('O telefone cadastrado é inválido ou está sem o DDD. Por favor, atualize o cadastro do paciente para incluir o DDD.');
+    return false;
+  }
+
+  const patientName = appointment.patient_name || appointment.patientName || 'Paciente';
+  const professionalName = appointment.professional_name || appointment.professionalName || '';
+  const serviceName = appointment.service_name || appointment.serviceName || '';
+  const startTime = appointment.start_time || appointment.startTime || '';
+
+  const message = buildWhatsAppReminderMessage({
+    patientName,
+    professionalName,
+    clinicName,
+    startTime,
+    serviceName
+  });
+
+  const url = generateWhatsAppUrl(cleanPhone, message);
+  if (typeof window !== 'undefined') {
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
+  return true;
 }
 
 /**

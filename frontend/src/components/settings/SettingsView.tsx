@@ -12,7 +12,6 @@ import { ServicesView } from '../services/ServicesView';
 import { ProfileSpecialties } from '../profile/ProfileSpecialties';
 import { ImportDataView } from '../import/ImportDataView';
 import { ProfessionalPayrollView } from '../payroll/ProfessionalPayrollView';
-import { GoogleCalendarIntegrationCard } from './integrations/GoogleCalendarIntegrationCard';
 import {
   Settings,
   Building2,
@@ -48,9 +47,7 @@ import {
   Users,
   Calendar,
   DollarSign,
-  Share2,
-  MessageSquare,
-  Copy,
+      Copy,
   Check,
   X,
   RefreshCw
@@ -96,7 +93,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
       if (['clinic', 'clinica'].includes(initialSection)) return 'clinic';
       if (['account', 'profile', 'minha-conta'].includes(initialSection)) return 'account';
       if (['legal', 'privacidade'].includes(initialSection)) return 'legal';
-      if (['integrations', 'integracoes', 'google-calendar'].includes(initialSection)) return 'integrations';
+      if (['integrations', 'integracoes', 'google-calendar'].includes(initialSection)) return 'hub';
     }
     return 'hub';
   });
@@ -114,7 +111,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
       else if (['clinic', 'clinica'].includes(initialSection)) setActiveSection('clinic');
       else if (['account', 'profile', 'minha-conta'].includes(initialSection)) setActiveSection('account');
       else if (['legal', 'privacidade'].includes(initialSection)) setActiveSection('legal');
-      else if (['integrations', 'integracoes', 'google-calendar'].includes(initialSection)) setActiveSection('integrations');
+      else if (['integrations', 'integracoes', 'google-calendar'].includes(initialSection)) setActiveSection('hub');
       else if (initialSection === 'hub') setActiveSection('hub');
     }
   }, [initialSection]);
@@ -752,16 +749,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
       tags: ['Minha Conta', 'Senha', 'LGPD'],
       defaultTab: 'profile'
     },
-    {
-      id: 'integrations',
-      title: 'Integrações',
-      desc: 'Sincronize sua Google Agenda (individual por profissional) e gerencie o WhatsApp oficial (Infobip).',
-      icon: Share2,
-      iconBg: 'bg-blue-50',
-      iconColor: 'text-blue-600',
-      tags: ['Google Agenda', 'WhatsApp', 'Infobip']
-    },
-    {
+        {
       id: 'billing',
       title: 'Assinatura & Plano',
       desc: 'Gerenciamento do plano ativo, limites de capacidade da clínica, faturas e opções de upgrade.',
@@ -801,16 +789,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
       iconColor: 'text-cyan-600',
       tags: ['Link Público', 'Agendamento Online']
     },
-    {
-      id: 'integrations',
-      title: 'Integrações & Google Agenda',
-      desc: 'Sincronize seus atendimentos com sua Google Agenda pessoal e evite conflitos de horário.',
-      icon: Share2,
-      iconBg: 'bg-blue-50',
-      iconColor: 'text-blue-600',
-      tags: ['Google Agenda', 'Sincronização', 'Meet']
-    },
-    {
+        {
       id: 'legal',
       title: 'Segurança & Privacidade (LGPD)',
       desc: 'Termos de uso da plataforma, política de privacidade da LGPD e preferências de cookies.',
@@ -1024,71 +1003,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
         </div>
       )}
 
-      {/* SEÇÃO: INTEGRAÇÕES (WhatsApp & Infobip) */}
-      {activeSection === 'integrations' && (
-        <div className="space-y-6">
-          <GoogleCalendarIntegrationCard />
-          <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xs space-y-5 text-xs">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
-                  <Share2 className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-slate-900 text-sm">Integração Oficial: WhatsApp & Infobip</h3>
-                  <p className="text-slate-500 text-[11px] mt-0.5">
-                    Notificações automáticas de confirmação de consulta, lembretes de 24h e 2h antes, e canal interativo com pacientes.
-                  </p>
-                </div>
-              </div>
-              <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-[10px] flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                Canal Ativo
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50 space-y-2">
-                <h4 className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
-                  <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
-                  Confirmação Automática de Consulta
-                </h4>
-                <p className="text-slate-600 text-[11px]">
-                  Dispara mensagem no WhatsApp assim que um novo agendamento é criado. O paciente pode responder <strong>1</strong> para confirmar ou <strong>2</strong> para remarcar.
-                </p>
-                <div className="bg-white p-3 rounded-xl border border-slate-200 font-mono text-[11px] text-slate-700">
-                  "Olá, [Paciente]! Sua consulta na {currentTenant?.trade_name || currentTenant?.name || 'Clínica'} com [Profissional] está marcada para [Data] às [Horário]. Responda 1 para confirmar."
-                </div>
-              </div>
-
-              <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50 space-y-2">
-                <h4 className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 text-indigo-600" />
-                  Lembrete de Antecedência (24h e 2h)
-                </h4>
-                <p className="text-slate-600 text-[11px]">
-                  Reduz o índice de faltas e no-show em mais de 70%, alertando o paciente com antecedência programada.
-                </p>
-                <div className="bg-white p-3 rounded-xl border border-slate-200 font-mono text-[11px] text-slate-700">
-                  "Lembrete: sua consulta acontece amanhã às [Horário]. Endereço: {currentTenant?.address || 'Consulte o agendamento'}."
-                </div>
-              </div>
-            </div>
-
-            <div className="p-4 rounded-2xl border border-indigo-100 bg-indigo-50/40 space-y-2">
-              <h4 className="font-bold text-indigo-900 text-xs flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-                Infobip Cloud WhatsApp API
-              </h4>
-              <p className="text-indigo-800 text-[11px]">
-                A infraestrutura de mensageria da sua clínica opera conectada à Infobip oficial com templates aprovados pela Meta, garantindo entrega instantânea e segurança LGPD.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* SEÇÃO: PERFIL PROFISSIONAL (Não-Admin) */}
+            {/* SEÇÃO: PERFIL PROFISSIONAL (Não-Admin) */}
       {activeSection === 'profile_professional' && (
         <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xs space-y-5 text-xs">
           <div className="flex items-center gap-3 border-b border-slate-100 pb-4">

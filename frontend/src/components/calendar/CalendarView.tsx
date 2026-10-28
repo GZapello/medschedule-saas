@@ -38,7 +38,7 @@ import { OnlineConsultationTools } from '../clinical/OnlineConsultationTools';
 import { PatientPreviousRecordsModal } from '../clinical/PatientPreviousRecordsModal';
 import { SelectConsultationModuleModal, getCompatibleClinicalModules, getModuleForProfession } from '../clinical/SelectConsultationModuleModal';
 import { WhatsAppReminderModal, WhatsAppIcon } from '../common/WhatsAppReminderModal';
-import { isValidPhoneNumber, formatPhoneDisplay } from '../../utils/phone.utils';
+import { isValidPhoneNumber, formatPhoneDisplay, openManualWhatsApp } from '../../utils/phone.utils';
 import { useMobileLayout } from '../../hooks/useMobileLayout';
 
 interface CalendarViewProps {
@@ -450,6 +450,15 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
   const [whatsappReminderAppt, setWhatsappReminderAppt] = useState<Appointment | null>(null);
   const [communications, setCommunications] = useState<any[]>([]);
   const [loadingComms, setLoadingComms] = useState<boolean>(false);
+
+  const handleManualWhatsApp = (appt: Appointment | null) => {
+    if (!appt) return;
+    openManualWhatsApp({
+      appointment: appt,
+      clinicName: currentTenant?.trade_name || currentTenant?.name || 'Clínica',
+      onError: (msg) => showToast(msg, 'error')
+    });
+  };
 
   // Bloqueio do scroll da página enquanto qualquer modal da agenda estiver aberto
   const isAnyModalOpen = Boolean(
@@ -1420,7 +1429,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                   </h3>
 
                   <div className="flex items-center gap-3 flex-wrap text-xs text-slate-600 pt-0.5">
-                    {isValidPhoneNumber(selectedAppt.patient_phone) ? (
+                    {selectedAppt.patient_phone ? (
                       <>
                         <span className="inline-flex items-center gap-1.5 font-medium text-slate-700">
                           <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
@@ -1428,16 +1437,27 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                         </span>
                         <button
                           type="button"
-                          disabled
-                          title="Integração com WhatsApp em breve"
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100/70 text-slate-400 border border-slate-200/80 text-[11px] font-medium cursor-not-allowed select-none opacity-80"
+                          onClick={() => handleManualWhatsApp(selectedAppt)}
+                          title="Abrir conversa no WhatsApp com lembrete preenchido"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 text-emerald-700 border border-emerald-200/90 text-[11px] font-semibold transition-colors cursor-pointer"
                         >
-                          <WhatsAppIcon className="w-3 h-3 fill-slate-400 shrink-0" />
-                          <span>Em breve</span>
+                          <WhatsAppIcon className="w-3 h-3 fill-emerald-600 shrink-0" />
+                          <span>WhatsApp</span>
                         </button>
                       </>
                     ) : (
-                      <span className="text-slate-400 italic text-xs">Paciente sem telefone cadastrado</span>
+                      <div className="inline-flex items-center gap-2">
+                        <span className="text-slate-400 italic text-xs">Paciente sem telefone cadastrado</span>
+                        <button
+                          type="button"
+                          onClick={() => handleManualWhatsApp(selectedAppt)}
+                          title="Paciente sem telefone cadastrado"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-500 border border-slate-200 text-[11px] font-medium transition-colors cursor-pointer"
+                        >
+                          <WhatsAppIcon className="w-3 h-3 fill-slate-400 shrink-0" />
+                          <span>WhatsApp</span>
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -1755,16 +1775,16 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                     </button>
                   )}
 
-                  {/* Linha de Ações Secundárias: Abrir no WhatsApp + Gerenciar agendamento */}
+                  {/* Linha de Ações Secundárias: Enviar pelo WhatsApp + Gerenciar agendamento */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <button
                       type="button"
-                      disabled
-                      title="Integração com WhatsApp em breve"
-                      className="flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-medium bg-slate-50 text-slate-400 border border-slate-200/80 opacity-80 cursor-not-allowed select-none"
+                      onClick={() => handleManualWhatsApp(selectedAppt)}
+                      title="Abrir WhatsApp com lembrete preenchido"
+                      className="flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold text-emerald-700 hover:text-emerald-800 bg-white hover:bg-emerald-50/80 active:bg-emerald-100 border border-emerald-200/90 hover:border-emerald-300 shadow-2xs transition-all cursor-pointer"
                     >
-                      <WhatsAppIcon className="w-4 h-4 fill-slate-400 shrink-0" />
-                      <span>Em breve</span>
+                      <WhatsAppIcon className="w-4 h-4 fill-emerald-600 shrink-0" />
+                      <span>Enviar pelo WhatsApp</span>
                     </button>
 
                     <button
