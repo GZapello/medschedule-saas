@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { ClinicalHeaderSlots } from './ClinicalHeaderSlots';
 import { ApiClient } from '../../api/client';
 import { ConsultationPaymentModal } from './ConsultationPaymentModal';
 import { useAuth } from '../../context/AuthContext';
@@ -59,6 +60,8 @@ export function AppointmentConsultation({
     currentUser,
     hasCapability
   } = auth;
+  const [headerFilters, setHeaderFilters] = useState<HTMLDivElement | null>(null);
+  const [headerActions, setHeaderActions] = useState<HTMLDivElement | null>(null);
   const [status, setStatus] = useState<any>(null);
   const [error, setError] = useState('');
   const [meetingLink, setMeetingLink] = useState<{ id: string; url: string | null } | null>(null);
@@ -252,8 +255,10 @@ export function AppointmentConsultation({
               <span>WhatsApp</span>
             </button>
           </span>
+          <div ref={setHeaderFilters} className="flex flex-wrap items-center gap-2 min-w-0 max-w-full [&>div]:max-w-full [&_select]:min-w-0 [&_select]:max-w-full" />
         </div>
       </div>
+      <div ref={setHeaderActions} />
 
       {/* FAIXA DEDICADA DE NAVEGAÇÃO DAS ABAS DO ATENDIMENTO */}
       <div className="px-3.5 sm:px-6 py-1.5 bg-slate-50/80 border-t border-slate-200">
@@ -366,18 +371,20 @@ export function AppointmentConsultation({
     }
 
     return (
-      <div className="fixed inset-0 z-50 bg-slate-50 overflow-auto mobile-modal" role="dialog" aria-modal="true" aria-label="Atendimento clínico especializado">
-        {renderUnifiedTopBar('specialized', 'Navegação do módulo clínico')}
-        <div className="px-4 sm:px-6 pt-2 max-w-7xl mx-auto w-full">
-          <OnlineConsultationTools appointment={{ ...onlineAppointment, clinical_module: effectiveModuleType }} onRequestEvolution={() => { setReturnWorkspaceTab('evolucao'); setActiveTab('records'); }} onMeetingUrlSaved={onMeetingUrlSaved} onDriveUrlSaved={onDriveUrlSaved} />
+      <ClinicalHeaderSlots.Provider value={{ filters: headerFilters, actions: headerActions }}>
+        <div className="fixed inset-0 z-50 bg-slate-50 overflow-auto mobile-modal" role="dialog" aria-modal="true" aria-label="Atendimento clínico especializado">
+          {renderUnifiedTopBar('specialized', 'Navegação do módulo clínico')}
+          <div className="px-4 sm:px-6 pt-2 max-w-7xl mx-auto w-full">
+            <OnlineConsultationTools appointment={{ ...onlineAppointment, clinical_module: effectiveModuleType }} onRequestEvolution={() => { setReturnWorkspaceTab('evolucao'); setActiveTab('records'); }} onMeetingUrlSaved={onMeetingUrlSaved} onDriveUrlSaved={onDriveUrlSaved} />
+          </div>
+          <Workspace
+            key={appointment.id}
+            initialPatientId={appointment.patient_id}
+            initialAppointmentId={appointment.id}
+            onFinishConsultation={onFinished}
+          />
         </div>
-        <Workspace
-          key={appointment.id}
-          initialPatientId={appointment.patient_id}
-          initialAppointmentId={appointment.id}
-          onFinishConsultation={onFinished}
-        />
-      </div>
+      </ClinicalHeaderSlots.Provider>
     );
   }
 

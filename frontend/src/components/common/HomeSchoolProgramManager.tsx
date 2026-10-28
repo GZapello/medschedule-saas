@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Home, School, BookOpen, Plus, X, Copy, Printer, Download, AlertCircle, FileText } from 'lucide-react';
 import { ApiClient, buildApiUrl, getApiBaseUrl } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -79,6 +79,16 @@ export const HomeSchoolProgramManager: React.FC<HomeSchoolProgramManagerProps> =
   };
 
   const [programs, setPrograms] = useState<HomeProgramItem[]>([]);
+  const activePrograms = programs.filter(program => program.status === 'active');
+  const pendingStatusIds = useRef(new Set<string>());
+  const [updatingStatusIds, setUpdatingStatusIds] = useState<Set<string>>(new Set());
+  const statusGroups = [
+    { id: 'active', title: 'Orientações ativas', items: activePrograms },
+    { id: 'paused', title: 'Orientações pausadas', items: programs.filter(p => p.status === 'paused') },
+    { id: 'completed', title: 'Orientações concluídas', items: programs.filter(p => p.status === 'completed') },
+    // Preserve legacy statuses without including them in active exports.
+    { id: 'other', title: 'Orientações com outros status', items: programs.filter(p => !['active', 'paused', 'completed'].includes(p.status)) }
+  ].filter(group => group.id !== 'other' || group.items.length > 0);
   const [patientName, setPatientName] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
@@ -183,13 +193,21 @@ export const HomeSchoolProgramManager: React.FC<HomeSchoolProgramManagerProps> =
   };
 
   const handleStatusChange = async (id: string, newStatus: string) => {
+    if (readOnly || pendingStatusIds.current.has(id)) return;
+    const previousStatus = programs.find(p => p.id === id)?.status;
+    if (!previousStatus) return;
+    pendingStatusIds.current.add(id);
+    setUpdatingStatusIds(new Set(pendingStatusIds.current));
+    setPrograms(prev => prev.map(p => p.id === id ? { ...p, status: newStatus as HomeProgramItem['status'] } : p));
     try {
       await ApiClient.put(`/v1/occupational-therapy/home-programs/${id}/status`, { status: newStatus });
-      setPrograms(prev => prev.map(p => (p.id === id ? { ...p, status: newStatus as any } : p)));
       showToast('Status da orientação atualizado.', 'success');
     } catch (err: any) {
-      console.error('[HomeSchoolProgramManager] Erro ao atualizar status:', err);
+      setPrograms(prev => prev.map(p => p.id === id ? { ...p, status: previousStatus } : p));
       showToast(err?.message || 'Erro ao atualizar status da orientação.', 'error');
+    } finally {
+      pendingStatusIds.current.delete(id);
+      setUpdatingStatusIds(new Set(pendingStatusIds.current));
     }
   };
 
@@ -278,11 +296,11 @@ export const HomeSchoolProgramManager: React.FC<HomeSchoolProgramManagerProps> =
       showToast('Selecione um paciente antes de exportar.', 'error');
       return;
     }
-    if (programs.length === 0) {
-      showToast('Nenhuma orientação salva para exportar.', 'info');
+    if (activePrograms.length === 0) {
+      showToast('Nenhuma orientação ativa para exportar.', 'info');
       return;
     }
-    if (isDownloadingAllPdf) return;
+    if (isDownloadingAllPdf || pendingStatusIds.current.size > 0) return;
 
     try {
       setIsDownloadingAllPdf(true);
@@ -314,7 +332,7 @@ export const HomeSchoolProgramManager: React.FC<HomeSchoolProgramManagerProps> =
         .replace(/^-+|-+$/g, '')
         .toLowerCase();
       await downloadBlob(blob, `orientacoes-casa-escola-${safePatientName || 'paciente'}.pdf`);
-      showToast(`PDF consolidado com ${programs.length} orientação(ões) salvo com sucesso!`, 'success');
+      showToast(`PDF consolidado com ${activePrograms.length} orientação(ões) salvo com sucesso!`, 'success');
     } catch (err: any) {
       console.error('[HomeSchoolProgramManager] Erro ao baixar PDF consolidado:', err);
       showToast(err?.message || 'Não foi possível gerar o PDF consolidado das orientações.', 'error');
@@ -324,8 +342,9 @@ export const HomeSchoolProgramManager: React.FC<HomeSchoolProgramManagerProps> =
   };
 
   const handleOpenConsolidatedPrintModal = (autoPrint = true) => {
-    if (programs.length === 0) {
-      showToast('Nenhuma orientação salva para imprimir.', 'info');
+    if (pendingStatusIds.current.size > 0) return;
+    if (activePrograms.length === 0) {
+      showToast('Nenhuma orientação ativa para imprimir.', 'info');
       return;
     }
     setIsConsolidatedPrintModalOpen(true);
@@ -380,13 +399,13 @@ export const HomeSchoolProgramManager: React.FC<HomeSchoolProgramManagerProps> =
         <div className="flex items-center gap-2 flex-wrap">
           <button
             type="button"
-            disabled={programs.length === 0 || isDownloadingAllPdf || isLoading}
+            disabled={activePrograms.length === 0 || updatingStatusIds.size > 0 || isDownloadingAllPdf || isLoading}
             onClick={() => handleOpenConsolidatedPrintModal(true)}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl text-xs font-semibold shadow-2xs transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
             title={
-              programs.length === 0
-                ? 'Nenhuma orientação salva para imprimir. Cadastre uma orientação primeiro.'
-                : 'Imprimir todas as orientações salvas em um único documento consolidado'
+              activePrograms.length === 0
+                ? 'Nenhuma orientação ativa para imprimir. Cadastre uma orientação primeiro.'
+                : 'Imprimir todas as orientações ativas em um único documento consolidado'
             }
           >
             <Printer className="w-3.5 h-3.5 text-slate-500" />
@@ -395,13 +414,13 @@ export const HomeSchoolProgramManager: React.FC<HomeSchoolProgramManagerProps> =
 
           <button
             type="button"
-            disabled={programs.length === 0 || isDownloadingAllPdf || isLoading}
+            disabled={activePrograms.length === 0 || updatingStatusIds.size > 0 || isDownloadingAllPdf || isLoading}
             onClick={handleDownloadAllPdf}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-xl text-xs font-semibold shadow-2xs transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
             title={
-              programs.length === 0
-                ? 'Nenhuma orientação salva para exportar. Cadastre uma orientação primeiro.'
-                : 'Baixar todas as orientações salvas em um único arquivo PDF consolidado'
+              activePrograms.length === 0
+                ? 'Nenhuma orientação ativa para exportar. Cadastre uma orientação primeiro.'
+                : 'Baixar todas as orientações ativas em um único arquivo PDF consolidado'
             }
           >
             <Download className="w-3.5 h-3.5 text-teal-600" />
@@ -531,15 +550,18 @@ export const HomeSchoolProgramManager: React.FC<HomeSchoolProgramManagerProps> =
         </form>
       )}
 
+      {!isLoading && activePrograms.length === 0 && (
+        <p className="text-xs text-slate-500" role="status">Nenhuma orientação ativa. Ative ou cadastre uma orientação para imprimir todas ou salvar todas em PDF.</p>
+      )}
       <div className="space-y-3">
         {isLoading ? (
           <div className="text-center py-6 text-xs text-slate-400">Carregando orientações...</div>
-        ) : programs.length === 0 ? (
-          <div className="text-center py-6 border border-dashed border-slate-200 rounded-xl text-slate-400 text-xs">
-            Nenhuma orientação para casa ou escola registrada ainda.
-          </div>
         ) : (
-          programs.map(prog => (
+          statusGroups.map(group => (
+            <details key={group.id} open={group.id === 'active' ? true : undefined} className="space-y-3" data-status-group={group.id}>
+              <summary className="cursor-pointer text-sm font-bold text-slate-800 py-2">{group.title} ({group.items.length})</summary>
+              {group.items.length === 0 && <p className="text-xs text-slate-500">Nenhuma orientação nesta seção.</p>}
+              {group.items.map(prog => (
             <div
               key={prog.id}
               className="p-3.5 bg-white border border-slate-200/80 rounded-2xl space-y-2.5 hover:border-slate-300 transition-colors shadow-xs"
@@ -592,7 +614,7 @@ export const HomeSchoolProgramManager: React.FC<HomeSchoolProgramManagerProps> =
                   <select
                     value={prog.status}
                     onChange={(e) => handleStatusChange(prog.id, e.target.value)}
-                    disabled={readOnly}
+                    disabled={readOnly || updatingStatusIds.has(prog.id)}
                     aria-label="Status da orientação"
                     className="text-[11px] font-semibold bg-white border border-slate-200 rounded-lg px-2 py-1 outline-none cursor-pointer focus:border-teal-500"
                   >
@@ -600,10 +622,12 @@ export const HomeSchoolProgramManager: React.FC<HomeSchoolProgramManagerProps> =
                     <option value="completed">Concluído</option>
                     <option value="paused">Pausado</option>
                     <option value="revised">Revisado</option>
+                    {!['active', 'completed', 'paused', 'revised'].includes(prog.status) && <option value={prog.status}>{STATUS_LABELS[prog.status] || prog.status}</option>}
                   </select>
                 </div>
               </div>
 
+              {prog.professional_name && <p className="text-[11px] text-slate-500">Profissional responsável: {prog.professional_name}</p>}
               <div className="text-xs text-slate-700 whitespace-pre-line bg-slate-50/70 p-3 rounded-xl border border-slate-100 leading-relaxed">
                 {prog.instructions}
               </div>
@@ -614,6 +638,8 @@ export const HomeSchoolProgramManager: React.FC<HomeSchoolProgramManagerProps> =
                 </div>
               )}
             </div>
+              ))}
+            </details>
           ))
         )}
       </div>
@@ -805,7 +831,7 @@ export const HomeSchoolProgramManager: React.FC<HomeSchoolProgramManagerProps> =
       })()}
 
       {/* Modal de Visualização, Impressão e PDF Consolidado de Todas as Orientações */}
-      {isConsolidatedPrintModalOpen && (() => {
+      {isConsolidatedPrintModalOpen && activePrograms.length > 0 && (() => {
         const displayPatientName = patientName || 'Paciente';
         const displayIssueDate = new Date().toLocaleDateString('pt-BR');
 
@@ -856,7 +882,7 @@ export const HomeSchoolProgramManager: React.FC<HomeSchoolProgramManagerProps> =
                   <div>
                     <h4 className="text-sm font-bold">Documento Consolidado de Orientações (Casa / Escola)</h4>
                     <p className="text-[11px] text-slate-400">
-                      Total: {programs.length} orientação(ões) salva(s) • Formato A4 pronto para impressão ou download em PDF
+                      Total: {activePrograms.length} orientação(ões) ativa(s) • Formato A4 pronto para impressão ou download em PDF
                     </p>
                   </div>
                 </div>
@@ -917,13 +943,13 @@ export const HomeSchoolProgramManager: React.FC<HomeSchoolProgramManagerProps> =
                       </div>
                       <div>
                         <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Total de Registros</span>
-                        <span className="font-semibold text-teal-700">{programs.length} orientação(ões) salva(s)</span>
+                        <span className="font-semibold text-teal-700">{activePrograms.length} orientação(ões) ativa(s)</span>
                       </div>
                     </div>
 
                     {/* Lista Consolidada de Orientações */}
                     <div className="space-y-6">
-                      {programs.map((prog, idx) => {
+                      {activePrograms.map((prog, idx) => {
                         const prof = resolveRecordProfessional(prog);
                         const progDate = formatOrientationDate(prog.created_at);
                         const settingLabel = SETTING_LABELS[prog.setting] || prog.setting;

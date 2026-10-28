@@ -1,4 +1,5 @@
 import React from 'react';
+import { HomeSchoolProgramManager } from '../src/components/common/HomeSchoolProgramManager';
 import { createRoot } from 'react-dom/client';
 import { AuthProvider } from '../src/context/AuthContext';
 import { ToastProvider } from '../src/context/ToastContext';
@@ -26,11 +27,17 @@ const date=new Date(); date.setHours(10,0,0,0);
 const localDate=[date.getFullYear(),String(date.getMonth()+1).padStart(2,'0'),String(date.getDate()).padStart(2,'0')].join('-');
 const appointment:any={id:'appointment',patient_id:patient.id,patient_name:patient.full_name,professional_id:professional.id,professional_name:professional.name,service_id:'service',service_name:'Consulta',status:params.has('completed')?'completed':'scheduled',clinical_module:moduleType,start_time:localDate+'T10:00:00',end_time:localDate+'T10:50:00',modality:params.has('online')?'online':'presential',meeting_url:params.has('missing')?null:'https://meet.google.com/abc-defg-hij',patient_phone:'11999999999'};
 state.appointment=appointment;
+if(source==='home') {
+  state.programs=JSON.parse(localStorage.getItem('test-home-programs') || 'null') || ['active','paused','completed'].map((status,i)=>({id:'hp-'+i,status,title:'Orientação '+i,instructions:'Instruções completas '+i,setting:'home',professional_name:'Profissional teste',created_at:'2026-10-20'}));
+  window.print=()=>{state.printed=document.querySelector('[id$="print-root"]')?.textContent};
+  window.fetch=async(url:any)=>{state.pdfUrl=String(url);return new Response(new Blob(['%PDF fixture'],{type:'application/pdf'}),{status:200})};
+}
 const user:any={id:'user',name:professional.name,role:'clinic_admin',professionalId:professional.id,commercialModule:moduleType,clinicalWorkspace:moduleType,capabilities:[],permissions:['attend_appointment']};
 localStorage.setItem('auth_token','fixture-token');
 window.addEventListener('zemda-appointment-updated',()=>state.events++);
 ApiClient.get=async (url:string):Promise<any>=>{
   state.calls.push({method:'GET',url});
+  if(source==='home' && url.includes('/home-programs/'))return structuredClone(state.programs);
   if(url==='/v1/auth/me')return {user,tenant:{id:'clinic',name:'Clínica teste'}};
   if(url.includes('/completion'))return {moduleType,alreadyCompleted:appointment.status==='completed'};
   if(url==='/v1/appointments/appointment')return {appointment:{...appointment}};
@@ -66,10 +73,10 @@ ApiClient.post=async(url:string,body:any):Promise<any>=>{
   }
   return {id:'record',success:true};
 };
-ApiClient.put=async(url:string,body:any):Promise<any>=>{state.calls.push({method:'PUT',url,body});if(url.endsWith('/status'))appointment.status=body.status;else if(url==='/v1/appointments/appointment')Object.assign(appointment,body);return {success:true};};
+ApiClient.put=async(url:string,body:any):Promise<any>=>{state.calls.push({method:'PUT',url,body});if(source==='home' && url.endsWith('/status')) {if(state.fail) throw new Error('Falha simulada');state.programs=state.programs.map((p:any)=>url.includes('/'+p.id+'/')?{...p,status:body.status}:p);localStorage.setItem('test-home-programs',JSON.stringify(state.programs));} else if(url.endsWith('/status'))appointment.status=body.status;else if(url==='/v1/appointments/appointment')Object.assign(appointment,body);return {success:true};};
 ApiClient.delete=async(url:string):Promise<any>=>{state.calls.push({method:'DELETE',url});return {};};
 const modules:any={ZemdaMed:ZemdaMedWorkspace,ZemdaOdonto:DentistryWorkspace,ZemdaNutri:NutritionWorkspace,ZemdaTO:OccupationalTherapyWorkspace,ZemdaFono:SpeechTherapyWorkspace,ZemdaPsico:PsychologyWorkspace,ZemdaPP:PsychopedagogyWorkspace,ZemdaFisio:PhysiotherapyWorkspace,ZemdaEstetic:ZemdaEsteticWorkspace,ZemdaPersonal:ZemdaPersonalView,general:GeneralClinicalWorkspace};
 const Workspace=modules[moduleType];
 const finished=()=>{state.finished++};
 const props:any={initialPatientId:'patient',initialStudentId:'patient',initialAppointmentId:params.has('sidebar')?undefined:appointment.id,...(params.has('callback')?{onFinishConsultation:finished}:{})};
-createRoot(document.getElementById('root')!).render(<AuthProvider><ToastProvider>{source==='new'?<NewAppointmentModal isOpen onClose={()=>{}} onSuccess={()=>{}}/>:source==='dashboard'?<DashboardView onNavigate={()=>{}} onOpenNewAppointment={()=>{}} onOpenNewPatient={()=>{}}/>:source==='agenda'?<CalendarView onOpenNewAppointment={()=>{}}/>:source==='orchestrator'?<AppointmentConsultation appointment={appointment} initialModuleType={moduleType} onClose={()=>{}} onFinished={finished}/>:<Workspace {...props}/>}</ToastProvider></AuthProvider>);
+createRoot(document.getElementById('root')!).render(<AuthProvider><ToastProvider>{source==='home'?<HomeSchoolProgramManager patientId='patient' specialty={moduleType==='ZemdaFono'?'fono':'to'}/>:source==='new'?<NewAppointmentModal isOpen onClose={()=>{}} onSuccess={()=>{}}/>:source==='dashboard'?<DashboardView onNavigate={()=>{}} onOpenNewAppointment={()=>{}} onOpenNewPatient={()=>{}}/>:source==='agenda'?<CalendarView onOpenNewAppointment={()=>{}}/>:source==='orchestrator'?<AppointmentConsultation appointment={appointment} initialModuleType={moduleType} onClose={()=>{}} onFinished={finished}/>:<Workspace {...props}/>}</ToastProvider></AuthProvider>);

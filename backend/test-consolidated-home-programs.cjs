@@ -22,6 +22,11 @@ app.use(express.json());
 app.use('/api', require('./dist/routes').default);
 
 const server = http.createServer(app);
+const PDFDocument = require('pdfkit');
+const originalText = PDFDocument.prototype.text;
+let pdfText = [];
+PDFDocument.prototype.text = function(value, ...args) { pdfText.push(String(value)); return originalText.call(this, value, ...args); };
+
 
 let passedTests = 0;
 let failedTests = 0;
@@ -155,7 +160,7 @@ server.listen(3205, async () => {
     );
     assert(resEmptyPdf.status === 404, `Status 404 quando não há orientações cadastradas (recebido: ${resEmptyPdf.status})`);
     assert(
-      resEmptyPdf.body?.error === 'Nenhuma orientação cadastrada para este paciente.',
+      resEmptyPdf.body?.error === 'Nenhuma orientação ativa para este paciente.',
       `Mensagem de erro clara retornada: "${resEmptyPdf.body?.error}"`
     );
 
@@ -286,6 +291,30 @@ server.listen(3205, async () => {
 
     const magicHeader = resConsolidatedPdf.body.slice(0, 4).toString('utf-8');
     assert(magicHeader === '%PDF', `Arquivo binário inicia com cabeçalho válido %PDF`);
+
+    const exportedText = pdfText.join(' ');
+    for (const row of db.prepare('SELECT title, status FROM clinical_home_programs WHERE patient_id = ?').all(patientId)) {
+      assert(exportedText.includes(row.title.toUpperCase()) === (row.status === 'active'), 'PDF filtra status: ' + row.status + ' / ' + row.title);
+    }
+    for (const row of db.prepare('SELECT id FROM clinical_home_programs WHERE patient_id = ?').all(patientId)) {
+      for (const status of ['paused', 'completed', 'active', 'paused']) {
+        const update = await makeRequest('PUT', `/api/v1/occupational-therapy/home-programs/${row.id}/status`, authHeaders, {status});
+        assert(update.status === 200, 'Status salvo: ' + status);
+        const list = await makeRequest('GET', `/api/v1/occupational-therapy/home-programs/${patientId}?module_type=to`, authHeaders);
+        assert(list.body.filter(p => p.id === row.id && p.status === status).length === 1, 'Releitura preserva status sem duplicação');
+        const individual = await makeRequest('GET', `/api/v1/occupational-therapy/home-programs/${row.id}/pdf`, authHeaders, null, true);
+        assert(individual.status === 200, 'PDF individual: ' + status);
+        assert(db.prepare('SELECT status FROM clinical_home_programs WHERE id = ?').get(row.id).status === status, 'Exportar não altera status');
+      }
+    }
+    const noActive = await makeRequest('GET', `/api/v1/occupational-therapy/home-programs/consolidated-pdf/${patientId}?module_type=to`, authHeaders);
+    assert(noActive.status === 404 && noActive.body.error.includes('ativa'), 'Sem ativas não gera PDF vazio');
+    const first = db.prepare('SELECT id FROM clinical_home_programs WHERE patient_id = ? LIMIT 1').get(patientId);
+    await makeRequest('PUT', `/api/v1/occupational-therapy/home-programs/${first.id}/status`, authHeaders, {status:'active'});
+    pdfText = [];
+    const reactivated = await makeRequest('GET', `/api/v1/occupational-therapy/home-programs/consolidated-pdf/${patientId}?module_type=to`, authHeaders, null, true);
+    assert(reactivated.status === 200, 'Reativação retorna ao consolidado filtrado');
+    for (const row of db.prepare('SELECT title, status FROM clinical_home_programs WHERE patient_id = ?').all(patientId)) assert(pdfText.join(' ').includes(row.title.toUpperCase()) === (row.status === 'active'), 'Consolidado atualizado após reativação');
 
     // --- TEST 4: Rota alternativa /patient/:patientId/consolidated-pdf ---
     console.log('\n--- TEST 4: Requisição via Rota Alternativa /patient/:patientId/consolidated-pdf ---');

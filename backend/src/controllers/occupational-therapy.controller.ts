@@ -1288,7 +1288,7 @@ export class OccupationalTherapyController {
             FROM clinical_home_programs hp
             LEFT JOIN professionals pr ON pr.id = hp.professional_id AND pr.tenant_id = hp.tenant_id
             LEFT JOIN patients pt ON pt.id = hp.patient_id
-            WHERE hp.patient_id = ? AND hp.tenant_id = ?
+            WHERE hp.patient_id = ? AND hp.tenant_id = ? AND hp.status = 'active'
               AND (LOWER(COALESCE(hp.module_type, hp.specialty, 'to')) = ? OR LOWER(COALESCE(hp.specialty, hp.module_type, 'to')) = ?)
             ORDER BY datetime(COALESCE(hp.created_at, '1970-01-01')) DESC, hp.id DESC
           `).all(patientId, tenantId, moduleFilter, moduleFilter)
@@ -1301,12 +1301,12 @@ export class OccupationalTherapyController {
             FROM clinical_home_programs hp
             LEFT JOIN professionals pr ON pr.id = hp.professional_id AND pr.tenant_id = hp.tenant_id
             LEFT JOIN patients pt ON pt.id = hp.patient_id
-            WHERE hp.patient_id = ? AND hp.tenant_id = ?
+            WHERE hp.patient_id = ? AND hp.tenant_id = ? AND hp.status = 'active'
             ORDER BY datetime(COALESCE(hp.created_at, '1970-01-01')) DESC, hp.id DESC
           `).all(patientId, tenantId)) as any[];
 
       if (!rows || rows.length === 0) {
-        res.status(404).json({ error: 'Nenhuma orientação cadastrada para este paciente.' });
+        res.status(404).json({ error: 'Nenhuma orientação ativa para este paciente.' });
         return;
       }
 

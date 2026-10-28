@@ -1,4 +1,6 @@
-import React from 'react';
+import React, { useContext } from 'react';
+import { createPortal } from 'react-dom';
+import { ClinicalHeaderSlots } from './ClinicalHeaderSlots';
 import { LucideIcon, User, RefreshCw, X } from 'lucide-react';
 import { ProfessionalModuleHeader } from '../common/ProfessionalModuleHeader';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
@@ -137,6 +139,8 @@ export const ClinicalModuleShell: React.FC<ClinicalModuleShellProps> = ({
   className = '',
   contentMaxWidth = 'max-w-7xl mx-auto'
 }) => {
+  const headerSlots = useContext(ClinicalHeaderSlots);
+  const renderActions = (node: React.ReactNode) => isLockedContext && headerSlots?.actions ? createPortal(node, headerSlots.actions) : node;
   const tabScroll = useHorizontalTabScroll(activeTab);
   const { tabScrollProps } = tabScroll;
 
@@ -177,11 +181,12 @@ export const ClinicalModuleShell: React.FC<ClinicalModuleShellProps> = ({
       )}
 
       {/* LINHA 2 — FAIXA HORIZONTAL COMPACTA DE AÇÕES DO ATENDIMENTO */}
-      {Boolean(selectedPatientId) && (
+      {isLockedContext && headerSlots?.filters && createPortal(filterSlot, headerSlots.filters)}
+      {Boolean(selectedPatientId) && renderActions(
         <div className="bg-white border-b border-slate-200 px-3.5 sm:px-6 py-1.5 shrink-0 shadow-2xs">
           <div className={`${contentMaxWidth} flex items-center gap-1.5 sm:gap-2 flex-wrap`}>
-            {/* Quando em atendimento (isLockedContext), filtros de área/especialidade ficam compactos na linha de ações */}
-            {isLockedContext && filterSlot}
+            {/* Sem cabeçalho de atendimento externo, mantém os filtros na barra local */}
+            {isLockedContext && !headerSlots?.filters && filterSlot}
             {isLockedContext && headerActions}
 
             {/* Fora do atendimento agendado, mostra chip do paciente com opção de desmarcar */}
