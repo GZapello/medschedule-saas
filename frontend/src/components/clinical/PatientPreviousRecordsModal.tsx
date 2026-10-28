@@ -113,7 +113,7 @@ export const PatientPreviousRecordsModal: React.FC<PatientPreviousRecordsModalPr
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-900/60 backdrop-blur-xs overflow-y-auto print:p-0 print:bg-white print:static mobile-modal"
+      className="clinical-history-modal fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-900/60 backdrop-blur-xs overflow-y-auto print:p-0 print:bg-white print:static mobile-modal"
       role="dialog"
       aria-modal="true"
       aria-label="Histórico de Prontuários Anteriores"

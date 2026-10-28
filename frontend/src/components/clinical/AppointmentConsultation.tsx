@@ -167,10 +167,10 @@ export function AppointmentConsultation({
   const patientPhone = appointment.patient_phone || appointment.patientPhone || '';
 
   const renderUnifiedTopBar = (currentView: 'specialized' | 'zemda_body', ariaLabel?: string) => (
-    <div className="bg-white border-b border-slate-200 sticky top-0 z-20 shadow-2xs">
+    <div className="clinical-header bg-white border-b border-slate-200 sticky top-0 z-20 shadow-2xs">
       {/* LINHA 1: Cabeçalho com identificação do paciente, dados do atendimento e contato */}
       <div className="px-3.5 sm:px-6 py-2 space-y-1.5">
-        <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="clinical-identity flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <button
               type="button"
@@ -179,7 +179,7 @@ export function AppointmentConsultation({
             >
               <ChevronLeft className="w-3.5 h-3.5" /> Voltar à agenda
             </button>
-            <span className="font-bold text-xs sm:text-sm text-slate-900 truncate">
+            <span title={appointment.patient_name || 'Paciente'} className="clinical-patient-name font-bold text-xs sm:text-sm text-slate-900 truncate">
               {appointment.patient_name || 'Paciente'}
             </span>
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-teal-50 text-teal-800 border border-teal-200 shrink-0">
@@ -200,7 +200,7 @@ export function AppointmentConsultation({
         </div>
 
         {/* CHIPS DE INFORMAÇÕES DO ATENDIMENTO + CONTATO */}
-        <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-600">
+        <div className="clinical-info flex flex-wrap items-center gap-1.5 text-[11px] text-slate-600">
           {timeRangeChip && (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100/90 border border-slate-200/80 font-medium text-slate-700">
               <Calendar className="w-3 h-3 text-indigo-500 shrink-0" />
@@ -255,7 +255,7 @@ export function AppointmentConsultation({
               <span>WhatsApp</span>
             </button>
           </span>
-          <div ref={setHeaderFilters} className="flex flex-wrap items-center gap-2 min-w-0 max-w-full [&>div]:max-w-full [&_select]:min-w-0 [&_select]:max-w-full" />
+          <div ref={setHeaderFilters} className="clinical-area flex flex-wrap items-center gap-2 min-w-0 max-w-full [&>div]:max-w-full [&_select]:min-w-0 [&_select]:max-w-full" />
         </div>
       </div>
       <div ref={setHeaderActions} />
@@ -264,6 +264,7 @@ export function AppointmentConsultation({
       <div className="px-3.5 sm:px-6 py-1.5 bg-slate-50/80 border-t border-slate-200">
         <nav
           aria-label={ariaLabel || 'Navegação do atendimento'}
+          data-clinical-tabs
           className="flex items-center gap-1.5 overflow-x-auto no-scrollbar max-w-full py-0.5"
         >
           {[
@@ -331,7 +332,7 @@ export function AppointmentConsultation({
   // Se o profissional estiver visualizando o ZemdaBody dentro do mesmo atendimento:
   if (activeTab === 'zemda_body') {
     return (
-      <div className="fixed inset-0 z-50 bg-slate-50 flex flex-col overflow-auto mobile-modal" role="dialog" aria-modal="true" aria-label="Atendimento com Zemda360">
+      <div className="clinical-screen clinical-workspace fixed inset-0 z-50 bg-slate-50 flex flex-col overflow-auto mobile-modal" role="dialog" aria-modal="true" aria-label="Atendimento com Zemda360">
         {renderUnifiedTopBar('zemda_body', 'Navegação Zemda360')}
         <div className="px-4 sm:px-6 pt-2 max-w-6xl mx-auto w-full">
           <OnlineConsultationTools appointment={{ ...onlineAppointment, clinical_module: effectiveModuleType }} onRequestEvolution={() => { setReturnWorkspaceTab('evolucao'); setActiveTab('records'); }} onMeetingUrlSaved={onMeetingUrlSaved} onDriveUrlSaved={onDriveUrlSaved} />
@@ -354,7 +355,7 @@ export function AppointmentConsultation({
   if (activeTab === 'specialized' && Workspace) {
     if (effectiveModuleType === 'ZemdaPersonal') {
       return (
-        <div className="fixed inset-0 z-50 bg-slate-50 overflow-auto mobile-modal" role="dialog" aria-modal="true" aria-label="Atendimento Personal Trainer">
+        <div className="clinical-screen clinical-workspace fixed inset-0 z-50 bg-slate-50 overflow-auto mobile-modal" role="dialog" aria-modal="true" aria-label="Atendimento Personal Trainer">
           {renderUnifiedTopBar('specialized', 'Navegação ZemdaPersonal')}
           <div className="px-4 sm:px-6 pt-2 max-w-7xl mx-auto w-full">
             <OnlineConsultationTools appointment={{ ...onlineAppointment, clinical_module: effectiveModuleType }} onRequestEvolution={() => { setReturnWorkspaceTab('evolucao'); setActiveTab('records'); }} onMeetingUrlSaved={onMeetingUrlSaved} onDriveUrlSaved={onDriveUrlSaved} />
@@ -372,7 +373,7 @@ export function AppointmentConsultation({
 
     return (
       <ClinicalHeaderSlots.Provider value={{ filters: headerFilters, actions: headerActions }}>
-        <div className="fixed inset-0 z-50 bg-slate-50 overflow-auto mobile-modal" role="dialog" aria-modal="true" aria-label="Atendimento clínico especializado">
+        <div className="clinical-screen clinical-workspace fixed inset-0 z-50 bg-slate-50 overflow-auto mobile-modal" role="dialog" aria-modal="true" aria-label="Atendimento clínico especializado">
           {renderUnifiedTopBar('specialized', 'Navegação do módulo clínico')}
           <div className="px-4 sm:px-6 pt-2 max-w-7xl mx-auto w-full">
             <OnlineConsultationTools appointment={{ ...onlineAppointment, clinical_module: effectiveModuleType }} onRequestEvolution={() => { setReturnWorkspaceTab('evolucao'); setActiveTab('records'); }} onMeetingUrlSaved={onMeetingUrlSaved} onDriveUrlSaved={onDriveUrlSaved} />

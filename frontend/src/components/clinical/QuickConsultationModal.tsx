@@ -1357,13 +1357,13 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-label="Iniciar atendimento"
-        className="bg-white w-screen h-[100dvh] sm:w-[96vw] sm:h-[94vh] lg:w-[min(94vw,1500px)] lg:h-[92vh] max-w-full !max-h-none rounded-none sm:rounded-2xl lg:rounded-3xl shadow-2xl border-0 sm:border border-slate-200/90 flex flex-col !overflow-hidden min-w-0 animate-in zoom-in-95 duration-150"
+        className="clinical-screen clinical-dialog bg-white w-screen h-[100dvh] sm:w-[96vw] sm:h-[94vh] lg:w-[min(94vw,1500px)] lg:h-[92vh] max-w-full !max-h-none rounded-none sm:rounded-2xl lg:rounded-3xl shadow-2xl border-0 sm:border border-slate-200/90 flex flex-col !overflow-hidden min-w-0 animate-in zoom-in-95 duration-150"
       >
         {/* 1. CABEÇALHO COMPACTO DO ATENDIMENTO CLÍNICO */}
-        <header className="shrink-0 sticky top-0 z-30 bg-white text-slate-900 border-b border-slate-200 shadow-2xs">
+        <header className="clinical-header shrink-0 sticky top-0 z-30 bg-white text-slate-900 border-b border-slate-200 shadow-2xs">
           {/* PRIMEIRA LINHA + CHIPS DO ATENDIMENTO */}
           <div className="px-3.5 sm:px-6 py-2 space-y-1.5">
-            <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
+            <div className="clinical-identity flex flex-wrap items-center justify-between gap-2 min-w-0">
               {/* Esquerda: Voltar à agenda + Nome do Paciente + Badge do Módulo */}
               <div className="flex items-center gap-2 min-w-0 flex-wrap">
                 <button
@@ -1375,7 +1375,7 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
                   <span>Voltar à agenda</span>
                 </button>
 
-                <h2 className="text-xs sm:text-sm font-bold text-slate-900 truncate max-w-[240px] sm:max-w-[360px]">
+                <h2 title={patientName} className="clinical-patient-name text-xs sm:text-sm font-bold text-slate-900 truncate max-w-[240px] sm:max-w-[360px]">
                   {patientName}
                 </h2>
 
@@ -1412,7 +1412,7 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
             </div>
 
             {/* INFORMAÇÕES DO ATENDIMENTO EM CHIPS COMPACTOS */}
-            <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-600 relative">
+            <div className="clinical-info flex flex-wrap items-center gap-1.5 text-[11px] text-slate-600 relative">
               {/* Chip Data e Horário + Editar */}
               <div className="relative inline-flex items-center">
                 <span
@@ -1568,7 +1568,7 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
           </div>
 
           {/* SEGUNDA LINHA — AÇÕES EM UMA ÚNICA LINHA COMPACTA */}
-          <div className="px-3.5 sm:px-6 py-1.5 bg-slate-50/90 border-t border-slate-200/80 flex flex-wrap items-center gap-1.5 sm:gap-2">
+          <div className="clinical-actions px-3.5 sm:px-6 py-1.5 bg-slate-50/90 border-t border-slate-200/80 flex flex-wrap items-center gap-1.5 sm:gap-2">
             {/* Autosave ativo */}
             <div className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-0.5 rounded-lg border bg-white border-slate-200 text-slate-600">
               {autosaveStatus === 'saving' ? (
@@ -1651,6 +1651,7 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
           <div className="px-3.5 sm:px-6 py-1.5 bg-white border-t border-slate-200">
             <nav
               aria-label="Navegação do atendimento"
+              data-clinical-tabs
               className="flex items-center gap-1.5 overflow-x-auto no-scrollbar max-w-full py-0.5"
             >
               {[
@@ -1716,7 +1717,7 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
         </header>
 
         {/* 4. ÁREA DE CONTEÚDO CENTRAL SCROLLÁVEL (Único scroll principal do modal) */}
-        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden bg-slate-50/60 pt-3 pb-5 px-3.5 sm:px-5 lg:px-6">
+        <div className="clinical-content flex-1 min-h-0 overflow-y-auto overflow-x-hidden bg-slate-50/60 pt-3 pb-5 px-3.5 sm:px-5 lg:px-6">
           {/* Ferramentas de Atendimento Online (exibidas apenas quando modalidade === 'online') */}
           {appointment.modality === 'online' && (
             <div className="mb-4">

@@ -76,7 +76,7 @@ export const QuickAIAssistantShortcut: React.FC<QuickAIAssistantShortcutProps> =
   };
 
   return (
-    <div className="fixed bottom-4 right-4 z-40 select-none">
+    <div className="clinical-ai-shortcut fixed bottom-4 right-4 z-40 select-none">
       {/* Popover do Assistente Rápido de Atalho */}
       {isOpen && (
         <div

@@ -148,7 +148,7 @@ export const ClinicalModuleShell: React.FC<ClinicalModuleShellProps> = ({
   const handleClear = onClearPatient || (() => onSelectPatient('', null));
 
   return (
-    <div className={`flex flex-col min-h-screen bg-slate-50 text-slate-800 ${className}`}>
+    <div className={`clinical-screen clinical-module flex flex-col min-h-screen bg-slate-50 text-slate-800 ${className}`}>
       {/* Modais Globais / Slots */}
       {modalsSlot}
 

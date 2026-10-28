@@ -132,7 +132,7 @@ export const ClinicalQuickToolsMenu: React.FC<ClinicalQuickToolsMenuProps> = ({
         <div
           role="menu"
           aria-orientation="vertical"
-          className="absolute right-0 mt-1.5 w-60 origin-top-right rounded-2xl bg-white p-1.5 shadow-xl border border-slate-200/80 ring-1 ring-black/5 focus:outline-none z-50 animate-in fade-in zoom-in-95 duration-100"
+          className="clinical-tools-popover absolute right-0 mt-1.5 w-60 origin-top-right rounded-2xl bg-white p-1.5 shadow-xl border border-slate-200/80 ring-1 ring-black/5 focus:outline-none z-50 animate-in fade-in zoom-in-95 duration-100"
         >
           <div className="px-3 py-1.5 border-b border-slate-100 mb-1">
             <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">

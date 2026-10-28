@@ -47,7 +47,7 @@ export const ClinicalQuickHeaderActions: React.FC<ClinicalQuickHeaderActionsProp
   toolsVariant = 'slate'
 }) => {
   return (
-    <div className={`flex items-center gap-1.5 sm:gap-2 flex-wrap flex-1 ${className}`}>
+    <div className={`clinical-actions flex items-center gap-1.5 sm:gap-2 flex-wrap flex-1 ${className}`}>
       {/* 1. Indicador Discreto de Autosave Universal */}
       {autosaveStatus && (
         <div data-tour="clinical-autosave" className="inline-flex">

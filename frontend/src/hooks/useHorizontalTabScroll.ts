@@ -69,7 +69,7 @@ export function useHorizontalTabScroll<T extends HTMLElement = HTMLDivElement>(
   const scrollBy = useCallback(
     (offset: number) => {
       const el = containerRef.current;
-      if (!el || window.matchMedia('(max-width: 1023px)').matches) return;
+      if (!el) return;
       el.scrollBy({
         left: offset,
         behavior: 'smooth'
@@ -110,7 +110,7 @@ export function useHorizontalTabScroll<T extends HTMLElement = HTMLDivElement>(
 
     const timer = setTimeout(() => {
       const el = containerRef.current;
-      if (!el || window.innerWidth < 1024) return;
+      if (!el || el.getClientRects().length === 0) return;
 
       const activeEl = el.querySelector<HTMLElement>(
         '[data-active="true"], [data-active=true], [aria-selected="true"]'

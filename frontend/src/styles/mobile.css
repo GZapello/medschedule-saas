@@ -60,3 +60,116 @@
   :is(#root, .mobile-modal) form .grid { grid-template-columns: minmax(0, 1fr); }
 }
 @media (min-width: 1024px) { .zemda-tab-mobile { display: none; } }
+/* Clinical mobile presentation: desktop and printed documents keep their layout. */
+@media screen and (max-width: 1023px) {
+  .clinical-screen { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+  .clinical-screen.clinical-dialog {
+    overflow-y: auto !important;
+    overflow-x: clip !important;
+    display: block;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    scroll-padding-block: 1rem;
+  }
+  .clinical-screen.clinical-workspace.mobile-modal {
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    align-items: stretch;
+    overflow-y: auto;
+    overflow-x: clip;
+  }
+  .clinical-workspace.mobile-modal > :is(div, section):not(.fixed):not(.absolute) {
+    max-height: none;
+    overflow: visible;
+    flex-shrink: 0;
+  }
+  .clinical-screen .clinical-header {
+    position: relative;
+    top: auto;
+    min-height: 0;
+    padding-top: 0;
+    z-index: 20;
+  }
+  .clinical-dialog > .clinical-content {
+    overflow: visible;
+    min-height: auto;
+    padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+  }
+  .clinical-identity {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 44px;
+    align-items: start;
+    gap: .5rem;
+  }
+  .clinical-identity > :first-child { display: flex; flex-wrap: wrap; min-width: 0; gap: .5rem; }
+  .clinical-identity .clinical-patient-name {
+    max-width: 100%; white-space: normal; overflow: visible;
+    font-size: .875rem; line-height: 1.4;
+  }
+  .clinical-identity button { min-height: 44px; }
+  .clinical-info { gap: .5rem; font-size: .8125rem; line-height: 1.5; }
+  .clinical-info > * { min-width: 0; max-width: 100%; }
+  .clinical-info > span { padding-block: .25rem; }
+  .clinical-info button { font-size: .8125rem; min-height: 44px; }
+  .clinical-area { width: 100%; }
+  .clinical-area > div { width: 100%; min-width: 0; padding: .375rem .625rem; }
+  .clinical-area select { width: 0; flex: 1 1 0%; min-width: 0; font-size: 16px; }
+  .clinical-area > div > span { flex-shrink: 0; font-size: .75rem; }
+  .clinical-actions { display: flex; flex-wrap: wrap; width: 100%; min-width: 0; gap: .5rem; align-items: stretch; }
+  .clinical-actions > button, .clinical-actions > [data-tour="clinical-tools"] {
+    flex: 1 1 140px; min-width: 0; max-width: 100%; margin-left: 0;
+  }
+  .clinical-actions button { min-height: 44px; font-size: .8125rem; line-height: 1.4; justify-content: center; }
+  .clinical-actions > [data-tour="clinical-autosave"] { flex-basis: 100%; align-items: center; }
+  .clinical-actions [data-tour="clinical-tools"] > div,
+  .clinical-actions [data-tour="clinical-tools"] > div > button { width: 100%; }
+  .clinical-tools-popover {
+    position: fixed; left: max(.75rem, env(safe-area-inset-left)); right: max(.75rem, env(safe-area-inset-right));
+    top: auto; bottom: max(.75rem, env(safe-area-inset-bottom)); width: auto;
+    max-height: 70dvh; overflow-y: auto; z-index: 60;
+  }
+  .clinical-tools-popover .truncate { white-space: normal; overflow: visible; }
+  .clinical-screen [data-clinical-tabs],
+  .clinical-screen .zemda-tab-desktop [class*="overflow-x-auto"] {
+    min-width: 0; max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain;
+    touch-action: pan-x pan-y; scrollbar-width: thin; scrollbar-color: #94a3b8 #f1f5f9;
+    scroll-padding-inline: 1rem;
+  }
+  .clinical-screen [data-clinical-tabs]::-webkit-scrollbar,
+  .clinical-screen .zemda-tab-desktop .no-scrollbar::-webkit-scrollbar { display: block; height: 5px; }
+  .clinical-screen [data-clinical-tabs]::-webkit-scrollbar-thumb,
+  .clinical-screen .zemda-tab-desktop .no-scrollbar::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
+  .clinical-screen [data-clinical-tabs] button,
+  .clinical-screen .zemda-tab-desktop button { flex-shrink: 0; white-space: nowrap; min-height: 44px; font-size: .8125rem; }
+  .clinical-screen .zemda-tab-mobile { display: none; }
+  .clinical-screen .zemda-tab-desktop { display: block; min-width: 0; }
+  .clinical-screen .zemda-tab-desktop [class*="overflow-x-auto"] { padding-inline: 3.25rem; }
+  .clinical-screen .clinical-module > .sticky,
+  .clinical-module > .sticky { position: relative; top: auto; }
+  .clinical-module { min-height: 0; }
+  .clinical-module > main { overflow: visible; }
+  .clinical-screen :is(input, select, textarea) { min-width: 0; max-width: 100%; scroll-margin-block: 1.5rem; }
+  .clinical-screen textarea { min-height: 8rem; }
+  .clinical-screen #clinical-evolution-editor { min-height: 16rem; }
+  .clinical-screen .overflow-x-auto { max-width: 100%; overscroll-behavior-x: contain; }
+  .clinical-screen [role="dialog"] { max-width: 100%; max-height: 100dvh; }
+  .clinical-ai-shortcut {
+    right: max(.75rem, env(safe-area-inset-right)); bottom: max(.75rem, env(safe-area-inset-bottom));
+  }
+  .clinical-ai-shortcut > div {
+    width: min(23rem, calc(100vw - 1.5rem)); max-height: calc(100dvh - 6rem); overflow-y: auto;
+  }
+}
+@media screen and (max-width: 639px) {
+  .clinical-screen .grid-cols-2 { grid-template-columns: minmax(0, 1fr); }
+  .clinical-screen .clinical-content .flex:has(> #clinical-evolution-editor) { min-width: 0; }
+}
+
+@media screen and (max-width: 1023px) {
+  .clinical-history-modal > div > :first-child { flex-wrap: wrap; gap: .75rem; }
+  .clinical-history-modal h3 { flex-wrap: wrap; }
+  .clinical-history-modal > div > :first-child > :last-child { margin-left: auto; flex-shrink: 0; }
+  .clinical-history-modal > div > :last-child { flex-wrap: wrap; gap: .75rem; }
+  .clinical-history-modal > div > :last-child > button { flex-shrink: 0; white-space: nowrap; margin-left: auto; }
+  .clinical-toasts { left: .75rem; right: .75rem; max-width: min(24rem, calc(100vw - 1.5rem)); margin-left: auto; z-index: 110; }
+  .clinical-toasts button { flex-shrink: 0; }
+}
