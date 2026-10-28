@@ -296,9 +296,9 @@ export const ExternalTestsManager: React.FC<ExternalTestsManagerProps> = ({
   const colors = getColorClasses();
 
   return (
-    <div className={`bg-white rounded-3xl border border-slate-200 p-6 shadow-xs space-y-6 ${className}`}>
+    <div className={`clinical-readable bg-white rounded-3xl border border-slate-200 p-6 shadow-xs space-y-6 ${className}`}>
       {/* Cabeçalho */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 gap-3">
+      <div className="clinical-text-actions flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 gap-3">
         <div>
           <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
             <FileText className={`w-5 h-5 ${colors.headerIcon}`} />
@@ -353,7 +353,7 @@ export const ExternalTestsManager: React.FC<ExternalTestsManagerProps> = ({
               className="p-4 rounded-2xl border border-slate-200 bg-white hover:border-slate-300 transition-all shadow-2xs space-y-3"
             >
               {/* Topo do Card */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+              <div className="clinical-text-actions flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-bold text-sm text-slate-900">{test.testName}</span>
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${colors.badge}`}>

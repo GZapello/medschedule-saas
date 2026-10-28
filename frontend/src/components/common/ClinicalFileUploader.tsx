@@ -491,7 +491,7 @@ export const ClinicalFileUploader: React.FC<ClinicalFileUploaderProps> = ({
             {/* Informações do arquivo */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-xs font-bold text-slate-800 truncate" title={currentFilename || ''}>
+                <span className="clinical-file-name text-xs font-bold text-slate-800 truncate" title={currentFilename || ''}>
                   {currentFilename || 'Arquivo Anexado'}
                 </span>
                 {uploadSuccess && (
@@ -520,7 +520,7 @@ export const ClinicalFileUploader: React.FC<ClinicalFileUploaderProps> = ({
           </div>
 
           {/* 4 Botões Padronizados de Ação: [Visualizar] [Baixar] [Substituir] [Excluir] */}
-          <div className="flex items-center justify-end gap-1.5 pt-2 border-t border-slate-200/70">
+          <div className="clinical-readable clinical-card-actions flex items-center justify-end gap-1.5 pt-2 border-t border-slate-200/70">
             {(fileCat === 'image' || fileCat === 'pdf') && (
               <button
                 type="button"
@@ -617,7 +617,7 @@ export const ClinicalFileUploader: React.FC<ClinicalFileUploaderProps> = ({
           <div className="bg-white rounded-3xl overflow-hidden shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col">
             <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
               <div className="flex items-center gap-2 min-w-0">
-                <span className="text-xs font-bold text-slate-800 truncate">
+                <span className="clinical-file-name text-xs font-bold text-slate-800 truncate">
                   {currentFilename || 'Visualização do Anexo'}
                 </span>
                 <span className="text-[10px] uppercase font-bold text-slate-500 bg-slate-200 px-2 py-0.5 rounded-md">

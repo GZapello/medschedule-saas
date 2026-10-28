@@ -173,3 +173,33 @@
   .clinical-toasts { left: .75rem; right: .75rem; max-width: min(24rem, calc(100vw - 1.5rem)); margin-left: auto; z-index: 110; }
   .clinical-toasts button { flex-shrink: 0; }
 }
+/* Opt-in clinical text/action layouts: preserve space for prose before actions. */
+@media screen and (max-width: 1023px) {
+  .clinical-readable { min-width: 0; max-width: 100%; word-break: normal; overflow-wrap: break-word; }
+  .clinical-readable :is(h1, h2, h3, h4, p, label) { min-width: 0; word-break: normal; }
+  .clinical-readable svg, .clinical-card-actions svg { flex-shrink: 0; }
+  .clinical-text-actions { display: flex; flex-direction: column; align-items: stretch; gap: .75rem; min-width: 0; }
+  .clinical-text-actions > :first-child, .clinical-card-copy { width: 100%; min-width: 0; flex-basis: auto; }
+  .clinical-text-actions > button { align-self: flex-start; flex-shrink: 0; }
+  .clinical-card-actions, .clinical-text-actions > div:last-child:not(:first-child) {
+    display: flex; flex-wrap: wrap; gap: .5rem; min-width: 0; max-width: 100%;
+  }
+  .clinical-readable button, .clinical-card-actions button {
+    min-height: 44px; max-width: 100%; flex-shrink: 0;
+    white-space: normal; word-break: normal; overflow-wrap: break-word;
+  }
+  .clinical-card-actions button:has(> span), .goals-manager .clinical-card-actions > button:first-child { flex: 0 1 auto; }
+  .clinical-goal-metrics { flex-direction: column; align-items: flex-start; gap: .5rem; }
+  .clinical-goal-metrics > div { flex-wrap: wrap; gap: .5rem 1rem; width: 100%; }
+  .clinical-goal-metrics > div > span { max-width: 100%; }
+  .clinical-goal-modal > div > :first-child { gap: .75rem; align-items: flex-start; }
+  .clinical-goal-modal > div > :first-child > :first-child { min-width: 0; flex: 1; }
+  .clinical-goal-modal > div > :first-child > button { flex-shrink: 0; }
+  .clinical-goal-modal form > .flex:last-child { flex-wrap: wrap; gap: .5rem; }
+  .clinical-professional-header > :first-child { align-items: flex-start; min-width: 0; }
+  .clinical-professional-header > :first-child > :last-child { min-width: 0; flex: 1; }
+  .clinical-file-name { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: break-word; word-break: normal; }
+  .clinical-comparison-modal > div > :first-child { gap: .75rem; align-items: flex-start; }
+  .clinical-comparison-modal > div > :first-child > :first-child { flex: 1; min-width: 0; }
+  .clinical-comparison-modal > div > :nth-child(2) > div { flex-wrap: wrap; }
+}

@@ -82,7 +82,7 @@ export const EvolutionComparisonModal: React.FC<EvolutionComparisonModalProps> =
   const categories = Array.from(new Set(items.map(i => i.category || 'Geral')));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-150 mobile-modal">
+    <div className="clinical-readable clinical-comparison-modal fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-150 mobile-modal">
       <div className="bg-white w-full max-w-5xl max-h-[90vh] rounded-3xl shadow-2xl flex flex-col border border-slate-100 overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/70">

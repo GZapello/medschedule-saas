@@ -343,9 +343,9 @@ export const MeasurableGoalsManager: React.FC<MeasurableGoalsManagerProps> = ({
   };
 
   return (
-    <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-xs space-y-4">
+    <div className="clinical-readable goals-manager bg-white border border-slate-200/80 rounded-2xl p-5 shadow-xs space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="clinical-text-actions flex items-center justify-between">
         <div>
           <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
             <Target className="w-5 h-5 text-teal-600" />
@@ -524,8 +524,8 @@ export const MeasurableGoalsManager: React.FC<MeasurableGoalsManagerProps> = ({
                 key={goal.id}
                 className="p-4 bg-white border border-slate-200/80 rounded-2xl space-y-3 hover:border-slate-300 transition-colors shadow-xs"
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-1 flex-1">
+                <div className="clinical-text-actions flex items-start justify-between gap-3">
+                  <div className="clinical-card-copy space-y-1 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-sm font-bold text-slate-900">
                         {goal.title}
@@ -549,7 +549,7 @@ export const MeasurableGoalsManager: React.FC<MeasurableGoalsManagerProps> = ({
                     )}
                   </div>
 
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="clinical-card-actions flex items-center gap-1.5 shrink-0">
                     {!readOnly && (
                       <button
                         type="button"
@@ -576,7 +576,7 @@ export const MeasurableGoalsManager: React.FC<MeasurableGoalsManagerProps> = ({
 
                 {/* Progress Bar & Indicators */}
                 <div className="space-y-1.5 pt-1">
-                  <div className="flex items-center justify-between text-xs text-slate-600 font-medium">
+                  <div className="clinical-goal-metrics flex items-center justify-between text-xs text-slate-600 font-medium">
                     <span>
                       Progresso: <strong className="text-slate-900">{pct}%</strong>
                     </span>
@@ -672,7 +672,7 @@ export const MeasurableGoalsManager: React.FC<MeasurableGoalsManagerProps> = ({
 
       {/* Modal Registrar Progresso */}
       {selectedGoalForProgress && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 mobile-modal">
+        <div className="clinical-readable clinical-goal-modal fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 mobile-modal">
           <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col">
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-teal-50/50">
               <div className="flex items-center gap-2">

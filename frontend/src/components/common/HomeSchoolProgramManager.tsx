@@ -386,7 +386,7 @@ export const HomeSchoolProgramManager: React.FC<HomeSchoolProgramManagerProps> =
 
   return (
     <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-xs space-y-4">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
+      <div className="clinical-readable clinical-text-actions flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
             <BookOpen className="w-5 h-5 text-teal-600" />
@@ -566,7 +566,7 @@ export const HomeSchoolProgramManager: React.FC<HomeSchoolProgramManagerProps> =
               key={prog.id}
               className="p-3.5 bg-white border border-slate-200/80 rounded-2xl space-y-2.5 hover:border-slate-300 transition-colors shadow-xs"
             >
-              <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div className="clinical-readable clinical-text-actions flex items-start justify-between gap-3 flex-wrap">
                 <div className="flex items-center gap-2">
                   <span className="p-1.5 bg-slate-50 rounded-lg border border-slate-200">
                     {getSettingIcon(prog.setting)}
