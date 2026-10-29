@@ -18,6 +18,7 @@ export interface GoogleCalendarStatusData {
   lastSyncAt?: string;
   lastSyncError?: string;
   notificationsActive?: boolean;
+  syncStatus?: 'synced' | 'pending' | 'sync_failed' | 'reconnection_required' | 'disabled';
 }
 
 export function useGoogleCalendarStatus() {
@@ -47,7 +48,7 @@ export function useGoogleCalendarStatus() {
       const googleCalError = urlParams.get('google_calendar_error');
 
       if (googleCal === 'connected') {
-        showToast('Google Agenda conectada com sucesso!', 'success');
+        showToast('Google Agenda conectada e sincronização ativada com sucesso!', 'success');
         const url = new URL(window.location.href);
         url.searchParams.delete('google_calendar');
         window.history.replaceState({}, document.title, url.pathname + (url.search || ''));

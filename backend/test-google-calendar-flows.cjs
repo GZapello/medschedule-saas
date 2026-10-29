@@ -178,7 +178,10 @@ async function run() {
   const connA = GoogleCalendarService.getConnection(tenantA, userA);
   assert.ok(connA);
   assert.strictEqual(connA.google_account_email, 'ana.medica@gmail.com');
-  console.log('  ✅ [PASS] Conexão OAuth realizada e tokens persistidos com segurança.');
+  assert.strictEqual(connA.sync_enabled, 1, 'A sincronização deve ser ativada automaticamente no callback');
+  assert.strictEqual(connA.calendar_id, 'primary', 'A agenda principal deve ser selecionada automaticamente');
+  assert.strictEqual(connA.sync_direction, 'both', 'A direção padrão deve ser Zemda ↔ Google');
+  console.log('  ✅ [PASS] Conexão OAuth realizada, agenda selecionada e sincronização ativada automaticamente.');
 
   // -------------------------------------------------------------------
   // CENÁRIO 2: Selecionar uma agenda e ativar sincronização

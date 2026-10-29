@@ -965,7 +965,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
       )}
 
       {/* SEÇÃO: EQUIPE & ACESSOS (Unificação de Profissionais + Equipe + Escala) */}
-      {activeSection === 'integrations' && <GoogleCalendarSettings />}
+      {activeSection === 'integrations' && <GoogleCalendarSettings onBack={() => setActiveSection('hub')} />}
       {activeSection === 'team' && <UnifiedTeamManagement />}
 
       {/* SEÇÃO: AGENDA & OPERAÇÃO (Serviços e Salas) */}

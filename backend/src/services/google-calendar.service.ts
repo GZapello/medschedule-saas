@@ -109,6 +109,43 @@ export class GoogleCalendarService {
   }
 
   /**
+   * Resolve o ID do profissional vinculado ao usuário e clínica.
+   */
+  static resolveProfessionalId(tenantId: string, userId: string): string | null {
+    const row = db.prepare(`
+      SELECT id FROM professionals WHERE tenant_id = ? AND user_id = ?
+    `).get(tenantId, userId) as { id: string } | undefined;
+    if (row?.id) return row.id;
+
+    // Se professionals.user_id estiver nulo, busca pelo nome do usuário no mesmo tenant
+    const user = db.prepare('SELECT email, name FROM users WHERE id = ?').get(userId) as { email: string; name: string } | undefined;
+    if (user?.name) {
+      const profByName = db.prepare(`
+        SELECT id FROM professionals WHERE tenant_id = ? AND (user_id IS NULL OR user_id = '') AND LOWER(name) = LOWER(?) LIMIT 1
+      `).get(tenantId, user.name) as { id: string } | undefined;
+      if (profByName?.id) {
+        try {
+          db.prepare("UPDATE professionals SET user_id = ?, updated_at = datetime('now') WHERE id = ?").run(userId, profByName.id);
+        } catch (_) {}
+        return profByName.id;
+      }
+    }
+
+    // Fallback para clínica com apenas 1 profissional ativo
+    const soleProf = db.prepare(`
+      SELECT id FROM professionals WHERE tenant_id = ? AND active = 1
+    `).all(tenantId) as { id: string }[];
+    if (soleProf.length === 1) {
+      try {
+        db.prepare("UPDATE professionals SET user_id = ?, updated_at = datetime('now') WHERE id = ? AND user_id IS NULL").run(userId, soleProf[0].id);
+      } catch (_) {}
+      return soleProf[0].id;
+    }
+
+    return null;
+  }
+
+  /**
    * Verifica se o administrador configurou as credenciais OAuth de Calendar no ambiente.
    */
   static isConfigured(): boolean {
@@ -254,16 +291,33 @@ export class GoogleCalendarService {
       throw new GoogleCalendarError('Desconecte a integração atual antes de conectar esta conta Google.');
     }
 
-    // Busca nome da agenda principal
-    let primaryCalendarName = 'Agenda principal';
+    // Busca e seleciona a agenda padrão automaticamente (prioriza a principal ou única válida)
+    let selectedCalendarId = 'primary';
+    let selectedCalendarName = 'Agenda principal';
     try {
       const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
-      const primaryRes = await calendar.calendarList.get({ calendarId: 'primary' });
-      if (primaryRes.data.summary) {
-        primaryCalendarName = primaryRes.data.summary;
+      const listRes = await calendar.calendarList.list({ minAccessRole: 'writer' });
+      const items = listRes.data.items || [];
+      if (items.length > 0) {
+        const primary = items.find(c => c.primary);
+        if (primary) {
+          selectedCalendarId = primary.id || 'primary';
+          selectedCalendarName = primary.summary || 'Agenda principal';
+        } else if (items.length === 1) {
+          selectedCalendarId = items[0].id || 'primary';
+          selectedCalendarName = items[0].summary || 'Agenda principal';
+        } else {
+          selectedCalendarId = items[0].id || 'primary';
+          selectedCalendarName = items[0].summary || 'Agenda principal';
+        }
+      } else {
+        const primaryRes = await calendar.calendarList.get({ calendarId: 'primary' });
+        if (primaryRes.data.summary) {
+          selectedCalendarName = primaryRes.data.summary;
+        }
       }
     } catch (err) {
-      console.warn('[GoogleCalendarService] Não foi possível obter resumo da agenda principal:', 'Falha na operação Google Agenda');
+      console.warn('[GoogleCalendarService] Não foi possível listar ou obter resumo da agenda principal:', 'Falha na operação Google Agenda');
     }
 
     const refreshTokenToSave = tokens.refresh_token || (previous?.google_subject === identity.sub
@@ -282,15 +336,9 @@ export class GoogleCalendarService {
     const connectionId = previous?.id || uuidv4();
 
     // Se o professionalId não veio no state, tenta resolver
-    let professionalId = stateRow.professional_id;
-    if (!professionalId) {
-      const profRow = db.prepare(`
-        SELECT id FROM professionals WHERE tenant_id = ? AND user_id = ?
-      `).get(stateRow.tenant_id, stateRow.user_id) as { id: string } | undefined;
-      if (profRow) professionalId = profRow.id;
-    }
+    let professionalId = stateRow.professional_id || this.resolveProfessionalId(stateRow.tenant_id, stateRow.user_id);
 
-    // Upsert na tabela de conexões
+    // Upsert na tabela de conexões: ativa sincronização e seleciona agenda automaticamente
     db.prepare(`
       INSERT INTO google_calendar_connections (
         id, tenant_id, user_id, professional_id, google_account_email,
@@ -299,17 +347,19 @@ export class GoogleCalendarService {
         privacy_mode, sync_interval_option, last_sync_at, created_at, updated_at
       ) VALUES (
         ?, ?, ?, ?, ?,
-        'primary', ?, ?, ?,
-        0, 'both', 1, 1,
+        ?, ?, ?, ?,
+        1, 'both', 1, 1,
         'private', 'future', datetime('now'), datetime('now'), datetime('now')
       )
       ON CONFLICT(tenant_id, user_id) DO UPDATE SET
         professional_id = COALESCE(excluded.professional_id, google_calendar_connections.professional_id),
         google_account_email = excluded.google_account_email,
-
+        calendar_id = COALESCE(excluded.calendar_id, google_calendar_connections.calendar_id),
+        calendar_name = COALESCE(excluded.calendar_name, google_calendar_connections.calendar_name),
         encrypted_refresh_token = excluded.encrypted_refresh_token,
         granted_scopes = excluded.granted_scopes,
-        sync_enabled = google_calendar_connections.sync_enabled,
+        sync_enabled = 1,
+        sync_direction = COALESCE(google_calendar_connections.sync_direction, 'both'),
         updated_at = datetime('now')
     `).run(
       connectionId,
@@ -317,7 +367,8 @@ export class GoogleCalendarService {
       stateRow.user_id,
       professionalId,
       accountEmail,
-      primaryCalendarName,
+      selectedCalendarId,
+      selectedCalendarName,
       encryptedToken,
       grantedScopes
     );
@@ -331,11 +382,17 @@ export class GoogleCalendarService {
       'GOOGLE_CALENDAR_CONNECTED',
       'google_calendar_connections',
       connectionId,
-      { email: accountEmail, primaryCalendar: primaryCalendarName }
+      { email: accountEmail, primaryCalendar: selectedCalendarName, calendarId: selectedCalendarId }
     );
 
-    // Start inbound monitoring; outbound synchronization is an explicit user action.
-    await this.ensureWatch(this.getConnection(stateRow.tenant_id, stateRow.user_id)!);
+    // Inicia monitoramento de entrada e sincronização inicial automática em background
+    const activeConnection = this.getConnection(stateRow.tenant_id, stateRow.user_id);
+    if (activeConnection) {
+      await this.ensureWatch(activeConnection);
+      void this.syncNowInternal(stateRow.tenant_id, stateRow.user_id, professionalId).catch(err => {
+        console.warn('[GoogleCalendarService] Sincronização inicial automática pós-conexão:', err?.message);
+      });
+    }
 
     return {
       success: true,

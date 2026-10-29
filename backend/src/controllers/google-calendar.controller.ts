@@ -5,37 +5,7 @@ function publicError(err: any, fallback: string): string { return err instanceof
 import { db } from '../config/database';
 
 function resolveProfessionalId(tenantId: string, userId: string): string | null {
-  const row = db.prepare(`
-    SELECT id FROM professionals WHERE tenant_id = ? AND user_id = ?
-  `).get(tenantId, userId) as { id: string } | undefined;
-  if (row?.id) return row.id;
-
-  // Se professionals.user_id estiver nulo, busca pelo nome do usuário no mesmo tenant
-  const user = db.prepare('SELECT email, name FROM users WHERE id = ?').get(userId) as { email: string; name: string } | undefined;
-  if (user?.name) {
-    const profByName = db.prepare(`
-      SELECT id FROM professionals WHERE tenant_id = ? AND (user_id IS NULL OR user_id = '') AND LOWER(name) = LOWER(?) LIMIT 1
-    `).get(tenantId, user.name) as { id: string } | undefined;
-    if (profByName?.id) {
-      try {
-        db.prepare("UPDATE professionals SET user_id = ?, updated_at = datetime('now') WHERE id = ?").run(userId, profByName.id);
-      } catch (_) {}
-      return profByName.id;
-    }
-  }
-
-  // Fallback para clínica com apenas 1 profissional ativo
-  const soleProf = db.prepare(`
-    SELECT id FROM professionals WHERE tenant_id = ? AND active = 1
-  `).all(tenantId) as { id: string }[];
-  if (soleProf.length === 1) {
-    try {
-      db.prepare("UPDATE professionals SET user_id = ?, updated_at = datetime('now') WHERE id = ? AND user_id IS NULL").run(userId, soleProf[0].id);
-    } catch (_) {}
-    return soleProf[0].id;
-  }
-
-  return null;
+  return GoogleCalendarService.resolveProfessionalId(tenantId, userId);
 }
 
 export class GoogleCalendarController {

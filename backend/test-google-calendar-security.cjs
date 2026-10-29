@@ -82,7 +82,7 @@ async function state() {
   granted = fullGranted;
   auth = await state();
   assert.equal((await service.handleCallback('code', auth.state)).success, true);
-  assert.equal(connection().sync_enabled, 0);
+  assert.equal(connection().sync_enabled, 1);
   assert.equal((await service.handleCallback('code', auth.state)).success, false);
   subject = 'other-account'; auth = await state();
   await assert.rejects(service.handleCallback('code', auth.state), /Desconecte/);
