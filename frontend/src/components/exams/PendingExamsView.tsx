@@ -19,15 +19,105 @@ import {
   Filter,
   Eye,
   Printer,
-  Download
+  Download,
+  Truck,
+  Package,
+  RotateCcw,
+  X
 } from 'lucide-react';
 import { PendingExam, Professional } from '../../types';
 import { PrintableDocumentModal } from '../clinical/PrintableDocumentModal';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
+import { DentalProstheticsKanban } from '../dentistry/DentalProstheticsKanban';
 
 export const PendingExamsView: React.FC = () => {
   const { showToast } = useToast();
-  const { clientTermLabel } = useAuth();
+  const { clientTermLabel, currentUser, isDentist, isZemdaOdonto } = useAuth();
+
+  // Controle de acesso estrito: exclusivo para Odontologia (ZemdaOdonto)
+  const canAccessDentistry = Boolean(
+    isDentist ||
+    isZemdaOdonto ||
+    currentUser?.commercialModule === 'ZemdaOdonto' ||
+    currentUser?.professionId === 'prof-dentista' ||
+    currentUser?.professionName?.toLowerCase().includes('odonto') ||
+    currentUser?.professionName?.toLowerCase().includes('dentis') ||
+    (currentUser as any)?.profession?.slug === 'dentista' ||
+    (currentUser as any)?.profession?.name?.toLowerCase().includes('odonto') ||
+    (currentUser as any)?.zemdaOdontoEnabled ||
+    (currentUser as any)?.zemda_odonto_enabled
+  );
+
+  const [activeTab, setActiveTab] = useState<'exams' | 'prosthetics'>('exams');
+
+  // Estados específicos para Próteses e Laboratório Protético
+  const [prostheticsSearch, setProstheticsSearch] = useState<string>('');
+  const [prostheticsStatus, setProstheticsStatus] = useState<string>('');
+  const [prostheticsLab, setProstheticsLab] = useState<string>('');
+  const [prostheticsCounts, setProstheticsCounts] = useState({
+    total: 0,
+    overdue: 0,
+    inProduction: 0,
+    delivered: 0,
+    installed: 0
+  });
+
+  const [showNewProstheticModal, setShowNewProstheticModal] = useState<boolean>(false);
+  const [prostheticForm, setProstheticForm] = useState({
+    patientId: '',
+    labName: '',
+    workType: '',
+    toothNumber: '',
+    shadeColor: '',
+    material: '',
+    sentDate: new Date().toISOString().split('T')[0],
+    expectedDate: '',
+    costValue: '' as number | '',
+    notes: ''
+  });
+  const [savingProsthetic, setSavingProsthetic] = useState<boolean>(false);
+
+  const handleCreateProsthetic = async () => {
+    if (!prostheticForm.patientId || !prostheticForm.labName.trim() || !prostheticForm.workType.trim()) {
+      showToast('Selecione o paciente e informe o laboratório e tipo de trabalho.', 'error');
+      return;
+    }
+    try {
+      setSavingProsthetic(true);
+      await ApiClient.post('/v1/dentistry/prosthetics', {
+        patientId: prostheticForm.patientId,
+        labName: prostheticForm.labName.trim(),
+        workType: prostheticForm.workType.trim(),
+        toothNumber: prostheticForm.toothNumber.trim() || null,
+        shadeColor: prostheticForm.shadeColor.trim() || null,
+        material: prostheticForm.material.trim() || null,
+        sentDate: prostheticForm.sentDate || null,
+        expectedDate: prostheticForm.expectedDate || null,
+        costValue: prostheticForm.costValue ? Number(prostheticForm.costValue) : 0,
+        notes: prostheticForm.notes || null,
+        status: 'sent_to_lab'
+      });
+      showToast('Ordem protética registrada com sucesso!', 'success');
+      setShowNewProstheticModal(false);
+      setProstheticForm({
+        patientId: '',
+        labName: '',
+        workType: '',
+        toothNumber: '',
+        shadeColor: '',
+        material: '',
+        sentDate: new Date().toISOString().split('T')[0],
+        expectedDate: '',
+        costValue: '',
+        notes: ''
+      });
+      window.dispatchEvent(new CustomEvent('zemda-prosthetics-updated'));
+    } catch (err: any) {
+      showToast(err?.response?.data?.error || err.message || 'Erro ao registrar trabalho protético', 'error');
+    } finally {
+      setSavingProsthetic(false);
+    }
+  };
 
   const [exams, setExams] = useState<PendingExam[]>([]);
   const [professionals, setProfessionals] = useState<Professional[]>([]);
@@ -216,6 +306,181 @@ export const PendingExamsView: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* Seletor de Abas exclusivo para ZemdaOdonto */}
+      {canAccessDentistry && (
+        <div className="flex items-center gap-2 border-b border-slate-200 pb-3">
+          <button
+            type="button"
+            onClick={() => setActiveTab('exams')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === 'exams'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'text-slate-600 hover:bg-slate-100 bg-white border border-slate-200'
+            }`}
+          >
+            <ClipboardList className="w-4 h-4" />
+            Exames a Receber
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+              activeTab === 'exams' ? 'bg-indigo-700 text-white' : 'bg-slate-100 text-slate-700'
+            }`}>
+              {exams.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('prosthetics')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === 'prosthetics'
+                ? 'bg-gradient-to-r from-cyan-600 to-indigo-600 text-white shadow-xs'
+                : 'text-slate-600 hover:bg-slate-100 bg-white border border-slate-200'
+            }`}
+          >
+            <Truck className="w-4 h-4 text-cyan-400" />
+            Próteses e Laboratório
+            <span className="px-1.5 py-0.5 rounded-md text-[9px] font-extrabold uppercase bg-cyan-100 text-cyan-800">
+              ZemdaOdonto
+            </span>
+          </button>
+        </div>
+      )}
+
+      {/* ABA 2: PRÓTESES E LABORATÓRIO (ZEMDAODONTO) */}
+      {canAccessDentistry && activeTab === 'prosthetics' ? (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          {/* Header Próteses */}
+          <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-gradient-to-br from-cyan-50 to-indigo-50 text-cyan-700 rounded-xl border border-cyan-100">
+                  <Truck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+                    Próteses e Laboratório Protético
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-black bg-cyan-100 text-cyan-800">
+                      ZemdaOdonto
+                    </span>
+                  </h2>
+                </div>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                Acompanhe o fluxo laboratorial, confecção, provas clínicas intermediárias e datas de entrega dos trabalhos protéticos.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowNewProstheticModal(true)}
+              className="flex items-center justify-center gap-2 w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-700 hover:to-indigo-700 text-white font-bold rounded-xl shadow-xs transition-all cursor-pointer text-xs self-start md:self-auto min-h-[40px]"
+            >
+              <Plus className="w-4 h-4" />
+              Novo Trabalho Protético
+            </button>
+          </div>
+
+          {/* Cards de Métricas do Laboratório */}
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold text-slate-500">Total no Fluxo</p>
+                <h3 className="text-2xl font-bold text-slate-800 mt-1">{prostheticsCounts.total}</h3>
+              </div>
+              <div className="p-3 bg-slate-50 text-slate-600 rounded-xl">
+                <Package className="w-5 h-5" />
+              </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold text-slate-500">Em Confecção / Lab</p>
+                <h3 className="text-2xl font-bold text-amber-600 mt-1">{prostheticsCounts.inProduction}</h3>
+              </div>
+              <div className="p-3 bg-amber-50 text-amber-600 rounded-xl">
+                <Clock className="w-5 h-5" />
+              </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold text-slate-500">Próteses Atrasadas</p>
+                <h3 className="text-2xl font-bold text-rose-600 mt-1">{prostheticsCounts.overdue}</h3>
+              </div>
+              <div className="p-3 bg-rose-50 text-rose-600 rounded-xl">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold text-slate-500">Entregues / Prova</p>
+                <h3 className="text-2xl font-bold text-indigo-600 mt-1">{prostheticsCounts.delivered}</h3>
+              </div>
+              <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl">
+                <CheckCircle2 className="w-5 h-5" />
+              </div>
+            </div>
+          </div>
+
+          {/* Filtros Próteses */}
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3">
+            {/* Campo de Busca Destacado */}
+            <div className="flex-1 min-w-0 sm:min-w-[280px] relative">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={prostheticsSearch}
+                onChange={e => setProstheticsSearch(e.target.value)}
+                placeholder="Buscar paciente por nome, trabalho ou laboratório..."
+                className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-cyan-500 min-h-[38px] font-medium"
+              />
+              {prostheticsSearch && (
+                <button
+                  type="button"
+                  onClick={() => setProstheticsSearch('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Filtro de Status das 6 Etapas */}
+            <select
+              value={prostheticsStatus}
+              onChange={e => setProstheticsStatus(e.target.value)}
+              className="w-full sm:w-auto border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium text-slate-700 min-h-[38px]"
+            >
+              <option value="">Todos os Status</option>
+              <option value="sent_to_lab">Enviado ao Lab</option>
+              <option value="in_production">Em Confecção / Produção</option>
+              <option value="delivered_to_clinic">Entregue na Clínica</option>
+              <option value="tested_adjusted">Provado / Ajuste</option>
+              <option value="installed">Instalado em Boca</option>
+              <option value="canceled">Cancelado</option>
+            </select>
+
+            {/* Filtro por Laboratório */}
+            <input
+              type="text"
+              value={prostheticsLab}
+              onChange={e => setProstheticsLab(e.target.value)}
+              placeholder="Filtrar laboratório..."
+              className="w-full sm:w-auto border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium text-slate-700 min-h-[38px]"
+            />
+          </div>
+
+          {/* Kanban Board com 6 Etapas */}
+          <DentalProstheticsKanban
+            searchQuery={prostheticsSearch}
+            filterStatus={prostheticsStatus}
+            filterLab={prostheticsLab}
+            onCountsChange={setProstheticsCounts}
+          />
+        </div>
+      ) : (
+        /* ABA 1: EXAMES LABORATORIAIS E IMAGEM (PADRÃO UNIVERSAL) */
+        <>
       {/* Header */}
       <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -757,6 +1022,181 @@ export const PendingExamsView: React.FC = () => {
           initialAction={printInitialAction}
           onClose={() => setPrintingExamId(null)}
         />
+      )}
+        </>
+      )}
+
+      {/* Modal Novo Trabalho Protético */}
+      {showNewProstheticModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white w-full max-w-xl rounded-3xl p-6 shadow-2xl border border-slate-100 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Truck className="w-5 h-5 text-cyan-600" />
+                Nova Ordem de Trabalho Protético
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowNewProstheticModal(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  Paciente <span className="text-rose-500">*</span>
+                </label>
+                <PatientSearchSelect
+                  value={prostheticForm.patientId}
+                  onChange={(id: string) => setProstheticForm(prev => ({ ...prev, patientId: id || '' }))}
+                  placeholder="Pesquisar e selecionar paciente..."
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Laboratório de Prótese <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={prostheticForm.labName}
+                    onChange={e => setProstheticForm(prev => ({ ...prev, labName: e.target.value }))}
+                    placeholder="Ex: Lab Dental Pro, Precision..."
+                    className="w-full border border-slate-200 rounded-xl p-2.5 font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Tipo de Trabalho <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    list="prosthetic-work-types"
+                    value={prostheticForm.workType}
+                    onChange={e => setProstheticForm(prev => ({ ...prev, workType: e.target.value }))}
+                    placeholder="Ex: Coroa Zircônia, Bloco E-max..."
+                    className="w-full border border-slate-200 rounded-xl p-2.5 font-medium"
+                  />
+                  <datalist id="prosthetic-work-types">
+                    <option value="Coroa Cerâmica / Zircônia" />
+                    <option value="Coroa Metalocerâmica" />
+                    <option value="Inlay / Onlay E-max" />
+                    <option value="Prótese Total Superior" />
+                    <option value="Prótese Total Inferior" />
+                    <option value="Prótese Parcial Removível (PPR)" />
+                    <option value="Protocolo sobre Implantes" />
+                    <option value="Placa Miorrelaxante / Bruxismo" />
+                    <option value="Alinhador Ortodôntico" />
+                    <option value="Faceta / Lente de Contato Dental" />
+                  </datalist>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Elemento / Dente</label>
+                  <input
+                    type="text"
+                    value={prostheticForm.toothNumber}
+                    onChange={e => setProstheticForm(prev => ({ ...prev, toothNumber: e.target.value }))}
+                    placeholder="Ex: 11, 21, 36..."
+                    className="w-full border border-slate-200 rounded-xl p-2.5 font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Cor / Escala</label>
+                  <input
+                    type="text"
+                    value={prostheticForm.shadeColor}
+                    onChange={e => setProstheticForm(prev => ({ ...prev, shadeColor: e.target.value }))}
+                    placeholder="Ex: A1, A2, BL1..."
+                    className="w-full border border-slate-200 rounded-xl p-2.5 font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Material</label>
+                  <input
+                    type="text"
+                    value={prostheticForm.material}
+                    onChange={e => setProstheticForm(prev => ({ ...prev, material: e.target.value }))}
+                    placeholder="Ex: Zircônia, PMMA..."
+                    className="w-full border border-slate-200 rounded-xl p-2.5 font-medium"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Data de Envio</label>
+                  <input
+                    type="date"
+                    value={prostheticForm.sentDate}
+                    onChange={e => setProstheticForm(prev => ({ ...prev, sentDate: e.target.value }))}
+                    className="w-full border border-slate-200 rounded-xl p-2.5 font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Previsão de Entrega</label>
+                  <input
+                    type="date"
+                    value={prostheticForm.expectedDate}
+                    onChange={e => setProstheticForm(prev => ({ ...prev, expectedDate: e.target.value }))}
+                    className="w-full border border-slate-200 rounded-xl p-2.5 font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Custo / Valor (R$)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={prostheticForm.costValue}
+                    onChange={e => setProstheticForm(prev => ({ ...prev, costValue: e.target.value ? Number(e.target.value) : '' }))}
+                    placeholder="0.00"
+                    className="w-full border border-slate-200 rounded-xl p-2.5 font-medium"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Observações Técnicas / Instruções</label>
+                <textarea
+                  rows={3}
+                  value={prostheticForm.notes}
+                  onChange={e => setProstheticForm(prev => ({ ...prev, notes: e.target.value }))}
+                  placeholder="Instruções para o protético, texturização, oclusão, detalhes anatômicos..."
+                  className="w-full border border-slate-200 rounded-xl p-2.5 font-medium"
+                />
+              </div>
+
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowNewProstheticModal(false)}
+                  className="px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCreateProsthetic}
+                  disabled={savingProsthetic}
+                  className="px-6 py-2 font-bold text-white bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-700 hover:to-indigo-700 rounded-xl shadow-xs disabled:opacity-50 cursor-pointer"
+                >
+                  {savingProsthetic ? 'Registrando...' : 'Registrar Ordem'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

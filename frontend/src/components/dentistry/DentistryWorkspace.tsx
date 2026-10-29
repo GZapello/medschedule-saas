@@ -149,6 +149,7 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
 
   // Fotos clínicas
   const [clinicalPhotos, setClinicalPhotos] = useState<any[]>([]);
+  const [hofErrors, setHofErrors] = useState<{ procedureName?: boolean }>({});
 
   const [loading, setLoading] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
@@ -466,6 +467,7 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
   useEffect(() => {
     if (!selectedPatientId) {
       setSelectedPatient(null);
+      setClinicalPhotos([]);
       return;
     }
 
@@ -560,6 +562,28 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
       if (!isCurrentClinicalContext()) return;
         setHofRecords(hofRes || []);
       } catch {}
+
+      // 8. Fotos Clínicas Odontológicas
+      try {
+        const photosRes = await ApiClient.get<any[]>(`/v1/dentistry/photos/${patientId}`);
+        if (!isCurrentClinicalContext()) return;
+        if (Array.isArray(photosRes)) {
+          setClinicalPhotos(photosRes.map(p => ({
+            id: p.id,
+            fileId: p.file_id || p.id,
+            url: p.object_key ? undefined : p.file_url,
+            capturedAt: p.photo_date || p.created_at,
+            isInitial: Boolean(p.is_initial),
+            notes: p.notes,
+            appointmentId: p.appointment_id
+          })));
+        } else {
+          setClinicalPhotos([]);
+        }
+      } catch (photoErr) {
+        console.warn('Aviso ao carregar fotos odontológicas:', photoErr);
+        setClinicalPhotos([]);
+      }
 
     } catch (err: any) {
       console.error('Erro ao carregar prontuário odontológico:', err);
@@ -696,19 +720,52 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
   const handleHofInventoryChange = (sel: ClinicalInventorySelection) => {
     setHofInventorySelection(sel);
     if (sel.productId && sel.productName) {
-      setHofForm(prev => ({
-        ...prev,
-        productBrand: sel.productName + (sel.brand ? ` (${sel.brand})` : ''),
-        lotNumber: sel.batchLot || '',
-        unitsQuantity: sel.quantity ? String(sel.quantity) : '1',
-        expiryDate: sel.expiryDate || prev.expiryDate || ''
-      }));
+      setHofForm(prev => {
+        let suggestedProc = prev.procedureName;
+        if (!suggestedProc.trim()) {
+          const lower = (sel.productName + ' ' + (sel.brand || '')).toLowerCase();
+          if (lower.includes('botox') || lower.includes('toxina') || lower.includes('dysport') || lower.includes('xeomin') || lower.includes('botulift')) {
+            suggestedProc = 'Aplicação de Toxina Botulínica';
+          } else if (lower.includes('hialur') || lower.includes('juvederm') || lower.includes('restylane') || lower.includes('rennova') || lower.includes('preenchedor')) {
+            suggestedProc = 'Preenchimento com Ácido Hialurônico';
+          } else if (lower.includes('sculptra') || lower.includes('radiesse') || lower.includes('elleva') || lower.includes('bioestimulador')) {
+            suggestedProc = 'Aplicação de Bioestimulador de Colágeno';
+          } else if (lower.includes('fio') || lower.includes('pdo')) {
+            suggestedProc = 'Implante de Fios de PDO';
+          } else if (lower.includes('desoxicolato') || lower.includes('papada') || lower.includes('lipolitico')) {
+            suggestedProc = 'Lipo Enzimática de Papada';
+          } else {
+            suggestedProc = sel.productName;
+          }
+        }
+        return {
+          ...prev,
+          procedureName: suggestedProc,
+          productBrand: sel.productName + (sel.brand ? ` (${sel.brand})` : ''),
+          lotNumber: sel.batchLot || '',
+          unitsQuantity: sel.quantity ? String(sel.quantity) : '1',
+          expiryDate: sel.expiryDate || prev.expiryDate || ''
+        };
+      });
+      setHofErrors(prev => ({ ...prev, procedureName: false }));
     }
   };
 
   // Salvar Procedimento HOF
   const handleSaveHof = async () => {
-    if (!selectedPatientId) return;
+    if (!selectedPatientId) {
+      setErrorMsg('Selecione um paciente para registrar a aplicação HOF.');
+      setTimeout(() => setErrorMsg(null), 4000);
+      return;
+    }
+    if (!hofForm.procedureName.trim()) {
+      setHofErrors({ procedureName: true });
+      setErrorMsg('O nome do procedimento é obrigatório (ex: Toxina Botulínica, Preenchimento Labial, Bioestimulador, etc.).');
+      setTimeout(() => setErrorMsg(null), 4000);
+      return;
+    }
+
+    setHofErrors({});
     setSaving(true);
     try {
       await ApiClient.post('/v1/dentistry/hof', {
@@ -761,9 +818,32 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
       setShowHofInventoryPicker(false);
       setTimeout(() => setSuccessMsg(null), 3000);
     } catch (err: any) {
-      setErrorMsg(err.message || 'Erro ao salvar HOF');
+      // Preserva o formulário preenchido em caso de erro para não perder dados digitados
+      const realMsg = err?.response?.data?.error || err.message || 'Erro ao registrar procedimento HOF';
+      setErrorMsg(realMsg);
+      setTimeout(() => setErrorMsg(null), 4000);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handlePhotosChange = async (newPhotos: any[]) => {
+    setClinicalPhotos(newPhotos);
+    const newSessionPhoto = newPhotos.find(p => p.isCurrentSession && (p.fileId || p.id));
+    if (newSessionPhoto && selectedPatientId) {
+      try {
+        await ApiClient.post('/v1/dentistry/photos', {
+          patientId: selectedPatientId,
+          appointmentId: initialAppointmentId,
+          category: 'dental_photos',
+          fileId: newSessionPhoto.fileId || newSessionPhoto.id,
+          photoDate: newSessionPhoto.capturedAt ? newSessionPhoto.capturedAt.split('T')[0] : undefined,
+          notes: newSessionPhoto.notes
+        });
+        newSessionPhoto.isCurrentSession = false;
+      } catch (photoErr) {
+        console.warn('Aviso ao sincronizar foto odontológica com backend:', photoErr);
+      }
     }
   };
 
@@ -968,7 +1048,8 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
           movementId: u.movementId,
           status: u.status
         })),
-        isSealed: true
+        photos: clinicalPhotos,
+        isSealed: false
       })) return;
       await autosave.clearDraft();
 
@@ -1426,16 +1507,21 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
                   )}
                 </div>
 
-                <div className="flex justify-end pt-2">
-                  {selectedPatientId && !completion.isCompleted && (<button
-                    type="button"
-                    disabled={saving}
-                    onClick={handleFinishConsultation}
-                    className="px-5 py-2.5 bg-gradient-to-r from-cyan-600 to-sky-600 hover:from-cyan-700 hover:to-sky-700 text-white rounded-2xl text-xs font-black shadow-md flex items-center gap-2 disabled:opacity-50"
-                  >
-                    <CheckCircle2 className="w-4 h-4" />
-                    {saving ? 'Registrando...' : 'Finalizar e Lacrar Atendimento Odontológico'}
-                  </button>)}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-4 border-t border-slate-100">
+                  <p className="text-xs text-slate-500 max-w-xl">
+                    Ao finalizar, o atendimento será registrado no prontuário e seu status será atualizado. Informações complementares poderão ser registradas posteriormente, conforme as permissões e o histórico de alterações.
+                  </p>
+                  {selectedPatientId && !completion.isCompleted && (
+                    <button
+                      type="button"
+                      disabled={saving}
+                      onClick={handleFinishConsultation}
+                      className="px-5 py-2.5 bg-gradient-to-r from-cyan-600 to-sky-600 hover:from-cyan-700 hover:to-sky-700 text-white rounded-2xl text-xs font-black shadow-md flex items-center justify-center gap-2 disabled:opacity-50 shrink-0 cursor-pointer"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      {saving ? 'Registrando...' : 'Finalizar Atendimento'}
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -2438,13 +2524,34 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Procedimento Realizado</label>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Procedimento Realizado <span className="text-rose-500">*</span>
+                    </label>
                     <input
                       type="text"
+                      list="hof-procedures-preset"
                       value={hofForm.procedureName}
-                      onChange={e => setHofForm({ ...hofForm, procedureName: e.target.value })}
-                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium"
+                      onChange={e => {
+                        setHofForm({ ...hofForm, procedureName: e.target.value });
+                        if (hofErrors.procedureName) setHofErrors(prev => ({ ...prev, procedureName: false }));
+                      }}
+                      placeholder="Ex: Toxina Botulínica, Preenchimento Labial..."
+                      className={`w-full p-2.5 bg-slate-50 border rounded-2xl text-xs font-medium transition ${
+                        hofErrors.procedureName ? 'border-rose-500 ring-2 ring-rose-200 bg-rose-50/20' : 'border-slate-200'
+                      }`}
                     />
+                    <datalist id="hof-procedures-preset">
+                      <option value="Aplicação de Toxina Botulínica" />
+                      <option value="Preenchimento Labial com Ácido Hialurônico" />
+                      <option value="Preenchimento de Sulco Nasogeniano (Bigode Chinês)" />
+                      <option value="Preenchimento Malar / Zigomático" />
+                      <option value="Preenchimento Mandibular / Mento" />
+                      <option value="Bioestimulador de Colágeno (Sculptra / Radiesse / Elleva)" />
+                      <option value="Fios de PDO (Sustentação / Tração)" />
+                      <option value="Fios de PDO (Estímulo de Colágeno)" />
+                      <option value="Lipo Enzimática de Papada" />
+                      <option value="Skinbooster / Hidratação Injetável" />
+                    </datalist>
                   </div>
 
                   <div>
@@ -2608,7 +2715,7 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
                 patientId={selectedPatientId}
                 appointmentId={initialAppointmentId}
                 photos={clinicalPhotos}
-                onChangePhotos={setClinicalPhotos}
+                onChangePhotos={handlePhotosChange}
               />
 
               {selectedPatientId && (

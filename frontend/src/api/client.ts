@@ -176,11 +176,15 @@ export class ApiClient {
         headers
       });
     } catch (networkErr: any) {
+      if (networkErr?.name === 'AbortError' || (options?.signal as any)?.aborted) {
+        throw networkErr;
+      }
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('saas-network-error', { detail: networkErr }));
       }
       const err: any = new Error('Não foi possível conectar ao servidor. Verifique sua conexão com a internet e tente novamente.');
       err.code = 'NETWORK_ERROR';
+      err.originalError = networkErr;
       throw err;
     }
 
@@ -252,8 +256,8 @@ export class ApiClient {
     }
   }
 
-  static get<T>(endpoint: string): Promise<T> {
-    return this.request<T>(endpoint, { method: 'GET' });
+  static get<T>(endpoint: string, options: { signal?: AbortSignal; headers?: HeadersInit } = {}): Promise<T> {
+    return this.request<T>(endpoint, { method: 'GET', ...options });
   }
 
   static post<T>(endpoint: string, data?: any, options: { signal?: AbortSignal } = {}): Promise<T> {

@@ -1249,8 +1249,12 @@ export class DentistryController {
         unitsQuantity, expiryDate, applicationPoints, beforeAfterImages, notes
       } = req.body;
 
-      if (!patientId || !procedureName) {
-        res.status(400).json({ error: 'patientId e procedureName são obrigatórios' });
+      if (!patientId || !String(patientId).trim()) {
+        res.status(400).json({ error: 'O paciente é obrigatório para registrar a aplicação HOF.', field: 'patientId' });
+        return;
+      }
+      if (!procedureName || !String(procedureName).trim()) {
+        res.status(400).json({ error: 'O nome do procedimento é obrigatório (ex: Toxina Botulínica, Preenchimento Labial, etc.).', field: 'procedureName' });
         return;
       }
 
@@ -1977,7 +1981,7 @@ export class DentistryController {
         FROM dental_photos p
         LEFT JOIN professionals prof ON prof.id = p.professional_id
         WHERE p.patient_id = ? AND p.tenant_id = ?
-        ORDER BY p.photo_date DESC
+        ORDER BY p.photo_date ASC, p.created_at ASC
       `).all(patientId, tenantId) as any[];
 
       res.json(rows);
@@ -2061,23 +2065,48 @@ export class DentistryController {
         return;
       }
 
-      const rows = db.prepare(`
+      const { search, status, labName, all } = req.query;
+
+      let sql = `
         SELECT p.*, pat.full_name as patient_name, prof.name as professional_name
         FROM dental_prosthetics_lab p
         JOIN patients pat ON pat.id = p.patient_id
         LEFT JOIN professionals prof ON prof.id = p.professional_id
-        WHERE p.tenant_id = ? AND p.status NOT IN ('installed', 'canceled', 'finished')
-        ORDER BY p.expected_date ASC
-      `).all(tenantId) as any[];
+        WHERE p.tenant_id = ?
+      `;
+      const params = [tenantId];
 
-      const today = new Date().toISOString().split('T')[0];
+      if (status) {
+        sql += ' AND p.status = ?';
+        params.push(String(status).trim());
+      } else if (all !== 'true' && all !== '1') {
+        sql += " AND p.status NOT IN ('installed', 'canceled', 'finished')";
+      }
+
+      if (labName) {
+        sql += ' AND p.lab_name = ?';
+        params.push(String(labName).trim());
+      }
+
+      if (search && String(search).trim()) {
+        const term = '%' + String(search).trim() + '%';
+        sql += ' AND (pat.full_name LIKE ? OR p.work_type LIKE ? OR p.lab_name LIKE ? OR p.notes LIKE ?)';
+        params.push(term, term, term, term);
+      }
+
+      sql += ' ORDER BY CASE WHEN p.expected_date IS NULL THEN 1 ELSE 0 END, p.expected_date ASC, p.created_at DESC';
+
+      const rows = db.prepare(sql).all(...params);
+
+      const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
       const result = rows.map(r => ({
         ...r,
-        isOverdue: r.expected_date ? r.expected_date < today : false
+        isOverdue: r.expected_date ? (r.expected_date < today && r.status !== 'installed' && r.status !== 'canceled') : false
       }));
 
       res.json(result);
-    } catch (err: any) {
+    } catch (err) {
+      console.error('[DentistryController.listPendingProsthetics] Erro:', err);
       res.status(500).json({ error: 'Erro ao listar próteses pendentes' });
     }
   }

@@ -809,7 +809,7 @@ export class DocumentsController {
         }
         const moduleDataJson = JSON.stringify(snapshot);
 
-        const shouldSeal = evolution.isSealed !== false;
+        const shouldSeal = Boolean(evolution?.isSealed);
         let signatureHash: string | null = null;
         let signedAt: string | null = null;
         let signedByUserId: string | null = null;

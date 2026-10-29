@@ -10,7 +10,7 @@ const aliases: Record<string, string> = {
   'fita de suspensao': 'fita de suspensao', trx: 'fita de suspensao', suspensao: 'fita de suspensao',
   'medicine ball': 'medicine ball', medicine_ball: 'medicine ball',
   'caixa step': 'caixa step', caixa: 'caixa step', step: 'caixa step',
-  adutor: 'adutores', abdutor: 'abdutores', gluteo: 'gluteos', ombro: 'ombros', costa: 'costas'
+  adutor: 'adutores', abdutor: 'abdutores', gluteo: 'gluteos', ombro: 'ombros', costa: 'costas', quadricep: 'quadriceps', quadriceps: 'quadriceps'
 };
 export function exerciseFilterKey(value: unknown): string {
   const normalized = normalizeExerciseText(value);
@@ -22,7 +22,7 @@ export function matchesExercise(ex: any, filters: Record<string, string>): boole
       if (!(key === 'muscle' && ['alongamento', 'mobilidade', 'cardiorrespiratorio'].includes(exerciseFilterKey(filters[key])) && exerciseFilterKey(ex.category) === exerciseFilterKey(filters[key]))) return false;
     }
   }
-  return !filters.q || normalizeExerciseText([ex.name, ex.muscle_group, ex.equipment, ex.category, ex.instructions, ex.technical_notes].join(' ')).includes(normalizeExerciseText(filters.q));
+  return !filters.q || normalizeExerciseText([ex.name, ex.muscle_group, ex.secondary_muscles_json, ex.equipment, ex.category, ex.instructions, ex.technical_notes].join(' ')).includes(normalizeExerciseText(filters.q));
 }
 
 // Persist only application-owned, stable paths. Signed URLs are resolved from file IDs at display time.

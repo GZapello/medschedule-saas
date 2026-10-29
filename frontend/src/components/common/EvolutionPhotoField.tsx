@@ -46,8 +46,8 @@ export const EvolutionPhotoField: React.FC<EvolutionPhotoFieldProps> = ({
 
   // Foto Inicial é a primeira marcada como isInitial, ou a primeira do histórico
   const initialPhoto = photos.find(p => p.isInitial) || (photos.length > 0 ? photos[0] : null);
-  // Foto Atual é a mais recente
-  const currentPhoto = photos.length > 0 ? photos[photos.length - 1] : null;
+  // Foto Atual de Retorno é a mais recente APENAS quando houver 2 ou mais fotos (para não duplicar visualmente a foto inicial)
+  const currentPhoto = photos.length > 1 ? photos[photos.length - 1] : null;
 
   const canDeletePhoto = (photo: EvolutionPhotoItem): boolean => {
     if (disabled) return false;
@@ -122,24 +122,9 @@ export const EvolutionPhotoField: React.FC<EvolutionPhotoFieldProps> = ({
         throw new Error('O servidor não confirmou o identificador do arquivo gravado.');
       }
 
-      // 4. Fluxo de Substituição na mesma consulta:
-      // Se o usuário já adicionou uma foto nesta mesma consulta e está trocando antes de salvar,
-      // exclui a anterior do R2 após o upload confirmado para não acumular lixo
-      const currentSessionPhoto = photos.find(p => canDeletePhoto(p));
-      if (currentSessionPhoto) {
-        const previousFileId = currentSessionPhoto.fileId || currentSessionPhoto.id;
-        try {
-          await ApiClient.delete(`/files/${encodeURIComponent(previousFileId)}`);
-        } catch (delErr) {
-          console.warn('[EvolutionPhotoField] Aviso ao excluir foto substituída da sessão:', delErr);
-        }
-        sessionPhotoIdsRef.current.delete(currentSessionPhoto.id);
-        if (currentSessionPhoto.fileId) sessionPhotoIdsRef.current.delete(currentSessionPhoto.fileId);
-      }
-
       sessionPhotoIdsRef.current.add(confirmedFileId);
 
-      const hasInitialPhoto = photos.some(p => p.isInitial);
+      const hasInitialPhoto = photos.some(p => p.isInitial) || photos.length > 0;
 
       const newPhoto: EvolutionPhotoItem = {
         id: confirmedFileId,
@@ -151,14 +136,8 @@ export const EvolutionPhotoField: React.FC<EvolutionPhotoFieldProps> = ({
         isCurrentSession: true
       };
 
-      if (currentSessionPhoto) {
-        // Substitui a foto da mesma consulta
-        const updated = photos.map(p => p.id === currentSessionPhoto.id ? newPhoto : p);
-        onChangePhotos(updated);
-      } else {
-        // Adiciona como nova foto no histórico (reconsulta preserva a foto inicial)
-        onChangePhotos([...photos, newPhoto]);
-      }
+      // Adiciona ao histórico preservando a foto inicial e quaisquer retornos anteriores
+      onChangePhotos([...photos, newPhoto]);
     } catch (err: any) {
       console.error('[EvolutionPhotoField] Erro no upload:', err);
       alert('Erro ao enviar foto para o servidor: ' + (err.message || 'Verifique sua conexão e tente novamente.'));
@@ -267,11 +246,11 @@ export const EvolutionPhotoField: React.FC<EvolutionPhotoFieldProps> = ({
           )}
         </div>
 
-        {/* Foto Atual */}
+        {/* Foto de Retorno / Atual */}
         <div className="border border-dashed border-slate-200 rounded-xl p-2.5 bg-slate-50/70 relative group">
           <div className="text-[11px] font-bold text-slate-500 mb-1 flex items-center justify-between">
-            <span className="text-teal-700 font-bold">Foto Atual</span>
-            {currentPhoto && currentPhoto !== initialPhoto && (
+            <span className="text-teal-700 font-bold">Foto de Retorno</span>
+            {currentPhoto && (
               <span className="text-[10px] text-slate-400 font-normal">
                 {new Date(currentPhoto.capturedAt).toLocaleDateString('pt-BR')}
               </span>
@@ -282,9 +261,9 @@ export const EvolutionPhotoField: React.FC<EvolutionPhotoFieldProps> = ({
               <SecureFileImage
                 fileId={currentPhoto.fileId || currentPhoto.id}
                 fallbackUrl={currentPhoto.url}
-                alt="Foto Atual"
+                alt="Foto de Retorno"
                 className="w-full h-full object-cover"
-                placeholderText="Foto Atual"
+                placeholderText="Foto de Retorno"
               />
               <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                 <button
@@ -308,9 +287,12 @@ export const EvolutionPhotoField: React.FC<EvolutionPhotoFieldProps> = ({
               </div>
             </div>
           ) : (
-            <div className="aspect-video rounded-lg bg-slate-100/70 flex flex-col items-center justify-center text-slate-400 text-xs">
-              <Camera className="w-6 h-6 mb-1 opacity-40" />
-              <span>Aguardando captura</span>
+            <div className="aspect-video rounded-lg bg-slate-100/70 flex flex-col items-center justify-center text-slate-400 text-xs p-3 text-center">
+              <Camera className="w-6 h-6 mb-1 opacity-40 text-teal-600" />
+              <span className="font-semibold text-slate-600">Aguardando Foto de Retorno</span>
+              <span className="text-[10px] text-slate-400 mt-0.5">
+                {photos.length === 0 ? 'Capture a foto inicial primeiro' : 'Adicione uma foto no retorno para comparar com a inicial'}
+              </span>
             </div>
           )}
         </div>
@@ -341,7 +323,7 @@ export const EvolutionPhotoField: React.FC<EvolutionPhotoFieldProps> = ({
           ) : (
             <>
               <Camera className="w-3.5 h-3.5" />
-              {photos.length === 0 ? 'Adicionar Foto Inicial' : 'Atualizar Foto'}
+              {photos.length === 0 ? 'Adicionar Foto Inicial' : (photos.length === 1 ? 'Adicionar Foto de Retorno' : 'Adicionar Nova Foto de Retorno')}
             </>
           )}
         </button>

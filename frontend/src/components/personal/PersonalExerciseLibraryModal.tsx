@@ -1,6 +1,6 @@
 import { ExerciseAnimation } from './ExerciseAnimation';
 import { ExerciseCardThumbnail } from './ExerciseCardThumbnail';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   Search,
@@ -11,7 +11,12 @@ import {
   Edit2,
   Check,
   Image as ImageIcon,
-  Power
+  Power,
+  AlertCircle,
+  RefreshCw,
+  ChevronLeft,
+  ChevronRight,
+  Filter
 } from 'lucide-react';
 import { Exercise } from './types';
 import { ExerciseImageCredit } from './ExerciseImageCredit';
@@ -78,6 +83,8 @@ export const CATEGORY_LIST = [
   { id: 'aquecimento', label: 'Aquecimento' }
 ];
 
+const PAGE_SIZE = 24;
+
 export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModalProps> = ({
   isOpen,
   onClose,
@@ -87,6 +94,8 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
   const { showToast } = useToast();
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<{ type: 'network' | 'auth' | 'general'; message: string } | null>(null);
+
   // Filtros
   const [search, setSearch] = useState('');
   const [selectedMuscle, setSelectedMuscle] = useState('');
@@ -94,18 +103,22 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
   const [selectedCategory, setSelectedCategory] = useState('');
   const [showInactive, setShowInactive] = useState(false);
 
+  // Paginação
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Controle de cancelamento e race condition
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const requestIdRef = useRef<number>(0);
+  const gridContainerRef = useRef<HTMLDivElement>(null);
+
   // One card animation at a time, including touch screens and filtered lists.
   const [activeAnimationId, setActiveAnimationId] = useState<string | null>(null);
-  useEffect(() => { setActiveAnimationId(null); }, [isOpen, exercises]);
 
   // Zoom
   const [zoomedExercise, setZoomedExercise] = useState<Exercise | null>(null);
 
-  useEffect(() => { if (zoomedExercise) setActiveAnimationId(null); }, [zoomedExercise]);
-
   // Formulário para novo exercício customizado / edição
   const [isFormOpen, setIsFormOpen] = useState(false);
-  useEffect(() => { if (isFormOpen) setActiveAnimationId(null); }, [isFormOpen]);
   const [editingExerciseId, setEditingExerciseId] = useState<string | null>(null);
   const [formName, setFormName] = useState('');
   const [formMuscle, setFormMuscle] = useState('peitoral');
@@ -123,45 +136,116 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
 
+  // Reset animations when state changes
+  useEffect(() => { setActiveAnimationId(null); }, [isOpen, currentPage, selectedMuscle, selectedEquipment, selectedCategory]);
+  useEffect(() => { if (zoomedExercise) setActiveAnimationId(null); }, [zoomedExercise]);
+  useEffect(() => { if (isFormOpen) setActiveAnimationId(null); }, [isFormOpen]);
+
+  // Limpa requisições pendentes ao fechar o modal
+  useEffect(() => {
+    if (!isOpen) {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+      setActiveAnimationId(null);
+      setZoomedExercise(null);
+      setIsFormOpen(false);
+    }
+  }, [isOpen]);
+
+  // Carrega exercícios ao abrir ou alterar filtros
   useEffect(() => {
     if (isOpen) {
+      setCurrentPage(1);
       loadExercises();
     }
   }, [isOpen, selectedMuscle, selectedEquipment, selectedCategory, showInactive]);
 
   const loadExercises = async () => {
+    // Cancela requisição anterior se ainda estiver em voo
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    const reqId = ++requestIdRef.current;
+
     try {
       setLoading(true);
+      setLoadError(null);
+
       const params = new URLSearchParams();
       if (selectedMuscle) params.append('muscle', selectedMuscle);
       if (selectedEquipment) params.append('equipment', selectedEquipment);
       if (selectedCategory) params.append('category', selectedCategory);
-      if (search) params.append('q', search);
+      if (search.trim()) params.append('q', search.trim());
       if (showInactive) {
         params.append('is_active', 'all');
       } else {
         params.append('is_active', '1');
       }
 
-      const res = await ApiClient.get<{ exercises: Exercise[] }>(`/v1/personal/exercises?${params.toString()}`);
-      setExercises(res.exercises || []);
-    } catch (err) {
+      const res = await ApiClient.get<{ exercises: Exercise[] }>(
+        `/v1/personal/exercises?${params.toString()}`,
+        { signal: controller.signal }
+      );
+
+      // Atualiza apenas se for a requisição mais recente
+      if (reqId === requestIdRef.current) {
+        setExercises(res.exercises || []);
+        setLoadError(null);
+      }
+    } catch (err: any) {
+      // Ignora cancelamentos intencionais (troca rápida de filtro ou fechamento)
+      if (err?.name === 'AbortError' || controller.signal.aborted) {
+        return;
+      }
+      if (reqId !== requestIdRef.current) {
+        return;
+      }
+
       console.error('Erro ao carregar exercícios:', err);
-      showToast('Erro ao carregar biblioteca de exercícios', 'error');
+      let errorType: 'network' | 'auth' | 'general' = 'general';
+      let errorMsg = 'Não foi possível carregar a biblioteca de exercícios.';
+
+      if (err?.status === 401 || err?.status === 403) {
+        errorType = 'auth';
+        errorMsg = 'Sua sessão expirou ou seu usuário não possui permissão para acessar o ZemdaPersonal.';
+      } else if (err?.code === 'NETWORK_ERROR' || !navigator.onLine) {
+        errorType = 'network';
+        errorMsg = 'Não foi possível conectar ao servidor. Verifique sua conexão com a internet e tente novamente.';
+      } else if (err?.message) {
+        errorMsg = err.message;
+      }
+
+      setLoadError({ type: errorType, message: errorMsg });
+      showToast(errorMsg, 'error');
     } finally {
-      setLoading(false);
+      if (reqId === requestIdRef.current) {
+        setLoading(false);
+      }
     }
   };
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setCurrentPage(1);
     loadExercises();
+  };
+
+  const handleClearFilters = () => {
+    setSelectedMuscle('');
+    setSelectedEquipment('');
+    setSelectedCategory('');
+    setSearch('');
+    setCurrentPage(1);
   };
 
   const handleOpenCreateForm = () => {
     setEditingExerciseId(null);
     setFormName('');
-    setFormMuscle('peitoral');
+    setFormMuscle(selectedMuscle || 'peitoral');
     setFormEquipment('barra');
     setFormCategory('hipertrofia');
     setFormRegion('membros_superiores');
@@ -261,6 +345,15 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
 
   if (!isOpen) return null;
 
+  // Cálculos de Paginação
+  const totalExercises = exercises.length;
+  const totalPages = Math.max(1, Math.ceil(totalExercises / PAGE_SIZE));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = (safeCurrentPage - 1) * PAGE_SIZE;
+  const paginatedExercises = exercises.slice(startIndex, startIndex + PAGE_SIZE);
+  const endIndex = Math.min(startIndex + PAGE_SIZE, totalExercises);
+  const hasActiveFilters = Boolean(selectedMuscle || selectedEquipment || selectedCategory || search.trim());
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn mobile-modal">
       <div className="bg-white rounded-3xl max-w-6xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
@@ -275,7 +368,7 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                 {isPickerMode ? 'Selecionar Exercício para o Treino' : 'Biblioteca de Exercícios & Cinesiologia'}
               </h3>
               <p className="text-xs text-slate-500">
-                Exercícios, instruções técnicas e imagens. Ilustrações de referência enquanto a foto não estiver disponível.
+                Exercícios com cinesiologia, instruções técnicas e animações em alta performance.
               </p>
             </div>
           </div>
@@ -283,14 +376,15 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
           <div className="flex items-center gap-2">
             <button
               onClick={handleOpenCreateForm}
-              className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-colors shadow-sm"
+              className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
               Criar Exercício
             </button>
-            <button aria-label="Fechar"
+            <button
+              aria-label="Fechar"
               onClick={onClose}
-              className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+              className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -307,14 +401,27 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                 placeholder="Buscar por nome, equipamento ou cinesiologia..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none transition-all"
+                className="w-full pl-10 pr-9 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none transition-all"
               />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch('');
+                    setCurrentPage(1);
+                  }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                  title="Limpar busca"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </form>
 
             <select
               value={selectedEquipment}
               onChange={(e) => setSelectedEquipment(e.target.value)}
-              className="px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-medium text-slate-700"
+              className="px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-medium text-slate-700 cursor-pointer"
             >
               {EQUIPMENT_LIST.map((eq) => (
                 <option key={eq.id} value={eq.id}>
@@ -326,7 +433,7 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
             <select
               value={selectedCategory}
               onChange={(e) => setSelectedCategory(e.target.value)}
-              className="px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-medium text-slate-700"
+              className="px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-medium text-slate-700 cursor-pointer"
             >
               {CATEGORY_LIST.map((cat) => (
                 <option key={cat.id} value={cat.id}>
@@ -340,7 +447,7 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                 type="checkbox"
                 checked={showInactive}
                 onChange={(e) => setShowInactive(e.target.checked)}
-                className="rounded text-indigo-600 focus:ring-indigo-500"
+                className="rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
               />
               <span>Incluir inativos</span>
             </label>
@@ -352,7 +459,7 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
               <button
                 key={cat.id}
                 onClick={() => setSelectedMuscle(cat.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
                   selectedMuscle === cat.id
                     ? 'bg-indigo-600 text-white shadow-sm'
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -362,26 +469,156 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
               </button>
             ))}
           </div>
+
+          {/* Barra de Filtros Ativos */}
+          {hasActiveFilters && (
+            <div className="flex items-center gap-1.5 flex-wrap pt-0.5 text-xs border-t border-slate-100/80">
+              <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1">
+                <Filter className="w-3 h-3 text-slate-400" />
+                Filtros ativos:
+              </span>
+              {selectedMuscle && (
+                <span className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 font-medium px-2 py-0.5 rounded-md text-[11px]">
+                  Músculo: {MUSCLE_CATEGORIES.find((m) => m.id === selectedMuscle)?.label || selectedMuscle}
+                  <button
+                    onClick={() => setSelectedMuscle('')}
+                    className="hover:text-indigo-900 cursor-pointer p-0.5"
+                    title="Remover filtro"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+              {selectedEquipment && (
+                <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 font-medium px-2 py-0.5 rounded-md text-[11px]">
+                  Equipamento: {EQUIPMENT_LIST.find((e) => e.id === selectedEquipment)?.label || selectedEquipment}
+                  <button
+                    onClick={() => setSelectedEquipment('')}
+                    className="hover:text-slate-900 cursor-pointer p-0.5"
+                    title="Remover filtro"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+              {selectedCategory && (
+                <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 font-medium px-2 py-0.5 rounded-md text-[11px]">
+                  Categoria: {CATEGORY_LIST.find((c) => c.id === selectedCategory)?.label || selectedCategory}
+                  <button
+                    onClick={() => setSelectedCategory('')}
+                    className="hover:text-slate-900 cursor-pointer p-0.5"
+                    title="Remover filtro"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+              {search.trim() && (
+                <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 font-medium px-2 py-0.5 rounded-md text-[11px]">
+                  Busca: &ldquo;{search.trim()}&rdquo;
+                  <button
+                    onClick={() => setSearch('')}
+                    className="hover:text-slate-900 cursor-pointer p-0.5"
+                    title="Remover busca"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+              <button
+                onClick={handleClearFilters}
+                className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold underline underline-offset-2 ml-1 cursor-pointer"
+              >
+                Limpar todos
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Grid de Exercícios */}
-        <div className="p-5 sm:p-6 overflow-y-auto flex-1">
+        <div ref={gridContainerRef} className="p-5 sm:p-6 overflow-y-auto flex-1">
           {loading ? (
-            <div className="py-16 text-center text-slate-400 text-xs flex flex-col items-center gap-2">
+            <div className="py-20 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-3">
               <div className="w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-              Carregando exercícios...
+              <span className="font-semibold text-slate-700">Carregando catálogo de exercícios...</span>
+              <span className="text-[11px] text-slate-400">Consultando cinesiologia e ilustrações</span>
+            </div>
+          ) : loadError ? (
+            <div className="py-16 text-center flex flex-col items-center justify-center max-w-md mx-auto px-4">
+              <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mb-3 shadow-xs">
+                <AlertCircle className="w-6 h-6" />
+              </div>
+              <h4 className="text-sm font-bold text-slate-800 mb-1">
+                Não foi possível carregar os exercícios
+              </h4>
+              <p className="text-xs text-slate-500 mb-4 leading-relaxed">
+                {loadError.message}
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => loadExercises()}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Tentar novamente
+                </button>
+                {hasActiveFilters && (
+                  <button
+                    type="button"
+                    onClick={handleClearFilters}
+                    className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition-colors cursor-pointer"
+                  >
+                    Limpar filtros
+                  </button>
+                )}
+              </div>
             </div>
           ) : exercises.length === 0 ? (
-            <div className="py-16 text-center text-slate-400 text-xs">
-              Nenhum exercício encontrado com os filtros selecionados.
+            <div className="py-16 text-center flex flex-col items-center justify-center max-w-md mx-auto px-4">
+              <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mb-3">
+                <Search className="w-6 h-6" />
+              </div>
+              <h4 className="text-sm font-bold text-slate-800 mb-1">
+                Nenhum exercício encontrado
+              </h4>
+              <p className="text-xs text-slate-500 mb-4 leading-relaxed">
+                Nenhum exercício corresponde aos filtros selecionados. Tente ajustar os filtros ou remover a busca textual.
+              </p>
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={handleClearFilters}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
+                >
+                  Limpar todos os filtros
+                </button>
+              )}
             </div>
           ) : (
             <div>
-              <div className="flex items-center justify-between text-xs text-slate-400 mb-3">
-                <span>{exercises.length} exercícios encontrados</span>
+              <div className="flex items-center justify-between text-xs text-slate-500 mb-3 flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <span>
+                    Exibindo <strong className="text-slate-800">{startIndex + 1}–{endIndex}</strong> de{' '}
+                    <strong className="text-slate-800">{totalExercises}</strong> exercícios
+                  </span>
+                  {selectedMuscle && (
+                    <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md uppercase">
+                      {MUSCLE_CATEGORIES.find((m) => m.id === selectedMuscle)?.label || selectedMuscle}
+                    </span>
+                  )}
+                </div>
+                {totalPages > 1 && (
+                  <span className="text-[11px] text-slate-400">
+                    Página {safeCurrentPage} de {totalPages}
+                  </span>
+                )}
               </div>
+
+              {/* Grid de Exercícios Paginados (limite de 24 no DOM para salvar memória e evitar congelamento de aba) */}
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {exercises.map((ex) => {
+                {paginatedExercises.map((ex) => {
                   const isInactive = ex.is_active === 0;
                   return (
                     <div
@@ -396,7 +633,9 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                         onZoom={() => setZoomedExercise(ex)}
                         isInactive={isInactive}
                         active={activeAnimationId === ex.id && !zoomedExercise && !isFormOpen && !loading}
-                        onActiveChange={active => setActiveAnimationId(current => active ? ex.id : current === ex.id ? null : current)}
+                        onActiveChange={(active) =>
+                          setActiveAnimationId((current) => (active ? ex.id : current === ex.id ? null : current))
+                        }
                       />
 
                       {/* Informações */}
@@ -417,7 +656,12 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                           )}
                         </div>
                         <span className="text-[10px] text-slate-500">{ex.category}</span>
-                        <h4 onClick={() => setZoomedExercise(ex)} className="font-bold text-slate-800 text-xs leading-snug line-clamp-1">{ex.name}</h4>
+                        <h4
+                          onClick={() => setZoomedExercise(ex)}
+                          className="font-bold text-slate-800 text-xs leading-snug line-clamp-1 cursor-pointer hover:text-indigo-600"
+                        >
+                          {ex.name}
+                        </h4>
                         {ex.instructions && (
                           <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed">
                             {ex.instructions}
@@ -430,7 +674,7 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                         {isPickerMode ? (
                           <button
                             onClick={() => onSelectExercise && onSelectExercise(ex)}
-                            className="w-full py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-1 shadow-sm transition-colors"
+                            className="w-full py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-1 shadow-sm transition-colors cursor-pointer"
                           >
                             <Check className="w-3.5 h-3.5" />
                             Selecionar
@@ -439,7 +683,7 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                           <>
                             <button
                               onClick={() => setZoomedExercise(ex)}
-                              className="text-xs font-semibold text-indigo-600 hover:text-indigo-800"
+                              className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 cursor-pointer"
                             >
                               Ver detalhes
                             </button>
@@ -448,28 +692,26 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                               <button
                                 onClick={() => handleOpenEditForm(ex)}
                                 title="Editar exercício"
-                                className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
                               >
                                 <Edit2 className="w-3.5 h-3.5" />
                               </button>
-
                               <button
                                 onClick={() => handleToggleActive(ex)}
                                 title={isInactive ? 'Ativar exercício' : 'Desativar exercício'}
-                                className={`p-1.5 rounded-lg transition-colors ${
+                                className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
                                   isInactive
-                                    ? 'text-slate-400 hover:text-emerald-600 hover:bg-emerald-50'
-                                    : 'text-slate-400 hover:text-amber-600 hover:bg-amber-50'
+                                    ? 'text-rose-500 hover:bg-rose-50'
+                                    : 'text-emerald-500 hover:bg-emerald-50'
                                 }`}
                               >
                                 <Power className="w-3.5 h-3.5" />
                               </button>
-
                               {ex.is_custom === 1 && (
                                 <button
                                   onClick={() => handleDeleteExercise(ex.id)}
                                   title="Excluir ou desativar"
-                                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
@@ -482,6 +724,76 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                   );
                 })}
               </div>
+
+              {/* Controles de Paginação */}
+              {totalPages > 1 && (
+                <div className="pt-5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 mt-5">
+                  <span className="text-xs text-slate-500">
+                    Página <strong className="text-slate-800">{safeCurrentPage}</strong> de{' '}
+                    <strong className="text-slate-800">{totalPages}</strong> ({totalExercises} exercícios no catálogo)
+                  </span>
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => {
+                        setCurrentPage((prev) => Math.max(prev - 1, 1));
+                        gridContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+                      }}
+                      disabled={safeCurrentPage === 1}
+                      className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center gap-1 cursor-pointer"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                      Anterior
+                    </button>
+
+                    <div className="flex items-center gap-1">
+                      {Array.from({ length: totalPages }, (_, i) => i + 1)
+                        .filter(
+                          (p) =>
+                            p === 1 ||
+                            p === totalPages ||
+                            Math.abs(p - safeCurrentPage) <= 1
+                        )
+                        .map((page, idx, arr) => {
+                          const prevPage = arr[idx - 1];
+                          const showEllipsis = prevPage && page - prevPage > 1;
+                          return (
+                            <React.Fragment key={page}>
+                              {showEllipsis && (
+                                <span className="text-slate-400 text-xs px-1">...</span>
+                              )}
+                              <button
+                                onClick={() => {
+                                  setCurrentPage(page);
+                                  gridContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+                                }}
+                                className={`w-7 h-7 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                                  safeCurrentPage === page
+                                    ? 'bg-indigo-600 text-white shadow-xs'
+                                    : 'text-slate-600 hover:bg-slate-100'
+                                }`}
+                              >
+                                {page}
+                              </button>
+                            </React.Fragment>
+                          );
+                        })}
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        setCurrentPage((prev) => Math.min(prev + 1, totalPages));
+                        gridContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+                      }}
+                      disabled={safeCurrentPage === totalPages}
+                      className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center gap-1 cursor-pointer"
+                    >
+                      Próxima
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -497,9 +809,10 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                   </span>
                   <h3 className="text-lg font-bold text-slate-800 mt-1">{zoomedExercise.name}</h3>
                 </div>
-                <button aria-label="Fechar"
+                <button
+                  aria-label="Fechar"
                   onClick={() => setZoomedExercise(null)}
-                  className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl"
+                  className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -515,12 +828,26 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                 />
               </div>
 
-              {zoomedExercise.gif_url && <ExerciseAnimation key={zoomedExercise.id} url={zoomedExercise.gif_url} name={zoomedExercise.name} attribution={zoomedExercise.gif_attribution} />}
+              {zoomedExercise.gif_url && (
+                <ExerciseAnimation
+                  key={zoomedExercise.id}
+                  url={zoomedExercise.gif_url}
+                  name={zoomedExercise.name}
+                  attribution={zoomedExercise.gif_attribution}
+                />
+              )}
 
-              <p className="text-xs text-slate-600">Execução: {zoomedExercise.execution_type} • Mecânica: {zoomedExercise.mechanics} • Região: {zoomedExercise.body_region}</p>
-              <p className="text-xs text-slate-600">Músculos secundários: {zoomedExercise.secondary_muscles_json || 'Não informados'}</p>
-              {zoomedExercise.suggested_duration && <p className="text-xs text-slate-600">{zoomedExercise.suggested_duration}</p>}
+              <p className="text-xs text-slate-600">
+                Execução: {zoomedExercise.execution_type} • Mecânica: {zoomedExercise.mechanics} • Região: {zoomedExercise.body_region}
+              </p>
+              <p className="text-xs text-slate-600">
+                Músculos secundários: {zoomedExercise.secondary_muscles_json || 'Não informados'}
+              </p>
+              {zoomedExercise.suggested_duration && (
+                <p className="text-xs text-slate-600">{zoomedExercise.suggested_duration}</p>
+              )}
               <ExerciseImageCredit value={zoomedExercise.image_attribution_json} />
+
               {/* Informações detalhadas */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
                 {zoomedExercise.equipment && (
@@ -565,7 +892,7 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                     if (onSelectExercise) onSelectExercise(zoomedExercise);
                     setZoomedExercise(null);
                   }}
-                  className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-sm"
+                  className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
                 >
                   <Check className="w-4 h-4" />
                   Selecionar para o Treino
@@ -589,13 +916,14 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                   Preencha os dados biomecânicos e selecione uma foto anatômica para o catálogo.
                 </p>
               </div>
-              <button aria-label="Fechar"
+              <button
+                aria-label="Fechar"
                 type="button"
                 onClick={() => {
                   setIsFormOpen(false);
                   setEditingExerciseId(null);
                 }}
-                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -620,10 +948,12 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                   <select
                     value={formMuscle}
                     onChange={(e) => setFormMuscle(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none capitalize"
+                    className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none capitalize cursor-pointer"
                   >
-                    {formMuscle && !MUSCLE_CATEGORIES.some(item => item.id === formMuscle) && <option value={formMuscle}>{formMuscle}</option>}
-                  {MUSCLE_CATEGORIES.filter((c) => c.id).map((c) => (
+                    {formMuscle && !MUSCLE_CATEGORIES.some((item) => item.id === formMuscle) && (
+                      <option value={formMuscle}>{formMuscle}</option>
+                    )}
+                    {MUSCLE_CATEGORIES.filter((c) => c.id).map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.label}
                       </option>
@@ -636,10 +966,12 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                   <select
                     value={formEquipment}
                     onChange={(e) => setFormEquipment(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                    className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer"
                   >
-                    {formEquipment && !EQUIPMENT_LIST.some(item => item.id === formEquipment) && <option value={formEquipment}>{formEquipment}</option>}
-                  {EQUIPMENT_LIST.filter((eq) => eq.id).map((eq) => (
+                    {formEquipment && !EQUIPMENT_LIST.some((item) => item.id === formEquipment) && (
+                      <option value={formEquipment}>{formEquipment}</option>
+                    )}
+                    {EQUIPMENT_LIST.filter((eq) => eq.id).map((eq) => (
                       <option key={eq.id} value={eq.id}>
                         {eq.label}
                       </option>
@@ -652,10 +984,12 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                   <select
                     value={formCategory}
                     onChange={(e) => setFormCategory(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                    className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer"
                   >
-                    {formCategory && !CATEGORY_LIST.some(item => item.id === formCategory) && <option value={formCategory}>{formCategory}</option>}
-                  {CATEGORY_LIST.filter((cat) => cat.id).map((cat) => (
+                    {formCategory && !CATEGORY_LIST.some((item) => item.id === formCategory) && (
+                      <option value={formCategory}>{formCategory}</option>
+                    )}
+                    {CATEGORY_LIST.filter((cat) => cat.id).map((cat) => (
                       <option key={cat.id} value={cat.id}>
                         {cat.label}
                       </option>
@@ -668,7 +1002,7 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                   <select
                     value={formRegion}
                     onChange={(e) => setFormRegion(e.target.value)}
-                    className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                    className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer"
                   >
                     <option value="membros_superiores">Membros Superiores</option>
                     <option value="membros_inferiores">Membros Inferiores</option>
@@ -684,7 +1018,7 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                     <select
                       value={formMechanics}
                       onChange={(e) => setFormMechanics(e.target.value)}
-                      className="w-full px-2 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                      className="w-full px-2 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer"
                     >
                       <option value="composto">Composto</option>
                       <option value="isolado">Isolado</option>
@@ -692,7 +1026,7 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                     <select
                       value={formExecutionType}
                       onChange={(e) => setFormExecutionType(e.target.value)}
-                      className="w-full px-2 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                      className="w-full px-2 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer"
                     >
                       <option value="bilateral">Bilateral</option>
                       <option value="unilateral">Unilateral</option>
@@ -706,7 +1040,7 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                     <select
                       value={formLevel}
                       onChange={(e) => setFormLevel(e.target.value)}
-                      className="w-full px-2 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                      className="w-full px-2 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer"
                     >
                       <option value="iniciante">Iniciante</option>
                       <option value="intermediario">Intermediário</option>
@@ -715,7 +1049,7 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                     <select
                       value={formIsActive}
                       onChange={(e) => setFormIsActive(Number(e.target.value))}
-                      className="w-full px-2 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-semibold text-indigo-700"
+                      className="w-full px-2 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-semibold text-indigo-700 cursor-pointer"
                     >
                       <option value={1}>Ativo</option>
                       <option value={0}>Inativo</option>
@@ -748,7 +1082,9 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
               {/* Instruções e Notas Técnicas */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Instruções de Execução & Postura</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Instruções de Execução & Postura
+                  </label>
                   <textarea
                     rows={3}
                     placeholder="Pés firmes no solo, escápulas em retração e depressão, descida controlada em 3s..."
@@ -759,7 +1095,9 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Notas Técnicas / Cuidados Articulares</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Notas Técnicas / Cuidados Articulares
+                  </label>
                   <textarea
                     rows={3}
                     placeholder="Evitar hiperextensão lombar, manter cotovelos a 45 graus, amplitude máxima segura..."
@@ -777,14 +1115,14 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                     setIsFormOpen(false);
                     setEditingExerciseId(null);
                   }}
-                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={saving || uploading}
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-xl shadow-sm transition-colors"
+                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-xl shadow-sm transition-colors cursor-pointer disabled:opacity-50"
                 >
                   {saving ? 'Salvando...' : editingExerciseId ? 'Salvar Alterações' : 'Cadastrar Exercício'}
                 </button>

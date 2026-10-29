@@ -28,6 +28,10 @@ export interface ProstheticWork {
 export interface DentalProstheticsKanbanProps {
   patientId?: string;
   onUpdateStatus?: (id: string, newStatus: string) => void;
+  searchQuery?: string;
+  filterStatus?: string;
+  filterLab?: string;
+  onCountsChange?: (counts: { total: number; overdue: number; inProduction: number; delivered: number; installed: number }) => void;
 }
 
 const COLUMNS = [
@@ -41,7 +45,11 @@ const COLUMNS = [
 
 export const DentalProstheticsKanban: React.FC<DentalProstheticsKanbanProps> = ({
   patientId,
-  onUpdateStatus
+  onUpdateStatus,
+  searchQuery = '',
+  filterStatus = '',
+  filterLab = '',
+  onCountsChange
 }) => {
   const [items, setItems] = useState<ProstheticWork[]>([]);
   const [loading, setLoading] = useState(false);
@@ -53,7 +61,7 @@ export const DentalProstheticsKanban: React.FC<DentalProstheticsKanbanProps> = (
         const res = await ApiClient.get<ProstheticWork[]>(`/v1/dentistry/prosthetics/${patientId}`);
         if (Array.isArray(res)) setItems(res);
       } else {
-        const res = await ApiClient.get<ProstheticWork[]>('/v1/dentistry/prosthetics-lab/pending');
+        const res = await ApiClient.get<ProstheticWork[]>('/v1/dentistry/prosthetics-lab/pending?all=true');
         if (Array.isArray(res)) setItems(res);
       }
     } catch (err) {
@@ -98,6 +106,40 @@ export const DentalProstheticsKanban: React.FC<DentalProstheticsKanbanProps> = (
 
   const today = new Date().toISOString().split('T')[0];
 
+  const normalize = (str?: string) => (str || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const normQuery = normalize(searchQuery);
+
+  const filteredItems = items.filter(item => {
+    if (normQuery) {
+      const pName = normalize(item.patient_name);
+      const wType = normalize(item.work_type);
+      const lName = normalize(item.lab_name);
+      const nText = normalize(item.notes);
+      const tNum = (item.tooth_number || '').toLowerCase();
+      if (!pName.includes(normQuery) && !wType.includes(normQuery) && !lName.includes(normQuery) && !nText.includes(normQuery) && !tNum.includes(normQuery)) {
+        return false;
+      }
+    }
+    if (filterStatus) {
+      const st = item.status === 'requested' ? 'sent_to_lab' : item.status;
+      if (st !== filterStatus) return false;
+    }
+    if (filterLab) {
+      if (item.lab_name !== filterLab) return false;
+    }
+    return true;
+  });
+
+  useEffect(() => {
+    if (onCountsChange) {
+      const overdue = items.filter(i => i.isOverdue || ((i.expected_date || i.delivery_date) && (i.expected_date || i.delivery_date)! < today && i.status !== 'installed' && i.status !== 'canceled')).length;
+      const inProduction = items.filter(i => i.status === 'in_production' || i.status === 'sent_to_lab' || i.status === 'requested').length;
+      const delivered = items.filter(i => i.status === 'delivered_to_clinic' || i.status === 'tested_adjusted').length;
+      const installed = items.filter(i => i.status === 'installed').length;
+      onCountsChange({ total: items.length, overdue, inProduction, delivered, installed });
+    }
+  }, [items, onCountsChange]);
+
   return (
     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-sm space-y-4">
       <div className="flex items-center justify-between">
@@ -119,7 +161,7 @@ export const DentalProstheticsKanban: React.FC<DentalProstheticsKanbanProps> = (
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 lg:overflow-x-auto min-h-[320px]">
         {COLUMNS.map(col => {
-          const colItems = items.filter(i => {
+          const colItems = filteredItems.filter(i => {
             const st = i.status === 'requested' ? 'sent_to_lab' : (i.status || 'sent_to_lab');
             return st === col.id;
           });
