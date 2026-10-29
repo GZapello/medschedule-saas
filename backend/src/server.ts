@@ -1,3 +1,4 @@
+import { GoogleCalendarService } from './services/google-calendar.service';
 // Precisa ser o primeiro import: vários módulos leem variáveis de ambiente ao serem carregados (ex.: JWT_SECRET).
 import 'dotenv/config';
 import { registerPublicSite } from './seo/publicSite';
@@ -193,7 +194,11 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   });
 });
 
+// Renew channels and retry pending operations without overlapping maintenance runs.
+const calendarMaintenance = setInterval(() => { void GoogleCalendarService.maintainConnections(); }, 5 * 60 * 1000);
+calendarMaintenance.unref();
 app.listen(PORT, () => {
+  void GoogleCalendarService.maintainConnections();
   console.log(`[SaaS Core API] Servidor rodando com sucesso na porta ${PORT}`);
   console.log(`[SaaS Core API] Rotas ativas em http://localhost:${PORT}/api/v1`);
 });

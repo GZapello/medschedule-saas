@@ -9,6 +9,15 @@ export interface GoogleCalendarStatusData {
   accountEmail?: string;
   calendarId?: string;
   calendarName?: string;
+  syncEnabled?: boolean;
+  syncDirection?: string;
+  blockExternalEvents?: boolean;
+  createGoogleMeet?: boolean;
+  privacyMode?: string;
+  syncIntervalOption?: string;
+  lastSyncAt?: string;
+  lastSyncError?: string;
+  notificationsActive?: boolean;
 }
 
 export function useGoogleCalendarStatus() {
@@ -44,7 +53,7 @@ export function useGoogleCalendarStatus() {
         window.history.replaceState({}, document.title, url.pathname + (url.search || ''));
         fetchStatus();
       } else if (googleCalError) {
-        showToast(`Erro ao conectar Google Agenda: ${decodeURIComponent(googleCalError)}`, 'error');
+        showToast(`Erro ao conectar Google Agenda: ${googleCalError}`, 'error');
         const url = new URL(window.location.href);
         url.searchParams.delete('google_calendar_error');
         window.history.replaceState({}, document.title, url.pathname + (url.search || ''));

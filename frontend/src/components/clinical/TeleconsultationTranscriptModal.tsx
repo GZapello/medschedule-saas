@@ -83,7 +83,7 @@ export function TeleconsultationTranscriptModal({ appointment, onClose, onInsert
             <button type="button" disabled={busy || speech.isListening || speech.isPaused} aria-pressed={source === 'meet'} className={`${button} ${source === 'meet' ? 'border-indigo-500 text-indigo-700 bg-indigo-50' : ''}`} onClick={() => setSource('meet')}>📋 Importar transcrição do Google Meet</button>
           </div>
           {source === 'meet' ? <>
-            <label className="flex gap-2 text-sm items-start"><input type="checkbox" checked={meetConsent} onChange={e => setMeetConsent(e.target.checked)} />Confirme que o paciente foi informado sobre a utilização da transcrição para apoio ao registro profissional.</label>
+            <label className="flex gap-2 text-sm items-start"><input type="checkbox" checked={meetConsent} onChange={e => setMeetConsent(e.target.checked)} />Confirmo que o paciente foi informado e autorizou o envio desta transcrição ao Google Gemini para organizar um rascunho clínico. Revise e remova dados pessoais desnecessários antes de enviar.</label>
             <label className="block text-sm font-medium">Transcrição do Google Meet<textarea aria-label="Transcrição do Google Meet" disabled={busy} maxLength={100000} value={imported} onChange={e => setImported(e.target.value)} rows={10} placeholder="Cole aqui a transcrição gerada pelo Google Meet…" className="block mt-2 w-full border border-slate-200 rounded-xl p-3 font-normal" /></label>
           </> : <>
             <p className="text-xs text-slate-500">Usa o microfone deste navegador. Não captura diretamente o áudio da aba do Meet.</p>

@@ -81,6 +81,11 @@ async function call(method, body = {}, id, tenantId = 'tele-test') {
     assert.match(teleconsultationPrompt(module),/Não invente/);
     assert.ok(TELECONSULTATION_SECTIONS[module].every(field=>teleconsultationPrompt(module).includes(field)));
   }
+  db.prepare("UPDATE patients SET full_name='Maria Teste', cpf='123.456.789-09', email='maria@example.test' WHERE id='tele-patient'").run();
+  assert.equal((await aiCall({transcript:'Maria Teste relata melhora. CPF 123.456.789-09, maria@example.test'})).status,200);
+  assert.ok(!/Maria|123\.456\.789-09|maria@example/.test(captured.transcript), 'Meet transcript identifiers must be redacted before provider call');
+  assert.match(captured.transcript,/relata melhora/);
+  console.log('PASS Meet transcript known identifiers removed before Gemini');
   assert.equal((await aiCall({},'other-tenant')).status,403);
   assert.equal((await aiCall({},'tele-test','receptionist')).status,403);
   assert.equal((await aiCall({patientId:'other-patient'})).status,400);

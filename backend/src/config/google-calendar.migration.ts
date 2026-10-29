@@ -85,6 +85,15 @@ export function migrateGoogleCalendar(rawDb: DatabaseSync): void {
       CREATE INDEX IF NOT EXISTS idx_gcal_oauth_state
       ON google_calendar_oauth_states(state);
     `);
+    // Additive migration: preserve existing connections and event history.
+    for (const [table, columns] of Object.entries({
+      google_calendar_connections: ['google_subject', 'watch_token', 'last_sync_error'],
+      google_calendar_oauth_states: ['code_verifier'],
+      appointments: ['google_time_imported']
+    })) {
+      const existing = new Set((rawDb.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map(c => c.name));
+      for (const column of columns) if (!existing.has(column)) rawDb.exec(`ALTER TABLE ${table} ADD COLUMN ${column} TEXT`);
+    }
   } catch (err) {
     console.error('[Migration] Erro ao executar migrateGoogleCalendar:', err);
   }

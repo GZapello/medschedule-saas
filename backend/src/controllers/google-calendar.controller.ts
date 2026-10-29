@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
-import { GoogleCalendarService } from '../services/google-calendar.service';
+import { GoogleCalendarService, GoogleCalendarError } from '../services/google-calendar.service';
+function publicError(err: any, fallback: string): string { return err instanceof GoogleCalendarError ? err.message : fallback; }
+
 import { db } from '../config/database';
 
 function resolveProfessionalId(tenantId: string, userId: string): string | null {
@@ -26,7 +28,7 @@ export class GoogleCalendarController {
 
       if (!GoogleCalendarService.isConfigured()) {
         res.status(400).json({
-          error: 'Google Agenda ainda não configurado pelo administrador. As variáveis de ambiente GOOGLE_CALENDAR_CLIENT_ID e GOOGLE_CALENDAR_CLIENT_SECRET precisam ser definidas.'
+          error: 'Google Agenda ainda não configurado pelo administrador. Confira as credenciais OAuth e a chave dedicada de criptografia no servidor.'
         });
         return;
       }
@@ -42,8 +44,8 @@ export class GoogleCalendarController {
         res.status(200).json({ url });
       }
     } catch (err: any) {
-      console.error('[GoogleCalendarController.connect] Erro:', err?.message || err);
-      res.status(500).json({ error: err?.message || 'Falha ao iniciar conexão com Google Agenda' });
+      console.error('[GoogleCalendarController.connect] Erro:', 'Operação Google Agenda falhou');
+      res.status(500).json({ error: publicError(err, 'Falha ao iniciar conexão com Google Agenda') });
     }
   }
 
@@ -59,26 +61,23 @@ export class GoogleCalendarController {
     const appUrl = (process.env.APP_URL || process.env.PUBLIC_APP_URL || 'https://zemda.com.br').replace(/\/+$/, '');
 
     if (error) {
-      console.warn('[GoogleCalendarController.callback] Google retornou erro no consentimento:', error);
-      res.redirect(`${appUrl}/configuracoes?tab=integrations&google_calendar_error=${encodeURIComponent(error)}`);
+      if (typeof state === 'string') db.prepare('DELETE FROM google_calendar_oauth_states WHERE state = ?').run(state);
+      res.redirect(`${appUrl}/configuracoes?tab=integrations&google_calendar_error=${encodeURIComponent('Autorização Google não concluída.')}`);
       return;
     }
 
     try {
       const result = await GoogleCalendarService.handleCallback(code, state);
 
-      let redirectTarget = result.returnUrl || `${appUrl}/configuracoes?tab=integrations`;
-      // Garante que o redirectTarget leve aponte para a aba de integrações
-      const sep = redirectTarget.includes('?') ? '&' : '?';
-
-      if (result.success) {
-        res.redirect(`${redirectTarget}${sep}google_calendar=connected`);
-      } else {
-        res.redirect(`${redirectTarget}${sep}google_calendar_error=${encodeURIComponent(result.error || 'Erro na autorização')}`);
-      }
+      const redirectTarget = GoogleCalendarService.safeReturnUrl(result.returnUrl);
+      const target = new URL(redirectTarget);
+      target.searchParams.delete('google_calendar');
+      target.searchParams.delete('google_calendar_error');
+      target.searchParams.set(result.success ? 'google_calendar' : 'google_calendar_error', result.success ? 'connected' : result.error || 'Erro na autorização');
+      res.redirect(target.href);
     } catch (err: any) {
-      console.error('[GoogleCalendarController.callback] Exceção no callback:', err);
-      res.redirect(`${appUrl}/configuracoes?tab=integrations&google_calendar_error=${encodeURIComponent('Erro interno ao processar autorização')}`);
+      console.error('[GoogleCalendarController.callback] Exceção no callback:', 'Operação Google Agenda falhou');
+      res.redirect(`${appUrl}/configuracoes?tab=integrations&google_calendar_error=${encodeURIComponent(publicError(err, 'Não foi possível concluir a autorização. Tente novamente.'))}`);
     }
   }
 
@@ -101,7 +100,7 @@ export class GoogleCalendarController {
 
       res.status(200).json(status);
     } catch (err: any) {
-      console.error('[GoogleCalendarController.getStatus] Erro:', err);
+      console.error('[GoogleCalendarController.getStatus] Erro:', 'Operação Google Agenda falhou');
       res.status(500).json({ error: 'Erro ao consultar status da integração' });
     }
   }
@@ -123,8 +122,8 @@ export class GoogleCalendarController {
       const calendars = await GoogleCalendarService.listCalendars(tenantId, userId);
       res.status(200).json({ calendars });
     } catch (err: any) {
-      console.error('[GoogleCalendarController.getCalendars] Erro:', err?.message || err);
-      res.status(400).json({ error: err?.message || 'Erro ao listar agendas Google' });
+      console.error('[GoogleCalendarController.getCalendars] Erro:', 'Operação Google Agenda falhou');
+      res.status(400).json({ error: publicError(err, 'Erro ao listar agendas Google') });
     }
   }
 
@@ -142,11 +141,11 @@ export class GoogleCalendarController {
         return;
       }
 
-      GoogleCalendarService.updateSettings(tenantId, userId, req.body);
+      await GoogleCalendarService.updateSettings(tenantId, userId, req.body);
       res.status(200).json({ success: true, message: 'Configurações atualizadas com sucesso.' });
     } catch (err: any) {
-      console.error('[GoogleCalendarController.updateSettings] Erro:', err?.message || err);
-      res.status(400).json({ error: err?.message || 'Erro ao atualizar configurações' });
+      console.error('[GoogleCalendarController.updateSettings] Erro:', 'Operação Google Agenda falhou');
+      res.status(400).json({ error: publicError(err, 'Erro ao atualizar configurações') });
     }
   }
 
@@ -169,8 +168,8 @@ export class GoogleCalendarController {
 
       res.status(200).json({ success: true, ...result });
     } catch (err: any) {
-      console.error('[GoogleCalendarController.sync] Erro:', err?.message || err);
-      res.status(500).json({ error: err?.message || 'Erro ao sincronizar com Google Agenda' });
+      console.error('[GoogleCalendarController.sync] Erro:', 'Operação Google Agenda falhou');
+      res.status(500).json({ error: publicError(err, 'Erro ao sincronizar com Google Agenda') });
     }
   }
 
@@ -188,10 +187,10 @@ export class GoogleCalendarController {
         return;
       }
 
-      await GoogleCalendarService.disconnect(tenantId, userId);
-      res.status(200).json({ success: true, message: 'Google Agenda desconectada com sucesso.' });
+      const result = await GoogleCalendarService.disconnect(tenantId, userId);
+      res.status(200).json({ success: true, revoked: result.revoked, message: result.revoked ? 'Google Agenda desconectada.' : 'Conexão local removida. Não foi possível confirmar a revogação no Google; remova o acesso em myaccount.google.com/permissions.' });
     } catch (err: any) {
-      console.error('[GoogleCalendarController.disconnect] Erro:', err);
+      console.error('[GoogleCalendarController.disconnect] Erro:', 'Operação Google Agenda falhou');
       res.status(500).json({ error: 'Erro ao desconectar Google Agenda' });
     }
   }
@@ -206,7 +205,7 @@ export class GoogleCalendarController {
 
     // Executa em background
     GoogleCalendarService.handleWebhook(req.headers as any).catch(err => {
-      console.warn('[GoogleCalendarController.webhook] Erro ao tratar notificação:', err);
+      console.warn('[GoogleCalendarController.webhook] Erro ao tratar notificação:', 'Operação Google Agenda falhou');
     });
   }
 
@@ -231,11 +230,11 @@ export class GoogleCalendarController {
       }
 
       const apptId = Array.isArray(appointmentId) ? appointmentId[0] : String(appointmentId);
-      const result = await GoogleCalendarService.resolveDivergence(apptId, tenantId, action);
+      const result = await GoogleCalendarService.resolveDivergence(apptId, tenantId, action, req.user!.userId);
       res.status(200).json({ success: true, ...result });
     } catch (err: any) {
-      console.error('[GoogleCalendarController.resolveDivergence] Erro:', err?.message || err);
-      res.status(400).json({ error: err?.message || 'Erro ao resolver divergência' });
+      console.error('[GoogleCalendarController.resolveDivergence] Erro:', 'Operação Google Agenda falhou');
+      res.status(400).json({ error: publicError(err, 'Erro ao resolver divergência') });
     }
   }
 }

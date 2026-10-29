@@ -29,7 +29,7 @@ if (!fs.existsSync(dbDir)) {
 const rawDb = new DatabaseSync(dbPath);
 
 export const CURRENT_TERMS_VERSION = '2026.1';
-export const CURRENT_PRIVACY_VERSION = '2026.1';
+export const CURRENT_PRIVACY_VERSION = '2026.2';
 
 
 // Configurações de alta performance e integridade referencial

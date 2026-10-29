@@ -654,7 +654,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
       const res = await ApiClient.post<{ success: boolean; message: string }>(`/v1/integrations/google-calendar/divergence/${apptId}/resolve`, { action });
       showToast(res.message || 'Divergência resolvida com sucesso', 'success');
       fetchCalendarData();
-      setSelectedAppt(prev => prev ? { ...prev, google_sync_status: 'synced' } : null);
+      setSelectedAppt(null);
+      notifyAppointmentChange();
     } catch (err: any) {
       showToast(err.message || 'Erro ao resolver divergência', 'error');
     }
@@ -1379,6 +1380,15 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                     <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${getStatusColor(selectedAppt.status)}`}>
                       {getStatusLabel(selectedAppt.status)}
                     </span>
+                    {selectedAppt.google_sync_status === 'divergent' && (
+                      <div className="w-full space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">
+                        <p>Este evento foi alterado no Google. O proprietário da conexão pode aplicar o horário do Google ou manter o horário Zemda, conforme a direção configurada.</p>
+                        <div className="flex flex-wrap gap-2">
+                          <button type="button" className="min-h-11 rounded-lg border border-amber-300 bg-white px-3 py-2" onClick={() => handleResolveDivergence(selectedAppt.id, 'apply_google')}>Aplicar horário do Google</button>
+                          <button type="button" className="min-h-11 rounded-lg border border-amber-300 bg-white px-3 py-2" onClick={() => handleResolveDivergence(selectedAppt.id, 'keep_zemda')}>Manter horário Zemda</button>
+                        </div>
+                      </div>
+                    )}
                     {selectedAppt.google_sync_status === 'synced' && (
                       <span title="Sincronizado com Google Agenda" className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
                         <CalendarIcon className="w-3 h-3 text-emerald-600" />

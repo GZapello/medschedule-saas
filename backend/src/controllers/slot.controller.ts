@@ -34,7 +34,8 @@ export class SlotController {
         const busyRanges = await GoogleCalendarService.getBusyIntervals(tenantId, String(professionalId), String(date));
         externalBusyIntervals = busyRanges.map(b => ({ startMin: b.startMin, endMin: b.endMin }));
       } catch (fbErr) {
-        console.warn('[SlotController] Falha ao consultar FreeBusy Google Calendar:', fbErr);
+        res.status(503).json({ error: 'Não foi possível verificar a disponibilidade Google. Tente novamente.', code: 'GOOGLE_AVAILABILITY_UNAVAILABLE' });
+        return;
       }
 
       const slots = calculateAvailableSlots(

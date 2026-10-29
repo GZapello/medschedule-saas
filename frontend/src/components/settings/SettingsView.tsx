@@ -1,3 +1,4 @@
+import { GoogleCalendarSettings } from './GoogleCalendarSettings';
 import { ResponsiveTable } from '../common/ResponsiveTable';
 import { useAndroidSectionBack } from '../../hooks/useAndroidSectionBack';
 import { ClinicBookingSettings, ProfessionalBookingSettings } from '../public-booking/BookingLinkSettings';
@@ -93,7 +94,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
       if (['clinic', 'clinica'].includes(initialSection)) return 'clinic';
       if (['account', 'profile', 'minha-conta'].includes(initialSection)) return 'account';
       if (['legal', 'privacidade'].includes(initialSection)) return 'legal';
-      if (['integrations', 'integracoes', 'google-calendar'].includes(initialSection)) return 'hub';
+      if (['integrations', 'integracoes', 'google-calendar'].includes(initialSection)) return 'integrations';
     }
     return 'hub';
   });
@@ -111,7 +112,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
       else if (['clinic', 'clinica'].includes(initialSection)) setActiveSection('clinic');
       else if (['account', 'profile', 'minha-conta'].includes(initialSection)) setActiveSection('account');
       else if (['legal', 'privacidade'].includes(initialSection)) setActiveSection('legal');
-      else if (['integrations', 'integracoes', 'google-calendar'].includes(initialSection)) setActiveSection('hub');
+      else if (['integrations', 'integracoes', 'google-calendar'].includes(initialSection)) setActiveSection('integrations');
       else if (initialSection === 'hub') setActiveSection('hub');
     }
   }, [initialSection]);
@@ -834,8 +835,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
       ] : adminCards)
     : effectiveStaffCards;
 
+  const googleCard = { id: 'integrations', title: 'Google Agenda e Meet', desc: 'Conecte sua agenda, configure a sincronização e gerencie o acesso à sua conta Google.', icon: Calendar, iconBg: 'bg-indigo-50', iconColor: 'text-indigo-600', tags: ['Google', 'Integrações', 'Meet'] };
+  cards.push(googleCard);
   const getSectionTitle = (sec: string) => {
-    const found = [...adminCards, ...staffCards, importCard].find(c => c.id === sec);
+    const found = [...adminCards, ...staffCards, importCard, googleCard].find(c => c.id === sec);
     return found ? found.title : 'Configurações';
   };
 
@@ -962,6 +965,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
       )}
 
       {/* SEÇÃO: EQUIPE & ACESSOS (Unificação de Profissionais + Equipe + Escala) */}
+      {activeSection === 'integrations' && <GoogleCalendarSettings />}
       {activeSection === 'team' && <UnifiedTeamManagement />}
 
       {/* SEÇÃO: AGENDA & OPERAÇÃO (Serviços e Salas) */}

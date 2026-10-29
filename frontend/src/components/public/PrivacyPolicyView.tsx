@@ -66,7 +66,7 @@ export const PrivacyPolicyView: React.FC<PrivacyPolicyViewProps> = ({
               <span>Voltar ao início</span>
             </button>
             <span className="text-[11px] font-semibold text-slate-400">
-              Versão vigente: 2026.1
+              Versão vigente: 2026.2
             </span>
           </div>
 
@@ -142,7 +142,7 @@ export const PrivacyPolicyView: React.FC<PrivacyPolicyViewProps> = ({
                   ✓ <strong>Sigilo e Auditabilidade:</strong> As principais ações e acessos a prontuários, evoluções e anamneses geram registros de auditoria com carimbo de data, hora e identificação do usuário profissional responsável, atendendo às determinações dos conselhos federais (CFM, COFFITO, CFO, CFP, CFN, CFFa). Estamos ampliando a cobertura desses registros para incluir progressivamente todas as leituras de dados sensíveis.
                 </p>
                 <p>
-                  ✓ <strong>Não Utilização para Treinamento de Modelos Públicos:</strong> Informações de pacientes, prontuários ou dados clínicos <strong>nunca são compartilhados com redes sociais nem com brokers de dados</strong>. Quando o profissional utiliza o assistente de IA Zemda (organização de evolução clínica, resumos de consulta, geração de relatórios), identificadores diretos do paciente — nome, CPF, telefone, e-mail, contato de emergência e observações administrativas — são removidos antes do envio ao provedor de IA (Google Gemini), que processa apenas o conteúdo clínico necessário para a tarefa solicitada, sem retenção para treinamento de modelos.
+                  ✓ <strong>Não Utilização para Treinamento de Modelos Públicos:</strong> Informações de pacientes, prontuários ou dados clínicos <strong>nunca são compartilhados com redes sociais nem com brokers de dados</strong>. Quando o profissional utiliza o assistente de IA Zemda (organização de evolução clínica, resumos de consulta, geração de relatórios), o Zemda aplica minimização e remoção de identificadores conhecidos antes do envio ao provedor de IA (Google Gemini), para processar o conteúdo necessário à tarefa solicitada. Textos livres devem ser revisados pelo profissional; a remoção automática não garante anonimização integral.
                 </p>
               </div>
             </section>
@@ -206,6 +206,16 @@ export const PrivacyPolicyView: React.FC<PrivacyPolicyViewProps> = ({
                 <li><strong>Google Analytics (GA4):</strong> Métricas estatísticas de uso, ativadas apenas com consentimento prévio do usuário e sem dado clínico;</li>
                 <li><strong>Autoridades Públicas:</strong> Exclusivamente mediante ordem judicial fundamentada ou estrita determinação legal.</li>
               </ul>
+            </section>
+
+            <section className="space-y-3" id="google-calendar-privacy">
+              <h2 className="text-lg sm:text-xl font-black text-slate-900">Integração opcional com Google Agenda e Meet</h2>
+              <p>Ao conectar sua conta, o Zemda acessa sua identificação Google (identificador e e-mail), lista de agendas, eventos da agenda selecionada e intervalos de disponibilidade. Usamos esses dados exclusivamente para sincronizar atendimentos, indicar conflitos de horário e criar links Google Meet para consultas online. A conexão é individual por usuário e clínica.</p>
+              <p>Enviamos ao Google os horários, um identificador do atendimento e da clínica, um link para o Zemda e o título “Atendimento Zemda”. O nome do paciente só integra o título quando o profissional ativa essa opção. Prontuários e evoluções não são incluídos nos eventos. A visibilidade dos eventos segue as permissões da agenda escolhida.</p>
+              <p>Os tokens de atualização são criptografados em repouso e usados pelo servidor, com acesso restrito. Mantemos a identificação da conta, configurações e vínculos de eventos enquanto a integração estiver conectada. A disponibilidade fica em cache temporário de até três minutos; os estados de autorização expiram em quinze minutos e são eliminados na limpeza periódica. Não armazenamos uma cópia integral dos eventos pessoais da agenda.</p>
+              <p>Em Configurações → Google Agenda e Meet, você pode pausar a sincronização ou desconectar. Desconectar remove os tokens, a identificação da conexão e os vínculos operacionais do banco ativo, limpa o cache e solicita a revogação no Google. Se a revogação não puder ser confirmada, informamos como remover o acesso diretamente na conta Google. Os atendimentos do Zemda e os eventos já criados no Google permanecem em seus sistemas de origem. Registros de auditoria e cópias de segurança seguem a política de retenção aplicável; pedidos sobre dados remanescentes podem ser encaminhados pelo canal de privacidade indicado nesta política.</p>
+              <p>O fluxo OAuth não solicita acesso ao Gmail, ao Drive ou às gravações e transcrições do Meet. A importação de uma transcrição Meet ocorre apenas quando o profissional cola o texto e solicita “Organizar com IA”. Nessa ação, o Google Gemini processa o texto para gerar um rascunho clínico revisável. Aplicamos remoção dos identificadores conhecidos do paciente e padrões de CPF/e-mail; essa proteção não garante anonimização de todas as informações de um texto livre. O profissional deve informar o paciente e revisar o conteúdo antes do envio. A transcrição bruta não é salva automaticamente por esse fluxo.</p>
+              <p>Não utilizamos dados obtidos pelas APIs Google para publicidade, venda de dados ou treinamento de modelos gerais de inteligência artificial. O uso e a transferência de informações recebidas das APIs Google obedecem à <a className="underline text-indigo-700" href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noreferrer">Google API Services User Data Policy</a> e à <a className="underline text-indigo-700" href="https://developers.google.com/workspace/workspace-api-user-data-developer-policy" target="_blank" rel="noreferrer">Google Workspace API User Data and Developer Policy</a>, incluindo os requisitos de Limited Use.</p>
             </section>
 
             {/* 6. Retenção e Eliminação */}

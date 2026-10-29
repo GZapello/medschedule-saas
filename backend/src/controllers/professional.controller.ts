@@ -155,12 +155,15 @@ export class ProfessionalController {
             id: `gcal-${b.start}`,
             title: 'Indisponível por compromisso externo',
             reason: 'Indisponível por compromisso externo',
-            start_datetime: b.start.replace('T', ' ').slice(0, 19),
-            end_datetime: b.end.replace('T', ' ').slice(0, 19),
+            start_datetime: GoogleCalendarService.toClinicTime(b.start),
+            end_datetime: GoogleCalendarService.toClinicTime(b.end),
             type: 'google_busy'
           });
         }
-      } catch (_) {}
+      } catch (_) {
+        const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+        blockedTimes.push({ id: 'google-availability-unavailable', title: 'Disponibilidade Google não verificada', reason: 'Tente novamente antes de reservar um horário.', start_datetime: `${date}T00:00:00`, end_datetime: `${date}T23:59:59`, type: 'google_busy' });
+      }
 
       res.json({
         professional,

@@ -178,7 +178,7 @@ export class AIController {
           identifierReplacements
         );
         const geminiReply = await GeminiService.chat({
-          message: text,
+          message: redactText(text, identifierReplacements),
           conversationHistory: redactHistory(conversationHistory.slice(-20), identifierReplacements),
           contextData: contextStr,
           professionalName: req.user?.name
@@ -991,7 +991,7 @@ export class AIController {
           || resolveProfessionalCanonicalModule(appointment.professional_id, tenantId) || 'general';
         // This branch never persists input, returns raw transcripts, or uses heuristic clinical defaults.
         const result = GeminiService.isAvailable() ? await GeminiService.organizeClinicalEvolution({
-          transcript: rawInput.trim(), mode: 'organize', teleconsultationModule: module
+          transcript: redactText(rawInput.trim(), collectPatientReplacements(tenantId!, [appointment.patient_id])), mode: 'organize', teleconsultationModule: module
         }) : null;
         if (!result?.organizedText) {
           res.status(503).json({ error: 'A IA está indisponível no momento. Sua transcrição foi preservada nesta janela; tente novamente.' }); return;
@@ -1568,7 +1568,7 @@ function buildContextString(
     parts.push(`Paciente: ${PATIENT_PLACEHOLDER}`);
     parts.push(`Profissional: ${appointmentCtx.prof_name}`);
     parts.push(`Serviço: ${appointmentCtx.service_name}`);
-    parts.push(`Horário: ${appointmentCtx.start_time} a ${appointmentCtx.end_time}`);
+    if (!appointmentCtx.google_time_imported && !db.prepare('SELECT 1 FROM google_calendar_event_links WHERE appointment_id = ? AND tenant_id = ?').get(appointmentCtx.id, tenantId)) parts.push(`Horário: ${appointmentCtx.start_time} a ${appointmentCtx.end_time}`);
     parts.push(`Status: ${appointmentCtx.status}`);
     if (appointmentCtx.patient_notes) parts.push(`Observações do paciente: ${appointmentCtx.patient_notes}`);
     if (appointmentCtx.internal_notes) parts.push(`Notas internas: ${appointmentCtx.internal_notes}`);
@@ -1630,6 +1630,7 @@ function buildContextString(
     if (patientCtx.pastAppts.length > 0) {
       parts.push(`\nÚLTIMAS CONSULTAS:`);
       for (const ap of patientCtx.pastAppts.slice(0, 5)) {
+        if (ap.google_time_imported || db.prepare('SELECT 1 FROM google_calendar_event_links WHERE appointment_id = ? AND tenant_id = ?').get(ap.id, tenantId)) continue;
         const time = ap.start_time?.split('T')[1]?.slice(0, 5) || '--:--';
         parts.push(`- [${ap.start_time?.split('T')[0] || '-'}] ${time} | ${ap.service_name || 'Serviço'} | Prof. ${ap.prof_name || '-'} | Status: ${ap.status}`);
       }

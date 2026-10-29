@@ -1,51 +1,34 @@
 import crypto from 'crypto';
 
-const SECRET_KEY_SEED =
-  process.env.GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY ||
-  process.env.JWT_SECRET ||
-  'zemda-google-calendar-aes256-default-seed';
-
-// Deriva chave de 32 bytes (256 bits) para AES-256-GCM
-const DERIVED_KEY = crypto.createHash('sha256').update(SECRET_KEY_SEED).digest();
-const IV_LENGTH = 12; // 12 bytes recomendado para GCM
-
-/**
- * Criptografa o refresh token em repouso utilizando AES-256-GCM.
- * Formato retornado: iv_hex:authTag_hex:ciphertext_hex
- */
-export function encryptRefreshToken(token: string): string {
-  if (!token) return '';
-  const iv = crypto.randomBytes(IV_LENGTH);
-  const cipher = crypto.createCipheriv('aes-256-gcm', DERIVED_KEY, iv);
-
-  let encrypted = cipher.update(token, 'utf8', 'hex');
-  encrypted += cipher.final('hex');
-  const authTag = cipher.getAuthTag().toString('hex');
-
-  return `${iv.toString('hex')}:${authTag}:${encrypted}`;
+// Dedicated keys only. Previous keys are explicitly supplied during rotation.
+function key(seed: string): Buffer {
+  if (Buffer.byteLength(seed) < 32) throw new Error('Configure uma chave dedicada de pelo menos 32 bytes para Google Agenda.');
+  return crypto.createHash('sha256').update(seed).digest();
 }
-
-/**
- * Decifra o refresh token seguro.
- * Retorna null em caso de falha de autenticação ou integridade.
- */
+export function calendarEncryptionConfigured(): boolean {
+  return Buffer.byteLength(process.env.GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY || '') >= 32;
+}
+export function encryptRefreshToken(token: string): string {
+  if (!token) throw new Error('Token ausente.');
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key(process.env.GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY || ''), iv);
+  const ciphertext = Buffer.concat([cipher.update(token, 'utf8'), cipher.final()]);
+  return `${iv.toString('hex')}:${cipher.getAuthTag().toString('hex')}:${ciphertext.toString('hex')}`;
+}
 export function decryptRefreshToken(payload: string): string | null {
-  if (!payload) return null;
+  const parts = payload.split(':');
+  if (parts.length !== 3 || !/^[a-f0-9]{24}$/i.test(parts[0]) || !/^[a-f0-9]{32}$/i.test(parts[1]) || !/^(?:[a-f0-9]{2})+$/i.test(parts[2])) return null;
+  let previous: string[] = [];
   try {
-    const parts = payload.split(':');
-    if (parts.length !== 3) return null;
-
-    const [ivHex, authTagHex, encryptedHex] = parts;
-    const iv = Buffer.from(ivHex, 'hex');
-    const authTag = Buffer.from(authTagHex, 'hex');
-    const decipher = crypto.createDecipheriv('aes-256-gcm', DERIVED_KEY, iv);
-    decipher.setAuthTag(authTag);
-
-    let decrypted = decipher.update(encryptedHex, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
-    return decrypted;
-  } catch (err) {
-    console.error('[GoogleCalendarCrypto] Falha ao decifrar token em repouso:', err);
-    return null;
+    const parsed = JSON.parse(process.env.GOOGLE_CALENDAR_PREVIOUS_ENCRYPTION_KEYS || '[]');
+    if (Array.isArray(parsed)) previous = parsed.filter((v): v is string => typeof v === 'string');
+  } catch { return null; }
+  for (const seed of [process.env.GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY || '', ...previous]) {
+    try {
+      const decipher = crypto.createDecipheriv('aes-256-gcm', key(seed), Buffer.from(parts[0], 'hex'));
+      decipher.setAuthTag(Buffer.from(parts[1], 'hex'));
+      return Buffer.concat([decipher.update(Buffer.from(parts[2], 'hex')), decipher.final()]).toString('utf8');
+    } catch { /* Never log credentials or crypto payloads. */ }
   }
+  return null;
 }

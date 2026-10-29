@@ -1,3 +1,4 @@
+process.env.GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY = 'test-only-google-key-32-bytes-minimum';
 const assert = require('node:assert');
 const crypto = require('node:crypto');
 const path = require('node:path');
@@ -185,8 +186,10 @@ async function runTests() {
   // ----------------------------------------------------
   // TESTE 7: Atualização de Configurações
   // ----------------------------------------------------
-  test('Atualização de preferências da Google Agenda (Privacidade, Meet, FreeBusy)', () => {
-    GoogleCalendarService.updateSettings(tenantA, userId, {
+  await testAsync('Atualização de preferências da Google Agenda (Privacidade, Meet, FreeBusy)', async () => {
+    GoogleCalendarService.listCalendars = async () => [{id:'cal-secundaria-99', summary:'Consultório Principal'}];
+    GoogleCalendarService.ensureWatch = async () => {};
+    await GoogleCalendarService.updateSettings(tenantA, userId, {
       calendar_id: 'cal-secundaria-99',
       calendar_name: 'Consultório Principal',
       privacy_mode: 'show_patient_name',
@@ -266,6 +269,7 @@ async function runTests() {
     `).run(apptId, tenantA, patId, profA, servId);
 
     // Desconecta a Google Agenda
+    GoogleCalendarService.createOAuth2Client = () => ({ revokeToken: async () => {} });
     await GoogleCalendarService.disconnect(tenantA, userId);
 
     // Conexão Google foi apagada
