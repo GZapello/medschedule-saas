@@ -27,6 +27,7 @@ export interface ProstheticWork {
 
 export interface DentalProstheticsKanbanProps {
   patientId?: string;
+  patientName?: string;
   onUpdateStatus?: (id: string, newStatus: string) => void;
   searchQuery?: string;
   filterStatus?: string;
@@ -45,6 +46,7 @@ const COLUMNS = [
 
 export const DentalProstheticsKanban: React.FC<DentalProstheticsKanbanProps> = ({
   patientId,
+  patientName,
   onUpdateStatus,
   searchQuery = '',
   filterStatus = '',
@@ -54,31 +56,47 @@ export const DentalProstheticsKanban: React.FC<DentalProstheticsKanbanProps> = (
   const [items, setItems] = useState<ProstheticWork[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      if (patientId) {
-        const res = await ApiClient.get<ProstheticWork[]>(`/v1/dentistry/prosthetics/${patientId}`);
-        if (Array.isArray(res)) setItems(res);
-      } else {
-        const res = await ApiClient.get<ProstheticWork[]>('/v1/dentistry/prosthetics-lab/pending?all=true');
-        if (Array.isArray(res)) setItems(res);
-      }
-    } catch (err) {
-      console.error('[DentalProstheticsKanban] Erro:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Carregamento estrito por paciente com proteção contra race conditions
   useEffect(() => {
-    loadData();
+    let isCurrent = true;
+
+    if (!patientId) {
+      setItems([]);
+      setLoading(false);
+      if (onCountsChange) onCountsChange({ total: 0, overdue: 0, inProduction: 0, delivered: 0, installed: 0 });
+      return;
+    }
+
+    // Limpa imediatamente antes de carregar o novo paciente (Regra 2)
+    setItems([]);
+    setLoading(true);
+
+    const fetchPatientData = async () => {
+      try {
+        const res = await ApiClient.get<ProstheticWork[]>(`/v1/dentistry/prosthetics/${patientId}`);
+        if (!isCurrent) return;
+        if (Array.isArray(res)) {
+          setItems(res);
+        } else {
+          setItems([]);
+        }
+      } catch (err) {
+        if (!isCurrent) return;
+        console.error('[DentalProstheticsKanban] Erro ao carregar próteses do paciente:', err);
+        setItems([]);
+      } finally {
+        if (isCurrent) setLoading(false);
+      }
+    };
+
+    fetchPatientData();
 
     const handleCustomUpdate = () => {
-      loadData();
+      fetchPatientData();
     };
     window.addEventListener('zemda-prosthetics-updated', handleCustomUpdate);
     return () => {
+      isCurrent = false;
       window.removeEventListener('zemda-prosthetics-updated', handleCustomUpdate);
     };
   }, [patientId]);
@@ -132,13 +150,36 @@ export const DentalProstheticsKanban: React.FC<DentalProstheticsKanbanProps> = (
 
   useEffect(() => {
     if (onCountsChange) {
+      if (!patientId) {
+        onCountsChange({ total: 0, overdue: 0, inProduction: 0, delivered: 0, installed: 0 });
+        return;
+      }
       const overdue = items.filter(i => i.isOverdue || ((i.expected_date || i.delivery_date) && (i.expected_date || i.delivery_date)! < today && i.status !== 'installed' && i.status !== 'canceled')).length;
       const inProduction = items.filter(i => i.status === 'in_production' || i.status === 'sent_to_lab' || i.status === 'requested').length;
       const delivered = items.filter(i => i.status === 'delivered_to_clinic' || i.status === 'tested_adjusted').length;
       const installed = items.filter(i => i.status === 'installed').length;
       onCountsChange({ total: items.length, overdue, inProduction, delivered, installed });
     }
-  }, [items, onCountsChange]);
+  }, [items, patientId, onCountsChange]);
+
+  // Se nenhum paciente foi selecionado, apresenta estado vazio com orientação clara
+  if (!patientId) {
+    return (
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-10 shadow-sm flex flex-col items-center justify-center text-center space-y-3 min-h-[300px]">
+        <div className="p-4 bg-gradient-to-br from-cyan-50 to-indigo-50 dark:bg-slate-800 text-cyan-600 rounded-2xl border border-cyan-100 dark:border-slate-700">
+          <User className="w-8 h-8 opacity-80" />
+        </div>
+        <div>
+          <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">
+            Nenhum paciente selecionado
+          </h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mt-1">
+            Selecione um paciente acima para visualizar os encaminhamentos protéticos e acompanhar o fluxo do laboratório deste paciente.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-sm space-y-4">
@@ -147,6 +188,11 @@ export const DentalProstheticsKanban: React.FC<DentalProstheticsKanbanProps> = (
           <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
             <Truck className="w-5 h-5 text-indigo-600" />
             Fluxo Kanban do Laboratório de Prótese
+            {patientName && (
+              <span className="text-xs font-semibold text-cyan-700 bg-cyan-50 border border-cyan-200 px-2 py-0.5 rounded-lg">
+                {patientName}
+              </span>
+            )}
           </h3>
           <p className="text-xs text-slate-500 dark:text-slate-400">
             Acompanhe cada etapa de confecção, provas intermediárias e data prevista de entrega
@@ -159,7 +205,28 @@ export const DentalProstheticsKanban: React.FC<DentalProstheticsKanbanProps> = (
         )}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 lg:overflow-x-auto min-h-[320px]">
+      {items.length === 0 && !loading ? (
+        <div className="bg-slate-50 dark:bg-slate-800/40 border border-dashed border-slate-200 dark:border-slate-700 rounded-2xl p-10 flex flex-col items-center justify-center text-center space-y-2">
+          <Package className="w-8 h-8 text-slate-300 dark:text-slate-600" />
+          <p className="text-xs font-bold text-slate-700 dark:text-slate-200">
+            Nenhum trabalho protético registrado para este paciente
+          </p>
+          <p className="text-[11px] text-slate-400 max-w-sm">
+            Clique em "Novo Trabalho Protético" para enviar um trabalho ao laboratório.
+          </p>
+        </div>
+      ) : items.length > 0 && filteredItems.length === 0 ? (
+        <div className="bg-slate-50 dark:bg-slate-800/40 border border-dashed border-slate-200 dark:border-slate-700 rounded-2xl p-8 flex flex-col items-center justify-center text-center space-y-1">
+          <Package className="w-6 h-6 text-slate-400" />
+          <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+            Nenhum encaminhamento encontrado com os filtros aplicados
+          </p>
+          <p className="text-[11px] text-slate-400">
+            Tente alterar o termo de busca ou o filtro de status.
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 lg:overflow-x-auto min-h-[320px]">
         {COLUMNS.map(col => {
           const colItems = filteredItems.filter(i => {
             const st = i.status === 'requested' ? 'sent_to_lab' : (i.status || 'sent_to_lab');
@@ -284,7 +351,8 @@ export const DentalProstheticsKanban: React.FC<DentalProstheticsKanbanProps> = (
             </div>
           );
         })}
-      </div>
+        </div>
+      )}
     </div>
   );
 };

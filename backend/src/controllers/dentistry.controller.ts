@@ -897,6 +897,14 @@ export class DentistryController {
         return;
       }
 
+      if (!hasClinicalAccess(req, patientId)) {
+        res.status(403).json({
+          error: 'Acesso clínico restrito: profissional sem vínculo assistencial com o paciente (Sigilo LGPD).',
+          code: 'CLINICAL_PRIVACY_RESTRICTION'
+        });
+        return;
+      }
+
       const rows = db.prepare(`
         SELECT dpl.*, p.name as professional_name, pat.full_name as patient_name
         FROM dental_prosthetics_lab dpl
@@ -946,6 +954,14 @@ export class DentistryController {
 
       if (!patientId || !labName || !workType) {
         res.status(400).json({ error: 'patientId, labName e workType são obrigatórios' });
+        return;
+      }
+
+      if (!hasClinicalAccess(req, String(patientId))) {
+        res.status(403).json({
+          error: 'Acesso clínico restrito: profissional sem vínculo assistencial com o paciente (Sigilo LGPD).',
+          code: 'CLINICAL_PRIVACY_RESTRICTION'
+        });
         return;
       }
 
@@ -1042,6 +1058,25 @@ export class DentistryController {
       const existing = db.prepare('SELECT * FROM dental_prosthetics_lab WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
       if (!existing) {
         res.status(404).json({ error: 'Trabalho de prótese não encontrado' });
+        return;
+      }
+
+      // Regra de Integridade Clínica: Um trabalho de prótese jamais pode mudar de paciente
+      if (req.body.patientId && String(req.body.patientId).trim() !== String(existing.patient_id)) {
+        res.status(400).json({ error: 'Não é permitido alterar o paciente vinculado a um trabalho protético existente.' });
+        return;
+      }
+      if (req.body.patient_id && String(req.body.patient_id).trim() !== String(existing.patient_id)) {
+        res.status(400).json({ error: 'Não é permitido alterar o paciente vinculado a um trabalho protético existente.' });
+        return;
+      }
+
+      // Validação de acesso assistencial ao paciente dono da prótese
+      if (!hasClinicalAccess(req, String(existing.patient_id))) {
+        res.status(403).json({
+          error: 'Acesso clínico restrito: profissional sem vínculo assistencial com o paciente da prótese.',
+          code: 'CLINICAL_PRIVACY_RESTRICTION'
+        });
         return;
       }
 
@@ -2065,7 +2100,15 @@ export class DentistryController {
         return;
       }
 
-      const { search, status, labName, all } = req.query;
+      const { search, status, labName, all, patientId } = req.query;
+
+      if (patientId && !hasClinicalAccess(req, String(patientId))) {
+        res.status(403).json({
+          error: 'Acesso clínico restrito: profissional sem vínculo assistencial com o paciente.',
+          code: 'CLINICAL_PRIVACY_RESTRICTION'
+        });
+        return;
+      }
 
       let sql = `
         SELECT p.*, pat.full_name as patient_name, prof.name as professional_name
@@ -2075,6 +2118,11 @@ export class DentistryController {
         WHERE p.tenant_id = ?
       `;
       const params = [tenantId];
+
+      if (patientId) {
+        sql += ' AND p.patient_id = ?';
+        params.push(String(patientId).trim());
+      }
 
       if (status) {
         sql += ' AND p.status = ?';

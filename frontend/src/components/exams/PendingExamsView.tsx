@@ -51,6 +51,8 @@ export const PendingExamsView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'exams' | 'prosthetics'>('exams');
 
   // Estados específicos para Próteses e Laboratório Protético
+  const [selectedProstheticsPatientId, setSelectedProstheticsPatientId] = useState<string>('');
+  const [selectedProstheticsPatient, setSelectedProstheticsPatient] = useState<any | null>(null);
   const [prostheticsSearch, setProstheticsSearch] = useState<string>('');
   const [prostheticsStatus, setProstheticsStatus] = useState<string>('');
   const [prostheticsLab, setProstheticsLab] = useState<string>('');
@@ -98,9 +100,12 @@ export const PendingExamsView: React.FC = () => {
         status: 'sent_to_lab'
       });
       showToast('Ordem protética registrada com sucesso!', 'success');
+      if (prostheticForm.patientId && !selectedProstheticsPatientId) {
+        setSelectedProstheticsPatientId(prostheticForm.patientId);
+      }
       setShowNewProstheticModal(false);
       setProstheticForm({
-        patientId: '',
+        patientId: selectedProstheticsPatientId || prostheticForm.patientId || '',
         labName: '',
         workType: '',
         toothNumber: '',
@@ -371,7 +376,13 @@ export const PendingExamsView: React.FC = () => {
 
             <button
               type="button"
-              onClick={() => setShowNewProstheticModal(true)}
+              onClick={() => {
+                setProstheticForm(prev => ({
+                  ...prev,
+                  patientId: selectedProstheticsPatientId || prev.patientId || ''
+                }));
+                setShowNewProstheticModal(true);
+              }}
               className="flex items-center justify-center gap-2 w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-700 hover:to-indigo-700 text-white font-bold rounded-xl shadow-xs transition-all cursor-pointer text-xs self-start md:self-auto min-h-[40px]"
             >
               <Plus className="w-4 h-4" />
@@ -379,7 +390,71 @@ export const PendingExamsView: React.FC = () => {
             </button>
           </div>
 
+          {/* Seletor de Paciente Obrigatório para Visualização de Próteses */}
+          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-cyan-100 bg-gradient-to-r from-white via-cyan-50/20 to-indigo-50/20 shadow-xs space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <User className="w-4 h-4 text-cyan-600" />
+                  <h3 className="text-sm font-bold text-slate-800">
+                    Paciente Selecionado
+                  </h3>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-cyan-100 text-cyan-800">
+                    Obrigatório para Próteses
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Selecione o paciente para carregar com segurança o fluxo laboratorial e ordens ativas.
+                </p>
+              </div>
+
+              {selectedProstheticsPatientId && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedProstheticsPatientId('');
+                    setSelectedProstheticsPatient(null);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all cursor-pointer border border-slate-200 hover:border-rose-200 self-start sm:self-auto"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  Limpar seleção
+                </button>
+              )}
+            </div>
+
+            <div className="max-w-xl">
+              <PatientSearchSelect
+                value={selectedProstheticsPatientId}
+                onChange={(id, patient) => {
+                  setSelectedProstheticsPatientId(id || '');
+                  setSelectedProstheticsPatient(patient || null);
+                }}
+                selectedPatient={selectedProstheticsPatient}
+                placeholder="Pesquise o paciente por nome, CPF ou prontuário..."
+                className="text-xs"
+              />
+            </div>
+
+            {selectedProstheticsPatient && (
+              <div className="flex items-center gap-2 pt-1 text-xs text-slate-600">
+                <span className="font-semibold text-slate-700">
+                  Exibindo ordens laboratoriais de:
+                </span>
+                <span className="font-bold text-cyan-700 bg-cyan-50 px-2 py-0.5 rounded-md border border-cyan-100">
+                  {selectedProstheticsPatient.full_name || selectedProstheticsPatient.name}
+                </span>
+              </div>
+            )}
+          </div>
+
           {/* Cards de Métricas do Laboratório */}
+          {!selectedProstheticsPatientId && (
+            <div className="text-[11px] text-slate-400 italic bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+              Selecione um paciente acima para carregar os indicadores e contagens do laboratório.
+            </div>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs flex items-center justify-between">
               <div>
@@ -472,6 +547,8 @@ export const PendingExamsView: React.FC = () => {
 
           {/* Kanban Board com 6 Etapas */}
           <DentalProstheticsKanban
+            patientId={selectedProstheticsPatientId || undefined}
+            patientName={selectedProstheticsPatient?.full_name || selectedProstheticsPatient?.name}
             searchQuery={prostheticsSearch}
             filterStatus={prostheticsStatus}
             filterLab={prostheticsLab}
