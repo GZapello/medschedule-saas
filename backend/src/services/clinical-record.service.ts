@@ -203,7 +203,7 @@ export class ClinicalRecordService {
         session_date, session_time, session_end_time, procedure_name, title, clinical_evolution,
         technical_notes, conducts, clinical_data_json, module_type, module_data_json,
         source_id, source_type, is_sealed, created_by, updated_by, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
     `).run(
       recordId,
       tenantId,

@@ -1,3 +1,4 @@
+import { canAccessPatient } from '../services/patient-sharing.service';
 import { resolveBookingTenant, publicBookingProfessional, professionalBookingService, validBookingDate } from '../utils/public-booking';
 import { Request, Response } from 'express';
 import { calculateAvailableSlots } from '../utils/slot-calculator';
@@ -8,7 +9,7 @@ export class SlotController {
   static async getAvailableSlots(req: Request, res: Response): Promise<void> {
     try {
       let tenantId = req.tenantId;
-      const { tenantSlug, professionalId, serviceId, date, roomId } = req.query;
+      const { tenantSlug, professionalId, serviceId, date, roomId, patientId } = req.query;
 
       const isPublic = req.path.startsWith('/v1/public/');
       if (isPublic) {
@@ -28,6 +29,9 @@ export class SlotController {
         return;
       }
 
+      if (patientId && (isPublic || typeof patientId !== 'string' || (!db.prepare('SELECT 1 FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId) && (!req.user || !canAccessPatient(req.user.userId, tenantId, patientId, 'appointments'))))) {
+        res.status(403).json({ error: 'Paciente não autorizado nesta clínica.' }); return;
+      }
       // Consulta FreeBusy da Google Agenda com cache em memória e fallback resiliente
       let externalBusyIntervals: Array<{ startMin: number; endMin: number }> = [];
       try {
@@ -45,7 +49,8 @@ export class SlotController {
         String(date),
         roomId ? String(roomId) : undefined,
         undefined,
-        externalBusyIntervals
+        externalBusyIntervals,
+        typeof patientId === 'string' ? patientId : undefined
       );
 
       res.json({

@@ -1,3 +1,4 @@
+import { bookingTime } from '../utils/booking-time';
 import {recordedAttendance,appointmentRecord,extractDatePart,extractTimePart,normalizeLocalDateTimeIso,getClinicLocalNowIso,addMinutesToLocalIso} from '../services/document-context.service';
 import { canAccessPatient } from '../services/patient-sharing.service';
 import { resolveBookingTenant, publicBookingProfessional, professionalBookingService, validBookingDate } from '../utils/public-booking';
@@ -314,7 +315,6 @@ export class AppointmentController {
   }
 
   static create(req: Request, res: Response): void {
-    if (!req.path.startsWith('/v1/public/')) { AppointmentController.createInternal(req, res); return; }
     // Send success only after the synchronous transaction has committed.
     let status = 200;
     let body: any;
@@ -326,11 +326,15 @@ export class AppointmentController {
       // Billing expiry opens its own transaction. Run it before the atomic booking
       // transaction; subscription eligibility is still checked inside createInternal.
       BillingService.expireGrace();
-      db.transaction(() => AppointmentController.createInternal(req, pendingResponse))();
+      db.transaction(() => {
+        AppointmentController.createInternal(req, pendingResponse);
+        if (status >= 400) throw new Error('BOOKING_REJECTED');
+      })();
       res.status(status).json(body);
-    } catch (err) {
-      console.error('[AppointmentController.createPublic] Erro:', err);
-      res.status(500).json({ error: 'Não foi possível concluir o agendamento. Tente novamente.' });
+    } catch (err: any) {
+      if (status >= 400) { res.status(status).json(body); return; }
+      console.error('[AppointmentController.create] Persistência falhou:', { code: err?.code, constraint: err?.errcode });
+      res.status(500).json({ code: 'BOOKING_INTERNAL_ERROR', error: 'Não foi possível salvar o agendamento. Tente novamente. Se persistir, contate o suporte.' });
     }
   }
 
@@ -344,6 +348,12 @@ export class AppointmentController {
         // Dados se o paciente for novo (página de agendamento público)
         newPatientData
       } = req.body;
+
+      const ids = [professionalId, serviceId, patientId, roomId, insuranceId, referredFromAppointmentId, referredByProfessionalId];
+      if (ids.some(value => value !== undefined && value !== null && typeof value !== 'string') ||
+          ['isCustomTime', 'is_custom_time', 'isRetroactive', 'is_retroactive'].some(key => req.body[key] !== undefined && typeof req.body[key] !== 'boolean')) {
+        res.status(400).json({ code: 'INVALID_BOOKING_FIELDS', error: 'Revise os campos do agendamento e tente novamente.' }); return;
+      }
 
       const rawDriveUrl = req.body.google_drive_url !== undefined ? req.body.google_drive_url : req.body.googleDriveUrl;
       if (!validMeetingUrl(meeting_url) || !validMeetingUrl(rawDriveUrl)) {
@@ -390,7 +400,7 @@ export class AppointmentController {
       if (!db.prepare("SELECT 1 FROM tenants WHERE id = ? AND status = 'active'").get(tenantId)) {
         res.status(403).json({ error: 'O acesso a esta clínica está bloqueado.' }); return;
       }
-      if (!isPublic) BillingService.expireGrace();
+
       if (!canOperate(tenantId)) { res.status(isPublic ? 404 : 402).json(isPublic ? {error:'Agendamento online indisponível.'} : {code:'SUBSCRIPTION_REQUIRED',error:'Agendamento indisponível. A clínica precisa regularizar sua assinatura.'}); return; }
       const serviceRow = db.prepare('SELECT id, price, professional_id FROM services WHERE id = ? AND tenant_id = ?').get(serviceId, tenantId) as { id: string; price: number; professional_id: string | null } | undefined;
       if (!serviceRow) { res.status(400).json({ error: 'Serviço não pertence à clínica.' }); return; }
@@ -405,6 +415,24 @@ export class AppointmentController {
         res.status(400).json({ error: 'Valor da consulta inválido. Informe um número não negativo com até duas casas decimais.' }); return;
       }
       const agreedAmount = Math.round(appointmentPrice * 100) / 100;
+
+      const normalizedStartTime = bookingTime(startTime);
+      const normalizedEndTime = bookingTime(endTime);
+      if (!normalizedStartTime || !normalizedEndTime || normalizedEndTime <= normalizedStartTime) {
+        res.status(400).json({ code: 'INVALID_BOOKING_TIME', error: 'Informe uma data válida e um horário de término posterior ao início.' }); return;
+      }
+      if (!db.prepare('SELECT 1 FROM professionals WHERE id = ? AND tenant_id = ? AND active = 1').get(professionalId, tenantId)) {
+        res.status(400).json({ code: 'INVALID_PROFESSIONAL', error: 'Selecione um profissional ativo desta clínica.' }); return;
+      }
+      if (roomId && !db.prepare('SELECT 1 FROM rooms WHERE id = ? AND tenant_id = ? AND active = 1').get(roomId, tenantId)) {
+        res.status(400).json({ code: 'INVALID_ROOM', error: 'Selecione uma sala ativa desta clínica ou deixe sem sala.' }); return;
+      }
+      if (insuranceId && !db.prepare('SELECT 1 FROM clinic_insurances WHERE id = ? AND tenant_id = ? AND active = 1').get(insuranceId, tenantId)) {
+        res.status(400).json({ code: 'INVALID_INSURANCE', error: 'Selecione um convênio ativo desta clínica ou atendimento particular.' }); return;
+      }
+      if (modality !== undefined && !['presential', 'online', 'home'].includes(modality)) {
+        res.status(400).json({ code: 'INVALID_MODALITY', error: 'Selecione uma modalidade válida.' }); return;
+      }
 
       // Resolve ou cria o paciente
       let resolvedPatientId = patientId;
@@ -448,8 +476,7 @@ export class AppointmentController {
         res.status(403).json({error:'Paciente não autorizado para agendamento nesta clínica.'}); return;
       }
 
-      const normalizedStartTime = String(startTime).trim().replace(' ', 'T');
-      const normalizedEndTime = String(endTime).trim().replace(' ', 'T');
+
 
       const isRetroactive = !isPublic && Boolean(req.body.isRetroactive || req.body.is_retroactive);
       const isCustomTime = Boolean(req.body.isCustomTime || req.body.is_custom_time || isRetroactive);
@@ -551,6 +578,11 @@ export class AppointmentController {
           });
           return;
         }
+      }
+
+      if (!isCustomTime && !isPublic && !calculateAvailableSlots(tenantId, professionalId, serviceId, normalizedStartTime.slice(0, 10), roomId || undefined)
+        .some(slot => slot.startTime === normalizedStartTime && slot.endTime === normalizedEndTime)) {
+        res.status(409).json({ code: 'SLOT_UNAVAILABLE', error: 'Este horário não está mais disponível para a duração do serviço. Atualize os horários e escolha novamente.' }); return;
       }
 
       const appointmentId = 'apt-' + uuidv4().slice(0, 8);
@@ -689,23 +721,27 @@ export class AppointmentController {
       }
 
       // Enfileira notificação
-      const patientData = db.prepare('SELECT full_name, phone, email FROM patients WHERE id = ?').get(resolvedPatientId) as any;
-      if (patientData) {
-        db.prepare(`
-          INSERT INTO notifications (id, tenant_id, patient_id, professional_id, appointment_id, type, channel, recipient, content, status, scheduled_for)
-          VALUES (?, ?, ?, ?, ?, 'confirmation', 'whatsapp', ?, ?, 'pending', datetime('now'))
-        `).run(
-          'notif-' + uuidv4().slice(0, 8),
-          tenantId,
-          resolvedPatientId,
-          professionalId,
-          appointmentId,
-          patientData.phone,
-          `Olá ${patientData.full_name}, seu atendimento foi agendado com sucesso para ${startTime}. Código: ${appointmentNumber}`
-        );
+      try {
+        const patientData = db.prepare('SELECT full_name, phone, email FROM patients WHERE id = ?').get(resolvedPatientId) as any;
+        if (typeof patientData?.phone === 'string' && patientData.phone.trim()) {
+          db.prepare(`
+            INSERT INTO notifications (id, tenant_id, patient_id, professional_id, appointment_id, type, channel, recipient, content, status, scheduled_for)
+            VALUES (?, ?, ?, ?, ?, 'confirmation', 'whatsapp', ?, ?, 'pending', datetime('now'))
+          `).run(
+            'notif-' + uuidv4().slice(0, 8),
+            tenantId,
+            resolvedPatientId,
+            professionalId,
+            appointmentId,
+            patientData.phone,
+            `Olá ${patientData.full_name}, seu atendimento foi agendado com sucesso para ${startTime}. Código: ${appointmentNumber}`
+          );
+        }
+
+      } catch (notificationError: any) {
+        console.warn('[AppointmentController] Confirmação não enfileirada:', { appointmentId, code: notificationError?.code });
       }
 
-      // Agenda lembrete automático inteligente de 1 hora antes (Item 22)
       // Agenda lembrete automático inteligente de 1 hora antes (Item 22)
       if (!isRetroactive) {
         NotificationService.scheduleAppointmentReminder(appointmentId);
@@ -754,9 +790,7 @@ export class AppointmentController {
         message: 'Atendimento agendado com sucesso!'
       });
     } catch (err: any) {
-      if (req.path.startsWith('/v1/public/')) throw err;
-      console.error('[AppointmentController.create] Erro:', err);
-      res.status(500).json({ error: 'Erro ao registrar agendamento' });
+      throw err;
     }
   }
 
@@ -1165,9 +1199,14 @@ export class AppointmentController {
         return;
       }
 
-      const normalizedStartTime = String(startTime).trim().replace(' ', 'T');
-      const normalizedEndTime = String(endTime).trim().replace(' ', 'T');
+      const normalizedStartTime = bookingTime(startTime);
+      const normalizedEndTime = bookingTime(endTime);
+      if (!normalizedStartTime || !normalizedEndTime || normalizedEndTime <= normalizedStartTime) {
+        res.status(400).json({ code: 'INVALID_BOOKING_TIME', error: 'Informe início e término válidos, nesta ordem.' }); return;
+      }
 
+      const isCustomTime = Boolean(req.body.isCustomTime || req.body.is_custom_time);
+      if (!isCustomTime) {
       // 0. Validação dos horários de funcionamento da clínica (Item 3)
       const hoursCheck = validateClinicBusinessHours(tenantId, normalizedStartTime, normalizedEndTime);
       if (!hoursCheck.valid) {
@@ -1180,6 +1219,7 @@ export class AppointmentController {
       if (!scheduleCheck.valid) {
         res.status(400).json({ error: scheduleCheck.error });
         return;
+      }
       }
 
       // 1. Conflito de profissional (Item 7)
@@ -1320,13 +1360,14 @@ export class AppointmentController {
       let newEnd = origEnd;
 
       if (startTime) {
-        newStart = String(startTime).trim().replace(' ', 'T');
+        newStart = bookingTime(startTime) || '';
       }
       if (endTime) {
-        newEnd = String(endTime).trim().replace(' ', 'T');
+        newEnd = bookingTime(endTime) || '';
       }
 
       const safeProfId = String(professionalId || appt.professional_id || '');
+      if (!newStart || !newEnd || newEnd <= newStart) { res.status(400).json({ code: 'INVALID_BOOKING_TIME', error: 'Informe início e término válidos, nesta ordem.' }); return; }
       const safeStart = String(newStart || '');
       const safeEnd = String(newEnd || '');
       const safeRoomId = roomId !== undefined ? (roomId || null) : (appt.room_id || null);

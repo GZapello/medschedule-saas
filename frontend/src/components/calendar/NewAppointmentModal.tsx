@@ -1,3 +1,4 @@
+import { bookingError } from '../../utils/booking-error';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
@@ -74,6 +75,9 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
   const priceEdited = useRef(false);
   const [insuranceId, setInsuranceId] = useState<string>('');
   const [roomId, setRoomId] = useState<string>('');
+  const submissionPending = useRef(false);
+  const [errorTitle, setErrorTitle] = useState('Não foi possível concluir');
+  const slotRequest = useRef(0);
   const [conflictError, setConflictError] = useState<string | null>(null);
 
   const [date, setDate] = useState<string>(() => {
@@ -97,6 +101,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
     if (isOpen) {
       setMeetingUrl('');
       setIsConfiguringTele(false);
+      setSelectedSlot(null);
       setIsCustomTime(false);
       setIsRetroactive(false);
       setCustomTime(initialPrefill?.time || '18:30');
@@ -216,7 +221,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
         } else if (srvs.length > 0) {
           setServiceId(srvs[0].id);
         }
-      }).catch(() => {});
+      }).catch((error) => { const feedback = bookingError(error); setErrorTitle(feedback.title); setConflictError(feedback.message); });
     }
   }, [isOpen, initialPrefill]);
 
@@ -235,15 +240,17 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
 
   // Consulta slots livres imediatamente ao alterar profissional, serviço, data ou sala
   useEffect(() => {
-    if (professionalId && serviceId && date) {
+    const request = ++slotRequest.current;
+    if (isOpen && professionalId && serviceId && date) {
       setAvailableSlots([]);
       setSelectedSlot(null);
       setLoadingSlots(true);
       setConflictError(null);
 
-      const roomParam = roomId ? `&roomId=${encodeURIComponent(roomId)}` : '';
+      const roomParam = (roomId ? `&roomId=${encodeURIComponent(roomId)}` : '') + (patientId ? `&patientId=${encodeURIComponent(patientId)}` : '');
       ApiClient.get<any>(`/v1/slots/available?professionalId=${professionalId}&serviceId=${serviceId}&date=${date}${roomParam}`)
         .then(data => {
+          if (request !== slotRequest.current) return;
           const slots: AvailableSlot[] = data.slots || [];
           setAvailableSlots(slots);
           if (initialPrefill?.time) {
@@ -256,16 +263,20 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
             }
           }
         })
-        .catch(() => {
+        .catch(error => {
+          if (request !== slotRequest.current) return;
+          const feedback = bookingError(error); setErrorTitle(feedback.title); setConflictError(feedback.message);
           setAvailableSlots([]);
           setSelectedSlot(null);
         })
-        .finally(() => setLoadingSlots(false));
+        .finally(() => { if (request === slotRequest.current) setLoadingSlots(false); });
     } else {
+      setLoadingSlots(false);
       setAvailableSlots([]);
       setSelectedSlot(null);
     }
-  }, [professionalId, serviceId, date, roomId, initialPrefill]);
+    return () => { ++slotRequest.current; };
+  }, [isOpen, professionalId, serviceId, date, roomId, patientId, initialPrefill]);
 
   if (!isOpen) return null;
 
@@ -283,6 +294,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
   };
 
   const handleBook = async () => {
+    if (submissionPending.current || loadingSlots) return;
     if (!patientId || !professionalId || !serviceId) {
       showToast('Preencha todos os campos obrigatórios', 'error');
       return;
@@ -334,6 +346,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
     }
 
     try {
+      submissionPending.current = true;
       setLoading(true);
       setConflictError(null);
       const createdAppt = await ApiClient.post('/v1/appointments', {
@@ -363,29 +376,30 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
       onSuccess(createdAppt);
       onClose();
     } catch (err: any) {
-      const errorMsg = err.error || err.message || 'Este horário não está mais disponível. Escolha outro horário.';
-      if (err.conflict) {
-        setConflictError(`${errorMsg} (${err.conflict.professionalName} - ${err.conflict.serviceName || ''})`);
-      } else {
-        setConflictError(errorMsg);
-      }
-      showToast(errorMsg, 'error');
+      const feedback = bookingError(err);
+      setErrorTitle(feedback.title);
+      setConflictError(feedback.message);
+      showToast(feedback.message, 'error');
 
       // Recalcula imediatamente os horários disponíveis para remover o horário conflitante
-      if (professionalId && serviceId && date) {
+      if (err.status === 409 && professionalId && serviceId && date) {
+        const request = ++slotRequest.current;
+        setSelectedSlot(null);
         setLoadingSlots(true);
-        const roomParam = roomId ? `&roomId=${encodeURIComponent(roomId)}` : '';
+        const roomParam = (roomId ? `&roomId=${encodeURIComponent(roomId)}` : '') + (patientId ? `&patientId=${encodeURIComponent(patientId)}` : '');
         ApiClient.get<any>(`/v1/slots/available?professionalId=${professionalId}&serviceId=${serviceId}&date=${date}${roomParam}`)
           .then(data => {
+            if (request !== slotRequest.current) return;
             setAvailableSlots(data.slots || []);
             if (!isCustomTime) {
               setSelectedSlot(null);
             }
           })
           .catch(() => {})
-          .finally(() => setLoadingSlots(false));
+          .finally(() => { if (request === slotRequest.current) setLoadingSlots(false); });
       }
     } finally {
+      submissionPending.current = false;
       setLoading(false);
     }
   };
@@ -629,7 +643,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
           {/* Banner de conflito de agendamento */}
           {conflictError && (
             <div className="p-2.5 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-medium flex items-start gap-2">
-              <span className="font-bold text-red-800 shrink-0">Conflito Detectado:</span>
+              <span className="font-bold text-red-800 shrink-0">{errorTitle}:</span>
               <span>{conflictError}</span>
             </div>
           )}
@@ -813,7 +827,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
             <button
               type="button"
               onClick={handleBook}
-              disabled={(isRetroactive ? (!date || !retroStartTime || !retroEndTime) : (!isCustomTime ? !selectedSlot : (!date || !customTime))) || !patientId || !professionalId || !serviceId || loading}
+              disabled={(isRetroactive ? (!date || !retroStartTime || !retroEndTime) : (!isCustomTime ? !selectedSlot : (!date || !customTime))) || !patientId || !professionalId || !serviceId || loading || loadingSlots}
               className="w-full sm:w-auto px-5 py-2 font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs disabled:opacity-50 cursor-pointer text-xs"
             >
               {isRetroactive ? (loading ? 'Registrando...' : 'Registrar e abrir atendimento') : (loading ? 'Agendando...' : 'Confirmar Agendamento')}

@@ -50,8 +50,11 @@ export function calculateAvailableSlots(
   dateStr: string, // 'YYYY-MM-DD'
   roomId?: string,
   mockNow?: Date,
-  externalBusyIntervals?: Array<{ startMin: number; endMin: number }>
+  externalBusyIntervals?: Array<{ startMin: number; endMin: number }>,
+  patientId?: string
 ): AvailableSlot[] {
+  if (!db.prepare('SELECT 1 FROM professionals WHERE id = ? AND tenant_id = ? AND active = 1').get(professionalId, tenantId)) return [];
+  if (roomId && !db.prepare('SELECT 1 FROM rooms WHERE id = ? AND tenant_id = ? AND active = 1').get(roomId, tenantId)) return [];
   // 1. Busca dados do serviço
   const serviceStmt = db.prepare(`
     SELECT COALESCE(ps.custom_duration, s.duration_minutes) AS duration_minutes, s.buffer_minutes, s.min_lead_time_hours, s.max_advance_days, s.active
@@ -151,7 +154,7 @@ export function calculateAvailableSlots(
     SELECT start_time, end_time, room_id
     FROM appointments
     WHERE tenant_id = ?
-      AND (professional_id = ? OR (? IS NOT NULL AND room_id = ?))
+      AND (professional_id = ? OR (? IS NOT NULL AND room_id = ?) OR (? IS NOT NULL AND patient_id = ?))
       AND status NOT IN ('cancelled')
       AND (
         REPLACE(start_time, ' ', 'T') LIKE ?
@@ -165,6 +168,8 @@ export function calculateAvailableSlots(
     professionalId,
     roomId || null,
     roomId || null,
+    patientId || null,
+    patientId || null,
     `${dateStr}%`,
     `${dateStr}%`,
     `${dateStr}T23:59:59`,
@@ -286,6 +291,7 @@ export function calculateAvailableSlots(
       }
 
       const slotStartIso = `${dateStr}T${minutesToTime(current)}:00`;
+      if (Date.parse(`${slotStartIso}-03:00`) < referenceDate.getTime() + minLeadHours * 3600000) continue;
       const slotEndIso = `${dateStr}T${minutesToTime(slotEndMin)}:00`;
 
       if (seenTimes.has(slotStartIso)) continue;

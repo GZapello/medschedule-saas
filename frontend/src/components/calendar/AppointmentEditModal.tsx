@@ -1,3 +1,4 @@
+import { bookingError } from '../../utils/booking-error';
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { ApiClient } from '../../api/client';
@@ -78,6 +79,7 @@ export const AppointmentEditModal: React.FC<AppointmentEditModalProps> = ({
   const [availableSlots, setAvailableSlots] = useState<AvailableSlot[]>([]);
   const [loadingSlots, setLoadingSlots] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
+  const [errorTitle, setErrorTitle] = useState('Revise os dados');
   const [conflictError, setConflictError] = useState<string | null>(null);
 
   const [isNewServiceModalOpen, setIsNewServiceModalOpen] = useState<boolean>(false);
@@ -356,13 +358,10 @@ export const AppointmentEditModal: React.FC<AppointmentEditModalProps> = ({
       onSuccess();
       onClose();
     } catch (err: any) {
-      const errorMsg = err.error || err.message || 'Não foi possível salvar as alterações deste horário.';
-      if (err.conflict) {
-        setConflictError(`${errorMsg} (${err.conflict.professionalName} - ${err.conflict.serviceName || ''})`);
-      } else {
-        setConflictError(errorMsg);
-      }
-      showToast(errorMsg, 'error');
+      const feedback = bookingError(err);
+      setErrorTitle(feedback.title);
+      setConflictError(feedback.message);
+      showToast(feedback.message, 'error');
 
       if (!isInProgress && professionalId && serviceId && date) {
         fetchSlots(professionalId, serviceId, date, roomId);
@@ -648,7 +647,7 @@ export const AppointmentEditModal: React.FC<AppointmentEditModalProps> = ({
             <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 font-medium flex items-start gap-2">
               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
               <div>
-                <span className="font-bold text-rose-800 mr-1">Conflito detectado:</span>
+                <span className="font-bold text-rose-800 mr-1">{errorTitle}:</span>
                 <span>{conflictError}</span>
               </div>
             </div>
