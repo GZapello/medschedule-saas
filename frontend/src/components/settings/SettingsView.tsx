@@ -80,7 +80,7 @@ export interface SettingsViewProps {
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNavigateView }) => {
-  const { currentUser, currentTenant, isClinicAdmin, refreshTenant, reloadSession, hasPermission } = useAuth();
+  const { currentUser, currentTenant, isClinicAdmin, isReceptionist, isProfessional, refreshTenant, reloadSession, hasPermission } = useAuth();
   const { showToast } = useToast();
 
   const [activeSection, setActiveSection] = useState<string>(() => {
@@ -836,9 +836,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
     : effectiveStaffCards;
 
   const googleCard = { id: 'integrations', title: 'Google Agenda e Meet', desc: 'Conecte sua agenda, configure a sincronização e gerencie o acesso à sua conta Google.', icon: Calendar, iconBg: 'bg-indigo-50', iconColor: 'text-indigo-600', tags: ['Google', 'Integrações', 'Meet'] };
-  cards.push(googleCard);
+  const canAccessGoogleCalendar = !isReceptionist && (isProfessional || isClinicAdmin);
+  if (canAccessGoogleCalendar) {
+    cards.push(googleCard);
+  }
   const getSectionTitle = (sec: string) => {
-    const found = [...adminCards, ...staffCards, importCard, googleCard].find(c => c.id === sec);
+    const found = [...adminCards, ...staffCards, importCard, ...(canAccessGoogleCalendar ? [googleCard] : [])].find(c => c.id === sec);
     return found ? found.title : 'Configurações';
   };
 

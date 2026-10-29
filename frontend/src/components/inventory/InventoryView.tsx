@@ -26,7 +26,7 @@ import { InventoryItem, InventoryMovement } from '../../types';
 
 export const InventoryView: React.FC = () => {
   const { showToast } = useToast();
-  const { isClinicAdmin } = useAuth();
+  const { isClinicAdmin, isReceptionist, hasPermission, canAccessInventory } = useAuth();
 
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [movements, setMovements] = useState<InventoryMovement[]>([]);
@@ -67,13 +67,14 @@ export const InventoryView: React.FC = () => {
   const [savingMovement, setSavingMovement] = useState<boolean>(false);
 
   // Restrição de acesso
-  if (!isClinicAdmin) {
+  const isAuthorized = Boolean(canAccessInventory || isClinicAdmin || isReceptionist || hasPermission('manage_inventory') || hasPermission('view_inventory'));
+  if (!isAuthorized) {
     return (
       <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-xs text-center space-y-3 max-w-md mx-auto my-12">
         <div className="p-3 bg-rose-50 text-rose-600 rounded-full w-fit mx-auto">
           <ShieldAlert className="w-8 h-8" />
         </div>
-        <h3 className="text-base font-bold text-slate-900">Acesso Restrito ao Gerenciador</h3>
+        <h3 className="text-base font-bold text-slate-900">Acesso Restrito</h3>
         <p className="text-xs text-slate-500">
           O módulo de controle de estoque de insumos e produtos é reservado exclusivamente para os administradores da clínica.
         </p>

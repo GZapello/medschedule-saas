@@ -48,6 +48,7 @@ import { PersonalAIController } from '../controllers/personal-ai.controller';
 import { PersonalStudentLinkController } from '../controllers/personal-student-link.controller';
 import { IntegrationsController } from '../controllers/integrations.controller';
 import { GoogleCalendarController } from '../controllers/google-calendar.controller';
+import { AdminVisitsController } from '../controllers/admin-visits.controller';
 import { FreeTrialController } from '../controllers/free-trial.controller';
 import { FileController } from '../controllers/file.controller';
 import { ClinicalReassessmentController } from '../controllers/clinical-reassessment.controller';
@@ -240,6 +241,25 @@ api.patch(['/v1/admin/trials/:id/validity', '/admin/trials/:id/validity'], requi
 api.patch(['/v1/admin/solo-trials/:id/validity', '/admin/solo-trials/:id/validity'], requireRole('superadmin'), FreeTrialController.updateValidity);
 api.delete('/v1/admin/free-trials/:id/revoke', requireRole('superadmin'), FreeTrialController.revoke);
 api.delete('/v1/admin/free-trials/:id', requireRole('superadmin'), FreeTrialController.deletePermanent);
+
+// ==========================================
+// REGISTRO DE VISITAS E CRM COMERCIAL (Exclusivo SuperAdmin)
+// ==========================================
+api.get('/v1/admin/visits/metrics', requireRole('superadmin'), AdminVisitsController.getMetrics);
+api.get('/v1/admin/visits/reports', requireRole('superadmin'), AdminVisitsController.getReports);
+api.get('/v1/admin/visits/export-csv', requireRole('superadmin'), AdminVisitsController.exportCsv);
+api.get('/v1/admin/visits/search-tenants', requireRole('superadmin'), AdminVisitsController.searchTenantsForLink);
+api.get('/v1/admin/visits/tasks', requireRole('superadmin'), AdminVisitsController.listTasks);
+api.post('/v1/admin/visits/tasks', requireRole('superadmin'), AdminVisitsController.createTask);
+api.patch('/v1/admin/visits/tasks/:id/toggle', requireRole('superadmin'), AdminVisitsController.toggleTask);
+api.get('/v1/admin/visits/establishments', requireRole('superadmin'), AdminVisitsController.listEstablishments);
+api.post('/v1/admin/visits/establishments', requireRole('superadmin'), AdminVisitsController.createEstablishment);
+api.get('/v1/admin/visits/establishments/:id', requireRole('superadmin'), AdminVisitsController.getEstablishmentDetails);
+api.put('/v1/admin/visits/establishments/:id', requireRole('superadmin'), AdminVisitsController.updateEstablishment);
+api.delete('/v1/admin/visits/establishments/:id', requireRole('superadmin'), AdminVisitsController.archiveEstablishment);
+api.post('/v1/admin/visits/establishments/:id/visits', requireRole('superadmin'), AdminVisitsController.addVisit);
+api.patch('/v1/admin/visits/establishments/:id/status', requireRole('superadmin'), AdminVisitsController.updateStatus);
+api.post('/v1/admin/visits/establishments/:id/link-tenant', requireRole('superadmin'), AdminVisitsController.linkTenant);
 
 // Onboarding e Assistente de Configuração da Clínica (Gestor)
 api.get('/v1/onboarding/status', requireTenant, OnboardingController.getStatus);
@@ -921,7 +941,7 @@ api.get('/v1/budgets/:id', requireTenant, BudgetController.getById);
 api.post('/v1/budgets', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), BudgetController.create);
 api.put('/v1/budgets/:id/status', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), BudgetController.updateStatus);
 api.patch('/v1/budgets/:id/status', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), BudgetController.updateStatus);
-api.post('/v1/budgets/:id/convert-to-inventory', requireTenant, requireRole('clinic_admin'), BudgetController.convertToInventory);
+api.post('/v1/budgets/:id/convert-to-inventory', requireTenant, requireRole('clinic_admin', 'receptionist'), BudgetController.convertToInventory);
 api.delete(
   '/v1/budgets/:id',
   requireTenant,

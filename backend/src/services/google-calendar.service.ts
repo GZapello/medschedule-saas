@@ -449,13 +449,27 @@ export class GoogleCalendarService {
       }
     }
 
-    // 4. Fallback: se a clínica tiver apenas 1 conexão ativa com Google Calendar
+    // 4. Fallback seguro: se a clínica tiver apenas 1 conexão ativa com Google Calendar
     const allConns = db.prepare('SELECT * FROM google_calendar_connections WHERE tenant_id = ? AND sync_enabled = 1').all(tenantId) as GoogleCalendarConnectionRow[];
     if (allConns.length === 1) {
       const single = allConns[0];
-      if (!single.professional_id || single.professional_id === professionalId) {
-        return single;
+      // Se a conexão já possui vínculo explícito a um profissional, só pode ser usada por ele
+      if (single.professional_id) {
+        return single.professional_id === professionalId ? single : null;
       }
+      // Se o usuário proprietário da conexão for outro profissional da clínica, NÃO vazar
+      if (single.user_id) {
+        const ownerProf = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(single.user_id, tenantId) as any;
+        if (ownerProf && ownerProf.id !== professionalId) {
+          return null;
+        }
+      }
+      // Se há mais de 1 profissional ativo cadastrado na clínica, não associar arbitrariamente à agenda alheia
+      const totalProfs = db.prepare('SELECT COUNT(*) as c FROM professionals WHERE tenant_id = ? AND active = 1').get(tenantId) as any;
+      if (totalProfs?.c > 1) {
+        return null;
+      }
+      return single;
     }
 
     return null;

@@ -19,6 +19,7 @@ import { migrateEstetic } from './estetic.migration';
 import { migrateProfessionsNormalization } from './professions-normalization.migration';
 import { migrateProfessionalSlugs, migrateClinicBooking } from './slug-migration';
 import { migrateGoogleCalendar } from './google-calendar.migration';
+import { migrateSuperAdminVisits } from './superadmin-visits.migration';
 import { dbPath } from './db-path';
 import { backfillMissingDefaultSchedules } from '../utils/schedule-defaults';
 
@@ -3850,5 +3851,6 @@ function repairLegacyPhotoUrls(rawDb: any): void {
   migrateMulticlinic(rawDb);
   migrateAttendanceTimes(rawDb);
   migrateGoogleCalendar(rawDb);
+  migrateSuperAdminVisits(rawDb);
 
 }

@@ -482,7 +482,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <p className="text-xs text-slate-500">Acompanhe os clientes e altere o status com agilidade.</p>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
-              {!googleCalendarConnected && (
+              {!auth.isReceptionist && (auth.isProfessional || auth.isClinicAdmin) && !googleCalendarConnected && (
                 <button
                   type="button"
                   onClick={() => connectGoogleCalendar()}

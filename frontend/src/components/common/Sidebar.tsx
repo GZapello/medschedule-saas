@@ -3,6 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import {
   LayoutDashboard,
   Calendar,
+  CalendarCheck,
   Users,
   FileText,
   Activity,
@@ -203,7 +204,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           id: 'inventory',
           label: 'Estoque de Insumos',
           icon: Package,
-          visible: isClinicAdmin || hasPermission('manage_inventory') || hasPermission('view_inventory')
+          visible: isClinicAdmin || isReceptionist || hasPermission('manage_inventory') || hasPermission('view_inventory')
         },
         {
           id: 'budgets',
@@ -228,6 +229,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Administração Global',
       items: [
         { id: 'superadmin', label: 'Painel Global', icon: Globe, visible: true },
+        { id: 'superadmin-visits', label: 'Registro de Visitas', icon: CalendarCheck, visible: true },
         { id: 'support-tickets', label: 'Chamados', icon: LifeBuoy, visible: true },
         { id: 'audit', label: 'Auditoria LGPD', icon: ShieldCheck, visible: true }
       ]

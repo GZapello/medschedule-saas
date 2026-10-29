@@ -18,6 +18,7 @@ interface AuthContextType {
   isProfessional: boolean;
   isReceptionist: boolean;
   canAccessConsents: boolean;
+  canAccessInventory: boolean;
   isPatient: boolean;
   isPhysiotherapist: boolean;
   isZemdaFisio: boolean;
@@ -320,6 +321,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const isProfessional = currentUser?.role === 'professional';
   const isReceptionist = currentUser?.role === 'receptionist';
   const canAccessConsents = Boolean(isClinicAdmin || isProfessional || isReceptionist);
+  const canAccessInventory = Boolean(isClinicAdmin || isReceptionist);
   const isPatient = currentUser?.role === 'patient';
   const isEligibleStaff = !isPatient && !isSuperAdmin && (isClinicAdmin || isProfessional);
 
@@ -585,6 +587,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (isSuperAdmin && !isSandboxSession) return true;
     if (isClinicAdmin) return true;
     if (permId === 'can_import_data' && isEligibleForImport) return true;
+    if ((permId === 'manage_inventory' || permId === 'view_inventory') && isReceptionist) return true;
     return userPermissions.includes(permId);
   };
 
@@ -610,6 +613,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         isProfessional,
         isReceptionist,
         canAccessConsents,
+        canAccessInventory,
         isPatient,
         isPhysiotherapist,
         isZemdaFisio,

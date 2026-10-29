@@ -57,6 +57,7 @@ const ProfessionalPayrollView = lazyWithRetry(() => import('./components/payroll
 const ZemdaMedWorkspace = lazyWithRetry(() => import('./components/medical/ZemdaMedWorkspace').then(module => ({ default: module.ZemdaMedWorkspace })), 'ZemdaMedWorkspace');
 const ZemdaEsteticWorkspace = lazyWithRetry(() => import('./components/estetic/ZemdaEsteticWorkspace').then(module => ({ default: module.ZemdaEsteticWorkspace })), 'ZemdaEsteticWorkspace');
 const SuperAdminLaboratoryView = lazyWithRetry(() => import('./components/superadmin/SuperAdminLaboratoryView').then(module => ({ default: module.SuperAdminLaboratoryView })), 'SuperAdminLaboratoryView');
+const SuperAdminVisitsView = lazyWithRetry(() => import('./components/superadmin/SuperAdminVisitsView').then(module => ({ default: module.SuperAdminVisitsView })), 'SuperAdminVisitsView');
 import { ZemdaLandingPage } from './components/public/ZemdaLandingPage';
 import { PublicSeoPageView } from './components/public/PublicSeoPageView';
 import { PublicPlansLayout } from './components/public/PublicPlansLayout';
@@ -159,6 +160,7 @@ export const VIEW_TO_PATH: Record<string, string> = {
   reports: '/relatorios',
   settings: '/configuracoes',
   superadmin: '/superadmin',
+  'superadmin-visits': '/superadmin/visitas',
   billing: '/assinatura'
 };
 
@@ -193,6 +195,7 @@ export const PATH_TO_VIEW: Record<string, string> = {
   '/relatorios': 'reports',
   '/configuracoes': 'settings',
   '/superadmin': 'superadmin',
+  '/superadmin/visitas': 'superadmin-visits',
   '/assinatura': 'billing'
 };
 
@@ -295,7 +298,7 @@ const AppContent: React.FC = () => {
   const [settingsSection, setSettingsSection] = useState<string>(getInitialSettingsSection);
 
   const handleNavigateView = (view: string, subId?: string | null, force?: boolean) => {
-    if ((view === 'superadmin' || view === 'audit') && currentUserRef.current?.role !== 'superadmin' && !force) {
+    if ((view === 'superadmin' || view === 'superadmin-visits' || view === 'audit') && currentUserRef.current?.role !== 'superadmin' && !force) {
       return;
     }
 
@@ -516,7 +519,7 @@ const AppContent: React.FC = () => {
     const handleNavigate = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (detail?.view) {
-        if ((detail.view === 'superadmin' || detail.view === 'audit') && currentUserRef.current?.role !== 'superadmin' && detail?.force !== true) {
+        if ((detail.view === 'superadmin' || detail.view === 'superadmin-visits' || detail.view === 'audit') && currentUserRef.current?.role !== 'superadmin' && detail?.force !== true) {
           return;
         }
         handleNavigateView(detail.view, detail.subId || null, detail?.force);
@@ -608,6 +611,7 @@ const AppContent: React.FC = () => {
         reports: 'Relatórios Gerenciais',
         settings: 'Configurações da Clínica',
         superadmin: 'Administração Global',
+        'superadmin-visits': 'Registro de Visitas',
         billing: 'Assinatura e Planos',
         onboarding: 'Configuração Inicial'
       };
@@ -1562,7 +1566,7 @@ const AppContent: React.FC = () => {
           )}
 
           {currentView === 'inventory' && (
-            (isClinicAdmin || hasPermission('manage_inventory') || hasPermission('view_inventory')) ? (
+            (isClinicAdmin || isReceptionist || hasPermission('manage_inventory') || hasPermission('view_inventory')) ? (
               <InventoryView />
             ) : (
               <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
@@ -1720,6 +1724,22 @@ const AppContent: React.FC = () => {
           )}
 
           {currentView === 'superadmin' && isSuperAdmin && <SuperAdminView />}
+
+          {currentView === 'superadmin-visits' && (
+            isSuperAdmin ? (
+              <SuperAdminVisitsView />
+            ) : (
+              <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
+                <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mb-4">
+                  <AlertCircle className="w-8 h-8" />
+                </div>
+                <h2 className="text-xl font-bold text-slate-800 mb-2">Acesso Exclusivo ao SuperAdmin</h2>
+                <p className="text-sm text-slate-600 mb-4">
+                  O módulo de Registro de Visitas é exclusivo da administração global do Zemda.
+                </p>
+              </div>
+            )
+          )}
           </SectionErrorBoundary>
         </main>
       </div>
