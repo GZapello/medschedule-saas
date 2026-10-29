@@ -79,8 +79,16 @@ export class GoogleCalendarService {
     try { return await next; } finally { if (this.operations.get(key) === next) this.operations.delete(key); }
   }
   private static appointmentKey(tenantId: string, appointmentId: string): string {
-    const row = db.prepare(`SELECT gcc.id FROM google_calendar_connections gcc JOIN appointments a
-      ON a.professional_id = gcc.professional_id AND a.tenant_id = gcc.tenant_id WHERE a.id = ? AND a.tenant_id = ?`).get(appointmentId, tenantId) as any;
+    const row = db.prepare(`
+      SELECT gcc.id FROM appointments a
+      LEFT JOIN google_calendar_connections gcc
+        ON gcc.tenant_id = a.tenant_id AND (
+          gcc.professional_id = a.professional_id OR
+          gcc.user_id = (SELECT p.user_id FROM professionals p WHERE p.id = a.professional_id AND p.tenant_id = a.tenant_id)
+        )
+      WHERE a.id = ? AND a.tenant_id = ?
+      LIMIT 1
+    `).get(appointmentId, tenantId) as any;
     return row?.id || `${tenantId}:${appointmentId}`;
   }
   static async syncAppointmentCreated(id: string, tenant: string) { return this.serialized(this.appointmentKey(tenant, id), () => this.syncAppointmentCreatedInternal(id, tenant)); }
@@ -104,8 +112,8 @@ export class GoogleCalendarService {
    * Verifica se o administrador configurou as credenciais OAuth de Calendar no ambiente.
    */
   static isConfigured(): boolean {
-    const clientId = process.env.GOOGLE_CALENDAR_CLIENT_ID?.trim();
-    const clientSecret = process.env.GOOGLE_CALENDAR_CLIENT_SECRET?.trim();
+    const clientId = (process.env.GOOGLE_CALENDAR_CLIENT_ID || process.env.GOOGLE_CLIENT_ID)?.trim();
+    const clientSecret = (process.env.GOOGLE_CALENDAR_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET)?.trim();
     return Boolean(clientId && clientSecret && calendarEncryptionConfigured());
   }
 
@@ -124,8 +132,8 @@ export class GoogleCalendarService {
    * Cria uma instância de OAuth2Client para Google Calendar.
    */
   static createOAuth2Client(): OAuth2Client {
-    const clientId = process.env.GOOGLE_CALENDAR_CLIENT_ID?.trim();
-    const clientSecret = process.env.GOOGLE_CALENDAR_CLIENT_SECRET?.trim();
+    const clientId = (process.env.GOOGLE_CALENDAR_CLIENT_ID || process.env.GOOGLE_CLIENT_ID)?.trim();
+    const clientSecret = (process.env.GOOGLE_CALENDAR_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET)?.trim();
     const redirectUri = this.getRedirectUri();
 
     return new google.auth.OAuth2(clientId, clientSecret, redirectUri);
@@ -233,7 +241,8 @@ export class GoogleCalendarService {
     oauth2Client.setCredentials(tokens);
 
     if (!tokens.id_token || !tokens.access_token) throw new GoogleCalendarError('Identidade Google não confirmada. Reconecte a conta.');
-    const identity = (await oauth2Client.verifyIdToken({ idToken: tokens.id_token, audience: process.env.GOOGLE_CALENDAR_CLIENT_ID })).getPayload();
+    const audience = (process.env.GOOGLE_CALENDAR_CLIENT_ID || process.env.GOOGLE_CLIENT_ID)?.trim();
+    const identity = (await oauth2Client.verifyIdToken({ idToken: tokens.id_token, audience })).getPayload();
     if (!identity?.sub || !identity.email || !identity.email_verified) throw new GoogleCalendarError('Conta Google sem identidade verificada.');
     const accountEmail = identity.email;
     const granted = tokens.scope?.split(' ') || (await oauth2Client.getTokenInfo(tokens.access_token)).scopes;
@@ -366,7 +375,33 @@ export class GoogleCalendarService {
       WHERE gcc.tenant_id = ? AND p.id = ?
     `).get(tenantId, professionalId) as GoogleCalendarConnectionRow | undefined;
 
-    return row || null;
+    if (row) return row;
+
+    // 3. Fallback: se houver conexão do usuário e o profissional corresponder ao usuário
+    const prof = db.prepare('SELECT id, user_id, name FROM professionals WHERE id = ? AND tenant_id = ?').get(professionalId, tenantId) as any;
+    if (prof?.user_id) {
+      row = db.prepare(`
+        SELECT * FROM google_calendar_connections
+        WHERE tenant_id = ? AND user_id = ?
+      `).get(tenantId, prof.user_id) as GoogleCalendarConnectionRow | undefined;
+      if (row) {
+        try {
+          db.prepare('UPDATE google_calendar_connections SET professional_id = ? WHERE id = ?').run(professionalId, row.id);
+        } catch (_) {}
+        return row;
+      }
+    }
+
+    // 4. Fallback: se a clínica tiver apenas 1 conexão ativa com Google Calendar
+    const allConns = db.prepare('SELECT * FROM google_calendar_connections WHERE tenant_id = ? AND sync_enabled = 1').all(tenantId) as GoogleCalendarConnectionRow[];
+    if (allConns.length === 1) {
+      const single = allConns[0];
+      if (!single.professional_id || single.professional_id === professionalId) {
+        return single;
+      }
+    }
+
+    return null;
   }
 
   /**
@@ -408,6 +443,13 @@ export class GoogleCalendarService {
       syncIntervalOption: conn.sync_interval_option,
       lastSyncAt: conn.last_sync_at,
       lastSyncError: conn.last_sync_error,
+      syncStatus: !conn.sync_enabled
+        ? 'disabled'
+        : (conn.last_sync_error?.toLowerCase().includes('reconex') || conn.last_sync_error?.toLowerCase().includes('reconect'))
+          ? 'reconnection_required'
+          : conn.last_sync_error
+            ? 'sync_failed'
+            : 'synced',
       notificationsActive: Boolean(conn.watch_expiration && Number(conn.watch_expiration) > Date.now())
     };
   }
@@ -577,8 +619,20 @@ export class GoogleCalendarService {
       // 2. Busca conexão ativa do profissional
       const conn = this.getConnectionForProfessional(tenantId, appt.professional_id);
       if (!conn || !conn.sync_enabled || conn.sync_direction === 'google_to_zemda') return;
-      const ahead = (Date.parse(this.formatRFC3339(appt.start_time)) - Date.now()) / 86400000;
-      if (ahead < 0 || (conn.sync_interval_option === 'next_7_days' && ahead > 7) || (conn.sync_interval_option === 'next_30_days' && ahead > 30)) return;
+
+      const apptLocalTime = this.formatRFC3339(appt.start_time);
+      const apptTimeMs = Date.parse(apptLocalTime);
+      const nowMs = Date.now();
+      const apptDateStr = appt.start_time.slice(0, 10);
+      const todayStr = this.toClinicTime(new Date().toISOString()).slice(0, 10);
+
+      // Atendimentos do dia de hoje ou futuros são elegíveis
+      if (apptDateStr < todayStr && apptTimeMs < nowMs - 24 * 3600 * 1000) {
+        return;
+      }
+      const daysAhead = (apptTimeMs - nowMs) / 86400000;
+      if (conn.sync_interval_option === 'next_7_days' && daysAhead > 7) return;
+      if (conn.sync_interval_option === 'next_30_days' && daysAhead > 30) return;
 
       // 3. Verifica se já existe vínculo criado (idempotência local)
       const existingLink = db.prepare(`
@@ -609,14 +663,16 @@ export class GoogleCalendarService {
         });
         if (searchRes.data.items && searchRes.data.items.length > 0) {
           const found = searchRes.data.items[0];
-          if (found.id) {
+          if (found.id && found.status !== 'cancelled') {
             this.recordEventLink(tenantId, appointmentId, conn.id, conn.calendar_id, 'synced', null, found.id);
             return this.syncAppointmentUpdatedInternal(appointmentId, tenantId);
           }
         }
-      } catch (error) { throw error; }
+      } catch (error: any) {
+        console.warn(`[GoogleCalendarService] Verificação de idempotência no Google para ${appointmentId}:`, error?.message || 'prossegue para inserção');
+      }
 
-      // 5. Monta título e descrição conforme privacy_mode
+      // 5. Monta título e descrição conforme privacy_mode (sem dados clínicos confidenciais)
       let summary = 'Atendimento Zemda';
       if (conn.privacy_mode === 'show_patient_name' && appt.patient_name) {
         summary = `Atendimento Zemda — ${appt.patient_name}`;
@@ -659,14 +715,26 @@ export class GoogleCalendarService {
         };
       }
 
-      // 7. Insere evento na Google Calendar API
+      // 7. Insere evento na Google Calendar API (recupera ou restaura se já existir)
       const insertRes = await calendar.events.insert({
         calendarId: conn.calendar_id || 'primary',
         requestBody: eventPayload,
         conferenceDataVersion: shouldCreateMeet ? 1 : 0
       }).catch(async (error: any) => {
         if (Number(error.code || error.response?.status) !== 409) throw error;
-        return calendar.events.get({ calendarId: conn.calendar_id, eventId: eventPayload.id });
+        const existingEvent = await calendar.events.get({ calendarId: conn.calendar_id || 'primary', eventId: eventPayload.id });
+        if (existingEvent.data.status === 'cancelled') {
+          return calendar.events.patch({
+            calendarId: conn.calendar_id || 'primary',
+            eventId: eventPayload.id,
+            conferenceDataVersion: shouldCreateMeet ? 1 : 0,
+            requestBody: {
+              ...eventPayload,
+              status: 'confirmed'
+            }
+          });
+        }
+        return existingEvent;
       });
 
       const googleEventId = insertRes.data.id;
@@ -676,7 +744,7 @@ export class GoogleCalendarService {
 
       const meetReady = !shouldCreateMeet || await this.captureMeet(calendar, conn, appointmentId, googleEventId, insertRes.data);
 
-      // 9. Registra o vínculo com status 'synced'
+      // 8. Registra o vínculo com status 'synced'
       this.recordEventLink(tenantId, appointmentId, conn.id, conn.calendar_id, meetReady ? 'synced' : 'pending', meetReady ? null : 'Criação do Google Meet pendente', googleEventId);
 
       this.recordAuditLog(
@@ -688,7 +756,14 @@ export class GoogleCalendarService {
         { googleEventId, calendarId: conn.calendar_id }
       );
     } catch (err: any) {
-      console.error(`[GoogleCalendarService] Falha ao sincronizar criação do agendamento ${appointmentId}:`, 'Falha na operação Google Agenda');
+      const errCode = Number(err?.code || err?.response?.status) || 0;
+      const errMsg = err?.message || String(err);
+      const isAuthError = errCode === 401 || errMsg.includes('invalid_grant') || errMsg.includes('invalid_token') || errMsg.includes('Reconecte');
+
+      console.error(`[GoogleCalendarService] Falha ao sincronizar criação do agendamento ${appointmentId}:`, {
+        code: errCode,
+        message: isAuthError ? 'Autorização Google expirada ou inválida (invalid_grant/401)' : errMsg
+      });
 
       let profId = '';
       try {
@@ -698,14 +773,25 @@ export class GoogleCalendarService {
       const conn = profId ? this.getConnectionForProfessional(tenantId, profId) : null;
 
       if (conn) {
-        this.recordEventLink(tenantId, appointmentId, conn.id, conn.calendar_id, 'pending', 'Falha na comunicação com Google Agenda. Tente novamente ou reconecte a conta.');
+        const syncStatus = isAuthError ? 'error' : 'pending';
+        const userFriendlyError = isAuthError
+          ? 'Reconexão necessária: a autorização da conta Google expirou ou foi revogada.'
+          : (errCode === 403
+              ? 'Permissão insuficiente na agenda Google selecionada.'
+              : 'Falha na comunicação com Google Agenda. Tente novamente ou use Sincronizar agora.');
+
+        if (isAuthError) {
+          db.prepare("UPDATE google_calendar_connections SET last_sync_error = ? WHERE id = ?").run(userFriendlyError, conn.id);
+        }
+
+        this.recordEventLink(tenantId, appointmentId, conn.id, conn.calendar_id, syncStatus, userFriendlyError);
         this.recordAuditLog(
           tenantId,
           conn.user_id,
           'GOOGLE_CALENDAR_SYNC_ERROR',
           'appointments',
           appointmentId,
-          { error: 'Falha na comunicação com Google Agenda. Tente novamente ou reconecte a conta.' }
+          { error: userFriendlyError, statusCode: errCode }
         );
       }
     }
@@ -798,13 +884,23 @@ export class GoogleCalendarService {
         { googleEventId: link.google_event_id }
       );
     } catch (err: any) {
-      console.error(`[GoogleCalendarService] Falha ao sincronizar atualização do agendamento ${appointmentId}:`, 'Falha na operação Google Agenda');
+      const errCode = Number(err?.code || err?.response?.status) || 0;
+      const errMsg = err?.message || String(err);
+      const isAuthError = errCode === 401 || errMsg.includes('invalid_grant') || errMsg.includes('invalid_token') || errMsg.includes('Reconecte');
+
+      console.error(`[GoogleCalendarService] Falha ao sincronizar atualização do agendamento ${appointmentId}:`, {
+        code: errCode,
+        message: isAuthError ? 'Autorização Google expirada ou inválida (invalid_grant/401)' : errMsg
+      });
       try {
+        const userFriendly = isAuthError
+          ? 'Reconexão necessária: autorização Google expirou ou foi revogada.'
+          : 'Falha na comunicação com Google Agenda. Tente novamente ou use Sincronizar agora.';
         db.prepare(`
           UPDATE google_calendar_event_links
-          SET sync_status = 'pending', last_error = ?, updated_at = datetime('now')
+          SET sync_status = ?, last_error = ?, updated_at = datetime('now')
           WHERE appointment_id = ? AND tenant_id = ?
-        `).run('Falha na comunicação com Google Agenda. Tente novamente ou reconecte a conta.', appointmentId, tenantId);
+        `).run(isAuthError ? 'error' : 'pending', userFriendly, appointmentId, tenantId);
       } catch (_) {}
     }
   }
@@ -859,8 +955,13 @@ export class GoogleCalendarService {
         { googleEventId: link.google_event_id }
       );
     } catch (err: any) {
+      const errCode = Number(err?.code || err?.response?.status) || 0;
+      const errMsg = err?.message || String(err);
+      console.error(`[GoogleCalendarService] Falha ao sincronizar cancelamento do agendamento ${appointmentId}:`, {
+        code: errCode,
+        message: errMsg
+      });
       db.prepare("UPDATE google_calendar_event_links SET sync_status = 'pending', last_error = 'Cancelamento pendente no Google' WHERE appointment_id = ? AND tenant_id = ?").run(appointmentId, tenantId);
-      console.error(`[GoogleCalendarService] Falha ao sincronizar cancelamento do agendamento ${appointmentId}:`, 'Falha na operação Google Agenda');
     }
   }
 
@@ -929,8 +1030,17 @@ export class GoogleCalendarService {
    * Força sincronização imediata ("Sincronizar agora").
    */
   private static async captureMeet(calendar: ReturnType<typeof google.calendar>, conn: GoogleCalendarConnectionRow, appointmentId: string, eventId: string, event: import('googleapis').calendar_v3.Schema$Event) {
-    // Conference creation is asynchronous. Subsequent syncs/webhooks retry pending results.
-    const url = event.hangoutLink || event.conferenceData?.entryPoints?.find(e => e.entryPointType === 'video')?.uri;
+    let url = event.hangoutLink || event.conferenceData?.entryPoints?.find(e => e.entryPointType === 'video')?.uri;
+    
+    // Se a criação do Meet estiver em processamento assíncrono no Google, aguarda brevemente e reconsulta
+    if (!url && event.conferenceData?.createRequest?.status?.statusCode === 'pending') {
+      try {
+        await new Promise(resolve => setTimeout(resolve, 600));
+        const refetched = await calendar.events.get({ calendarId: conn.calendar_id || 'primary', eventId });
+        url = refetched.data.hangoutLink || refetched.data.conferenceData?.entryPoints?.find(e => e.entryPointType === 'video')?.uri;
+      } catch (_) {}
+    }
+
     if (url && /^https:\/\/meet\.google\.com\//.test(url)) {
       db.prepare("UPDATE appointments SET meeting_url = ?, updated_at = datetime('now') WHERE id = ? AND tenant_id = ? AND (meeting_url IS NULL OR meeting_url = '')").run(url, appointmentId, conn.tenant_id);
       db.prepare("UPDATE google_calendar_event_links SET sync_status = 'synced', last_error = NULL WHERE appointment_id = ? AND connection_id = ? AND sync_status = 'pending' AND last_error = 'Criação do Google Meet pendente'").run(appointmentId, conn.id);
@@ -1030,8 +1140,8 @@ export class GoogleCalendarService {
       while (true) {
         const appts = db.prepare(`SELECT a.id, a.status FROM appointments a
           WHERE a.tenant_id = ? AND a.professional_id = ? AND
-          ((a.status != 'cancelled' AND datetime(a.start_time) >= datetime('now')
-            AND (? = 'future' OR date(a.start_time) <= date('now', ?)))
+          ((a.status != 'cancelled' AND datetime(a.start_time) >= datetime('now', '-3 hours')
+            AND (? = 'future' OR date(a.start_time) <= date('now', '-3 hours', ?)))
            OR (a.status = 'cancelled' AND EXISTS (SELECT 1 FROM google_calendar_event_links l WHERE l.appointment_id = a.id AND l.connection_id = ?)))
           ORDER BY a.id LIMIT 100 OFFSET ?`).all(tenantId, profId, conn.sync_interval_option,
           conn.sync_interval_option === 'next_7_days' ? '+7 days' : '+30 days', conn.id, offset) as {id: string; status: string}[];
