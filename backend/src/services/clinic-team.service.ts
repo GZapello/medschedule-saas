@@ -7,7 +7,7 @@ export function clinicTeam(tenantId: string): any[] {
     UNION ALL
     SELECT u.id,u.role,u.status,u.profession_name FROM users u WHERE u.tenant_id=?
       AND NOT EXISTS(SELECT 1 FROM clinic_users cu WHERE cu.user_id=u.id AND cu.tenant_id=?)
-  ) SELECT u.id,u.name,u.email,m.role,m.status,u.status AS account_status,
+  ) SELECT u.id,u.name,u.email,u.phone,m.role,m.status,u.status AS account_status,
       COALESCE(NULLIF(m.profession_name,''),NULLIF(p.profession_name,''),u.profession_name) AS profession_name,
       COALESCE(NULLIF(p.registration_type,''),u.registration_type) AS registration_type,
       COALESCE(NULLIF(p.registration_number,''),u.registration_number) AS registration_number,

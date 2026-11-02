@@ -49,11 +49,11 @@ const financialLabel=(status?:string,days?:number|null,allowed?:boolean)=> {
     SUSPENDED:'Suspenso',CANCELED:'Cancelado'};
   return labels[String(status || '').toUpperCase()] || 'Sem assinatura';
 };
-const TenantPlan=({tenant}:{tenant:any})=><div className="space-y-1">
-  <p className="font-bold text-slate-800">{tenant.subscription_plan_name || tenant.plan_name || 'Sem plano'}</p>
-  <p className="text-xs text-slate-600">{tenant.administrative_trial ? `Teste administrativo · ${tenant.trial_days_remaining ?? 0} dias restantes` : financialLabel(tenant.subscription_status,tenant.trial_days_remaining,tenant.can_operate)}</p>
-  {!tenant.subscription_status && tenant.selected_plan_code && <p className="text-xs text-amber-800">Plano selecionado · Aguardando pagamento</p>}
-  {tenant.billing_required === 0 && <p className="text-xs text-slate-500">Clínica legada · Cobrança dispensada</p>}
+const TenantPlan=({tenant}:{tenant:any})=><div className="space-y-0.5 min-w-0">
+  <p className="font-bold text-slate-800 text-xs truncate" title={tenant.subscription_plan_name || tenant.plan_name || 'Sem plano'}>{tenant.subscription_plan_name || tenant.plan_name || 'Sem plano'}</p>
+  <p className="text-[10px] text-slate-500 leading-tight">{tenant.administrative_trial ? `Teste adm. · ${tenant.trial_days_remaining ?? 0}d` : financialLabel(tenant.subscription_status,tenant.trial_days_remaining,tenant.can_operate)}</p>
+  {!tenant.subscription_status && tenant.selected_plan_code && <p className="text-[10px] text-amber-700 leading-tight font-medium truncate" title="Aguardando pagamento">Aguardando pagto.</p>}
+  {tenant.billing_required === 0 && <p className="text-[10px] text-slate-400 leading-tight truncate">Cobrança dispensada</p>}
 </div>;
 
 export const SuperAdminView: React.FC = () => {
@@ -540,7 +540,7 @@ export const SuperAdminView: React.FC = () => {
 
           {/* Grid de Estatísticas Globais */}
           {metrics && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5 sm:gap-4">
               <div className="p-4 bg-white rounded-3xl border border-slate-100 shadow-xs">
                 <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">Total de Clínicas</span>
                 <p className="text-2xl font-black text-slate-900 mt-1">{metrics.totalClinics}</p>
@@ -565,6 +565,14 @@ export const SuperAdminView: React.FC = () => {
                   {Number(metrics.totalRevenueEstimate).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                 </p>
                 <span className="text-[11px] text-slate-400 font-medium">Volume transacionado</span>
+              </div>
+
+              <div className="p-4 bg-white rounded-3xl border border-slate-100 shadow-xs">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">Valores em Aberto</span>
+                <p className="text-2xl font-black text-amber-600 mt-1">
+                  {Number(metrics.totalPendingRevenue || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                </p>
+                <span className="text-[11px] text-slate-400 font-medium">Cobranças pendentes</span>
               </div>
             </div>
           )}
@@ -626,18 +634,18 @@ export const SuperAdminView: React.FC = () => {
               </div>
             </div>
 
-            <div className="overflow-x-auto mobile-table-container">
-              <ResponsiveTable className="w-full text-left text-xs">
+            <div className="w-full min-w-0 mobile-table-container">
+              <ResponsiveTable className="w-full text-left text-xs lg:table-fixed">
                 <thead>
                   <tr className="border-b border-slate-100 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-                    <th className="py-3 px-3">Clínica / Estabelecimento</th>
-                    <th className="py-3 px-3">Responsável</th>
-                    <th className="py-3 px-3">Plano / Assinatura</th>
-                    <th className="py-3 px-3">Status</th>
-                    <th className="py-3 px-3">Onboarding</th>
-                    <th className="py-3 px-3 text-center">Profissionais</th>
-                    <th className="py-3 px-3 text-center">Atendimentos</th>
-                    <th className="py-3 px-3 text-right">Ações de Moderação</th>
+                    <th className="py-2.5 px-2.5 lg:w-[22%]">Clínica / Estabelecimento</th>
+                    <th className="py-2.5 px-2 lg:w-[15%]">Responsável</th>
+                    <th className="py-2.5 px-2 lg:w-[14%]">Plano / Assinatura</th>
+                    <th className="py-2.5 px-1.5 lg:w-[9%]">Status</th>
+                    <th className="py-2.5 px-1.5 lg:w-[9%]">Onboarding</th>
+                    <th className="py-2.5 px-1 text-center lg:w-[6%]">Prof.</th>
+                    <th className="py-2.5 px-1 text-center lg:w-[6%]">Atend.</th>
+                    <th className="py-2.5 px-2 text-right lg:w-[19%]">Ações de Moderação</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
@@ -659,106 +667,165 @@ export const SuperAdminView: React.FC = () => {
                   ) : (
                     filteredTenants.map(t => (
                       <tr key={t.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="py-3 px-3">
-                          <p className="font-bold text-slate-800 text-sm">{t.trade_name || t.name}</p>
-                          <p className="text-[11px] text-slate-400 font-mono">
+                        <td className="py-2.5 px-2.5 min-w-0">
+                          <p className="font-bold text-slate-800 text-xs sm:text-sm truncate" title={t.trade_name || t.name}>
+                            {t.trade_name || t.name}
+                          </p>
+                          <p className="text-[10px] text-slate-400 font-mono truncate" title={`/c/${t.slug} • ${t.city || 'São Paulo'}/${t.state || 'SP'}`}>
                             /c/{t.slug} • {t.city || 'São Paulo'}/{t.state || 'SP'}
-                        </p>
-                      </td>
-                      <td className="py-3 px-3">
-                        <p className="font-semibold text-slate-700">{t.responsible_name || 'Gestor'}</p>
-                        <p className="text-[10px] text-slate-400">{t.responsible_email || t.email}</p>
-                      </td>
-                      <td className="py-3 px-3"><TenantPlan tenant={t} /></td>
-                      <td className="py-3 px-3">
-                        <span
-                          className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase ${
-                            t.status === 'active'
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                              : t.status === 'pending'
-                              ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                              : t.status === 'rejected'
-                              ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                              : 'bg-slate-100 text-slate-700 border border-slate-200'
-                          }`}
-                        >
-                          {t.status === 'active' ? 'Ativa' : t.status === 'pending' ? 'Pendente' : t.status === 'rejected' ? 'Recusada' : t.status === 'banned' ? 'Banida' : t.status === 'cleanup_pending' ? 'Limpeza pendente — repetir exclusão' : 'Bloqueada'}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3">
-                        {t.onboarding_completed === 1 ? (
-                          <span className="text-emerald-600 font-bold flex items-center gap-1 text-[11px]">
-                            <CheckCircle2 className="w-3.5 h-3.5" /> Concluído
-                          </span>
-                        ) : (
-                          <span className="text-amber-600 font-bold text-[11px]">Pendente</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-3 text-center font-bold text-slate-700">
-                        {t.total_professionals || 0}
-                      </td>
-                      <td className="py-3 px-3 text-center font-bold text-teal-600">
-                        {t.total_appointments || 0}
-                      </td>
-                      <td className="py-3 px-3 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {t.status === 'pending' && (
-                            <>
-                              <button
-                                onClick={() => handleApprove(t.id, t.name)}
-                                className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs flex items-center gap-1 shadow-xs cursor-pointer"
-                                title="Aprovar Clínica"
-                              >
-                                <Check className="w-3.5 h-3.5" />
-                                Aprovar
-                              </button>
-                              <button
-                                onClick={() => setRejectingClinic(t)}
-                                className="px-2 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-lg text-xs cursor-pointer"
-                                title="Recusar Cadastro"
-                              >
-                                <X className="w-3.5 h-3.5" />
-                              </button>
-                            </>
-                          )}
-
-                          {t.status === 'active' && (
-                            <button
-                              onClick={() => handleBlock(t.id, t.name)}
-                              className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 cursor-pointer"
-                              title="Bloquear Clínica"
-                            >
-                              <Lock className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-
-                          {(t.status === 'blocked' || t.status === 'suspended') && (
-                            <button
-                              onClick={() => handleUnblock(t.id, t.name)}
-                              className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold rounded-lg text-xs flex items-center gap-1 cursor-pointer"
-                              title="Desbloquear Clínica"
-                            >
-                              <Unlock className="w-3.5 h-3.5" />
-                              Desbloquear
-                            </button>
-                          )}
-
-                          {t.status === 'banned' ? (
-                            <button disabled={controlBusy} onClick={() => updateControl(t, 'unban')} className="p-2 text-green-700">Remover banimento</button>
-                          ) : <button disabled={controlBusy} onClick={() => { closeControl(); setControl({ clinic: t, action: 'ban' }); }} className="p-2 text-red-700">Banir clínica</button>}
-                          <button disabled={controlBusy} onClick={() => updateControl(t, 'toggle-registrations')} className="p-2 text-amber-800">{t.registrations_blocked ? 'Liberar novos cadastros' : 'Bloquear novos cadastros'}</button>
-                          <button disabled={controlBusy} onClick={() => { closeControl(); setControl({ clinic: t, action: 'delete' }); }} className="p-2 text-red-700 font-bold">Excluir clínica definitivamente</button>
-                          <button
-                            onClick={() => handleOpenClinicSummary(t)}
-                            className="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 cursor-pointer transition-colors"
-                            title="Resumo da Clínica (Métricas Agregadas)"
+                          </p>
+                        </td>
+                        <td className="py-2.5 px-2 min-w-0">
+                          <p className="font-semibold text-slate-700 text-xs truncate" title={t.responsible_name || 'Gestor'}>
+                            {t.responsible_name || 'Gestor'}
+                          </p>
+                          <p className="text-[10px] text-slate-400 truncate" title={t.responsible_email || t.email}>
+                            {t.responsible_email || t.email}
+                          </p>
+                        </td>
+                        <td className="py-2.5 px-2 min-w-0">
+                          <TenantPlan tenant={t} />
+                        </td>
+                        <td className="py-2.5 px-1.5 whitespace-nowrap">
+                          <span
+                            className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
+                              t.status === 'active'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : t.status === 'pending'
+                                ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                : t.status === 'rejected'
+                                ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                                : 'bg-slate-100 text-slate-700 border border-slate-200'
+                            }`}
                           >
-                            <Eye className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  )))}
+                            {t.status === 'active' ? 'Ativa' : t.status === 'pending' ? 'Pendente' : t.status === 'rejected' ? 'Recusada' : t.status === 'banned' ? 'Banida' : t.status === 'cleanup_pending' ? 'Limpeza' : 'Bloqueada'}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-1.5 whitespace-nowrap">
+                          {t.onboarding_completed === 1 ? (
+                            <span className="text-emerald-600 font-bold flex items-center gap-1 text-[11px]">
+                              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" /> Concluído
+                            </span>
+                          ) : (
+                            <span className="text-amber-600 font-bold text-[11px]">Pendente</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-1 text-center font-bold text-slate-700 text-xs">
+                          {t.total_professionals || 0}
+                        </td>
+                        <td className="py-2.5 px-1 text-center font-bold text-teal-600 text-xs">
+                          {t.total_appointments || 0}
+                        </td>
+                        <td className="py-2.5 px-2 text-right">
+                          <div className="flex items-center justify-end gap-1 flex-wrap">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenClinicSummary(t)}
+                              className="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 cursor-pointer transition-colors"
+                              title="Resumo da Clínica (Métricas Agregadas)"
+                              aria-label="Resumo da Clínica"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </button>
+
+                            {t.status === 'pending' && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleApprove(t.id, t.name)}
+                                  className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-[10px] flex items-center gap-1 shadow-xs cursor-pointer whitespace-nowrap"
+                                  title="Aprovar Clínica"
+                                >
+                                  <Check className="w-3 h-3" />
+                                  Aprovar
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setRejectingClinic(t)}
+                                  className="p-1 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-lg text-[10px] cursor-pointer"
+                                  title="Recusar Cadastro"
+                                  aria-label="Recusar Cadastro"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </>
+                            )}
+
+                            {t.status === 'active' && (
+                              <button
+                                type="button"
+                                onClick={() => handleBlock(t.id, t.name)}
+                                className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 cursor-pointer transition-colors"
+                                title="Bloquear Clínica"
+                                aria-label="Bloquear Clínica"
+                              >
+                                <Lock className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+
+                            {(t.status === 'blocked' || t.status === 'suspended') && (
+                              <button
+                                type="button"
+                                onClick={() => handleUnblock(t.id, t.name)}
+                                className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold rounded-lg text-[10px] flex items-center gap-1 cursor-pointer whitespace-nowrap"
+                                title="Desbloquear Clínica"
+                              >
+                                <Unlock className="w-3 h-3" />
+                                Desbloquear
+                              </button>
+                            )}
+
+                            {t.status === 'banned' ? (
+                              <button
+                                type="button"
+                                disabled={controlBusy}
+                                onClick={() => updateControl(t, 'unban')}
+                                className="px-1.5 py-1 text-emerald-700 hover:bg-emerald-50 rounded-lg text-[10px] font-bold border border-emerald-200 cursor-pointer whitespace-nowrap transition-colors"
+                                title="Remover Banimento"
+                              >
+                                Desbanir
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={controlBusy}
+                                onClick={() => { closeControl(); setControl({ clinic: t, action: 'ban' }); }}
+                                className="px-1.5 py-1 text-rose-700 hover:bg-rose-50 rounded-lg text-[10px] font-bold border border-rose-200 cursor-pointer whitespace-nowrap transition-colors"
+                                title="Banir Clínica"
+                              >
+                                Banir
+                              </button>
+                            )}
+
+                            <button
+                              type="button"
+                              disabled={controlBusy}
+                              onClick={() => updateControl(t, 'toggle-registrations')}
+                              className={`px-1.5 py-1 rounded-lg text-[10px] font-bold border cursor-pointer whitespace-nowrap transition-colors ${
+                                t.registrations_blocked
+                                  ? 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
+                                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                              }`}
+                              title={t.registrations_blocked ? 'Liberar novos cadastros' : 'Bloquear novos cadastros'}
+                            >
+                              {t.registrations_blocked ? 'Lib. cad.' : 'Bloq. cad.'}
+                            </button>
+
+                            <button
+                              type="button"
+                              disabled={controlBusy}
+                              onClick={() => { closeControl(); setControl({ clinic: t, action: 'delete' }); }}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 cursor-pointer transition-colors"
+                              title="Excluir clínica definitivamente"
+                              aria-label="Excluir clínica definitivamente"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </ResponsiveTable>
             </div>
@@ -1101,9 +1168,9 @@ export const SuperAdminView: React.FC = () => {
                   <h4 className="font-bold text-slate-800">Profissionais ativos</h4>
                   {!clinicSummary.activeProfessionals?.length ? <p className="text-sm text-slate-500">Nenhum profissional ativo nesta clínica.</p> :
                     <div className="overflow-x-auto mobile-table-container"><ResponsiveTable className="w-full text-left text-sm">
-                      <thead><tr>{['Nome','E-mail','Profissão','Papel na clínica','Status','Registro profissional'].map(label=><th key={label} className="p-2">{label}</th>)}</tr></thead>
+                      <thead><tr>{['Nome','Telefone','E-mail','Profissão','Papel na clínica','Status','Registro profissional'].map(label=><th key={label} className="p-2 whitespace-nowrap">{label}</th>)}</tr></thead>
                       <tbody>{clinicSummary.activeProfessionals.map((member:any)=><tr key={member.id}>
-                        <td className="p-2">{member.name}</td><td className="p-2 break-all">{member.email}</td>
+                        <td className="p-2 font-medium text-slate-800">{member.name}</td><td className="p-2 text-slate-600 whitespace-nowrap">{member.phone || '—'}</td><td className="p-2 break-all text-slate-600">{member.email}</td>
                         <td className="p-2">{member.professionName || '—'}</td><td className="p-2">{({clinic_admin:'Administrador',professional:'Profissional',receptionist:'Recepcionista',secretary:'Secretaria'} as Record<string,string>)[member.role] || member.role}</td>
                         <td className="p-2">Ativo</td><td className="p-2">{[member.registrationType,member.registrationNumber].filter(Boolean).join(' ') || '—'}</td>
                       </tr>)}</tbody>

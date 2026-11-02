@@ -848,6 +848,34 @@ export class TenantController {
       const totalAppointments = (db.prepare('SELECT COUNT(*) as c FROM appointments').get() as any).c;
       const totalRevenueEstimate = (db.prepare("SELECT SUM(amount) as s FROM payments WHERE status = 'paid'").get() as any)?.s || 0;
 
+      // Total de valores pendentes / em aberto agregados dos registros reais de cobrança (SaaS / Asaas e Plataforma)
+      // Considera status de cobrança/assinaturas realmente pendentes conforme Asaas/Zemda.
+      // Exclui expressamente: pagos ('paid', 'CONFIRMED'), recebidos ('RECEIVED'), estornados ('refunded', 'REFUNDED'),
+      // cancelados ('cancelled', 'CANCELED', 'CANCELLED') e removidos ('DELETED').
+      let pendingSubscriptionAmount = 0;
+      try {
+        const subRow = db.prepare(`
+          SELECT COALESCE(SUM(amount), 0) as s 
+          FROM subscription_payments 
+          WHERE UPPER(status) IN ('PENDING', 'OVERDUE')
+            AND UPPER(status) NOT IN ('CONFIRMED', 'RECEIVED', 'REFUNDED', 'CANCELED', 'CANCELLED', 'DELETED')
+        `).get() as any;
+        pendingSubscriptionAmount = Number(subRow?.s || 0);
+      } catch (_) {}
+
+      let pendingPaymentsAmount = 0;
+      try {
+        const payRow = db.prepare(`
+          SELECT COALESCE(SUM(amount), 0) as s 
+          FROM payments 
+          WHERE status IN ('pending', 'partial')
+            AND status NOT IN ('paid', 'refunded', 'cancelled')
+        `).get() as any;
+        pendingPaymentsAmount = Number(payRow?.s || 0);
+      } catch (_) {}
+
+      const totalPendingRevenue = pendingSubscriptionAmount + pendingPaymentsAmount;
+
       // Últimos logs de auditoria administrativa
       const recentLogs = db.prepare(`
         SELECT id, action, clinic_id AS entity_id, clinic_name, reason, reauthenticated, created_at
@@ -875,6 +903,7 @@ export class TenantController {
         totalProfessionals,
         totalAppointments,
         totalRevenueEstimate,
+        totalPendingRevenue,
         recentLogs,
         alerts
       });
@@ -998,7 +1027,7 @@ export class TenantController {
           canOperate:billing.canOperate,activeUsers:billing.activeUsers,maxUsers:billing.maxUsers,
           trialEndsAt:billing.trialEndsAt,trialDaysRemaining:billing.trialDaysRemaining,currentPeriodEnd:billing.currentPeriodEnd,
           billingRequired:billing.billingRequired,administrativeTrial:billing.administrativeTrial},
-        activeProfessionals:activeTeam.filter(m=>m.is_professional).map(m=>({id:m.id,name:m.name,email:m.email,
+        activeProfessionals:activeTeam.filter(m=>m.is_professional).map(m=>({id:m.id,name:m.name,email:m.email,phone:m.phone || null,
           professionName:m.profession_name,role:m.role,status:m.status,registrationType:m.registration_type,registrationNumber:m.registration_number})),
         clinic: {
           id: tenant.id,
