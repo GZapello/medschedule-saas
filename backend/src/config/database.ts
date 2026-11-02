@@ -358,6 +358,15 @@ export function initializeDatabase(): void {
     addColIfMissing('users', 'email_verified_at', 'TEXT');
     addColIfMissing('users', 'google_sub', 'TEXT');
     addColIfMissing('users', 'auth_provider', "TEXT DEFAULT 'local'");
+    addColIfMissing('users', 'last_login_at', 'TEXT');
+    addColIfMissing('users', 'last_login_provider', "TEXT DEFAULT 'local'");
+    addColIfMissing('users', 'phone_verified', 'INTEGER DEFAULT 0');
+    addColIfMissing('users', 'moderation_flag', "TEXT DEFAULT 'clean'");
+    addColIfMissing('users', 'whatsapp_status', 'TEXT');
+    addColIfMissing('users', 'blocked_reason', 'TEXT');
+    addColIfMissing('users', 'blocked_at', 'TEXT');
+    addColIfMissing('users', 'blocked_by', 'TEXT');
+    addColIfMissing('users', 'blocked_until', 'TEXT');
 
     // Índice UNIQUE seguro para google_sub (não derruba o startup se falhar)
     try {
@@ -367,6 +376,47 @@ export function initializeDatabase(): void {
       `);
     } catch (e) {
       console.warn('[Migration] Erro ao criar índice idx_users_google_sub:', e);
+    }
+
+    // Tabelas para Moderação Individual de Usuários e Solicitações de WhatsApp
+    try {
+      rawDb.exec(`
+        CREATE TABLE IF NOT EXISTS user_moderation_logs (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          tenant_id TEXT REFERENCES tenants(id) ON DELETE SET NULL,
+          action TEXT NOT NULL,
+          reason_code TEXT NOT NULL,
+          reason_details TEXT,
+          blocked_until TEXT,
+          performed_by_user_id TEXT NOT NULL,
+          performed_by_name TEXT,
+          metadata_json TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_user_mod_logs_user ON user_moderation_logs(user_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_user_mod_logs_tenant ON user_moderation_logs(tenant_id, created_at);
+
+        CREATE TABLE IF NOT EXISTS user_whatsapp_requests (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          tenant_id TEXT REFERENCES tenants(id) ON DELETE SET NULL,
+          requested_by_user_id TEXT NOT NULL,
+          requested_by_name TEXT,
+          reason TEXT NOT NULL,
+          previous_phone TEXT,
+          new_phone TEXT,
+          status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'awaiting_correction', 'awaiting_verification', 'completed', 'cancelled')),
+          suspended_access INTEGER NOT NULL DEFAULT 0,
+          verified INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+          resolved_at TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_user_wa_req_user ON user_whatsapp_requests(user_id, status);
+      `);
+    } catch (e) {
+      console.warn('[Migration] Erro ao criar tabelas de moderação:', e);
     }
 
     // Colunas em agendamentos para convênio, encaminhamento e cancelamento detalhado
@@ -3852,5 +3902,15 @@ function repairLegacyPhotoUrls(rawDb: any): void {
   migrateAttendanceTimes(rawDb);
   migrateGoogleCalendar(rawDb);
   migrateSuperAdminVisits(rawDb);
+}
+
+// Inicialização automática e idempotente da base de dados e migrações no carregamento do módulo
+try {
+  initializeDatabase();
+} catch (err) {
+  console.warn('[Database] Aviso na auto-inicialização do banco:', err);
+}
+
+function _noopEnd() {
 
 }

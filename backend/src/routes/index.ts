@@ -48,6 +48,7 @@ import { PersonalAIController } from '../controllers/personal-ai.controller';
 import { PersonalStudentLinkController } from '../controllers/personal-student-link.controller';
 import { IntegrationsController } from '../controllers/integrations.controller';
 import { GoogleCalendarController } from '../controllers/google-calendar.controller';
+import { UserModerationController } from '../controllers/user-moderation.controller';
 import { AdminVisitsController } from '../controllers/admin-visits.controller';
 import { FreeTrialController } from '../controllers/free-trial.controller';
 import { FileController } from '../controllers/file.controller';
@@ -207,6 +208,8 @@ api.post('/v1/patient-sharing/:id/revoke', PatientSharingController.revoke);
 api.post('/v1/auth/accept-legal', AuthController.acceptLegal);
 api.put('/v1/auth/profile/password', AuthController.updateProfilePassword);
 api.put('/v1/auth/profile/email', AuthController.updateProfileEmail);
+api.get('/v1/auth/whatsapp-update-request', UserModerationController.getMyWhatsAppUpdateRequest);
+api.post('/v1/auth/update-whatsapp', UserModerationController.submitMyWhatsAppUpdate);
 
 api.use(onboardingGate);
 mountConsentRoutes(api);
@@ -232,6 +235,15 @@ api.put('/v1/admin/tenants/:id/unban', requireRole('superadmin'), TenantControll
 api.put('/v1/admin/tenants/:id/toggle-registrations', requireRole('superadmin'), TenantController.adminToggleRegistrations);
 api.post('/v1/admin/tenants/:id/delete-permanently', requireRole('superadmin'), TenantController.adminDeletePermanently);
 api.get(['/v1/admin/tenants/:tenantId/summary', '/admin/tenants/:tenantId/summary'], requireRole('superadmin'), TenantController.adminTenantSummary);
+
+// Moderação Individual de Usuários & Atualização de WhatsApp (Exclusivo SuperAdmin)
+api.get('/v1/admin/users/:userId/moderation', requireRole('superadmin'), UserModerationController.getUserModerationDetails);
+api.post('/v1/admin/users/:userId/flag', requireRole('superadmin'), UserModerationController.flagUser);
+api.post('/v1/admin/users/:userId/clear-flag', requireRole('superadmin'), UserModerationController.clearFlag);
+api.post('/v1/admin/users/:userId/block', requireRole('superadmin'), UserModerationController.blockUser);
+api.post('/v1/admin/users/:userId/unblock', requireRole('superadmin'), UserModerationController.unblockUser);
+api.post('/v1/admin/users/:userId/request-whatsapp-update', requireRole('superadmin'), UserModerationController.requestWhatsAppUpdate);
+api.get('/v1/admin/users/:userId/moderation-logs', requireRole('superadmin'), UserModerationController.getUserModerationLogs);
 
 // Gestão de Testes Grátis (Exclusivo SuperAdmin SaaS)
 api.post('/v1/admin/free-trials', requireRole('superadmin'), FreeTrialController.create);

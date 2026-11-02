@@ -26,7 +26,8 @@ import {
   MoreHorizontal,
   XCircle,
   Eye,
-  Loader2
+  Loader2,
+  Phone
 } from 'lucide-react';
 import { AppointmentConsultation } from '../clinical/AppointmentConsultation';
 import { PrintableDocumentModal } from '../clinical/PrintableDocumentModal';
@@ -71,6 +72,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [viewPatientId, setViewPatientId] = useState<string | null>(null);
   const [whatsappReminderAppt, setWhatsappReminderAppt] = useState<any | null>(null);
   const [editingAppt, setEditingAppt] = useState<any | null>(null);
+  const [pendingWhatsAppNotice, setPendingWhatsAppNotice] = useState<any | null>(null);
   const [openMenuState, setOpenMenuState] = useState<{
     appt: any;
     top?: number;
@@ -204,8 +206,23 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   useEffect(() => {
     fetchMetrics();
+    const checkWhatsAppNotice = async () => {
+      try {
+        const res = await ApiClient.get<any>('/v1/auth/whatsapp-update-request');
+        if (res && res.request && res.request.status === 'pending') {
+          setPendingWhatsAppNotice(res.request);
+        } else {
+          setPendingWhatsAppNotice(null);
+        }
+      } catch {
+        // Ignorar silenciosamente
+      }
+    };
+    checkWhatsAppNotice();
+
     const handleRemoteUpdate = () => {
       fetchMetrics();
+      checkWhatsAppNotice();
     };
     window.addEventListener('zemda-appointment-updated', handleRemoteUpdate);
     return () => {
@@ -400,6 +417,46 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           )}
         </div>
       </div>
+
+      {/* Solicitação Administrativa de Atualização de WhatsApp */}
+      {pendingWhatsAppNotice && (
+        <div className="bg-amber-50/90 border border-amber-200/90 rounded-xl p-3 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-start gap-3">
+            <div className="p-2 bg-amber-100 text-amber-700 rounded-lg shrink-0 mt-0.5 sm:mt-0">
+              <Phone className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-xs sm:text-sm font-bold text-amber-900 flex items-center gap-1.5">
+                <span>Solicitação de Atualização de WhatsApp</span>
+                <span className="text-[10px] bg-amber-200/70 text-amber-900 font-semibold px-1.5 py-0.5 rounded">
+                  Ação Necessária
+                </span>
+              </h4>
+              <p className="text-xs text-amber-800 mt-0.5 leading-relaxed">
+                {pendingWhatsAppNotice.suspend_access ? (
+                  <span className="font-semibold text-rose-700 block">
+                    Seu acesso foi temporariamente suspenso para regularização do WhatsApp cadastrado. Atualize seu número para reativar seu acesso.
+                  </span>
+                ) : (
+                  <span>A administração do sistema solicitou que você confirme e atualize seu número de WhatsApp de contato profissional.</span>
+                )}
+                {pendingWhatsAppNotice.reason && (
+                  <span className="block mt-0.5 text-amber-900">
+                    <strong>Motivo informado:</strong> {pendingWhatsAppNotice.reason}
+                  </span>
+                )}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => onNavigate('settings')}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded-lg shadow-xs transition-all shrink-0 cursor-pointer self-stretch sm:self-auto justify-center"
+          >
+            <span>Atualizar WhatsApp</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* KPI Cards Grid (Compact & Informative) */}
       <div className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 ${metrics?.permissions?.finance ? 'lg:grid-cols-5' : 'lg:grid-cols-3'} gap-2`}>

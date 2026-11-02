@@ -111,7 +111,11 @@ export class AuthController {
       if (user.status === 'blocked' || user.status === 'inactive') {
         logAudit(req, 'LOGIN_FAILED', 'users', user.id, { email: attemptedEmail, reason: 'account_inactive' });
         res.status(403).json({
-          error: 'Sua conta de usuário está desativada ou bloqueada. Entre em contato com o gestor da clínica.',
+          error: (user as any).blocked_reason
+            ? `Sua conta está bloqueada pela administração. Motivo: ${(user as any).blocked_reason}`
+            : 'Sua conta de usuário está desativada ou bloqueada. Entre em contato com o gestor da clínica.',
+          blocked_until: (user as any).blocked_until || null,
+          blocked_reason: (user as any).blocked_reason || null,
           code: 'USER_BLOCKED'
         });
         return;
@@ -185,6 +189,9 @@ export class AuthController {
 
       // Log de auditoria
       logAudit(req, 'USER_LOGIN', 'users', user.id, { email: user.email, role: user.role });
+      try {
+        db.prepare("UPDATE users SET last_login_at = datetime('now'), last_login_provider = 'local' WHERE id = ?").run(user.id);
+      } catch (_) {}
 
       // Busca dados profissionais se for professional ou se o clinic_admin atuar como profissional
       let profDetails: any = null;
@@ -1839,6 +1846,7 @@ export class AuthController {
           SELECT id, tenant_id, name, email, password_hash, role, phone, avatar_url, status,
                  onboarding_status, email_verified,
                  terms_version_accepted, privacy_version_accepted, terms_accepted_at, privacy_accepted_at,
+                blocked_reason, blocked_until,
                  google_sub, auth_provider
           FROM users
           WHERE google_sub = ?
@@ -1850,6 +1858,7 @@ export class AuthController {
             SELECT id, tenant_id, name, email, password_hash, role, phone, avatar_url, status,
                    onboarding_status, email_verified,
                    terms_version_accepted, privacy_version_accepted, terms_accepted_at, privacy_accepted_at,
+                blocked_reason, blocked_until,
                    google_sub, auth_provider
             FROM users
             WHERE email = ?
@@ -1925,7 +1934,11 @@ export class AuthController {
         if (user.status === 'blocked' || user.status === 'inactive') {
           logAudit(req, 'LOGIN_FAILED', 'users', user.id, { email: cleanEmail, reason: 'account_inactive' });
           res.status(403).json({
-            error: 'Sua conta de usuário está desativada ou bloqueada. Entre em contato com o gestor da clínica.',
+            error: (user as any).blocked_reason
+            ? `Sua conta está bloqueada pela administração. Motivo: ${(user as any).blocked_reason}`
+            : 'Sua conta de usuário está desativada ou bloqueada. Entre em contato com o gestor da clínica.',
+          blocked_until: (user as any).blocked_until || null,
+          blocked_reason: (user as any).blocked_reason || null,
             code: 'USER_BLOCKED'
           });
           return;
@@ -1964,6 +1977,9 @@ export class AuthController {
         }
 
         logAudit(req, 'USER_LOGIN_GOOGLE', 'users', user.id, { email: cleanEmail, role: user.role });
+        try {
+          db.prepare("UPDATE users SET last_login_at = datetime('now'), last_login_provider = 'google' WHERE id = ?").run(user.id);
+        } catch (_) {}
         const authResponse = AuthController.buildUserAuthResponse(user, tenantData);
         res.status(200).json(authResponse);
         return;
@@ -2156,6 +2172,7 @@ export class AuthController {
                   google_sub, auth_provider,
                   profession_id, profession_name, practice_areas, registration_type, registration_number,
                   terms_version_accepted, privacy_version_accepted, terms_accepted_at, privacy_accepted_at,
+                blocked_reason, blocked_until,
                   zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled,
                   zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled, zemda_med_enabled, zemda_estetic_enabled,
                   created_at, updated_at

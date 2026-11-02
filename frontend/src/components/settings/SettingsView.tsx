@@ -21,6 +21,8 @@ import {
   User,
   Key,
   Mail,
+  Phone,
+  AlertTriangle,
   Lock,
   Shield,
   AlertCircle,
@@ -324,6 +326,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
 
   // Configurações Pessoais (Minha Conta)
   const [profileEmail, setProfileEmail] = useState<string>(currentUser?.email || '');
+  const [profilePhone, setProfilePhone] = useState<string>(currentUser?.phone || '');
+  const [loadingProfilePhone, setLoadingProfilePhone] = useState<boolean>(false);
+  const [pendingWhatsAppRequest, setPendingWhatsAppRequest] = useState<any | null>(null);
   const [currentPassword, setCurrentPassword] = useState<string>('');
   const [newPassword, setNewPassword] = useState<string>('');
   const [confirmPassword, setConfirmPassword] = useState<string>('');
@@ -574,7 +579,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
     }
     if (currentUser) {
       setProfileEmail(currentUser.email || '');
+      setProfilePhone(currentUser.phone || '');
     }
+    ApiClient.get<any>('/v1/auth/whatsapp-update-request')
+      .then(res => {
+        if (res?.hasPending) setPendingWhatsAppRequest(res.request);
+        else setPendingWhatsAppRequest(null);
+      })
+      .catch(() => {});
   }, [currentTenant, currentUser]);
 
   const handleSaveClinic = async (e: React.FormEvent) => {
@@ -657,6 +669,25 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
       showToast(err.message || 'Erro ao atualizar e-mail pessoal', 'error');
     } finally {
       setLoadingProfileEmail(false);
+    }
+  };
+
+  const handleUpdateProfilePhone = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!profilePhone.trim()) {
+      showToast('Informe o novo número de WhatsApp / telefone com DDD', 'error');
+      return;
+    }
+    try {
+      setLoadingProfilePhone(true);
+      const res = await ApiClient.post<any>('/v1/auth/update-whatsapp', { phone: profilePhone.trim() });
+      showToast(res.message || 'WhatsApp atualizado com sucesso! (Número atualizado — não verificado).', 'success');
+      setPendingWhatsAppRequest(null);
+      await reloadSession();
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao atualizar número de WhatsApp', 'error');
+    } finally {
+      setLoadingProfilePhone(false);
     }
   };
 
@@ -2344,6 +2375,69 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
                 className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50"
               >
                 {loadingProfileEmail ? 'Salvando...' : 'Salvar Novo E-mail'}
+              </button>
+            </div>
+          </form>
+
+          {/* Card de WhatsApp & Telefone de Contato */}
+          <form onSubmit={handleUpdateProfilePhone} className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xs space-y-4 text-xs">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <Phone className="w-4 h-4 text-teal-600" />
+                <h3 className="font-bold text-slate-800 text-sm">WhatsApp & Telefone de Contato</h3>
+              </div>
+              <span className="text-[11px] text-slate-400 font-medium">Comunicação e Notificações</span>
+            </div>
+
+            {/* ALERTA DE SOLICITAÇÃO PENDENTE DO SUPERADMIN */}
+            {pendingWhatsAppRequest && (
+              <div className="p-4 bg-amber-50 border-2 border-amber-300 rounded-2xl flex items-start gap-3 text-amber-900 leading-relaxed">
+                <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <h4 className="font-bold text-amber-950 text-xs">Atualização de Telefone/WhatsApp Solicitada pela Administração</h4>
+                  <p className="text-xs">A administração do sistema identificou a necessidade de atualização do seu número.</p>
+                  <p className="text-xs font-semibold bg-amber-100/80 p-2 rounded-xl border border-amber-200 mt-1">
+                    Motivo informado: {pendingWhatsAppRequest.reason}
+                  </p>
+                  {pendingWhatsAppRequest.previous_phone && (
+                    <p className="text-[11px] text-amber-800">Número anterior: {pendingWhatsAppRequest.previous_phone}</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Telefone Cadastrado</label>
+                <input
+                  type="text"
+                  disabled
+                  value={currentUser?.phone || 'Nenhum telefone cadastrado'}
+                  className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-slate-500 font-medium cursor-not-allowed"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Novo Número com DDD (WhatsApp) *</label>
+                <input
+                  type="tel"
+                  required
+                  value={profilePhone}
+                  onChange={e => setProfilePhone(e.target.value)}
+                  placeholder="(11) 98765-4321"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 font-medium focus:ring-2 focus:ring-teal-500"
+                />
+                <span className="text-[10px] text-slate-400 mt-1 block">Informe seu DDD + 8 ou 9 dígitos (ex: (11) 98765-4321)</span>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="submit"
+                disabled={loadingProfilePhone}
+                className="px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50"
+              >
+                {loadingProfilePhone ? 'Salvando...' : 'Salvar Novo WhatsApp'}
               </button>
             </div>
           </form>

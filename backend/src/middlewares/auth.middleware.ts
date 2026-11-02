@@ -76,7 +76,7 @@ export function onboardingGate(req: Request, res: Response, next: NextFunction):
     return;
   }
 
-  const isAllowed = /^\/(?:v1\/)?(?:auth\/(?:me|accept-legal|logout|profile)|onboarding|user-onboarding|public|tenants\/current|clinics\/current|taxonomy|capabilities|plans|subscriptions|support)(?:\/|$)/.test(req.path);
+  const isAllowed = /^\/(?:v1\/)?(?:auth\/(?:me|accept-legal|logout|profile|whatsapp-update-request|update-whatsapp)|onboarding|user-onboarding|public|tenants\/current|clinics\/current|taxonomy|capabilities|plans|subscriptions|support)(?:\/|$)/.test(req.path);
   if (isAllowed) {
     next();
     return;

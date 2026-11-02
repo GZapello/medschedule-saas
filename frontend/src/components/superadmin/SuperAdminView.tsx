@@ -42,6 +42,18 @@ import {
 import { FreeTrialsAdminView } from './FreeTrialsAdminView';
 import { InfobipWhatsAppAdmin } from './InfobipWhatsAppAdmin';
 import { SuperAdminLaboratoryView } from './SuperAdminLaboratoryView';
+import {
+  UserModerationDetailModal,
+  UserModerationActionModal,
+  formatDateTimeBR,
+  formatLoginDate
+} from './UserModerationModals';
+import {
+  Phone,
+  PhoneOff,
+  MoreVertical,
+  ShieldAlert
+} from 'lucide-react';
 
 const financialLabel=(status?:string,days?:number|null,allowed?:boolean)=> {
   const labels:Record<string,string>={TRIAL:`Teste grátis · ${days ?? 0} dias restantes`,TRIAL_EXPIRED:'Teste encerrado',
@@ -116,6 +128,24 @@ export const SuperAdminView: React.FC = () => {
       setSummaryError(err.message || 'Erro ao carregar resumo estatístico da clínica');
     } finally {
       setLoadingSummary(false);
+    }
+  };
+
+  // Moderação individual de usuários
+  const [moderationDetailUserId, setModerationDetailUserId] = useState<string | null>(null);
+  const [moderationAction, setModerationAction] = useState<{
+    type: 'flag' | 'block' | 'unblock' | 'request_whatsapp';
+    user: any;
+  } | null>(null);
+  const [actionMenuOpenUserId, setActionMenuOpenUserId] = useState<string | null>(null);
+
+  const handleClearFlag = async (user: any) => {
+    try {
+      await ApiClient.post(`/v1/admin/users/${user.id}/clear-flag`, { clinicId: selectedClinic?.id });
+      showToast(`Sinalização de ${user.name} removida com sucesso.`, 'success');
+      if (selectedClinic) handleOpenClinicSummary(selectedClinic);
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao remover sinalização', 'error');
     }
   };
 
@@ -1165,16 +1195,220 @@ export const SuperAdminView: React.FC = () => {
                   <p className="text-sm font-semibold">{clinicSummary.subscription.canOperate ? 'Acesso operacional permitido' : 'Sem acesso operacional'}</p>
                 </section>}
                 <section className="space-y-3">
-                  <h4 className="font-bold text-slate-800">Profissionais ativos</h4>
-                  {!clinicSummary.activeProfessionals?.length ? <p className="text-sm text-slate-500">Nenhum profissional ativo nesta clínica.</p> :
-                    <div className="overflow-x-auto mobile-table-container"><ResponsiveTable className="w-full text-left text-sm">
-                      <thead><tr>{['Nome','Telefone','E-mail','Profissão','Papel na clínica','Status','Registro profissional'].map(label=><th key={label} className="p-2 whitespace-nowrap">{label}</th>)}</tr></thead>
-                      <tbody>{clinicSummary.activeProfessionals.map((member:any)=><tr key={member.id}>
-                        <td className="p-2 font-medium text-slate-800">{member.name}</td><td className="p-2 text-slate-600 whitespace-nowrap">{member.phone || '—'}</td><td className="p-2 break-all text-slate-600">{member.email}</td>
-                        <td className="p-2">{member.professionName || '—'}</td><td className="p-2">{({clinic_admin:'Administrador',professional:'Profissional',receptionist:'Recepcionista',secretary:'Secretaria'} as Record<string,string>)[member.role] || member.role}</td>
-                        <td className="p-2">Ativo</td><td className="p-2">{[member.registrationType,member.registrationNumber].filter(Boolean).join(' ') || '—'}</td>
-                      </tr>)}</tbody>
-                    </ResponsiveTable></div>}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-bold text-slate-800 text-sm">Profissionais e Usuários da Clínica</h4>
+                      <p className="text-[11px] text-slate-500">Controle individual de acesso, moderação, atualização cadastral e histórico</p>
+                    </div>
+                    <span className="text-xs bg-slate-100 text-slate-700 px-2.5 py-1 rounded-xl font-bold">
+                      {clinicSummary.activeProfessionals?.length || 0} membro(s)
+                    </span>
+                  </div>
+                  {!clinicSummary.activeProfessionals?.length ? (
+                    <p className="text-sm text-slate-500">Nenhum profissional ou usuário cadastrado nesta clínica.</p>
+                  ) : (
+                    <div className="overflow-x-auto mobile-table-container rounded-2xl border border-slate-200">
+                      <ResponsiveTable className="w-full text-left text-xs">
+                        <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-600 font-bold text-[11px]">
+                          <tr>
+                            <th className="p-2.5 whitespace-nowrap">Nome</th>
+                            <th className="p-2.5 whitespace-nowrap">Telefone / WhatsApp</th>
+                            <th className="p-2.5 whitespace-nowrap">E-mail</th>
+                            <th className="p-2.5 whitespace-nowrap">Profissão</th>
+                            <th className="p-2.5 whitespace-nowrap">Papel</th>
+                            <th className="p-2.5 whitespace-nowrap">Status</th>
+                            <th className="p-2.5 whitespace-nowrap">Registro</th>
+                            <th className="p-2.5 whitespace-nowrap">Data do Cadastro</th>
+                            <th className="p-2.5 whitespace-nowrap">Último Login</th>
+                            <th className="p-2.5 text-right whitespace-nowrap">Ações</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {clinicSummary.activeProfessionals.map((member: any) => {
+                            const isUserBlocked = member.status === 'blocked' || member.accountStatus === 'blocked';
+                            const isUserSuspended = member.status === 'suspended';
+                            const isUserActive = member.status === 'active' && member.accountStatus === 'active';
+                            const isSpamFlagged = member.moderationFlag === 'suspected_spam';
+                            const isWaPending = member.whatsappStatus === 'pending_correction' || member.moderationFlag === 'invalid_phone';
+                            const loginData = formatLoginDate(member.lastLoginAt);
+
+                            return (
+                              <tr key={member.id} className="hover:bg-slate-50/60 transition-colors">
+                                <td className="p-2.5 font-bold text-slate-800 whitespace-nowrap">
+                                  <div className="flex items-center gap-1.5">
+                                    <span>{member.name}</span>
+                                    {member.isProfessional ? (
+                                      <span className="text-[10px] text-blue-600 font-normal">🩺</span>
+                                    ) : null}
+                                  </div>
+                                </td>
+                                <td className="p-2.5 text-slate-700 whitespace-nowrap">
+                                  <div className="flex flex-col">
+                                    <span className="font-medium">{member.phone || '—'}</span>
+                                    {member.whatsappStatus === 'invalid' && (
+                                      <span className="text-[10px] text-rose-600 font-bold flex items-center gap-0.5 mt-0.5">
+                                        <PhoneOff className="w-3 h-3" /> Inválido
+                                      </span>
+                                    )}
+                                    {member.whatsappStatus === 'unverified' && member.phone && (
+                                      <span className="text-[10px] text-slate-400 font-medium">Não verificado</span>
+                                    )}
+                                    {member.phoneVerified ? (
+                                      <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-0.5 mt-0.5">
+                                        <CheckCircle2 className="w-3 h-3" /> Verificado
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                </td>
+                                <td className="p-2.5 text-slate-600 max-w-[180px] truncate" title={member.email}>
+                                  {member.email}
+                                </td>
+                                <td className="p-2.5 text-slate-700 whitespace-nowrap">
+                                  {member.professionName || '—'}
+                                </td>
+                                <td className="p-2.5 text-slate-700 whitespace-nowrap">
+                                  {({
+                                    clinic_admin: 'Administrador',
+                                    professional: 'Profissional',
+                                    receptionist: 'Recepcionista',
+                                    secretary: 'Secretária'
+                                  } as Record<string, string>)[member.role] || member.role}
+                                </td>
+                                <td className="p-2.5 whitespace-nowrap">
+                                  <div className="flex flex-col gap-1 items-start">
+                                    {isUserBlocked ? (
+                                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                                        Bloqueado
+                                      </span>
+                                    ) : isUserSuspended ? (
+                                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                                        Suspenso
+                                      </span>
+                                    ) : isUserActive ? (
+                                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                        Ativo
+                                      </span>
+                                    ) : (
+                                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                                        {member.status}
+                                      </span>
+                                    )}
+                                    {isSpamFlagged && (
+                                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200 flex items-center gap-0.5" title="Cadastro sinalizado como suspeito ou spam">
+                                        <AlertTriangle className="w-2.5 h-2.5 text-purple-600" /> Suspeito
+                                      </span>
+                                    )}
+                                    {isWaPending && (
+                                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200 flex items-center gap-0.5" title="WhatsApp pendente de correção cadastral">
+                                        <PhoneOff className="w-2.5 h-2.5 text-amber-600" /> WhatsApp pendente
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="p-2.5 text-slate-600 whitespace-nowrap">
+                                  {[member.registrationType, member.registrationNumber].filter(Boolean).join(' ') || '—'}
+                                </td>
+                                <td className="p-2.5 text-slate-600 whitespace-nowrap">
+                                  {formatDateTimeBR(member.userCreatedAt || member.membershipCreatedAt)}
+                                </td>
+                                <td className="p-2.5 text-slate-600 whitespace-nowrap">
+                                  <div className="flex flex-col">
+                                    <span className="font-medium text-slate-800">{loginData.text}</span>
+                                    {loginData.relative && (
+                                      <span className="text-[10px] text-slate-400">{loginData.relative}</span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="p-2.5 text-right whitespace-nowrap">
+                                  <div className="flex items-center justify-end gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => setModerationDetailUserId(member.id)}
+                                      className="p-1.5 text-slate-500 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-colors cursor-pointer"
+                                      title="Visualizar detalhes e histórico"
+                                      aria-label="Visualizar detalhes do usuário"
+                                    >
+                                      <Eye className="w-3.5 h-3.5" />
+                                    </button>
+                                    <div className="relative">
+                                      <button
+                                        type="button"
+                                        onClick={() => setActionMenuOpenUserId(actionMenuOpenUserId === member.id ? null : member.id)}
+                                        className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                                          actionMenuOpenUserId === member.id ? 'bg-blue-100 text-blue-700' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'
+                                        }`}
+                                        title="Ações de moderação"
+                                        aria-label="Ações de moderação"
+                                      >
+                                        <MoreVertical className="w-3.5 h-3.5" />
+                                      </button>
+                                      {actionMenuOpenUserId === member.id && (
+                                        <div className="absolute right-0 top-8 z-30 w-56 bg-white border border-slate-200 rounded-2xl shadow-xl py-1.5 text-left text-xs animate-in fade-in zoom-in-95">
+                                          <button
+                                            type="button"
+                                            onClick={() => { setActionMenuOpenUserId(null); setModerationDetailUserId(member.id); }}
+                                            className="w-full px-3 py-1.5 text-left hover:bg-slate-50 text-slate-700 font-medium flex items-center gap-2 cursor-pointer"
+                                          >
+                                            <Eye className="w-3.5 h-3.5 text-blue-600" />
+                                            Visualizar Detalhes
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => { setActionMenuOpenUserId(null); setModerationAction({ type: 'request_whatsapp', user: member }); }}
+                                            className="w-full px-3 py-1.5 text-left hover:bg-slate-50 text-slate-700 font-medium flex items-center gap-2 cursor-pointer"
+                                          >
+                                            <Phone className="w-3.5 h-3.5 text-teal-600" />
+                                            Solicitar WhatsApp
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => { setActionMenuOpenUserId(null); setModerationAction({ type: 'flag', user: member }); }}
+                                            className="w-full px-3 py-1.5 text-left hover:bg-slate-50 text-slate-700 font-medium flex items-center gap-2 cursor-pointer"
+                                          >
+                                            <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                                            Sinalizar Spam / Suspeito
+                                          </button>
+                                          {isUserBlocked ? (
+                                            <button
+                                              type="button"
+                                              onClick={() => { setActionMenuOpenUserId(null); setModerationAction({ type: 'unblock', user: member }); }}
+                                              className="w-full px-3 py-1.5 text-left hover:bg-emerald-50 text-emerald-700 font-bold flex items-center gap-2 cursor-pointer"
+                                            >
+                                              <Unlock className="w-3.5 h-3.5 text-emerald-600" />
+                                              Desbloquear Usuário
+                                            </button>
+                                          ) : (
+                                            <button
+                                              type="button"
+                                              onClick={() => { setActionMenuOpenUserId(null); setModerationAction({ type: 'block', user: member }); }}
+                                              className="w-full px-3 py-1.5 text-left hover:bg-rose-50 text-rose-700 font-bold flex items-center gap-2 cursor-pointer"
+                                            >
+                                              <Lock className="w-3.5 h-3.5 text-rose-600" />
+                                              Bloquear Usuário
+                                            </button>
+                                          )}
+                                          {(isSpamFlagged || isWaPending) && (
+                                            <button
+                                              type="button"
+                                              onClick={() => { setActionMenuOpenUserId(null); handleClearFlag(member); }}
+                                              className="w-full px-3 py-1.5 text-left hover:bg-slate-50 text-emerald-700 font-medium flex items-center gap-2 cursor-pointer border-t border-slate-100"
+                                            >
+                                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                              Limpar Sinalização
+                                            </button>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </ResponsiveTable>
+                    </div>
+                  )}
                 </section>
                 {/* 1. VISÃO GERAL */}
                 <div className="space-y-2.5">
@@ -1538,6 +1772,27 @@ export const SuperAdminView: React.FC = () => {
         </div>
       )}
 
-    </div>
+    
+      {/* Modais de Moderação Individual de Usuários */}
+      <UserModerationDetailModal
+        userId={moderationDetailUserId}
+        onClose={() => setModerationDetailUserId(null)}
+        onOpenAction={(actType, targetUser) => {
+          setModerationDetailUserId(null);
+          setModerationAction({ type: actType, user: targetUser });
+        }}
+        onClearFlag={handleClearFlag}
+      />
+
+      <UserModerationActionModal
+        type={moderationAction?.type || null}
+        user={moderationAction?.user || null}
+        clinic={selectedClinic}
+        onClose={() => setModerationAction(null)}
+        onSuccess={() => {
+          if (selectedClinic) handleOpenClinicSummary(selectedClinic);
+        }}
+      />
+</div>
   );
 };

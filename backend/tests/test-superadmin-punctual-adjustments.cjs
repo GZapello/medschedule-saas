@@ -119,7 +119,9 @@ async function runTests() {
     const mockPlanId = 'plan-pro-' + Date.now();
     const mockSubId = 'sub-' + Date.now();
 
-    db.prepare("INSERT INTO plans (id, slug, code, name, monthly_price, extra_user_price, max_users, active) VALUES (?, 'test-pro', 'TEST_PRO', 'Plano Teste', 250, 50, 5, 1)").run(mockPlanId);
+    const mockPlanSlug = 'test-pro-' + Date.now();
+    const mockPlanCode = 'TEST_PRO_' + Date.now();
+    db.prepare("INSERT INTO plans (id, slug, code, name, monthly_price, extra_user_price, max_users, active) VALUES (?, ?, ?, 'Plano Teste', 250, 50, 5, 1)").run(mockPlanId, mockPlanSlug, mockPlanCode);
     db.prepare("INSERT INTO subscriptions (id, tenant_id, plan_id, status, current_period_start, current_period_end) VALUES (?, ?, ?, 'active', date('now'), date('now', '+30 days'))").run(mockSubId, testTenantId, mockPlanId);
 
     // 1 cobrança de R$ 500 PENDING

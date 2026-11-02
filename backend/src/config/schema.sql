@@ -163,6 +163,15 @@ CREATE TABLE IF NOT EXISTS users (
   two_factor_enabled INTEGER NOT NULL DEFAULT 0,
   google_sub TEXT,
   auth_provider TEXT DEFAULT 'local',
+  last_login_at TEXT,
+  last_login_provider TEXT DEFAULT 'local',
+  phone_verified INTEGER DEFAULT 0,
+  moderation_flag TEXT DEFAULT 'clean',
+  whatsapp_status TEXT,
+  blocked_reason TEXT,
+  blocked_at TEXT,
+  blocked_by TEXT,
+  blocked_until TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
@@ -852,3 +861,38 @@ CREATE TABLE IF NOT EXISTS google_calendar_oauth_states (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_gcal_oauth_state ON google_calendar_oauth_states(state);
+
+-- 32. Moderação Individual de Usuários & Solicitações de WhatsApp
+CREATE TABLE IF NOT EXISTS user_moderation_logs (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  tenant_id TEXT REFERENCES tenants(id) ON DELETE SET NULL,
+  action TEXT NOT NULL,
+  reason_code TEXT NOT NULL,
+  reason_details TEXT,
+  blocked_until TEXT,
+  performed_by_user_id TEXT NOT NULL,
+  performed_by_name TEXT,
+  metadata_json TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_user_mod_logs_user ON user_moderation_logs(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_user_mod_logs_tenant ON user_moderation_logs(tenant_id, created_at);
+
+CREATE TABLE IF NOT EXISTS user_whatsapp_requests (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  tenant_id TEXT REFERENCES tenants(id) ON DELETE SET NULL,
+  requested_by_user_id TEXT NOT NULL,
+  requested_by_name TEXT,
+  reason TEXT NOT NULL,
+  previous_phone TEXT,
+  new_phone TEXT,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'awaiting_correction', 'awaiting_verification', 'completed', 'cancelled')),
+  suspended_access INTEGER NOT NULL DEFAULT 0,
+  verified INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  resolved_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_user_wa_req_user ON user_whatsapp_requests(user_id, status);
