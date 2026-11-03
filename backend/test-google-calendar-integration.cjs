@@ -235,7 +235,7 @@ async function runTests() {
     `).run(`sched-${runId}`, tenantA, profA);
 
     // Data de teste: 2026-11-02 é uma segunda-feira
-    const testDate = '2026-11-02';
+    const testDate = '2026-11-09';
 
     // 1. Sem bloqueios externos: slots 14:00, 15:00, 16:00, 17:00 (total 4)
     const normalSlots = calculateAvailableSlots(tenantA, profA, servId, testDate);

@@ -198,6 +198,18 @@ export class AppointmentController {
           r.name as room_name,
           (SELECT gel.sync_status FROM google_calendar_event_links gel WHERE gel.appointment_id = a.id LIMIT 1) as google_sync_status,
           (SELECT gel.google_event_id FROM google_calendar_event_links gel WHERE gel.appointment_id = a.id LIMIT 1) as google_event_id,
+          (SELECT gel.google_html_link FROM google_calendar_event_links gel WHERE gel.appointment_id = a.id LIMIT 1) as google_html_link,
+          (SELECT gel.last_error FROM google_calendar_event_links gel WHERE gel.appointment_id = a.id LIMIT 1) as google_last_error,
+          (SELECT gel.last_synced_at FROM google_calendar_event_links gel WHERE gel.appointment_id = a.id LIMIT 1) as google_last_synced_at,
+          (SELECT gel.last_verified_at FROM google_calendar_event_links gel WHERE gel.appointment_id = a.id LIMIT 1) as google_last_verified_at,
+          (SELECT conn.calendar_name FROM google_calendar_event_links gel LEFT JOIN google_calendar_connections conn ON conn.id = gel.connection_id WHERE gel.appointment_id = a.id LIMIT 1) as google_calendar_name,
+          (SELECT conn.google_account_email FROM google_calendar_event_links gel LEFT JOIN google_calendar_connections conn ON conn.id = gel.connection_id WHERE gel.appointment_id = a.id LIMIT 1) as google_account_email,
+          (SELECT gel.google_html_link FROM google_calendar_event_links gel WHERE gel.appointment_id = a.id LIMIT 1) as google_html_link,
+          (SELECT gel.last_error FROM google_calendar_event_links gel WHERE gel.appointment_id = a.id LIMIT 1) as google_last_error,
+          (SELECT gel.last_synced_at FROM google_calendar_event_links gel WHERE gel.appointment_id = a.id LIMIT 1) as google_last_synced_at,
+          (SELECT gel.last_verified_at FROM google_calendar_event_links gel WHERE gel.appointment_id = a.id LIMIT 1) as google_last_verified_at,
+          (SELECT conn.calendar_name FROM google_calendar_event_links gel LEFT JOIN google_calendar_connections conn ON conn.id = gel.connection_id WHERE gel.appointment_id = a.id LIMIT 1) as google_calendar_name,
+          (SELECT conn.google_account_email FROM google_calendar_event_links gel LEFT JOIN google_calendar_connections conn ON conn.id = gel.connection_id WHERE gel.appointment_id = a.id LIMIT 1) as google_account_email,
           (SELECT pay.amount FROM payments pay WHERE pay.appointment_id = a.id AND pay.tenant_id = a.tenant_id ORDER BY pay.created_at ASC LIMIT 1) as payment_amount,
           (SELECT pay.status FROM payments pay WHERE pay.appointment_id = a.id AND pay.tenant_id = a.tenant_id ORDER BY pay.created_at ASC LIMIT 1) as payment_status,
           (SELECT pay.payment_method FROM payments pay WHERE pay.appointment_id = a.id AND pay.tenant_id = a.tenant_id ORDER BY pay.created_at ASC LIMIT 1) as payment_method
@@ -761,6 +773,23 @@ export class AppointmentController {
         logAudit(req, 'CREATE_APPOINTMENT', 'appointments', appointmentId, { appointmentNumber, startTime, endTime });
       }
 
+      // Registra vínculo prévio com status 'pending' se o profissional possuir conexão Google ativa
+      const gcalConn = GoogleCalendarService.getConnectionForProfessional(tenantId, professionalId);
+      if (gcalConn && gcalConn.sync_enabled && gcalConn.sync_direction !== 'google_to_zemda') {
+        try {
+          db.prepare(`
+            INSERT INTO google_calendar_event_links (
+              id, tenant_id, appointment_id, connection_id, calendar_id, google_event_id,
+              sync_status, last_error, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, '', 'pending', 'Sincronização em andamento', datetime('now'), datetime('now'))
+            ON CONFLICT(appointment_id) DO UPDATE SET
+              sync_status = 'pending',
+              last_error = 'Sincronização em andamento',
+              updated_at = datetime('now')
+          `).run(uuidv4(), tenantId, appointmentId, gcalConn.id, gcalConn.calendar_id);
+        } catch (_) {}
+      }
+
       // Sincroniza de forma resiliente com o Google Calendar (sem travar a criação caso haja falha externa)
       GoogleCalendarService.syncAppointmentCreated(appointmentId, tenantId).catch(err => {
         console.warn('[AppointmentController] Falha assíncrona ao sincronizar criação com Google Calendar:', err?.message || err);
@@ -776,19 +805,10 @@ export class AppointmentController {
         status: initialStatus,
         clinical_module: initialClinicalModule || (isRetroactive ? 'general' : null),
         isRetroactive,
+        google_sync_status: gcalConn ? 'pending' : null,
         message: isRetroactive ? 'Atendimento retroativo registrado com sucesso!' : 'Atendimento agendado com sucesso!'
       });
       return;
-
-      logAudit(req, 'CREATE_APPOINTMENT', 'appointments', appointmentId, { appointmentNumber, startTime, endTime });
-
-      res.status(201).json({
-        id: appointmentId,
-        appointmentNumber,
-        startTime,
-        endTime,
-        message: 'Atendimento agendado com sucesso!'
-      });
     } catch (err: any) {
       throw err;
     }
@@ -1306,6 +1326,12 @@ export class AppointmentController {
       // Atualiza os lembretes automáticos para o novo horário (Item 24)
       NotificationService.cancelAppointmentReminders(id as string);
       NotificationService.scheduleAppointmentReminder(id as string);
+
+      if (tenantId) {
+        GoogleCalendarService.syncAppointmentUpdated(id as string, tenantId).catch(err => {
+          console.warn('[AppointmentController] Falha ao atualizar Google Calendar após remarcar:', err?.message || err);
+        });
+      }
 
       logAudit(req, 'RESCHEDULE_APPOINTMENT', 'appointments', id, { newStart: normalizedStartTime, newEnd: normalizedEndTime });
       res.json({ message: 'Atendimento remarcado com sucesso' });

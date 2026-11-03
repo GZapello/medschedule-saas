@@ -318,8 +318,14 @@ export interface Appointment {
   modality: 'presential' | 'online' | 'home';
   meeting_url?: string | null;
   google_drive_url?: string | null;
-  google_sync_status?: 'synced' | 'pending' | 'error' | 'divergent' | null;
+  google_sync_status?: 'synced' | 'pending' | 'error' | 'reconnect_required' | 'divergent' | null;
   google_event_id?: string | null;
+  google_html_link?: string | null;
+  google_last_error?: string | null;
+  google_last_synced_at?: string | null;
+  google_last_verified_at?: string | null;
+  google_calendar_name?: string | null;
+  google_account_email?: string | null;
   patient_notes?: string;
   internal_notes?: string;
   cancellation_reason?: string;

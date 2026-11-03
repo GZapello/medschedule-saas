@@ -47,9 +47,11 @@ export function migrateGoogleCalendar(rawDb: DatabaseSync): void {
         connection_id TEXT NOT NULL,
         calendar_id TEXT NOT NULL,
         google_event_id TEXT NOT NULL,
+        google_html_link TEXT,
         sync_status TEXT NOT NULL DEFAULT 'synced',
         last_error TEXT,
         last_synced_at TEXT,
+        last_verified_at TEXT,
         last_google_updated_at TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -89,7 +91,8 @@ export function migrateGoogleCalendar(rawDb: DatabaseSync): void {
     for (const [table, columns] of Object.entries({
       google_calendar_connections: ['google_subject', 'watch_token', 'last_sync_error'],
       google_calendar_oauth_states: ['code_verifier'],
-      appointments: ['google_time_imported']
+      appointments: ['google_time_imported'],
+      google_calendar_event_links: ['google_html_link', 'last_verified_at']
     })) {
       const existing = new Set((rawDb.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map(c => c.name));
       for (const column of columns) if (!existing.has(column)) rawDb.exec(`ALTER TABLE ${table} ADD COLUMN ${column} TEXT`);

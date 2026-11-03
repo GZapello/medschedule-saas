@@ -373,6 +373,7 @@ api.put('/v1/integrations/google-calendar/settings', requireTenant, GoogleCalend
 api.post('/v1/integrations/google-calendar/sync', requireTenant, GoogleCalendarController.sync);
 api.delete('/v1/integrations/google-calendar/disconnect', requireTenant, GoogleCalendarController.disconnect);
 api.post('/v1/integrations/google-calendar/divergence/:appointmentId/resolve', requireTenant, GoogleCalendarController.resolveDivergence);
+api.post('/v1/integrations/google-calendar/sync-appointment/:id', requireTenant, GoogleCalendarController.syncAppointment);
 api.get('/v1/slots/available', requireTenant, SlotController.getAvailableSlots);
 
 // Prontuário & Evolução Clínica (Restrito estritamente a Profissionais e Admins Clínicos - LGPD)

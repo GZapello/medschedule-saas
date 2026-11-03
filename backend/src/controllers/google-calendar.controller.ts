@@ -234,4 +234,26 @@ export class GoogleCalendarController {
       res.status(400).json({ error: publicError(err, 'Erro ao resolver divergência') });
     }
   }
+
+  /**
+   * Verifica ou re-sincroniza ativamente um agendamento com a Google Calendar API.
+   * POST /v1/integrations/google-calendar/sync-appointment/:id
+   */
+  public static async syncAppointment(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.tenantId || (req.user ? req.user.tenantId : null);
+      const { id } = req.params;
+
+      if (!tenantId || !id) {
+        res.status(400).json({ error: 'Parâmetros inválidos' });
+        return;
+      }
+
+      const result = await GoogleCalendarService.verifyAppointmentSync(String(id), tenantId);
+      res.status(200).json({ success: true, ...result });
+    } catch (err: any) {
+      console.error('[GoogleCalendarController.syncAppointment] Erro:', err);
+      res.status(500).json({ error: publicError(err, 'Erro ao verificar sincronização do agendamento') });
+    }
+  }
 }

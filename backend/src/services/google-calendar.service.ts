@@ -98,6 +98,7 @@ export class GoogleCalendarService {
   static async disconnect(tenant: string, user: string) { return this.serialized(this.getConnection(tenant, user)?.id || `${tenant}:${user}`, () => this.disconnectInternal(tenant, user)); }
   static async syncNow(tenant: string, user: string, professional?: string | null) { return this.serialized(this.getConnection(tenant, user)?.id || `${tenant}:${user}`, () => this.syncNowInternal(tenant, user, professional)); }
   static async resolveDivergence(id: string, tenant: string, action: 'apply_google' | 'keep_zemda', user: string) { return this.serialized(this.appointmentKey(tenant, id), () => this.resolveDivergenceInternal(id, tenant, action, user)); }
+  static async verifyAppointmentSync(id: string, tenant: string) { return this.serialized(this.appointmentKey(tenant, id), () => this.verifyAppointmentSyncInternal(id, tenant)); }
 
   static safeReturnUrl(value?: string): string {
     const origin = new URL(this.getRedirectUri()).origin;
@@ -420,7 +421,7 @@ export class GoogleCalendarService {
     // 1. Busca por professional_id direto
     let row = db.prepare(`
       SELECT * FROM google_calendar_connections
-      WHERE tenant_id = ? AND professional_id = ?
+      WHERE tenant_id = ? AND professional_id = ? AND sync_enabled = 1
     `).get(tenantId, professionalId) as GoogleCalendarConnectionRow | undefined;
 
     if (row) return row;
@@ -429,7 +430,7 @@ export class GoogleCalendarService {
     row = db.prepare(`
       SELECT gcc.* FROM google_calendar_connections gcc
       JOIN professionals p ON p.user_id = gcc.user_id AND p.tenant_id = gcc.tenant_id
-      WHERE gcc.tenant_id = ? AND p.id = ?
+      WHERE gcc.tenant_id = ? AND p.id = ? AND gcc.sync_enabled = 1
     `).get(tenantId, professionalId) as GoogleCalendarConnectionRow | undefined;
 
     if (row) return row;
@@ -439,7 +440,7 @@ export class GoogleCalendarService {
     if (prof?.user_id) {
       row = db.prepare(`
         SELECT * FROM google_calendar_connections
-        WHERE tenant_id = ? AND user_id = ?
+        WHERE tenant_id = ? AND user_id = ? AND sync_enabled = 1
       `).get(tenantId, prof.user_id) as GoogleCalendarConnectionRow | undefined;
       if (row) {
         try {
@@ -449,27 +450,24 @@ export class GoogleCalendarService {
       }
     }
 
-    // 4. Fallback seguro: se a clínica tiver apenas 1 conexão ativa com Google Calendar
-    const allConns = db.prepare('SELECT * FROM google_calendar_connections WHERE tenant_id = ? AND sync_enabled = 1').all(tenantId) as GoogleCalendarConnectionRow[];
-    if (allConns.length === 1) {
-      const single = allConns[0];
-      // Se a conexão já possui vínculo explícito a um profissional, só pode ser usada por ele
-      if (single.professional_id) {
-        return single.professional_id === professionalId ? single : null;
-      }
-      // Se o usuário proprietário da conexão for outro profissional da clínica, NÃO vazar
-      if (single.user_id) {
-        const ownerProf = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(single.user_id, tenantId) as any;
-        if (ownerProf && ownerProf.id !== professionalId) {
-          return null;
+    // 4. Fallback seguro: se a clínica tiver exatamente 1 profissional ativo E 1 conexão ativa
+    const totalProfs = db.prepare('SELECT COUNT(*) as c FROM professionals WHERE tenant_id = ? AND active = 1').get(tenantId) as any;
+    if (totalProfs?.c === 1) {
+      const soleProf = db.prepare('SELECT id, user_id FROM professionals WHERE tenant_id = ? AND active = 1').get(tenantId) as any;
+      if (soleProf && soleProf.id === professionalId) {
+        const allConns = db.prepare('SELECT * FROM google_calendar_connections WHERE tenant_id = ? AND sync_enabled = 1').all(tenantId) as GoogleCalendarConnectionRow[];
+        if (allConns.length === 1) {
+          const single = allConns[0];
+          // Se a conexão já possui vínculo explícito a outro profissional, não usar
+          if (single.professional_id && single.professional_id !== professionalId) {
+            return null;
+          }
+          if (single.user_id && soleProf.user_id && single.user_id !== soleProf.user_id) {
+            return null;
+          }
+          return single;
         }
       }
-      // Se há mais de 1 profissional ativo cadastrado na clínica, não associar arbitrariamente à agenda alheia
-      const totalProfs = db.prepare('SELECT COUNT(*) as c FROM professionals WHERE tenant_id = ? AND active = 1').get(tenantId) as any;
-      if (totalProfs?.c > 1) {
-        return null;
-      }
-      return single;
     }
 
     return null;
@@ -660,8 +658,16 @@ export class GoogleCalendarService {
    */
   static formatRFC3339(dateTimeStr: string, timeZone: string = 'America/Sao_Paulo'): string {
     const cleaned = dateTimeStr.trim().replace(' ', 'T');
-    if (cleaned.includes('+') || (cleaned.includes('-') && cleaned.length > 19) || cleaned.endsWith('Z')) {
-      return cleaned;
+    // Se vier com sufixo UTC 'Z', converte para o horário local da clínica em São Paulo antes de fixar o offset
+    if (cleaned.endsWith('Z')) {
+      const localStr = this.toClinicTime(cleaned);
+      return `${localStr}-03:00`;
+    }
+    // Se já tiver offset numérico explícito (-03:00, +00:00)
+    const matchWithOffset = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?)([+-]\d{2}:\d{2})$/.exec(cleaned);
+    if (matchWithOffset) {
+      const timePart = matchWithOffset[1].length === 16 ? `${matchWithOffset[1]}:00` : matchWithOffset[1];
+      return `${timePart}${matchWithOffset[2]}`;
     }
     const withSec = cleaned.length === 16 ? `${cleaned}:00` : cleaned;
     return `${withSec}-03:00`;
@@ -812,11 +818,31 @@ export class GoogleCalendarService {
       if (!googleEventId) {
         throw new GoogleCalendarError('Google Calendar não retornou o ID do evento.');
       }
+      const googleHtmlLink = insertRes.data.htmlLink || null;
+
+      // Confirmação ativa de existência no Google Calendar
+      let confirmedHtmlLink = googleHtmlLink;
+      let liveVerified = false;
+      try {
+        const verifyRes = await calendar.events.get({
+          calendarId: conn.calendar_id || 'primary',
+          eventId: googleEventId
+        });
+        if (verifyRes.data && verifyRes.data.status !== 'cancelled') {
+          liveVerified = true;
+          if (verifyRes.data.htmlLink) confirmedHtmlLink = verifyRes.data.htmlLink;
+        }
+      } catch (vErr) {
+        console.warn(`[GoogleCalendarService] Verificação imediata pós-insert para ${appointmentId}:`, vErr);
+      }
 
       const meetReady = !shouldCreateMeet || await this.captureMeet(calendar, conn, appointmentId, googleEventId, insertRes.data);
 
-      // 8. Registra o vínculo com status 'synced'
-      this.recordEventLink(tenantId, appointmentId, conn.id, conn.calendar_id, meetReady ? 'synced' : 'pending', meetReady ? null : 'Criação do Google Meet pendente', googleEventId);
+      // Registra o vínculo com status 'synced' apenas se confirmado na API do Google
+      const statusToRecord = (meetReady && liveVerified) ? 'synced' : 'pending';
+      const reasonToRecord = !meetReady ? 'Criação do Google Meet pendente' : (!liveVerified ? 'Aguardando confirmação do Google Agenda' : null);
+
+      this.recordEventLink(tenantId, appointmentId, conn.id, conn.calendar_id, statusToRecord, reasonToRecord, googleEventId, confirmedHtmlLink);
 
       this.recordAuditLog(
         tenantId,
@@ -844,12 +870,12 @@ export class GoogleCalendarService {
       const conn = profId ? this.getConnectionForProfessional(tenantId, profId) : null;
 
       if (conn) {
-        const syncStatus = isAuthError ? 'error' : 'pending';
+        const syncStatus = isAuthError ? 'reconnect_required' : (errCode === 403 ? 'error' : 'pending');
         const userFriendlyError = isAuthError
           ? 'Reconexão necessária: a autorização da conta Google expirou ou foi revogada.'
           : (errCode === 403
               ? 'Permissão insuficiente na agenda Google selecionada.'
-              : 'Falha na comunicação com Google Agenda. Tente novamente ou use Sincronizar agora.');
+              : 'Sincronização pendente: falha temporária de comunicação com Google Agenda.');
 
         if (isAuthError) {
           db.prepare("UPDATE google_calendar_connections SET last_sync_error = ? WHERE id = ?").run(userFriendlyError, conn.id);
@@ -917,7 +943,22 @@ export class GoogleCalendarService {
         summary = `Atendimento Zemda — ${appt.patient_name}`;
       }
 
-      const remote = await calendar.events.get({ calendarId: link.calendar_id, eventId: link.google_event_id });
+      let remote: any;
+      try {
+        remote = await calendar.events.get({ calendarId: link.calendar_id, eventId: link.google_event_id });
+      } catch (getErr: any) {
+        const getCode = Number(getErr?.code || getErr?.response?.status) || 0;
+        if (getCode === 404 || getCode === 410) {
+          db.prepare(`
+            UPDATE google_calendar_event_links
+            SET sync_status = 'divergent', last_error = 'Evento foi removido ou não existe mais no Google Agenda.', updated_at = datetime('now')
+            WHERE id = ?
+          `).run(link.id);
+          return;
+        }
+        throw getErr;
+      }
+
       const wantsMeet = appt.modality === 'online' && Boolean(conn.create_google_meet) && !appt.meeting_url;
       const conference = remote.data.conferenceData;
       const createMeet = wantsMeet && (!conference || conference.createRequest?.status?.statusCode === 'failure');
@@ -939,12 +980,13 @@ export class GoogleCalendarService {
         }
       });
 
+      const googleHtmlLink = patched.data.htmlLink || remote.data?.htmlLink || link.google_html_link;
       const meetReady = !wantsMeet || await this.captureMeet(calendar, conn, appt.id, link.google_event_id, { ...remote.data, ...patched.data });
       db.prepare(`
         UPDATE google_calendar_event_links
-        SET sync_status = ?, last_error = ?, last_synced_at = datetime('now'), updated_at = datetime('now')
+        SET sync_status = ?, last_error = ?, last_synced_at = datetime('now'), last_verified_at = datetime('now'), google_html_link = COALESCE(?, google_html_link), updated_at = datetime('now')
         WHERE id = ?
-      `).run(meetReady ? 'synced' : 'pending', meetReady ? null : 'Criação do Google Meet pendente', link.id);
+      `).run(meetReady ? 'synced' : 'pending', meetReady ? null : 'Criação do Google Meet pendente', googleHtmlLink, link.id);
 
       this.recordAuditLog(
         tenantId,
@@ -966,12 +1008,12 @@ export class GoogleCalendarService {
       try {
         const userFriendly = isAuthError
           ? 'Reconexão necessária: autorização Google expirou ou foi revogada.'
-          : 'Falha na comunicação com Google Agenda. Tente novamente ou use Sincronizar agora.';
+          : 'Atualização pendente no Google Agenda.';
         db.prepare(`
           UPDATE google_calendar_event_links
           SET sync_status = ?, last_error = ?, updated_at = datetime('now')
           WHERE appointment_id = ? AND tenant_id = ?
-        `).run(isAuthError ? 'error' : 'pending', userFriendly, appointmentId, tenantId);
+        `).run(isAuthError ? 'reconnect_required' : 'pending', userFriendly, appointmentId, tenantId);
       } catch (_) {}
     }
   }
@@ -1180,8 +1222,14 @@ export class GoogleCalendarService {
             const changed = item.status === 'cancelled' || !item.start?.dateTime || !item.end?.dateTime ||
               Date.parse(item.start.dateTime) !== Date.parse(this.formatRFC3339(link.start_time)) ||
               Date.parse(item.end.dateTime) !== Date.parse(this.formatRFC3339(link.end_time));
-            if (changed) db.prepare("UPDATE google_calendar_event_links SET sync_status = 'divergent', last_google_updated_at = ? WHERE id = ?")
-              .run(item.updated || new Date().toISOString(), link.id);
+            if (changed) {
+              const errMsg = item.status === 'cancelled' ? 'Evento cancelado no Google Agenda' : 'Horário alterado no Google Agenda';
+              db.prepare("UPDATE google_calendar_event_links SET sync_status = 'divergent', last_error = ?, last_google_updated_at = ?, updated_at = datetime('now') WHERE id = ?")
+                .run(errMsg, item.updated || new Date().toISOString(), link.id);
+            } else {
+              db.prepare("UPDATE google_calendar_event_links SET sync_status = 'synced', last_error = NULL, last_verified_at = datetime('now'), google_html_link = COALESCE(?, google_html_link), updated_at = datetime('now') WHERE id = ? AND sync_status != 'divergent'")
+                .run(item.htmlLink || null, link.id);
+            }
           }
         }
         pageToken = result.data.nextPageToken || undefined;
@@ -1392,9 +1440,10 @@ export class GoogleCalendarService {
     appointmentId: string,
     connectionId: string,
     calendarId: string,
-    syncStatus: 'synced' | 'pending' | 'error',
+    syncStatus: 'synced' | 'pending' | 'error' | 'reconnect_required' | 'divergent',
     lastError: string | null = null,
-    googleEventId?: string
+    googleEventId?: string,
+    googleHtmlLink?: string | null
   ): void {
     const existing = db.prepare(`
       SELECT id FROM google_calendar_event_links WHERE appointment_id = ?
@@ -1406,20 +1455,24 @@ export class GoogleCalendarService {
         SET connection_id = ?,
             calendar_id = ?,
             google_event_id = COALESCE(?, google_event_id),
+            google_html_link = COALESCE(?, google_html_link),
             sync_status = ?,
             last_error = ?,
             last_synced_at = CASE WHEN ? = 'synced' THEN datetime('now') ELSE last_synced_at END,
+            last_verified_at = CASE WHEN ? = 'synced' THEN datetime('now') ELSE last_verified_at END,
             updated_at = datetime('now')
         WHERE id = ?
-      `).run(connectionId, calendarId, googleEventId || null, syncStatus, lastError, syncStatus, existing.id);
+      `).run(connectionId, calendarId, googleEventId || null, googleHtmlLink || null, syncStatus, lastError, syncStatus, syncStatus, existing.id);
     } else {
       db.prepare(`
         INSERT INTO google_calendar_event_links (
           id, tenant_id, appointment_id, connection_id, calendar_id, google_event_id,
-          sync_status, last_error, last_synced_at, created_at, updated_at
+          google_html_link, sync_status, last_error, last_synced_at, last_verified_at, created_at, updated_at
         ) VALUES (
           ?, ?, ?, ?, ?, ?,
-          ?, ?, CASE WHEN ? = 'synced' THEN datetime('now') ELSE NULL END, datetime('now'), datetime('now')
+          ?, ?, ?, CASE WHEN ? = 'synced' THEN datetime('now') ELSE NULL END,
+          CASE WHEN ? = 'synced' THEN datetime('now') ELSE NULL END,
+          datetime('now'), datetime('now')
         )
       `).run(
         uuidv4(),
@@ -1428,10 +1481,196 @@ export class GoogleCalendarService {
         connectionId,
         calendarId,
         googleEventId || '',
+        googleHtmlLink || null,
         syncStatus,
         lastError,
+        syncStatus,
         syncStatus
       );
+    }
+  }
+
+  /**
+   * Valida ativamente com a Google Calendar API a existência e integridade do agendamento sincronizado.
+   */
+  private static async verifyAppointmentSyncInternal(
+    appointmentId: string,
+    tenantId: string
+  ): Promise<{
+    sync_status: 'synced' | 'pending' | 'error' | 'reconnect_required' | 'divergent';
+    google_event_id?: string | null;
+    google_html_link?: string | null;
+    google_account_email?: string | null;
+    google_calendar_name?: string | null;
+    last_verified_at?: string | null;
+    last_error?: string | null;
+    message: string;
+  }> {
+    const appt = db.prepare(`
+      SELECT a.id, a.tenant_id, a.professional_id, a.start_time, a.end_time, a.status
+      FROM appointments a
+      WHERE a.id = ? AND a.tenant_id = ?
+    `).get(appointmentId, tenantId) as any;
+
+    if (!appt) {
+      throw new GoogleCalendarError('Agendamento não encontrado.');
+    }
+
+    const conn = this.getConnectionForProfessional(tenantId, appt.professional_id);
+    if (!conn) {
+      return {
+        sync_status: 'pending',
+        message: 'Nenhuma conexão ativa do Google Agenda para este profissional.'
+      };
+    }
+
+    const client = this.getAuthenticatedClient(conn.encrypted_refresh_token);
+    if (!client) {
+      db.prepare(`
+        UPDATE google_calendar_event_links
+        SET sync_status = 'reconnect_required', last_error = 'Reconexão necessária com a conta Google', updated_at = datetime('now')
+        WHERE appointment_id = ? AND tenant_id = ?
+      `).run(appointmentId, tenantId);
+      return {
+        sync_status: 'reconnect_required',
+        google_account_email: conn.google_account_email,
+        google_calendar_name: conn.calendar_name,
+        last_error: 'Reconexão necessária com a conta Google',
+        message: 'Reconexão necessária: a autorização da conta Google expirou ou foi revogada.'
+      };
+    }
+
+    let link = db.prepare(`
+      SELECT * FROM google_calendar_event_links
+      WHERE appointment_id = ? AND tenant_id = ?
+    `).get(appointmentId, tenantId) as any;
+
+    // Se ainda não existia vínculo ou não tem google_event_id, tenta criar no Google agora
+    if (!link || !link.google_event_id) {
+      await this.syncAppointmentCreatedInternal(appointmentId, tenantId);
+      link = db.prepare(`
+        SELECT * FROM google_calendar_event_links
+        WHERE appointment_id = ? AND tenant_id = ?
+      `).get(appointmentId, tenantId) as any;
+
+      if (!link || !link.google_event_id) {
+        return {
+          sync_status: 'pending',
+          google_account_email: conn.google_account_email,
+          google_calendar_name: conn.calendar_name,
+          message: 'Sincronização em andamento com a Google Agenda.'
+        };
+      }
+    }
+
+    const calendar = google.calendar({ version: 'v3', auth: client });
+    try {
+      const gEvent = await calendar.events.get({
+        calendarId: link.calendar_id || conn.calendar_id || 'primary',
+        eventId: link.google_event_id
+      });
+
+      if (gEvent.data.status === 'cancelled') {
+        const errorMsg = 'Evento foi cancelado ou excluído na Google Agenda.';
+        this.recordEventLink(tenantId, appointmentId, conn.id, link.calendar_id, 'divergent', errorMsg, link.google_event_id, gEvent.data.htmlLink || link.google_html_link);
+        return {
+          sync_status: 'divergent',
+          google_event_id: link.google_event_id,
+          google_html_link: gEvent.data.htmlLink || link.google_html_link,
+          google_account_email: conn.google_account_email,
+          google_calendar_name: conn.calendar_name,
+          last_verified_at: new Date().toISOString(),
+          last_error: errorMsg,
+          message: errorMsg
+        };
+      }
+
+      // Compara horário
+      const remoteStart = gEvent.data.start?.dateTime;
+      const remoteEnd = gEvent.data.end?.dateTime;
+      if (remoteStart && remoteEnd) {
+        const clinicStart = this.toClinicTime(remoteStart);
+        const clinicEnd = this.toClinicTime(remoteEnd);
+        const apptStart = (appt.start_time || '').replace(' ', 'T').slice(0, 19);
+        const apptEnd = (appt.end_time || '').replace(' ', 'T').slice(0, 19);
+
+        if (clinicStart !== apptStart || clinicEnd !== apptEnd) {
+          const errorMsg = `Horário divergente: Google está ${clinicStart.slice(11,16)} às ${clinicEnd.slice(11,16)}, Zemda está ${apptStart.slice(11,16)} às ${apptEnd.slice(11,16)}.`;
+          this.recordEventLink(tenantId, appointmentId, conn.id, link.calendar_id, 'divergent', errorMsg, link.google_event_id, gEvent.data.htmlLink || link.google_html_link);
+          return {
+            sync_status: 'divergent',
+            google_event_id: link.google_event_id,
+            google_html_link: gEvent.data.htmlLink || link.google_html_link,
+            google_account_email: conn.google_account_email,
+            google_calendar_name: conn.calendar_name,
+            last_verified_at: new Date().toISOString(),
+            last_error: errorMsg,
+            message: errorMsg
+          };
+        }
+      }
+
+      // Confirmado no Google!
+      const htmlLink = gEvent.data.htmlLink || link.google_html_link;
+      this.recordEventLink(tenantId, appointmentId, conn.id, link.calendar_id, 'synced', null, link.google_event_id, htmlLink);
+
+      return {
+        sync_status: 'synced',
+        google_event_id: link.google_event_id,
+        google_html_link: htmlLink,
+        google_account_email: conn.google_account_email,
+        google_calendar_name: conn.calendar_name,
+        last_verified_at: new Date().toISOString(),
+        last_error: null,
+        message: 'Evento confirmado e sincronizado com o Google Agenda.'
+      };
+    } catch (err: any) {
+      const errCode = Number(err?.code || err?.response?.status) || 0;
+      const errMsg = err?.message || String(err);
+      const isAuthError = errCode === 401 || errMsg.includes('invalid_grant') || errMsg.includes('invalid_token');
+
+      if (isAuthError) {
+        const errorMsg = 'Reconexão necessária: a autorização da conta Google expirou ou foi revogada.';
+        this.recordEventLink(tenantId, appointmentId, conn.id, link.calendar_id, 'reconnect_required', errorMsg, link.google_event_id, link.google_html_link);
+        return {
+          sync_status: 'reconnect_required',
+          google_event_id: link.google_event_id,
+          google_html_link: link.google_html_link,
+          google_account_email: conn.google_account_email,
+          google_calendar_name: conn.calendar_name,
+          last_verified_at: new Date().toISOString(),
+          last_error: errorMsg,
+          message: errorMsg
+        };
+      }
+
+      if (errCode === 404 || errCode === 410) {
+        const errorMsg = 'O evento não foi encontrado na Google Agenda (pode ter sido excluído).';
+        this.recordEventLink(tenantId, appointmentId, conn.id, link.calendar_id, 'divergent', errorMsg, link.google_event_id, null);
+        return {
+          sync_status: 'divergent',
+          google_event_id: link.google_event_id,
+          google_html_link: null,
+          google_account_email: conn.google_account_email,
+          google_calendar_name: conn.calendar_name,
+          last_verified_at: new Date().toISOString(),
+          last_error: errorMsg,
+          message: errorMsg
+        };
+      }
+
+      const genericError = `Falha ao consultar Google Agenda: ${errMsg}`;
+      this.recordEventLink(tenantId, appointmentId, conn.id, link.calendar_id, 'error', genericError, link.google_event_id, link.google_html_link);
+      return {
+        sync_status: 'error',
+        google_event_id: link.google_event_id,
+        google_html_link: link.google_html_link,
+        google_account_email: conn.google_account_email,
+        google_calendar_name: conn.calendar_name,
+        last_verified_at: new Date().toISOString(),
+        last_error: genericError,
+        message: genericError
+      };
     }
   }
 

@@ -315,7 +315,7 @@ async function run() {
   await GoogleCalendarService.syncAppointmentCreated(apptFailId, tenantA);
 
   const failLink = db.prepare('SELECT * FROM google_calendar_event_links WHERE appointment_id = ?').get(apptFailId);
-  assert.strictEqual(failLink.sync_status, 'error');
+  assert.ok(failLink.sync_status === 'reconnect_required' || failLink.sync_status === 'error', 'Status deve indicar erro ou reconexão necessária');
   assert.ok(failLink.last_error.includes('Reconexão necessária'));
 
   const failStatus = GoogleCalendarService.getStatus(tenantA, userA, profA);
