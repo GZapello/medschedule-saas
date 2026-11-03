@@ -63,6 +63,32 @@ const RECORD_BADGE_PRESETS = [
   { id: 'melhor-desempenho', label: 'Melhor desempenho', prefix: 'MELHOR DESEMPENHO' }
 ];
 
+const OFFICIAL_ZEMDA_LOGO_SRC = '/brand/zemda-logo.png';
+let cachedZemdaLogoElement: HTMLImageElement | null = null;
+let cachedZemdaLogoPromise: Promise<HTMLImageElement | null> | null = null;
+
+function loadOfficialZemdaLogo(): Promise<HTMLImageElement | null> {
+  if (cachedZemdaLogoElement && cachedZemdaLogoElement.complete && cachedZemdaLogoElement.naturalWidth > 0) {
+    return Promise.resolve(cachedZemdaLogoElement);
+  }
+  if (cachedZemdaLogoPromise) {
+    return cachedZemdaLogoPromise;
+  }
+  cachedZemdaLogoPromise = new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      cachedZemdaLogoElement = img;
+      resolve(img);
+    };
+    img.onerror = () => {
+      cachedZemdaLogoPromise = null;
+      resolve(null);
+    };
+    img.src = OFFICIAL_ZEMDA_LOGO_SRC;
+  });
+  return cachedZemdaLogoPromise;
+}
+
 function drawRoundedRect(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -149,18 +175,19 @@ export const PersonalWorkoutPhotoShareModal: React.FC<PersonalWorkoutPhotoShareM
   const [selectedPresetQuote, setSelectedPresetQuote] = useState<string>(POST_WORKOUT_SHARE_QUOTES[0].text);
   const [customQuote, setCustomQuote] = useState<string>('');
 
-  // Recorde Pessoal (PR) opcional
-  const [showRecord, setShowRecord] = useState<boolean>(newPRs.length > 0);
+  // Recorde Pessoal (PR) opcional — inicia desmarcado para manter a arte limpa
+  const [showRecord, setShowRecord] = useState<boolean>(false);
   const [selectedPRIndex, setSelectedPRIndex] = useState<number>(0);
   const [selectedBadgePreset, setSelectedBadgePreset] = useState<string>(
     newPRs.length > 0 ? 'novo-recorde' : 'pr-batido'
   );
   const [customRecordDetail, setCustomRecordDetail] = useState<string>('');
 
-  // Opções de visibilidade na arte
-  const [showStudentName, setShowStudentName] = useState<boolean>(true);
-  const [showWorkoutTitle, setShowWorkoutTitle] = useState<boolean>(true);
-  const [showMetrics, setShowMetrics] = useState<boolean>(true);
+  // Opções de visibilidade na arte (todas iniciam desmarcadas e preservam a escolha do aluno)
+  const [showStudentName, setShowStudentName] = useState<boolean>(false);
+  const [showWorkoutTitle, setShowWorkoutTitle] = useState<boolean>(false);
+  const [showWorkoutDuration, setShowWorkoutDuration] = useState<boolean>(false);
+  const [showExerciseCount, setShowExerciseCount] = useState<boolean>(false);
 
   // Feedback de ações de compartilhamento / cópia / download
   const [copiedFeedback, setCopiedFeedback] = useState(false);
@@ -211,21 +238,25 @@ export const PersonalWorkoutPhotoShareModal: React.FC<PersonalWorkoutPhotoShareM
     };
   }, [showRecord, selectedBadgePreset, customRecordDetail, newPRs, selectedPRIndex]);
 
-  // Carrega a logo oficial do Zemda para uso no Canvas
+  // Carrega a logo oficial do Zemda para uso obrigatório no Canvas
   useEffect(() => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => setZemdaLogoImg(img);
-    img.src = '/brand/zemda-logo.png';
+    let active = true;
+    loadOfficialZemdaLogo().then(img => {
+      if (active && img) {
+        setZemdaLogoImg(img);
+      }
+    });
+    return () => {
+      active = false;
+    };
   }, []);
 
-  // Sincroniza estado de PR quando a lista de PRs muda
+  // Mantém o índice selecionado válido caso a lista de PRs mude, sem reativar opções automaticamente
   useEffect(() => {
-    if (newPRs.length > 0) {
-      setShowRecord(true);
+    if (selectedPRIndex >= newPRs.length && newPRs.length > 0) {
       setSelectedPRIndex(0);
     }
-  }, [newPRs]);
+  }, [newPRs, selectedPRIndex]);
 
   // Para a câmera ao fechar o modal
   const stopCamera = useCallback(() => {
@@ -338,341 +369,366 @@ export const PersonalWorkoutPhotoShareModal: React.FC<PersonalWorkoutPhotoShareM
   // ==========================================
   // RENDERIZADOR OFICIAL DA ARTE EM CANVAS
   // ==========================================
-  const renderWorkoutArt = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+  const renderWorkoutArt = useCallback(
+    (explicitLogoImg?: HTMLImageElement | null) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
 
-    const width = 1080;
-    const height = format === 'story' ? 1920 : 1080;
-    if (canvas.width !== width) canvas.width = width;
-    if (canvas.height !== height) canvas.height = height;
+      const width = 1080;
+      const height = format === 'story' ? 1920 : 1080;
+      if (canvas.width !== width) canvas.width = width;
+      if (canvas.height !== height) canvas.height = height;
 
-    const isStory = format === 'story';
-    ctx.clearRect(0, 0, width, height);
+      const isStory = format === 'story';
+      ctx.clearRect(0, 0, width, height);
 
-    // 1. FUNDO (Foto do aluno OU Arte Esportiva Zemda)
-    if (photoImageElement) {
-      const imgW = photoImageElement.naturalWidth || photoImageElement.width;
-      const imgH = photoImageElement.naturalHeight || photoImageElement.height;
-      const baseScale = Math.max(width / imgW, height / imgH) * photoZoom;
-      const drawW = imgW * baseScale;
-      const drawH = imgH * baseScale;
-      const drawX = (width - drawW) / 2;
-      const drawY = (height - drawH) / 2;
+      // 1. FUNDO (Foto do aluno OU Arte Esportiva)
+      if (photoImageElement) {
+        const imgW = photoImageElement.naturalWidth || photoImageElement.width;
+        const imgH = photoImageElement.naturalHeight || photoImageElement.height;
+        const baseScale = Math.max(width / imgW, height / imgH) * photoZoom;
+        const drawW = imgW * baseScale;
+        const drawH = imgH * baseScale;
+        const drawX = (width - drawW) / 2;
+        const drawY = (height - drawH) / 2;
 
-      ctx.drawImage(photoImageElement, drawX, drawY, drawW, drawH);
+        ctx.drawImage(photoImageElement, drawX, drawY, drawW, drawH);
 
-      // Vinheta e Gradiente Cinematográfico para leitura nítida
-      const topGrad = ctx.createLinearGradient(0, 0, 0, height * 0.35);
-      topGrad.addColorStop(0, `rgba(2, 6, 23, ${Math.min(0.85, overlayOpacity + 0.15)})`);
-      topGrad.addColorStop(1, 'rgba(2, 6, 23, 0)');
-      ctx.fillStyle = topGrad;
-      ctx.fillRect(0, 0, width, height * 0.35);
+        // Vinheta e Gradiente Cinematográfico para leitura nítida sobre fotos claras e escuras
+        const topGrad = ctx.createLinearGradient(0, 0, 0, height * 0.25);
+        topGrad.addColorStop(0, `rgba(2, 6, 23, ${Math.min(0.65, overlayOpacity * 0.7)})`);
+        topGrad.addColorStop(1, 'rgba(2, 6, 23, 0)');
+        ctx.fillStyle = topGrad;
+        ctx.fillRect(0, 0, width, height * 0.25);
 
-      const bottomGrad = ctx.createLinearGradient(0, height * 0.3, 0, height);
-      bottomGrad.addColorStop(0, 'rgba(2, 6, 23, 0)');
-      bottomGrad.addColorStop(0.55, `rgba(2, 6, 23, ${overlayOpacity})`);
-      bottomGrad.addColorStop(1, `rgba(2, 6, 23, ${Math.min(0.95, overlayOpacity + 0.35)})`);
-      ctx.fillStyle = bottomGrad;
-      ctx.fillRect(0, height * 0.3, width, height * 0.7);
-    } else {
-      // Fundo Artístico Sem Foto
-      const bgGrad = ctx.createLinearGradient(0, 0, width, height);
-      if (theme === 'emerald') {
-        bgGrad.addColorStop(0, '#020617');
-        bgGrad.addColorStop(0.45, '#062c28');
-        bgGrad.addColorStop(1, '#020617');
-      } else if (theme === 'midnight') {
-        bgGrad.addColorStop(0, '#020617');
-        bgGrad.addColorStop(0.5, '#0f172a');
-        bgGrad.addColorStop(1, '#042f2e');
+        const bottomGrad = ctx.createLinearGradient(0, height * 0.3, 0, height);
+        bottomGrad.addColorStop(0, 'rgba(2, 6, 23, 0)');
+        bottomGrad.addColorStop(0.55, `rgba(2, 6, 23, ${overlayOpacity})`);
+        bottomGrad.addColorStop(1, `rgba(2, 6, 23, ${Math.min(0.95, Math.max(0.75, overlayOpacity + 0.35))})`);
+        ctx.fillStyle = bottomGrad;
+        ctx.fillRect(0, height * 0.3, width, height * 0.7);
       } else {
-        bgGrad.addColorStop(0, '#090d16');
-        bgGrad.addColorStop(0.5, '#1c1917');
-        bgGrad.addColorStop(1, '#020617');
+        // Fundo Artístico Sem Foto
+        const bgGrad = ctx.createLinearGradient(0, 0, width, height);
+        if (theme === 'emerald') {
+          bgGrad.addColorStop(0, '#020617');
+          bgGrad.addColorStop(0.45, '#062c28');
+          bgGrad.addColorStop(1, '#020617');
+        } else if (theme === 'midnight') {
+          bgGrad.addColorStop(0, '#020617');
+          bgGrad.addColorStop(0.5, '#0f172a');
+          bgGrad.addColorStop(1, '#042f2e');
+        } else {
+          bgGrad.addColorStop(0, '#090d16');
+          bgGrad.addColorStop(0.5, '#1c1917');
+          bgGrad.addColorStop(1, '#020617');
+        }
+        ctx.fillStyle = bgGrad;
+        ctx.fillRect(0, 0, width, height);
+
+        // Glows Esportivos Decorativos
+        const glow1 = ctx.createRadialGradient(
+          width * 0.8,
+          height * 0.22,
+          20,
+          width * 0.8,
+          height * 0.22,
+          width * 0.55
+        );
+        glow1.addColorStop(0, theme === 'gold' ? 'rgba(245, 158, 11, 0.22)' : 'rgba(20, 184, 166, 0.25)');
+        glow1.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = glow1;
+        ctx.fillRect(0, 0, width, height);
+
+        const glow2 = ctx.createRadialGradient(
+          width * 0.2,
+          height * 0.75,
+          20,
+          width * 0.2,
+          height * 0.75,
+          width * 0.55
+        );
+        glow2.addColorStop(0, 'rgba(16, 185, 129, 0.18)');
+        glow2.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = glow2;
+        ctx.fillRect(0, 0, width, height);
+
+        // Linhas sutis de alta performance
+        ctx.save();
+        ctx.strokeStyle = 'rgba(148, 163, 184, 0.06)';
+        ctx.lineWidth = 2;
+        const stepGrid = 120;
+        for (let x = 0; x < width; x += stepGrid) {
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, height);
+          ctx.stroke();
+        }
+        for (let y = 0; y < height; y += stepGrid) {
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(width, y);
+          ctx.stroke();
+        }
+        ctx.restore();
       }
-      ctx.fillStyle = bgGrad;
-      ctx.fillRect(0, 0, width, height);
 
-      // Glows Esportivos Decorativos
-      const glow1 = ctx.createRadialGradient(
-        width * 0.8,
-        height * 0.22,
-        20,
-        width * 0.8,
-        height * 0.22,
-        width * 0.55
-      );
-      glow1.addColorStop(0, theme === 'gold' ? 'rgba(245, 158, 11, 0.22)' : 'rgba(20, 184, 166, 0.25)');
-      glow1.addColorStop(1, 'rgba(0, 0, 0, 0)');
-      ctx.fillStyle = glow1;
-      ctx.fillRect(0, 0, width, height);
+      const padX = 72;
 
-      const glow2 = ctx.createRadialGradient(
-        width * 0.2,
-        height * 0.75,
-        20,
-        width * 0.2,
-        height * 0.75,
-        width * 0.55
-      );
-      glow2.addColorStop(0, 'rgba(16, 185, 129, 0.18)');
-      glow2.addColorStop(1, 'rgba(0, 0, 0, 0)');
-      ctx.fillStyle = glow2;
-      ctx.fillRect(0, 0, width, height);
+      // 2. RODAPÉ OBRIGATÓRIO: LOGO OFICIAL DO ZEMDA + zemda.com.br
+      const logoToDraw = explicitLogoImg || zemdaLogoImg || cachedZemdaLogoElement;
+      const targetLogoH = isStory ? 54 : 46;
+      const logoAspect =
+        logoToDraw && logoToDraw.naturalWidth > 0 && logoToDraw.naturalHeight > 0
+          ? logoToDraw.naturalWidth / logoToDraw.naturalHeight
+          : 882 / 280;
+      const logoH = targetLogoH;
+      const logoW = Math.round(logoH * logoAspect);
 
-      // Linhas sutis de alta performance
+      const pillPadX = isStory ? 28 : 24;
+      const pillPadY = isStory ? 12 : 10;
+      const logoPillW = logoW + pillPadX * 2;
+      const logoPillH = logoH + pillPadY * 2;
+      const logoPillX = (width - logoPillW) / 2;
+
+      const urlBaselineY = height - (isStory ? 44 : 30);
+      const logoPillY = urlBaselineY - (isStory ? 30 : 26) - logoPillH;
+
+      // Cápsula clara discreta para preservar cores originais da logo e garantir contraste em fotos claras e escuras
       ctx.save();
-      ctx.strokeStyle = 'rgba(148, 163, 184, 0.06)';
-      ctx.lineWidth = 2;
-      const stepGrid = 120;
-      for (let x = 0; x < width; x += stepGrid) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, height);
-        ctx.stroke();
-      }
-      for (let y = 0; y < height; y += stepGrid) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(width, y);
-        ctx.stroke();
-      }
-      ctx.restore();
-    }
-
-    const padX = 72;
-    const topY = isStory ? 96 : 64;
-
-    // 2. HEADER: MARCA D'ÁGUA OFICIAL ZEMDA + BADGE DATA
-    ctx.save();
-    drawRoundedRect(ctx, padX, topY, 430, 88, 28);
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.78)';
-    ctx.fill();
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = 'rgba(45, 212, 191, 0.35)';
-    ctx.stroke();
-
-    // Ícone / Logo Zemda no badge superior
-    drawRoundedRect(ctx, padX + 16, topY + 14, 60, 60, 18);
-    const iconGrad = ctx.createLinearGradient(padX + 16, topY + 14, padX + 76, topY + 74);
-    iconGrad.addColorStop(0, '#14b8a6');
-    iconGrad.addColorStop(1, '#10b981');
-    ctx.fillStyle = iconGrad;
-    ctx.fill();
-
-    ctx.fillStyle = '#020617';
-    ctx.font = '900 34px system-ui, -apple-system, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('Z', padX + 46, topY + 46);
-
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'alphabetic';
-    ctx.fillStyle = '#2dd4bf';
-    ctx.font = '800 18px system-ui, -apple-system, sans-serif';
-    ctx.fillText('ZEMDAPERSONAL', padX + 94, topY + 42);
-
-    ctx.fillStyle = '#f8fafc';
-    ctx.font = '700 22px system-ui, -apple-system, sans-serif';
-    const cleanClinic = (clinicName || 'Treino Concluído').slice(0, 22);
-    ctx.fillText(cleanClinic, padX + 94, topY + 69);
-    ctx.restore();
-
-    // Pílula de Data no canto superior direito
-    const dateLabel = new Date(workoutContext.completedAt || Date.now())
-      .toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
-      .toUpperCase()
-      .replace('.', '');
-    ctx.save();
-    ctx.font = '800 21px system-ui, -apple-system, sans-serif';
-    const dateText = `✓ ${dateLabel}`;
-    const dateMetrics = ctx.measureText(dateText);
-    const pillW = dateMetrics.width + 52;
-    drawRoundedRect(ctx, width - padX - pillW, topY + 14, pillW, 60, 20);
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.78)';
-    ctx.fill();
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)';
-    ctx.stroke();
-
-    ctx.fillStyle = '#e2e8f0';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(dateText, width - padX - pillW / 2, topY + 45);
-    ctx.restore();
-
-    // 3. ÁREA INFERIOR / CENTRAL: FRASE + RECORDE + CARD DO TREINO
-    const bottomFooterY = height - (isStory ? 95 : 58);
-
-    // Card Glassmorphic de Informações do Treino
-    const hasCardContent = showStudentName || showWorkoutTitle || showMetrics;
-    const cardHeight = hasCardContent ? (showMetrics ? (isStory ? 280 : 230) : 140) : 0;
-    const cardY = bottomFooterY - (isStory ? 55 : 40) - cardHeight;
-
-    if (hasCardContent) {
-      ctx.save();
-      drawRoundedRect(ctx, padX, cardY, width - padX * 2, cardHeight, 36);
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.84)';
+      ctx.shadowColor = 'rgba(2, 6, 23, 0.65)';
+      ctx.shadowBlur = 22;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 6;
+      drawRoundedRect(ctx, logoPillX, logoPillY, logoPillW, logoPillH, logoPillH / 2);
+      ctx.fillStyle = 'rgba(248, 250, 252, 0.96)';
       ctx.fill();
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = 'rgba(45, 212, 191, 0.28)';
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = 'rgba(20, 184, 166, 0.4)';
       ctx.stroke();
+      ctx.restore();
 
-      let innerY = cardY + (isStory ? 52 : 44);
-
-      if (showStudentName || showWorkoutTitle) {
-        ctx.textAlign = 'left';
-        if (showStudentName) {
-          ctx.fillStyle = '#2dd4bf';
-          ctx.font = '800 22px system-ui, -apple-system, sans-serif';
-          ctx.fillText(
-            `ATLETA • ${(studentName || 'Aluno').toUpperCase().slice(0, 28)}`,
-            padX + 40,
-            innerY
-          );
-          innerY += 40;
-        }
-
-        if (showWorkoutTitle) {
-          ctx.fillStyle = '#ffffff';
-          ctx.font = '900 32px system-ui, -apple-system, sans-serif';
-          const divisionPrefix = workoutContext.division ? `Treino ${workoutContext.division} — ` : '';
-          const fullTitle = `${divisionPrefix}${workoutContext.title || 'Sessão Concluída'}`.slice(0, 38);
-          ctx.fillText(fullTitle, padX + 40, innerY);
-          innerY += 36;
-        }
+      if (logoToDraw && logoToDraw.complete && logoToDraw.naturalWidth > 0) {
+        ctx.save();
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(
+          logoToDraw,
+          Math.round((width - logoW) / 2),
+          Math.round(logoPillY + pillPadY),
+          logoW,
+          logoH
+        );
+        ctx.restore();
       }
 
-      if (showMetrics) {
-        const metricsY = cardY + cardHeight - (isStory ? 105 : 88);
-        const colW = (width - padX * 2 - 80) / 3;
+      // Endereço oficial zemda.com.br centralizado logo abaixo da logo
+      ctx.save();
+      ctx.font = `700 ${isStory ? 22 : 19}px system-ui, -apple-system, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'alphabetic';
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = 'rgba(2, 6, 23, 0.85)';
+      ctx.shadowColor = 'rgba(2, 6, 23, 0.9)';
+      ctx.shadowBlur = 12;
+      ctx.shadowOffsetY = 2;
+      ctx.strokeText('zemda.com.br', width / 2, urlBaselineY);
+      ctx.fillStyle = '#f8fafc';
+      ctx.fillText('zemda.com.br', width / 2, urlBaselineY);
+      ctx.restore();
 
-        const metricsList = [
-          { label: 'DURAÇÃO', value: `${workoutContext.durationMinutes || 45} min`, color: '#2dd4bf' },
-          {
-            label: 'EXERCÍCIOS',
-            value: `${workoutContext.completedExercisesCount}/${workoutContext.totalExercisesCount}`,
-            color: '#34d399'
-          },
-          { label: 'STATUS', value: 'CONCLUÍDO', color: '#fbbf24' }
-        ];
+      // Limite seguro acima do rodapé para evitar qualquer sobreposição
+      const footerTopSafeY = logoPillY - (isStory ? 38 : 28);
 
-        metricsList.forEach((m, idx) => {
-          const boxX = padX + 40 + idx * colW;
-          drawRoundedRect(ctx, boxX, metricsY, colW - 16, isStory ? 82 : 70, 20);
-          ctx.fillStyle = 'rgba(2, 6, 23, 0.65)';
-          ctx.fill();
-
-          ctx.fillStyle = '#94a3b8';
-          ctx.font = '700 16px system-ui, -apple-system, sans-serif';
-          ctx.fillText(m.label, boxX + 20, metricsY + (isStory ? 28 : 24));
-
-          ctx.fillStyle = m.color;
-          ctx.font = `900 ${isStory ? 28 : 24}px system-ui, -apple-system, sans-serif`;
-          ctx.fillText(m.value, boxX + 20, metricsY + (isStory ? 64 : 54));
+      // 3. CARD OPCIONAL DE INFORMAÇÕES DO TREINO (somente se o aluno ativar opções)
+      const hasHeaderInfo = showStudentName || showWorkoutTitle;
+      const metricsList: { label: string; value: string; color: string }[] = [];
+      if (showWorkoutDuration) {
+        metricsList.push({
+          label: 'TEMPO DE TREINO',
+          value: `${workoutContext.durationMinutes || 45} min`,
+          color: '#2dd4bf'
         });
       }
+      if (showExerciseCount) {
+        metricsList.push({
+          label: 'EXERCÍCIOS',
+          value: `${workoutContext.completedExercisesCount}/${workoutContext.totalExercisesCount}`,
+          color: '#34d399'
+        });
+      }
+      const hasMetricsInfo = metricsList.length > 0;
+      const hasCardContent = hasHeaderInfo || hasMetricsInfo;
 
-      ctx.restore();
-    }
+      const cardPadY = isStory ? 32 : 26;
+      const studentNameRowH = showStudentName ? (isStory ? 34 : 30) : 0;
+      const workoutTitleRowH = showWorkoutTitle ? (isStory ? 42 : 36) : 0;
+      const headerGap = showStudentName && showWorkoutTitle ? 10 : 0;
+      const headerBlockH = studentNameRowH + headerGap + workoutTitleRowH;
+      const metricsBoxH = hasMetricsInfo ? (isStory ? 84 : 72) : 0;
+      const blocksGap = hasHeaderInfo && hasMetricsInfo ? (isStory ? 22 : 18) : 0;
 
-    // 4. FRASE ESCOLHIDA PELO ALUNO (DESTAQUE PRINCIPAL)
-    const quoteFontSize = isStory ? 66 : 52;
-    const quoteLineHeight = isStory ? 78 : 62;
-    ctx.save();
-    ctx.font = `900 ${quoteFontSize}px system-ui, -apple-system, sans-serif`;
-    const quoteLines = wrapCanvasText(ctx, `“${activeQuote}”`, width - padX * 2 - 20, 4);
-    const totalQuoteHeight = quoteLines.length * quoteLineHeight;
-    const quoteBottomY = (hasCardContent ? cardY : bottomFooterY - 60) - (isStory ? 48 : 32);
-    const quoteStartY = quoteBottomY - totalQuoteHeight + quoteLineHeight;
+      const cardHeight = hasCardContent ? cardPadY * 2 + headerBlockH + blocksGap + metricsBoxH : 0;
+      const cardY = footerTopSafeY - cardHeight;
 
-    // Barra lateral de destaque ao lado da frase
-    drawRoundedRect(
-      ctx,
-      padX,
-      quoteStartY - quoteFontSize + 10,
-      10,
-      totalQuoteHeight - 8,
-      5
-    );
-    ctx.fillStyle = '#14b8a6';
-    ctx.fill();
+      if (hasCardContent) {
+        ctx.save();
+        drawRoundedRect(ctx, padX, cardY, width - padX * 2, cardHeight, 34);
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.84)';
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = 'rgba(45, 212, 191, 0.28)';
+        ctx.stroke();
 
-    // Sombra para leitura perfeita sobre qualquer foto
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.85)';
-    ctx.shadowBlur = 24;
-    ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 4;
-    ctx.fillStyle = '#ffffff';
-    ctx.textAlign = 'left';
+        let cursorY = cardY + cardPadY;
 
-    quoteLines.forEach((line, idx) => {
-      ctx.fillText(line, padX + 30, quoteStartY + idx * quoteLineHeight);
-    });
-    ctx.restore();
+        if (hasHeaderInfo) {
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'top';
+          if (showStudentName) {
+            ctx.fillStyle = '#2dd4bf';
+            ctx.font = `800 ${isStory ? 22 : 20}px system-ui, -apple-system, sans-serif`;
+            ctx.fillText(
+              `ATLETA • ${(studentName || 'Aluno').toUpperCase().slice(0, 32)}`,
+              padX + 36,
+              cursorY
+            );
+            cursorY += studentNameRowH + headerGap;
+          }
 
-    // 5. SELO DE RECORDE PESSOAL (PR) OPCIONAL ACIMA DA FRASE
-    if (activeRecordBadge) {
-      const badgeBottomY = quoteStartY - quoteFontSize - (isStory ? 34 : 24);
-      const badgeH = isStory ? 96 : 82;
-      const badgeY = badgeBottomY - badgeH;
+          if (showWorkoutTitle) {
+            ctx.fillStyle = '#ffffff';
+            ctx.font = `900 ${isStory ? 30 : 26}px system-ui, -apple-system, sans-serif`;
+            const divisionPrefix = workoutContext.division ? `Treino ${workoutContext.division} — ` : '';
+            const fullTitle = `${divisionPrefix}${workoutContext.title || 'Sessão Concluída'}`.slice(0, 50);
+            ctx.fillText(fullTitle, padX + 36, cursorY);
+            cursorY += workoutTitleRowH;
+          }
+        }
 
+        if (hasMetricsInfo) {
+          const metricsY = cardY + cardPadY + headerBlockH + blocksGap;
+          const innerWidth = width - padX * 2 - 72;
+          const gapX = 20;
+          const colW =
+            metricsList.length === 1 ? innerWidth : (innerWidth - gapX * (metricsList.length - 1)) / metricsList.length;
+
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'alphabetic';
+
+          metricsList.forEach((m, idx) => {
+            const boxX = padX + 36 + idx * (colW + gapX);
+            drawRoundedRect(ctx, boxX, metricsY, colW, metricsBoxH, 20);
+            ctx.fillStyle = 'rgba(2, 6, 23, 0.65)';
+            ctx.fill();
+
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '700 16px system-ui, -apple-system, sans-serif';
+            ctx.fillText(m.label, boxX + 24, metricsY + (isStory ? 29 : 25));
+
+            ctx.fillStyle = m.color;
+            ctx.font = `900 ${isStory ? 28 : 24}px system-ui, -apple-system, sans-serif`;
+            ctx.fillText(m.value, boxX + 24, metricsY + (isStory ? 65 : 55));
+          });
+        }
+
+        ctx.restore();
+      }
+
+      // 4. FRASE ESCOLHIDA PELO ALUNO (DESTAQUE PRINCIPAL)
+      const quoteFontSize = isStory ? 64 : 50;
+      const quoteLineHeight = isStory ? 76 : 60;
       ctx.save();
-      drawRoundedRect(ctx, padX, badgeY, width - padX * 2, badgeH, 26);
-      const prGrad = ctx.createLinearGradient(padX, badgeY, width - padX, badgeY + badgeH);
-      prGrad.addColorStop(0, 'rgba(120, 53, 15, 0.92)');
-      prGrad.addColorStop(0.5, 'rgba(180, 83, 9, 0.92)');
-      prGrad.addColorStop(1, 'rgba(120, 53, 15, 0.92)');
-      ctx.fillStyle = prGrad;
-      ctx.fill();
-      ctx.lineWidth = 2.5;
-      ctx.strokeStyle = '#fbbf24';
-      ctx.stroke();
+      ctx.font = `900 ${quoteFontSize}px system-ui, -apple-system, sans-serif`;
+      const quoteLines = wrapCanvasText(ctx, `“${activeQuote}”`, width - padX * 2 - 28, 4);
+      const totalQuoteHeight = quoteLines.length * quoteLineHeight;
+      const quoteAnchorBottomY = (hasCardContent ? cardY : footerTopSafeY) - (isStory ? 44 : 28);
+      const quoteStartY = quoteAnchorBottomY - totalQuoteHeight + quoteLineHeight;
 
-      // Ícone de troféu / recorde
-      ctx.font = `900 ${isStory ? 38 : 32}px system-ui, -apple-system, sans-serif`;
-      ctx.fillText('🏆', padX + 26, badgeY + (isStory ? 62 : 52));
-
-      ctx.fillStyle = '#fde68a';
-      ctx.font = '800 18px system-ui, -apple-system, sans-serif';
-      ctx.fillText(activeRecordBadge.header, padX + 86, badgeY + (isStory ? 36 : 31));
-
-      ctx.fillStyle = '#ffffff';
-      ctx.font = `900 ${isStory ? 28 : 24}px system-ui, -apple-system, sans-serif`;
-      ctx.fillText(
-        activeRecordBadge.detail.slice(0, 44),
-        padX + 86,
-        badgeY + (isStory ? 72 : 62)
+      // Barra lateral de destaque ao lado da frase
+      drawRoundedRect(
+        ctx,
+        padX,
+        quoteStartY - quoteFontSize + 10,
+        10,
+        totalQuoteHeight - 8,
+        5
       );
-      ctx.restore();
-    }
+      ctx.fillStyle = '#14b8a6';
+      ctx.fill();
 
-    // 6. RODAPÉ COM ASSINATURA DISCRETA E PROFISSIONAL DO ZEMDA
-    ctx.save();
-    ctx.textAlign = 'center';
-    ctx.fillStyle = 'rgba(226, 232, 240, 0.85)';
-    ctx.font = '700 20px system-ui, -apple-system, sans-serif';
-    ctx.fillText('ZEMDA • ZEMDAPERSONAL', width / 2, bottomFooterY);
-    ctx.restore();
-  }, [
-    format,
-    theme,
-    photoImageElement,
-    photoZoom,
-    overlayOpacity,
-    clinicName,
-    workoutContext,
-    showStudentName,
-    showWorkoutTitle,
-    showMetrics,
-    studentName,
-    activeQuote,
-    activeRecordBadge,
-    zemdaLogoImg
-  ]);
+      // Sombra para leitura perfeita sobre qualquer foto
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.85)';
+      ctx.shadowBlur = 24;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 4;
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
+
+      quoteLines.forEach((line, idx) => {
+        ctx.fillText(line, padX + 30, quoteStartY + idx * quoteLineHeight);
+      });
+      ctx.restore();
+
+      // 5. SELO DE RECORDE PESSOAL (PR) OPCIONAL ACIMA DA FRASE
+      if (activeRecordBadge) {
+        const badgeBottomY = quoteStartY - quoteFontSize - (isStory ? 32 : 22);
+        const badgeH = isStory ? 96 : 80;
+        const badgeY = Math.max(40, badgeBottomY - badgeH);
+
+        ctx.save();
+        drawRoundedRect(ctx, padX, badgeY, width - padX * 2, badgeH, 26);
+        const prGrad = ctx.createLinearGradient(padX, badgeY, width - padX, badgeY + badgeH);
+        prGrad.addColorStop(0, 'rgba(120, 53, 15, 0.92)');
+        prGrad.addColorStop(0.5, 'rgba(180, 83, 9, 0.92)');
+        prGrad.addColorStop(1, 'rgba(120, 53, 15, 0.92)');
+        ctx.fillStyle = prGrad;
+        ctx.fill();
+        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = '#fbbf24';
+        ctx.stroke();
+
+        // Ícone de troféu / recorde
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'alphabetic';
+        ctx.font = `900 ${isStory ? 38 : 32}px system-ui, -apple-system, sans-serif`;
+        ctx.fillText('🏆', padX + 26, badgeY + (isStory ? 62 : 52));
+
+        ctx.fillStyle = '#fde68a';
+        ctx.font = '800 18px system-ui, -apple-system, sans-serif';
+        ctx.fillText(activeRecordBadge.header, padX + 86, badgeY + (isStory ? 36 : 31));
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = `900 ${isStory ? 28 : 24}px system-ui, -apple-system, sans-serif`;
+        ctx.fillText(
+          activeRecordBadge.detail.slice(0, 44),
+          padX + 86,
+          badgeY + (isStory ? 72 : 62)
+        );
+        ctx.restore();
+      }
+    },
+    [
+      format,
+      theme,
+      photoImageElement,
+      photoZoom,
+      overlayOpacity,
+      workoutContext,
+      showStudentName,
+      showWorkoutTitle,
+      showWorkoutDuration,
+      showExerciseCount,
+      studentName,
+      activeQuote,
+      activeRecordBadge,
+      zemdaLogoImg
+    ]
+  );
 
   useEffect(() => {
     if (isOpen) {
@@ -680,14 +736,17 @@ export const PersonalWorkoutPhotoShareModal: React.FC<PersonalWorkoutPhotoShareM
     }
   }, [isOpen, renderWorkoutArt]);
 
-  const getCanvasBlob = (): Promise<Blob | null> => {
+  const getCanvasBlob = async (): Promise<Blob | null> => {
+    const loadedLogo = await loadOfficialZemdaLogo();
+    if (loadedLogo && !zemdaLogoImg) {
+      setZemdaLogoImg(loadedLogo);
+    }
+    renderWorkoutArt(loadedLogo);
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      return null;
+    }
     return new Promise(resolve => {
-      renderWorkoutArt();
-      const canvas = canvasRef.current;
-      if (!canvas) {
-        resolve(null);
-        return;
-      }
       canvas.toBlob(blob => resolve(blob), 'image/png', 0.95);
     });
   };
@@ -1209,42 +1268,56 @@ export const PersonalWorkoutPhotoShareModal: React.FC<PersonalWorkoutPhotoShareM
               )}
             </div>
 
-            {/* 3. Informações exibidas no Card */}
+            {/* 3. Informações opcionais exibidas na arte */}
             <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-4 space-y-2.5">
               <div className="flex items-center gap-2">
                 <Sliders className="h-4 w-4 text-teal-400" />
-                <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-200">
-                  Elementos visíveis na arte
-                </h3>
+                <div>
+                  <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-200">
+                    Informações opcionais do treino
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Ative apenas o que desejar exibir na sua imagem
+                  </p>
+                </div>
               </div>
 
-              <div className="flex flex-wrap gap-3 pt-1 text-xs">
-                <label className="flex items-center gap-2 cursor-pointer text-slate-300">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1 text-xs">
+                <label className="flex items-center gap-2.5 rounded-xl border border-slate-800 bg-slate-900/70 px-3 py-2 cursor-pointer text-slate-300 hover:border-slate-700 transition">
                   <input
                     type="checkbox"
                     checked={showStudentName}
                     onChange={e => setShowStudentName(e.target.checked)}
-                    className="rounded accent-teal-500"
+                    className="h-4 w-4 rounded accent-teal-500"
                   />
-                  Meu nome ({studentName.split(' ')[0]})
+                  <span>Nome do aluno ({studentName.split(' ')[0]})</span>
                 </label>
-                <label className="flex items-center gap-2 cursor-pointer text-slate-300">
+                <label className="flex items-center gap-2.5 rounded-xl border border-slate-800 bg-slate-900/70 px-3 py-2 cursor-pointer text-slate-300 hover:border-slate-700 transition">
                   <input
                     type="checkbox"
                     checked={showWorkoutTitle}
                     onChange={e => setShowWorkoutTitle(e.target.checked)}
-                    className="rounded accent-teal-500"
+                    className="h-4 w-4 rounded accent-teal-500"
                   />
-                  Nome do treino
+                  <span>Nome do treino</span>
                 </label>
-                <label className="flex items-center gap-2 cursor-pointer text-slate-300">
+                <label className="flex items-center gap-2.5 rounded-xl border border-slate-800 bg-slate-900/70 px-3 py-2 cursor-pointer text-slate-300 hover:border-slate-700 transition">
                   <input
                     type="checkbox"
-                    checked={showMetrics}
-                    onChange={e => setShowMetrics(e.target.checked)}
-                    className="rounded accent-teal-500"
+                    checked={showWorkoutDuration}
+                    onChange={e => setShowWorkoutDuration(e.target.checked)}
+                    className="h-4 w-4 rounded accent-teal-500"
                   />
-                  Tempo e exercícios
+                  <span>Tempo de treino</span>
+                </label>
+                <label className="flex items-center gap-2.5 rounded-xl border border-slate-800 bg-slate-900/70 px-3 py-2 cursor-pointer text-slate-300 hover:border-slate-700 transition">
+                  <input
+                    type="checkbox"
+                    checked={showExerciseCount}
+                    onChange={e => setShowExerciseCount(e.target.checked)}
+                    className="h-4 w-4 rounded accent-teal-500"
+                  />
+                  <span>Quantidade de exercícios</span>
                 </label>
               </div>
             </div>
