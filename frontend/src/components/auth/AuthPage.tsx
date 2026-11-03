@@ -1,5 +1,6 @@
 import './auth-experience.css';
 import { googleAuthError } from './googleAuthErrors';
+import { sanitizePlanCode } from '../../utils/planUtils';
 import { GoogleAccountLinkDialog } from './GoogleAccountLinkDialog';
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
@@ -107,8 +108,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   };
 
   const openRegistration = () => {
+    const cleanPlan = sanitizePlanCode(initialPlan);
     const query = new URLSearchParams(window.location.search);
-    if (initialPlan) query.set('plan', initialPlan);
+    if (cleanPlan) query.set('plan', cleanPlan);
+    else query.delete('plan');
     if (isTrial !== undefined) query.set('isTrial', String(isTrial));
     if (window.location.pathname !== '/cadastro') {
       window.history.pushState({ registrationFrom: '/login' }, '', `/cadastro${query.size ? `?${query}` : ''}`);
@@ -164,9 +167,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       }
       throw new Error('Resposta inesperada ao entrar com Google. Tente novamente.');
     } catch (err: any) {
-      googleAuthError(err);
-      setLoginError({ message: GOOGLE_LOGIN_ERROR });
-      showToast(GOOGLE_LOGIN_ERROR, 'error');
+      const msg = googleAuthError(err, 'login');
+      setLoginError({ message: msg, code: err?.code });
+      showToast(msg, 'error');
     } finally {
       setLoading(false);
     }
@@ -232,7 +235,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
               text="continue_with"
               customLabel="Continuar com Google"
               onSuccess={handleGoogleSuccess}
-              onError={() => showToast(GOOGLE_LOGIN_ERROR, 'error')}
+              onError={(errStr) => showToast(googleAuthError(errStr, 'login'), 'error')}
               disabled={loading || isCreateClinicOpen || !!googleLinkingState}
             />
 
@@ -418,7 +421,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           window.history.pushState({ view: 'dashboard' }, '', '/dashboard');
           window.dispatchEvent(new CustomEvent('zemda-navigate', { detail: { view: 'dashboard' } }));
         }}
-        initialPlan={initialPlan}
+        initialPlan={sanitizePlanCode(initialPlan)}
         isTrial={isTrial}
         initialGoogleData={googleSignupData}
         onGoogleSuccess={handleGoogleSuccess}

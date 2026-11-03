@@ -93,7 +93,7 @@ export const PublicHeader: React.FC<PublicHeaderProps> = ({
           {onRegisterClinic && (
             <button
               type="button"
-              onClick={onRegisterClinic}
+              onClick={() => onRegisterClinic()}
               className="px-5 py-2.5 text-xs font-bold text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 rounded-xl shadow-md shadow-teal-600/20 hover:shadow-lg hover:shadow-teal-600/30 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer flex items-center gap-1.5"
             >
               <span>Começar agora</span>
@@ -107,7 +107,7 @@ export const PublicHeader: React.FC<PublicHeaderProps> = ({
           {onRegisterClinic && (
             <button
               type="button"
-              onClick={onRegisterClinic}
+              onClick={() => onRegisterClinic()}
               className="px-3.5 py-2 text-[11px] font-bold text-white bg-teal-600 hover:bg-teal-500 rounded-lg transition-all"
             >
               Começar

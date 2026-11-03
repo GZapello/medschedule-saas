@@ -116,7 +116,7 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({ onLogin, onR
 
   return <div className="zemda-landing">
     <a className="zl-skip" href="#conteudo">Ir para o conteúdo</a>
-    <PublicHeader onLogin={onLogin} onRegisterClinic={onRegisterClinic} />
+    <PublicHeader onLogin={onLogin} onRegisterClinic={() => onRegisterClinic()} />
     <main id="conteudo">
       <section id="inicio" className="zl-hero">
         <div className="zl-container">

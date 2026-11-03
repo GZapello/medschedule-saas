@@ -61,6 +61,7 @@ const SuperAdminVisitsView = lazyWithRetry(() => import('./components/superadmin
 import { ZemdaLandingPage } from './components/public/ZemdaLandingPage';
 import { PublicSeoPageView } from './components/public/PublicSeoPageView';
 import { PublicPlansLayout } from './components/public/PublicPlansLayout';
+import { sanitizePlanCode } from './utils/planUtils';
 import { PublicHeader } from './components/public/PublicHeader';
 import { PublicFooter } from './components/public/PublicFooter';
 import { SEO_PAGES, isValidApplicationRoute, isValidInternalRoute, buildCanonical } from './data/seoPagesData';
@@ -455,6 +456,17 @@ const AppContent: React.FC = () => {
     setActiveSeoSlug(null);
     window.history.pushState(null, '', '/');
   };
+
+  // Clean invalid plan params like [object Object] from URL
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const rawPlan = searchParams.get('plan');
+    if (rawPlan && !sanitizePlanCode(rawPlan)) {
+      searchParams.delete('plan');
+      const cleanSearch = searchParams.size ? `?${searchParams.toString()}` : '';
+      window.history.replaceState(null, '', `${window.location.pathname}${cleanSearch}`);
+    }
+  }, []);
 
   const [authInitialAction, setAuthInitialAction] = useState<'login' | 'create-clinic' | 'register-user'>(() =>
     window.location.pathname === '/cadastro' ? 'create-clinic' : 'login'
@@ -1014,7 +1026,7 @@ const AppContent: React.FC = () => {
             window.history.pushState(null, '', '/');
           }}
           initialAction={isRegisterPath ? 'create-clinic' : isLoginPath ? 'login' : authInitialAction}
-          initialPlan={new URLSearchParams(window.location.search).get('plan') || selectedRegistrationPlan}
+          initialPlan={sanitizePlanCode(new URLSearchParams(window.location.search).get('plan')) || sanitizePlanCode(selectedRegistrationPlan)}
           isTrial={new URLSearchParams(window.location.search).has('isTrial') ? new URLSearchParams(window.location.search).get('isTrial') === 'true' : isRegistrationTrial}
         />
       );
@@ -1032,7 +1044,7 @@ const AppContent: React.FC = () => {
             window.history.pushState(null, '', '/');
           }}
           initialAction="login"
-          initialPlan={new URLSearchParams(window.location.search).get('plan') || selectedRegistrationPlan}
+          initialPlan={sanitizePlanCode(new URLSearchParams(window.location.search).get('plan')) || sanitizePlanCode(selectedRegistrationPlan)}
           isTrial={new URLSearchParams(window.location.search).has('isTrial') ? new URLSearchParams(window.location.search).get('isTrial') === 'true' : isRegistrationTrial}
         />
       );
@@ -1120,10 +1132,11 @@ const AppContent: React.FC = () => {
             window.history.pushState(null, '', '/login');
           }}
           onRegisterClinic={(plan, isTrial) => {
-            setSelectedRegistrationPlan(plan);
+            const cleanPlan = sanitizePlanCode(plan);
+            setSelectedRegistrationPlan(cleanPlan);
             setIsRegistrationTrial(isTrial);
             const query = new URLSearchParams();
-            if (plan) query.set('plan', plan);
+            if (cleanPlan) query.set('plan', cleanPlan);
             if (isTrial !== undefined) query.set('isTrial', String(isTrial));
             setAuthInitialAction('create-clinic');
             setPublicView('login');
@@ -1149,7 +1162,7 @@ const AppContent: React.FC = () => {
           window.history.pushState(null, '', '/');
         }}
         initialAction={authInitialAction}
-        initialPlan={new URLSearchParams(window.location.search).get('plan') || selectedRegistrationPlan}
+        initialPlan={sanitizePlanCode(new URLSearchParams(window.location.search).get('plan')) || sanitizePlanCode(selectedRegistrationPlan)}
         isTrial={new URLSearchParams(window.location.search).has('isTrial') ? new URLSearchParams(window.location.search).get('isTrial') === 'true' : isRegistrationTrial}
       />
     );

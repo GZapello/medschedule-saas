@@ -52,6 +52,7 @@ import {
 import { RegistrationProfessionOption, REGISTRATION_PROFESSIONS } from '../../types/professions';
 import { PracticeArea, MedicalSpecialtyItem } from '../../types/capabilities';
 import { GoogleAuthButton, GoogleIcon, GOOGLE_LOGIN_ERROR } from './GoogleAuthButton';
+import { sanitizePlanCode } from '../../utils/planUtils';
 
 interface CreateClinicModalProps {
   isOpen: boolean;
@@ -104,7 +105,9 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
 
   // 1. Estado da Etapa Atual (Cadastro em tela única e Onboarding em 3 etapas)
   const [step, setStep] = useState<RegistrationStep>('signup');
-  const [selectedPlanCode, setSelectedPlanCode] = useState(initialPlan || (isTrial ? 'SOLO' : ''));
+  const sanitizedInitialPlan = sanitizePlanCode(initialPlan);
+  const [selectedPlanCode, setSelectedPlanCode] = useState(sanitizedInitialPlan || (isTrial ? 'SOLO' : ''));
+  const effectivePlanCode = sanitizePlanCode(selectedPlanCode) || sanitizedInitialPlan || (isTrial ? 'SOLO' : undefined);
   const [plans, setPlans] = useState<RegistrationPlan[]>([]);
   const [planError, setPlanError] = useState('');
   const [verification, setVerification] = useState<{ email: string; token: string } | null>(null);
@@ -346,7 +349,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
       if (!hasTrackedOpen.current) {
         hasTrackedOpen.current = true;
         trackSignupOpen({
-          planCode: selectedPlanCode || initialPlan,
+          planCode: effectivePlanCode,
           professionCode: formData.profession || undefined
         });
       }
@@ -362,7 +365,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
     if (!hasTrackedStarted.current) {
       hasTrackedStarted.current = true;
       trackSignupStarted({
-        planCode: selectedPlanCode || initialPlan,
+        planCode: effectivePlanCode,
         professionCode: formData.profession || undefined
       });
     }
@@ -503,7 +506,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
     try {
       setLoading(true);
       trackSignupSubmit({
-        planCode: selectedPlanCode || initialPlan,
+        planCode: effectivePlanCode,
         professionCode: formData.profession || undefined
       });
 
@@ -534,7 +537,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
             termsAccepted: formData.termsAccepted,
             privacyAccepted: formData.privacyAccepted,
             marketingAccepted: marketingAccepted,
-            planCode: selectedPlanCode || initialPlan,
+            planCode: effectivePlanCode,
             startTrial: isTrial
           }
         });
@@ -548,7 +551,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
           });
           trackGoogleConversionSignup({
             accountId: data.user.id,
-            planCode: selectedPlanCode || initialPlan || 'SOLO',
+            planCode: effectivePlanCode || 'SOLO',
             isTrial: true,
             value: 0
           });
@@ -588,7 +591,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
         });
         trackGoogleConversionSignup({
           accountId: data.user.id,
-          planCode: selectedPlanCode || initialPlan || 'SOLO',
+          planCode: effectivePlanCode || 'SOLO',
           isTrial: true,
           value: 0
         });
@@ -614,7 +617,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
         step: 'signup',
         errorCode: err.code || 'REGISTRATION_FAILED',
         errorType: err.code ? 'api_error' : 'network_error',
-        planCode: selectedPlanCode || initialPlan,
+        planCode: effectivePlanCode,
         professionCode: formData.profession || undefined
       });
       if (err.code === 'ACCOUNT_EXISTS_ONBOARDING_PENDING') {
@@ -691,7 +694,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
         step: 'verify_email',
         errorCode: err.code || 'OTP_VERIFICATION_FAILED',
         errorType: err.code ? 'api_error' : 'network_error',
-        planCode: selectedPlanCode || initialPlan,
+        planCode: effectivePlanCode,
         professionCode: formData.profession || undefined
       });
       setOtpError('Código inválido ou expirado. Verifique e tente novamente.');
@@ -1099,7 +1102,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
                       } catch(err:any) { showToast(googleAuthError(err, 'signup'),'error'); }
                       finally { setLoading(false); }
                     }}
-                    onError={() => showToast(GOOGLE_LOGIN_ERROR, 'error')}
+                    onError={(errStr) => showToast(googleAuthError(errStr, 'login'), 'error')}
                     disabled={loading}
                   />
                   <div className="flex items-center gap-3">

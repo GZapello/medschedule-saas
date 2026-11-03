@@ -1807,6 +1807,7 @@ export class AuthController {
    * 3. 'trial': Ativação de link de teste grátis (trialToken) sem OTP e sem seleção de plano
    */
   static async googleAuth(req: Request, res: Response): Promise<void> {
+    const correlationId = 'ga-' + uuidv4().slice(0, 8);
     try {
       const idToken = typeof req.body.idToken === 'string' && req.body.idToken.trim()
         ? req.body.idToken.trim()
@@ -1825,13 +1826,17 @@ export class AuthController {
       try {
         googleUser = await GoogleAuthService.verifyIdToken(idToken);
       } catch (tokenErr: any) {
-        console.error('[GoogleAuth] Falha ao verificar credencial:', tokenErr?.message);
-        res.status(tokenErr?.status || 401).json({ error: 'Não foi possível entrar com o Google. Tente novamente ou use seu e-mail e senha.' });
+        console.error(`[GoogleAuth][${correlationId}] Falha ao verificar credencial:`, tokenErr?.message);
+        res.status(tokenErr?.status || 401).json({
+          error: tokenErr?.message || 'Não foi possível validar a credencial Google. Tente novamente ou use seu e-mail e senha.',
+          code: 'INVALID_GOOGLE_TOKEN',
+          correlationId
+        });
         return;
       }
 
       if (!googleUser.emailVerified) {
-        res.status(400).json({ error: 'O e-mail da sua conta Google não está verificado pela Google.' });
+        res.status(400).json({ error: 'O e-mail da sua conta Google não está verificado pela Google.', code: 'EMAIL_NOT_VERIFIED', correlationId });
         return;
       }
 
@@ -2002,36 +2007,54 @@ export class AuthController {
         const marketingOptIn = additionalData.marketingOptIn;
 
         if (!responsibleName) {
-          res.status(400).json({ error: 'Nome do responsável é obrigatório.' });
+          res.status(400).json({ error: 'Nome do responsável é obrigatório.', code: 'VALIDATION_ERROR', correlationId });
           return;
         }
 
         const cleanPhone = String(phone || '').replace(/\D/g, '');
         if (cleanPhone.length < 10) {
-          res.status(400).json({ error: 'Informe um número de WhatsApp ou celular válido com DDD.' });
+          res.status(400).json({ error: 'Informe um número de WhatsApp ou celular válido com DDD.', code: 'VALIDATION_ERROR', correlationId });
           return;
         }
 
         if (!termsAccepted || !privacyAccepted) {
-          res.status(400).json({ error: 'É obrigatório aceitar os Termos de Uso e a Política de Privacidade.' });
+          res.status(400).json({ error: 'É obrigatório aceitar os Termos de Uso e a Política de Privacidade.', code: 'VALIDATION_ERROR', correlationId });
           return;
         }
 
-        // Verifica existência de conta
-        const existingByGoogle = db.prepare('SELECT id FROM users WHERE google_sub = ?').get(googleSub);
+        // Verifica existência de conta (com suporte a retorno idempotente para cliques repetidos)
+        const existingByGoogle = db.prepare('SELECT * FROM users WHERE google_sub = ?').get(googleSub) as any;
         if (existingByGoogle) {
+          const tenantData = existingByGoogle.tenant_id ? db.prepare('SELECT * FROM tenants WHERE id = ?').get(existingByGoogle.tenant_id) as any : null;
+          if (tenantData) {
+            logAudit(req, 'REGISTER_CLINIC_GOOGLE_IDEMPOTENT', 'users', existingByGoogle.id, { email: cleanEmail, tenantId: tenantData.id });
+            const authResponse = AuthController.buildUserAuthResponse(existingByGoogle, tenantData);
+            res.status(200).json(authResponse);
+            return;
+          }
           res.status(409).json({
             error: 'Você já possui uma conta cadastrada com este Google. Faça login para acessar.',
-            code: 'ACCOUNT_EXISTS'
+            code: 'ACCOUNT_EXISTS',
+            correlationId
           });
           return;
         }
 
-        const existingByEmail = db.prepare('SELECT id, onboarding_status FROM users WHERE email = ?').get(cleanEmail) as any;
+        const existingByEmail = db.prepare('SELECT id, google_sub, tenant_id FROM users WHERE email = ?').get(cleanEmail) as any;
         if (existingByEmail) {
+          if (existingByEmail.google_sub === googleSub) {
+            const existingUser = db.prepare('SELECT * FROM users WHERE id = ?').get(existingByEmail.id) as any;
+            const tenantData = existingUser.tenant_id ? db.prepare('SELECT * FROM tenants WHERE id = ?').get(existingUser.tenant_id) as any : null;
+            if (tenantData) {
+              const authResponse = AuthController.buildUserAuthResponse(existingUser, tenantData);
+              res.status(200).json(authResponse);
+              return;
+            }
+          }
           res.status(409).json({
             error: 'Este e-mail já está cadastrado na plataforma. Faça login para vincular seu Google.',
-            code: 'EMAIL_ALREADY_EXISTS'
+            code: 'EMAIL_ALREADY_EXISTS',
+            correlationId
           });
           return;
         }
@@ -2090,7 +2113,14 @@ export class AuthController {
         const hashedPassword = await hashPassword(randomPass);
 
         const startTrial = additionalData.startTrial === true || additionalData.startTrial === 'true';
-        const planCode = additionalData.planCode ? String(additionalData.planCode).toUpperCase() : null;
+        let rawPlan = typeof additionalData.planCode === 'string' ? additionalData.planCode.trim() : null;
+        if (rawPlan && (rawPlan === '[object Object]' || rawPlan.toLowerCase().includes('[object') || rawPlan.toLowerCase() === 'undefined' || rawPlan.toLowerCase() === 'null')) {
+          rawPlan = null;
+        }
+        let planCode = rawPlan ? rawPlan.toUpperCase() : null;
+        if (planCode?.startsWith('ZEMDA-') || planCode?.startsWith('PLAN-')) {
+          planCode = planCode.replace(/^(ZEMDA-|PLAN-)/, '');
+        }
         const selectedPlan = planCode ? BillingService.plans().find(p => p.code === planCode) : null;
 
         if (planCode && !selectedPlan) throw new BillingError('PLAN_INVALID','Selecione um plano válido.',400);
@@ -2181,6 +2211,7 @@ export class AuthController {
                   ?, 'google',
                   ?, ?, ?, ?, ?,
                   ?, ?, datetime('now'), datetime('now'),
+                  NULL, NULL,
                   ?, ?, ?, ?,
                   ?, ?, ?, ?, ?, ?,
                   datetime('now'), datetime('now')
@@ -2305,8 +2336,14 @@ export class AuthController {
             if (startTrial && soloPlan) BillingService.createSoloTrialInTransaction(tenantId,userId);
           })();
         } catch (txErr: any) {
-          console.error(`[GoogleAuth.signup] Transação abortada na etapa "${currentStep}". Rollback executado.`);
-          throw txErr;
+          console.error(`[GoogleAuth.signup][${correlationId}] Transação abortada na etapa "${currentStep}". Rollback executado:`, txErr?.message || txErr);
+          res.status(500).json({
+            error: 'Ocorreu um erro ao criar sua conta. Por favor, tente novamente.',
+            code: 'SIGNUP_TRANSACTION_FAILED',
+            step: currentStep,
+            correlationId
+          });
+          return;
         }
 
         if (startTrial) BillingService.notifySoloTrialStarted(tenantId,userId);
@@ -2575,8 +2612,12 @@ export class AuthController {
       res.status(400).json({ error: `Contexto de autenticação inválido: ${context}` });
     } catch (err: any) {
       if (respondBillingError(res,err)) return;
-      console.error('[AuthController.googleAuth] Erro inesperado:', err);
-      res.status(500).json({ error: 'Erro interno ao autenticar via Google.' });
+      console.error(`[AuthController.googleAuth][${correlationId}] Erro inesperado:`, err);
+      res.status(500).json({
+        error: 'Erro interno ao autenticar via Google.',
+        code: 'INTERNAL_SERVER_ERROR',
+        correlationId
+      });
     }
   }
 }

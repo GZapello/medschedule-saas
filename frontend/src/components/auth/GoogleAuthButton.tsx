@@ -116,9 +116,9 @@ export const GoogleAuthButton: React.FC<GoogleAuthButtonProps> = ({
     let pending = false;
     const fail = (message?: string) => {
       if (!live) return;
-      setError(GOOGLE_LOGIN_ERROR);
-      if (message) googleAuthError(message);
-      callbacks.current.onError?.(GOOGLE_LOGIN_ERROR);
+      const friendlyMessage = googleAuthError(message);
+      setError(friendlyMessage);
+      callbacks.current.onError?.(friendlyMessage);
     };
     const receive = (credential: unknown) => {
       if (!live || !pending || callbacks.current.disabled) return;
@@ -130,8 +130,8 @@ export const GoogleAuthButton: React.FC<GoogleAuthButtonProps> = ({
       setError('');
       // Only the primitive token crosses the GIS/application boundary.
       Promise.resolve().then(() => { if (live && !callbacks.current.disabled) return callbacks.current.onSuccess(credential); }).catch(error => {
-        googleAuthError(error);
-        if (live) fail('Processamento da credencial falhou');
+        const friendly = googleAuthError(error);
+        if (live) fail(friendly);
       });
     };
     setError(''); setReady(false);
@@ -174,7 +174,7 @@ export const GoogleAuthButton: React.FC<GoogleAuthButtonProps> = ({
           responseTimer = window.setTimeout(() => { pending = false; fail('Tempo limite esgotado.'); }, 45000);
         }});
       setReady(true);
-    }).catch(e => { googleAuthError(e); fail('Falha ao inicializar autenticação Google'); });
+    }).catch(e => { fail(e?.message || 'Falha ao inicializar autenticação Google'); });
     return () => {
       live=false; clearTimeout(responseTimer);
       receivers.delete(buttonState);
