@@ -20,6 +20,7 @@ import { MedicalTreeService } from '../services/medical-tree.service';
 import { resolveProfessionModule, resolveCanonicalProfession } from '../utils/profession-module';
 import { REGISTRATION_PROFESSIONS } from '../types/professions';
 import { createDefaultSchedules } from '../utils/schedule-defaults';
+import { findNextAvailableDate } from '../utils/slot-calculator';
 
 
 
@@ -1417,11 +1418,29 @@ export class TenantController {
           AND (s.professional_id = p.id OR EXISTS (SELECT 1 FROM professional_services ps WHERE ps.service_id = s.id AND ps.professional_id = p.id))
         ) ORDER BY s.name
       `).all(resolved.id);
-      const publicProfessionals = (professionals as any[]).map(p => ({ ...p, services: db.prepare(`
-        SELECT s.id, COALESCE(ps.custom_duration, s.duration_minutes) AS duration_minutes, s.modality
-        FROM services s LEFT JOIN professional_services ps ON ps.service_id = s.id AND ps.professional_id = ?
-        WHERE s.tenant_id = ? AND s.active = 1 AND (s.professional_id = ? OR ps.professional_id = ?)
-      `).all(p.id, resolved.id, p.id, p.id) }));
+      const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+      const publicProfessionals = (professionals as any[]).map(p => {
+        const profServices = db.prepare(`
+          SELECT s.id, COALESCE(ps.custom_duration, s.duration_minutes) AS duration_minutes, s.modality
+          FROM services s LEFT JOIN professional_services ps ON ps.service_id = s.id AND ps.professional_id = ?
+          WHERE s.tenant_id = ? AND s.active = 1 AND (s.professional_id = ? OR ps.professional_id = ?)
+        `).all(p.id, resolved.id, p.id, p.id) as any[];
+        const activeDaysRows = db.prepare(`
+          SELECT DISTINCT day_of_week FROM schedules
+          WHERE tenant_id = ? AND professional_id = ? AND is_active = 1
+          ORDER BY day_of_week ASC
+        `).all(resolved.id, p.id) as { day_of_week: number }[];
+        const active_days = activeDaysRows.map(r => r.day_of_week);
+        const next_available = profServices.length > 0
+          ? findNextAvailableDate(resolved.id, p.id, profServices[0].id, todayStr, 21)
+          : null;
+        return {
+          ...p,
+          services: profServices,
+          active_days,
+          next_available
+        };
+      });
       res.json({
         tenant,
         professionals: publicProfessionals,

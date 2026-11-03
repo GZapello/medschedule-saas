@@ -15,7 +15,10 @@ import {
   CheckCircle2,
   TrendingUp,
   History,
-  Info
+  Info,
+  Camera,
+  Share2,
+  Image as ImageIcon
 } from 'lucide-react';
 import { ApiClient } from '../../api/client';
 import { getRandomMotivationalQuote } from './studentMotivationalQuotes';
@@ -24,6 +27,7 @@ import {
   ExerciseDemoDetails
 } from './PersonalPublicExerciseDemoModal';
 import { PersonalPublicStudentRecordsModal } from './PersonalPublicStudentRecordsModal';
+import { PersonalWorkoutPhotoShareModal } from './PersonalWorkoutPhotoShareModal';
 
 export interface PublicExercise {
   id: string;
@@ -125,6 +129,9 @@ export const PersonalPublicStudentWorkoutView: React.FC<PersonalPublicStudentWor
   const [isFinishing, setIsFinishing] = useState(false);
   const [sessionCompletedSummary, setSessionCompletedSummary] = useState<SessionSummary | null>(null);
   const [newPRsList, setNewPRsList] = useState<any[]>([]);
+  const [lastCompletedWorkout, setLastCompletedWorkout] = useState<PublicWorkout | null>(null);
+  const [showPhotoShareModal, setShowPhotoShareModal] = useState(false);
+  const [photoShareInitialMode, setPhotoShareInitialMode] = useState<'default' | 'camera' | 'gallery'>('default');
 
   // Saudação de boas-vindas dinâmica pelo horário do dia
   const greeting = useMemo(() => {
@@ -416,6 +423,7 @@ export const PersonalPublicStudentWorkoutView: React.FC<PersonalPublicStudentWor
         }
       );
 
+      setLastCompletedWorkout(sessionWorkout);
       setSessionCompletedSummary(res.summary);
       setNewPRsList(res.newPRs || []);
       setShowFinishModal(false);
@@ -561,6 +569,64 @@ export const PersonalPublicStudentWorkoutView: React.FC<PersonalPublicStudentWor
             </div>
           )}
 
+          {/* Experiência Opcional de Foto & Compartilhamento Pós-Treino */}
+          <div className="rounded-2xl border border-teal-500/40 bg-gradient-to-br from-teal-950/60 via-slate-900 to-slate-950 p-4 text-left space-y-3 shadow-lg">
+            <div className="flex items-start justify-between gap-2">
+              <div className="space-y-0.5">
+                <span className="inline-flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wider text-teal-400">
+                  <Sparkles className="w-3 h-3" />
+                  Celebrar seu resultado
+                </span>
+                <h3 className="text-sm font-black text-white">
+                  Compartilhar seu treino nas redes
+                </h3>
+                <p className="text-[11px] text-slate-400 leading-snug">
+                  Tire uma foto ou crie um card com marca d’água do Zemda, frase motivacional e seus recordes para postar no Story ou Feed.
+                </p>
+              </div>
+              <div className="w-9 h-9 rounded-xl bg-teal-500/20 border border-teal-500/30 flex items-center justify-center text-teal-300 shrink-0">
+                <Camera className="w-4 h-4" />
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setPhotoShareInitialMode('default');
+                setShowPhotoShareModal(true);
+              }}
+              className="w-full py-3 px-4 bg-gradient-to-r from-teal-500 to-emerald-400 hover:from-teal-400 hover:to-emerald-300 text-slate-950 font-black rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-md shadow-teal-500/20 cursor-pointer"
+            >
+              <Camera className="w-4 h-4" />
+              Gerar foto do treino concluído
+            </button>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setPhotoShareInitialMode('camera');
+                  setShowPhotoShareModal(true);
+                }}
+                className="py-2 px-3 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-xl text-[11px] font-bold text-teal-300 flex items-center justify-center gap-1.5 transition cursor-pointer"
+              >
+                <Camera className="w-3.5 h-3.5" />
+                Tirar foto agora
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setPhotoShareInitialMode('gallery');
+                  setShowPhotoShareModal(true);
+                }}
+                className="py-2 px-3 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-xl text-[11px] font-bold text-slate-300 flex items-center justify-center gap-1.5 transition cursor-pointer"
+              >
+                <ImageIcon className="w-3.5 h-3.5 text-teal-400" />
+                Escolher da galeria
+              </button>
+            </div>
+          </div>
+
           <div className="flex flex-col gap-2 pt-1">
             <button
               onClick={() => setShowRecordsModal(true)}
@@ -573,6 +639,7 @@ export const PersonalPublicStudentWorkoutView: React.FC<PersonalPublicStudentWor
             <button
               onClick={() => {
                 setSessionCompletedSummary(null);
+                setShowPhotoShareModal(false);
                 loadWorkoutData();
               }}
               className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-2xl text-xs sm:text-sm transition-all cursor-pointer"
@@ -581,6 +648,31 @@ export const PersonalPublicStudentWorkoutView: React.FC<PersonalPublicStudentWor
             </button>
           </div>
         </div>
+
+        {/* Modal de Foto e Compartilhamento Pós-Treino */}
+        <PersonalWorkoutPhotoShareModal
+          isOpen={showPhotoShareModal}
+          onClose={() => setShowPhotoShareModal(false)}
+          studentName={studentName}
+          clinicName={clinicName}
+          workoutContext={{
+            title: lastCompletedWorkout?.title || workouts[selectedWorkoutIndex]?.title || 'Treino do Dia',
+            division: lastCompletedWorkout?.division || workouts[selectedWorkoutIndex]?.division,
+            muscleGroups: Array.from(
+              new Set(
+                (lastCompletedWorkout?.exercises || [])
+                  .map(e => e.muscle_group)
+                  .filter(Boolean)
+              )
+            ),
+            durationMinutes: sessionCompletedSummary.duration_minutes,
+            completedExercisesCount: sessionCompletedSummary.completed_exercises_count,
+            totalExercisesCount: sessionCompletedSummary.exercises_count,
+            completedAt: sessionCompletedSummary.completed_at
+          }}
+          newPRs={newPRsList}
+          initialMode={photoShareInitialMode}
+        />
 
         {/* Modal de Recordes acessível pelo pós-treino */}
         <PersonalPublicStudentRecordsModal

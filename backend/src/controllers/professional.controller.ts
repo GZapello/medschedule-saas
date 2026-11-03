@@ -6,7 +6,7 @@ import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { hashPassword } from '../utils/password';
 import { logAudit } from '../middlewares/audit.middleware';
-import { calculateAvailableSlots } from '../utils/slot-calculator';
+import { calculateAvailableSlots, buildPublicAvailabilityInsights, findNextAvailableDate } from '../utils/slot-calculator';
 import { createDefaultSchedules } from '../utils/schedule-defaults';
 import { resolveProfessionModule, cleanPracticeAreasForNewProfession } from '../utils/profession-module';
 import { ProfessionTaxonomyService } from '../services/profession-taxonomy.service';
@@ -616,8 +616,23 @@ export class ProfessionalController {
         ORDER BY s.name ASC
       `).all(profRow.id, profRow.tenant_id, profRow.id, profRow.id) as any[];
 
+      const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+      const activeDaysRows = db.prepare(`
+        SELECT DISTINCT day_of_week FROM schedules
+        WHERE tenant_id = ? AND professional_id = ? AND is_active = 1
+        ORDER BY day_of_week ASC
+      `).all(profRow.tenant_id, profRow.id) as { day_of_week: number }[];
+      const active_days = activeDaysRows.map(r => r.day_of_week);
+      const next_available = services.length > 0
+        ? findNextAvailableDate(profRow.tenant_id, profRow.id, services[0].id, todayStr, 21)
+        : null;
+
       res.json({
-        professional: (({ tenant_id, gender, ...publicData }) => publicData)(profRow),
+        professional: {
+          ...(({ tenant_id, gender, ...publicData }) => publicData)(profRow),
+          active_days,
+          next_available
+        },
         tenant: (({ id, ...publicData }) => publicData)(tenantRow),
         services
       });
@@ -696,12 +711,21 @@ export class ProfessionalController {
         String(date)
       );
 
+      const publicInsights = buildPublicAvailabilityInsights(
+        profRow.tenant_id,
+        profRow.id,
+        targetServiceId,
+        String(date),
+        { includeAlternativeProfessionals: false }
+      );
+
       res.json({
         date: String(date),
         professionalId: profRow.id,
         serviceId: targetServiceId,
         totalAvailable: slots.length,
-        slots
+        slots,
+        ...publicInsights
       });
     } catch (err: any) {
       if (respondBillingError(res, err)) return;

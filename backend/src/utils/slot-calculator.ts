@@ -312,3 +312,236 @@ export function calculateAvailableSlots(
   return slots;
 }
 
+export interface NextAvailableDateInfo {
+  date: string;
+  slotsCount: number;
+  firstSlotTime: string;
+  previewSlots: AvailableSlot[];
+}
+
+export interface UpcomingDayAvailability {
+  date: string;
+  available: boolean;
+  slotsCount: number;
+  firstSlotTime: string | null;
+}
+
+export interface AlternativeProfessionalAvailability {
+  id: string;
+  name: string;
+  slug: string | null;
+  photo_url: string | null;
+  profession_name: string | null;
+  specialty_name: string | null;
+  serviceId: string;
+  serviceName: string;
+  date: string;
+  isSameDate: boolean;
+  slotsCount: number;
+  firstSlotTime: string;
+  previewSlots: AvailableSlot[];
+}
+
+function addDaysToIsoDate(dateStr: string, daysToAdd: number): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+  dt.setUTCDate(dt.getUTCDate() + daysToAdd);
+  return dt.toISOString().slice(0, 10);
+}
+
+/**
+ * Encontra a próxima data com horários disponíveis para um profissional e serviço.
+ */
+export function findNextAvailableDate(
+  tenantId: string,
+  professionalId: string,
+  serviceId: string,
+  startFromDateStr: string,
+  maxDaysToSearch = 30,
+  excludeDateStr?: string
+): NextAvailableDateInfo | null {
+  for (let i = 0; i <= maxDaysToSearch; i++) {
+    const candidateDate = addDaysToIsoDate(startFromDateStr, i);
+    if (excludeDateStr && candidateDate === excludeDateStr) continue;
+    const candidateSlots = calculateAvailableSlots(tenantId, professionalId, serviceId, candidateDate);
+    if (candidateSlots.length > 0) {
+      return {
+        date: candidateDate,
+        slotsCount: candidateSlots.length,
+        firstSlotTime: candidateSlots[0].time,
+        previewSlots: candidateSlots.slice(0, 6)
+      };
+    }
+  }
+  return null;
+}
+
+/**
+ * Calcula insights completos de disponibilidade para orientar o paciente no agendamento online.
+ */
+export function buildPublicAvailabilityInsights(
+  tenantId: string,
+  professionalId: string,
+  serviceId: string,
+  requestedDateStr: string,
+  options?: { includeAlternativeProfessionals?: boolean }
+): {
+  nextAvailable: NextAvailableDateInfo | null;
+  earliestAvailable: NextAvailableDateInfo | null;
+  upcomingDays: UpcomingDayAvailability[];
+  alternativeProfessionals: AlternativeProfessionalAvailability[];
+} {
+  const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+  const baseStart = requestedDateStr >= todayStr ? requestedDateStr : todayStr;
+
+  // 1. Próxima data disponível após a data solicitada (se a data solicitada estiver dentro de um horizonte razoável)
+  const nextAfterRequested = findNextAvailableDate(
+    tenantId,
+    professionalId,
+    serviceId,
+    addDaysToIsoDate(baseStart, 1),
+    45,
+    requestedDateStr
+  );
+
+  // 2. Data mais próxima disponível a partir de hoje (útil se o paciente escolheu uma data distante sem agenda)
+  const earliestFromToday = findNextAvailableDate(
+    tenantId,
+    professionalId,
+    serviceId,
+    todayStr,
+    45,
+    requestedDateStr
+  );
+
+  const nextAvailable = nextAfterRequested || earliestFromToday;
+
+  // 3. Janela de próximos 14 dias a partir de hoje + janela ao redor da data escolhida
+  const dateSet = new Set<string>();
+  for (let i = 0; i < 14; i++) {
+    dateSet.add(addDaysToIsoDate(todayStr, i));
+  }
+  if (requestedDateStr >= todayStr) {
+    for (let offset = -2; offset <= 4; offset++) {
+      const around = addDaysToIsoDate(requestedDateStr, offset);
+      if (around >= todayStr) dateSet.add(around);
+    }
+  }
+  const sortedDates = Array.from(dateSet).sort().slice(0, 21);
+  const upcomingDays: UpcomingDayAvailability[] = sortedDates.map(d => {
+    const daySlots = calculateAvailableSlots(tenantId, professionalId, serviceId, d);
+    return {
+      date: d,
+      available: daySlots.length > 0,
+      slotsCount: daySlots.length,
+      firstSlotTime: daySlots.length > 0 ? daySlots[0].time : null
+    };
+  });
+
+  // 4. Outros profissionais disponíveis na clínica para o mesmo serviço ou mesma área/profissão
+  const alternativeProfessionals: AlternativeProfessionalAvailability[] = [];
+  if (options?.includeAlternativeProfessionals) {
+    const currentProf = db.prepare(`
+      SELECT id, profession_id, specialty_id, COALESCE(specialty_custom, '') as specialty_custom
+      FROM professionals
+      WHERE id = ? AND tenant_id = ?
+    `).get(professionalId, tenantId) as any;
+
+    const otherProfs = db.prepare(`
+      SELECT
+        p.id, p.name, p.slug, p.photo_url, p.profession_id, p.specialty_id,
+        COALESCE(p.specialty_custom, spec.name) as specialty_name,
+        COALESCE(prof.name, p.profession_name) as profession_name
+      FROM professionals p
+      LEFT JOIN specialties spec ON spec.id = p.specialty_id
+      LEFT JOIN professions prof ON prof.id = p.profession_id
+      WHERE p.tenant_id = ? AND p.active = 1 AND p.public_booking_enabled = 1 AND p.id != ?
+      ORDER BY p.name ASC
+    `).all(tenantId, professionalId) as any[];
+
+    for (const other of otherProfs) {
+      // Verifica se este profissional atende o mesmo serviceId
+      const sameService = db.prepare(`
+        SELECT s.id, s.name
+        FROM services s
+        LEFT JOIN professional_services ps ON ps.service_id = s.id AND ps.professional_id = ?
+        WHERE s.tenant_id = ? AND s.id = ? AND s.active = 1 AND (s.professional_id = ? OR ps.professional_id = ?)
+      `).get(other.id, tenantId, serviceId, other.id, other.id) as { id: string; name: string } | undefined;
+
+      let targetService = sameService;
+      if (!targetService && currentProf) {
+        const sameArea =
+          (currentProf.profession_id && other.profession_id === currentProf.profession_id) ||
+          (currentProf.specialty_id && other.specialty_id === currentProf.specialty_id);
+        if (sameArea) {
+          targetService = db.prepare(`
+            SELECT s.id, s.name
+            FROM services s
+            LEFT JOIN professional_services ps ON ps.service_id = s.id AND ps.professional_id = ?
+            WHERE s.tenant_id = ? AND s.active = 1 AND (s.professional_id = ? OR ps.professional_id = ?)
+            ORDER BY s.name ASC
+            LIMIT 1
+          `).get(other.id, tenantId, other.id, other.id) as { id: string; name: string } | undefined;
+        }
+      }
+
+      if (!targetService) continue;
+
+      // Tenta primeiro na mesma data escolhida pelo usuário
+      const sameDateSlots = requestedDateStr >= todayStr
+        ? calculateAvailableSlots(tenantId, other.id, targetService.id, requestedDateStr)
+        : [];
+
+      if (sameDateSlots.length > 0) {
+        alternativeProfessionals.push({
+          id: other.id,
+          name: other.name,
+          slug: other.slug || null,
+          photo_url: other.photo_url || null,
+          profession_name: other.profession_name || null,
+          specialty_name: other.specialty_name || null,
+          serviceId: targetService.id,
+          serviceName: targetService.name,
+          date: requestedDateStr,
+          isSameDate: true,
+          slotsCount: sameDateSlots.length,
+          firstSlotTime: sameDateSlots[0].time,
+          previewSlots: sameDateSlots.slice(0, 4)
+        });
+      } else {
+        const nextOther = findNextAvailableDate(tenantId, other.id, targetService.id, todayStr, 21);
+        if (nextOther) {
+          alternativeProfessionals.push({
+            id: other.id,
+            name: other.name,
+            slug: other.slug || null,
+            photo_url: other.photo_url || null,
+            profession_name: other.profession_name || null,
+            specialty_name: other.specialty_name || null,
+            serviceId: targetService.id,
+            serviceName: targetService.name,
+            date: nextOther.date,
+            isSameDate: nextOther.date === requestedDateStr,
+            slotsCount: nextOther.slotsCount,
+            firstSlotTime: nextOther.firstSlotTime,
+            previewSlots: nextOther.previewSlots.slice(0, 4)
+          });
+        }
+      }
+    }
+
+    // Prioriza quem tem horário na mesma data e depois pela data mais próxima
+    alternativeProfessionals.sort((a, b) => {
+      if (a.isSameDate !== b.isSameDate) return a.isSameDate ? -1 : 1;
+      return a.date.localeCompare(b.date);
+    });
+  }
+
+  return {
+    nextAvailable,
+    earliestAvailable: earliestFromToday,
+    upcomingDays,
+    alternativeProfessionals
+  };
+}
+

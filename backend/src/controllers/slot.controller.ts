@@ -1,7 +1,7 @@
 import { canAccessPatient } from '../services/patient-sharing.service';
 import { resolveBookingTenant, publicBookingProfessional, professionalBookingService, validBookingDate } from '../utils/public-booking';
 import { Request, Response } from 'express';
-import { calculateAvailableSlots } from '../utils/slot-calculator';
+import { calculateAvailableSlots, buildPublicAvailabilityInsights } from '../utils/slot-calculator';
 import { GoogleCalendarService } from '../services/google-calendar.service';
 import { db } from '../config/database';
 
@@ -53,12 +53,23 @@ export class SlotController {
         typeof patientId === 'string' ? patientId : undefined
       );
 
+      const publicInsights = isPublic
+        ? buildPublicAvailabilityInsights(
+            tenantId,
+            String(professionalId),
+            String(serviceId),
+            String(date),
+            { includeAlternativeProfessionals: true }
+          )
+        : undefined;
+
       res.json({
         date: String(date),
         professionalId: String(professionalId),
         serviceId: String(serviceId),
         totalAvailable: slots.length,
-        slots
+        slots,
+        ...(publicInsights || {})
       });
     } catch (err: any) {
       console.error('[SlotController.getAvailableSlots] Erro:', err);
