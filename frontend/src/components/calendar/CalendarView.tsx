@@ -440,6 +440,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
   const [activeConsultationAppt, setActiveConsultationAppt] = useState<any | null>(null);
   const [activeConsultationModule, setActiveConsultationModule] = useState<string | undefined>(undefined);
   const [selectingModuleAppt, setSelectingModuleAppt] = useState<Appointment | null>(null);
+  const [isStartingConsultation, setIsStartingConsultation] = useState(false);
   const [compatibleModules, setCompatibleModules] = useState<any[]>([]);
   const [finishingAppt, setFinishingAppt] = useState<any | null>(null);
   const [cancellingAppt, setCancellingAppt] = useState<any | null>(null);
@@ -471,11 +472,14 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
   );
 
   useEffect(() => {
-    if (!isAnyModalOpen) return;
-    const originalOverflow = document.body.style.overflow;
+    if (!isAnyModalOpen) {
+      document.body.style.overflow = '';
+      return;
+    }
+    const previous = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => {
-      document.body.style.overflow = originalOverflow;
+      document.body.style.overflow = previous === 'hidden' ? '' : previous;
     };
   }, [isAnyModalOpen]);
 
@@ -506,18 +510,19 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
         ApiClient.get<Professional[]>('/v1/professionals'),
         ApiClient.get<Room[]>('/v1/rooms')
       ]);
-      setAppointments(apptsData);
+      const safeAppts = Array.isArray(apptsData) ? apptsData : [];
+      setAppointments(safeAppts);
       setSelectedAppt(prev => {
         if (!prev) return null;
-        return apptsData.find(a => a.id === prev.id) || prev;
+        return safeAppts.find(a => a.id === prev.id) || prev;
       });
       setActiveConsultationAppt((prev: any) => {
         if (!prev) return null;
-        const updated = apptsData.find(a => a.id === prev.id);
+        const updated = safeAppts.find(a => a.id === prev.id);
         return updated ? { ...prev, ...updated, status: prev.status || updated.status, clinical_module: prev.clinical_module || updated.clinical_module } : prev;
       });
-      setProfessionals(profsData);
-      setRooms(roomsData);
+      setProfessionals(Array.isArray(profsData) ? profsData : []);
+      setRooms(Array.isArray(roomsData) ? roomsData : []);
 
       const pendingRetroRaw = sessionStorage.getItem('zemda_open_retroactive_appt');
       if (pendingRetroRaw) {
@@ -662,6 +667,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
   };
 
   const executeStartConsultation = async (appointment: Appointment, selectedModule?: string) => {
+    if (isStartingConsultation) return;
+    setIsStartingConsultation(true);
     try {
       const payload: any = { status: 'in_progress' };
       if (selectedModule) {
@@ -671,7 +678,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
       const nextRealStart = statusRes?.attendance_start_at || appointment.attendance_start_at || null;
       const nextExpectedEnd = statusRes?.attendance_expected_end_at || appointment.attendance_expected_end_at || null;
       const chosenModule = selectedModule || (appointment as any).service_clinical_module || (appointment as any).clinical_module || 'general';
-      setAppointments(prev => prev.map(a => a.id === appointment.id ? { ...a, status: 'in_progress' as any, clinical_module: chosenModule, attendance_start_at: nextRealStart, attendance_expected_end_at: nextExpectedEnd } : a));
+      setAppointments(prev => (prev || []).map(a => a.id === appointment.id ? { ...a, status: 'in_progress' as any, clinical_module: chosenModule, attendance_start_at: nextRealStart, attendance_expected_end_at: nextExpectedEnd } : a));
       setActiveConsultationModule(chosenModule);
       setActiveConsultationAppt({
         ...appointment,
@@ -686,6 +693,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
       notifyAppointmentChange();
     } catch (err: any) {
       showToast(err.message || 'Erro ao iniciar atendimento', 'error');
+    } finally {
+      setIsStartingConsultation(false);
     }
   };
 
@@ -790,7 +799,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
   };
 
   // Filtra agendamentos
-  const filteredAppointments = appointments.filter(a => {
+  const filteredAppointments = (appointments || []).filter(a => {
+    if (!a) return false;
     if (selectedProf !== 'all' && a.professional_id !== selectedProf) return false;
     if (selectedStatus !== 'all' && a.status !== selectedStatus) return false;
     return true;
@@ -1773,14 +1783,19 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                   ) : (
                     <button
                       type="button"
+                      disabled={isStartingConsultation}
                       onClick={() => {
                         startConsultation(selectedAppt);
                       }}
-                      className="w-full flex items-center justify-center gap-2 py-3 px-5 rounded-xl text-sm font-bold text-white bg-teal-600 hover:bg-teal-700 shadow-sm shadow-teal-600/15 transition-all cursor-pointer"
+                      className="w-full flex items-center justify-center gap-2 py-3 px-5 rounded-xl text-sm font-bold text-white bg-teal-600 hover:bg-teal-700 disabled:opacity-60 shadow-sm shadow-teal-600/15 transition-all cursor-pointer"
                     >
                       <Stethoscope className="w-4 h-4" />
                       <span>
-                        {selectedAppt.status === 'in_progress' ? 'Continuar atendimento' : 'Iniciar atendimento'}
+                        {isStartingConsultation
+                          ? 'Iniciando...'
+                          : selectedAppt.status === 'in_progress'
+                          ? 'Continuar atendimento'
+                          : 'Iniciar atendimento'}
                       </span>
                     </button>
                   )}
@@ -1826,10 +1841,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                         {['scheduled', 'confirmed', 'rescheduled'].includes(selectedAppt.status) && (
                           <button
                             type="button"
+                            disabled={isStartingConsultation}
                             onClick={() => startConsultation(selectedAppt)}
-                            className="px-3 py-1.5 text-xs font-semibold bg-white text-teal-700 hover:bg-teal-50 border border-teal-200 rounded-xl transition-colors cursor-pointer"
+                            className="px-3 py-1.5 text-xs font-semibold bg-white text-teal-700 hover:bg-teal-50 disabled:opacity-60 border border-teal-200 rounded-xl transition-colors cursor-pointer"
                           >
-                            Iniciar atendimento
+                            {isStartingConsultation ? 'Iniciando...' : 'Iniciar atendimento'}
                           </button>
                         )}
 
@@ -2154,7 +2170,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
               clinical_module: activeConsultationAppt.clinical_module || activeConsultationModule
             }}
             initialModuleType={activeConsultationModule || activeConsultationAppt.clinical_module}
-            onClose={() => setActiveConsultationAppt(null)}
+            onClose={() => {
+              setActiveConsultationAppt(null);
+              fetchCalendarData();
+              notifyAppointmentChange();
+            }}
             onFinished={() => {
               setActiveConsultationAppt(null);
               fetchCalendarData();

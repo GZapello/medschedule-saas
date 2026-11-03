@@ -140,7 +140,36 @@ export const ClinicalModuleShell: React.FC<ClinicalModuleShellProps> = ({
   contentMaxWidth = 'max-w-7xl mx-auto'
 }) => {
   const headerSlots = useContext(ClinicalHeaderSlots);
-  const renderActions = (node: React.ReactNode) => isLockedContext && headerSlots?.actions ? createPortal(node, headerSlots.actions) : node;
+
+  const isDOMElement = (node: any): node is Element => {
+    return Boolean(node && typeof node === 'object' && node.nodeType === 1 && node.isConnected);
+  };
+
+  const canPortalActions = Boolean(
+    isLockedContext &&
+    headerSlots?.actions &&
+    isDOMElement(headerSlots.actions)
+  );
+
+  const canPortalFilters = Boolean(
+    isLockedContext &&
+    filterSlot !== null &&
+    filterSlot !== undefined &&
+    headerSlots?.filters &&
+    isDOMElement(headerSlots.filters)
+  );
+
+  const renderActions = (node: React.ReactNode) => {
+    if (canPortalActions && headerSlots?.actions) {
+      try {
+        return createPortal(node, headerSlots.actions);
+      } catch (err) {
+        console.warn('[ClinicalModuleShell] Fallback seguro ao renderizar ações sem portal:', err);
+        return node;
+      }
+    }
+    return node;
+  };
   const tabScroll = useHorizontalTabScroll(activeTab);
   const { tabScrollProps } = tabScroll;
 
@@ -181,7 +210,14 @@ export const ClinicalModuleShell: React.FC<ClinicalModuleShellProps> = ({
       )}
 
       {/* LINHA 2 — FAIXA HORIZONTAL COMPACTA DE AÇÕES DO ATENDIMENTO */}
-      {isLockedContext && headerSlots?.filters && createPortal(filterSlot, headerSlots.filters)}
+      {canPortalFilters && headerSlots?.filters && (() => {
+        try {
+          return createPortal(filterSlot, headerSlots.filters);
+        } catch (err) {
+          console.warn('[ClinicalModuleShell] Falha ao portalizar filtros no cabeçalho unificado:', err);
+          return null;
+        }
+      })()}
       {Boolean(selectedPatientId) && renderActions(
         <div className="bg-white border-b border-slate-200 px-3.5 sm:px-6 py-1.5 shrink-0 shadow-2xs">
           <div className={`${contentMaxWidth} flex items-center gap-1.5 sm:gap-2 flex-wrap`}>

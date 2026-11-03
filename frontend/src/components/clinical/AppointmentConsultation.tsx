@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { ClinicalHeaderSlots } from './ClinicalHeaderSlots';
 import { ApiClient } from '../../api/client';
 import { ConsultationPaymentModal } from './ConsultationPaymentModal';
@@ -62,6 +62,24 @@ export function AppointmentConsultation({
   } = auth;
   const [headerFilters, setHeaderFilters] = useState<HTMLDivElement | null>(null);
   const [headerActions, setHeaderActions] = useState<HTMLDivElement | null>(null);
+  const isUnmountingRef = useRef(false);
+
+  useEffect(() => {
+    isUnmountingRef.current = false;
+    return () => {
+      isUnmountingRef.current = true;
+    };
+  }, []);
+
+  const setFiltersRef = useCallback((node: HTMLDivElement | null) => {
+    if (isUnmountingRef.current && node === null) return;
+    setHeaderFilters(node);
+  }, []);
+
+  const setActionsRef = useCallback((node: HTMLDivElement | null) => {
+    if (isUnmountingRef.current && node === null) return;
+    setHeaderActions(node);
+  }, []);
   const [status, setStatus] = useState<any>(null);
   const [error, setError] = useState('');
   const [meetingLink, setMeetingLink] = useState<{ id: string; url: string | null } | null>(null);
@@ -94,9 +112,17 @@ export function AppointmentConsultation({
   const [returnWorkspaceTab, setReturnWorkspaceTab] = useState<'resumo' | 'evolucao' | 'modulo' | 'documentos' | 'finalizacao'>('evolucao');
 
   useEffect(() => {
+    let isMounted = true;
     ApiClient.get(`/v1/appointments/${appointment.id}/completion`)
-      .then(setStatus)
-      .catch((err: any) => setError(err.message || 'Sem permissão para este atendimento.'));
+      .then(data => {
+        if (isMounted) setStatus(data);
+      })
+      .catch((err: any) => {
+        if (isMounted) setError(err.message || 'Sem permissão para este atendimento.');
+      });
+    return () => {
+      isMounted = false;
+    };
   }, [appointment.id]);
 
   if (error) {
@@ -154,7 +180,13 @@ export function AppointmentConsultation({
   const startIso = (appointment.attendance_start_at || appointment.start_time || '').replace(' ', 'T');
   const endIso = (appointment.attendance_end_at || appointment.attendance_expected_end_at || appointment.end_time || '').replace(' ', 'T');
   const datePart = startIso ? startIso.split('T')[0] : '';
-  const formattedDate = datePart ? new Date(datePart + 'T12:00:00').toLocaleDateString('pt-BR') : '';
+  let formattedDate = '';
+  if (datePart && /^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+    const [y, m, d] = datePart.split('-').map(Number);
+    if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+      formattedDate = new Date(y, m - 1, d, 12, 0, 0).toLocaleDateString('pt-BR');
+    }
+  }
   const startTimeStr = startIso && startIso.includes('T') ? startIso.split('T')[1]?.slice(0, 5) : '';
   const endTimeStr = endIso && endIso.includes('T') ? endIso.split('T')[1]?.slice(0, 5) : '';
   const timeRangeChip = [
@@ -255,10 +287,10 @@ export function AppointmentConsultation({
               <span>WhatsApp</span>
             </button>
           </span>
-          <div ref={setHeaderFilters} className="clinical-area flex flex-wrap items-center gap-2 min-w-0 max-w-full [&>div]:max-w-full [&_select]:min-w-0 [&_select]:max-w-full" />
+          <div ref={setFiltersRef} className="clinical-area flex flex-wrap items-center gap-2 min-w-0 max-w-full [&>div]:max-w-full [&_select]:min-w-0 [&_select]:max-w-full" />
         </div>
       </div>
-      <div ref={setHeaderActions} />
+      <div ref={setActionsRef} />
 
       {/* FAIXA DEDICADA DE NAVEGAÇÃO DAS ABAS DO ATENDIMENTO */}
       <div className="px-3.5 sm:px-6 py-1.5 bg-slate-50/80 border-t border-slate-200">
