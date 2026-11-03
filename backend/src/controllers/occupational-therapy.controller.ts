@@ -6,6 +6,8 @@ import { logAudit } from '../middlewares/audit.middleware';
 import { ServiceReminderService } from '../services/service-reminder.service';
 import { hasClinicalAccess } from './clinical.controller';
 import { DocumentsController } from './documents.controller';
+import { isSpeechTherapistOrClinicManager } from './speech-therapy.controller';
+import { hasPsychopedagogyAccess } from './psychopedagogy.controller';
 
 /**
  * Validação de acesso exclusivo para Terapia Ocupacional (ZemdaTO - Regras 1 e 2)
@@ -94,6 +96,23 @@ export function isOccupationalTherapistOrClinicManager(req: Request): boolean {
     Number(clinicUser?.u_zemda_to_enabled) === 1;
 
   return isAuthorized;
+}
+
+
+export function verifyModuleAccess(req: Request, moduleType: string, patientId?: string): boolean {
+  if (!req.user || !req.tenantId) return false;
+  if (req.user.role === 'superadmin') return false;
+  const roleStr = String(req.user.role || '').toLowerCase();
+  if (['receptionist', 'financial', 'secretary', 'assistant'].includes(roleStr)) return false;
+
+  const clean = String(moduleType || 'to').toLowerCase();
+  if (clean === 'fono' || clean === 'speech-therapy') {
+    return isSpeechTherapistOrClinicManager(req) && (!patientId || hasClinicalAccess(req, patientId));
+  }
+  if (clean === 'pp' || clean === 'psicopedagogia' || clean === 'psychopedagogy') {
+    return hasPsychopedagogyAccess(req, patientId);
+  }
+  return isOccupationalTherapistOrClinicManager(req) && (!patientId || hasClinicalAccess(req, patientId));
 }
 
 export class OccupationalTherapyController {
@@ -810,39 +829,31 @@ export class OccupationalTherapyController {
       const patientId = String(req.params.patientId || req.query.patientId || '').trim();
       const tenantId = req.tenantId;
       const rawModule = req.query.module_type || req.query.specialty;
-      const moduleFilter = rawModule ? String(rawModule).trim().toLowerCase() : null;
+      const effectiveModule = rawModule ? String(rawModule).trim().toLowerCase() : 'to';
 
       if (!patientId || !hasClinicalAccess(req, patientId)) {
         res.status(403).json({ error: 'Acesso restrito' });
         return;
       }
 
-      const rows = (moduleFilter
-        ? db.prepare(`
-            SELECT hp.*,
-                   pr.name AS professional_name,
-                   pr.registration_type AS registration_type,
-                   pr.registration_number AS registration_number,
-                   pt.full_name AS patient_name
-            FROM clinical_home_programs hp
-            LEFT JOIN professionals pr ON pr.id = hp.professional_id AND pr.tenant_id = hp.tenant_id
-            LEFT JOIN patients pt ON pt.id = hp.patient_id
-            WHERE hp.patient_id = ? AND hp.tenant_id = ?
-              AND (LOWER(COALESCE(hp.module_type, 'to')) = ? OR LOWER(COALESCE(hp.specialty, '')) = ?)
-            ORDER BY hp.created_at DESC
-          `).all(patientId, tenantId, moduleFilter, moduleFilter)
-        : db.prepare(`
-            SELECT hp.*,
-                   pr.name AS professional_name,
-                   pr.registration_type AS registration_type,
-                   pr.registration_number AS registration_number,
-                   pt.full_name AS patient_name
-            FROM clinical_home_programs hp
-            LEFT JOIN professionals pr ON pr.id = hp.professional_id AND pr.tenant_id = hp.tenant_id
-            LEFT JOIN patients pt ON pt.id = hp.patient_id
-            WHERE hp.patient_id = ? AND hp.tenant_id = ?
-            ORDER BY hp.created_at DESC
-          `).all(patientId, tenantId)) as any[];
+      if (!verifyModuleAccess(req, effectiveModule, patientId)) {
+        res.status(403).json({ error: 'Acesso restrito ao módulo solicitado' });
+        return;
+      }
+
+      const rows = db.prepare(`
+        SELECT hp.*,
+               pr.name AS professional_name,
+               pr.registration_type AS registration_type,
+               pr.registration_number AS registration_number,
+               pt.full_name AS patient_name
+        FROM clinical_home_programs hp
+        LEFT JOIN professionals pr ON pr.id = hp.professional_id AND pr.tenant_id = hp.tenant_id
+        LEFT JOIN patients pt ON pt.id = hp.patient_id
+        WHERE hp.patient_id = ? AND hp.tenant_id = ?
+          AND (LOWER(COALESCE(hp.module_type, hp.specialty, 'to')) = ? OR LOWER(COALESCE(hp.specialty, hp.module_type, 'to')) = ?)
+        ORDER BY hp.created_at DESC
+      `).all(patientId, tenantId, effectiveModule, effectiveModule) as any[];
 
       const normalized = rows.map((r: any) => ({
         ...r,
@@ -931,12 +942,14 @@ export class OccupationalTherapyController {
         return;
       }
 
+      if (!verifyModuleAccess(req, effectiveSpecialty, effectivePatientId)) {
+        res.status(403).json({ error: 'Sem permissão para registrar orientações neste módulo.' });
+        return;
+      }
+
       let profRow: any = null;
       if (req.user?.userId) {
-        profRow = db.prepare('SELECT id, name, registration_type, registration_number FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
-      }
-      if (!profRow) {
-        profRow = db.prepare('SELECT id, name, registration_type, registration_number FROM professionals WHERE tenant_id = ? ORDER BY active DESC, created_at ASC LIMIT 1').get(tenantId) as any;
+        profRow = db.prepare('SELECT id, name, registration_type, registration_number FROM professionals WHERE user_id = ? AND tenant_id = ? AND active = 1').get(req.user.userId, tenantId) as any;
       }
       const profId = profRow?.id || null;
 
@@ -944,12 +957,13 @@ export class OccupationalTherapyController {
       const recentDup = db.prepare(`
         SELECT id, created_at FROM clinical_home_programs
         WHERE tenant_id = ? AND patient_id = ?
+          AND LOWER(COALESCE(module_type, specialty, 'to')) = ?
           AND COALESCE(title, activity) = ?
           AND COALESCE(instructions, instruction) = ?
           AND datetime(created_at) >= datetime('now', '-5 seconds')
         ORDER BY created_at DESC
         LIMIT 1
-      `).get(tenantId, effectivePatientId, effectiveTitle, effectiveInstructions) as any;
+      `).get(tenantId, effectivePatientId, effectiveSpecialty, effectiveTitle, effectiveInstructions) as any;
 
       if (recentDup) {
         res.status(200).json({
@@ -1042,13 +1056,14 @@ export class OccupationalTherapyController {
       const { id } = req.params;
       const { status, followUpNotes } = req.body || {};
 
-      const existing = db.prepare('SELECT id, patient_id FROM clinical_home_programs WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
+      const existing = db.prepare('SELECT id, patient_id, module_type, specialty FROM clinical_home_programs WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
       if (!existing) {
         res.status(404).json({ error: 'Orientação não encontrada' });
         return;
       }
-      if (!hasClinicalAccess(req, existing.patient_id)) {
-        res.status(403).json({ error: 'Acesso restrito' });
+      const mod = existing.module_type || existing.specialty || 'to';
+      if (!verifyModuleAccess(req, mod, existing.patient_id)) {
+        res.status(403).json({ error: 'Sem permissão para atualizar orientação deste módulo.' });
         return;
       }
 
@@ -1274,36 +1289,28 @@ export class OccupationalTherapyController {
       }
 
       const rawModule = req.query.module_type || req.query.specialty;
-      const moduleFilter = rawModule && String(rawModule).trim().toLowerCase() !== 'all'
+      const effectiveModule = rawModule && String(rawModule).trim().toLowerCase() !== 'all'
         ? String(rawModule).trim().toLowerCase()
-        : null;
+        : 'to';
 
-      const rows = (moduleFilter
-        ? db.prepare(`
-            SELECT hp.*,
-                   pr.name AS professional_name,
-                   pr.registration_type AS registration_type,
-                   pr.registration_number AS registration_number,
-                   pt.full_name AS patient_name
-            FROM clinical_home_programs hp
-            LEFT JOIN professionals pr ON pr.id = hp.professional_id AND pr.tenant_id = hp.tenant_id
-            LEFT JOIN patients pt ON pt.id = hp.patient_id
-            WHERE hp.patient_id = ? AND hp.tenant_id = ? AND hp.status = 'active'
-              AND (LOWER(COALESCE(hp.module_type, hp.specialty, 'to')) = ? OR LOWER(COALESCE(hp.specialty, hp.module_type, 'to')) = ?)
-            ORDER BY datetime(COALESCE(hp.created_at, '1970-01-01')) DESC, hp.id DESC
-          `).all(patientId, tenantId, moduleFilter, moduleFilter)
-        : db.prepare(`
-            SELECT hp.*,
-                   pr.name AS professional_name,
-                   pr.registration_type AS registration_type,
-                   pr.registration_number AS registration_number,
-                   pt.full_name AS patient_name
-            FROM clinical_home_programs hp
-            LEFT JOIN professionals pr ON pr.id = hp.professional_id AND pr.tenant_id = hp.tenant_id
-            LEFT JOIN patients pt ON pt.id = hp.patient_id
-            WHERE hp.patient_id = ? AND hp.tenant_id = ? AND hp.status = 'active'
-            ORDER BY datetime(COALESCE(hp.created_at, '1970-01-01')) DESC, hp.id DESC
-          `).all(patientId, tenantId)) as any[];
+      if (!verifyModuleAccess(req, effectiveModule, patientId)) {
+        res.status(403).json({ error: 'Acesso restrito ao módulo solicitado.' });
+        return;
+      }
+
+      const rows = db.prepare(`
+        SELECT hp.*,
+               pr.name AS professional_name,
+               pr.registration_type AS registration_type,
+               pr.registration_number AS registration_number,
+               pt.full_name AS patient_name
+        FROM clinical_home_programs hp
+        LEFT JOIN professionals pr ON pr.id = hp.professional_id AND pr.tenant_id = hp.tenant_id
+        LEFT JOIN patients pt ON pt.id = hp.patient_id
+        WHERE hp.patient_id = ? AND hp.tenant_id = ? AND hp.status = 'active'
+          AND (LOWER(COALESCE(hp.module_type, hp.specialty, 'to')) = ? OR LOWER(COALESCE(hp.specialty, hp.module_type, 'to')) = ?)
+        ORDER BY datetime(COALESCE(hp.created_at, '1970-01-01')) DESC, hp.id DESC
+      `).all(patientId, tenantId, effectiveModule, effectiveModule) as any[];
 
       if (!rows || rows.length === 0) {
         res.status(404).json({ error: 'Nenhuma orientação ativa para este paciente.' });

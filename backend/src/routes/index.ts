@@ -41,6 +41,7 @@ import { PhysiotherapyController } from '../controllers/physiotherapy.controller
 import { DentistryController } from '../controllers/dentistry.controller';
 import { NutritionController } from '../controllers/nutrition.controller';
 import { OccupationalTherapyController } from '../controllers/occupational-therapy.controller';
+import { ProfessionalActivitiesController } from '../controllers/professional-activities.controller';
 import { SpeechTherapyController } from '../controllers/speech-therapy.controller';
 import { BodyAssessmentController } from '../controllers/body-assessment.controller';
 import { PersonalController } from '../controllers/personal.controller';
@@ -523,6 +524,30 @@ api.get('/v1/occupational-therapy/home-programs/patient/:patientId/consolidated-
 api.get('/v1/occupational-therapy/home-programs/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaTO'), OccupationalTherapyController.listHomePrograms);
 api.post('/v1/occupational-therapy/home-programs', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaTO'), OccupationalTherapyController.saveHomeProgram);
 api.put('/v1/occupational-therapy/home-programs/:id/status', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaTO'), OccupationalTherapyController.updateHomeProgramStatus);
+
+// ==========================================
+// BIBLIOTECA MULTIPROFISSIONAL DE ATIVIDADES E ORIENTAÇÕES (ZEMDA)
+// ==========================================
+// 1. Modelos da Biblioteca (Biblioteca Zemda e Minha Biblioteca)
+api.get('/v1/clinical-activities/templates', requireTenant, requireRole('clinic_admin', 'professional'), ProfessionalActivitiesController.listTemplates);
+api.post('/v1/clinical-activities/templates', requireTenant, requireRole('clinic_admin', 'professional'), ProfessionalActivitiesController.createTemplate);
+api.put('/v1/clinical-activities/templates/:id', requireTenant, requireRole('clinic_admin', 'professional'), ProfessionalActivitiesController.updateTemplate);
+api.delete('/v1/clinical-activities/templates/:id', requireTenant, requireRole('clinic_admin', 'professional'), ProfessionalActivitiesController.deleteTemplate);
+api.post('/v1/clinical-activities/templates/:id/duplicate', requireTenant, requireRole('clinic_admin', 'professional'), ProfessionalActivitiesController.duplicateTemplate);
+api.post('/v1/clinical-activities/templates/:id/favorite', requireTenant, requireRole('clinic_admin', 'professional'), ProfessionalActivitiesController.toggleFavorite);
+
+// 2. Atividades Atribuídas ao Paciente
+api.get('/v1/clinical-activities/patient/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), ProfessionalActivitiesController.listPatientActivities);
+api.post('/v1/clinical-activities/patient/:patientId/assign', requireTenant, requireRole('clinic_admin', 'professional'), ProfessionalActivitiesController.assignPatientActivity);
+api.patch('/v1/clinical-activities/assignments/:id/status', requireTenant, requireRole('clinic_admin', 'professional'), ProfessionalActivitiesController.updateAssignmentStatus);
+api.put('/v1/clinical-activities/assignments/:id/status', requireTenant, requireRole('clinic_admin', 'professional'), ProfessionalActivitiesController.updateAssignmentStatus);
+api.get('/v1/clinical-activities/assignments/:id/follow-ups', requireTenant, requireRole('clinic_admin', 'professional'), ProfessionalActivitiesController.getAssignmentFollowUps);
+
+// 3. Documentos e PDFs
+api.get('/v1/clinical-activities/assignments/:id/pdf', requireTenant, requireRole('clinic_admin', 'professional'), ProfessionalActivitiesController.downloadAssignmentPdf);
+api.post('/v1/clinical-activities/patient/:patientId/export-pdf', requireTenant, requireRole('clinic_admin', 'professional'), ProfessionalActivitiesController.exportConsolidatedPdf);
+api.get('/v1/clinical-activities/patient/:patientId/consolidated-pdf', requireTenant, requireRole('clinic_admin', 'professional'), ProfessionalActivitiesController.exportConsolidatedPdf);
+
 api.get('/v1/occupational-therapy/dashboard/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaTO'), OccupationalTherapyController.getFunctionalDashboard);
 
 api.post('/v1/occupational-therapy/consultations/finish', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaTO'), OccupationalTherapyController.finishConsultation);

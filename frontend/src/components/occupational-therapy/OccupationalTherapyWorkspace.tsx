@@ -42,7 +42,7 @@ import { RoutineMapModal } from './RoutineMapModal';
 import { OccupationalParticipationModal } from './OccupationalParticipationModal';
 import { TOEvolutionReportModal } from './TOEvolutionReportModal';
 import { MeasurableGoalsManager } from '../common/MeasurableGoalsManager';
-import { HomeSchoolProgramManager } from '../common/HomeSchoolProgramManager';
+import { ProfessionalActivityLibrary } from '../common/ProfessionalActivityLibrary';
 import { EvolutionComparisonModal } from '../common/EvolutionComparisonModal';
 import { EvolutionPhotoField } from '../common/EvolutionPhotoField';
 import { PatientPreviousRecordsModal } from '../clinical/PatientPreviousRecordsModal';
@@ -1135,14 +1135,13 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
               </div>
             )}
 
-            {/* ABA: PROGRAMAS DOMICILIARES E ESCOLARES */}
+            {/* ABA: PROGRAMAS DOMICILIARES E ESCOLARES (BIBLIOTECA ZEMDATO) */}
             {activeTab === 'home_program' && (
-              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
-                <HomeSchoolProgramManager
-                  patientId={selectedPatientId}
-                  specialty="to"
-                />
-              </div>
+              <ProfessionalActivityLibrary
+                profession="to"
+                patientId={selectedPatientId}
+                patientName={selectedPatient?.full_name || selectedPatient?.name || ''}
+              />
             )}
 
             {/* ABA 6: TECNOLOGIA ASSISTIVA & ÓRTESES */}

@@ -7,6 +7,7 @@ import { useToast } from '../../context/ToastContext';
 import { PatientPreviousRecordsModal } from '../clinical/PatientPreviousRecordsModal';
 import { ExternalTestsManager } from '../common/ExternalTestsManager';
 import { MeasurableGoalsManager } from '../common/MeasurableGoalsManager';
+import { ProfessionalActivityLibrary } from '../common/ProfessionalActivityLibrary';
 import { PsychopedagogyDocumentModal, PsychopedagogyDocType } from './PsychopedagogyDocumentModal';
 import { useClinicalAutosave } from '../../hooks/useClinicalAutosave';
 import { useHorizontalTabScroll, HorizontalTabNav } from '../../hooks/useHorizontalTabScroll';
@@ -60,6 +61,7 @@ type TabKey =
   | 'learning'
   | 'plans_goals'
   | 'family_school'
+  | 'activities_library'
   | 'tests_attachments'
   | 'finish';
 
@@ -70,8 +72,9 @@ const PP_TABS: ClinicalModuleTabItem[] = [
   { id: 'learning', label: '4. Aprendizagem', icon: Pencil },
   { id: 'plans_goals', label: '5. Plano & Metas', icon: Target },
   { id: 'family_school', label: '6. Família & Escola', icon: School },
-  { id: 'tests_attachments', label: '7. Testes & Anexos', icon: Layers },
-  { id: 'finish', label: '8. Finalização', icon: CheckCircle2 }
+  { id: 'activities_library', label: '7. Atividades & Orientações', icon: Sparkles },
+  { id: 'tests_attachments', label: '8. Testes & Anexos', icon: Layers },
+  { id: 'finish', label: '9. Finalização', icon: CheckCircle2 }
 ];
 
 type LearningSubTab = 'reading' | 'writing' | 'math' | 'cognition' | 'notebooks';
@@ -2453,7 +2456,18 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
             )}
 
             {/* ========================================================================= */}
-            {/* ABA 7: TESTES & ANEXOS (Instrumentos + ExternalTestsManager) */}
+            {/* ABA 7: ATIVIDADES & ORIENTAÇÕES (Biblioteca Multiprofissional ZemdaPP) */}
+            {/* ========================================================================= */}
+            {activeTab === 'activities_library' && (
+              <ProfessionalActivityLibrary
+                profession="pp"
+                patientId={selectedPatientId}
+                patientName={selectedPatient?.full_name || selectedPatient?.name || ''}
+              />
+            )}
+
+            {/* ========================================================================= */}
+            {/* ABA 8: TESTES & ANEXOS (Instrumentos + ExternalTestsManager) */}
             {/* ========================================================================= */}
             {activeTab === 'tests_attachments' && (
               <div className="space-y-6">
@@ -2584,7 +2598,7 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
             )}
 
             {/* ========================================================================= */}
-            {/* ABA 8: FINALIZAÇÃO (Padrão Canônico Zemda) */}
+            {/* ABA 9: FINALIZAÇÃO (Padrão Canônico Zemda) */}
             {/* ========================================================================= */}
             {activeTab === 'finish' && (
               <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-6">

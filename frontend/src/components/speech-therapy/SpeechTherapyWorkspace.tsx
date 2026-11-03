@@ -46,7 +46,7 @@ import { DysphagiaMatrixModal } from './DysphagiaMatrixModal';
 import { FonoEvolutionReportModal } from './FonoEvolutionReportModal';
 import { MeasurableGoalsManager } from '../common/MeasurableGoalsManager';
 import { ExternalTestsManager } from '../common/ExternalTestsManager';
-import { HomeSchoolProgramManager } from '../common/HomeSchoolProgramManager';
+import { ProfessionalActivityLibrary } from '../common/ProfessionalActivityLibrary';
 import { EvolutionComparisonModal } from '../common/EvolutionComparisonModal';
 import { FileImageUploader, FileUploadedInfo } from '../common/FileImageUploader';
 import { SecureFileImage } from '../common/SecureFileImage';
@@ -1498,14 +1498,13 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
               </div>
             )}
 
-            {/* ABA: PROGRAMAS DOMICILIARES E ESCOLARES */}
+            {/* ABA: PROGRAMAS DOMICILIARES E ESCOLARES (BIBLIOTECA ZEMDAFONO) */}
             {activeTab === 'home_program' && (
-              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
-                <HomeSchoolProgramManager
-                  patientId={selectedPatientId}
-                  specialty="fono"
-                />
-              </div>
+              <ProfessionalActivityLibrary
+                profession="fono"
+                patientId={selectedPatientId}
+                patientName={selectedPatient?.full_name || selectedPatient?.name || ''}
+              />
             )}
 
             {/* ABA 8: PLANO TERAPÊUTICO FONOAUDIOLÓGICO */}

@@ -20,6 +20,7 @@ import { migrateProfessionsNormalization } from './professions-normalization.mig
 import { migrateProfessionalSlugs, migrateClinicBooking } from './slug-migration';
 import { migrateGoogleCalendar } from './google-calendar.migration';
 import { migrateSuperAdminVisits } from './superadmin-visits.migration';
+import { migrateProfessionalActivities } from './professional-activities.migration';
 import { dbPath } from './db-path';
 import { backfillMissingDefaultSchedules } from '../utils/schedule-defaults';
 
@@ -3038,6 +3039,7 @@ export function initializeDatabase(): void {
   }
   migrateBilling(rawDb);
   migrateLongitudinalClinical(rawDb);
+  migrateProfessionalActivities(rawDb);
   migratePersonalStudentLinks(rawDb);
   migrateConsents(rawDb);
   seedExerciseLibrary(rawDb);
