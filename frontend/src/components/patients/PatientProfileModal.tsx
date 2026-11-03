@@ -38,8 +38,10 @@ import {
   Mic,
   ChevronDown,
   ChevronUp,
-  Lock
+  Lock,
+  Eye
 } from 'lucide-react';
+import { ZemdaBodyModal } from '../zemda-body/ZemdaBodyModal';
 import { PrintableDocumentModal } from '../clinical/PrintableDocumentModal';
 import { EditPatientModal } from './EditPatientModal';
 import { ClinicalSnapshot } from '../clinical/ClinicalSnapshot';
@@ -103,6 +105,8 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
 
   // Records state
   const [records, setRecords] = useState<any[]>([]);
+  const [patientBodyAssessments, setPatientBodyAssessments] = useState<any[]>([]);
+  const [viewingBodyAssessment, setViewingBodyAssessment] = useState<any | null>(null);
   const [expandedRecordId, setExpandedRecordId] = useState<string | null>(null);
   const [showNewRecord, setShowNewRecord] = useState<boolean>(false);
   const [newRecordData, setNewRecordData] = useState({ title: 'Evolução Clínica', clinicalEvolution: '', technicalNotes: '', isSealed: false });
@@ -259,8 +263,12 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
 
   const loadRecords = async () => {
     try {
-      const data = await ApiClient.get<any[]>(`/v1/clinical-records/patient/${patientId}`);
+      const [data, bodyData] = await Promise.all([
+        ApiClient.get<any[]>(`/v1/clinical-records/patient/${patientId}`),
+        ApiClient.get<any[]>(`/v1/body-assessments/patient/${patientId}`).catch(() => [])
+      ]);
       setRecords(data || []);
+      setPatientBodyAssessments(bodyData || []);
     } catch (err: any) {
       console.error(err);
     }
@@ -1378,6 +1386,45 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
                               <ClinicalSnapshot record={r} />
                             </div>
 
+                            {(() => {
+                              const linkedMapId = r.anatomical_map_id || r.module_data?.anatomical_map_id || r.module_data?.anatomicalMapId || (Array.isArray(r.module_data?.procedures) && r.module_data.procedures.find((p: any) => p.anatomical_map_id || p.anatomicalMapId)?.anatomical_map_id);
+                              const bodyAss = patientBodyAssessments.find(
+                                ba => (r.appointment_id && ba.appointment_id === r.appointment_id) ||
+                                      (linkedMapId && ba.id === linkedMapId)
+                              ) || (linkedMapId ? { id: linkedMapId, patient_id: r.patient_id, module: r.module_type === 'ZemdaEstetic' ? 'estetic:facial' : 'general', body_model: 'female' } : null);
+                              if (!bodyAss) return null;
+
+                              return (
+                                <div className="bg-gradient-to-br from-teal-50/80 via-emerald-50/40 to-slate-50 border border-teal-200/90 rounded-2xl p-3.5 my-2 shadow-2xs">
+                                  <div className="flex items-center justify-between flex-wrap gap-2">
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-7 h-7 rounded-lg bg-teal-600 text-white flex items-center justify-center shadow-xs">
+                                        <Activity className="w-3.5 h-3.5" />
+                                      </div>
+                                      <div>
+                                        <span className="text-[10px] font-extrabold text-teal-700 uppercase tracking-wider block">
+                                          Zemda360 • Mapeamento Anatômico
+                                        </span>
+                                        <span className="text-xs font-bold text-slate-800">
+                                          Registro Visual Vinculado
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => setViewingBodyAssessment(bodyAss)}
+                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-xl shadow-xs transition-all cursor-pointer"
+                                      title="Visualizar mapa anatômico"
+                                    >
+                                      <Eye className="w-3.5 h-3.5" />
+                                      <span>Visualizar mapa {bodyAss.module?.toLowerCase().includes('facial') || r.module_type === 'ZemdaEstetic' ? 'facial' : 'corporal'}</span>
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })()}
+
                             {(r.signature_hash || r.is_sealed === 1) && (
                               <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-950 space-y-1">
                                 <div className="font-semibold flex items-center gap-1.5">
@@ -2329,6 +2376,24 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
           documentType={printDoc.type}
           documentId={printDoc.id}
           onClose={() => setPrintDoc(null)}
+        />
+      )}
+
+{/* Modal ZemdaBody Histórico */}
+      {viewingBodyAssessment && (
+        <ZemdaBodyModal
+          isOpen={!!viewingBodyAssessment}
+          onClose={() => setViewingBodyAssessment(null)}
+          patientId={viewingBodyAssessment.patient_id || patientId}
+          patientName={viewingBodyAssessment.patient_name || patientData?.patient?.full_name}
+          assessmentId={viewingBodyAssessment.id}
+          appointmentId={viewingBodyAssessment.appointment_id}
+          professionalId={viewingBodyAssessment.professional_id}
+          professionalName={viewingBodyAssessment.professional_name}
+          module={viewingBodyAssessment.module}
+          initialBodyModel={viewingBodyAssessment.body_model}
+          initialMapType={viewingBodyAssessment.module?.toLowerCase().includes('facial') ? 'FACE' : 'BODY'}
+          readOnly={true}
         />
       )}
 

@@ -127,6 +127,8 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
   // Modais de ações rápidas
   const [isNewPlanModalOpen, setIsNewPlanModalOpen] = useState(false);
   const [isNewProcedureModalOpen, setIsNewProcedureModalOpen] = useState(false);
+  const [currentAnatomicalMapId, setCurrentAnatomicalMapId] = useState<string>('');
+  const [viewingMapAssessmentId, setViewingMapAssessmentId] = useState<string | null>(null);
   const [isNewPhotoModalOpen, setIsNewPhotoModalOpen] = useState(false);
   const [isNewEvolutionModalOpen, setIsNewEvolutionModalOpen] = useState(false);
   const [isNewReturnModalOpen, setIsNewReturnModalOpen] = useState(false);
@@ -225,7 +227,8 @@ interface EsteticPlanItemForm {
     inventory_item_id: '',
     plan_id: '',
     plan_item_id: '',
-    without_product: false
+    without_product: false,
+    anatomical_map_id: ''
   });
 
   // Formulário de Nova Foto
@@ -343,6 +346,7 @@ interface EsteticPlanItemForm {
       merged.lot_number = row.batch_lot || row.lot_number || '';
       merged.expiry_date = row.expiry_date ? row.expiry_date.slice(0, 10) : '';
       merged.without_product = !merged.inventory_item_id && !merged.product_applied;
+      merged.anatomical_map_id = row.anatomical_map_id || row.anatomicalMapId || '';
       setProcedureForm(merged as any);
       setIsNewProcedureModalOpen(true);
     }
@@ -496,6 +500,9 @@ interface EsteticPlanItemForm {
       setPhotos(data.photos);
       setBeforeAfterPairs(data.pairs);
       setTimeline(data.timeline);
+      ApiClient.get<any[]>(`/v1/body-assessments/patient/${patientId}?module=estetic:${area}`)
+        .then(maps => { if (maps && maps.length > 0) setCurrentAnatomicalMapId(maps[0].id); })
+        .catch(() => {});
       setDataError('');
     } catch (err) {
       if (request === dataRequest.current) { setDataError('Não foi possível carregar os registros. Tente novamente.'); showToast((err as Error).message || 'Erro ao carregar registros.', 'error'); }
@@ -654,7 +661,9 @@ interface EsteticPlanItemForm {
         productId: procedureForm.without_product ? undefined : (procedureForm.inventory_item_id || undefined),
         product_id: procedureForm.without_product ? undefined : (procedureForm.inventory_item_id || undefined),
         plan_id: procedureForm.plan_id || undefined,
-        plan_item_id: procedureForm.plan_item_id || undefined
+        plan_item_id: procedureForm.plan_item_id || undefined,
+        anatomical_map_id: procedureForm.anatomical_map_id || currentAnatomicalMapId || undefined,
+        anatomicalMapId: procedureForm.anatomical_map_id || currentAnatomicalMapId || undefined
       });
       if (!isCurrentClinicalContext()) return;
 
@@ -677,7 +686,8 @@ interface EsteticPlanItemForm {
         inventory_item_id: '',
         plan_id: '',
         plan_item_id: '',
-        without_product: false
+        without_product: false,
+        anatomical_map_id: ''
       });
       loadPatientData(selectedPatientId, activeArea);
     } catch (err: any) {
@@ -1432,7 +1442,17 @@ interface EsteticPlanItemForm {
                                 {overviewData.lastProcedure.expiry_date && ` • Val: ${overviewData.lastProcedure.expiry_date}`}
                               </div>
                             )}
-                          </div>
+                            {overviewData.lastProcedure.anatomical_map_id && (
+                                <button
+                                  type="button"
+                                  onClick={() => setViewingMapAssessmentId(overviewData.lastProcedure.anatomical_map_id)}
+                                  className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-xl transition-colors cursor-pointer"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                  Visualizar Mapa {overviewData.lastProcedure.area === 'FACIAL' ? 'Facial' : overviewData.lastProcedure.area === 'CORPORAL' ? 'Corporal' : 'Capilar'}
+                                </button>
+                              )}
+                            </div>
                         ) : (
                           <div className="text-center py-6 text-slate-500 text-sm">
                             Nenhum procedimento registrado ainda.
@@ -2397,6 +2417,17 @@ interface EsteticPlanItemForm {
                             </div>
 
                             <div className="flex items-center gap-2 shrink-0">
+                              {proc.anatomical_map_id && (
+                                <button
+                                  type="button"
+                                  onClick={() => setViewingMapAssessmentId(proc.anatomical_map_id)}
+                                  className="px-3 py-1.5 text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
+                                  title="Visualizar mapa anatômico vinculado"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                  Visualizar Mapa {proc.area === 'FACIAL' ? 'Facial' : proc.area === 'CORPORAL' ? 'Corporal' : 'Capilar'}
+                                </button>
+                              )}
                               <button
                                 type="button"
                                 onClick={() => {
@@ -2453,6 +2484,7 @@ interface EsteticPlanItemForm {
                         module={`estetic:${activeArea}`}
                         appointmentId={encounterId || directAppointmentId.current}
                         registerSave={save => { mapSave.current = save; }}
+                        onAssessmentSaved={id => setCurrentAnatomicalMapId(id)}
                       />
                     </div>
                   </div>
@@ -2808,6 +2840,16 @@ interface EsteticPlanItemForm {
                                   {event.badge}
                                 </span>
                               )}
+                              {(event.anatomical_map_id || event.anatomicalMapId) && (
+                                <button
+                                  type="button"
+                                  onClick={() => setViewingMapAssessmentId(event.anatomical_map_id || event.anatomicalMapId)}
+                                  className="mt-1 inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-teal-700 bg-white hover:bg-teal-50 border border-teal-200 rounded-lg transition-colors cursor-pointer"
+                                >
+                                  <Eye className="w-3 h-3" />
+                                  Visualizar Mapa
+                                </button>
+                              )}
                             </div>
                           </div>
                         ))}
@@ -3112,6 +3154,43 @@ interface EsteticPlanItemForm {
                 }}
                 required={true}
               />
+
+              {/* Vínculo ao Mapeamento Anatômico (Zemda360) */}
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-7 h-7 rounded-lg bg-teal-100 text-teal-700 flex items-center justify-center shrink-0">
+                    <Activity className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="font-bold text-slate-800 block text-xs truncate">
+                      Mapeamento Anatômico Zemda360 ({procedureForm.area || activeArea})
+                    </span>
+                    <span className="text-[11px] text-slate-500 block truncate">
+                      {(procedureForm.anatomical_map_id || currentAnatomicalMapId)
+                        ? 'Mapa registrado será vinculado a este procedimento'
+                        : 'Nenhum mapa registrado para esta sessão'}
+                    </span>
+                  </div>
+                </div>
+                {(procedureForm.anatomical_map_id || currentAnatomicalMapId) ? (
+                  <button
+                    type="button"
+                    onClick={() => setViewingMapAssessmentId(procedureForm.anatomical_map_id || currentAnatomicalMapId)}
+                    className="px-2.5 py-1 text-xs font-bold text-teal-800 bg-white hover:bg-teal-50 border border-teal-200 rounded-lg flex items-center gap-1 cursor-pointer shrink-0"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    Visualizar Mapa
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setIsZemda360ModalOpen(true)}
+                    className="px-2.5 py-1 text-xs font-bold text-teal-700 bg-white hover:bg-teal-50 border border-slate-200 rounded-lg flex items-center gap-1 cursor-pointer shrink-0"
+                  >
+                    Mapear Agora
+                  </button>
+                )}
+              </div>
 
               <div>
                 <label className="block font-bold text-slate-700 mb-1">Orientações Pós-Procedimento Fornecidas</label>
@@ -3423,6 +3502,20 @@ interface EsteticPlanItemForm {
         </div>
       )}
 
+{/* Modal: Visualizar Mapa Salvo */}
+      {viewingMapAssessmentId && (
+        <ZemdaBodyModal
+          isOpen={Boolean(viewingMapAssessmentId)}
+          onClose={() => setViewingMapAssessmentId(null)}
+          patientId={selectedPatientId}
+          patientName={overviewData?.patient?.full_name || selectedPatient?.full_name}
+          assessmentId={viewingMapAssessmentId}
+          module={`estetic:${activeArea}`}
+          initialMapType={areaTheme.mapType}
+          readOnly={true}
+        />
+      )}
+
       {/* Modal: Zemda360 em Tela Cheia */}
       <ZemdaBodyModal
         isOpen={isZemda360ModalOpen}
@@ -3432,6 +3525,7 @@ interface EsteticPlanItemForm {
         module={`estetic:${activeArea}`}
         appointmentId={encounterId || directAppointmentId.current}
         initialMapType={areaTheme.mapType}
+        onAssessmentSaved={id => setCurrentAnatomicalMapId(id)}
       />
 
       {/* Lightbox de Foto */}

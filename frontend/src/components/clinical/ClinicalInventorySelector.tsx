@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { ApiClient } from '../../api/client';
 import {
   Package,
@@ -162,6 +163,9 @@ export function ClinicalInventorySelector({
 
   const handleQuickAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation();
+    if (savingQuickAdd) return;
+
     setQuickAddError('');
     if (!quickAddForm.name.trim()) {
       setQuickAddError('Nome do produto é obrigatório.');
@@ -208,7 +212,7 @@ export function ClinicalInventorySelector({
       // Reset form
       setQuickAddForm({
         name: '',
-        category: 'Estética',
+        category: defaultCategory || 'Geral',
         productType: '',
         brand: '',
         presentation: 'unidade',
@@ -471,10 +475,16 @@ export function ClinicalInventorySelector({
         </div>
       )}
 
-      {/* Modal de Cadastro Rápido de Produto no Estoque Central */}
-      {showQuickAddModal && (
-        <div className="fixed inset-0 z-[100001] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 mobile-modal">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200">
+      {/* Modal de Cadastro Rápido de Produto no Estoque Central (Portal fora de formulários pais) */}
+      {showQuickAddModal && createPortal(
+        <div
+          className="fixed inset-0 z-[100001] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 mobile-modal"
+          onClick={(e) => { e.stopPropagation(); setShowQuickAddModal(false); }}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Package className="w-5 h-5 text-teal-600" />
@@ -483,7 +493,7 @@ export function ClinicalInventorySelector({
               <button aria-label="Fechar"
                 type="button"
                 onClick={() => setShowQuickAddModal(false)}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -621,21 +631,22 @@ export function ClinicalInventorySelector({
                   type="button"
                   disabled={savingQuickAdd}
                   onClick={() => setShowQuickAddModal(false)}
-                  className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+                  className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={savingQuickAdd}
-                  className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5"
+                  className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
                   {savingQuickAdd ? 'Salvando...' : 'Salvar no Estoque Central'}
                 </button>
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

@@ -42,10 +42,66 @@ export function dashboardWorklist(req: Request, today: string) {
     FROM pending_exams a JOIN patients p ON p.id = a.patient_id AND p.tenant_id = a.tenant_id
     WHERE ${examWhere} ORDER BY a.expected_date IS NULL, a.expected_date LIMIT 10`).all(...params) : [];
   const examCount = canViewExams ? (db.prepare(`SELECT COUNT(*) AS count FROM pending_exams a WHERE ${examWhere}`).get(...params) as any).count : 0;
-  const returns = db.prepare(`SELECT a.id, a.patient_id, p.full_name AS patient_name, a.start_time, a.status
-    FROM appointments a JOIN patients p ON p.id = a.patient_id AND p.tenant_id = a.tenant_id
-    WHERE a.tenant_id = ? ${filter} AND a.patient_notes = 'Consulta de Retorno' AND a.status IN ('scheduled', 'confirmed')
-    AND date(a.start_time) <= date(?, '+7 days') ORDER BY a.start_time LIMIT 10`).all(...params, today);
+  const appointmentReturns = db.prepare(`SELECT 
+      a.id, 
+      a.patient_id, 
+      p.full_name AS patient_name, 
+      p.phone AS patient_phone,
+      p.whatsapp AS patient_whatsapp,
+      a.start_time, 
+      a.status,
+      'appointment' AS source_type,
+      NULL AS area,
+      NULL AS origin_procedure_name,
+      'Consulta de Retorno' AS return_type,
+      prof.name AS professional_name,
+      a.professional_id
+    FROM appointments a 
+    JOIN patients p ON p.id = a.patient_id AND p.tenant_id = a.tenant_id
+    LEFT JOIN professionals prof ON prof.id = a.professional_id AND prof.tenant_id = a.tenant_id
+    WHERE a.tenant_id = ? ${filter} 
+      AND a.patient_notes = 'Consulta de Retorno' 
+      AND a.status IN ('scheduled', 'confirmed')
+    ORDER BY a.start_time
+  `).all(...params) as any[];
+
+  const esteticReturns = db.prepare(`SELECT 
+      r.id, 
+      r.patient_id, 
+      p.full_name AS patient_name, 
+      p.phone AS patient_phone,
+      p.whatsapp AS patient_whatsapp,
+      COALESCE(r.scheduled_date, r.next_return_date) AS start_time, 
+      r.scheduled_date,
+      r.status,
+      'estetic_return' AS source_type,
+      r.area,
+      COALESCE(ep.procedure_name, 'Procedimento Estético') AS origin_procedure_name,
+      CASE 
+        WHEN r.touchup_required = 1 THEN 'Retoque'
+        ELSE 'Avaliação pós-procedimento'
+      END AS return_type,
+      prof.name AS professional_name,
+      r.professional_id,
+      r.procedure_record_id,
+      r.return_assessment,
+      r.touchup_required,
+      r.touchup_description
+    FROM estetic_returns r 
+    JOIN patients p ON p.id = r.patient_id AND p.tenant_id = r.tenant_id
+    LEFT JOIN estetic_procedures ep ON ep.id = r.procedure_record_id AND ep.tenant_id = r.tenant_id
+    LEFT JOIN professionals prof ON prof.id = r.professional_id AND prof.tenant_id = r.tenant_id
+    WHERE r.tenant_id = ? ${own ? ' AND r.professional_id IN (SELECT id FROM professionals WHERE tenant_id = ? AND user_id = ? AND active = 1)' : ''}
+      AND r.status = 'AGENDADO'
+      AND COALESCE(r.scheduled_date, r.next_return_date) IS NOT NULL
+    ORDER BY COALESCE(r.scheduled_date, r.next_return_date) ASC
+  `).all(...params) as any[];
+
+  const returns = [...appointmentReturns, ...esteticReturns].sort((a, b) => {
+    const dateA = String(a.start_time || '');
+    const dateB = String(b.start_time || '');
+    return dateA.localeCompare(dateB);
+  });
   const alerts = clinical ? db.prepare(`SELECT DISTINCT p.id AS patient_id, p.full_name AS patient_name, al.agent, al.reaction
     FROM patient_allergies al JOIN patients p ON p.id = al.patient_id AND p.tenant_id = al.tenant_id
     JOIN appointments a ON a.patient_id = p.id AND a.tenant_id = p.tenant_id

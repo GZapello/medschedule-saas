@@ -446,9 +446,12 @@ export const ClinicalRecordsView: React.FC = () => {
 
                         {/* ZEMDABODY INTEGRADO AO PRONTUÁRIO */}
                         {(() => {
+                          const rec = r as any;
+                          const linkedMapId = rec.anatomical_map_id || rec.module_data?.anatomical_map_id || rec.module_data?.anatomicalMapId || (Array.isArray(rec.module_data?.procedures) && rec.module_data.procedures.find((p: any) => p.anatomical_map_id || p.anatomicalMapId)?.anatomical_map_id);
                           const bodyAss = patientBodyAssessments.find(
-                            ba => (r.appointment_id && ba.appointment_id === r.appointment_id)
-                          );
+                            ba => (rec.appointment_id && ba.appointment_id === rec.appointment_id) ||
+                                  (linkedMapId && ba.id === linkedMapId)
+                          ) || (linkedMapId ? { id: linkedMapId, patient_id: rec.patient_id, module: rec.module_type === 'ZemdaEstetic' ? 'estetic:facial' : 'general', body_model: 'female' } : null);
                           if (!bodyAss) return null;
 
                           let parsedNotes: any = null;
@@ -500,7 +503,7 @@ export const ClinicalRecordsView: React.FC = () => {
                                   title="Abrir o mapa corporal deste atendimento em modo visualização"
                                 >
                                   <Eye className="w-3.5 h-3.5" />
-                                  <span>Visualizar mapa corporal</span>
+                                  <span>Visualizar mapa {bodyAss.module?.toLowerCase().includes('facial') || r.module_type === 'ZemdaEstetic' ? 'facial' : 'corporal'}</span>
                                 </button>
                               </div>
 
@@ -945,6 +948,7 @@ export const ClinicalRecordsView: React.FC = () => {
           professionalName={viewingBodyAssessment.professional_name}
           module={viewingBodyAssessment.module}
           initialBodyModel={viewingBodyAssessment.body_model}
+          initialMapType={viewingBodyAssessment.module?.toLowerCase().includes('facial') ? 'FACE' : 'BODY'}
           readOnly={true}
         />
       )}

@@ -1,4 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { Eye } from 'lucide-react';
+import { ZemdaBodyModal } from '../zemda-body/ZemdaBodyModal';
 import { clinicalLabels as recordLabels } from './clinicalLabels';
 
 // Presentation only: never mutate the payload submitted by the consultation.
@@ -68,8 +70,16 @@ export function reviewGroups(data: Record<string, any>) {
   const walk = (value: any, key: string, path: string, group: number, context: string[]) => {
     if (ignored.test(key) || value == null || value === '' || value === 'not_tested') return;
     if (typeof value === 'string' && !value.trim()) return;
-    if (typeof value === 'string' && /^[\[{]/.test(value)) { try { walk(JSON.parse(value), key, path, group, context); return; } catch { /* Free text */ } }
     const nextGroup = sectionFor(key, group);
+    if (/anatomical_?map_?id/i.test(key) && value) {
+      const mapId = String(value);
+      const label = [...new Set([...context, 'Mapeamento Anatômico (Zemda360)'])].join(' · ');
+      if (!groups[nextGroup].some((row: any) => row.mapId === mapId)) {
+        groups[nextGroup].push({ label, value: 'Mapa Registrado', path, isMapId: true, mapId } as any);
+      }
+      return;
+    }
+    if (typeof value === 'string' && /^[\[{]/.test(value)) { try { walk(JSON.parse(value), key, path, group, context); return; } catch { /* Free text */ } }
     if (Array.isArray(value)) { value.forEach((item, index) => walk(item, key, `${path}.${index}`, nextGroup, [...context, `${reviewLabel(key)} ${index + 1}`])); return; }
     if (typeof value === 'object') {
       const entries = Object.entries(value);
@@ -92,12 +102,45 @@ export function reviewGroups(data: Record<string, any>) {
   return groups.map((rows, index) => ({ title: sections[index], rows })).filter(group => group.rows.length);
 }
 export function ClinicalReviewContent({ data }: { data: Record<string, any> }) {
+  const [viewingMapId, setViewingMapId] = useState<string | null>(null);
   const groups = reviewGroups(data);
-  return groups.length ? <div className="space-y-3">{groups.map(group => <section key={group.title} className="rounded-xl border border-slate-200 bg-white overflow-hidden">
-    <h3 className="px-4 py-2 bg-slate-50 border-b border-slate-100 text-sm font-semibold text-slate-900">{group.title}</h3>
-    <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-3 p-4">{group.rows.map(row => <div key={row.path} className={`min-w-0 ${row.value.length > 100 ? 'sm:col-span-2' : ''}`}>
-      <dt className="text-xs text-slate-500 mb-0.5 break-words">{row.label}</dt>
-      <dd className="text-sm text-slate-900 whitespace-pre-wrap [overflow-wrap:anywhere] leading-relaxed">{row.value}</dd>
-    </div>)}</dl>
-  </section>)}</div> : <p className="text-sm text-slate-500 py-4">Nenhuma informação clínica preenchida para revisar.</p>;
+  return groups.length ? (
+    <>
+      <div className="space-y-3">{groups.map(group => <section key={group.title} className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+        <h3 className="px-4 py-2 bg-slate-50 border-b border-slate-100 text-sm font-semibold text-slate-900">{group.title}</h3>
+        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-3 p-4">{group.rows.map((row: any) => <div key={row.path} className={`min-w-0 ${row.value.length > 100 || row.isMapId ? 'sm:col-span-2' : ''}`}>
+          <dt className="text-xs text-slate-500 mb-0.5 break-words">{row.label}</dt>
+          {row.isMapId ? (
+            <dd className="flex items-center gap-2 mt-1">
+              <span className="text-xs font-semibold text-teal-800 bg-teal-50 px-2.5 py-1 rounded-lg border border-teal-200">
+                Mapa Anatômico Registrado
+              </span>
+              <button
+                type="button"
+                onClick={() => setViewingMapId(row.mapId)}
+                className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold text-teal-700 bg-white hover:bg-teal-50 border border-teal-300 rounded-lg shadow-2xs transition-colors cursor-pointer"
+              >
+                <Eye className="w-3.5 h-3.5" />
+                <span>Visualizar Mapa Facial / Corporal</span>
+              </button>
+            </dd>
+          ) : (
+            <dd className="text-sm text-slate-900 whitespace-pre-wrap [overflow-wrap:anywhere] leading-relaxed">{row.value}</dd>
+          )}
+        </div>)}</dl>
+      </section>)}</div>
+
+      {viewingMapId && (
+        <ZemdaBodyModal
+          isOpen={Boolean(viewingMapId)}
+          onClose={() => setViewingMapId(null)}
+          patientId={data?.patient_id || data?.patientId || ''}
+          patientName={data?.patientName || data?.patient?.full_name}
+          assessmentId={viewingMapId}
+          initialMapType={String(data?.module_type || '').toLowerCase().includes('facial') || String(data?.activeArea || '').toUpperCase() === 'FACIAL' ? 'FACE' : 'BODY'}
+          readOnly={true}
+        />
+      )}
+    </>
+  ) : <p className="text-sm text-slate-500 py-4">Nenhuma informação clínica preenchida para revisar.</p>;
 }

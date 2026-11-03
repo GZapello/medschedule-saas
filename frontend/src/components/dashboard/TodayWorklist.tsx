@@ -8,9 +8,14 @@ import { UniversalWhatsAppModal } from '../common/UniversalWhatsAppModal';
 import { WhatsAppIcon } from '../common/WhatsAppReminderModal';
 import { buildServiceReminderWhatsAppMessage, isValidPhoneNumber, openManualWhatsApp } from '../../utils/phone.utils';
 
-export function TodayWorklist({ data, onNavigate, onPatient }: {
-  data: any; onNavigate: (view: string) => void; onPatient: (id: string) => void;
+export function TodayWorklist({ data, onNavigate, onPatient, onUpdate }: {
+  data: any; onNavigate: (view: string) => void; onPatient: (id: string) => void; onUpdate?: () => void;
 }) {
+  const [returnFilter, setReturnFilter] = useState<'7d' | '30d' | 'all' | 'overdue'>('30d');
+  const [concludingReturn, setConcludingReturn] = useState<any | null>(null);
+  const [returnResolutionStatus, setReturnResolutionStatus] = useState<string>('COMPARECEU');
+  const [returnResolutionNotes, setReturnResolutionNotes] = useState<string>('');
+  const [isSavingResolution, setIsSavingResolution] = useState<boolean>(false);
   const { currentTenant, isClinicAdmin, hasCapability, hasPermission } = useAuth();
   const { showToast } = useToast();
   const canViewExams = isClinicAdmin || hasCapability('CORE_EXAMS_RECEIVED') || hasCapability('CORE_EXAM_REQUEST') || hasPermission('view_exams');
@@ -56,6 +61,36 @@ export function TodayWorklist({ data, onNavigate, onPatient }: {
   const draftsList = data.drafts || [];
   const examsList = data.exams || [];
   const returnsList = data.returns || [];
+  const getReturnDate = (row: any) => String(row.scheduled_date || row.start_time || '').slice(0, 10);
+  const returns7d = useMemo(() => {
+    const max7d = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+    return returnsList.filter((r: any) => {
+      const d = getReturnDate(r);
+      return d >= todayStr && d <= max7d;
+    });
+  }, [returnsList, todayStr]);
+
+  const returns30d = useMemo(() => {
+    const max30d = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+    return returnsList.filter((r: any) => {
+      const d = getReturnDate(r);
+      return d >= todayStr && d <= max30d;
+    });
+  }, [returnsList, todayStr]);
+
+  const returnsOverdue = useMemo(() => {
+    return returnsList.filter((r: any) => {
+      const d = getReturnDate(r);
+      return d && d < todayStr;
+    });
+  }, [returnsList, todayStr]);
+
+  const currentFilteredReturns = useMemo(() => {
+    if (returnFilter === '7d') return returns7d;
+    if (returnFilter === '30d') return returns30d;
+    if (returnFilter === 'overdue') return returnsOverdue;
+    return returnsList;
+  }, [returnFilter, returns7d, returns30d, returnsOverdue, returnsList]);
   const alertsList = data.alerts || [];
 
   const hasUnfinishedOrDrafts = unfinishedList.length + draftsList.length > 0;
@@ -162,6 +197,33 @@ export function TodayWorklist({ data, onNavigate, onPatient }: {
       showToast('Erro ao carregar lista completa de lembretes', 'error');
     } finally {
       setModalLoading(false);
+    }
+  };
+
+  const handleResolveReturn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!concludingReturn) return;
+    setIsSavingResolution(true);
+    try {
+      if (concludingReturn.source_type === 'estetic_return') {
+        await ApiClient.patch(`/v1/estetic/returns/${concludingReturn.id}`, {
+          status: returnResolutionStatus,
+          returnAssessment: returnResolutionNotes,
+          actualDate: new Date().toISOString().slice(0, 10)
+        });
+      } else {
+        await ApiClient.patch(`/v1/appointments/${concludingReturn.id}/status`, {
+          status: returnResolutionStatus === 'CANCELADO' ? 'cancelled' : 'completed'
+        });
+      }
+      showToast('Retorno atualizado com sucesso!', 'success');
+      setConcludingReturn(null);
+      onUpdate?.();
+      window.dispatchEvent(new CustomEvent('zemda-appointment-updated'));
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao atualizar retorno.', 'error');
+    } finally {
+      setIsSavingResolution(false);
     }
   };
 
@@ -287,26 +349,208 @@ export function TodayWorklist({ data, onNavigate, onPatient }: {
         {hasReturns && (
           <article className="bg-white rounded-xl border border-slate-200 p-3 shadow-2xs flex flex-col justify-between">
             <div>
-              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                <h3 className="font-bold text-slate-800 text-xs tracking-tight">Retornos previstos</h3>
-                <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
-                  {returnsList.length}
-                </span>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b border-slate-100 gap-2">
+                <div className="flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-teal-600" />
+                  <h3 className="font-bold text-slate-800 text-xs tracking-tight">Retornos previstos</h3>
+                </div>
+                {/* Filtros de período */}
+                <div className="flex items-center gap-1 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => setReturnFilter('7d')}
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full transition-colors cursor-pointer ${
+                      returnFilter === '7d'
+                        ? 'bg-teal-600 text-white shadow-2xs'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    7 dias ({returns7d.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReturnFilter('30d')}
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full transition-colors cursor-pointer ${
+                      returnFilter === '30d'
+                        ? 'bg-teal-600 text-white shadow-2xs'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    30 dias ({returns30d.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReturnFilter('all')}
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full transition-colors cursor-pointer ${
+                      returnFilter === 'all'
+                        ? 'bg-teal-600 text-white shadow-2xs'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    Todos ({returnsList.length})
+                  </button>
+                  {returnsOverdue.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setReturnFilter('overdue')}
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full transition-colors cursor-pointer ${
+                        returnFilter === 'overdue'
+                          ? 'bg-rose-600 text-white shadow-2xs'
+                          : 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200'
+                      }`}
+                    >
+                      Atrasados ({returnsOverdue.length})
+                    </button>
+                  )}
+                </div>
               </div>
 
-              <div className="max-h-[192px] overflow-y-auto overflow-x-hidden pr-1.5 my-1.5 space-y-1.5 [scrollbar-width:thin] [scrollbar-color:#cbd5e1_transparent]">
-                {returnsList.map((row: any) => (
-                  <div key={row.id} className="text-xs bg-slate-50/70 hover:bg-slate-50 p-2 rounded-lg transition-colors border border-slate-100">
-                    <div className="truncate">{patient(row)}</div>
-                    <p className="text-[11px] text-slate-500 mt-0.5">Previsão: {date(row.start_time)}</p>
+              <div className="max-h-[260px] overflow-y-auto overflow-x-hidden pr-1.5 my-2 space-y-2 [scrollbar-width:thin] [scrollbar-color:#cbd5e1_transparent]">
+                {currentFilteredReturns.length === 0 ? (
+                  <div className="py-6 text-center text-slate-400 text-xs">
+                    Nenhum retorno encontrado para este período.
                   </div>
-                ))}
+                ) : (
+                  currentFilteredReturns.map((row: any) => {
+                    const retDate = getReturnDate(row);
+                    const isOverdue = retDate && retDate < todayStr;
+                    const isToday = retDate === todayStr;
+                    const hasPhone = isValidPhoneNumber(row.patient_phone || row.patient_whatsapp);
+
+                    return (
+                      <div
+                        key={row.id}
+                        className={`text-xs p-2.5 rounded-xl transition-all border ${
+                          isOverdue
+                            ? 'bg-rose-50/50 border-rose-200/80 hover:bg-rose-50'
+                            : isToday
+                            ? 'bg-teal-50/50 border-teal-200/80 hover:bg-teal-50'
+                            : 'bg-slate-50/70 border-slate-200/80 hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="font-bold text-slate-900 truncate">
+                              {patient(row)}
+                            </div>
+                            <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                              <span className={`inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-bold ${
+                                isOverdue ? 'bg-rose-100 text-rose-800' : isToday ? 'bg-teal-100 text-teal-800' : 'bg-slate-200/80 text-slate-700'
+                              }`}>
+                                <Calendar className="w-2.5 h-2.5 mr-1" />
+                                {date(row.start_time || row.scheduled_date)}
+                                {isToday && ' (Hoje)'}
+                                {isOverdue && ' (Atrasado)'}
+                              </span>
+
+                              {row.area && (
+                                <span className={`inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-bold uppercase ${
+                                  row.area === 'FACIAL'
+                                    ? 'bg-sky-50 text-sky-700 border border-sky-200'
+                                    : row.area === 'CORPORAL'
+                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                    : 'bg-violet-50 text-violet-700 border border-violet-200'
+                                }`}>
+                                  {row.area}
+                                </span>
+                              )}
+
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-amber-50 text-amber-800 border border-amber-200">
+                                {row.return_type || 'Retorno'}
+                              </span>
+
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 uppercase">
+                                {row.status || 'AGENDADO'}
+                              </span>
+                            </div>
+
+                            {row.origin_procedure_name && (
+                              <p className="text-[11px] text-slate-600 mt-1 truncate">
+                                <span className="font-semibold text-slate-500">Procedimento de origem:</span> {row.origin_procedure_name}
+                              </p>
+                            )}
+
+                            {row.touchup_description && (
+                              <p className="text-[11px] text-slate-500 italic mt-0.5 truncate">
+                                Retoque: {row.touchup_description}
+                              </p>
+                            )}
+
+                            {row.professional_name && (
+                              <p className="text-[10px] text-slate-400 mt-0.5 truncate">
+                                Profissional: {row.professional_name}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Botões de Ação do Retorno */}
+                        <div className="flex items-center justify-end gap-1.5 pt-2 mt-2 border-t border-slate-200/60">
+                          {hasPhone && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                openManualWhatsApp({
+                                  appointment: {
+                                    patient_name: row.patient_name,
+                                    patient_phone: row.patient_phone || row.patient_whatsapp,
+                                    service_name: row.origin_procedure_name ? `Retorno: ${row.origin_procedure_name}` : 'Retorno agendado',
+                                    professional_name: row.professional_name,
+                                    start_time: row.start_time || row.scheduled_date
+                                  },
+                                  clinicName: currentTenant?.trade_name || currentTenant?.name || 'Clínica',
+                                  onError: msg => showToast(msg, 'error')
+                                });
+                              }}
+                              className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors cursor-pointer"
+                              title="Abrir WhatsApp com lembrete preenchido"
+                            >
+                              <WhatsAppIcon className="w-3 h-3 fill-emerald-600" />
+                              <span>WhatsApp</span>
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => onPatient(row.patient_id)}
+                            className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-bold text-slate-600 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors cursor-pointer"
+                            title="Ver prontuário completo"
+                          >
+                            <span>Prontuário</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setConcludingReturn(row);
+                              setReturnResolutionStatus(row.touchup_required ? 'RETOQUE_REALIZADO' : 'COMPARECEU');
+                              setReturnResolutionNotes('');
+                            }}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-lg transition-colors cursor-pointer"
+                            title="Concluir este retorno e atualizar status"
+                          >
+                            <Check className="w-3 h-3 text-teal-600" />
+                            <span>Concluir retorno</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
               </div>
             </div>
 
-            <p className="text-[11px] text-slate-400 pt-2 border-t border-slate-100">
-              Janela de acompanhamento: 7 dias
-            </p>
+            <div className="flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-100">
+              <span>
+                {returnFilter === '7d' && 'Exibindo retornos dos próximos 7 dias'}
+                {returnFilter === '30d' && 'Exibindo retornos dos próximos 30 dias'}
+                {returnFilter === 'all' && 'Exibindo todos os retornos pendentes'}
+                {returnFilter === 'overdue' && 'Exibindo retornos com data anterior a hoje'}
+              </span>
+              <span className="font-semibold text-slate-500">
+                {currentFilteredReturns.length} item(ns)
+              </span>
+            </div>
           </article>
         )}
 
@@ -509,6 +753,93 @@ export function TodayWorklist({ data, onNavigate, onPatient }: {
           confirmButtonText="Abrir no WhatsApp"
           noticeText="A mensagem será aberta no WhatsApp com o contato e texto preenchidos. O envio será feito manualmente por você. A abertura do WhatsApp NÃO marca este lembrete como concluído."
         />
+      )}
+
+      {/* Modal Concluir Retorno */}
+      {concludingReturn && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs mobile-modal">
+          <div role="dialog" aria-modal="true" className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in zoom-in-95">
+            <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-slate-900 text-sm">Concluir Retorno Clínico</h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Atualize o status deste retorno para registrar a presença ou resolução.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setConcludingReturn(null)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleResolveReturn} className="p-5 space-y-4 text-xs">
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
+                <div className="text-xs">
+                  <span className="font-bold text-slate-700">Paciente:</span> {concludingReturn.patient_name}
+                </div>
+                {concludingReturn.origin_procedure_name && (
+                  <div className="text-xs">
+                    <span className="font-bold text-slate-700">Procedimento de Origem:</span> {concludingReturn.origin_procedure_name}
+                  </div>
+                )}
+                <div className="text-xs">
+                  <span className="font-bold text-slate-700">Data Prevista:</span> {date(concludingReturn.start_time || concludingReturn.scheduled_date)}
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1.5">
+                  Desfecho do Retorno *
+                </label>
+                <select
+                  value={returnResolutionStatus}
+                  onChange={e => setReturnResolutionStatus(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-slate-200 bg-white font-medium text-slate-800"
+                  required
+                >
+                  <option value="COMPARECEU">Compareceu — Resultado Satisfatório (Sem Retoque)</option>
+                  <option value="RETOQUE_REALIZADO">Retoque Realizado na Sessão</option>
+                  <option value="ALTA_CICLO">Alta do Ciclo de Tratamento</option>
+                  <option value="CANCELADO">Cancelado / Paciente Não Compareceu</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1.5">
+                  Anotações da Avaliação do Retorno
+                </label>
+                <textarea
+                  rows={3}
+                  value={returnResolutionNotes}
+                  onChange={e => setReturnResolutionNotes(e.target.value)}
+                  placeholder="Descreva a avaliação tecidual, simetria, queixas e orientações pós-retorno..."
+                  className="w-full p-2.5 rounded-xl border border-slate-200 resize-none font-sans"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setConcludingReturn(null)}
+                  disabled={isSavingResolution}
+                  className="px-4 py-2 rounded-xl border border-slate-200 font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingResolution}
+                  className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold transition-colors shadow-xs flex items-center gap-1.5"
+                >
+                  {isSavingResolution ? 'Salvando...' : 'Salvar e Concluir'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {/* Modal Completo: Todos os Lembretes de Contato */}

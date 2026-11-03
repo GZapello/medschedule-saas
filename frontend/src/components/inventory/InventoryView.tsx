@@ -116,6 +116,17 @@ export const InventoryView: React.FC = () => {
   }, [filterAlert, filterCategory]);
 
   useEffect(() => {
+    const handleInventoryUpdate = () => {
+      fetchInventory();
+      if (activeTab === 'history') {
+        fetchMovements();
+      }
+    };
+    window.addEventListener('zemda-inventory-updated', handleInventoryUpdate);
+    return () => window.removeEventListener('zemda-inventory-updated', handleInventoryUpdate);
+  }, [activeTab]);
+
+  useEffect(() => {
     if (activeTab === 'history') {
       fetchMovements();
     }

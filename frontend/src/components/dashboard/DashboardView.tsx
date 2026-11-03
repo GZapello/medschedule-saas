@@ -527,7 +527,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </>}
       </div>
 
-      <TodayWorklist data={metrics?.worklist} onNavigate={onNavigate} onPatient={setViewPatientId} />
+      <TodayWorklist data={metrics?.worklist} onNavigate={onNavigate} onPatient={setViewPatientId} onUpdate={fetchMetrics} />
 
       {/* Main Content Area: Today's Appointments & Monthly Chart */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-2.5 items-start">

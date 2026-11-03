@@ -164,52 +164,55 @@ export class ClinicalInventoryService {
     const unit = (data.unit && data.unit.trim()) || 'un';
 
     const itemId = 'inv-' + uuidv4().slice(0, 8);
-    const now = new Date().toISOString();
 
-    db.prepare(`
-      INSERT INTO inventory_items (
-        id, tenant_id, name, category, product_type, brand, presentation, volume_ml,
-        quantity, unit, batch_number, expiration_date, unit_cost, supplier, min_stock,
-        notes, active, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, datetime('now'), datetime('now'))
-    `).run(
-      itemId,
-      tenantId,
-      data.name.trim(),
-      data.category?.trim() || null,
-      data.productType?.trim() || null,
-      data.brand?.trim() || null,
-      data.presentation?.trim() || 'unidade',
-      data.volumeMl !== undefined ? Number(data.volumeMl) : null,
-      initialQty,
-      unit,
-      data.batchNumber?.trim() || null,
-      data.expirationDate?.trim() || null,
-      data.unitCost !== undefined ? Number(data.unitCost) : 0,
-      data.supplier?.trim() || null,
-      data.minStock !== undefined ? Number(data.minStock) : 5,
-      data.notes?.trim() || 'Cadastro rápido via atendimento clínico'
-    );
-
-    if (initialQty > 0) {
-      const movementId = 'mov-' + uuidv4().slice(0, 8);
+    const insertTx = db.transaction(() => {
       db.prepare(`
-        INSERT INTO inventory_movements (
-          id, tenant_id, item_id, movement_type, quantity, previous_quantity, new_quantity,
-          reason, document_reference, user_id, module_type, source_type, source_id, batch, created_at
-        ) VALUES (?, ?, ?, 'in', ?, 0, ?, 'Saldo inicial no cadastro rápido clínico', ?, ?, 'ZemdaClinical', 'quick_add', ?, ?, datetime('now'))
+        INSERT INTO inventory_items (
+          id, tenant_id, name, category, product_type, brand, presentation, volume_ml,
+          quantity, unit, batch_number, expiration_date, unit_cost, supplier, min_stock,
+          notes, active, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, datetime('now'), datetime('now'))
       `).run(
-        movementId,
+        itemId,
         tenantId,
-        itemId,
+        data.name.trim(),
+        data.category?.trim() || null,
+        data.productType?.trim() || null,
+        data.brand?.trim() || null,
+        data.presentation?.trim() || 'unidade',
+        data.volumeMl !== undefined && !isNaN(Number(data.volumeMl)) ? Number(data.volumeMl) : null,
         initialQty,
-        initialQty,
-        itemId,
-        userId || null,
-        itemId,
-        data.batchNumber?.trim() || null
+        unit,
+        data.batchNumber?.trim() || null,
+        data.expirationDate?.trim() || null,
+        data.unitCost !== undefined && !isNaN(Number(data.unitCost)) ? Number(data.unitCost) : 0,
+        data.supplier?.trim() || null,
+        data.minStock !== undefined && !isNaN(Number(data.minStock)) ? Number(data.minStock) : 5,
+        data.notes?.trim() || 'Cadastro rápido via atendimento clínico'
       );
-    }
+
+      if (initialQty > 0) {
+        const movementId = 'mov-' + uuidv4().slice(0, 8);
+        db.prepare(`
+          INSERT INTO inventory_movements (
+            id, tenant_id, item_id, movement_type, quantity, previous_quantity, new_quantity,
+            reason, document_reference, user_id, module_type, source_type, source_id, batch, created_at
+          ) VALUES (?, ?, ?, 'in', ?, 0, ?, 'Saldo inicial no cadastro rápido clínico', ?, ?, 'ZemdaClinical', 'quick_add', ?, ?, datetime('now'))
+        `).run(
+          movementId,
+          tenantId,
+          itemId,
+          initialQty,
+          initialQty,
+          itemId,
+          userId || null,
+          itemId,
+          data.batchNumber?.trim() || null
+        );
+      }
+    });
+
+    insertTx();
 
     const created = this.getItem(tenantId, itemId, true);
     if (!created) {
