@@ -1305,8 +1305,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                                   <AlertCircle className="w-3 h-3 text-amber-700" /> Horário alterado no Google
                                 </span>
                               )}
-                              <div className={`text-xs font-semibold px-2.5 py-1 rounded-full ${getStatusColor(appt.status)}`}>
-                                {getStatusLabel(appt.status)}
+                              <div className={`text-xs font-semibold px-2.5 py-1 rounded-full notranslate ${getStatusColor(appt.status)}`} translate="no">
+                                <span>{getStatusLabel(appt.status)}</span>
                               </div>
                             </div>
                           </div>
@@ -1387,8 +1387,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                     <span className="text-xs font-bold text-teal-700 bg-teal-50 border border-teal-200/70 px-2 py-0.5 rounded-md uppercase tracking-wider">
                       {selectedAppt.appointment_number}
                     </span>
-                    <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${getStatusColor(selectedAppt.status)}`}>
-                      {getStatusLabel(selectedAppt.status)}
+                    <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full notranslate ${getStatusColor(selectedAppt.status)}`} translate="no">
+                      <span>{getStatusLabel(selectedAppt.status)}</span>
                     </span>
                     {selectedAppt.google_sync_status === 'divergent' && (
                       <div className="w-full space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">
@@ -1605,13 +1605,18 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                         <span className="text-[10px] font-bold uppercase tracking-wider text-teal-800 bg-teal-100/80 px-2 py-0.5 rounded-md">
                           Atendimento Real
                         </span>
-                        <span className="font-semibold text-slate-800">
-                          {realDateFormatted}Início: <strong className="text-teal-800">{realStartT || '-'}</strong>
+                        <span className="font-semibold text-slate-800 inline-flex items-center gap-1 flex-wrap">
+                          {realDateFormatted ? <span>{realDateFormatted}</span> : null}
+                          <span>Início:</span> <strong className="text-teal-800">{realStartT || '-'}</strong>
                           {expectedEndT && !realEndT ? (
-                            <> • Previsão: <strong className="text-slate-700">{expectedEndT}</strong></>
+                            <span className="inline-flex items-center gap-1">
+                              <span>• Previsão:</span> <strong className="text-slate-700">{expectedEndT}</strong>
+                            </span>
                           ) : null}
                           {realEndT ? (
-                            <> • Término: <strong className="text-teal-800">{realEndT}</strong></>
+                            <span className="inline-flex items-center gap-1">
+                              <span>• Término:</span> <strong className="text-teal-800">{realEndT}</strong>
+                            </span>
                           ) : null}
                         </span>
                       </div>
@@ -1787,15 +1792,18 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                       onClick={() => {
                         startConsultation(selectedAppt);
                       }}
-                      className="w-full flex items-center justify-center gap-2 py-3 px-5 rounded-xl text-sm font-bold text-white bg-teal-600 hover:bg-teal-700 disabled:opacity-60 shadow-sm shadow-teal-600/15 transition-all cursor-pointer"
+                      className="w-full flex items-center justify-center gap-2 py-3 px-5 rounded-xl text-sm font-bold text-white bg-teal-600 hover:bg-teal-700 disabled:opacity-60 shadow-sm shadow-teal-600/15 transition-all cursor-pointer notranslate"
+                      translate="no"
                     >
-                      <Stethoscope className="w-4 h-4" />
-                      <span>
-                        {isStartingConsultation
-                          ? 'Iniciando...'
-                          : selectedAppt.status === 'in_progress'
-                          ? 'Continuar atendimento'
-                          : 'Iniciar atendimento'}
+                      <Stethoscope className="w-4 h-4 shrink-0" />
+                      <span className="notranslate" translate="no">
+                        {isStartingConsultation ? (
+                          <span key="starting">Iniciando...</span>
+                        ) : selectedAppt.status === 'in_progress' ? (
+                          <span key="continue">Continuar atendimento</span>
+                        ) : (
+                          <span key="start">Iniciar atendimento</span>
+                        )}
                       </span>
                     </button>
                   )}
@@ -1843,9 +1851,16 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                             type="button"
                             disabled={isStartingConsultation}
                             onClick={() => startConsultation(selectedAppt)}
-                            className="px-3 py-1.5 text-xs font-semibold bg-white text-teal-700 hover:bg-teal-50 disabled:opacity-60 border border-teal-200 rounded-xl transition-colors cursor-pointer"
+                            className="px-3 py-1.5 text-xs font-semibold bg-white text-teal-700 hover:bg-teal-50 disabled:opacity-60 border border-teal-200 rounded-xl transition-colors cursor-pointer notranslate"
+                            translate="no"
                           >
-                            {isStartingConsultation ? 'Iniciando...' : 'Iniciar atendimento'}
+                            <span className="notranslate" translate="no">
+                              {isStartingConsultation ? (
+                                <span key="sub-starting">Iniciando...</span>
+                              ) : (
+                                <span key="sub-start">Iniciar atendimento</span>
+                              )}
+                            </span>
                           </button>
                         )}
 
@@ -1856,9 +1871,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                               setFinishingAppt(selectedAppt);
                               setSelectedAppt(null);
                             }}
-                            className="px-3 py-1.5 text-xs font-semibold bg-white text-teal-800 hover:bg-teal-50 border border-teal-300 rounded-xl transition-colors cursor-pointer"
+                            className="px-3 py-1.5 text-xs font-semibold bg-white text-teal-800 hover:bg-teal-50 border border-teal-300 rounded-xl transition-colors cursor-pointer notranslate"
+                            translate="no"
                           >
-                            Concluir atendimento
+                            <span className="notranslate" translate="no">Concluir atendimento</span>
                           </button>
                         )}
 

@@ -391,14 +391,14 @@ export const SelectConsultationModuleModal: React.FC<SelectConsultationModuleMod
         {(patientName || serviceName) && (
           <div className="px-4 sm:px-6 py-2.5 sm:py-3 bg-indigo-50/50 border-b border-indigo-100/60 flex flex-wrap items-center justify-between gap-2 text-xs text-indigo-950 shrink-0">
             {patientName && (
-              <div>
-                <span className="text-indigo-600 font-semibold">Paciente:</span>{' '}
+              <div className="inline-flex items-center gap-1">
+                <span className="text-indigo-600 font-semibold">Paciente:</span>
                 <span className="font-bold">{patientName}</span>
               </div>
             )}
             {serviceName && (
-              <div>
-                <span className="text-indigo-600 font-semibold">Serviço:</span>{' '}
+              <div className="inline-flex items-center gap-1">
+                <span className="text-indigo-600 font-semibold">Serviço:</span>
                 <span className="font-medium text-slate-700">{serviceName}</span>
               </div>
             )}
@@ -457,9 +457,10 @@ export const SelectConsultationModuleModal: React.FC<SelectConsultationModuleMod
         <div className="px-4 sm:px-6 py-3.5 bg-slate-50 border-t border-slate-100 flex justify-end shrink-0">
           <button
             onClick={onClose}
-            className="w-full sm:w-auto px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-200/60 rounded-xl transition-colors cursor-pointer min-h-[40px]"
+            className="w-full sm:w-auto px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-200/60 rounded-xl transition-colors cursor-pointer min-h-[40px] notranslate"
+            translate="no"
           >
-            Cancelar
+            <span>Cancelar</span>
           </button>
         </div>
 

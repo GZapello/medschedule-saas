@@ -1,11 +1,15 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { installDomTranslateGuard } from './utils/domTranslateGuard';
 import { App } from './App';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { triggerChunkRecovery, cleanRefreshQueryParam } from './utils/chunkRecovery';
 import './styles/global.css';
 import './styles/mobile.css';
 import { installNativeNavigation } from './utils/nativeNavigation';
+
+// Proteção preventiva contra quebras de reconciliação do React causadas por tradução automática do navegador (Google Translate)
+installDomTranslateGuard();
 
 installNativeNavigation();
 

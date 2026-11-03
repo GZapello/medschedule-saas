@@ -207,9 +207,11 @@ export function AppointmentConsultation({
             <button
               type="button"
               onClick={onClose}
-              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors cursor-pointer shrink-0"
+              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors cursor-pointer shrink-0 notranslate"
+              translate="no"
             >
-              <ChevronLeft className="w-3.5 h-3.5" /> Voltar à agenda
+              <ChevronLeft className="w-3.5 h-3.5 shrink-0" />
+              <span className="notranslate" translate="no">Voltar à agenda</span>
             </button>
             <span title={appointment.patient_name || 'Paciente'} className="clinical-patient-name font-bold text-xs sm:text-sm text-slate-900 truncate">
               {appointment.patient_name || 'Paciente'}
