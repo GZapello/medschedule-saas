@@ -86,6 +86,8 @@ export const PersonalPublicStudentWorkoutView: React.FC<PersonalPublicStudentWor
   const [errorMessage, setErrorMessage] = useState('');
   const [studentName, setStudentName] = useState('');
   const [clinicName, setClinicName] = useState('ZemdaPersonal');
+  const [personalName, setPersonalName] = useState<string>('');
+  const [completedWorkoutDates, setCompletedWorkoutDates] = useState<string[]>([]);
   const [workouts, setWorkouts] = useState<PublicWorkout[]>([]);
   const [selectedWorkoutIndex, setSelectedWorkoutIndex] = useState(0);
 
@@ -154,6 +156,12 @@ export const PersonalPublicStudentWorkoutView: React.FC<PersonalPublicStudentWor
       const res = await ApiClient.get<any>(`/v1/public/personal/workouts/${encodeURIComponent(token)}`);
       setStudentName(res.student?.name || 'Aluno');
       setClinicName(res.clinicName || 'ZemdaPersonal');
+      if (res.professionalName) {
+        setPersonalName(String(res.professionalName));
+      }
+      if (Array.isArray(res.completedWorkoutDates)) {
+        setCompletedWorkoutDates(res.completedWorkoutDates.map((d: any) => String(d)));
+      }
       setWorkouts(res.workouts || []);
 
       if (res.summary) {
@@ -426,6 +434,14 @@ export const PersonalPublicStudentWorkoutView: React.FC<PersonalPublicStudentWor
       setLastCompletedWorkout(sessionWorkout);
       setSessionCompletedSummary(res.summary);
       setNewPRsList(res.newPRs || []);
+      if (res.professionalName) {
+        setPersonalName(String(res.professionalName));
+      }
+      if (Array.isArray(res.completedWorkoutDates)) {
+        setCompletedWorkoutDates(res.completedWorkoutDates.map((d: any) => String(d)));
+      } else if (res.summary?.completed_at) {
+        setCompletedWorkoutDates(prev => [String(res.summary.completed_at), ...prev]);
+      }
       setShowFinishModal(false);
       setSessionId(null);
       setSessionWorkout(null);
@@ -655,6 +671,13 @@ export const PersonalPublicStudentWorkoutView: React.FC<PersonalPublicStudentWor
           onClose={() => setShowPhotoShareModal(false)}
           studentName={studentName}
           clinicName={clinicName}
+          personalName={personalName}
+          completedWorkoutDates={
+            sessionCompletedSummary?.completed_at &&
+            !completedWorkoutDates.includes(sessionCompletedSummary.completed_at)
+              ? [sessionCompletedSummary.completed_at, ...completedWorkoutDates]
+              : completedWorkoutDates
+          }
           workoutContext={{
             title: lastCompletedWorkout?.title || workouts[selectedWorkoutIndex]?.title || 'Treino do Dia',
             division: lastCompletedWorkout?.division || workouts[selectedWorkoutIndex]?.division,

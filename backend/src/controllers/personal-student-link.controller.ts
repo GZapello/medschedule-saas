@@ -16,7 +16,24 @@ import {
 import { hasPersonalAccess, getProfessionalId } from './personal.controller';
 import { logAudit } from '../middlewares/audit.middleware';
 
-
+function isCompletedWorkoutLogValid(log: { completed_at?: string | null; log_details_json?: string | null }): boolean {
+  if (!log || !log.completed_at) return false;
+  if (!log.log_details_json) return true;
+  try {
+    const parsed = JSON.parse(log.log_details_json);
+    if (!Array.isArray(parsed) || parsed.length === 0) return true;
+    return parsed.some((ex: any) => {
+      if (!ex || typeof ex !== 'object') return false;
+      if (ex.skipped === true) return false;
+      if (typeof ex.sets_completed === 'number') return ex.sets_completed > 0;
+      if (typeof ex.sets_done === 'number') return ex.sets_done > 0;
+      if (Array.isArray(ex.sets_data)) return ex.sets_data.some((s: any) => s && s.completed === true);
+      return true;
+    });
+  } catch {
+    return true;
+  }
+}
 
 export class PersonalStudentLinkController {
   // ==========================================
@@ -331,11 +348,18 @@ export class PersonalStudentLinkController {
 
       // Busca os treinos ativos prescritos diretamente do banco
       const workouts = db.prepare(`
-        SELECT id, title, division, structure_type, notes, updated_at
+        SELECT id, title, division, structure_type, notes, updated_at, professional_id
         FROM personal_workouts
         WHERE patient_id = ? AND tenant_id = ? AND is_active = 1
         ORDER BY division ASC, created_at DESC
       `).all(link.student_id, link.tenant_id) as any[];
+
+      // Resolve nome do personal trainer associado ao link/treino
+      const resolvedProfId = link.professional_id || workouts[0]?.professional_id || null;
+      const professionalRow = resolvedProfId
+        ? (db.prepare(`SELECT name FROM professionals WHERE id = ? AND tenant_id = ?`).get(resolvedProfId, link.tenant_id) as any)
+        : (db.prepare(`SELECT name FROM professionals WHERE tenant_id = ? AND active = 1 ORDER BY created_at ASC LIMIT 1`).get(link.tenant_id) as any);
+      const professionalName = professionalRow?.name || null;
 
       // Anexa exercícios para cada treino com resolução completa de mídia/GIF/instruções
       for (const w of workouts) {
@@ -364,9 +388,14 @@ export class PersonalStudentLinkController {
       const totalWorkoutsCompleted = Number(logsCountRow?.count || 0);
 
       const studentLogs = db.prepare(`
-        SELECT log_details_json FROM personal_workout_logs
+        SELECT completed_at, log_details_json FROM personal_workout_logs
         WHERE patient_id = ? AND tenant_id = ?
+        ORDER BY completed_at DESC
       `).all(link.student_id, link.tenant_id) as any[];
+
+      const completedWorkoutDates = studentLogs
+        .filter(isCompletedWorkoutLogValid)
+        .map((l: any) => String(l.completed_at));
 
       const recordsSet = new Set<string>();
       studentLogs.forEach((l: any) => {
@@ -413,6 +442,8 @@ export class PersonalStudentLinkController {
           gender: student.gender
         },
         clinicName: tenant?.name || 'ZemdaPersonal',
+        professionalName,
+        completedWorkoutDates,
         workouts,
         activeSession: sessionData,
         summary: {
@@ -718,10 +749,27 @@ export class PersonalStudentLinkController {
         WHERE id = ?
       `).run(completedAt, finalDuration, logId, sessionId);
 
+      // 4. Consulta datas reais de treinos concluídos e nome do personal para atualização imediata da tela do aluno
+      const updatedLogs = db.prepare(`
+        SELECT completed_at, log_details_json FROM personal_workout_logs
+        WHERE patient_id = ? AND tenant_id = ?
+        ORDER BY completed_at DESC
+      `).all(link.student_id, link.tenant_id) as any[];
+      const completedWorkoutDates = updatedLogs
+        .filter(isCompletedWorkoutLogValid)
+        .map((l: any) => String(l.completed_at));
+
+      const professionalRow = professionalId
+        ? (db.prepare(`SELECT name FROM professionals WHERE id = ? AND tenant_id = ?`).get(professionalId, link.tenant_id) as any)
+        : (db.prepare(`SELECT name FROM professionals WHERE tenant_id = ? AND active = 1 ORDER BY created_at ASC LIMIT 1`).get(link.tenant_id) as any);
+      const professionalName = professionalRow?.name || null;
+
       res.status(200).json({
         success: true,
         logId,
         newPRs,
+        professionalName,
+        completedWorkoutDates,
         summary: {
           completed_at: completedAt,
           duration_minutes: finalDuration,

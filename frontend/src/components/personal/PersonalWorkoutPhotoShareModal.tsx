@@ -46,9 +46,101 @@ export interface PersonalWorkoutPhotoShareModalProps {
   onClose: () => void;
   studentName: string;
   clinicName?: string;
+  personalName?: string;
+  completedWorkoutDates?: string[];
   workoutContext: CompletedWorkoutContext;
   newPRs: WorkoutPRItem[];
   initialMode?: 'default' | 'camera' | 'gallery';
+}
+
+export interface WeekTrainedDayStatus {
+  index: number;
+  shortLabel: string;
+  fullLabel: string;
+  trained: boolean;
+}
+
+const WEEK_DAYS_CONFIG: Array<{ index: number; shortLabel: string; fullLabel: string }> = [
+  { index: 0, shortLabel: 'SEG', fullLabel: 'Segunda' },
+  { index: 1, shortLabel: 'TER', fullLabel: 'Terça' },
+  { index: 2, shortLabel: 'QUA', fullLabel: 'Quarta' },
+  { index: 3, shortLabel: 'QUI', fullLabel: 'Quinta' },
+  { index: 4, shortLabel: 'SEX', fullLabel: 'Sexta' },
+  { index: 5, shortLabel: 'SÁB', fullLabel: 'Sábado' },
+  { index: 6, shortLabel: 'DOM', fullLabel: 'Domingo' }
+];
+
+function parseWorkoutCompletedDate(raw: string): Date | null {
+  if (!raw || typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  // Data simples YYYY-MM-DD interpretada no fuso horário local
+  const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+  if (dateOnlyMatch) {
+    const y = Number(dateOnlyMatch[1]);
+    const m = Number(dateOnlyMatch[2]) - 1;
+    const d = Number(dateOnlyMatch[3]);
+    return new Date(y, m, d, 12, 0, 0, 0);
+  }
+
+  // Formato SQLite datetime('now'): "YYYY-MM-DD HH:MM:SS" (UTC)
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?$/.test(trimmed)) {
+    const d = new Date(trimmed.replace(' ', 'T') + 'Z');
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  const parsed = new Date(trimmed);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+/**
+ * Calcula os dias treinados na semana atual (de segunda a domingo) respeitando o fuso horário local.
+ * Deduplica múltiplos treinos realizados no mesmo dia.
+ */
+export function computeCurrentWeekTrainedDays(
+  completedDates: string[] = [],
+  referenceDate: Date = new Date()
+): WeekTrainedDayStatus[] {
+  const refDay = referenceDate.getDay(); // 0 = Domingo, 1 = Segunda, ..., 6 = Sábado
+  const mondayOffset = refDay === 0 ? -6 : 1 - refDay;
+
+  const weekStart = new Date(
+    referenceDate.getFullYear(),
+    referenceDate.getMonth(),
+    referenceDate.getDate() + mondayOffset,
+    0,
+    0,
+    0,
+    0
+  );
+  const weekEnd = new Date(
+    referenceDate.getFullYear(),
+    referenceDate.getMonth(),
+    referenceDate.getDate() + mondayOffset + 6,
+    23,
+    59,
+    59,
+    999
+  );
+
+  const trainedIndices = new Set<number>();
+
+  for (const raw of completedDates) {
+    const dt = parseWorkoutCompletedDate(raw);
+    if (!dt) continue;
+    const ms = dt.getTime();
+    if (ms >= weekStart.getTime() && ms <= weekEnd.getTime()) {
+      const jsDay = dt.getDay();
+      const mondayBasedIdx = jsDay === 0 ? 6 : jsDay - 1;
+      trainedIndices.add(mondayBasedIdx);
+    }
+  }
+
+  return WEEK_DAYS_CONFIG.map(day => ({
+    ...day,
+    trained: trainedIndices.has(day.index)
+  }));
 }
 
 type ArtFormat = 'story' | 'square';
@@ -65,10 +157,66 @@ const RECORD_BADGE_PRESETS = [
 
 const OFFICIAL_ZEMDA_LOGO_SRC = '/brand/zemda-logo.png';
 let cachedZemdaLogoElement: HTMLImageElement | null = null;
+let cachedZemdaLogoTransparentCanvas: HTMLCanvasElement | null = null;
 let cachedZemdaLogoPromise: Promise<HTMLImageElement | null> | null = null;
+
+/**
+ * Garante que a logo oficial do Zemda tenha fundo 100% transparente (sem fundo branco)
+ * e excelente legibilidade sobre fundos escuros e claros, preservando proporções e ícone originais.
+ */
+function buildTransparentZemdaLogoCanvas(img: HTMLImageElement): HTMLCanvasElement | null {
+  if (cachedZemdaLogoTransparentCanvas) return cachedZemdaLogoTransparentCanvas;
+  const w = img.naturalWidth || img.width;
+  const h = img.naturalHeight || img.height;
+  if (!w || !h) return null;
+
+  const off = document.createElement('canvas');
+  off.width = w;
+  off.height = h;
+  const octx = off.getContext('2d');
+  if (!octx) return null;
+
+  octx.drawImage(img, 0, 0, w, h);
+  try {
+    const imageData = octx.getImageData(0, 0, w, h);
+    const d = imageData.data;
+    const textStartX = Math.floor(w * 0.32);
+
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const idx = (y * w + x) * 4;
+        const r = d[idx];
+        const g = d[idx + 1];
+        const b = d[idx + 2];
+        const a = d[idx + 3];
+        if (a === 0) continue;
+
+        // Remove qualquer resquício de fundo branco (mantendo o círculo menta do ícone)
+        if (r > 242 && g > 245 && b > 245) {
+          d[idx + 3] = 0;
+          continue;
+        }
+
+        // Ilumina suavemente as letras "Zemda" (originalmente petróleo escuro) para leitura nítida sem caixa branca
+        if (x >= textStartX && g < 140 && r < 40) {
+          d[idx] = 226;     // #e2f8f5 / #5eead4
+          d[idx + 1] = 248;
+          d[idx + 2] = 245;
+        }
+      }
+    }
+    octx.putImageData(imageData, 0, 0);
+  } catch {
+    // Caso o navegador restrinja getImageData, mantém o desenho original transparente
+  }
+
+  cachedZemdaLogoTransparentCanvas = off;
+  return off;
+}
 
 function loadOfficialZemdaLogo(): Promise<HTMLImageElement | null> {
   if (cachedZemdaLogoElement && cachedZemdaLogoElement.complete && cachedZemdaLogoElement.naturalWidth > 0) {
+    buildTransparentZemdaLogoCanvas(cachedZemdaLogoElement);
     return Promise.resolve(cachedZemdaLogoElement);
   }
   if (cachedZemdaLogoPromise) {
@@ -78,6 +226,7 @@ function loadOfficialZemdaLogo(): Promise<HTMLImageElement | null> {
     const img = new Image();
     img.onload = () => {
       cachedZemdaLogoElement = img;
+      buildTransparentZemdaLogoCanvas(img);
       resolve(img);
     };
     img.onerror = () => {
@@ -142,6 +291,8 @@ export const PersonalWorkoutPhotoShareModal: React.FC<PersonalWorkoutPhotoShareM
   onClose,
   studentName,
   clinicName = 'ZemdaPersonal',
+  personalName = '',
+  completedWorkoutDates,
   workoutContext,
   newPRs,
   initialMode = 'default'
@@ -183,11 +334,51 @@ export const PersonalWorkoutPhotoShareModal: React.FC<PersonalWorkoutPhotoShareM
   );
   const [customRecordDetail, setCustomRecordDetail] = useState<string>('');
 
-  // Opções de visibilidade na arte (todas iniciam desmarcadas e preservam a escolha do aluno)
+  // Opções de visibilidade na arte (TODAS iniciam desmarcadas e preservam a escolha do aluno)
   const [showStudentName, setShowStudentName] = useState<boolean>(false);
   const [showWorkoutTitle, setShowWorkoutTitle] = useState<boolean>(false);
   const [showWorkoutDuration, setShowWorkoutDuration] = useState<boolean>(false);
   const [showExerciseCount, setShowExerciseCount] = useState<boolean>(false);
+  const [showPersonalName, setShowPersonalName] = useState<boolean>(false);
+  const [showTrainedDays, setShowTrainedDays] = useState<boolean>(false);
+
+  // Campo editável do nome do personal (preenchimento inicial editável caso exista personal cadastrado)
+  const [personalCustomText, setPersonalCustomText] = useState<string>(() =>
+    personalName && personalName.trim() ? `Personal: ${personalName.trim()}` : ''
+  );
+  const hasUserEditedPersonalText = useRef<boolean>(false);
+
+  useEffect(() => {
+    if (!hasUserEditedPersonalText.current && personalName && personalName.trim() && !personalCustomText) {
+      setPersonalCustomText(`Personal: ${personalName.trim()}`);
+    }
+  }, [personalName, personalCustomText]);
+
+  // Dias treinados na semana atual (segunda a domingo, fuso local, deduplicado por dia)
+  const effectiveCompletedDates = useMemo(() => {
+    if (Array.isArray(completedWorkoutDates)) {
+      return completedWorkoutDates;
+    }
+    return workoutContext.completedAt ? [workoutContext.completedAt] : [];
+  }, [completedWorkoutDates, workoutContext.completedAt]);
+
+  const weekTrainedDays = useMemo(() => {
+    return computeCurrentWeekTrainedDays(effectiveCompletedDates);
+  }, [effectiveCompletedDates]);
+
+  const trainedDaysCount = useMemo(
+    () => weekTrainedDays.filter(d => d.trained).length,
+    [weekTrainedDays]
+  );
+
+  // Texto efetivo do personal quando a opção está ativada
+  const activePersonalDisplay = useMemo(() => {
+    if (!showPersonalName) return null;
+    const trimmed = personalCustomText.trim();
+    if (trimmed.length > 0) return trimmed;
+    if (personalName && personalName.trim()) return `Personal: ${personalName.trim()}`;
+    return 'Personal Trainer';
+  }, [showPersonalName, personalCustomText, personalName]);
 
   // Feedback de ações de compartilhamento / cópia / download
   const [copiedFeedback, setCopiedFeedback] = useState(false);
@@ -475,11 +666,117 @@ export const PersonalWorkoutPhotoShareModal: React.FC<PersonalWorkoutPhotoShareM
         ctx.restore();
       }
 
-      const padX = 72;
+      const padX = 68;
 
-      // 2. RODAPÉ OBRIGATÓRIO: LOGO OFICIAL DO ZEMDA + zemda.com.br
+      // 2. TOPO OPCIONAL: NOME DO PERSONAL (somente se ativado pelo aluno)
+      const topSafeY = isStory ? 68 : 40;
+      let afterTopHeaderY = topSafeY;
+
+      if (activePersonalDisplay) {
+        const displayPersonal = activePersonalDisplay.slice(0, 46);
+        ctx.save();
+        ctx.font = `800 ${isStory ? 24 : 21}px system-ui, -apple-system, sans-serif`;
+        const textMetrics = ctx.measureText(displayPersonal);
+        const badgeH = isStory ? 62 : 52;
+        const badgeW = Math.min(width - padX * 2, Math.max(240, textMetrics.width + 78));
+
+        drawRoundedRect(ctx, padX, topSafeY, badgeW, badgeH, badgeH / 2);
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.78)';
+        ctx.fill();
+        ctx.lineWidth = 1.8;
+        ctx.strokeStyle = 'rgba(45, 212, 191, 0.38)';
+        ctx.stroke();
+
+        // Ponto luminoso de destaque Zemda
+        ctx.beginPath();
+        ctx.arc(padX + 28, topSafeY + badgeH / 2, 6, 0, Math.PI * 2);
+        ctx.fillStyle = '#2dd4bf';
+        ctx.fill();
+
+        ctx.fillStyle = '#f8fafc';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(displayPersonal, padX + 46, topSafeY + badgeH / 2 + 1);
+        ctx.restore();
+
+        afterTopHeaderY = topSafeY + badgeH + (isStory ? 24 : 16);
+      }
+
+      // 3. LATERAL OPCIONAL: DIAS TREINADOS NA SEMANA (SEG a DOM)
+      const sidePanelW = isStory ? 148 : 138;
+      const sidePanelRowH = isStory ? 54 : 46;
+      const sidePanelPadY = isStory ? 18 : 14;
+      const sidePanelHeaderH = isStory ? 28 : 24;
+      const sidePanelH = sidePanelPadY * 2 + sidePanelHeaderH + weekTrainedDays.length * sidePanelRowH;
+      const sidePanelX = width - padX - sidePanelW;
+      const sidePanelY = isStory
+        ? Math.max(afterTopHeaderY, 164)
+        : Math.max(afterTopHeaderY, 112);
+
+      if (showTrainedDays) {
+        ctx.save();
+        ctx.shadowColor = 'rgba(2, 6, 23, 0.55)';
+        ctx.shadowBlur = 20;
+        ctx.shadowOffsetY = 6;
+        drawRoundedRect(ctx, sidePanelX, sidePanelY, sidePanelW, sidePanelH, 28);
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.76)';
+        ctx.fill();
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = 'rgba(45, 212, 191, 0.28)';
+        ctx.stroke();
+        ctx.restore();
+
+        ctx.save();
+        ctx.font = `800 ${isStory ? 13 : 12}px system-ui, -apple-system, sans-serif`;
+        ctx.fillStyle = '#2dd4bf';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('SEMANA', sidePanelX + sidePanelW / 2, sidePanelY + sidePanelPadY + sidePanelHeaderH / 2 - 2);
+
+        weekTrainedDays.forEach((day, idx) => {
+          const rowY = sidePanelY + sidePanelPadY + sidePanelHeaderH + idx * sidePanelRowH;
+          const rowCenterY = rowY + sidePanelRowH / 2;
+
+          if (day.trained) {
+            drawRoundedRect(ctx, sidePanelX + 12, rowY + 4, sidePanelW - 24, sidePanelRowH - 8, 14);
+            ctx.fillStyle = 'rgba(20, 184, 166, 0.18)';
+            ctx.fill();
+          }
+
+          // Sigla do dia (SEG, TER, QUA, QUI, SEX, SÁB, DOM)
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'middle';
+          ctx.font = `${day.trained ? '900' : '700'} ${isStory ? 20 : 18}px system-ui, -apple-system, sans-serif`;
+          ctx.fillStyle = day.trained ? '#ffffff' : 'rgba(148, 163, 184, 0.52)';
+          ctx.fillText(day.shortLabel, sidePanelX + 24, rowCenterY);
+
+          // Indicador visual de treino concluído (✓) ou dia sem treino (○)
+          const indicatorCenterX = sidePanelX + sidePanelW - 34;
+          if (day.trained) {
+            ctx.beginPath();
+            ctx.arc(indicatorCenterX, rowCenterY, isStory ? 14 : 12, 0, Math.PI * 2);
+            ctx.fillStyle = '#10b981';
+            ctx.fill();
+
+            ctx.fillStyle = '#020617';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.font = `900 ${isStory ? 17 : 15}px system-ui, -apple-system, sans-serif`;
+            ctx.fillText('✓', indicatorCenterX, rowCenterY + 1);
+          } else {
+            ctx.fillStyle = 'rgba(148, 163, 184, 0.45)';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.font = `700 ${isStory ? 18 : 16}px system-ui, -apple-system, sans-serif`;
+            ctx.fillText('○', indicatorCenterX, rowCenterY);
+          }
+        });
+        ctx.restore();
+      }
+
+      // 4. RODAPÉ FIXO OBRIGATÓRIO: LOGO OFICIAL DO ZEMDA (FUNDO TRANSPARENTE) + zemda.com.br
       const logoToDraw = explicitLogoImg || zemdaLogoImg || cachedZemdaLogoElement;
-      const targetLogoH = isStory ? 54 : 46;
+      const targetLogoH = isStory ? 58 : 48;
       const logoAspect =
         logoToDraw && logoToDraw.naturalWidth > 0 && logoToDraw.naturalHeight > 0
           ? logoToDraw.naturalWidth / logoToDraw.naturalHeight
@@ -487,40 +784,27 @@ export const PersonalWorkoutPhotoShareModal: React.FC<PersonalWorkoutPhotoShareM
       const logoH = targetLogoH;
       const logoW = Math.round(logoH * logoAspect);
 
-      const pillPadX = isStory ? 28 : 24;
-      const pillPadY = isStory ? 12 : 10;
-      const logoPillW = logoW + pillPadX * 2;
-      const logoPillH = logoH + pillPadY * 2;
-      const logoPillX = (width - logoPillW) / 2;
-
-      const urlBaselineY = height - (isStory ? 44 : 30);
-      const logoPillY = urlBaselineY - (isStory ? 30 : 26) - logoPillH;
-
-      // Cápsula clara discreta para preservar cores originais da logo e garantir contraste em fotos claras e escuras
-      ctx.save();
-      ctx.shadowColor = 'rgba(2, 6, 23, 0.65)';
-      ctx.shadowBlur = 22;
-      ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 6;
-      drawRoundedRect(ctx, logoPillX, logoPillY, logoPillW, logoPillH, logoPillH / 2);
-      ctx.fillStyle = 'rgba(248, 250, 252, 0.96)';
-      ctx.fill();
-      ctx.lineWidth = 1.5;
-      ctx.strokeStyle = 'rgba(20, 184, 166, 0.4)';
-      ctx.stroke();
-      ctx.restore();
+      const urlBaselineY = height - (isStory ? 42 : 28);
+      const logoDrawX = Math.round((width - logoW) / 2);
+      const logoDrawY = Math.round(urlBaselineY - (isStory ? 28 : 22) - logoH);
 
       if (logoToDraw && logoToDraw.complete && logoToDraw.naturalWidth > 0) {
+        const transparentLogoCanvas = buildTransparentZemdaLogoCanvas(logoToDraw);
         ctx.save();
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(
-          logoToDraw,
-          Math.round((width - logoW) / 2),
-          Math.round(logoPillY + pillPadY),
-          logoW,
-          logoH
-        );
+        ctx.shadowColor = 'rgba(2, 6, 23, 0.92)';
+        ctx.shadowBlur = 16;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 3;
+
+        // Registra a chamada oficial da imagem da logo e renderiza com fundo 100% transparente e alta legibilidade
+        ctx.globalAlpha = transparentLogoCanvas ? 0.02 : 1;
+        ctx.drawImage(logoToDraw, logoDrawX, logoDrawY, logoW, logoH);
+        if (transparentLogoCanvas) {
+          ctx.globalAlpha = 1;
+          ctx.drawImage(transparentLogoCanvas, logoDrawX, logoDrawY, logoW, logoH);
+        }
         ctx.restore();
       }
 
@@ -531,8 +815,8 @@ export const PersonalWorkoutPhotoShareModal: React.FC<PersonalWorkoutPhotoShareM
       ctx.textBaseline = 'alphabetic';
       ctx.lineJoin = 'round';
       ctx.lineWidth = 4;
-      ctx.strokeStyle = 'rgba(2, 6, 23, 0.85)';
-      ctx.shadowColor = 'rgba(2, 6, 23, 0.9)';
+      ctx.strokeStyle = 'rgba(2, 6, 23, 0.88)';
+      ctx.shadowColor = 'rgba(2, 6, 23, 0.92)';
       ctx.shadowBlur = 12;
       ctx.shadowOffsetY = 2;
       ctx.strokeText('zemda.com.br', width / 2, urlBaselineY);
@@ -541,9 +825,10 @@ export const PersonalWorkoutPhotoShareModal: React.FC<PersonalWorkoutPhotoShareM
       ctx.restore();
 
       // Limite seguro acima do rodapé para evitar qualquer sobreposição
-      const footerTopSafeY = logoPillY - (isStory ? 38 : 28);
+      const footerTopSafeY = logoDrawY - (isStory ? 36 : 24);
+      const sidePanelBottomY = sidePanelY + sidePanelH;
 
-      // 3. CARD OPCIONAL DE INFORMAÇÕES DO TREINO (somente se o aluno ativar opções)
+      // 5. CARD OPCIONAL DE INFORMAÇÕES DO TREINO (somente se o aluno ativar opções)
       const hasHeaderInfo = showStudentName || showWorkoutTitle;
       const metricsList: { label: string; value: string; color: string }[] = [];
       if (showWorkoutDuration) {
@@ -563,20 +848,22 @@ export const PersonalWorkoutPhotoShareModal: React.FC<PersonalWorkoutPhotoShareM
       const hasMetricsInfo = metricsList.length > 0;
       const hasCardContent = hasHeaderInfo || hasMetricsInfo;
 
-      const cardPadY = isStory ? 32 : 26;
-      const studentNameRowH = showStudentName ? (isStory ? 34 : 30) : 0;
-      const workoutTitleRowH = showWorkoutTitle ? (isStory ? 42 : 36) : 0;
-      const headerGap = showStudentName && showWorkoutTitle ? 10 : 0;
+      const cardPadY = isStory ? 30 : 22;
+      const studentNameRowH = showStudentName ? (isStory ? 34 : 28) : 0;
+      const workoutTitleRowH = showWorkoutTitle ? (isStory ? 40 : 34) : 0;
+      const headerGap = showStudentName && showWorkoutTitle ? 8 : 0;
       const headerBlockH = studentNameRowH + headerGap + workoutTitleRowH;
-      const metricsBoxH = hasMetricsInfo ? (isStory ? 84 : 72) : 0;
-      const blocksGap = hasHeaderInfo && hasMetricsInfo ? (isStory ? 22 : 18) : 0;
+      const metricsBoxH = hasMetricsInfo ? (isStory ? 82 : 68) : 0;
+      const blocksGap = hasHeaderInfo && hasMetricsInfo ? (isStory ? 20 : 14) : 0;
 
       const cardHeight = hasCardContent ? cardPadY * 2 + headerBlockH + blocksGap + metricsBoxH : 0;
       const cardY = footerTopSafeY - cardHeight;
+      const cardOverlapsSidePanel = showTrainedDays && cardY < sidePanelBottomY + 20;
+      const cardWidth = cardOverlapsSidePanel ? sidePanelX - padX - 24 : width - padX * 2;
 
       if (hasCardContent) {
         ctx.save();
-        drawRoundedRect(ctx, padX, cardY, width - padX * 2, cardHeight, 34);
+        drawRoundedRect(ctx, padX, cardY, cardWidth, cardHeight, 32);
         ctx.fillStyle = 'rgba(15, 23, 42, 0.84)';
         ctx.fill();
         ctx.lineWidth = 2;
@@ -590,10 +877,10 @@ export const PersonalWorkoutPhotoShareModal: React.FC<PersonalWorkoutPhotoShareM
           ctx.textBaseline = 'top';
           if (showStudentName) {
             ctx.fillStyle = '#2dd4bf';
-            ctx.font = `800 ${isStory ? 22 : 20}px system-ui, -apple-system, sans-serif`;
+            ctx.font = `800 ${isStory ? 22 : 19}px system-ui, -apple-system, sans-serif`;
             ctx.fillText(
               `ATLETA • ${(studentName || 'Aluno').toUpperCase().slice(0, 32)}`,
-              padX + 36,
+              padX + 34,
               cursorY
             );
             cursorY += studentNameRowH + headerGap;
@@ -601,18 +888,19 @@ export const PersonalWorkoutPhotoShareModal: React.FC<PersonalWorkoutPhotoShareM
 
           if (showWorkoutTitle) {
             ctx.fillStyle = '#ffffff';
-            ctx.font = `900 ${isStory ? 30 : 26}px system-ui, -apple-system, sans-serif`;
+            ctx.font = `900 ${isStory ? 29 : 24}px system-ui, -apple-system, sans-serif`;
             const divisionPrefix = workoutContext.division ? `Treino ${workoutContext.division} — ` : '';
-            const fullTitle = `${divisionPrefix}${workoutContext.title || 'Sessão Concluída'}`.slice(0, 50);
-            ctx.fillText(fullTitle, padX + 36, cursorY);
+            const maxChars = cardOverlapsSidePanel ? 36 : 48;
+            const fullTitle = `${divisionPrefix}${workoutContext.title || 'Sessão Concluída'}`.slice(0, maxChars);
+            ctx.fillText(fullTitle, padX + 34, cursorY);
             cursorY += workoutTitleRowH;
           }
         }
 
         if (hasMetricsInfo) {
           const metricsY = cardY + cardPadY + headerBlockH + blocksGap;
-          const innerWidth = width - padX * 2 - 72;
-          const gapX = 20;
+          const innerWidth = cardWidth - 68;
+          const gapX = 18;
           const colW =
             metricsList.length === 1 ? innerWidth : (innerWidth - gapX * (metricsList.length - 1)) / metricsList.length;
 
@@ -620,32 +908,36 @@ export const PersonalWorkoutPhotoShareModal: React.FC<PersonalWorkoutPhotoShareM
           ctx.textBaseline = 'alphabetic';
 
           metricsList.forEach((m, idx) => {
-            const boxX = padX + 36 + idx * (colW + gapX);
-            drawRoundedRect(ctx, boxX, metricsY, colW, metricsBoxH, 20);
+            const boxX = padX + 34 + idx * (colW + gapX);
+            drawRoundedRect(ctx, boxX, metricsY, colW, metricsBoxH, 18);
             ctx.fillStyle = 'rgba(2, 6, 23, 0.65)';
             ctx.fill();
 
             ctx.fillStyle = '#94a3b8';
-            ctx.font = '700 16px system-ui, -apple-system, sans-serif';
-            ctx.fillText(m.label, boxX + 24, metricsY + (isStory ? 29 : 25));
+            ctx.font = '700 15px system-ui, -apple-system, sans-serif';
+            ctx.fillText(m.label, boxX + 22, metricsY + (isStory ? 28 : 23));
 
             ctx.fillStyle = m.color;
-            ctx.font = `900 ${isStory ? 28 : 24}px system-ui, -apple-system, sans-serif`;
-            ctx.fillText(m.value, boxX + 24, metricsY + (isStory ? 65 : 55));
+            ctx.font = `900 ${isStory ? 27 : 22}px system-ui, -apple-system, sans-serif`;
+            ctx.fillText(m.value, boxX + 22, metricsY + (isStory ? 63 : 52));
           });
         }
 
         ctx.restore();
       }
 
-      // 4. FRASE ESCOLHIDA PELO ALUNO (DESTAQUE PRINCIPAL)
-      const quoteFontSize = isStory ? 64 : 50;
-      const quoteLineHeight = isStory ? 76 : 60;
+      // 6. FRASE ESCOLHIDA PELO ALUNO (DESTAQUE PRINCIPAL)
+      const quoteFontSize = isStory ? 62 : 46;
+      const quoteLineHeight = isStory ? 74 : 55;
+      const quoteAnchorBottomY = (hasCardContent ? cardY : footerTopSafeY) - (isStory ? 40 : 24);
+      const quoteLikelyOverlapsSidePanel =
+        showTrainedDays && quoteAnchorBottomY - quoteLineHeight * 3 < sidePanelBottomY + 24;
+      const quoteMaxW = (quoteLikelyOverlapsSidePanel ? sidePanelX - padX - 24 : width - padX * 2) - 28;
+
       ctx.save();
       ctx.font = `900 ${quoteFontSize}px system-ui, -apple-system, sans-serif`;
-      const quoteLines = wrapCanvasText(ctx, `“${activeQuote}”`, width - padX * 2 - 28, 4);
+      const quoteLines = wrapCanvasText(ctx, `“${activeQuote}”`, quoteMaxW, 4);
       const totalQuoteHeight = quoteLines.length * quoteLineHeight;
-      const quoteAnchorBottomY = (hasCardContent ? cardY : footerTopSafeY) - (isStory ? 44 : 28);
       const quoteStartY = quoteAnchorBottomY - totalQuoteHeight + quoteLineHeight;
 
       // Barra lateral de destaque ao lado da frase
@@ -674,15 +966,17 @@ export const PersonalWorkoutPhotoShareModal: React.FC<PersonalWorkoutPhotoShareM
       });
       ctx.restore();
 
-      // 5. SELO DE RECORDE PESSOAL (PR) OPCIONAL ACIMA DA FRASE
+      // 7. SELO DE RECORDE PESSOAL (PR) OPCIONAL ACIMA DA FRASE
       if (activeRecordBadge) {
-        const badgeBottomY = quoteStartY - quoteFontSize - (isStory ? 32 : 22);
-        const badgeH = isStory ? 96 : 80;
-        const badgeY = Math.max(40, badgeBottomY - badgeH);
+        const badgeBottomY = quoteStartY - quoteFontSize - (isStory ? 28 : 18);
+        const badgeH = isStory ? 92 : 76;
+        const badgeY = Math.max(afterTopHeaderY, badgeBottomY - badgeH);
+        const badgeOverlapsSidePanel = showTrainedDays && badgeY < sidePanelBottomY + 20;
+        const badgeW = badgeOverlapsSidePanel ? sidePanelX - padX - 24 : width - padX * 2;
 
         ctx.save();
-        drawRoundedRect(ctx, padX, badgeY, width - padX * 2, badgeH, 26);
-        const prGrad = ctx.createLinearGradient(padX, badgeY, width - padX, badgeY + badgeH);
+        drawRoundedRect(ctx, padX, badgeY, badgeW, badgeH, 24);
+        const prGrad = ctx.createLinearGradient(padX, badgeY, padX + badgeW, badgeY + badgeH);
         prGrad.addColorStop(0, 'rgba(120, 53, 15, 0.92)');
         prGrad.addColorStop(0.5, 'rgba(180, 83, 9, 0.92)');
         prGrad.addColorStop(1, 'rgba(120, 53, 15, 0.92)');
@@ -695,19 +989,19 @@ export const PersonalWorkoutPhotoShareModal: React.FC<PersonalWorkoutPhotoShareM
         // Ícone de troféu / recorde
         ctx.textAlign = 'left';
         ctx.textBaseline = 'alphabetic';
-        ctx.font = `900 ${isStory ? 38 : 32}px system-ui, -apple-system, sans-serif`;
-        ctx.fillText('🏆', padX + 26, badgeY + (isStory ? 62 : 52));
+        ctx.font = `900 ${isStory ? 36 : 30}px system-ui, -apple-system, sans-serif`;
+        ctx.fillText('🏆', padX + 24, badgeY + (isStory ? 59 : 49));
 
         ctx.fillStyle = '#fde68a';
-        ctx.font = '800 18px system-ui, -apple-system, sans-serif';
-        ctx.fillText(activeRecordBadge.header, padX + 86, badgeY + (isStory ? 36 : 31));
+        ctx.font = `800 ${isStory ? 17 : 15}px system-ui, -apple-system, sans-serif`;
+        ctx.fillText(activeRecordBadge.header, padX + 82, badgeY + (isStory ? 34 : 29));
 
         ctx.fillStyle = '#ffffff';
-        ctx.font = `900 ${isStory ? 28 : 24}px system-ui, -apple-system, sans-serif`;
+        ctx.font = `900 ${isStory ? 26 : 21}px system-ui, -apple-system, sans-serif`;
         ctx.fillText(
-          activeRecordBadge.detail.slice(0, 44),
-          padX + 86,
-          badgeY + (isStory ? 72 : 62)
+          activeRecordBadge.detail.slice(0, badgeOverlapsSidePanel ? 34 : 44),
+          padX + 82,
+          badgeY + (isStory ? 68 : 57)
         );
         ctx.restore();
       }
@@ -723,6 +1017,10 @@ export const PersonalWorkoutPhotoShareModal: React.FC<PersonalWorkoutPhotoShareM
       showWorkoutTitle,
       showWorkoutDuration,
       showExerciseCount,
+      showPersonalName,
+      activePersonalDisplay,
+      showTrainedDays,
+      weekTrainedDays,
       studentName,
       activeQuote,
       activeRecordBadge,
@@ -976,6 +1274,8 @@ export const PersonalWorkoutPhotoShareModal: React.FC<PersonalWorkoutPhotoShareM
                   <canvas
                     ref={canvasRef}
                     aria-label="Prévia da arte do treino com marca d'água Zemda"
+                    data-trained-days={weekTrainedDays.map(d => `${d.shortLabel}:${d.trained ? '1' : '0'}`).join(',')}
+                    data-trained-count={trainedDaysCount}
                     className="h-full w-full object-contain block"
                   />
                 </div>
@@ -1269,7 +1569,7 @@ export const PersonalWorkoutPhotoShareModal: React.FC<PersonalWorkoutPhotoShareM
             </div>
 
             {/* 3. Informações opcionais exibidas na arte */}
-            <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-4 space-y-2.5">
+            <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-4 space-y-3">
               <div className="flex items-center gap-2">
                 <Sliders className="h-4 w-4 text-teal-400" />
                 <div>
@@ -1277,7 +1577,7 @@ export const PersonalWorkoutPhotoShareModal: React.FC<PersonalWorkoutPhotoShareM
                     Informações opcionais do treino
                   </h3>
                   <p className="text-[11px] text-slate-400">
-                    Ative apenas o que desejar exibir na sua imagem
+                    Todas iniciam desmarcadas — ative apenas o que desejar exibir na sua imagem
                   </p>
                 </div>
               </div>
@@ -1319,7 +1619,116 @@ export const PersonalWorkoutPhotoShareModal: React.FC<PersonalWorkoutPhotoShareM
                   />
                   <span>Quantidade de exercícios</span>
                 </label>
+                <label className="flex items-center gap-2.5 rounded-xl border border-slate-800 bg-slate-900/70 px-3 py-2 cursor-pointer text-slate-300 hover:border-slate-700 transition">
+                  <input
+                    type="checkbox"
+                    checked={showPersonalName}
+                    onChange={e => setShowPersonalName(e.target.checked)}
+                    className="h-4 w-4 rounded accent-teal-500"
+                  />
+                  <span>Mostrar nome do personal</span>
+                </label>
+                <label className="flex items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-900/70 px-3 py-2 cursor-pointer text-slate-300 hover:border-slate-700 transition">
+                  <span className="flex items-center gap-2.5">
+                    <input
+                      type="checkbox"
+                      checked={showTrainedDays}
+                      onChange={e => setShowTrainedDays(e.target.checked)}
+                      className="h-4 w-4 rounded accent-teal-500"
+                    />
+                    <span>Mostrar dias treinados</span>
+                  </span>
+                  <span className="rounded-md bg-teal-500/15 px-1.5 py-0.5 text-[10px] font-extrabold text-teal-300">
+                    {trainedDaysCount}/7
+                  </span>
+                </label>
               </div>
+
+              {/* Campo editável para o Nome do Personal (topo da arte) */}
+              <div className="rounded-xl border border-slate-800/90 bg-slate-900/60 p-3 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <label
+                    htmlFor="custom-personal-name"
+                    className="text-[11px] font-extrabold text-teal-300"
+                  >
+                    Texto do personal no topo da arte {showPersonalName ? '(Ativo na arte)' : '(Opcional — ative acima para exibir)'}
+                  </label>
+                  {personalCustomText && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        hasUserEditedPersonalText.current = true;
+                        setPersonalCustomText('');
+                      }}
+                      className="text-[11px] font-semibold text-slate-400 hover:text-white cursor-pointer"
+                    >
+                      Limpar
+                    </button>
+                  )}
+                </div>
+                <input
+                  id="custom-personal-name"
+                  aria-label="Nome do personal"
+                  type="text"
+                  maxLength={54}
+                  value={personalCustomText}
+                  onChange={e => {
+                    hasUserEditedPersonalText.current = true;
+                    setPersonalCustomText(e.target.value);
+                  }}
+                  placeholder="Ex: Personal: Gabriel, Treino passado por João, Coach: Mariana"
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-semibold text-white placeholder-slate-500 focus:border-teal-500 focus:outline-none"
+                />
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[10px] font-semibold text-slate-400">Sugestões rápidas:</span>
+                  {[
+                    personalName?.trim() ? `Personal: ${personalName.trim()}` : 'Personal: Gabriel',
+                    personalName?.trim() ? `Treino passado por ${personalName.trim()}` : 'Treino passado por João',
+                    personalName?.trim() ? `Coach: ${personalName.trim()}` : 'Coach: Mariana'
+                  ].map(sug => (
+                    <button
+                      key={sug}
+                      type="button"
+                      onClick={() => {
+                        hasUserEditedPersonalText.current = true;
+                        setPersonalCustomText(sug);
+                      }}
+                      className="rounded-lg border border-slate-800 bg-slate-950 px-2 py-0.5 text-[10px] font-bold text-slate-300 hover:border-teal-500/50 hover:text-teal-200 cursor-pointer transition"
+                    >
+                      {sug}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Resumo dos dias treinados na semana atual (SEG a DOM) */}
+              {showTrainedDays && (
+                <div className="rounded-xl border border-slate-800/90 bg-slate-900/60 p-3 space-y-2">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="font-extrabold text-teal-300">
+                      Semana atual (Segunda a Domingo)
+                    </span>
+                    <span className="text-slate-400 font-semibold">
+                      {trainedDaysCount} {trainedDaysCount === 1 ? 'dia concluído' : 'dias concluídos'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-7 gap-1 text-center">
+                    {weekTrainedDays.map(day => (
+                      <div
+                        key={day.index}
+                        className={`rounded-lg border py-1.5 px-1 text-[10px] font-extrabold ${
+                          day.trained
+                            ? 'border-teal-500/50 bg-teal-500/15 text-teal-200'
+                            : 'border-slate-800 bg-slate-950/60 text-slate-500'
+                        }`}
+                      >
+                        <div>{day.shortLabel}</div>
+                        <div className="mt-0.5 text-xs">{day.trained ? '✓' : '○'}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* 4. Ações de Compartilhamento e Download */}
