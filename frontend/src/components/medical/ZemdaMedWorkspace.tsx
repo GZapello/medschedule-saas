@@ -18,6 +18,7 @@ import { ClinicalModuleEmptyState } from '../clinical/ClinicalModuleEmptyState';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
 import { ProfessionalModuleHeader } from '../common/ProfessionalModuleHeader';
 import { ClinicalModuleShell } from '../clinical/ClinicalModuleShell';
+import { ProfessionalModuleOverview } from '../clinical/ProfessionalModuleOverview';
 import {
   Stethoscope,
   Activity,
@@ -42,7 +43,10 @@ import {
   HeartPulse,
   Columns,
   AlertTriangle,
-  ArrowRight
+  ArrowRight,
+  Calendar,
+  Clock,
+  User
 } from 'lucide-react';
 import {
   MedicalSpecialtyPreset,
@@ -56,6 +60,8 @@ import {
 } from '../../types/capabilities';
 
 const MedicalBodyHistory = React.lazy(() => import('../zemda-body/ZemdaBodyModal').then(m => ({ default: m.ZemdaBodyModal })));
+
+export const ENABLE_MED_OVERVIEW = true;
 
 interface ZemdaMedWorkspaceProps {
   initialPatientId?: string;
@@ -665,6 +671,7 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
     | 'history';
 
   const [activeTab, setActiveTab] = useState<MedicalWorkspaceTab>('summary');
+  const pendingInitialTabRef = useRef<MedicalWorkspaceTab | null>(null);
   const tabScroll = useHorizontalTabScroll(activeTab);
   const { tabScrollProps } = tabScroll;
 
@@ -700,7 +707,12 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
     setConsultationsHistory([]);
     setBodyHistoryId(null);
     setExpandedHistoryId(null);
-    setActiveTab('summary');
+    if (pendingInitialTabRef.current) {
+      setActiveTab(pendingInitialTabRef.current);
+      pendingInitialTabRef.current = null;
+    } else {
+      setActiveTab('summary');
+    }
   }, [selectedPatientId, initialAppointmentId]);
 
   // Sincroniza Paciente Selecionado
@@ -1039,6 +1051,85 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
         tabActiveVariant="bg-teal-600 text-white shadow-xs"
         emptyStateColorVariant="teal"
         emptyStateDescription="Escolha um paciente no menu superior para iniciar o atendimento médico estruturado, sinais vitais e notas SOAP."
+        emptyStateContent={
+          ENABLE_MED_OVERVIEW && !selectedPatientId && !initialAppointmentId ? (
+            <ProfessionalModuleOverview<MedicalWorkspaceTab>
+              moduleKey="medical"
+              colorVariant="teal"
+              selectedPatientId={selectedPatientId}
+              selectedPatient={selectedPatient}
+              defaultServiceLabel="Consulta Médica"
+              onSelectPatient={(id, pat, initialShortcut) => {
+                if (initialShortcut) {
+                  pendingInitialTabRef.current = initialShortcut;
+                }
+                setSelectedPatientId(id);
+                if (pat) {
+                  setSelectedPatient(pat);
+                } else if (!id) {
+                  setSelectedPatient(null);
+                  sessionStorage.removeItem('zemda_med_active_patient_id');
+                }
+              }}
+              indicators={[
+                {
+                  id: 'week_consultations',
+                  label: 'Consultas da semana',
+                  subtitle: 'na agenda',
+                  icon: Calendar,
+                  metricKey: 'week_appointments'
+                },
+                {
+                  id: 'completed_consultations',
+                  label: 'Atendimentos realizados',
+                  subtitle: 'concluídos',
+                  icon: CheckCircle2,
+                  metricKey: 'completed_appointments'
+                },
+                {
+                  id: 'active_patients',
+                  label: 'Pacientes acompanhados',
+                  subtitle: 'cadastrados',
+                  icon: User,
+                  metricKey: 'active_patients'
+                },
+                {
+                  id: 'scheduled_returns',
+                  label: 'Retornos programados',
+                  subtitle: 'retornos',
+                  icon: Clock,
+                  metricKey: 'pending_returns'
+                }
+              ]}
+              shortcuts={[
+                {
+                  id: 'anamnesis',
+                  label: 'Consulta / Evolução',
+                  description: 'Anamnese e atendimento',
+                  icon: Stethoscope
+                },
+                {
+                  id: 'summary',
+                  label: 'Sinais Vitais',
+                  description: 'Resumo e biometria',
+                  icon: HeartPulse
+                },
+                {
+                  id: 'history',
+                  label: 'Histórico Clínico',
+                  description: 'Consultas anteriores',
+                  icon: History
+                },
+                {
+                  id: 'conduct',
+                  label: 'Documentos clínicos',
+                  description: 'Conduta e desfecho',
+                  icon: FileText
+                }
+              ]}
+            />
+          ) : undefined
+        }
         modalsSlot={
           <>
             <ClinicalDraftRecoveryModal

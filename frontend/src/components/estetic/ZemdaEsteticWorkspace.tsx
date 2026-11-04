@@ -10,6 +10,7 @@ import { ClinicalDraftRecoveryModal } from '../clinical/ClinicalDraftRecoveryMod
 import { FinishConsultationModal } from '../clinical/FinishConsultationModal';
 import { ClinicalBooleanSelect } from '../clinical/ClinicalBooleanSelect';
 import { ClinicalModuleEmptyState } from '../clinical/ClinicalModuleEmptyState';
+import { ProfessionalModuleOverview } from '../clinical/ProfessionalModuleOverview';
 import { useHorizontalTabScroll, HorizontalTabNav } from '../../hooks/useHorizontalTabScroll';
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import {
@@ -60,6 +61,8 @@ import { ZemdaBodyModal } from '../zemda-body/ZemdaBodyModal';
 import { ZemdaBodyWorkspace } from '../zemda-body/ZemdaBodyWorkspace';
 
 export type EsteticArea = 'FACIAL' | 'CORPORAL' | 'CAPILAR';
+
+export const ENABLE_ESTETIC_OVERVIEW = true;
 
 const assessmentLabels: Record<string, string> = { fitzpatrick: 'Fototipo', glogau: 'Glogau', dynamicLines: 'Linhas dinâmicas', staticLines: 'Linhas estáticas', flaccidityRegions: 'Regiões com flacidez', volumeLossRegions: 'Perda de volume', targetRegions: 'Regiões avaliadas', bodyAlterationType: 'Alteração corporal', celluliteGrade: 'Grau de celulite', stretchMarks: 'Estrias', circumferences: 'Circunferências', habits: 'Hábitos', physicalActivity: 'Atividade física', waterIntake: 'Ingestão de água', smoking: 'Tabagismo', hairLossPattern: 'Padrão de queda', hairLossScale: 'Escala de queda', scalpCondition: 'Couro cabeludo', oiliness: 'Oleosidade', flaking: 'Descamação', erythema: 'Eritema', sensitivity: 'Sensibilidade', pullTest: 'Teste de tração', fiberDensity: 'Densidade dos fios', familyHistory: 'Histórico familiar', previousTreatments: 'Tratamentos anteriores', contraindications: 'Contraindicações', allergies: 'Alergias', currentMedications: 'Medicações', clinicalConduct: 'Conduta', observations: 'Observações', cintura: 'Cintura', abdomen: 'Abdômen', quadril: 'Quadril', coxaDir: 'Coxa direita', coxaEsq: 'Coxa esquerda', bracoDir: 'Braço direito', bracoEsq: 'Braço esquerdo' };
 const formatAssessmentValue = (value: any): string => Array.isArray(value) ? value.join(', ') : typeof value === 'object' ? Object.entries(value).filter(([, entry]) => entry !== '' && entry != null).map(([key, entry]) => `${assessmentLabels[key] || key}: ${formatAssessmentValue(entry)}`).join(' • ') : String(value);
@@ -1104,15 +1107,17 @@ interface EsteticPlanItemForm {
               )}
             </div>
 
-            <div className="w-64 sm:w-72 lg:w-80" data-tour="estetic-patient-select">
-              <PatientSearchSelect
-                value={selectedPatientId}
-                selectedPatient={selectedPatient}
-                onChange={handleSelectPatient}
-                placeholder="Buscar paciente para atendimento estético..."
-                compact
-              />
-            </div>
+            {(!ENABLE_ESTETIC_OVERVIEW || Boolean(selectedPatientId)) && (
+              <div className="w-64 sm:w-72 lg:w-80" data-tour="estetic-patient-select">
+                <PatientSearchSelect
+                  value={selectedPatientId}
+                  selectedPatient={selectedPatient}
+                  onChange={handleSelectPatient}
+                  placeholder="Buscar paciente para atendimento estético..."
+                  compact
+                />
+              </div>
+            )}
           </div>
         </ProfessionalModuleHeader>
       )}
@@ -1271,55 +1276,131 @@ interface EsteticPlanItemForm {
       )}
 
       {/* 3. MENU HORIZONTAL DE ABAS CLÍNICAS COMPACTO (LINHA 3) */}
-      <div className="bg-white border-b border-slate-200 shrink-0 sticky top-0 z-10 shadow-2xs">
-        <HorizontalTabNav scroll={tabScroll}>
-          <div {...tabScrollProps} className={`${tabScrollProps.className} max-w-7xl mx-auto flex items-center gap-1 py-1`}>
-            {[
-              { id: 'overview', label: 'Visão Geral', icon: Layers },
-              { id: 'assessment', label: 'Avaliação Estética', icon: FileText },
-              { id: 'photos', label: `Fotos (${photos.length})`, icon: Camera },
-              { id: 'planning', label: `Planejamento (${plans.length})`, icon: Calendar },
-              { id: 'procedures', label: `Procedimentos (${procedures.length})`, icon: Scissors },
-              { id: 'zemda360', label: 'Zemda360', icon: Activity },
-              { id: 'evolutions', label: `Evoluções (${evolutions.length})`, icon: CheckCircle2 },
-              { id: 'returns', label: `Retornos (${returnsList.length})`, icon: Clock },
-              { id: 'before_after', label: 'Antes × Depois', icon: ArrowLeftRight },
-              { id: 'history', label: 'Histórico Completo', icon: RefreshCw }, ...(selectedPatientId && !appointmentCompleted ? [{ id: 'finish', label: 'Finalizar', icon: CheckCircle2 }] : [])
-            ].map(tab => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  data-active={isActive ? 'true' : 'false'}
-                  data-tour={`tab-${tab.id}`}
-                  onClick={() => tab.id === 'finish' ? void requestFinish() : changeTab(tab.id as any)}
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer ${
-                    isActive
-                      ? areaTheme.activeTab
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                  }`}
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  <span>{tab.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </HorizontalTabNav>
-      </div>
+      {(!ENABLE_ESTETIC_OVERVIEW || Boolean(selectedPatientId) || Boolean(initialAppointmentId)) && (
+        <div className="bg-white border-b border-slate-200 shrink-0 sticky top-0 z-10 shadow-2xs">
+          <HorizontalTabNav scroll={tabScroll}>
+            <div {...tabScrollProps} className={`${tabScrollProps.className} max-w-7xl mx-auto flex items-center gap-1 py-1`}>
+              {[
+                { id: 'overview', label: 'Visão Geral', icon: Layers },
+                { id: 'assessment', label: 'Avaliação Estética', icon: FileText },
+                { id: 'photos', label: `Fotos (${photos.length})`, icon: Camera },
+                { id: 'planning', label: `Planejamento (${plans.length})`, icon: Calendar },
+                { id: 'procedures', label: `Procedimentos (${procedures.length})`, icon: Scissors },
+                { id: 'zemda360', label: 'Zemda360', icon: Activity },
+                { id: 'evolutions', label: `Evoluções (${evolutions.length})`, icon: CheckCircle2 },
+                { id: 'returns', label: `Retornos (${returnsList.length})`, icon: Clock },
+                { id: 'before_after', label: 'Antes × Depois', icon: ArrowLeftRight },
+                { id: 'history', label: 'Histórico Completo', icon: RefreshCw }, ...(selectedPatientId && !appointmentCompleted ? [{ id: 'finish', label: 'Finalizar', icon: CheckCircle2 }] : [])
+              ].map(tab => {
+                const Icon = tab.icon;
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    data-active={isActive ? 'true' : 'false'}
+                    data-tour={`tab-${tab.id}`}
+                    onClick={() => tab.id === 'finish' ? void requestFinish() : changeTab(tab.id as any)}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                      isActive
+                        ? areaTheme.activeTab
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Icon className="w-3.5 h-3.5" />
+                    <span>{tab.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </HorizontalTabNav>
+        </div>
+      )}
 
       {/* 4. CONTEÚDO PRINCIPAL DO WORKSPACE */}
       <div className="flex-1 pt-3 pb-5 px-3.5 md:px-6 overflow-y-auto">
         <div className="max-w-7xl mx-auto">
           {!selectedPatientId ? (
-            <ClinicalModuleEmptyState
-              icon={Sparkles}
-              title={`Selecione um paciente para iniciar o atendimento no ZemdaEstetic (${areaTheme.title})`}
-              description="Escolha um paciente na busca superior para iniciar a avaliação estética, planejar tratamentos, registrar procedimentos com rastreabilidade de lote e acessar o Zemda360."
-              colorVariant={activeArea === 'FACIAL' ? 'rose' : activeArea === 'CORPORAL' ? 'teal' : 'amber'}
-            />
+            ENABLE_ESTETIC_OVERVIEW && !initialAppointmentId ? (
+              <ProfessionalModuleOverview<'assessment' | 'procedures' | 'photos' | 'returns'>
+                moduleKey="estetic"
+                colorVariant={activeArea === 'FACIAL' ? 'rose' : activeArea === 'CORPORAL' ? 'teal' : 'amber'}
+                selectedPatientId={selectedPatientId}
+                selectedPatient={selectedPatient}
+                searchPlaceholder="Buscar paciente para atendimento estético..."
+                patientDataTour="estetic-patient-select"
+                defaultServiceLabel={`Atendimento Estético (${areaTheme.title})`}
+                onSelectPatient={(id, pat, initialShortcut) => {
+                  void handleSelectPatient(id, pat);
+                  if (initialShortcut) {
+                    setActiveTab(initialShortcut);
+                  }
+                }}
+                indicators={[
+                  {
+                    id: 'week_appointments',
+                    label: 'Atendimentos da semana',
+                    subtitle: 'na agenda',
+                    icon: Calendar,
+                    metricKey: 'week_appointments'
+                  },
+                  {
+                    id: 'completed_procedures',
+                    label: 'Atendimentos realizados',
+                    subtitle: 'concluídos',
+                    icon: Scissors,
+                    metricKey: 'completed_appointments'
+                  },
+                  {
+                    id: 'pending_returns',
+                    label: 'Retornos previstos',
+                    subtitle: 'retornos',
+                    icon: Clock,
+                    metricKey: 'pending_returns'
+                  },
+                  {
+                    id: 'active_patients',
+                    label: 'Pacientes ativos',
+                    subtitle: 'cadastrados',
+                    icon: User,
+                    metricKey: 'active_patients'
+                  }
+                ]}
+                shortcuts={[
+                  {
+                    id: 'assessment',
+                    label: 'Avaliação Estética',
+                    description: 'Análise estruturada',
+                    icon: FileText
+                  },
+                  {
+                    id: 'procedures',
+                    label: 'Procedimentos',
+                    description: 'Aplicações e lotes',
+                    icon: Scissors
+                  },
+                  {
+                    id: 'photos',
+                    label: 'Fotografias',
+                    description: 'Registro antes e depois',
+                    icon: Camera
+                  },
+                  {
+                    id: 'returns',
+                    label: 'Retornos',
+                    description: 'Reavaliação e retoque',
+                    icon: Clock
+                  }
+                ]}
+              />
+            ) : (
+              <ClinicalModuleEmptyState
+                icon={Sparkles}
+                title={`Selecione um paciente para iniciar o atendimento no ZemdaEstetic (${areaTheme.title})`}
+                description="Escolha um paciente na busca superior para iniciar a avaliação estética, planejar tratamentos, registrar procedimentos com rastreabilidade de lote e acessar o Zemda360."
+                colorVariant={activeArea === 'FACIAL' ? 'rose' : activeArea === 'CORPORAL' ? 'teal' : 'amber'}
+              />
+            )
           ) : (
             <>
               {/* ABA 1: VISÃO GERAL (OVERVIEW) */}

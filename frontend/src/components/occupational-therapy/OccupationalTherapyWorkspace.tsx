@@ -56,6 +56,9 @@ import { PatientSearchSelect } from '../common/PatientSearchSelect';
 import { ProfessionalModuleHeader } from '../common/ProfessionalModuleHeader';
 import { ClinicalModuleEmptyState } from '../clinical/ClinicalModuleEmptyState';
 import { ClinicalModuleShell } from '../clinical/ClinicalModuleShell';
+import { ProfessionalModuleOverview } from '../clinical/ProfessionalModuleOverview';
+
+export const ENABLE_TO_OVERVIEW = true;
 
 interface OccupationalTherapyWorkspaceProps {
   initialPatientId?: string;
@@ -656,6 +659,81 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
       tabActiveVariant="bg-teal-600 text-white shadow-xs"
       emptyStateColorVariant="teal"
       emptyStateDescription="Escolha um paciente no menu superior para acessar o perfil ocupacional, escala de AVDs e plano de terapia ocupacional."
+      emptyStateContent={
+        ENABLE_TO_OVERVIEW && !selectedPatientId && !initialAppointmentId ? (
+          <ProfessionalModuleOverview<'profile' | 'adl' | 'home_program' | 'treatment_plans'>
+            moduleKey="occupational-therapy"
+            colorVariant="teal"
+            selectedPatientId={selectedPatientId}
+            selectedPatient={selectedPatient}
+            defaultServiceLabel="Terapia Ocupacional"
+            onSelectPatient={(id, pat, initialShortcut) => {
+              setSelectedPatientId(id);
+              if (pat) setSelectedPatient(pat);
+              else if (!id) setSelectedPatient(null);
+              if (initialShortcut) {
+                setActiveTab(initialShortcut);
+              }
+            }}
+            indicators={[
+              {
+                id: 'active_patients',
+                label: 'Pacientes acompanhados',
+                subtitle: 'cadastrados',
+                icon: User,
+                metricKey: 'active_patients'
+              },
+              {
+                id: 'week_appointments',
+                label: 'Atendimentos da semana',
+                subtitle: 'na agenda',
+                icon: Calendar,
+                metricKey: 'week_appointments'
+              },
+              {
+                id: 'completed_appointments',
+                label: 'Atendimentos realizados',
+                subtitle: 'concluídos',
+                icon: CheckCircle2,
+                metricKey: 'completed_appointments'
+              },
+              {
+                id: 'pending_returns',
+                label: 'Acompanhamentos pendentes',
+                subtitle: 'retornos',
+                icon: Clock,
+                metricKey: 'pending_returns'
+              }
+            ]}
+            shortcuts={[
+              {
+                id: 'profile',
+                label: 'Perfil Ocupacional',
+                description: 'Histórico e papéis',
+                icon: User
+              },
+              {
+                id: 'adl',
+                label: 'Avaliação de AVDs e AIVDs',
+                description: 'Escala em 6 níveis',
+                icon: Activity
+              },
+              {
+                id: 'home_program',
+                label: 'Casa & Escola',
+                description: 'Rotina e orientações',
+                icon: BookOpen
+              },
+              {
+                id: 'treatment_plans',
+                label: 'Plano Singular',
+                description: 'Objetivos e condutas',
+                icon: Layers
+              }
+            ]}
+          />
+        ) : undefined
+      }
       modalsSlot={
         <>
           {completion.dialog}

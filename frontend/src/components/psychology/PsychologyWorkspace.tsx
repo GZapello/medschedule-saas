@@ -48,6 +48,9 @@ import { PatientSearchSelect } from '../common/PatientSearchSelect';
 import { ProfessionalModuleHeader } from '../common/ProfessionalModuleHeader';
 import { ClinicalQuickHeaderActions, ClinicalQuickToolItem } from '../clinical/ClinicalQuickHeaderActions';
 import { ClinicalModuleShell, ClinicalModuleTabItem } from '../clinical/ClinicalModuleShell';
+import { ProfessionalModuleOverview } from '../clinical/ProfessionalModuleOverview';
+
+export const ENABLE_PSICO_OVERVIEW = true;
 
 interface PsychologyWorkspaceProps {
   initialPatientId?: string;
@@ -1042,6 +1045,83 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
       tabActiveVariant="bg-purple-600 text-white shadow-xs"
       emptyStateColorVariant="purple"
       emptyStateDescription="Escolha um paciente no menu superior para visualizar o prontuário psicológico, evolução das sessões e avaliações."
+      emptyStateContent={
+        ENABLE_PSICO_OVERVIEW && !selectedPatientId && !initialAppointmentId ? (
+          <ProfessionalModuleOverview<'sessions' | 'assessments' | 'goals' | 'documents'>
+            moduleKey="psychology"
+            colorVariant="purple"
+            selectedPatientId={selectedPatientId}
+            selectedPatient={selectedPatient}
+            defaultServiceLabel="Sessão de Psicologia"
+            onSelectPatient={(id, pat, initialShortcut) => {
+              setSelectedPatientId(id);
+              if (pat) setSelectedPatient(pat);
+              else if (!id) setSelectedPatient(null);
+              if (initialShortcut === 'documents') {
+                setShowDocumentModal(true);
+              } else if (initialShortcut) {
+                setActiveTab(initialShortcut);
+              }
+            }}
+            indicators={[
+              {
+                id: 'active_patients',
+                label: 'Pacientes acompanhados',
+                subtitle: 'cadastrados',
+                icon: User,
+                metricKey: 'active_patients'
+              },
+              {
+                id: 'week_sessions',
+                label: 'Sessões da semana',
+                subtitle: 'na agenda',
+                icon: Calendar,
+                metricKey: 'week_appointments'
+              },
+              {
+                id: 'completed_sessions',
+                label: 'Sessões realizadas',
+                subtitle: 'concluídas',
+                icon: CheckCircle2,
+                metricKey: 'completed_appointments'
+              },
+              {
+                id: 'pending_followups',
+                label: 'Acompanhamentos pendentes',
+                subtitle: 'retornos',
+                icon: Clock,
+                metricKey: 'pending_returns'
+              }
+            ]}
+            shortcuts={[
+              {
+                id: 'sessions',
+                label: 'Evolução de sessão',
+                description: 'Registro confidencial',
+                icon: Clock
+              },
+              {
+                id: 'assessments',
+                label: 'Avaliações',
+                description: 'Processos e SATEPSI',
+                icon: Award
+              },
+              {
+                id: 'goals',
+                label: 'Plano de acompanhamento',
+                description: 'Metas terapêuticas',
+                icon: Target
+              },
+              {
+                id: 'documents',
+                label: 'Relatórios',
+                description: 'Documentos CFP',
+                icon: FileText
+              }
+            ]}
+          />
+        ) : undefined
+      }
       contentMaxWidth="max-w-6xl mx-auto"
       modalsSlot={
         <>

@@ -44,6 +44,9 @@ import { useHorizontalTabScroll, HorizontalTabNav } from '../../hooks/useHorizon
 import { ClinicalQuickHeaderActions, ClinicalQuickToolItem } from '../clinical/ClinicalQuickHeaderActions';
 import { ClinicalDraftRecoveryModal } from '../clinical/ClinicalDraftRecoveryModal';
 import { ClinicalModuleShell, ClinicalModuleTabItem } from '../clinical/ClinicalModuleShell';
+import { ProfessionalModuleOverview } from '../clinical/ProfessionalModuleOverview';
+
+export const ENABLE_FISIO_OVERVIEW = true;
 import { ZemdaBodyCanvas } from '../zemda-body/ZemdaBodyCanvas';
 import { getRegionLabel } from '../zemda-body/bodyRegionsData';
 import { RegionalPhysioAssessmentModal } from './RegionalPhysioAssessmentModal';
@@ -718,6 +721,81 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
         activeTab === 'evaluations'
           ? 'Selecione um paciente para visualizar ou registrar avaliações.'
           : 'Escolha um paciente no menu superior para iniciar a avaliação cinético-funcional, goniometria e plano terapêutico.'
+      }
+      emptyStateContent={
+        ENABLE_FISIO_OVERVIEW && !selectedPatientId && !initialAppointmentId ? (
+          <ProfessionalModuleOverview<'evolution' | 'kinetic_functional' | 'pain_zemdabody' | 'treatment_plan'>
+            moduleKey="physiotherapy"
+            colorVariant="teal"
+            selectedPatientId={selectedPatientId}
+            selectedPatient={selectedPatient}
+            defaultServiceLabel="Sessão de Fisioterapia"
+            onSelectPatient={(id, pat, initialShortcut) => {
+              setSelectedPatientId(id);
+              if (pat) setSelectedPatient(pat);
+              else if (!id) setSelectedPatient(null);
+              if (initialShortcut) {
+                setActiveTab(initialShortcut);
+              }
+            }}
+            indicators={[
+              {
+                id: 'active_patients',
+                label: 'Pacientes acompanhados',
+                subtitle: 'cadastrados',
+                icon: User,
+                metricKey: 'active_patients'
+              },
+              {
+                id: 'week_sessions',
+                label: 'Sessões da semana',
+                subtitle: 'na agenda',
+                icon: Calendar,
+                metricKey: 'week_appointments'
+              },
+              {
+                id: 'completed_sessions',
+                label: 'Atendimentos realizados',
+                subtitle: 'concluídos',
+                icon: CheckCircle2,
+                metricKey: 'completed_appointments'
+              },
+              {
+                id: 'pending_reassessments',
+                label: 'Reavaliações pendentes',
+                subtitle: 'retornos',
+                icon: Clock,
+                metricKey: 'pending_returns'
+              }
+            ]}
+            shortcuts={[
+              {
+                id: 'evolution',
+                label: 'Evolução',
+                description: 'Sessão e condutas',
+                icon: Activity
+              },
+              {
+                id: 'kinetic_functional',
+                label: 'Avaliação Funcional',
+                description: 'Cinético-funcional',
+                icon: Sliders
+              },
+              {
+                id: 'pain_zemdabody',
+                label: 'Avaliação Postural / Zemda360',
+                description: 'Mapa corporal e dor',
+                icon: Target
+              },
+              {
+                id: 'treatment_plan',
+                label: 'Plano Terapêutico',
+                description: 'Plano RBPF e metas',
+                icon: Calendar
+              }
+            ]}
+          />
+        ) : undefined
       }
       contentMaxWidth="max-w-6xl mx-auto"
       modalsSlot={

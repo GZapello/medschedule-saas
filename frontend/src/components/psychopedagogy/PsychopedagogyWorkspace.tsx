@@ -14,6 +14,7 @@ import { useHorizontalTabScroll, HorizontalTabNav } from '../../hooks/useHorizon
 import { ClinicalQuickHeaderActions, ClinicalQuickToolItem } from '../clinical/ClinicalQuickHeaderActions';
 import { ClinicalDraftRecoveryModal } from '../clinical/ClinicalDraftRecoveryModal';
 import { ClinicalModuleShell, ClinicalModuleTabItem } from '../clinical/ClinicalModuleShell';
+import { ProfessionalModuleOverview } from '../clinical/ProfessionalModuleOverview';
 import {
   GraduationCap,
   BookOpen,
@@ -78,6 +79,8 @@ const PP_TABS: ClinicalModuleTabItem[] = [
 ];
 
 type LearningSubTab = 'reading' | 'writing' | 'math' | 'cognition' | 'notebooks';
+
+export const ENABLE_PP_OVERVIEW = true;
 
 export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = ({
   initialPatientId,
@@ -879,6 +882,85 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
       tabActiveVariant="bg-indigo-600 text-white shadow-xs"
       emptyStateColorVariant="indigo"
       emptyStateDescription="Escolha um aprendente no seletor acima para abrir a evolução clínica, anamnese pedagógica, testes e plano de intervenção."
+      emptyStateContent={
+        ENABLE_PP_OVERVIEW && !selectedPatientId && !initialAppointmentId ? (
+          <ProfessionalModuleOverview<TabKey>
+            moduleKey="psychopedagogy"
+            colorVariant="indigo"
+            selectedPatientId={selectedPatientId}
+            selectedPatient={selectedPatient}
+            searchTitle="Buscar aprendente"
+            searchSubtitle="Encontre um aprendente por nome, CPF ou prontuário."
+            searchPlaceholder="Buscar aprendente por nome, CPF ou prontuário..."
+            patientTermSingular="aprendente"
+            defaultServiceLabel="Sessão Psicopedagógica"
+            onSelectPatient={(id, pat, initialShortcut) => {
+              setSelectedPatientId(id);
+              if (pat) setPatientData(pat);
+              else if (!id) setPatientData(null);
+              if (initialShortcut) {
+                setActiveTab(initialShortcut);
+              }
+            }}
+            indicators={[
+              {
+                id: 'active_learners',
+                label: 'Aprendentes acompanhados',
+                subtitle: 'cadastrados',
+                icon: User,
+                metricKey: 'active_patients'
+              },
+              {
+                id: 'week_sessions',
+                label: 'Atendimentos na semana',
+                subtitle: 'na agenda',
+                icon: Calendar,
+                metricKey: 'week_appointments'
+              },
+              {
+                id: 'completed_sessions',
+                label: 'Sessões realizadas',
+                subtitle: 'concluídas',
+                icon: CheckCircle2,
+                metricKey: 'completed_appointments'
+              },
+              {
+                id: 'pending_followups',
+                label: 'Acompanhamentos pendentes',
+                subtitle: 'retornos',
+                icon: Clock,
+                metricKey: 'pending_returns'
+              }
+            ]}
+            shortcuts={[
+              {
+                id: 'evolution',
+                label: 'Evolução',
+                description: 'Sessão e mediação',
+                icon: Clock
+              },
+              {
+                id: 'assessment',
+                label: 'Avaliação Psicopedagógica',
+                description: 'Hipóteses e domínios',
+                icon: Brain
+              },
+              {
+                id: 'activities_library',
+                label: 'Atividades & Orientações',
+                description: 'Jogos e recursos',
+                icon: Sparkles
+              },
+              {
+                id: 'plans_goals',
+                label: 'Plano & Metas',
+                description: 'Intervenção e metas',
+                icon: Target
+              }
+            ]}
+          />
+        ) : undefined
+      }
       contentMaxWidth="max-w-6xl mx-auto"
       modalsSlot={
         <>

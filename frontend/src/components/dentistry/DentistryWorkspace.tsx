@@ -54,6 +54,9 @@ import { ClinicalQuickHeaderActions, ClinicalQuickToolItem } from '../clinical/C
 import { ClinicalDraftRecoveryModal } from '../clinical/ClinicalDraftRecoveryModal';
 import { ClinicalInventorySelector, ClinicalInventorySelection } from '../clinical/ClinicalInventorySelector';
 import { ClinicalModuleShell, ClinicalModuleTabItem } from '../clinical/ClinicalModuleShell';
+import { ProfessionalModuleOverview } from '../clinical/ProfessionalModuleOverview';
+
+export const ENABLE_ODONTO_OVERVIEW = true;
 
 const DENTAL_TABS: ClinicalModuleTabItem[] = [
   { id: 'odontogram', label: 'Odontograma', icon: Smile },
@@ -1131,6 +1134,81 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
       tabActiveVariant="bg-cyan-600 text-white shadow-xs"
       emptyStateColorVariant="cyan"
       emptyStateDescription="Escolha um paciente no menu superior para visualizar o odontograma anatômico, periodontia, endodontia e condutas odontológicas."
+      emptyStateContent={
+        ENABLE_ODONTO_OVERVIEW && !selectedPatientId && !initialAppointmentId ? (
+          <ProfessionalModuleOverview<'odontogram' | 'perio' | 'treatment_plans' | 'prosthetics'>
+            moduleKey="dentistry"
+            colorVariant="cyan"
+            selectedPatientId={selectedPatientId}
+            selectedPatient={selectedPatient}
+            defaultServiceLabel="Consulta Odontológica"
+            onSelectPatient={(id, pat, initialShortcut) => {
+              setSelectedPatientId(id);
+              if (pat) setSelectedPatient(pat);
+              else if (!id) setSelectedPatient(null);
+              if (initialShortcut) {
+                setActiveTab(initialShortcut);
+              }
+            }}
+            indicators={[
+              {
+                id: 'active_patients',
+                label: 'Pacientes acompanhados',
+                subtitle: 'cadastrados',
+                icon: User,
+                metricKey: 'active_patients'
+              },
+              {
+                id: 'week_consultations',
+                label: 'Consultas da semana',
+                subtitle: 'na agenda',
+                icon: Calendar,
+                metricKey: 'week_appointments'
+              },
+              {
+                id: 'completed_consultations',
+                label: 'Atendimentos realizados',
+                subtitle: 'concluídos',
+                icon: CheckCircle2,
+                metricKey: 'completed_appointments'
+              },
+              {
+                id: 'scheduled_returns',
+                label: 'Retornos programados',
+                subtitle: 'retornos',
+                icon: Clock,
+                metricKey: 'pending_returns'
+              }
+            ]}
+            shortcuts={[
+              {
+                id: 'odontogram',
+                label: 'Odontograma',
+                description: 'Mapa dental FDI',
+                icon: Smile
+              },
+              {
+                id: 'perio',
+                label: 'Procedimentos',
+                description: 'Periodontia e clínica',
+                icon: Activity
+              },
+              {
+                id: 'treatment_plans',
+                label: 'Orçamentos',
+                description: 'Planos e valores',
+                icon: DollarSign
+              },
+              {
+                id: 'prosthetics',
+                label: 'Prótese & Laboratório',
+                description: 'Kanban protético',
+                icon: Package
+              }
+            ]}
+          />
+        ) : undefined
+      }
       contentMaxWidth="max-w-6xl mx-auto"
       modalsSlot={
         <>

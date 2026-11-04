@@ -32,7 +32,8 @@ import {
   Wind,
   Paperclip,
   ExternalLink,
-  Printer
+  Printer,
+  Calendar
 } from 'lucide-react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -66,6 +67,9 @@ import { PatientSearchSelect } from '../common/PatientSearchSelect';
 import { ProfessionalModuleHeader } from '../common/ProfessionalModuleHeader';
 import { ClinicalModuleEmptyState } from '../clinical/ClinicalModuleEmptyState';
 import { ClinicalModuleShell } from '../clinical/ClinicalModuleShell';
+import { ProfessionalModuleOverview } from '../clinical/ProfessionalModuleOverview';
+
+export const ENABLE_FONO_OVERVIEW = true;
 
 export interface StructuredGoalItem {
   id: string;
@@ -803,6 +807,83 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
       tabActiveVariant="bg-sky-600 text-white shadow-xs"
       emptyStateColorVariant="sky"
       emptyStateDescription="Escolha um paciente no menu superior para visualizar o painel fonêmico, avaliações vocais e condutas fonoaudiológicas."
+      emptyStateContent={
+        ENABLE_FONO_OVERVIEW && !selectedPatientId && !initialAppointmentId ? (
+          <ProfessionalModuleOverview<'finish' | 'phonemes' | 'home_program' | 'reports'>
+            moduleKey="speech-therapy"
+            colorVariant="sky"
+            selectedPatientId={selectedPatientId}
+            selectedPatient={selectedPatient}
+            defaultServiceLabel="Atendimento Fonoaudiológico"
+            onSelectPatient={(id, pat, initialShortcut) => {
+              setSelectedPatientId(id);
+              if (pat) setSelectedPatient(pat);
+              else if (!id) setSelectedPatient(null);
+              if (initialShortcut === 'reports') {
+                setIsAIReportOpen(true);
+              } else if (initialShortcut) {
+                setActiveTab(initialShortcut);
+              }
+            }}
+            indicators={[
+              {
+                id: 'active_patients',
+                label: 'Pacientes acompanhados',
+                subtitle: 'cadastrados',
+                icon: User,
+                metricKey: 'active_patients'
+              },
+              {
+                id: 'week_appointments',
+                label: 'Atendimentos da semana',
+                subtitle: 'na agenda',
+                icon: Calendar,
+                metricKey: 'week_appointments'
+              },
+              {
+                id: 'completed_appointments',
+                label: 'Atendimentos realizados',
+                subtitle: 'concluídos',
+                icon: CheckCircle2,
+                metricKey: 'completed_appointments'
+              },
+              {
+                id: 'pending_returns',
+                label: 'Acompanhamentos pendentes',
+                subtitle: 'retornos',
+                icon: Clock,
+                metricKey: 'pending_returns'
+              }
+            ]}
+            shortcuts={[
+              {
+                id: 'finish',
+                label: 'Evolução fonoaudiológica',
+                description: 'Registro e conduta',
+                icon: MessageSquare
+              },
+              {
+                id: 'phonemes',
+                label: 'Avaliações',
+                description: 'Painel fonêmico e fala',
+                icon: Volume2
+              },
+              {
+                id: 'home_program',
+                label: 'Casa & Escola',
+                description: 'Atividades e treinos',
+                icon: BookOpen
+              },
+              {
+                id: 'reports',
+                label: 'Relatórios',
+                description: 'Síntese evolutiva',
+                icon: FileText
+              }
+            ]}
+          />
+        ) : undefined
+      }
       modalsSlot={
         <>
           {completion.dialog}
