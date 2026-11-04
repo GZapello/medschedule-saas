@@ -225,28 +225,20 @@ export const ClinicalModuleShell: React.FC<ClinicalModuleShellProps> = ({
             {isLockedContext && !headerSlots?.filters && filterSlot}
             {isLockedContext && headerActions}
 
-            {/* Fora do atendimento agendado, mostra chip do paciente com opção de desmarcar */}
-            {!isLockedContext && (
-              <div className="max-w-full inline-flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200/70 border border-slate-200 rounded-lg px-2 py-0.5 transition-colors shrink-0">
+            {/* No contexto de atendimento agendado (quando não há seletor superior no cabeçalho), exibe a identificação do paciente */}
+            {isLockedContext && (
+              <div className="max-w-full inline-flex items-center gap-1.5 bg-slate-100 border border-slate-200 rounded-lg px-2 py-0.5 shrink-0">
                 <div className="w-5 h-5 rounded-md bg-white border border-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center shrink-0">
                   <User className="w-3 h-3" />
                 </div>
                 <span className="font-bold text-xs text-slate-900 truncate max-w-[160px] sm:max-w-[240px]">
-                  {patientDisplayName || 'Paciente Selecionado'}
+                  {patientDisplayName || 'Paciente em Atendimento'}
                 </span>
                 {selectedPatient?.birth_date && (
                   <span className="text-[10px] text-slate-500 hidden md:inline">
                     ({new Date(selectedPatient.birth_date).toLocaleDateString('pt-BR')})
                   </span>
                 )}
-                <button
-                  type="button"
-                  onClick={handleClear}
-                  className="p-0.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
-                  title="Desmarcar paciente"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
               </div>
             )}
 

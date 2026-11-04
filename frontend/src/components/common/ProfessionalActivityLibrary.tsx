@@ -17,7 +17,9 @@ import {
   AlertCircle,
   Eye,
   Edit3,
+  Pencil,
   Trash2,
+  ChevronLeft,
   FileText,
   ChevronRight,
   Layers,
@@ -90,6 +92,20 @@ export const ProfessionalActivityLibrary: React.FC<ProfessionalActivityLibraryPr
   const [previewTemplate, setPreviewTemplate] = useState<ActivityTemplateItem | null>(null);
   const [assigningTemplate, setAssigningTemplate] = useState<ActivityTemplateItem | null>(null);
   const [editingTemplate, setEditingTemplate] = useState<ActivityTemplateItem | null>(null);
+  const [isLibraryTemplateModalOpen, setIsLibraryTemplateModalOpen] = useState(false);
+  const [editingLibraryTemplate, setEditingLibraryTemplate] = useState<ActivityTemplateItem | null>(null);
+  const [libTplTitle, setLibTplTitle] = useState('');
+  const [libTplCategory, setLibTplCategory] = useState('');
+  const [libTplSubcategory, setLibTplSubcategory] = useState('');
+  const [libTplObjective, setLibTplObjective] = useState('');
+  const [libTplTargetSkill, setLibTplTargetSkill] = useState('');
+  const [libTplSetting, setLibTplSetting] = useState<ActivitySetting>('home');
+  const [libTplFrequency, setLibTplFrequency] = useState('');
+  const [libTplMaterials, setLibTplMaterials] = useState('');
+  const [libTplInstructions, setLibTplInstructions] = useState('');
+  const [libTplCaregiverGuidance, setLibTplCaregiverGuidance] = useState('');
+  const [libTplAdaptations, setLibTplAdaptations] = useState('');
+  const [isSavingLibraryTemplate, setIsSavingLibraryTemplate] = useState(false);
   const [isCreatingCustomTemplate, setIsCreatingCustomTemplate] = useState(false);
   const [followUpModalItem, setFollowUpModalItem] = useState<PatientActivityAssignmentItem | null>(null);
   const [followUpHistory, setFollowUpHistory] = useState<ActivityFollowUpItem[]>([]);
@@ -353,6 +369,94 @@ export const ProfessionalActivityLibrary: React.FC<ProfessionalActivityLibraryPr
   // AÇÕES: MODELOS DA BIBLIOTECA (FAVORITAR, DUPLICAR, EXCLUIR)
   // ==========================================
 
+  const availableLibSubcategories = useMemo(() => {
+    if (!libTplCategory) return [];
+    const cat = config.categories.find(c => c.name === libTplCategory);
+    return cat ? cat.subcategories : [];
+  }, [libTplCategory, config.categories]);
+
+  const handleOpenCreateTemplateModal = () => {
+    setEditingLibraryTemplate(null);
+    setLibTplTitle('');
+    setLibTplCategory(config.categories[0]?.name || '');
+    setLibTplSubcategory('');
+    setLibTplObjective('');
+    setLibTplTargetSkill('');
+    setLibTplSetting('home');
+    setLibTplFrequency(config.defaultFrequency);
+    setLibTplMaterials('');
+    setLibTplInstructions('');
+    setLibTplCaregiverGuidance('');
+    setLibTplAdaptations('');
+    setIsLibraryTemplateModalOpen(true);
+  };
+
+  const handleOpenEditTemplateModal = (tmpl: ActivityTemplateItem) => {
+    setEditingLibraryTemplate(tmpl);
+    setLibTplTitle(tmpl.title);
+    setLibTplCategory(tmpl.category);
+    setLibTplSubcategory(tmpl.subcategory || '');
+    setLibTplObjective(tmpl.objective);
+    setLibTplTargetSkill(tmpl.target_skill || '');
+    setLibTplSetting(tmpl.setting || 'home');
+    setLibTplFrequency(tmpl.frequency || config.defaultFrequency);
+    setLibTplMaterials(tmpl.materials_needed || '');
+    setLibTplInstructions(tmpl.instructions);
+    setLibTplCaregiverGuidance(tmpl.caregiver_guidance || '');
+    setLibTplAdaptations(tmpl.adaptations || '');
+    setIsLibraryTemplateModalOpen(true);
+  };
+
+  const handleSaveLibraryTemplate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isSavingLibraryTemplate) return;
+
+    const trimmedTitle = libTplTitle.trim();
+    const trimmedCategory = libTplCategory.trim();
+    const trimmedObjective = libTplObjective.trim();
+    const trimmedInstructions = libTplInstructions.trim();
+
+    if (!trimmedTitle || !trimmedCategory || !trimmedObjective || !trimmedInstructions) {
+      showToast('Preencha título, categoria, objetivo e instruções do exercício.', 'error');
+      return;
+    }
+
+    try {
+      setIsSavingLibraryTemplate(true);
+      const payload = {
+        title: trimmedTitle,
+        category: trimmedCategory,
+        subcategory: libTplSubcategory.trim() || undefined,
+        objective: trimmedObjective,
+        target_skill: libTplTargetSkill.trim() || undefined,
+        setting: libTplSetting,
+        frequency: libTplFrequency.trim() || undefined,
+        materials_needed: libTplMaterials.trim() || undefined,
+        instructions: trimmedInstructions,
+        caregiver_guidance: libTplCaregiverGuidance.trim() || undefined,
+        adaptations: libTplAdaptations.trim() || undefined,
+        profession_id: config.key
+      };
+
+      if (editingLibraryTemplate) {
+        await ApiClient.put(`/v1/clinical-activities/templates/${editingLibraryTemplate.id}`, payload);
+        showToast('Exercício atualizado na biblioteca com sucesso!', 'success');
+      } else {
+        await ApiClient.post('/v1/clinical-activities/templates', payload);
+        showToast('Exercício adicionado à biblioteca com sucesso!', 'success');
+        setLibraryScope('custom');
+      }
+
+      setIsLibraryTemplateModalOpen(false);
+      await loadTemplates();
+    } catch (err: any) {
+      console.error('[ProfessionalActivityLibrary] Erro ao salvar exercício na biblioteca:', err);
+      showToast(err?.message || 'Erro ao salvar exercício na biblioteca.', 'error');
+    } finally {
+      setIsSavingLibraryTemplate(false);
+    }
+  };
+
   const handleToggleFavorite = async (templateId: string) => {
     try {
       const res = await ApiClient.post<{ is_favorite: boolean; message: string }>(
@@ -566,32 +670,23 @@ export const ProfessionalActivityLibrary: React.FC<ProfessionalActivityLibraryPr
             </div>
           </div>
 
-          {/* Seletor de Visão Principal: Atividades do Paciente vs Biblioteca */}
-          <div className="flex items-center rounded-xl bg-slate-100 p-1 border border-slate-200 self-start sm:self-auto">
-            <button
-              type="button"
-              onClick={() => setActiveMainView('patient')}
-              className={`flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-bold transition cursor-pointer ${
-                activeMainView === 'patient'
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <User className="h-3.5 w-3.5" />
-              <span>{config.patientNameLabel} ({patientActivities.length})</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveMainView('library')}
-              className={`flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-bold transition cursor-pointer ${
-                activeMainView === 'library'
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <BookOpen className="h-3.5 w-3.5" />
-              <span>Biblioteca de Modelos</span>
-            </button>
+          {/* Ação / Navegação no Cabeçalho */}
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            {activeMainView === 'library' ? (
+              <button
+                type="button"
+                onClick={() => setActiveMainView('patient')}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition cursor-pointer shadow-2xs"
+              >
+                <ChevronLeft className="h-4 w-4 text-slate-500" />
+                <span>Voltar aos Exercícios do Paciente</span>
+              </button>
+            ) : (
+              <div className="inline-flex items-center gap-1.5 rounded-xl bg-slate-100 border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-700">
+                <User className="h-3.5 w-3.5 text-slate-500" />
+                <span>{patientActivities.length} exercício(s) atribuído(s)</span>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -655,20 +750,20 @@ export const ProfessionalActivityLibrary: React.FC<ProfessionalActivityLibraryPr
                 <>
                   <button
                     type="button"
-                    onClick={() => setActiveMainView('library')}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-teal-600 px-3.5 py-1.5 text-xs font-extrabold text-white shadow-xs hover:bg-teal-700 transition cursor-pointer"
+                    onClick={handleOpenNewBlankActivityModal}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-teal-600 px-4 py-2 text-xs font-extrabold text-white shadow-xs hover:bg-teal-700 transition cursor-pointer"
                   >
-                    <BookOpen className="h-3.5 w-3.5" />
-                    <span>Escolher da Biblioteca</span>
+                    <Plus className="h-4 w-4" />
+                    <span>Criar Exercício Livre</span>
                   </button>
 
                   <button
                     type="button"
-                    onClick={handleOpenNewBlankActivityModal}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition cursor-pointer"
+                    onClick={() => setActiveMainView('library')}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition cursor-pointer"
                   >
-                    <Plus className="h-3.5 w-3.5" />
-                    <span>Criar Atividade Livre</span>
+                    <BookOpen className="h-3.5 w-3.5 text-slate-500" />
+                    <span>Biblioteca de Exercícios</span>
                   </button>
                 </>
               )}
@@ -686,19 +781,27 @@ export const ProfessionalActivityLibrary: React.FC<ProfessionalActivityLibraryPr
               <div className="rounded-full bg-slate-100 p-3 mb-3 text-slate-400">
                 <FolderOpen className="h-6 w-6" />
               </div>
-              <h3 className="text-sm font-bold text-slate-700">Nenhuma atividade registrada neste módulo</h3>
+              <h3 className="text-sm font-bold text-slate-700">Nenhum exercício registrado para este paciente</h3>
               <p className="mt-1 text-xs text-slate-500 max-w-sm">
-                Explore a biblioteca para selecionar modelos profissionais estruturados ou cadastre uma nova orientação individualizada para este {config.patientNameLabel.toLowerCase()}.
+                Inicie criando um exercício livre personalizado ou selecione modelos prontos na biblioteca de exercícios.
               </p>
               {!readOnly && (
-                <div className="mt-4 flex gap-2">
+                <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={handleOpenNewBlankActivityModal}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-teal-600 px-4 py-2 text-xs font-bold text-white hover:bg-teal-700 transition cursor-pointer"
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span>Criar Exercício Livre</span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => setActiveMainView('library')}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-teal-600 px-4 py-2 text-xs font-bold text-white hover:bg-teal-700 cursor-pointer"
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition cursor-pointer"
                   >
-                    <BookOpen className="h-3.5 w-3.5" />
-                    Explorar Biblioteca de Modelos
+                    <BookOpen className="h-3.5 w-3.5 text-slate-500" />
+                    <span>Biblioteca de Exercícios</span>
                   </button>
                 </div>
               )}
@@ -874,11 +977,11 @@ export const ProfessionalActivityLibrary: React.FC<ProfessionalActivityLibraryPr
             {!readOnly && (
               <button
                 type="button"
-                onClick={handleOpenNewBlankActivityModal}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-teal-600 px-3.5 py-1.5 text-xs font-extrabold text-white shadow-xs hover:bg-teal-700 transition cursor-pointer"
+                onClick={handleOpenCreateTemplateModal}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-teal-600 px-4 py-2 text-xs font-extrabold text-white shadow-xs hover:bg-teal-700 transition cursor-pointer"
               >
-                <Plus className="h-3.5 w-3.5" />
-                <span>Cadastrar Novo Modelo</span>
+                <Plus className="h-4 w-4" />
+                <span>+ Adicionar Exercício à Biblioteca</span>
               </button>
             )}
           </div>
@@ -1068,14 +1171,24 @@ export const ProfessionalActivityLibrary: React.FC<ProfessionalActivityLibraryPr
                       </button>
 
                       {tmpl.is_custom && !readOnly && (
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteCustomTemplate(tmpl.id)}
-                          className="rounded-lg p-1.5 text-rose-400 hover:bg-rose-50 hover:text-rose-600 cursor-pointer"
-                          title="Excluir este modelo"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditTemplateModal(tmpl)}
+                            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 cursor-pointer"
+                            title="Editar este exercício na minha biblioteca"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteCustomTemplate(tmpl.id)}
+                            className="rounded-lg p-1.5 text-rose-400 hover:bg-rose-50 hover:text-rose-600 cursor-pointer"
+                            title="Excluir este exercício da biblioteca"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </>
                       )}
 
                       {!readOnly && (
@@ -1222,7 +1335,7 @@ export const ProfessionalActivityLibrary: React.FC<ProfessionalActivityLibraryPr
             <div className="flex items-start justify-between border-b border-slate-100 pb-3">
               <div>
                 <h3 className="text-base sm:text-lg font-extrabold text-slate-900">
-                  {assigningTemplate ? 'Personalizar e Atribuir Atividade' : 'Criar Nova Atividade e Prescrever'}
+                  {assigningTemplate ? 'Personalizar e Atribuir Atividade' : 'Criar Exercício Livre'}
                 </h3>
                 <p className="text-xs text-slate-500">
                   {config.patientNameLabel}: <strong className="text-slate-800">{patientName || 'Não identificado'}</strong>
@@ -1465,6 +1578,217 @@ export const ProfessionalActivityLibrary: React.FC<ProfessionalActivityLibraryPr
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+
+      {/* ========================================================================= */}
+      {/* MODAL: ADICIONAR / EDITAR EXERCÍCIO NA BIBLIOTECA (MINHA CLÍNICA) */}
+      {/* ========================================================================= */}
+      {isLibraryTemplateModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl space-y-4">
+            <div className="flex items-start justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-base sm:text-lg font-extrabold text-slate-900">
+                  {editingLibraryTemplate ? 'Editar Exercício da Biblioteca' : '+ Adicionar Exercício à Biblioteca'}
+                </h3>
+                <p className="text-xs text-slate-500">
+                  {editingLibraryTemplate
+                    ? 'Atualize as informações do exercício reutilizável na sua biblioteca'
+                    : `Cadastre um modelo reutilizável para a biblioteca de ${config.professionName}`}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsLibraryTemplateModalOpen(false)}
+                className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveLibraryTemplate} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block font-bold text-slate-800 mb-1">Título do Exercício / Atividade *</label>
+                <input
+                  type="text"
+                  required
+                  value={libTplTitle}
+                  onChange={e => setLibTplTitle(e.target.value)}
+                  placeholder="Ex: Treino de Pega e Estabilidade com Pinça Adaptada"
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-800 focus:border-teal-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">Categoria *</label>
+                  <select
+                    required
+                    value={libTplCategory}
+                    onChange={e => {
+                      setLibTplCategory(e.target.value);
+                      setLibTplSubcategory('');
+                    }}
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-800 focus:border-teal-500 focus:outline-none cursor-pointer"
+                  >
+                    {config.categories.map(c => (
+                      <option key={c.id} value={c.name}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">Subcategoria (Opcional)</label>
+                  {availableLibSubcategories.length > 0 ? (
+                    <select
+                      value={libTplSubcategory}
+                      onChange={e => setLibTplSubcategory(e.target.value)}
+                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-800 focus:border-teal-500 focus:outline-none cursor-pointer"
+                    >
+                      <option value="">Selecione ou deixe em branco</option>
+                      {availableLibSubcategories.map(sub => (
+                        <option key={sub} value={sub}>
+                          {sub}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      value={libTplSubcategory}
+                      onChange={e => setLibTplSubcategory(e.target.value)}
+                      placeholder="Ex: Escrita manual"
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-800 focus:border-teal-500 focus:outline-none"
+                    />
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">Ambiente Sugerido</label>
+                  <select
+                    value={libTplSetting}
+                    onChange={e => setLibTplSetting(e.target.value as any)}
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-800 focus:border-teal-500 focus:outline-none cursor-pointer"
+                  >
+                    <option value="home">Casa / Família</option>
+                    <option value="school">Escola / Educadores</option>
+                    <option value="community">Comunidade / Lazer</option>
+                    <option value="other">Outro Ambiente</option>
+                    <option value="general">Geral (Todos os Ambientes)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">Frequência Sugerida</label>
+                  <input
+                    type="text"
+                    value={libTplFrequency}
+                    onChange={e => setLibTplFrequency(e.target.value)}
+                    placeholder="Ex: 3x por semana (15 minutos)"
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-800 focus:border-teal-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-800 mb-1">Objetivo Terapêutico / Clínico *</label>
+                <input
+                  type="text"
+                  required
+                  value={libTplObjective}
+                  onChange={e => setLibTplObjective(e.target.value)}
+                  placeholder="Ex: Aprimorar o controle grafomotor e coordenação visuomotora..."
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-800 focus:border-teal-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-800 mb-1">Habilidade Trabalhada (Opcional)</label>
+                <input
+                  type="text"
+                  value={libTplTargetSkill}
+                  onChange={e => setLibTplTargetSkill(e.target.value)}
+                  placeholder="Ex: Pinça fina, dissociação digital, autorregulação..."
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-800 focus:border-teal-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-800 mb-1">Materiais ou Recursos Necessários</label>
+                <input
+                  type="text"
+                  value={libTplMaterials}
+                  onChange={e => setLibTplMaterials(e.target.value)}
+                  placeholder="Ex: Massinha de modelar, adaptador de lápis, timer visual..."
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-800 focus:border-teal-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-800 mb-1">Instruções Passo a Passo para Execução *</label>
+                <textarea
+                  required
+                  rows={4}
+                  value={libTplInstructions}
+                  onChange={e => setLibTplInstructions(e.target.value)}
+                  placeholder="Descreva passo a passo como o exercício deve ser executado pelo paciente, família ou escola..."
+                  className="w-full rounded-xl border border-slate-300 p-3 text-xs text-slate-800 leading-relaxed focus:border-teal-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-800 mb-1">Orientações ao Cuidador ou Educador</label>
+                <textarea
+                  rows={2}
+                  value={libTplCaregiverGuidance}
+                  onChange={e => setLibTplCaregiverGuidance(e.target.value)}
+                  placeholder="Dicas sobre reforço positivo, tempo de espera e mediação..."
+                  className="w-full rounded-xl border border-slate-300 p-3 text-xs text-slate-800 focus:border-teal-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-800 mb-1">Sugestões de Adaptações ou Variações</label>
+                <textarea
+                  rows={2}
+                  value={libTplAdaptations}
+                  onChange={e => setLibTplAdaptations(e.target.value)}
+                  placeholder="Variações para aumentar ou diminuir a dificuldade conforme a evolução..."
+                  className="w-full rounded-xl border border-slate-300 p-3 text-xs text-slate-800 focus:border-teal-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setIsLibraryTemplateModalOpen(false)}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingLibraryTemplate}
+                  className="inline-flex items-center gap-1.5 px-5 py-2 text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-xl transition shadow-xs cursor-pointer disabled:opacity-50"
+                >
+                  <Check className="h-4 w-4" />
+                  <span>
+                    {isSavingLibraryTemplate
+                      ? 'Salvando...'
+                      : editingLibraryTemplate
+                      ? 'Salvar Alterações'
+                      : 'Adicionar à Biblioteca'}
+                  </span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

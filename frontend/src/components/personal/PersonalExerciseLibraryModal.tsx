@@ -379,7 +379,7 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
               className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
-              Criar Exercício
+              + Adicionar Exercício à Biblioteca
             </button>
             <button
               aria-label="Fechar"
