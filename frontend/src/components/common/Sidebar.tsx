@@ -90,6 +90,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const isEligibleClinical = isClinicAdmin || isProfessional;
 
+  const hasSpecializedProfessionalModule = isEligibleClinical && Boolean(
+    (isDoctor || isZemdaMed || commercialModule === 'ZemdaMed') ||
+    (isPhysiotherapist || isZemdaFisio || commercialModule === 'ZemdaFisio') ||
+    (isDentist || isZemdaOdonto || commercialModule === 'ZemdaOdonto') ||
+    (isEsthetician || isZemdaEstetic || commercialModule === 'ZemdaEstetic') ||
+    (isNutritionist || isZemdaNutri || commercialModule === 'ZemdaNutri') ||
+    (isOccupationalTherapist || isZemdaTO || commercialModule === 'ZemdaTO') ||
+    (isSpeechTherapist || isZemdaFono || commercialModule === 'ZemdaFono') ||
+    (isPsychologist || isZemdaPsico || commercialModule === 'ZemdaPsico') ||
+    (isPsychopedagogue || isZemdaPP || commercialModule === 'ZemdaPP') ||
+    (isPersonalTrainer || isZemdaPersonal || commercialModule === 'ZemdaPersonal')
+  );
+
+  const hasZemda360Access = Boolean(isClinicAdmin || isZemdaBody);
+  // Remove o Zemda360 da sidebar quando a conta possui módulo profissional especializado e Zemda360 habilitado
+  const showZemda360InSidebar = hasZemda360Access && !hasSpecializedProfessionalModule;
+
   const categories: NavCategory[] = [
     {
       id: 'attendance',
@@ -126,7 +143,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           id: 'zemda-body',
           label: 'Zemda360 (Mapeamento)',
           icon: Activity,
-          visible: isClinicAdmin || isZemdaBody
+          visible: showZemda360InSidebar
         },
         {
           id: 'zemda-fisio',

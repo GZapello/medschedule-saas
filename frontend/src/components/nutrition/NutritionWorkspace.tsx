@@ -1019,6 +1019,8 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
               if (initialAction === 'reports') {
                 setActiveTab('evolution');
                 setShowFollowUpModal(true);
+              } else if (initialAction === 'zemda360') {
+                window.dispatchEvent(new CustomEvent('zemda-open-360', { detail: { patientId: id } }));
               } else if (initialAction) {
                 setActiveTab(initialAction);
               }

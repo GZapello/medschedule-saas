@@ -80,7 +80,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
   onSelectPatient,
   onFinishConsultation
 }) => {
-  const { currentUser, isClinicAdmin, isSuperAdmin, isDentist, practiceAreaIds } = useAuth();
+  const { currentUser, isClinicAdmin, isSuperAdmin, isDentist, practiceAreaIds, isZemda360, isZemdaBody } = useAuth();
   const { showToast } = useToast();
 
   // Configuração e permissões do módulo
@@ -299,6 +299,23 @@ interface EsteticPlanItemForm {
   const requestIds = useRef<Record<string, string>>({});
   const mapSave = useRef<(() => Promise<boolean>) | null>(null);
   const closeRecordModals = () => { setIsNewPlanModalOpen(false); setIsNewProcedureModalOpen(false); setIsNewEvolutionModalOpen(false); setIsNewReturnModalOpen(false); setIsNewPhotoModalOpen(false); setLightboxPhoto(null); setSelectedAssessmentDetail(null); setIsZemda360ModalOpen(false); setEditing(null); setPendingDelete(null); };
+
+  const handleOpenZemda360Header = () => {
+    if (!isZemda360 && !isZemdaBody) {
+      showToast('Sua conta não possui permissão para acessar o Zemda360.', 'error');
+      return;
+    }
+    if (!selectedPatientId) {
+      showToast('Selecione um paciente para iniciar o mapeamento no Zemda360.', 'info');
+      const input = document.querySelector('[data-tour="estetic-patient-select"] input') as HTMLInputElement | null;
+      if (input) {
+        input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        input.focus();
+      }
+      return;
+    }
+    setIsZemda360ModalOpen(true);
+  };
   useLayoutEffect(() => { setComparisonIds([]); setShowComparison(false); setAreaDrafts({}); setRecordIds({}); setSessionRecordIds({}); requestIds.current = {}; closeRecordModals(); restoreForms({}, activeArea); mapSave.current = null; }, [selectedPatientId, initialAppointmentId]);
   const changeArea = async (area: EsteticArea) => {
     if (saveBusy.current || (activeTab === 'zemda360' && mapSave.current && !await mapSave.current())) return;
@@ -1047,6 +1064,7 @@ interface EsteticPlanItemForm {
             ) : undefined
           }
           description="Avaliação estruturada por área, rastreabilidade de produtos, fotos clínicas e motor anatômico Zemda360."
+          onOpenZemda360={handleOpenZemda360Header}
         >
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
             {/* SELETOR DE ÁREA DE ATUAÇÃO (FACIAL, CORPORAL, CAPILAR) */}
@@ -1333,7 +1351,11 @@ interface EsteticPlanItemForm {
                 onSelectPatient={(id, pat, initialShortcut) => {
                   void handleSelectPatient(id, pat);
                   if (initialShortcut) {
-                    setActiveTab(initialShortcut);
+                    if ((initialShortcut as string) === 'zemda360') {
+                      setIsZemda360ModalOpen(true);
+                    } else {
+                      setActiveTab(initialShortcut as any);
+                    }
                   }
                 }}
                 indicators={[

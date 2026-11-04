@@ -4,7 +4,8 @@ import {
   Search,
   ChevronRight,
   History,
-  X
+  X,
+  Activity
 } from 'lucide-react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -440,9 +441,35 @@ export function ProfessionalModuleOverview<TShortcut extends string = string>({
     }
   };
 
+  const { isZemda360, isZemdaBody } = useAuth();
+  const hasZemda360Access = Boolean(isZemda360 || isZemdaBody);
+
+  // Evita duplicar botões que já levam ao Zemda360 ou mapeamento anatômico
+  const hasExistingZemdaShortcut = shortcuts.some(
+    (s) =>
+      s.id.toLowerCase().includes('zemda') ||
+      s.id.toLowerCase().includes('body') ||
+      s.label.toLowerCase().includes('zemda360') ||
+      s.label.toLowerCase().includes('mapa corporal') ||
+      s.description?.toLowerCase().includes('zemda360')
+  );
+
+  const displayShortcuts = useMemo(() => {
+    if (!hasZemda360Access || hasExistingZemdaShortcut) {
+      return shortcuts;
+    }
+    const zemdaShortcut: OverviewShortcutConfig<any> = {
+      id: 'zemda360',
+      label: 'Zemda360',
+      description: 'Mapeamento anatômico',
+      icon: Activity
+    };
+    return [...shortcuts, zemdaShortcut];
+  }, [shortcuts, hasZemda360Access, hasExistingZemdaShortcut]);
+
   const pendingShortcutConfig = useMemo(
-    () => shortcuts.find((s) => s.id === pendingShortcut) || null,
-    [shortcuts, pendingShortcut]
+    () => displayShortcuts.find((s) => s.id === pendingShortcut) || null,
+    [displayShortcuts, pendingShortcut]
   );
 
   const handleNavigateToAgenda = () => {
@@ -453,6 +480,9 @@ export function ProfessionalModuleOverview<TShortcut extends string = string>({
     const action = pendingShortcut || undefined;
     setPendingShortcut(null);
     onSelectPatient(patientId, patient, action);
+    if (action === 'zemda360') {
+      window.dispatchEvent(new CustomEvent('zemda-open-360', { detail: { patientId } }));
+    }
   };
 
   const handleQuickShortcutClick = (shortcut: OverviewShortcutConfig<TShortcut>) => {
@@ -704,7 +734,7 @@ export function ProfessionalModuleOverview<TShortcut extends string = string>({
       </section>
 
       {/* F. ACESSO RÁPIDO */}
-      {shortcuts.length > 0 && (
+      {displayShortcuts.length > 0 && (
         <section className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs">
           <div className="mb-3">
             <h3 className="text-sm font-bold text-slate-800">Acesso rápido</h3>
@@ -713,8 +743,12 @@ export function ProfessionalModuleOverview<TShortcut extends string = string>({
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {shortcuts.slice(0, 4).map((sc) => {
+          <div
+            className={`grid grid-cols-1 sm:grid-cols-2 ${
+              displayShortcuts.length >= 5 ? 'md:grid-cols-3 lg:grid-cols-5' : 'lg:grid-cols-4'
+            } gap-3`}
+          >
+            {displayShortcuts.map((sc) => {
               const IconComponent = sc.icon;
               const isSelected = pendingShortcut === sc.id;
               return (

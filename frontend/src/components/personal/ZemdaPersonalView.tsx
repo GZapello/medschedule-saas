@@ -34,6 +34,8 @@ import { PersonalAssessmentModal } from './PersonalAssessmentModal';
 import { PersonalAIAssistantModal } from './PersonalAIAssistantModal';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
 import { ProfessionalModuleHeader } from '../common/ProfessionalModuleHeader';
+import { useAuth } from '../../context/AuthContext';
+import { ZemdaBodyModal } from '../zemda-body/ZemdaBodyModal';
 
 interface ZemdaPersonalViewProps {
   initialStudentId?: string | null;
@@ -51,9 +53,28 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
   lockStudentContext = false
 }) => {
   const { showToast } = useToast();
+  const { isZemda360, isZemdaBody } = useAuth();
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(initialStudentId || null);
+  const [isZemda360ModalOpen, setIsZemda360ModalOpen] = useState(false);
   const currentStudent = useRef(selectedStudentId);
   currentStudent.current = selectedStudentId;
+
+  const handleOpenZemda360 = () => {
+    if (!isZemda360 && !isZemdaBody) {
+      showToast('Sua conta não possui permissão para acessar o Zemda360.', 'error');
+      return;
+    }
+    if (!selectedStudentId) {
+      showToast('Selecione um aluno para iniciar o mapeamento no Zemda360.', 'info');
+      const searchInput = searchContainerRef.current?.querySelector('input');
+      if (searchInput) {
+        searchInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        searchInput.focus();
+      }
+      return;
+    }
+    setIsZemda360ModalOpen(true);
+  };
   const [finishAppointment, setFinishAppointment] = useState<any>(null);
   const [openingFinish, setOpeningFinish] = useState(false);
   const [appointmentCompleted, setAppointmentCompleted] = useState(false);
@@ -334,6 +355,7 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
           badgeLabel="Treinamento & Prescrição"
           badgeVariant="bg-emerald-100 text-emerald-800 border-emerald-200"
           description="Gestão de alunos, dobras cutâneas (Pollock), periodização e mapa 3D de sobrecarga muscular."
+          onOpenZemda360={handleOpenZemda360}
         >
           {/* Barra de Busca Rápida Global */}
           <div ref={searchContainerRef} className="relative flex-1 min-w-0 lg:min-w-[220px] max-w-xs md:max-w-sm">
@@ -930,6 +952,17 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
           }
         }}
       />
+      {/* Modal Zemda360 Completo */}
+      {isZemda360ModalOpen && selectedStudentId && (
+        <ZemdaBodyModal
+          isOpen={isZemda360ModalOpen}
+          onClose={() => setIsZemda360ModalOpen(false)}
+          patientId={selectedStudentId}
+          patientName={selectedStudentObj?.name}
+          module="personal"
+          readOnly={false}
+        />
+      )}
     </div>
   );
 };

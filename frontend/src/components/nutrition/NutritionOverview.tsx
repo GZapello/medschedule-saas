@@ -17,7 +17,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { PatientSearchSelect, PatientSearchResult } from '../common/PatientSearchSelect';
 
-export type NutritionQuickShortcut = 'evolution' | 'meal_plans' | 'anthropometry' | 'reports';
+export type NutritionQuickShortcut = 'evolution' | 'meal_plans' | 'anthropometry' | 'reports' | 'zemda360';
 
 export interface NutritionOverviewProps {
   selectedPatientId?: string | null;
@@ -33,7 +33,8 @@ const SHORTCUT_LABELS: Record<NutritionQuickShortcut, string> = {
   evolution: 'Novo atendimento',
   meal_plans: 'Plano alimentar',
   anthropometry: 'Antropometria',
-  reports: 'Relatórios'
+  reports: 'Relatórios',
+  zemda360: 'Zemda360'
 };
 
 function extractDatePart(isoOrSql?: string | null): string {
@@ -78,7 +79,8 @@ export const NutritionOverview: React.FC<NutritionOverviewProps> = ({
   selectedPatient,
   onSelectPatient
 }) => {
-  const { currentUser } = useAuth();
+  const { currentUser, isZemda360, isZemdaBody } = useAuth();
+  const hasZemda360Access = Boolean(isZemda360 || isZemdaBody);
   const { showToast } = useToast();
 
   const [loading, setLoading] = useState<boolean>(true);
@@ -266,6 +268,9 @@ export const NutritionOverview: React.FC<NutritionOverviewProps> = ({
     const action = pendingShortcut || undefined;
     setPendingShortcut(null);
     onSelectPatient(patientId, patient, action);
+    if (action === 'zemda360') {
+      window.dispatchEvent(new CustomEvent('zemda-open-360', { detail: { patientId } }));
+    }
   };
 
   const handleQuickShortcutClick = (shortcut: NutritionQuickShortcut) => {
@@ -556,7 +561,11 @@ export const NutritionOverview: React.FC<NutritionOverviewProps> = ({
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div
+          className={`grid grid-cols-1 sm:grid-cols-2 ${
+            hasZemda360Access ? 'md:grid-cols-3 lg:grid-cols-5' : 'lg:grid-cols-4'
+          } gap-3`}
+        >
           <button
             type="button"
             onClick={() => handleQuickShortcutClick('evolution')}
@@ -640,6 +649,29 @@ export const NutritionOverview: React.FC<NutritionOverviewProps> = ({
             </div>
             <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
           </button>
+
+          {hasZemda360Access && (
+            <button
+              type="button"
+              onClick={() => handleQuickShortcutClick('zemda360')}
+              className={`p-3.5 rounded-xl border text-left transition-all flex items-center justify-between gap-3 cursor-pointer ${
+                pendingShortcut === 'zemda360'
+                  ? 'border-emerald-500 bg-emerald-50/60 text-emerald-900'
+                  : 'border-slate-200 bg-slate-50/60 hover:bg-emerald-50/40 hover:border-emerald-300 text-slate-800'
+              }`}
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-lg bg-emerald-100/80 text-emerald-700 flex items-center justify-center shrink-0">
+                  <Activity className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-bold truncate">Zemda360</div>
+                  <div className="text-[11px] text-slate-500 truncate">Mapeamento corporal</div>
+                </div>
+              </div>
+              <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+            </button>
+          )}
         </div>
       </section>
     </div>

@@ -1,4 +1,4 @@
-import React, { useContext } from 'react';
+import React, { useContext, useState, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { ClinicalHeaderSlots } from './ClinicalHeaderSlots';
 import { LucideIcon, User, RefreshCw, X } from 'lucide-react';
@@ -8,6 +8,9 @@ import { ClinicalQuickHeaderActions, ClinicalQuickToolItem } from './ClinicalQui
 import { ClinicalModuleEmptyState } from './ClinicalModuleEmptyState';
 import { AutosaveStatus } from '../../hooks/useClinicalAutosave';
 import { HorizontalTabNav, useHorizontalTabScroll } from '../../hooks/useHorizontalTabScroll';
+import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
+import { ZemdaBodyModal } from '../zemda-body/ZemdaBodyModal';
 
 export interface ClinicalModuleTabItem {
   id: string;
@@ -87,6 +90,11 @@ export interface ClinicalModuleShellProps {
   modalsSlot?: React.ReactNode;
   className?: string;
   contentMaxWidth?: string; // default 'max-w-7xl mx-auto'
+
+  // 8. Integração Zemda360
+  onOpenZemda360?: () => void;
+  showZemda360Button?: boolean;
+  moduleKey?: string;
 }
 
 /**
@@ -139,9 +147,53 @@ export const ClinicalModuleShell: React.FC<ClinicalModuleShellProps> = ({
   children,
   modalsSlot,
   className = '',
-  contentMaxWidth = 'max-w-7xl mx-auto'
+  contentMaxWidth = 'max-w-7xl mx-auto',
+  onOpenZemda360: customOnOpenZemda360,
+  showZemda360Button,
+  moduleKey
 }) => {
   const headerSlots = useContext(ClinicalHeaderSlots);
+  const [internalZemda360Open, setInternalZemda360Open] = useState(false);
+  const [internalZemda360PatientId, setInternalZemda360PatientId] = useState<string | null>(null);
+  const { isZemda360, isZemdaBody } = useAuth();
+  const { showToast } = useToast();
+  const hasZemda360Access = Boolean(isZemda360 || isZemdaBody);
+
+  const handleOpenZemda360 = useCallback(() => {
+    if (customOnOpenZemda360) {
+      customOnOpenZemda360();
+      return;
+    }
+    if (!hasZemda360Access) {
+      showToast('Sua conta não possui permissão para acessar o Zemda360.', 'error');
+      return;
+    }
+    if (!selectedPatientId) {
+      showToast('Selecione um paciente para iniciar o mapeamento no Zemda360.', 'info');
+      const searchInput = document.querySelector('[data-tour="clinical-patient-select"] input') as HTMLInputElement | null;
+      if (searchInput) {
+        searchInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        searchInput.focus();
+      }
+      return;
+    }
+    setInternalZemda360PatientId(selectedPatientId);
+    setInternalZemda360Open(true);
+  }, [customOnOpenZemda360, hasZemda360Access, selectedPatientId, showToast]);
+
+  useEffect(() => {
+    const handleGlobalOpen = (e: any) => {
+      const targetPatientId = e?.detail?.patientId || selectedPatientId;
+      if (targetPatientId) {
+        setInternalZemda360PatientId(targetPatientId);
+        setInternalZemda360Open(true);
+      } else {
+        handleOpenZemda360();
+      }
+    };
+    window.addEventListener('zemda-open-360', handleGlobalOpen);
+    return () => window.removeEventListener('zemda-open-360', handleGlobalOpen);
+  }, [handleOpenZemda360, selectedPatientId]);
 
   const isDOMElement = (node: any): node is Element => {
     return Boolean(node && typeof node === 'object' && node.nodeType === 1 && node.isConnected);
@@ -195,6 +247,8 @@ export const ClinicalModuleShell: React.FC<ClinicalModuleShellProps> = ({
           badgeVariant={badgeVariant}
           secondaryBadge={secondaryBadge}
           description={description}
+          onOpenZemda360={handleOpenZemda360}
+          showZemda360Button={showZemda360Button}
         >
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
             {filterSlot}
@@ -334,6 +388,21 @@ export const ClinicalModuleShell: React.FC<ClinicalModuleShellProps> = ({
           )}
         </div>
       </main>
+
+      {/* Modal do Zemda360 Completo Integrado ao Módulo Clínico */}
+      {internalZemda360Open && (selectedPatientId || internalZemda360PatientId) && (
+        <ZemdaBodyModal
+          isOpen={internalZemda360Open}
+          onClose={() => {
+            setInternalZemda360Open(false);
+            setInternalZemda360PatientId(null);
+          }}
+          patientId={selectedPatientId || internalZemda360PatientId || ''}
+          patientName={selectedPatient?.name || selectedPatient?.full_name || patientDisplayName}
+          module={moduleKey || 'general'}
+          readOnly={false}
+        />
+      )}
     </div>
   );
 };
