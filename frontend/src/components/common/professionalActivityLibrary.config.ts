@@ -1,4 +1,4 @@
-export type ProfessionKey = 'fono' | 'pp' | 'to';
+export type ProfessionKey = 'fono' | 'pp' | 'to' | 'fisio';
 
 export type ActivitySetting = 'home' | 'school' | 'community' | 'other' | 'general';
 
@@ -382,6 +382,67 @@ export const PROFESSION_LIBRARY_CONFIGS: Record<ProfessionKey, ProfessionLibrary
         subcategories: ['Recursos e adaptações funcionais', 'Engrossadores de cabo', 'Estabilização de objetos']
       }
     ]
+  },
+
+  fisio: {
+    key: 'fisio',
+    moduleName: 'ZemdaFisio',
+    professionName: 'Fisioterapia',
+    libraryTitle: 'Biblioteca de Exercícios Fisioterapêuticos',
+    librarySubtitle: 'Exercícios terapêuticos domiciliares, mobilidade articular, fortalecimento, alongamento e controle motor',
+    patientSectionTitle: 'Exercícios Terapêuticos Prescritos (Casa)',
+    patientSectionSubtitle: 'Orientações estruturadas para realização domiciliar e continuidade do plano terapêutico',
+    patientNameLabel: 'Paciente',
+    brandColor: 'teal',
+    badgeClass: 'bg-teal-50 text-teal-700 border-teal-200',
+    headerGradientClass: 'from-teal-600 to-emerald-700',
+    activeTabClass: 'bg-teal-600 text-white shadow-xs',
+    defaultFrequency: '1 a 2 vezes ao dia (séries conforme prescrição)',
+    quickSuggestionSettings: [
+      { id: 'home', label: 'Casa / Domiciliar' },
+      { id: 'general', label: 'Geral / Qualquer Ambiente' },
+      { id: 'other', label: 'Outro Ambiente' },
+      { id: 'community', label: 'Comunidade / Ar Livre' },
+      { id: 'school', label: 'Escola / Trabalho' }
+    ],
+    categories: [
+      {
+        id: 'cat-fisio-mobility',
+        name: 'Mobilidade Articular',
+        description: 'Exercícios ativos e auto-assistidos para amplitude de movimento e alívio de rigidez',
+        subcategories: ['Coluna e tronco', 'Membros superiores e ombro', 'Membros inferiores e quadril', 'Cintura escapular e pélvica']
+      },
+      {
+        id: 'cat-fisio-strength',
+        name: 'Fortalecimento Muscular',
+        description: 'Ativação isométrica, exercícios isotônicos, elásticos e resistência progressiva',
+        subcategories: ['Isometria e ativação inicial', 'Exercícios isotônicos concêntricos/excêntricos', 'Elásticos e faixas elásticas (Theraband)', 'Peso corporal e cadeias cinéticas']
+      },
+      {
+        id: 'cat-fisio-stretching',
+        name: 'Alongamento e Flexibilidade',
+        description: 'Alongamentos estáticos sustentados e dinâmicos para flexibilidade tecidual e alívio de tensões',
+        subcategories: ['Cadeia posterior e isquiotibiais', 'Cadeia anterior e flexores de quadril', 'Membros superiores e peitorais', 'Cervical e musculatura paravertebral']
+      },
+      {
+        id: 'cat-fisio-balance',
+        name: 'Equilíbrio e Propriocepção',
+        description: 'Apoio unipodal, transferência de peso corporal e prevenção de quedas',
+        subcategories: ['Apoio unipodal e tandem', 'Bases instáveis e transferências', 'Treino dinâmico de equilíbrio e perturbações', 'Prevenção de quedas no idoso']
+      },
+      {
+        id: 'cat-fisio-motor-control',
+        name: 'Controle Motor e Estabilização',
+        description: 'Ativação de estabilizadores profundos do core, dissociação e alinhamento biomecânico',
+        subcategories: ['Estabilização central e core (transverso/assoalho)', 'Controle escapulotorácico e manguito', 'Controle lombopélvico e glúteos', 'Dissociação de cinturas e alinhamento']
+      },
+      {
+        id: 'cat-fisio-functional',
+        name: 'Exercícios Funcionais e Marcha',
+        description: 'Treino de sentar e levantar, subir degraus, transferências e padrões da marcha',
+        subcategories: ['Sentar e levantar da cadeira', 'Treino de marcha e passadas', 'Subida e descida de degraus', 'Transferências posturais no leito/assento']
+      }
+    ]
   }
 };
 
@@ -392,6 +453,9 @@ export function getProfessionLibraryConfig(profession: string): ProfessionLibrar
   }
   if (clean === 'pp' || clean === 'psicopedagogia' || clean === 'psychopedagogy' || clean === 'zemdapp') {
     return PROFESSION_LIBRARY_CONFIGS.pp;
+  }
+  if (clean === 'fisio' || clean === 'fisioterapia' || clean === 'physiotherapy' || clean === 'zemdafisio') {
+    return PROFESSION_LIBRARY_CONFIGS.fisio;
   }
   return PROFESSION_LIBRARY_CONFIGS.to;
 }

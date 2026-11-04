@@ -38,6 +38,7 @@ import { BodyPainMapCanvas } from './BodyPainMapCanvas';
 import { PatientPreviousRecordsModal } from '../clinical/PatientPreviousRecordsModal';
 import { ExternalTestsManager } from '../common/ExternalTestsManager';
 import { MeasurableGoalsManager } from '../common/MeasurableGoalsManager';
+import { ProfessionalActivityLibrary } from '../common/ProfessionalActivityLibrary';
 import { PatientFollowUpDocumentModal } from '../clinical/PatientFollowUpDocumentModal';
 import { useClinicalAutosave } from '../../hooks/useClinicalAutosave';
 import { useHorizontalTabScroll, HorizontalTabNav } from '../../hooks/useHorizontalTabScroll';
@@ -302,6 +303,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
 
   // 13. Exercícios Domiciliares
   const [homeExercises, setHomeExercises] = useState<HomeExerciseItem[]>([]);
+  const [libraryActivities, setLibraryActivities] = useState<any[]>([]);
 
   const isCurrentClinicalContext = useClinicalFormReset(selectedPatientId + ':' + (initialAppointmentId || ''), [
     [clinicalEvolution, setClinicalEvolution],
@@ -487,6 +489,20 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
     }
   }, [activeTab, selectedPatientId]);
 
+  useEffect(() => {
+    if (!selectedPatientId) {
+      setLibraryActivities([]);
+      return;
+    }
+    if (activeTab === 'home_exercises' || activeTab === 'finish') {
+      ApiClient.get<any[]>(`/v1/clinical-activities/patient/${selectedPatientId}?module_type=fisio`)
+        .then(res => {
+          if (Array.isArray(res)) setLibraryActivities(res);
+        })
+        .catch(() => {});
+    }
+  }, [activeTab, selectedPatientId]);
+
   const loadPatientData = async (patId: string, restoreClinical = false) => {
     try {
       setLoading(true);
@@ -660,11 +676,26 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
   };
 
   // Converte exercícios domiciliares em texto para o documento do paciente
+  // Mantém total retrocompatibilidade com prescrições da sessão e com a biblioteca padronizada
   const homeExercisesText = React.useMemo(() => {
-    return homeExercises.map((ex, idx) => {
-      return `${idx + 1}. ${ex.name}\n   Dose: ${ex.series} de ${ex.repetitions} (${ex.frequency})\n   Instruções: ${ex.instructions}`;
-    }).join('\n\n');
-  }, [homeExercises]);
+    if (homeExercises.length > 0) {
+      return homeExercises.map((ex, idx) => {
+        return `${idx + 1}. ${ex.name}\n   Dose: ${ex.series} de ${ex.repetitions} (${ex.frequency})\n   Instruções: ${ex.instructions}`;
+      }).join('\n\n');
+    }
+    if (libraryActivities.length > 0) {
+      return libraryActivities
+        .filter(act => act.status === 'active')
+        .map((act, idx) => {
+          const dose = act.frequency ? `\n   Dose/Frequência: ${act.frequency}` : '';
+          const inst = act.instructions ? `\n   Instruções: ${act.instructions}` : '';
+          const guidance = act.caregiver_guidance ? `\n   Cuidados: ${act.caregiver_guidance}` : '';
+          return `${idx + 1}. ${act.title || act.activity || 'Exercício'}${dose}${inst}${guidance}`;
+        })
+        .join('\n\n');
+    }
+    return '';
+  }, [homeExercises, libraryActivities]);
 
   return (
     <ClinicalModuleShell
@@ -2045,108 +2076,58 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
               />
             )}
 
-            {/* ABA 11: EXERCÍCIOS DOMICILIARES */}
+            {/* ABA 11: EXERCÍCIOS EM CASA (BIBLIOTECA ZEMDAFISIO) */}
             {activeTab === 'home_exercises' && (
-              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-5">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-2">
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                      <Dumbbell className="w-4 h-4 text-teal-600" /> Prescrição de Exercícios Domiciliares
-                    </h3>
-                    <p className="text-xs text-slate-500">
-                      Montagem de rotina de exercícios com instruções claras para o paciente realizar em casa.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowFollowUpModal(true)}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-                  >
-                    <Printer className="w-4 h-4 text-teal-600" /> Gerar PDF do Paciente
-                  </button>
-                </div>
-
-                <div className="space-y-4">
-                  {homeExercises.map((ex, idx) => (
-                    <div key={idx} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <input
-                          type="text"
-                          value={ex.name}
-                          onChange={e => {
-                            const updated = [...homeExercises];
-                            updated[idx].name = e.target.value;
-                            setHomeExercises(updated);
-                          }}
-                          className="font-bold text-xs px-2 py-1 bg-white border border-slate-200 rounded-lg w-2/3"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setHomeExercises(homeExercises.filter((_, i) => i !== idx))}
-                          className="text-slate-400 hover:text-rose-600 p-1"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <input
-                          type="text"
-                          value={ex.series}
-                          placeholder="Séries (ex: 3 séries)"
-                          onChange={e => {
-                            const updated = [...homeExercises];
-                            updated[idx].series = e.target.value;
-                            setHomeExercises(updated);
-                          }}
-                          className="px-2.5 py-1 text-xs bg-white border border-slate-200 rounded-lg"
-                        />
-                        <input
-                          type="text"
-                          value={ex.repetitions}
-                          placeholder="Repetições (ex: 12 repetições)"
-                          onChange={e => {
-                            const updated = [...homeExercises];
-                            updated[idx].repetitions = e.target.value;
-                            setHomeExercises(updated);
-                          }}
-                          className="px-2.5 py-1 text-xs bg-white border border-slate-200 rounded-lg"
-                        />
-                        <input
-                          type="text"
-                          value={ex.frequency}
-                          placeholder="Frequência (ex: 1x ao dia)"
-                          onChange={e => {
-                            const updated = [...homeExercises];
-                            updated[idx].frequency = e.target.value;
-                            setHomeExercises(updated);
-                          }}
-                          className="px-2.5 py-1 text-xs bg-white border border-slate-200 rounded-lg"
-                        />
-                      </div>
-
-                      <textarea
-                        rows={2}
-                        value={ex.instructions}
-                        placeholder="Instruções e cuidados na execução..."
-                        onChange={e => {
-                          const updated = [...homeExercises];
-                          updated[idx].instructions = e.target.value;
-                          setHomeExercises(updated);
-                        }}
-                        className="w-full p-2.5 text-xs bg-white border border-slate-200 rounded-xl"
-                      />
+              <div className="space-y-6">
+                {/* Prescrições manuais legadas / em andamento desta sessão se houver */}
+                {homeExercises.length > 0 && (
+                  <div className="rounded-2xl border border-teal-200 bg-teal-50/40 p-4 space-y-3">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <span className="text-xs font-bold text-teal-900 flex items-center gap-1.5">
+                        <Dumbbell className="w-4 h-4 text-teal-700" />
+                        Prescrições manuais registradas nesta sessão ({homeExercises.length})
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setShowFollowUpModal(true)}
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-teal-800 underline hover:text-teal-950 cursor-pointer"
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                        Visualizar no PDF do Paciente
+                      </button>
                     </div>
-                  ))}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {homeExercises.map((ex, idx) => (
+                        <div key={idx} className="p-3 bg-white rounded-xl border border-teal-200/80 text-xs space-y-1 shadow-2xs">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-slate-800">{ex.name || `Exercício ${idx + 1}`}</span>
+                            <button
+                              type="button"
+                              onClick={() => setHomeExercises(homeExercises.filter((_, i) => i !== idx))}
+                              className="text-slate-400 hover:text-rose-600 p-0.5"
+                              title="Remover prescrição manual"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          <div className="text-[11px] text-slate-600">
+                            {ex.series ? `${ex.series}` : ''}{ex.repetitions ? ` • ${ex.repetitions}` : ''}{ex.frequency ? ` • ${ex.frequency}` : ''}
+                          </div>
+                          {ex.instructions && (
+                            <p className="text-[11px] text-slate-500 line-clamp-2">{ex.instructions}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
-                  <button
-                    type="button"
-                    onClick={() => setHomeExercises([...homeExercises, { name: '', series: '', repetitions: '', frequency: '', instructions: '' }])}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5" /> + Adicionar Exercício à Rotina
-                  </button>
-                </div>
+                {/* Biblioteca Padronizada ZemdaFisio */}
+                <ProfessionalActivityLibrary
+                  profession="fisio"
+                  patientId={selectedPatientId}
+                  patientName={selectedPatient?.full_name || selectedPatient?.name || ''}
+                />
               </div>
             )}
 
@@ -2189,7 +2170,11 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
                   </div>
                   <div className="p-3.5 bg-teal-50/50 border border-teal-200 rounded-xl text-xs">
                     <span className="font-bold text-teal-900 block mb-1">Exercícios Domiciliares</span>
-                    <p className="text-teal-700">{homeExercises.length} {homeExercises.length === 1 ? 'exercício prescrito' : 'exercícios prescritos'}</p>
+                    <p className="text-teal-700">
+                      {homeExercises.length > 0
+                        ? `${homeExercises.length} ${homeExercises.length === 1 ? 'exercício prescrito nesta sessão' : 'exercícios prescritos nesta sessão'}`
+                        : `${libraryActivities.filter(a => a.status === 'active').length} ${libraryActivities.filter(a => a.status === 'active').length === 1 ? 'exercício ativo na biblioteca' : 'exercícios ativos na biblioteca'}`}
+                    </p>
                   </div>
                 </div>
 

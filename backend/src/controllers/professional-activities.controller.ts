@@ -7,11 +7,12 @@ import { hasClinicalAccess } from './clinical.controller';
 import { isSpeechTherapistOrClinicManager } from './speech-therapy.controller';
 import { hasPsychopedagogyAccess } from './psychopedagogy.controller';
 import { isOccupationalTherapistOrClinicManager } from './occupational-therapy.controller';
+import { isPhysiotherapistOrClinicManager } from './physiotherapy.controller';
 
 /**
  * Normaliza o identificador da profissão/módulo
  */
-export function normalizeProfessionId(raw: string | undefined | null): 'fono' | 'pp' | 'to' | null {
+export function normalizeProfessionId(raw: string | undefined | null): 'fono' | 'pp' | 'to' | 'fisio' | null {
   if (!raw) return null;
   const clean = String(raw).trim().toLowerCase();
   if (clean === 'fono' || clean === 'fonoaudiologia' || clean === 'speech-therapy' || clean === 'zemdafono') {
@@ -22,6 +23,9 @@ export function normalizeProfessionId(raw: string | undefined | null): 'fono' | 
   }
   if (clean === 'to' || clean === 'terapia-ocupacional' || clean === 'occupational-therapy' || clean === 'zemdato') {
     return 'to';
+  }
+  if (clean === 'fisio' || clean === 'fisioterapia' || clean === 'physiotherapy' || clean === 'zemdafisio') {
+    return 'fisio';
   }
   return null;
 }
@@ -69,6 +73,12 @@ export function hasProfessionActivityAccess(req: Request, professionId: string, 
     return true;
   }
 
+  if (normalized === 'fisio') {
+    if (!isPhysiotherapistOrClinicManager(req)) return false;
+    if (patientId && !hasClinicalAccess(req, patientId)) return false;
+    return true;
+  }
+
   return false;
 }
 
@@ -104,7 +114,7 @@ export class ProfessionalActivitiesController {
       const professionId = normalizeProfessionId(String(rawProfession || ''));
 
       if (!professionId) {
-        res.status(400).json({ error: 'Módulo ou profissão inválida. Especifique fono, pp ou to.' });
+        res.status(400).json({ error: 'Módulo ou profissão inválida. Especifique fono, pp, to ou fisio.' });
         return;
       }
 
@@ -588,7 +598,7 @@ export class ProfessionalActivitiesController {
       const professionId = normalizeProfessionId(String(rawProfession || ''));
 
       if (!professionId) {
-        res.status(400).json({ error: 'Especifique o módulo/profissão (fono, pp, to).' });
+        res.status(400).json({ error: 'Especifique o módulo/profissão (fono, pp, to, fisio).' });
         return;
       }
 
@@ -604,8 +614,8 @@ export class ProfessionalActivitiesController {
                pr.registration_number,
                pt.full_name AS patient_name,
                (SELECT COUNT(*) FROM clinical_home_program_follow_ups fu WHERE fu.program_id = hp.id) AS follow_ups_count,
-               (SELECT fu.notes FROM clinical_home_program_follow_ups fu WHERE fu.program_id = hp.id ORDER BY fu.created_at DESC LIMIT 1) AS last_follow_up_note,
-               (SELECT fu.created_at FROM clinical_home_program_follow_ups fu WHERE fu.program_id = hp.id ORDER BY fu.created_at DESC LIMIT 1) AS last_follow_up_date
+               (SELECT fu.notes FROM clinical_home_program_follow_ups fu WHERE fu.program_id = hp.id ORDER BY fu.created_at DESC, fu.rowid DESC LIMIT 1) AS last_follow_up_note,
+               (SELECT fu.created_at FROM clinical_home_program_follow_ups fu WHERE fu.program_id = hp.id ORDER BY fu.created_at DESC, fu.rowid DESC LIMIT 1) AS last_follow_up_date
         FROM clinical_home_programs hp
         LEFT JOIN professionals pr ON pr.id = hp.professional_id AND pr.tenant_id = hp.tenant_id
         LEFT JOIN patients pt ON pt.id = hp.patient_id
@@ -838,7 +848,7 @@ export class ProfessionalActivitiesController {
       const tenantId = req.tenantId!;
       const userId = req.user!.userId;
       const { id } = req.params;
-      const { status, followUpNotes } = req.body || {};
+      const { status, followUpNotes, notes } = req.body || {};
 
       const existing = db.prepare(`
         SELECT * FROM clinical_home_programs
@@ -858,7 +868,8 @@ export class ProfessionalActivitiesController {
 
       const validStatuses = ['active', 'completed', 'paused', 'revised', 'pending', 'partially_completed', 'not_completed'];
       const targetStatus = status && validStatuses.includes(String(status)) ? String(status) : existing.status;
-      const trimmedNotes = followUpNotes ? String(followUpNotes).trim() : null;
+      const rawNotes = followUpNotes !== undefined ? followUpNotes : notes;
+      const trimmedNotes = rawNotes ? String(rawNotes).trim() : null;
 
       db.prepare(`
         UPDATE clinical_home_programs SET
@@ -932,7 +943,7 @@ export class ProfessionalActivitiesController {
       const rows = db.prepare(`
         SELECT * FROM clinical_home_program_follow_ups
         WHERE program_id = ? AND tenant_id = ?
-        ORDER BY created_at DESC
+        ORDER BY created_at DESC, rowid DESC
       `).all(id, tenantId);
 
       res.json(rows);
@@ -1083,7 +1094,8 @@ export class ProfessionalActivitiesController {
       const moduleTitles: Record<string, string> = {
         fono: 'ZEMDAFONO — PROGRAMA DE ORIENTAÇÕES E ATIVIDADES FONOAUDIOLÓGICAS',
         pp: 'ZEMDAPP — PROGRAMA DE ATIVIDADES E ORIENTAÇÕES PSICOPEDAGÓGICAS',
-        to: 'ZEMDATO — PROGRAMA DE ATIVIDADES E ORIENTAÇÕES DE TERAPIA OCUPACIONAL'
+        to: 'ZEMDATO — PROGRAMA DE ATIVIDADES E ORIENTAÇÕES DE TERAPIA OCUPACIONAL',
+        fisio: 'ZEMDAFISIO — PROGRAMA DE EXERCÍCIOS E ORIENTAÇÕES FISIOTERAPÊUTICAS'
       };
       const docHeaderTitle = moduleTitles[professionId] || 'PROGRAMA DE ATIVIDADES E ORIENTAÇÕES';
 
@@ -1293,7 +1305,8 @@ export class ProfessionalActivitiesController {
       const moduleTitles: Record<string, string> = {
         fono: 'ZEMDAFONO — PROGRAMA CONSOLIDADO DE ORIENTAÇÕES FONOAUDIOLÓGICAS',
         pp: 'ZEMDAPP — PROGRAMA CONSOLIDADO DE ATIVIDADES PSICOPEDAGÓGICAS',
-        to: 'ZEMDATO — PROGRAMA CONSOLIDADO DE ATIVIDADES DE TERAPIA OCUPACIONAL'
+        to: 'ZEMDATO — PROGRAMA CONSOLIDADO DE ATIVIDADES DE TERAPIA OCUPACIONAL',
+        fisio: 'ZEMDAFISIO — PROGRAMA CONSOLIDADO DE EXERCÍCIOS FISIOTERAPÊUTICOS'
       };
       const docHeaderTitle = moduleTitles[professionId] || 'PROGRAMA CONSOLIDADO DE ATIVIDADES E ORIENTAÇÕES';
 
