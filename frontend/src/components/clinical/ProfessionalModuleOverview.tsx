@@ -238,9 +238,9 @@ export function ProfessionalModuleOverview<TShortcut extends string = string>({
   selectedPatientId,
   selectedPatient,
   onSelectPatient,
-  searchTitle = 'Buscar paciente',
-  searchSubtitle = 'Encontre um paciente por nome, CPF ou prontuário.',
-  searchPlaceholder = 'Buscar paciente por nome, CPF ou prontuário...',
+  searchTitle,
+  searchSubtitle,
+  searchPlaceholder,
   searchInputId,
   patientDataTour = 'clinical-patient-select',
   defaultServiceLabel = 'Atendimento Clínico',
@@ -251,6 +251,23 @@ export function ProfessionalModuleOverview<TShortcut extends string = string>({
   const { currentUser } = useAuth();
   const { showToast } = useToast();
   const styles = COLOR_STYLES[colorVariant] || COLOR_STYLES.teal;
+
+  const isLearner = patientTermSingular === 'aprendente';
+  const resolvedSearchTitle =
+    searchTitle ||
+    (isLearner
+      ? 'Buscar aprendente para iniciar atendimento'
+      : 'Buscar paciente para iniciar atendimento');
+  const resolvedSearchSubtitle =
+    searchSubtitle ||
+    (isLearner
+      ? 'Encontre um aprendente por nome, CPF ou prontuário e acesse seu atendimento.'
+      : 'Encontre um paciente por nome, CPF ou prontuário e acesse seu atendimento.');
+  const resolvedSearchPlaceholder =
+    searchPlaceholder ||
+    (isLearner
+      ? 'Buscar aprendente por nome, CPF ou prontuário...'
+      : 'Buscar paciente por nome, CPF ou prontuário...');
 
   const [loading, setLoading] = useState<boolean>(true);
   const [patients, setPatients] = useState<any[]>([]);
@@ -453,50 +470,52 @@ export function ProfessionalModuleOverview<TShortcut extends string = string>({
 
   return (
     <div data-tour={`${moduleKey}-overview`} className="space-y-5 py-1 animate-fadeIn">
-      {/* B. BUSCA DE PACIENTE EM DESTAQUE */}
+      {/* B. BUSCA DE PACIENTE EM DESTAQUE (CARD HORIZONTAL CLEAN) */}
       <section
-        className={`bg-white rounded-2xl border p-5 shadow-xs transition-all ${
+        className={`bg-white rounded-2xl border p-4 sm:p-5 shadow-xs transition-all ${
           pendingShortcut ? styles.searchBorderActive : 'border-slate-200'
         }`}
       >
-        <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
-          <div className="flex items-center gap-2.5">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
             <div
               className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${styles.iconBox}`}
             >
               <Search className="w-4 h-4" />
             </div>
-            <div>
-              <h2 className="text-sm font-bold text-slate-800">{searchTitle}</h2>
-              <p className="text-xs text-slate-500">{searchSubtitle}</p>
+            <div className="min-w-0">
+              <h2 className="text-sm font-bold text-slate-800 tracking-tight">{resolvedSearchTitle}</h2>
+              <p className="text-xs text-slate-500 mt-0.5">{resolvedSearchSubtitle}</p>
             </div>
           </div>
 
-          {pendingShortcutConfig && (
-            <div
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold ${styles.pendingBadge}`}
-            >
-              <span>Abrir após selecionar: {pendingShortcutConfig.label}</span>
-              <button
-                type="button"
-                aria-label="Cancelar atalho selecionado"
-                onClick={() => setPendingShortcut(null)}
-                className={`p-0.5 rounded cursor-pointer ${styles.pendingClearBtn}`}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full md:w-auto md:min-w-[340px] md:max-w-md shrink-0">
+            {pendingShortcutConfig && (
+              <div
+                className={`inline-flex items-center justify-between gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold shrink-0 ${styles.pendingBadge}`}
               >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
-        </div>
+                <span className="truncate max-w-[200px]">Atalho: {pendingShortcutConfig.label}</span>
+                <button
+                  type="button"
+                  aria-label="Cancelar atalho selecionado"
+                  onClick={() => setPendingShortcut(null)}
+                  className={`p-0.5 rounded cursor-pointer ${styles.pendingClearBtn}`}
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
 
-        <div data-tour={patientDataTour} className="w-full">
-          <PatientSearchSelect
-            id={resolvedSearchInputId}
-            value={selectedPatientId || ''}
-            selectedPatient={selectedPatient}
-            onChange={(id, pat) => handleSelectPatient(id, pat)}
-            placeholder={searchPlaceholder}
-          />
+            <div data-tour={patientDataTour} className="w-full">
+              <PatientSearchSelect
+                id={resolvedSearchInputId}
+                value={selectedPatientId || ''}
+                selectedPatient={selectedPatient}
+                onChange={(id, pat) => handleSelectPatient(id, pat)}
+                placeholder={resolvedSearchPlaceholder}
+              />
+            </div>
+          </div>
         </div>
       </section>
 

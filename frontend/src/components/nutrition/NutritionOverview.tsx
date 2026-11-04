@@ -281,50 +281,52 @@ export const NutritionOverview: React.FC<NutritionOverviewProps> = ({
 
   return (
     <div data-tour="nutrition-overview" className="space-y-5 py-1 animate-fadeIn">
-      {/* B. BUSCAR PACIENTE */}
+      {/* B. BUSCAR PACIENTE (CARD HORIZONTAL CLEAN) */}
       <section
-        className={`bg-white rounded-2xl border p-5 shadow-xs transition-all ${
+        className={`bg-white rounded-2xl border p-4 sm:p-5 shadow-xs transition-all ${
           pendingShortcut
             ? 'border-emerald-400 ring-2 ring-emerald-500/15'
             : 'border-slate-200'
         }`}
       >
-        <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
-          <div className="flex items-center gap-2.5">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
             <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100 flex items-center justify-center shrink-0">
               <Search className="w-4 h-4" />
             </div>
-            <div>
-              <h2 className="text-sm font-bold text-slate-800">Buscar paciente</h2>
-              <p className="text-xs text-slate-500">
-                Encontre um paciente por nome, CPF ou prontuário.
+            <div className="min-w-0">
+              <h2 className="text-sm font-bold text-slate-800 tracking-tight">Buscar paciente para iniciar atendimento</h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Encontre um paciente por nome, CPF ou prontuário e acesse seu atendimento.
               </p>
             </div>
           </div>
 
-          {pendingShortcut && (
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold">
-              <span>Abrir após selecionar: {SHORTCUT_LABELS[pendingShortcut]}</span>
-              <button
-                type="button"
-                aria-label="Cancelar atalho selecionado"
-                onClick={() => setPendingShortcut(null)}
-                className="p-0.5 text-emerald-600 hover:text-emerald-900 rounded cursor-pointer"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
-        </div>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full md:w-auto md:min-w-[340px] md:max-w-md shrink-0">
+            {pendingShortcut && (
+              <div className="inline-flex items-center justify-between gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold shrink-0">
+                <span className="truncate max-w-[200px]">Atalho: {SHORTCUT_LABELS[pendingShortcut]}</span>
+                <button
+                  type="button"
+                  aria-label="Cancelar atalho selecionado"
+                  onClick={() => setPendingShortcut(null)}
+                  className="p-0.5 text-emerald-600 hover:text-emerald-900 rounded cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
 
-        <div data-tour="clinical-patient-select" className="w-full">
-          <PatientSearchSelect
-            id="nutrition-overview-patient-search"
-            value={selectedPatientId || ''}
-            selectedPatient={selectedPatient}
-            onChange={(id, pat) => handleSelectPatient(id, pat)}
-            placeholder="Buscar paciente por nome, CPF ou prontuário..."
-          />
+            <div data-tour="clinical-patient-select" className="w-full">
+              <PatientSearchSelect
+                id="nutrition-overview-patient-search"
+                value={selectedPatientId || ''}
+                selectedPatient={selectedPatient}
+                onChange={(id, pat) => handleSelectPatient(id, pat)}
+                placeholder="Buscar paciente por nome, CPF ou prontuário..."
+              />
+            </div>
+          </div>
         </div>
       </section>
 
