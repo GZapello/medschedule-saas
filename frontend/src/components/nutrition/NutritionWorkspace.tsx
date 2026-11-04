@@ -52,6 +52,14 @@ import { ClinicalDraftRecoveryModal } from '../clinical/ClinicalDraftRecoveryMod
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
 import { ProfessionalModuleHeader } from '../common/ProfessionalModuleHeader';
 import { ClinicalModuleShell } from '../clinical/ClinicalModuleShell';
+import { NutritionOverview, NutritionQuickShortcut } from './NutritionOverview';
+
+/**
+ * Configuração local e isolada para ativar/desativar o novo painel inicial do ZemdaNutri.
+ * - true: apresenta o novo painel inicial (NutritionOverview) quando nenhum paciente está selecionado.
+ * - false: restaura a tela inicial antiga de seleção de paciente (ClinicalModuleEmptyState).
+ */
+export const ENABLE_NUTRITION_OVERVIEW = true;
 
 interface NutritionWorkspaceProps {
   initialPatientId?: string;
@@ -999,6 +1007,25 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
       tabActiveVariant="bg-emerald-600 text-white shadow-xs"
       emptyStateColorVariant="emerald"
       emptyStateDescription="Escolha um paciente no seletor superior para iniciar a consulta nutricional, avaliar antropometria e construir o plano alimentar."
+      emptyStateContent={
+        ENABLE_NUTRITION_OVERVIEW && !initialAppointmentId ? (
+          <NutritionOverview
+            selectedPatientId={selectedPatientId}
+            selectedPatient={selectedPatient}
+            onSelectPatient={(id, pat, initialAction?: NutritionQuickShortcut) => {
+              setSelectedPatientId(id);
+              if (pat) setSelectedPatient(pat);
+              else if (!id) setSelectedPatient(null);
+              if (initialAction === 'reports') {
+                setActiveTab('evolution');
+                setShowFollowUpModal(true);
+              } else if (initialAction) {
+                setActiveTab(initialAction);
+              }
+            }}
+          />
+        ) : undefined
+      }
       contentMaxWidth="max-w-6xl mx-auto"
       modalsSlot={
         <>

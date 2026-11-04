@@ -80,6 +80,7 @@ export interface ClinicalModuleShellProps {
   emptyStateDescription?: string;
   emptyStateColorVariant?: 'teal' | 'cyan' | 'purple' | 'sky' | 'indigo' | 'emerald' | 'rose' | 'amber' | 'slate';
   emptyStateAction?: React.ReactNode;
+  emptyStateContent?: React.ReactNode;
 
   // 7. Modais / Extras
   children?: React.ReactNode;
@@ -134,6 +135,7 @@ export const ClinicalModuleShell: React.FC<ClinicalModuleShellProps> = ({
   emptyStateDescription = 'Escolha um paciente no menu superior para iniciar o atendimento.',
   emptyStateColorVariant = 'sky',
   emptyStateAction,
+  emptyStateContent,
   children,
   modalsSlot,
   className = '',
@@ -175,6 +177,7 @@ export const ClinicalModuleShell: React.FC<ClinicalModuleShellProps> = ({
 
   const patientDisplayName = selectedPatient?.full_name || selectedPatient?.name;
   const handleClear = onClearPatient || (() => onSelectPatient('', null));
+  const hasCustomEmptyState = Boolean(emptyStateContent && !selectedPatientId && !isLockedContext);
 
   return (
     <div className={`clinical-screen clinical-module flex flex-col min-h-screen bg-slate-50 text-slate-800 ${className}`}>
@@ -195,15 +198,17 @@ export const ClinicalModuleShell: React.FC<ClinicalModuleShellProps> = ({
         >
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
             {filterSlot}
-            <div className="w-64 sm:w-72 lg:w-80" data-tour="clinical-patient-select">
-              <PatientSearchSelect
-                value={selectedPatientId || ''}
-                selectedPatient={selectedPatient as any}
-                onChange={onSelectPatient}
-                placeholder={patientSearchPlaceholder}
-                compact
-              />
-            </div>
+            {!hasCustomEmptyState && (
+              <div className="w-64 sm:w-72 lg:w-80" data-tour="clinical-patient-select">
+                <PatientSearchSelect
+                  value={selectedPatientId || ''}
+                  selectedPatient={selectedPatient as any}
+                  onChange={onSelectPatient}
+                  placeholder={patientSearchPlaceholder}
+                  compact
+                />
+              </div>
+            )}
             {headerActions}
           </div>
         </ProfessionalModuleHeader>
@@ -266,7 +271,7 @@ export const ClinicalModuleShell: React.FC<ClinicalModuleShellProps> = ({
       )}
 
       {/* LINHA 3 — ABAS INTERNAS DO MÓDULO (HorizontalTabNav compacto com scroll horizontal) */}
-      {tabs.length > 0 && onTabChange && (
+      {tabs.length > 0 && onTabChange && !hasCustomEmptyState && (
         <div className="bg-white border-b border-slate-200 shrink-0 sticky top-0 z-10 shadow-2xs">
           <HorizontalTabNav scroll={tabScroll}>
             <div
@@ -315,13 +320,15 @@ export const ClinicalModuleShell: React.FC<ClinicalModuleShellProps> = ({
       <main className="flex-1 pt-3 pb-5 px-3.5 sm:px-6 overflow-y-auto">
         <div className={contentMaxWidth}>
           {!selectedPatientId ? (
-            <ClinicalModuleEmptyState
-              icon={ModuleIcon}
-              title={emptyStateTitle || `Selecione um Paciente para Iniciar o ${title}`}
-              description={emptyStateDescription}
-              colorVariant={emptyStateColorVariant}
-              action={emptyStateAction}
-            />
+            emptyStateContent || (
+              <ClinicalModuleEmptyState
+                icon={ModuleIcon}
+                title={emptyStateTitle || `Selecione um Paciente para Iniciar o ${title}`}
+                description={emptyStateDescription}
+                colorVariant={emptyStateColorVariant}
+                action={emptyStateAction}
+              />
+            )
           ) : (
             children
           )}
