@@ -98,6 +98,11 @@ export function migrateProfessionalActivities(rawDb: any): void {
   addColumnIfNotExists('clinical_home_programs', 'caregiver_guidance', 'TEXT');
   addColumnIfNotExists('clinical_home_programs', 'adaptations', 'TEXT');
   addColumnIfNotExists('clinical_home_programs', 'notes', 'TEXT');
+  addColumnIfNotExists('clinical_home_programs', 'deleted_at', 'TEXT');
+
+  rawDb.exec(`
+    CREATE INDEX IF NOT EXISTS idx_home_prog_del ON clinical_home_programs(tenant_id, patient_id, deleted_at);
+  `);
 
   // 5. Seed idempotente dos 60 modelos oficiais (Biblioteca Zemda)
   try {

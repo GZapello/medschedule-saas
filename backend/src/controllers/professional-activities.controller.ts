@@ -610,6 +610,7 @@ export class ProfessionalActivitiesController {
         LEFT JOIN professionals pr ON pr.id = hp.professional_id AND pr.tenant_id = hp.tenant_id
         LEFT JOIN patients pt ON pt.id = hp.patient_id
         WHERE hp.patient_id = ? AND hp.tenant_id = ?
+          AND hp.deleted_at IS NULL
           AND (LOWER(COALESCE(hp.module_type, hp.specialty, 'to')) = ? OR LOWER(COALESCE(hp.specialty, hp.module_type, 'to')) = ?)
         ORDER BY datetime(COALESCE(hp.created_at, '1970-01-01')) DESC
       `).all(patientId, tenantId, professionId, professionId) as any[];
@@ -841,7 +842,7 @@ export class ProfessionalActivitiesController {
 
       const existing = db.prepare(`
         SELECT * FROM clinical_home_programs
-        WHERE id = ? AND tenant_id = ?
+        WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL
       `).get(id, tenantId) as any;
 
       if (!existing) {
@@ -914,7 +915,7 @@ export class ProfessionalActivitiesController {
       const existing = db.prepare(`
         SELECT id, patient_id, module_type, specialty
         FROM clinical_home_programs
-        WHERE id = ? AND tenant_id = ?
+        WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL
       `).get(id, tenantId) as any;
 
       if (!existing) {
@@ -941,6 +942,75 @@ export class ProfessionalActivitiesController {
     }
   }
 
+  /**
+   * Exclui logicamente (soft-delete) uma atividade atribuída ao paciente
+   */
+  static deleteAssignment(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId!;
+      const userId = req.user!.userId;
+      const { id } = req.params;
+
+      const existing = db.prepare(`
+        SELECT id, patient_id, module_type, specialty, title, activity
+        FROM clinical_home_programs
+        WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL
+      `).get(id, tenantId) as any;
+
+      if (!existing) {
+        res.status(404).json({ error: 'Atividade não encontrada ou já excluída.' });
+        return;
+      }
+
+      const professionId = normalizeProfessionId(existing.module_type || existing.specialty);
+      if (!professionId || !hasProfessionActivityAccess(req, professionId, existing.patient_id)) {
+        res.status(403).json({ error: 'Sem permissão para excluir esta atividade do paciente.' });
+        return;
+      }
+
+      db.prepare(`
+        UPDATE clinical_home_programs SET
+          deleted_at = datetime('now'),
+          updated_at = datetime('now')
+        WHERE id = ? AND tenant_id = ?
+      `).run(id, tenantId);
+
+      // Registra no histórico de acompanhamento como 'deleted'
+      const matchedProf = findCurrentProfessionalId(tenantId, userId);
+      const profName = req.user?.name || 'Profissional';
+      const followUpId = 'fu-' + uuidv4().slice(0, 8);
+
+      try {
+        db.prepare(`
+          INSERT INTO clinical_home_program_follow_ups (
+            id, tenant_id, program_id, patient_id, professional_id, professional_name,
+            status, notes, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, 'deleted', 'Exercício desvinculado/excluído do paciente.', datetime('now'))
+        `).run(
+          followUpId,
+          tenantId,
+          id,
+          existing.patient_id,
+          matchedProf,
+          profName
+        );
+      } catch (fuErr) {
+        console.warn('[ProfessionalActivitiesController.deleteAssignment] Falha ao registrar log de follow_up:', fuErr);
+      }
+
+      logAudit(req, 'DELETE_ASSIGNED_ACTIVITY', 'clinical_home_programs', id, {
+        patientId: existing.patient_id,
+        professionId,
+        title: existing.title || existing.activity
+      });
+
+      res.json({ message: 'Exercício excluído das atividades do paciente com sucesso.' });
+    } catch (err: any) {
+      console.error('[ProfessionalActivitiesController.deleteAssignment] Erro:', err);
+      res.status(500).json({ error: 'Erro ao excluir atividade do paciente.' });
+    }
+  }
+
   // ==========================================
   // 3. EXPORTAÇÃO E GERAÇÃO DE PDFS
   // ==========================================
@@ -962,7 +1032,7 @@ export class ProfessionalActivitiesController {
         FROM clinical_home_programs hp
         LEFT JOIN professionals pr ON pr.id = hp.professional_id AND pr.tenant_id = hp.tenant_id
         LEFT JOIN patients pt ON pt.id = hp.patient_id
-        WHERE hp.id = ? AND hp.tenant_id = ?
+        WHERE hp.id = ? AND hp.tenant_id = ? AND hp.deleted_at IS NULL
       `).get(id, tenantId) as any;
 
       if (!row) {
@@ -1189,6 +1259,7 @@ export class ProfessionalActivitiesController {
         LEFT JOIN professionals pr ON pr.id = hp.professional_id AND pr.tenant_id = hp.tenant_id
         LEFT JOIN patients pt ON pt.id = hp.patient_id
         WHERE hp.patient_id = ? AND hp.tenant_id = ?
+          AND hp.deleted_at IS NULL
           AND (LOWER(COALESCE(hp.module_type, hp.specialty, 'to')) = ? OR LOWER(COALESCE(hp.specialty, hp.module_type, 'to')) = ?)
       `;
       const params: any[] = [patientId, tenantId, professionId, professionId];

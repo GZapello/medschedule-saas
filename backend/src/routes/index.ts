@@ -542,6 +542,7 @@ api.post('/v1/clinical-activities/patient/:patientId/assign', requireTenant, req
 api.patch('/v1/clinical-activities/assignments/:id/status', requireTenant, requireRole('clinic_admin', 'professional'), ProfessionalActivitiesController.updateAssignmentStatus);
 api.put('/v1/clinical-activities/assignments/:id/status', requireTenant, requireRole('clinic_admin', 'professional'), ProfessionalActivitiesController.updateAssignmentStatus);
 api.get('/v1/clinical-activities/assignments/:id/follow-ups', requireTenant, requireRole('clinic_admin', 'professional'), ProfessionalActivitiesController.getAssignmentFollowUps);
+api.delete('/v1/clinical-activities/assignments/:id', requireTenant, requireRole('clinic_admin', 'professional'), ProfessionalActivitiesController.deleteAssignment);
 
 // 3. Documentos e PDFs
 api.get('/v1/clinical-activities/assignments/:id/pdf', requireTenant, requireRole('clinic_admin', 'professional'), ProfessionalActivitiesController.downloadAssignmentPdf);

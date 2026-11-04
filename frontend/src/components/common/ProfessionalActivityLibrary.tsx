@@ -135,6 +135,10 @@ export const ProfessionalActivityLibrary: React.FC<ProfessionalActivityLibraryPr
   const [downloadingPdfId, setDownloadingPdfId] = useState<string | null>(null);
   const [isExportingConsolidated, setIsExportingConsolidated] = useState(false);
 
+  // Estados de Exclusão de Atividade do Paciente
+  const [deletingAssignmentItem, setDeletingAssignmentItem] = useState<PatientActivityAssignmentItem | null>(null);
+  const [isDeletingAssignment, setIsDeletingAssignment] = useState(false);
+
   // ==========================================
   // CARREGAMENTO DE DADOS
   // ==========================================
@@ -362,6 +366,27 @@ export const ProfessionalActivityLibrary: React.FC<ProfessionalActivityLibraryPr
       showToast(err?.message || 'Erro ao atualizar acompanhamento.', 'error');
     } finally {
       setIsSavingFollowUp(false);
+    }
+  };
+
+  const handleConfirmDeleteAssignment = async () => {
+    if (!deletingAssignmentItem || isDeletingAssignment) return;
+    try {
+      setIsDeletingAssignment(true);
+      await ApiClient.delete(`/v1/clinical-activities/assignments/${deletingAssignmentItem.id}`);
+      showToast('Exercício excluído das atividades do paciente.', 'success');
+      setPatientActivities(prev => prev.filter(a => a.id !== deletingAssignmentItem.id));
+      setSelectedAssignmentIds(prev => {
+        const next = new Set(prev);
+        next.delete(deletingAssignmentItem.id);
+        return next;
+      });
+      setDeletingAssignmentItem(null);
+    } catch (err: any) {
+      console.error('[ProfessionalActivityLibrary] Erro ao excluir exercício:', err);
+      showToast(err?.message || 'Erro ao excluir exercício.', 'error');
+    } finally {
+      setIsDeletingAssignment(false);
     }
   };
 
@@ -648,48 +673,50 @@ export const ProfessionalActivityLibrary: React.FC<ProfessionalActivityLibraryPr
 
   return (
     <div className="space-y-6">
-      {/* CABEÇALHO DO MÓDULO */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs sm:p-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-start gap-3.5">
-            <div className={`rounded-xl p-3 bg-${config.brandColor}-500/10 text-${config.brandColor}-600`}>
-              <Sparkles className="h-6 w-6" />
-            </div>
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-lg sm:text-xl font-bold text-slate-800">
-                  {config.libraryTitle}
-                </h2>
-                <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${config.badgeClass}`}>
-                  {config.moduleName}
-                </span>
+      {/* CABEÇALHO DO MÓDULO (Omitido no ZemdaPP para evitar redundância com o cabeçalho superior do módulo) */}
+      {config.key !== 'pp' && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs sm:p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3.5">
+              <div className={`rounded-xl p-3 bg-${config.brandColor}-500/10 text-${config.brandColor}-600`}>
+                <Sparkles className="h-6 w-6" />
               </div>
-              <p className="mt-1 text-xs sm:text-sm text-slate-500">
-                {config.librarySubtitle}
-              </p>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-lg sm:text-xl font-bold text-slate-800">
+                    {config.libraryTitle}
+                  </h2>
+                  <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${config.badgeClass}`}>
+                    {config.moduleName}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs sm:text-sm text-slate-500">
+                  {config.librarySubtitle}
+                </p>
+              </div>
             </div>
-          </div>
 
-          {/* Ação / Navegação no Cabeçalho */}
-          <div className="flex items-center gap-2 self-start sm:self-auto">
-            {activeMainView === 'library' ? (
-              <button
-                type="button"
-                onClick={() => setActiveMainView('patient')}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition cursor-pointer shadow-2xs"
-              >
-                <ChevronLeft className="h-4 w-4 text-slate-500" />
-                <span>Voltar aos Exercícios do Paciente</span>
-              </button>
-            ) : (
-              <div className="inline-flex items-center gap-1.5 rounded-xl bg-slate-100 border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-700">
-                <User className="h-3.5 w-3.5 text-slate-500" />
-                <span>{patientActivities.length} exercício(s) atribuído(s)</span>
-              </div>
-            )}
+            {/* Ação / Navegação no Cabeçalho */}
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              {activeMainView === 'library' ? (
+                <button
+                  type="button"
+                  onClick={() => setActiveMainView('patient')}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition cursor-pointer shadow-2xs"
+                >
+                  <ChevronLeft className="h-4 w-4 text-slate-500" />
+                  <span>Voltar aos Exercícios do Paciente</span>
+                </button>
+              ) : (
+                <div className="inline-flex items-center gap-1.5 rounded-xl bg-slate-100 border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-700">
+                  <User className="h-3.5 w-3.5 text-slate-500" />
+                  <span>{patientActivities.length} exercício(s) atribuído(s)</span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* ========================================================================= */}
       {/* VISÃO 1: ATIVIDADES ATRIBUÍDAS AO PACIENTE ATUAL */}
@@ -912,6 +939,18 @@ export const ProfessionalActivityLibrary: React.FC<ProfessionalActivityLibraryPr
                         >
                           <Printer className="h-3.5 w-3.5 text-slate-500" />
                         </button>
+
+                        {!readOnly && (
+                          <button
+                            type="button"
+                            onClick={() => setDeletingAssignmentItem(item)}
+                            className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs font-bold text-slate-400 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-200 cursor-pointer transition"
+                            title="Excluir exercício atribuído ao paciente"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            <span className="sr-only">Excluir</span>
+                          </button>
+                        )}
                       </div>
                     </div>
 
@@ -952,26 +991,38 @@ export const ProfessionalActivityLibrary: React.FC<ProfessionalActivityLibraryPr
         <div className="space-y-5">
           {/* Subabas da Biblioteca: Biblioteca Zemda vs Minha Biblioteca vs Favoritos */}
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
-            <div className="flex flex-wrap items-center gap-1.5">
-              {[
-                { id: 'all', label: 'Todos os Modelos' },
-                { id: 'system', label: `Biblioteca Zemda (${config.professionName})` },
-                { id: 'custom', label: 'Minha Biblioteca (Criados na Clínica)' },
-                { id: 'favorites', label: 'Favoritos' }
-              ].map(tab => (
+            <div className="flex flex-wrap items-center gap-2">
+              {config.key === 'pp' && (
                 <button
-                  key={tab.id}
                   type="button"
-                  onClick={() => setLibraryScope(tab.id as any)}
-                  className={`rounded-xl px-3 py-1.5 text-xs font-bold transition cursor-pointer ${
-                    libraryScope === tab.id
-                      ? 'bg-slate-900 text-white shadow-xs'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
+                  onClick={() => setActiveMainView('patient')}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition cursor-pointer shadow-2xs mr-1"
                 >
-                  {tab.label}
+                  <ChevronLeft className="h-4 w-4 text-slate-500" />
+                  <span>Voltar aos Exercícios do Paciente</span>
                 </button>
-              ))}
+              )}
+              <div className="flex flex-wrap items-center gap-1.5">
+                {[
+                  { id: 'all', label: 'Todos os Modelos' },
+                  { id: 'system', label: `Biblioteca Zemda (${config.professionName})` },
+                  { id: 'custom', label: 'Minha Biblioteca (Criados na Clínica)' },
+                  { id: 'favorites', label: 'Favoritos' }
+                ].map(tab => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setLibraryScope(tab.id as any)}
+                    className={`rounded-xl px-3 py-1.5 text-xs font-bold transition cursor-pointer ${
+                      libraryScope === tab.id
+                        ? 'bg-slate-900 text-white shadow-xs'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {!readOnly && (
@@ -1789,6 +1840,58 @@ export const ProfessionalActivityLibrary: React.FC<ProfessionalActivityLibraryPr
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO DE EXERCÍCIO ATRIBUÍDO */}
+      {deletingAssignmentItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-start gap-3.5">
+              <div className="rounded-xl bg-rose-50 p-2.5 text-rose-600 shrink-0">
+                <AlertCircle className="h-6 w-6" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-base font-bold text-slate-800">
+                  Excluir exercício?
+                </h3>
+                <p className="mt-1.5 text-xs leading-relaxed text-slate-600">
+                  Este exercício será retirado das atividades deste paciente. O modelo original da biblioteca não será excluído.
+                </p>
+                {deletingAssignmentItem.title && (
+                  <div className="mt-3 rounded-xl bg-slate-50 border border-slate-200/80 p-2.5 text-xs font-semibold text-slate-700 truncate">
+                    {deletingAssignmentItem.title}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-2.5 border-t border-slate-100 pt-4">
+              <button
+                type="button"
+                disabled={isDeletingAssignment}
+                onClick={() => setDeletingAssignmentItem(null)}
+                className="rounded-xl px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 transition cursor-pointer disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingAssignment}
+                onClick={handleConfirmDeleteAssignment}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white hover:bg-rose-700 transition cursor-pointer shadow-xs disabled:opacity-50"
+              >
+                {isDeletingAssignment ? (
+                  <span>Excluindo...</span>
+                ) : (
+                  <>
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span>Excluir exercício</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
