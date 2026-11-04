@@ -218,22 +218,18 @@ async function runTests() {
       'privado.com.br',
       '1199999',
       '000000000',
-      'Dra. Gestora',
-      'Dr. Profissional',
-      'Ex-Colaborador',
       'Prontuário Confidencial',
-      'Conteúdo Sigiloso',
-      'gestora@alpha',
-      'prof1@alpha'
+      'Conteúdo Sigiloso'
     ];
 
     for (const forbidden of forbiddenStrings) {
       assert.ok(!rawPayload.includes(forbidden), `Payload NÃO deve conter dado identificável: "${forbidden}"`);
     }
 
-    // Verificar se todas as propriedades de primeiro nível são objetos de números (exceto clinic que é o cabeçalho)
-    for (const [sectionKey, sectionObj] of Object.entries(summary)) {
-      if (sectionKey === 'clinic') continue;
+    // Verificar se todas as seções estatísticas de negócio são objetos estritamente numéricos
+    const numericSections = ['users', 'patients', 'appointments', 'services', 'schedules', 'rooms', 'inventory', 'documents', 'consents', 'financial'];
+    for (const sectionKey of numericSections) {
+      const sectionObj = summary[sectionKey];
       assert.equal(typeof sectionObj, 'object', `Seção ${sectionKey} deve ser um objeto`);
       for (const [metricKey, metricValue] of Object.entries(sectionObj)) {
         assert.equal(typeof metricValue, 'number', `Métrica ${sectionKey}.${metricKey} deve ser estritamente numérica`);

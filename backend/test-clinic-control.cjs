@@ -4,6 +4,8 @@ const fs = require('node:fs'); const os = require('node:os'); const path = requi
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'zemda-control-'));
 process.env.DATABASE_PATH = path.join(temp, 'test.db');
 process.env.CLINIC_UPLOAD_ROOT = path.join(temp, 'uploads');
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-jwt-secret-key-32-chars-long-min';
+process.env.ZEMDA_FILES_SIGNING_SECRET = process.env.ZEMDA_FILES_SIGNING_SECRET || 'test-signing-secret-key-min-32-chars';
 const { db, initializeDatabase } = require('./dist/config/database');
 // Exercise upgrade from the legacy CHECK that does not allow banned.
 db.exec(fs.readFileSync(path.join(__dirname,'src/config/schema.sql'),'utf8').replace("'suspended', 'banned'", "'suspended'"));
@@ -30,6 +32,7 @@ function fixture(table, clinic) {
     const fk = foreign.find(f => f.from === c.name);
     if (fk) values[c.name] = fk.table === 'tenants' ? clinic : fixture(fk.table, clinic);
     else if (c.name === 'file_url') values[c.name] = 'data:text/plain;base64,WA==';
+    else if (c.name.endsWith('_json') || c.name.includes('json')) values[c.name] = '{}';
     else if (c.type.includes('INT') || c.type.includes('REAL')) values[c.name] = 1;
     else values[c.name] = `${id}-${c.name}`;
     const match = sql.match(new RegExp(`CHECK\\s*\\(\\s*${c.name}\\s+IN\\s*\\(\\s*'([^']+)'`, 'i'));

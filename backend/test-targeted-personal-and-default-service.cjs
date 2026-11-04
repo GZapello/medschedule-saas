@@ -29,8 +29,10 @@ const path = require('path');
 const http = require('http');
 const express = require('express');
 
+process.env.NODE_ENV = 'test';
 process.env.DATABASE_PATH = path.resolve(__dirname, 'test_targeted_personal.db');
 process.env.JWT_SECRET = 'test-secret-targeted-personal-123';
+process.env.ZEMDA_FILES_SIGNING_SECRET = 'test-signing-secret-targeted-personal-123';
 process.env.PORT = '3105';
 process.env.R2_MOCK_STORAGE = 'true';
 process.env.ZEMDA_FILES_WORKER_URL = 'https://test-worker.invalid';
@@ -401,6 +403,7 @@ async function runTests() {
     assert(Number(checkService.price) === 180.0, '16.2. Valor do serviço padrão é rigorosamente R$ 180,00');
     assert(checkService.active === 1, '16.3. Status do serviço é Ativo (active = 1)');
 
+    await makeRequest('POST', '/api/v1/onboarding/select-plan', newClinicHeaders, { planCode: 'SOLO', startTrial: true });
     const completedProfile = await makeRequest('POST', '/api/v1/onboarding/complete-profile', newClinicHeaders, { practiceAreaIds: [] });
     assert(completedProfile.status === 200, '16.4. Perfil verificado conclui onboarding antes de acessar a agenda');
     // Isola o teste da agenda da cobrança após concluir o onboarding real.
@@ -448,6 +451,7 @@ async function runTests() {
       patientId: newPatientId,
       professionalId: newProfId,
       serviceId: defaultServiceFromApi.id,
+      isCustomTime: true,
       date: '2026-09-18',
       startTime: '2026-09-18T10:00:00',
       endTime: '2026-09-18T10:50:00',

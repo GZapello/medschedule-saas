@@ -82,7 +82,7 @@ const FISIO_TABS: ClinicalModuleTabItem[] = [
   { id: 'evolution', label: '1. Evolução', icon: Activity },
   { id: 'anamnesis', label: '2. Anamnese', icon: FileText },
   { id: 'kinetic_functional', label: '3. Cinético-Funcional', icon: Sliders },
-  { id: 'pain_zemdabody', label: '4. Mapa & Histórico', icon: Target },
+  { id: 'pain_zemdabody', label: '4. Dor & Zemda360', icon: Target },
   { id: 'evaluations', label: '5. Avaliações', icon: Award },
   { id: 'posture_gait', label: '6. Postura & Marcha', icon: User },
   { id: 'cbdf', label: '7. CBDF COFFITO', icon: ShieldCheck },
@@ -1256,9 +1256,18 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
               </div>
             )}
 
-            {/* ABA 4: MAPA & HISTÓRICO (ZEMDA360 REGIONAL) */}
+            {/* ABA 4: DOR & ZEMDA360 (DOR EVA E MAPA REGIONAL) */}
             {activeTab === 'pain_zemdabody' && (
               <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-5">
+                {/* Escala Visual Analógica de Dor (EVA) */}
+                <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-200/80">
+                  <ClinicalPainScale
+                    value={painScore}
+                    onChange={val => setPainScore(val ?? '')}
+                    label="Escala Visual Analógica de Dor (EVA)"
+                  />
+                </div>
+
                 {/* Cabeçalho da Aba */}
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
                   <div>

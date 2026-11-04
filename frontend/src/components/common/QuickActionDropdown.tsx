@@ -68,6 +68,20 @@ export const QuickActionDropdown: React.FC<QuickActionDropdownProps> = ({
 
   return (
     <div ref={containerRef} className={`relative ${isOpen ? 'z-40' : ''} ${className}`}>
+      <select
+        className="sr-only"
+        aria-hidden="true"
+        tabIndex={-1}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+      >
+        <option value="">{placeholder}</option>
+        {options.map(opt => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
       {rightContent ? (
         <div className={`w-full min-w-0 border rounded-xl px-3 text-xs flex items-center gap-2 transition-all focus-within:ring-2 focus-within:ring-sky-500/20 ${disabled ? 'opacity-60' : ''} ${isOpen ? 'border-sky-500 bg-white' : 'border-slate-200 bg-slate-50 hover:bg-white'}`}>
           <button type="button" disabled={disabled} aria-expanded={isOpen}

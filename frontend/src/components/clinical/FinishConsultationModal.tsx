@@ -209,6 +209,23 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
     }
   }[profCategory];
 
+  const formatToLocalHHmm = (isoStr: string) => {
+    if (!isoStr) return '';
+    if (/^\d{2}:\d{2}$/.test(isoStr)) return isoStr;
+    try {
+      const clean = isoStr.trim();
+      let parseable = clean.replace(' ', 'T');
+      if (!parseable.includes('Z') && !parseable.includes('+') && !/T\d{2}:\d{2}:\d{2}-/.test(parseable)) {
+        parseable += 'Z';
+      }
+      const d = new Date(parseable);
+      if (!isNaN(d.getTime())) {
+        return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+      }
+    } catch {}
+    return isoStr.replace(' ', 'T').split('T')[1]?.slice(0, 5) || '';
+  };
+
   const [receipt, setReceipt] = useState<any>(null);
   React.useEffect(() => {
     ApiClient.get<any>(`/v1/appointments/${appointment.id}/completion`).then(result => {
@@ -217,10 +234,10 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
   }, [appointment.id]);
   const [submitting, setSubmitting] = useState<boolean>(false);
   const realStartIso = appointment.attendance_start_at || appointment.start_time || '';
-  const realStartDisplay = realStartIso ? (realStartIso.replace(' ', 'T').split('T')[1]?.slice(0, 5) || '') : '';
+  const realStartDisplay = formatToLocalHHmm(realStartIso);
   const [attendanceEndTime, setAttendanceEndTime] = useState<string>(() => {
     if (appointment.attendance_end_at) {
-      const t = appointment.attendance_end_at.replace(' ', 'T').split('T')[1]?.slice(0, 5);
+      const t = formatToLocalHHmm(appointment.attendance_end_at);
       if (t) return t;
     }
     const now = new Date();
@@ -347,7 +364,7 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
     setSubmitting(true);
 
     try {
-      if (realStartDisplay && attendanceEndTime && attendanceEndTime < realStartDisplay) {
+      if (realStartDisplay && attendanceEndTime && editingFinishTime && attendanceEndTime < realStartDisplay) {
         showToast('O horário real de término não pode ser anterior ao horário de início do atendimento.', 'error');
         finishingRef.current = false;
         setSubmitting(false);

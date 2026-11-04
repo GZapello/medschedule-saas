@@ -1,3 +1,5 @@
+const os=require('node:os'),fs=require('node:fs'),path=require('node:path');
+process.env.DATABASE_PATH=path.join(fs.mkdtempSync(path.join(os.tmpdir(),'zemda-price-test-')),'test.db');
 const assert=require('node:assert/strict');
 const {db,initializeDatabase}=require('./dist/config/database');initializeDatabase();
 const {AppointmentController}=require('./dist/controllers/appointment.controller');

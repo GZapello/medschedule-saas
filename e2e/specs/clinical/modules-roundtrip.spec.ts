@@ -5,7 +5,7 @@ const cases = [
   { account: 'fono', module: 'ZemdaFono', route: '/zemda-fono', tab: 'finish', field: 'Descreva as atividades fonoterápicas realizadas, resposta aos estímulos, produção fonêmica e evolução vocal...', finish: 'Finalizar Atendimento e Gravar Prontuário' },
   { account: 'to', module: 'ZemdaTO', route: '/zemda-to', tab: 'finish', field: 'Descreva as atividades realizadas na sessão, desempenho do paciente, respostas sensoriais e nível de engajamento...', finish: 'Finalizar Atendimento e Gravar Prontuário' },
   { account: 'nutri', module: 'ZemdaNutri', route: '/zemda-nutri', tab: 'finish', field: 'Descreva a evolução da consulta, conduta terapêutica e recomendações...', finish: 'Finalizar Atendimento' },
-  { account: 'odonto', module: 'ZemdaOdonto', route: '/zemda-odonto', tab: 'odontogram', field: 'Ex: Realizada profilaxia ultrassônica e restauração em resina composta no dente 16 (oclusal). Paciente orientado quanto à higiene interdental.', finish: 'Finalizar e Lacrar Atendimento Odontológico' },
+  { account: 'odonto', module: 'ZemdaOdonto', route: '/zemda-odonto', tab: 'odontogram', field: 'Ex: Realizada profilaxia ultrassônica e restauração em resina composta no dente 16 (oclusal). Paciente orientado quanto à higiene interdental.', finish: 'Finalizar Atendimento' },
   { account: 'med-audit', module: 'ZemdaMed', route: '/zemda-med', tab: 'conduct', field: 'Prescrição de medicamentos, posologia, solicitações de exames laboratoriais ou de imagem, encaminhamentos e orientações gerais ao paciente...', finish: 'Finalizar Consulta e Registrar no Prontuário' },
   { account: 'psico-audit', module: 'ZemdaPsico', route: '/zemda-psico', tab: 'sessions', field: 'Descreva a escuta psicológica, intervenções técnicas realizadas, resposta do paciente e observações clínicas relevantes...', finish: 'Concluir Atendimento' },
   { account: 'pp-audit', module: 'ZemdaPP', route: '/zemda-pp', tab: 'finish', field: 'Descreva a evolução psicopedagógica completa observada durante a sessão...', finish: 'Finalizar Atendimento Psicopedagógico' },
@@ -27,8 +27,8 @@ for (const item of cases) {
         await search.fill(name);
         await page.getByText(name, { exact: true }).last().click();
       }
-      await expect(page.locator('main')).toContainText(name);
-      await page.locator(`main [data-tour=tab-${item.tab}]`).click();
+      await expect(page.locator('main').first()).toContainText(name);
+      await page.locator(`[data-tour=tab-${item.tab}]`).first().click();
     };
     await page.goto(item.route, { waitUntil: 'domcontentloaded' });
     await select();

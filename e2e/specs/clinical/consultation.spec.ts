@@ -5,7 +5,7 @@ test('@critical login → atendimento → autosave → revisão → prontuário'
   await login(page);
   await page.getByTitle('Iniciar Atendimento Rápido').click();
   await expect(page.getByText('Paciente teste fisio', { exact: true }).first()).toBeVisible();
-  await page.getByRole('button', { name: 'Abrir ZemdaFisio', exact: true }).first().click();
+  await page.getByRole('button', { name: /Abrir.*ZemdaFisio/ }).first().click();
   await page.getByRole('button', { name: '4. Dor & Zemda360', exact: true }).click();
   const scale = page.locator('[data-clinical-scale="pain"]').first();
   await expect(scale.locator('output')).toHaveText('Não avaliado');
@@ -29,7 +29,7 @@ test('@critical login → atendimento → autosave → revisão → prontuário'
   await expect(page.getByPlaceholder('Relato da queixa nas palavras do paciente...')).toHaveValue('');
   await page.getByRole('button', { name: '1. Evolução', exact: true }).click();
   await expect(evolution).toHaveValue(text);
-  await page.getByRole('button', { name: '14. Finalização', exact: true }).click();
+  await page.getByRole('button', { name: '12. Finalização', exact: true }).click();
   await page.getByRole('button', { name: 'Finalizar Atendimento', exact: true }).last().click();
   const review = page.getByRole('dialog', { name: 'Resumo do atendimento' });
   await expect(review).toContainText(text);
@@ -38,7 +38,7 @@ test('@critical login → atendimento → autosave → revisão → prontuário'
   await expect(review).toHaveCount(0);
   await page.getByRole('button', { name: '1. Evolução', exact: true }).click();
   await expect(evolution).toHaveValue(text);
-  await page.getByRole('button', { name: '14. Finalização', exact: true }).click();
+  await page.getByRole('button', { name: '12. Finalização', exact: true }).click();
   await page.getByRole('button', { name: 'Finalizar Atendimento', exact: true }).last().click();
   const clinicalSaved = page.waitForResponse(r => r.url().includes('/physiotherapy/consultations/finish') && r.request().method() === 'POST');
   await review.getByRole('button', { name: 'Finalizar atendimento', exact: true }).click();

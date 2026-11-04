@@ -792,6 +792,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       {canStart && (
                         <button
                           type="button"
+                          title="Iniciar Atendimento Rápido"
                           onClick={() => handleUpdateStatus(appt.id, 'in_progress')}
                           className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-teal-600 text-white hover:bg-teal-700 rounded-lg transition-colors shadow-2xs cursor-pointer whitespace-nowrap"
                         >

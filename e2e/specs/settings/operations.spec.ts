@@ -2,7 +2,7 @@ import { type Locator } from '@playwright/test';
 import { test, expect } from '../../helpers/audit-test';
 import { login, apiLogin } from '../../helpers/session';
 
-const field = (scope: Locator, name: string) => scope.locator('label').filter({ hasText: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\*?$`) }).locator('..').locator('input, select, textarea').first();
+const field = (scope: Locator, name: string) => scope.locator('label').filter({ hasText: new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) }).locator('..').locator('input, select, textarea').first();
 
 test('@critical Paciente, serviço e estoque persistem após F5; entrada 100 e saída 20', async ({ page, request }) => {
   await login(page, 'manager');
@@ -41,7 +41,7 @@ test('@critical Paciente, serviço e estoque persistem após F5; entrada 100 e s
 
   await page.goto('/agenda');
   await page.getByRole('button', { name: 'Agendar', exact: true }).click();
-  const appointmentModal = page.getByRole('heading', { name: 'Novo Agendamento', exact: true }).locator('xpath=../..');
+  const appointmentModal = page.getByRole('heading', { name: 'Novo Agendamento', exact: true }).locator('xpath=../../..');
   await appointmentModal.getByPlaceholder(/Buscar paciente/).fill('e2e-patient-operacional');
   await appointmentModal.getByText('e2e-patient-operacional', { exact: true }).click();
   await field(appointmentModal, 'Profissional').selectOption('pro-fisio');

@@ -4,7 +4,7 @@ import { login, apiLogin } from '../../helpers/session';
 test('@critical Estetic salva rascunho e exige revisão antes de gravar a finalização', async ({ page, request }) => {
   await login(page, 'estetic');
   await page.getByRole('heading', {name:'Paciente sintético estética',exact:true}).locator('xpath=ancestor::div[.//button[@title="Iniciar Atendimento Rápido"]][1]').getByTitle('Iniciar Atendimento Rápido').click();
-  await page.getByRole('button', { name: 'Abrir ZemdaEstetic', exact: true }).first().click();
+  await page.getByRole('button', { name: /Abrir.*ZemdaEstetic/ }).first().click();
   const workspace = page.getByTestId('zemda-estetic-workspace');
   await workspace.getByRole('button', { name: 'Avaliação Estética', exact: true }).click();
   const complaint = workspace.locator('textarea').first();

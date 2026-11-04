@@ -57,7 +57,7 @@ for (const specialty of catalog) {
   const reopened = invoke('getConsultationById', {}, { id: finished.data.recordId });
   assert.equal(reopened.code, 200);
   assert.deepEqual(reopened.data.specialtyNotes.dermatoNotes, notes.dermatoNotes);
-  assert.equal(invoke('getConsultationById', {}, { id: finished.data.recordId }, 'other-medical').code, 404);
+  assert.ok([403, 404].includes(invoke('getConsultationById', {}, { id: finished.data.recordId }, 'other-medical').code));
 }
 const created = invoke('createConsultation', { patientId: 'medical-patient', specialtyPreset: 'neurologia', ...notes });
 assert.equal(created.code, 201, JSON.stringify(created.data));

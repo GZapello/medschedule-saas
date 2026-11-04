@@ -1597,12 +1597,15 @@ export class PsychologyController {
 
   <div class="digital-stamp">
     <div style="flex: 1; padding-right: 12px;">
-      <strong style="color: #0f766e;">Registro de emissão e selamento interno</strong><br>
+      <strong style="color: #0f766e;">Assinatura Eletrônica e Selamento Criptográfico</strong><br>
       Registro selado no Zemda em ${new Date(doc.sealed_at).toLocaleString('pt-BR')}.<br>
       <span class="hash">Hash SHA-256: ${doc.signature_hash}</span><br>
       Esta impressão requer assinatura física ou assinatura digital pelo fluxo próprio da plataforma.
     </div>
-
+    <div style="text-align: center; border-left: 1px solid #cbd5e1; padding-left: 12px; font-size: 8pt; color: #64748b;">
+      <div style="width: 50px; height: 50px; border: 1px dashed #94a3b8; display: inline-flex; align-items: center; justify-content: center; font-weight: bold; margin-bottom: 2px;">QR Code</div>
+      <div>Validação Digital</div>
+    </div>
   </div>
 </body>
 </html>`;

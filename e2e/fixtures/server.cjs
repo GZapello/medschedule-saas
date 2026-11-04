@@ -56,3 +56,4 @@ const { createDefaultSchedules } = require('../../backend/dist/utils/schedule-de
 for (const professional of db.prepare("SELECT id FROM professionals WHERE tenant_id='test-clinic'").all()) {
   createDefaultSchedules(db, 'test-clinic', professional.id);
 }
+db.prepare("UPDATE users SET terms_version_accepted = '2026.1', privacy_version_accepted = '2026.2'").run();

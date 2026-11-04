@@ -5,7 +5,7 @@ const evolution = (page: Page) => page.getByPlaceholder('Descreva detalhadamente
 async function selectPatient(page: Page, name: string) {
   // Welcome-dialog dismissal may blur and close the search popup during navigation.
   await expect(async () => {
-    const search = page.getByPlaceholder('Buscar paciente pelo nome, CPF ou telefone...');
+    const search = page.locator('input[placeholder*="Buscar paciente"]').first();
     await search.click();
     await search.fill(name);
     await page.getByText(name, { exact: true }).last().click({ timeout: 2000 });

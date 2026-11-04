@@ -69,6 +69,69 @@ const PSICO_TABS: ClinicalModuleTabItem[] = [
   { id: 'external_tests', label: '8. Testes Externos & Laudos', icon: FileCheck }
 ];
 
+
+const EEM_QUICK_OPTIONS: Record<string, string[]> = {
+  appearance: ['Cuidado pessoal preservado', 'Vestimenta adequada', 'Higiene satisfatória', 'Aparência descuidada'],
+  attitudeBehavior: ['Colaborativo(a)', 'Receptivo(a)', 'Esquivo(a)', 'Desconfiado(a)', 'Inquieto(a)'],
+  consciousnessLevel: ['Vigil e lúcido(a)', 'Sonolento(a)', 'Obnubilado(a)', 'Reativo(a) a estímulos'],
+  orientation: ['Orientado(a) auto e alopsiquicamente', 'Desorientado(a) no tempo', 'Desorientado(a) no espaço'],
+  attention: ['Normoproxésico(a)', 'Hipoproxésico(a)', 'Disperso(a)', 'Atenção sustentada'],
+  memory: ['Preservada (recente e remota)', 'Déficit de fixação recente', 'Evocação preservada'],
+  languageSpeech: ['Fluente e coerente', 'Taquilálico(a)', 'Bradilálico(a)', 'Discurso empobrecido'],
+  psychomotor: ['Normocinético(a)', 'Agitação motora leve', 'Lentificação psicomotora', 'Inquietação'],
+  mood: ['Eutímico(a)', 'Hipotímico(a)', 'Ansioso(a)', 'Disfórico(a)', 'Hipertímico(a)'],
+  affect: ['Sintônico e modulado', 'Lábil', 'Embotado', 'Restrito / hiporreativo'],
+  thoughtProcess: ['Curso regular e lógico', 'Ideação ansiosa', 'Curso acelerado', 'Ruminações'],
+  sensoryPerception: ['Sensopercepção preservada', 'Sem alucinações ou ilusões'],
+  criticalJudgment: ['Juízo crítico preservado', 'Parcialmente preservado', 'Prejudicado'],
+  insight: ['Insight pleno sobre a queixa', 'Insight parcial', 'Ausência de insight'],
+  impulseControl: ['Preservado', 'Impulsividade situacional', 'Prejudicado']
+};
+
+const EemQuickChips: React.FC<{
+  field: keyof typeof EEM_QUICK_OPTIONS;
+  currentValue: string;
+  onSelect: (val: string) => void;
+}> = ({ field, currentValue, onSelect }) => {
+  const options = EEM_QUICK_OPTIONS[field] || [];
+  if (options.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1 mt-1.5">
+      {options.map(opt => {
+        const isSelected = (currentValue || '').includes(opt);
+        return (
+          <button
+            key={opt}
+            type="button"
+            onClick={() => {
+              const current = currentValue || '';
+              if (!current.trim()) {
+                onSelect(opt);
+              } else if (!isSelected) {
+                onSelect(`${current}, ${opt}`);
+              } else {
+                const cleaned = current
+                  .split(',')
+                  .map(s => s.trim())
+                  .filter(s => s !== opt)
+                  .join(', ');
+                onSelect(cleaned);
+              }
+            }}
+            className={`text-[10px] px-2 py-0.5 rounded-full font-medium transition-all cursor-pointer ${
+              isSelected
+                ? 'bg-teal-700 text-white font-bold shadow-2xs'
+                : 'bg-slate-100 hover:bg-teal-50 text-slate-600 hover:text-teal-700 border border-slate-200'
+            }`}
+          >
+            {opt}
+          </button>
+        );
+      })}
+    </div>
+  );
+};
+
 export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
   initialPatientId,
   initialAppointmentId,
@@ -1871,6 +1934,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
                       onChange={e => setMentalState(p => ({ ...p, appearance: e.target.value }))}
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs"
                     />
+                    <EemQuickChips field="appearance" currentValue={mentalState.appearance} onSelect={val => setMentalState(p => ({ ...p, appearance: val }))} />
                   </div>
                   <div>
                     <label className="font-bold text-slate-700 block mb-1">Atitude e Comportamento</label>
@@ -1881,6 +1945,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
                       onChange={e => setMentalState(p => ({ ...p, attitudeBehavior: e.target.value }))}
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs"
                     />
+                    <EemQuickChips field="attitudeBehavior" currentValue={mentalState.attitudeBehavior} onSelect={val => setMentalState(p => ({ ...p, attitudeBehavior: val }))} />
                   </div>
                   <div>
                     <label className="font-bold text-slate-700 block mb-1">Nível de Consciência</label>
@@ -1891,6 +1956,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
                       onChange={e => setMentalState(p => ({ ...p, consciousnessLevel: e.target.value }))}
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs"
                     />
+                    <EemQuickChips field="consciousnessLevel" currentValue={mentalState.consciousnessLevel} onSelect={val => setMentalState(p => ({ ...p, consciousnessLevel: val }))} />
                   </div>
 
                   <div>
@@ -1902,6 +1968,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
                       onChange={e => setMentalState(p => ({ ...p, orientation: e.target.value }))}
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs"
                     />
+                    <EemQuickChips field="orientation" currentValue={mentalState.orientation} onSelect={val => setMentalState(p => ({ ...p, orientation: val }))} />
                   </div>
                   <div>
                     <label className="font-bold text-slate-700 block mb-1">Atenção e Concentração</label>
@@ -1912,6 +1979,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
                       onChange={e => setMentalState(p => ({ ...p, attention: e.target.value }))}
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs"
                     />
+                    <EemQuickChips field="attention" currentValue={mentalState.attention} onSelect={val => setMentalState(p => ({ ...p, attention: val }))} />
                   </div>
                   <div>
                     <label className="font-bold text-slate-700 block mb-1">Memória (Imediata, Recente e Remota)</label>
@@ -1922,6 +1990,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
                       onChange={e => setMentalState(p => ({ ...p, memory: e.target.value }))}
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs"
                     />
+                    <EemQuickChips field="memory" currentValue={mentalState.memory} onSelect={val => setMentalState(p => ({ ...p, memory: val }))} />
                   </div>
 
                   <div>
@@ -1933,6 +2002,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
                       onChange={e => setMentalState(p => ({ ...p, languageSpeech: e.target.value }))}
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs"
                     />
+                    <EemQuickChips field="languageSpeech" currentValue={mentalState.languageSpeech} onSelect={val => setMentalState(p => ({ ...p, languageSpeech: val }))} />
                   </div>
                   <div>
                     <label className="font-bold text-slate-700 block mb-1">Psicomotricidade</label>
@@ -1943,6 +2013,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
                       onChange={e => setMentalState(p => ({ ...p, psychomotor: e.target.value }))}
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs"
                     />
+                    <EemQuickChips field="psychomotor" currentValue={mentalState.psychomotor} onSelect={val => setMentalState(p => ({ ...p, psychomotor: val }))} />
                   </div>
                   <div>
                     <label className="font-bold text-slate-700 block mb-1">Humor</label>
@@ -1953,6 +2024,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
                       onChange={e => setMentalState(p => ({ ...p, mood: e.target.value }))}
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs"
                     />
+                    <EemQuickChips field="mood" currentValue={mentalState.mood} onSelect={val => setMentalState(p => ({ ...p, mood: val }))} />
                   </div>
 
                   <div>
@@ -1964,6 +2036,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
                       onChange={e => setMentalState(p => ({ ...p, affect: e.target.value }))}
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs"
                     />
+                    <EemQuickChips field="affect" currentValue={mentalState.affect} onSelect={val => setMentalState(p => ({ ...p, affect: val }))} />
                   </div>
                   <div>
                     <label className="font-bold text-slate-700 block mb-1">Processo e Conteúdo do Pensamento</label>
@@ -1974,6 +2047,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
                       onChange={e => setMentalState(p => ({ ...p, thoughtProcess: e.target.value }))}
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs"
                     />
+                    <EemQuickChips field="thoughtProcess" currentValue={mentalState.thoughtProcess} onSelect={val => setMentalState(p => ({ ...p, thoughtProcess: val }))} />
                   </div>
                   <div>
                     <label className="font-bold text-slate-700 block mb-1">Sensopercepção</label>
@@ -1984,6 +2058,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
                       onChange={e => setMentalState(p => ({ ...p, sensoryPerception: e.target.value }))}
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs"
                     />
+                    <EemQuickChips field="sensoryPerception" currentValue={mentalState.sensoryPerception} onSelect={val => setMentalState(p => ({ ...p, sensoryPerception: val }))} />
                   </div>
 
                   <div>
@@ -1995,6 +2070,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
                       onChange={e => setMentalState(p => ({ ...p, criticalJudgment: e.target.value }))}
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs"
                     />
+                    <EemQuickChips field="criticalJudgment" currentValue={mentalState.criticalJudgment} onSelect={val => setMentalState(p => ({ ...p, criticalJudgment: val }))} />
                   </div>
                   <div>
                     <label className="font-bold text-slate-700 block mb-1">Insight / Consciência da Situação</label>
@@ -2005,6 +2081,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
                       onChange={e => setMentalState(p => ({ ...p, insight: e.target.value }))}
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs"
                     />
+                    <EemQuickChips field="insight" currentValue={mentalState.insight} onSelect={val => setMentalState(p => ({ ...p, insight: val }))} />
                   </div>
                   <div>
                     <label className="font-bold text-slate-700 block mb-1">Controle de Impulsos</label>
@@ -2015,6 +2092,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
                       onChange={e => setMentalState(p => ({ ...p, impulseControl: e.target.value }))}
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs"
                     />
+                    <EemQuickChips field="impulseControl" currentValue={mentalState.impulseControl} onSelect={val => setMentalState(p => ({ ...p, impulseControl: val }))} />
                   </div>
 
                   <div className="sm:col-span-3">

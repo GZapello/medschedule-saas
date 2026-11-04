@@ -68,7 +68,7 @@ test('Sidebar: pacientes A e B, áreas, CRUD, estoque, mapas, F5 e finalização
     await page.getByTestId(`record-actions-${plan.id}`).getByRole('button',{name:'Editar',exact:true}).click();
     await planDialog.getByLabel('Título',{exact:true}).fill(`Planejamento revisado ${suffix}`);
     await saved('plans', () => planDialog.locator('button[type=submit]').click(), 'PUT');
-    await saved('plans', () => page.getByTestId('zemda-estetic-workspace').locator('select').first().selectOption('REALIZADO'), 'PATCH');
+    await saved('plans', () => page.getByTestId('zemda-estetic-workspace').locator('select:visible').first().selectOption('REALIZADO'), 'PATCH');
     expect((await records('plans',patient))[0].status).toBe('CONCLUIDO');
     await remove('plans',plan.id);
 

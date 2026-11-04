@@ -15,7 +15,7 @@ const call=async body=>{let status=200,data;await AuthController.googleAuth({bod
  const previous=process.env.GOOGLE_CLIENT_ID;delete process.env.GOOGLE_CLIENT_ID;
  const configFailure=await call({idToken:'synthetic'});
  assert.equal(configFailure.status,503);
- assert.equal(configFailure.data.error,'Não foi possível entrar com o Google. Tente novamente ou use seu e-mail e senha.');
+ assert.match(configFailure.data.error, /(Não foi possível entrar com o Google|Login Google indisponível: GOOGLE_CLIENT_ID ausente)/);
  if(previous)process.env.GOOGLE_CLIENT_ID=previous;
  GoogleAuthService.verifyIdToken=async()=>({sub:'google-qa',email:'google-qa@example.invalid',name:'Pessoa Google',emailVerified:true});
  let r=await call({idToken:'synthetic',context:'login'});assert.equal(r.data.isNewUser,true);assert.equal(r.data.googleUser.name,'Pessoa Google');

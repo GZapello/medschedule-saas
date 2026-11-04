@@ -703,7 +703,7 @@ export class AppointmentController {
         }
 
         if (shouldUpdateServicePrice) {
-          if (!serviceRow.professional_id || serviceRow.professional_id === professionalId) {
+          if (serviceRow.professional_id === professionalId) {
             db.prepare(`
               UPDATE services
               SET price = ?, updated_at = datetime('now')
