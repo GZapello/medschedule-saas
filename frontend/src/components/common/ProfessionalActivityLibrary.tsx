@@ -9,7 +9,6 @@ import {
   Plus,
   X,
   Check,
-  Sparkles,
   BookOpen,
   School,
   Home,
@@ -24,7 +23,6 @@ import {
   ChevronRight,
   Layers,
   History,
-  User,
   Tag,
   Share2,
   RefreshCw,
@@ -673,51 +671,6 @@ export const ProfessionalActivityLibrary: React.FC<ProfessionalActivityLibraryPr
 
   return (
     <div className="space-y-6">
-      {/* CABEÇALHO DO MÓDULO (Omitido no ZemdaPP para evitar redundância com o cabeçalho superior do módulo) */}
-      {config.key !== 'pp' && (
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs sm:p-6">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-start gap-3.5">
-              <div className={`rounded-xl p-3 bg-${config.brandColor}-500/10 text-${config.brandColor}-600`}>
-                <Sparkles className="h-6 w-6" />
-              </div>
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-lg sm:text-xl font-bold text-slate-800">
-                    {config.libraryTitle}
-                  </h2>
-                  <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${config.badgeClass}`}>
-                    {config.moduleName}
-                  </span>
-                </div>
-                <p className="mt-1 text-xs sm:text-sm text-slate-500">
-                  {config.librarySubtitle}
-                </p>
-              </div>
-            </div>
-
-            {/* Ação / Navegação no Cabeçalho */}
-            <div className="flex items-center gap-2 self-start sm:self-auto">
-              {activeMainView === 'library' ? (
-                <button
-                  type="button"
-                  onClick={() => setActiveMainView('patient')}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition cursor-pointer shadow-2xs"
-                >
-                  <ChevronLeft className="h-4 w-4 text-slate-500" />
-                  <span>Voltar aos Exercícios do Paciente</span>
-                </button>
-              ) : (
-                <div className="inline-flex items-center gap-1.5 rounded-xl bg-slate-100 border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-700">
-                  <User className="h-3.5 w-3.5 text-slate-500" />
-                  <span>{patientActivities.length} exercício(s) atribuído(s)</span>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* ========================================================================= */}
       {/* VISÃO 1: ATIVIDADES ATRIBUÍDAS AO PACIENTE ATUAL */}
       {/* ========================================================================= */}
@@ -992,16 +945,14 @@ export const ProfessionalActivityLibrary: React.FC<ProfessionalActivityLibraryPr
           {/* Subabas da Biblioteca: Biblioteca Zemda vs Minha Biblioteca vs Favoritos */}
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
             <div className="flex flex-wrap items-center gap-2">
-              {config.key === 'pp' && (
-                <button
-                  type="button"
-                  onClick={() => setActiveMainView('patient')}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition cursor-pointer shadow-2xs mr-1"
-                >
-                  <ChevronLeft className="h-4 w-4 text-slate-500" />
-                  <span>Voltar aos Exercícios do Paciente</span>
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => setActiveMainView('patient')}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition cursor-pointer shadow-2xs mr-1"
+              >
+                <ChevronLeft className="h-4 w-4 text-slate-500" />
+                <span>Voltar aos Exercícios do Paciente</span>
+              </button>
               <div className="flex flex-wrap items-center gap-1.5">
                 {[
                   { id: 'all', label: 'Todos os Modelos' },
