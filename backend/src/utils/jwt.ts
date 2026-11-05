@@ -20,6 +20,7 @@ export interface TokenPayload {
   role: 'superadmin' | 'clinic_admin' | 'professional' | 'receptionist' | 'patient';
   email: string;
   name: string;
+  scope?: 'whatsapp_update_only' | undefined;
 }
 
 export function generateToken(payload: TokenPayload): string {
@@ -27,9 +28,19 @@ export function generateToken(payload: TokenPayload): string {
   const user = payload.userId ? db.prepare('SELECT session_version FROM users WHERE id = ?').get(payload.userId) : null;
   return jwt.sign({
     ...payload,
-    sessionVersion: tenant?.session_version || 0,
-    userSessionVersion: user?.session_version || 0
+    sessionVersion: (tenant as any)?.session_version || 0,
+    userSessionVersion: (user as any)?.session_version || 0
   }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+}
+
+export function generateRestrictedWhatsAppToken(payload: Omit<TokenPayload, 'scope'>): string {
+  const user = payload.userId ? db.prepare('SELECT session_version FROM users WHERE id = ?').get(payload.userId) : null;
+  return jwt.sign({
+    ...payload,
+    scope: 'whatsapp_update_only',
+    sessionVersion: 0,
+    userSessionVersion: (user as any)?.session_version || 0
+  }, JWT_SECRET, { expiresIn: '1h' });
 }
 
 export function verifyToken(token: string): TokenPayload | null {

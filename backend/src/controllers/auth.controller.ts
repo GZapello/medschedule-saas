@@ -9,7 +9,8 @@ import { Request, Response } from 'express';
 import { requireOpenRegistration } from '../services/clinic-control.service';
 import { db, CURRENT_TERMS_VERSION, CURRENT_PRIVACY_VERSION } from '../config/database';
 import { comparePassword, hashPassword } from '../utils/password';
-import { generateToken } from '../utils/jwt';
+import { generateToken, generateRestrictedWhatsAppToken } from '../utils/jwt';
+import { checkExclusiveWhatsAppBlock } from './user-moderation.controller';
 import { logAudit } from '../middlewares/audit.middleware';
 import { v4 as uuidv4 } from 'uuid';
 import { createDefaultSchedules } from '../utils/schedule-defaults';
@@ -109,6 +110,33 @@ export class AuthController {
       }
 
       if (user.status === 'blocked' || user.status === 'inactive') {
+        if (user.status === 'blocked') {
+          const waCheck = checkExclusiveWhatsAppBlock(user.id);
+          if (waCheck.isExclusiveWhatsAppBlock && waCheck.request) {
+            logAudit(req, 'LOGIN_BLOCKED_WHATSAPP_UPDATE_REQUIRED', 'users', user.id, { email: attemptedEmail });
+            const restrictedToken = generateRestrictedWhatsAppToken({
+              userId: user.id,
+              tenantId: user.tenant_id || null,
+              role: user.role,
+              email: user.email,
+              name: user.name
+            });
+            res.status(403).json({
+              code: 'WHATSAPP_UPDATE_REQUIRED',
+              error: 'Atualização de WhatsApp necessária. Seu acesso está temporariamente suspenso até a regularização do número de WhatsApp cadastrado.',
+              reason: waCheck.request.reason,
+              previousPhone: waCheck.request.previous_phone || user.phone || null,
+              restrictedToken,
+              user: {
+                id: user.id,
+                name: user.name,
+                email: user.email
+              }
+            });
+            return;
+          }
+        }
+
         logAudit(req, 'LOGIN_FAILED', 'users', user.id, { email: attemptedEmail, reason: 'account_inactive' });
         res.status(403).json({
           error: (user as any).blocked_reason
@@ -1937,6 +1965,33 @@ export class AuthController {
         }
 
         if (user.status === 'blocked' || user.status === 'inactive') {
+          if (user.status === 'blocked') {
+            const waCheck = checkExclusiveWhatsAppBlock(user.id);
+            if (waCheck.isExclusiveWhatsAppBlock && waCheck.request) {
+              logAudit(req, 'LOGIN_BLOCKED_WHATSAPP_UPDATE_REQUIRED', 'users', user.id, { email: cleanEmail });
+              const restrictedToken = generateRestrictedWhatsAppToken({
+                userId: user.id,
+                tenantId: user.tenant_id || null,
+                role: user.role,
+                email: user.email,
+                name: user.name
+              });
+              res.status(403).json({
+                code: 'WHATSAPP_UPDATE_REQUIRED',
+                error: 'Atualização de WhatsApp necessária. Seu acesso está temporariamente suspenso até a regularização do número de WhatsApp cadastrado.',
+                reason: waCheck.request.reason,
+                previousPhone: waCheck.request.previous_phone || user.phone || null,
+                restrictedToken,
+                user: {
+                  id: user.id,
+                  name: user.name,
+                  email: user.email
+                }
+              });
+              return;
+            }
+          }
+
           logAudit(req, 'LOGIN_FAILED', 'users', user.id, { email: cleanEmail, reason: 'account_inactive' });
           res.status(403).json({
             error: (user as any).blocked_reason

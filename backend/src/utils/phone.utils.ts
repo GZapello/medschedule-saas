@@ -2,17 +2,71 @@
  * Utilitários para normalização de telefone e geração de mensagens WhatsApp (Zemda)
  */
 
+export const VALID_BRAZILIAN_DDDS = new Set([
+  '11', '12', '13', '14', '15', '16', '17', '18', '19',
+  '21', '22', '24',
+  '27', '28',
+  '31', '32', '33', '34', '35', '37', '38',
+  '41', '42', '43', '44', '45', '46',
+  '47', '48', '49',
+  '51', '53', '54', '55',
+  '61', '62', '64', '63', '65', '66', '67', '68', '69',
+  '71', '73', '74', '75', '77', '79',
+  '81', '82', '83', '84', '85', '86', '87', '88', '89',
+  '91', '92', '93', '94', '95', '96', '97', '98', '99'
+]);
+
 export function cleanPhoneDigits(phone: string | null | undefined): string {
   if (!phone) return '';
   return String(phone).replace(/\D/g, '');
 }
 
+/**
+ * Validação rigorosa de telefone e DDD brasileiro:
+ * - DDD válido no Brasil
+ * - 10 dígitos (fixo) ou 11 dígitos (celular com 9)
+ * - Não permite números com todos os dígitos repetidos
+ */
+export function validateBrazilianPhone(value: string | null | undefined): { valid: boolean; error?: string } {
+  if (!value) return { valid: false, error: 'Telefone é obrigatório' };
+
+  let digits = cleanPhoneDigits(value);
+  if (digits.startsWith('55') && digits.length > 11) {
+    digits = digits.slice(2);
+  }
+
+  if (digits.length < 10) {
+    return { valid: false, error: 'Telefone incompleto. Informe o DDD e o número completo.' };
+  }
+  if (digits.length > 11) {
+    return { valid: false, error: 'Telefone possui dígitos em excesso para o padrão brasileiro.' };
+  }
+
+  const ddd = digits.slice(0, 2);
+  if (!VALID_BRAZILIAN_DDDS.has(ddd)) {
+    return { valid: false, error: `DDD "${ddd}" não é um DDD brasileiro válido.` };
+  }
+
+  if (/^(\d)\1+$/.test(digits)) {
+    return { valid: false, error: 'Número de telefone inválido (dígitos repetidos).' };
+  }
+
+  if (digits.length === 11) {
+    const ninthDigit = digits[2];
+    if (ninthDigit !== '9') {
+      return { valid: false, error: 'Celulares com 11 dígitos devem iniciar com o dígito 9 após o DDD.' };
+    }
+  }
+
+  return { valid: true };
+}
+
 export function isValidPhoneNumber(phone: string | null | undefined): boolean {
-  const digits = cleanPhoneDigits(phone);
-  // No Brasil: 10 dígitos (fixo com DDD) ou 11 dígitos (móvel com DDD).
-  // Com DDI 55: 12 ou 13 dígitos. Padrão E.164 aceita de 10 a 15 dígitos.
-  if (digits.length < 10 || digits.length > 15) {
-    return false;
+  const res = validateBrazilianPhone(phone);
+  if (!res.valid) {
+    // Permite números de 10 a 15 dígitos internacional caso aplicável
+    const digits = cleanPhoneDigits(phone);
+    return digits.length >= 10 && digits.length <= 15;
   }
   return true;
 }

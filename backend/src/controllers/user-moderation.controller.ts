@@ -2,9 +2,10 @@ import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '../middlewares/audit.middleware';
-import { isValidPhoneNumber, normalizePhoneWithDDI } from '../utils/phone.utils';
+import { isValidPhoneNumber, normalizePhoneWithDDI, validateBrazilianPhone } from '../utils/phone.utils';
 import { EmailService } from '../services/email.service';
 import { buildZemdaEmailLayout } from '../services/email-template.service';
+import { generateToken } from '../utils/jwt';
 
 export const MODERATION_REASONS = {
   suspected_spam: 'Suspeita de spam',
@@ -16,6 +17,78 @@ export const MODERATION_REASONS = {
   terms_violation: 'Violação dos termos de uso',
   other: 'Outros motivos'
 };
+
+export interface ExclusiveWhatsAppBlockCheck {
+  isExclusiveWhatsAppBlock: boolean;
+  request: any | null;
+  otherBlockReason?: string | null;
+}
+
+/**
+ * Verifica com rigor se o usuário está bloqueado exclusivamente por solicitação pendente de atualização de WhatsApp
+ */
+export function checkExclusiveWhatsAppBlock(userId: string): ExclusiveWhatsAppBlockCheck {
+  try {
+    const pendingRequest = db.prepare(`
+      SELECT id, reason, previous_phone, suspended_access, created_at
+      FROM user_whatsapp_requests
+      WHERE user_id = ? AND status IN ('pending', 'awaiting_correction')
+      ORDER BY created_at DESC
+      LIMIT 1
+    `).get(userId) as any;
+
+    if (!pendingRequest) {
+      return { isExclusiveWhatsAppBlock: false, request: null };
+    }
+
+    const user = db.prepare('SELECT id, status, moderation_flag, blocked_reason FROM users WHERE id = ?').get(userId) as any;
+    if (!user || user.status !== 'blocked') {
+      return { isExclusiveWhatsAppBlock: false, request: pendingRequest };
+    }
+
+    if (user.moderation_flag && !['clean', 'invalid_phone'].includes(user.moderation_flag)) {
+      return {
+        isExclusiveWhatsAppBlock: false,
+        request: pendingRequest,
+        otherBlockReason: `Sinalização de moderação: ${user.moderation_flag}`
+      };
+    }
+
+    const lastUnblock = db.prepare(`
+      SELECT created_at FROM user_moderation_logs
+      WHERE user_id = ? AND action = 'unblock_user'
+      ORDER BY created_at DESC LIMIT 1
+    `).get(userId) as any;
+
+    let otherBlockQuery = `
+      SELECT reason_code, reason_details, created_at FROM user_moderation_logs
+      WHERE user_id = ? AND action = 'block_user' AND reason_code != 'invalid_phone'
+    `;
+    const params: any[] = [userId];
+    if (lastUnblock?.created_at) {
+      otherBlockQuery += ` AND created_at > ?`;
+      params.push(lastUnblock.created_at);
+    }
+    otherBlockQuery += ` ORDER BY created_at DESC LIMIT 1`;
+    const otherBlock = db.prepare(otherBlockQuery).get(...params) as any;
+
+    if (otherBlock) {
+      return {
+        isExclusiveWhatsAppBlock: false,
+        request: pendingRequest,
+        otherBlockReason: otherBlock.reason_details || otherBlock.reason_code
+      };
+    }
+
+    return {
+      isExclusiveWhatsAppBlock: true,
+      request: pendingRequest
+    };
+  } catch (err) {
+    console.error('[checkExclusiveWhatsAppBlock] Erro ao verificar bloqueio exclusivo:', err);
+    return { isExclusiveWhatsAppBlock: false, request: null };
+  }
+}
 
 export class UserModerationController {
   /**
@@ -710,9 +783,11 @@ export class UserModerationController {
 
   /**
    * O próprio usuário submete um novo número de WhatsApp com DDD.
-   * Valida formato, salva com histórico e conclui a solicitação.
-   * Apresenta 'Número atualizado — não verificado'.
-   * Não realiza desbloqueio automático indevido de contas bloqueadas.
+   * Valida formato brasileiro e DDD, salva histórico, conclui a solicitação pendente.
+   * Se o bloqueio era exclusivo por WhatsApp, restabelece o acesso imediatamente e gera token de sessão completo.
+   * Se havia outro motivo de bloqueio ativo, mantém bloqueado e informa que aguarda análise.
+   * Invalida sessões antigas por segurança via session_version.
+   * Apresenta aviso claro: 'Número atualizado — não verificado'.
    */
   static async submitMyWhatsAppUpdate(req: Request, res: Response): Promise<void> {
     try {
@@ -729,33 +804,58 @@ export class UserModerationController {
       }
 
       // Validação estrita de formato brasileiro e DDD
-      if (!isValidPhoneNumber(phone)) {
-        res.status(400).json({ error: 'Número de telefone inválido. Informe um número com DDD válido (ex: (11) 98765-4321)' });
+      const validation = validateBrazilianPhone(phone);
+      if (!validation.valid) {
+        res.status(400).json({ error: validation.error || 'Número de telefone inválido. Informe um número com DDD válido (ex: (11) 98765-4321)' });
         return;
       }
 
       const normalized = normalizePhoneWithDDI(phone);
-      const user = db.prepare('SELECT id, name, phone, moderation_flag FROM users WHERE id = ?').get(userId) as any;
+      const user = db.prepare('SELECT id, name, email, phone, role, status, tenant_id, session_version, moderation_flag FROM users WHERE id = ?').get(userId) as any;
       if (!user) {
         res.status(404).json({ error: 'Usuário não encontrado' });
         return;
       }
 
-      // Atualiza o telefone do usuário mantendo o histórico
-      // Status fica 'unverified' e phone_verified = 0 conforme especificação de segurança
+      const wasBlocked = user.status === 'blocked';
+      const blockCheck = wasBlocked ? checkExclusiveWhatsAppBlock(userId) : { isExclusiveWhatsAppBlock: false };
+
+      // Invalidação obrigatória de sessões antigas por segurança
+      const newSessionVersion = (user.session_version || 0) + 1;
       const newFlag = user.moderation_flag === 'invalid_phone' ? 'clean' : user.moderation_flag;
 
-      db.prepare(`
-        UPDATE users
-        SET phone = ?,
-            phone_verified = 0,
-            whatsapp_status = 'unverified',
-            moderation_flag = ?,
-            updated_at = datetime('now')
-        WHERE id = ?
-      `).run(normalized, newFlag, userId);
+      if (wasBlocked && blockCheck.isExclusiveWhatsAppBlock) {
+        // Se o bloqueio era exclusivo por WhatsApp: restabelece o acesso imediatamente
+        db.prepare(`
+          UPDATE users
+          SET phone = ?,
+              phone_verified = 0,
+              whatsapp_status = 'unverified',
+              moderation_flag = ?,
+              status = 'active',
+              blocked_reason = NULL,
+              blocked_at = NULL,
+              blocked_by = NULL,
+              blocked_until = NULL,
+              session_version = ?,
+              updated_at = datetime('now')
+          WHERE id = ?
+        `).run(normalized, newFlag, newSessionVersion, userId);
+      } else {
+        // Se havia outro motivo de bloqueio ativo ou o usuário já estava ativo
+        db.prepare(`
+          UPDATE users
+          SET phone = ?,
+              phone_verified = 0,
+              whatsapp_status = 'unverified',
+              moderation_flag = ?,
+              session_version = ?,
+              updated_at = datetime('now')
+          WHERE id = ?
+        `).run(normalized, newFlag, newSessionVersion, userId);
+      }
 
-      // Marca as solicitações pendentes como concluídas
+      // Marca todas as solicitações pendentes deste usuário como concluídas
       db.prepare(`
         UPDATE user_whatsapp_requests
         SET status = 'completed',
@@ -765,15 +865,16 @@ export class UserModerationController {
         WHERE user_id = ? AND status IN ('pending', 'awaiting_correction')
       `).run(normalized, userId);
 
-      // Registra evento de histórico
+      // Registra log de auditoria no histórico do usuário
       db.prepare(`
         INSERT INTO user_moderation_logs (
-          id, user_id, action, reason_code, reason_details,
+          id, user_id, tenant_id, action, reason_code, reason_details,
           performed_by_user_id, performed_by_name, metadata_json, created_at
-        ) VALUES (?, ?, 'whatsapp_updated', 'user_updated_phone', 'Número de WhatsApp atualizado pelo próprio usuário no perfil', ?, ?, ?, datetime('now'))
+        ) VALUES (?, ?, ?, 'whatsapp_updated', 'user_updated_phone', 'Número de WhatsApp atualizado pelo próprio usuário', ?, ?, ?, datetime('now'))
       `).run(
         uuidv4(),
         userId,
+        user.tenant_id || null,
         userId,
         user.name,
         JSON.stringify({ previousPhone: user.phone, newPhone: normalized })
@@ -781,8 +882,74 @@ export class UserModerationController {
 
       logAudit(req, 'USER_UPDATE_WHATSAPP', 'users', userId, { previousPhone: user.phone, newPhone: normalized });
 
+      if (wasBlocked && blockCheck.isExclusiveWhatsAppBlock) {
+        // Registra histórico de desbloqueio
+        db.prepare(`
+          INSERT INTO user_moderation_logs (
+            id, user_id, tenant_id, action, reason_code, reason_details,
+            performed_by_user_id, performed_by_name, metadata_json, created_at
+          ) VALUES (?, ?, ?, 'unblock_user', 'whatsapp_regularized', 'Acesso restabelecido automaticamente após regularização do WhatsApp', ?, ?, ?, datetime('now'))
+        `).run(
+          uuidv4(),
+          userId,
+          user.tenant_id || null,
+          userId,
+          user.name,
+          JSON.stringify({ phone: normalized, unblockedAutomatically: true })
+        );
+
+        logAudit(req, 'USER_UNBLOCKED', 'users', userId, { reason: 'whatsapp_regularized' });
+
+        // Gera token completo para permitir acesso imediato à plataforma
+        const fullToken = generateToken({
+          userId: user.id,
+          tenantId: user.tenant_id || null,
+          role: user.role,
+          email: user.email,
+          name: user.name
+        });
+
+        let tenantData: any = null;
+        if (user.tenant_id) {
+          tenantData = db.prepare(`
+            SELECT id, slug, name, corporate_name, trade_name, email, phone, logo_url, primary_color, status
+            FROM tenants WHERE id = ?
+          `).get(user.tenant_id);
+        }
+
+        res.json({
+          success: true,
+          accessRestored: true,
+          message: 'Número atualizado — não verificado. Seu acesso foi restabelecido com sucesso!',
+          token: fullToken,
+          user: {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            phone: normalized,
+            role: user.role,
+            tenantId: user.tenant_id,
+            status: 'active'
+          },
+          tenant: tenantData || null,
+          phone: normalized
+        });
+        return;
+      }
+
+      if (wasBlocked && !blockCheck.isExclusiveWhatsAppBlock) {
+        res.json({
+          success: true,
+          accessRestored: false,
+          message: 'Número atualizado — não verificado. Sua conta permanece suspensa aguardando análise administrativa para os demais motivos.',
+          phone: normalized
+        });
+        return;
+      }
+
       res.json({
         success: true,
+        accessRestored: true,
         message: 'Número atualizado — não verificado.',
         phone: normalized
       });

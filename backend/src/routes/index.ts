@@ -68,7 +68,7 @@ import { SandboxController } from '../controllers/sandbox.controller';
 import { EsteticController } from '../controllers/estetic.controller';
 import { ServiceReminderController } from '../controllers/service-reminder.controller';
 
-import { authMiddleware, onboardingGate } from '../middlewares/auth.middleware';
+import { authMiddleware, onboardingGate, whatsappUpdateAuthMiddleware } from '../middlewares/auth.middleware';
 import { tenantMiddleware, requireTenant } from '../middlewares/tenant.middleware';
 import { requireRole, requirePermissionOrRole } from '../middlewares/rbac.middleware';
 import { requireCapability } from '../middlewares/capability.middleware';
@@ -189,6 +189,10 @@ api.get('/api/v1/integrations/google-calendar/callback', GoogleCalendarControlle
 api.post('/v1/integrations/google-calendar/webhook', GoogleCalendarController.webhook);
 api.post('/api/v1/integrations/google-calendar/webhook', GoogleCalendarController.webhook);
 
+// Rotas de recuperação restrita e atualização de WhatsApp (Autenticação dedicada com suporte a conta bloqueada)
+api.get('/v1/auth/whatsapp-update-request', whatsappUpdateAuthMiddleware, UserModerationController.getMyWhatsAppUpdateRequest);
+api.post('/v1/auth/update-whatsapp', whatsappUpdateAuthMiddleware, UserModerationController.submitMyWhatsAppUpdate);
+
 api.use(authMiddleware);
 api.use(tenantMiddleware);
 // Enforce billing before every authenticated operational route, including shared-patient APIs.
@@ -209,8 +213,6 @@ api.post('/v1/patient-sharing/:id/revoke', PatientSharingController.revoke);
 api.post('/v1/auth/accept-legal', AuthController.acceptLegal);
 api.put('/v1/auth/profile/password', AuthController.updateProfilePassword);
 api.put('/v1/auth/profile/email', AuthController.updateProfileEmail);
-api.get('/v1/auth/whatsapp-update-request', UserModerationController.getMyWhatsAppUpdateRequest);
-api.post('/v1/auth/update-whatsapp', UserModerationController.submitMyWhatsAppUpdate);
 
 api.use(onboardingGate);
 mountConsentRoutes(api);

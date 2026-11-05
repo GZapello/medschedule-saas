@@ -1,6 +1,7 @@
 import './auth-experience.css';
 import { googleAuthError } from './googleAuthErrors';
 import { sanitizePlanCode } from '../../utils/planUtils';
+import { maskBrazilianPhone, validateBrazilianPhone } from '../../utils/phone-mask';
 import { GoogleAccountLinkDialog } from './GoogleAccountLinkDialog';
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
@@ -24,7 +25,8 @@ import {
   RefreshCw,
   X,
   ArrowLeft,
-  Sparkles
+  Sparkles,
+  Phone
 } from 'lucide-react';
 
 interface AuthPageProps {
@@ -65,6 +67,26 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     name: string;
     email: string;
   } | null>(null);
+  // Fluxo restrito de regularização de WhatsApp para usuários suspensos por esse motivo
+  const [whatsappPendingState, setWhatsappPendingState] = useState<{
+    restrictedToken: string;
+    reason: string;
+    previousPhone?: string | null;
+    userName?: string;
+    userEmail?: string;
+  } | null>(null);
+
+  const [whatsappNewPhone, setWhatsappNewPhone] = useState<string>('');
+  const [whatsappPhoneError, setWhatsappPhoneError] = useState<string | null>(null);
+  const [whatsappSubmitting, setWhatsappSubmitting] = useState<boolean>(false);
+  const [whatsappSuccessResult, setWhatsappSuccessResult] = useState<{
+    message: string;
+    accessRestored: boolean;
+    token?: string;
+    user?: any;
+    tenant?: any;
+    phone?: string;
+  } | null>(null);
 
   const hasTrackedLoginStarted = useRef<boolean>(false);
   const notifyLoginStarted = () => {
@@ -74,6 +96,61 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     }
   };
 
+  const handleWhatsAppSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!whatsappPendingState) return;
+
+    const validation = validateBrazilianPhone(whatsappNewPhone);
+    if (!validation.valid) {
+      setWhatsappPhoneError(validation.error || 'Informe um número com DDD válido (ex: (11) 98765-4321)');
+      return;
+    }
+    setWhatsappPhoneError(null);
+
+    try {
+      setWhatsappSubmitting(true);
+      const res = await ApiClient.post<any>('/v1/auth/update-whatsapp', {
+        phone: whatsappNewPhone
+      }, {
+        headers: {
+          Authorization: `Bearer ${whatsappPendingState.restrictedToken}`
+        }
+      });
+
+      setWhatsappSuccessResult({
+        message: res.message || 'Número atualizado — não verificado.',
+        accessRestored: Boolean(res.accessRestored),
+        token: res.token,
+        user: res.user,
+        tenant: res.tenant,
+        phone: res.phone
+      });
+      showToast(res.message || 'Número atualizado com sucesso!', 'success');
+    } catch (err: any) {
+      setWhatsappPhoneError(err.message || 'Erro ao enviar novo número de WhatsApp. Tente novamente.');
+      showToast(err.message || 'Falha ao atualizar WhatsApp', 'error');
+    } finally {
+      setWhatsappSubmitting(false);
+    }
+  };
+
+  const handleAccessRestored = () => {
+    if (whatsappSuccessResult?.token && whatsappSuccessResult?.user) {
+      loginWithToken(whatsappSuccessResult.token, whatsappSuccessResult.user, whatsappSuccessResult.tenant);
+      showToast('Acesso restabelecido com sucesso! Bem-vindo de volta.', 'success');
+    } else {
+      setWhatsappPendingState(null);
+      setWhatsappSuccessResult(null);
+      setWhatsappNewPhone('');
+    }
+  };
+
+  const handleCancelWhatsAppUpdate = () => {
+    setWhatsappPendingState(null);
+    setWhatsappSuccessResult(null);
+    setWhatsappNewPhone('');
+    setWhatsappPhoneError(null);
+  };
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     notifyLoginStarted();
@@ -100,6 +177,24 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       await login(email.trim().toLowerCase(), password);
       showToast('Login realizado com sucesso!', 'success');
     } catch (err: any) {
+      if ((err.code === 'WHATSAPP_UPDATE_REQUIRED' || err.data?.code === 'WHATSAPP_UPDATE_REQUIRED') && (err.data?.restrictedToken || err.restrictedToken)) {
+        const rToken = err.data?.restrictedToken || err.restrictedToken;
+        const rReason = err.data?.reason || err.reason || 'Atualização cadastral do WhatsApp solicitada pela administração.';
+        const rPrevPhone = err.data?.previousPhone || err.previousPhone || null;
+        const rUser = err.data?.user || err.user;
+        setWhatsappPendingState({
+          restrictedToken: rToken,
+          reason: rReason,
+          previousPhone: rPrevPhone,
+          userName: rUser?.name,
+          userEmail: rUser?.email || email.trim()
+        });
+        setWhatsappNewPhone('');
+        setWhatsappPhoneError(null);
+        setWhatsappSuccessResult(null);
+        showToast('Atualização de WhatsApp necessária para regularizar seu acesso.', 'info');
+        return;
+      }
       setLoginError({ message: err.message, code: err.code });
       showToast(err.message || 'Falha na autenticação', 'error');
     } finally {
@@ -167,6 +262,24 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       }
       throw new Error('Resposta inesperada ao entrar com Google. Tente novamente.');
     } catch (err: any) {
+      if ((err.code === 'WHATSAPP_UPDATE_REQUIRED' || err.data?.code === 'WHATSAPP_UPDATE_REQUIRED') && (err.data?.restrictedToken || err.restrictedToken)) {
+        const rToken = err.data?.restrictedToken || err.restrictedToken;
+        const rReason = err.data?.reason || err.reason || 'Atualização cadastral do WhatsApp solicitada pela administração.';
+        const rPrevPhone = err.data?.previousPhone || err.previousPhone || null;
+        const rUser = err.data?.user || err.user;
+        setWhatsappPendingState({
+          restrictedToken: rToken,
+          reason: rReason,
+          previousPhone: rPrevPhone,
+          userName: rUser?.name,
+          userEmail: rUser?.email
+        });
+        setWhatsappNewPhone('');
+        setWhatsappPhoneError(null);
+        setWhatsappSuccessResult(null);
+        showToast('Atualização de WhatsApp necessária para regularizar seu acesso.', 'info');
+        return;
+      }
       const msg = googleAuthError(err, 'login');
       setLoginError({ message: msg, code: err?.code });
       showToast(msg, 'error');
@@ -219,7 +332,163 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           </div>
         </div>
 
-        {/* Login Box */}
+        {/* Caixa de Atualização Restrita de WhatsApp (Contas suspensas exclusivamente por WhatsApp) */}
+        {whatsappPendingState ? (
+          <div className="auth-login-card bg-white rounded-3xl p-6 sm:p-8 shadow-xl shadow-teal-900/5 border border-slate-200/80 space-y-5 animate-in fade-in duration-200">
+            <div className="space-y-1.5">
+              <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-amber-50 border border-amber-200/80 text-amber-800 text-[11px] font-bold">
+                <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                <span>Atualização de WhatsApp necessária</span>
+              </div>
+              <h2 className="text-lg font-black text-slate-900">
+                Regularização de Contato
+              </h2>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Seu acesso está temporariamente suspenso até a regularização do número de WhatsApp cadastrado.
+              </p>
+            </div>
+
+            {whatsappSuccessResult ? (
+              <div className="space-y-4">
+                <div className="p-4 rounded-2xl bg-emerald-50/80 border border-emerald-200 text-emerald-950 space-y-2">
+                  <div className="flex items-center gap-2 text-emerald-800 font-bold text-sm">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                    <span>Número atualizado — não verificado</span>
+                  </div>
+                  <p className="text-xs text-emerald-900 leading-relaxed">
+                    {whatsappSuccessResult.message}
+                  </p>
+                  {whatsappSuccessResult.phone && (
+                    <p className="text-[11px] text-emerald-800 font-semibold pt-1 border-t border-emerald-200/60">
+                      Novo número registrado: <span className="font-mono">{whatsappSuccessResult.phone}</span>
+                    </p>
+                  )}
+                </div>
+
+                {whatsappSuccessResult.accessRestored && whatsappSuccessResult.token ? (
+                  <button
+                    type="button"
+                    onClick={handleAccessRestored}
+                    className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white font-bold text-xs rounded-xl shadow-md shadow-teal-600/20 hover:scale-[1.01] active:scale-[0.99] transition-all cursor-pointer"
+                  >
+                    <span>Acessar Plataforma</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-xs text-slate-600 text-center">
+                      Sua regularização foi registrada com sucesso e aguarda análise da administração.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleCancelWhatsAppUpdate}
+                      className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all cursor-pointer"
+                    >
+                      Voltar ao Início
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <form onSubmit={handleWhatsAppSubmit} className="space-y-4">
+                {(whatsappPendingState.userName || whatsappPendingState.userEmail) && (
+                  <div className="px-3 py-2 rounded-xl bg-slate-50 border border-slate-200/70 text-slate-700 text-xs flex items-center justify-between">
+                    <span className="font-semibold text-slate-900 truncate">
+                      {whatsappPendingState.userName || whatsappPendingState.userEmail}
+                    </span>
+                    <span className="text-[10px] text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider shrink-0">
+                      Identificado
+                    </span>
+                  </div>
+                )}
+
+                <div className="p-3.5 rounded-2xl bg-amber-50/60 border border-amber-200/70 space-y-1 text-xs">
+                  <div className="flex items-center gap-1.5 font-bold text-amber-900 text-[11px] uppercase tracking-wider">
+                    <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    <span>Motivo informado pelo administrador:</span>
+                  </div>
+                  <p className="text-amber-950 font-medium leading-relaxed pl-5">
+                    {whatsappPendingState.reason}
+                  </p>
+                </div>
+
+                {whatsappPendingState.previousPhone && (
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    Número anterior cadastrado: <span className="font-mono text-slate-700">{whatsappPendingState.previousPhone}</span>
+                  </p>
+                )}
+
+                <div>
+                  <label htmlFor="zemda-update-whatsapp-phone" className="block text-xs font-bold text-slate-700 mb-1">
+                    Novo número de WhatsApp (com DDD)
+                  </label>
+                  <div className="relative">
+                    <Phone className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="tel"
+                      id="zemda-update-whatsapp-phone"
+                      autoFocus
+                      value={whatsappNewPhone}
+                      onChange={e => {
+                        const masked = maskBrazilianPhone(e.target.value);
+                        setWhatsappNewPhone(masked);
+                        if (whatsappPhoneError) setWhatsappPhoneError(null);
+                      }}
+                      placeholder="(11) 98765-4321"
+                      maxLength={15}
+                      className={`w-full pl-10 pr-4 py-2.5 text-xs font-medium border rounded-xl bg-slate-50/70 focus:bg-white focus:outline-hidden focus:ring-2 ${
+                        whatsappPhoneError
+                          ? 'border-red-400 focus:ring-red-500 bg-red-50/20'
+                          : 'border-slate-200 focus:ring-teal-500 focus:border-teal-500'
+                      }`}
+                    />
+                  </div>
+                  {whatsappPhoneError ? (
+                    <p className="text-[11px] text-red-600 mt-1 font-semibold">{whatsappPhoneError}</p>
+                  ) : (
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      Informe o código de área (DDD) e o número completo (10 ou 11 dígitos).
+                    </p>
+                  )}
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={whatsappSubmitting}
+                  className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white font-bold text-xs rounded-xl shadow-md shadow-teal-600/20 hover:scale-[1.01] active:scale-[0.99] transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {whatsappSubmitting ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Atualizando dados...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Atualizar WhatsApp</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
+                </button>
+
+                <div className="pt-2 text-center">
+                  <button
+                    type="button"
+                    onClick={handleCancelWhatsAppUpdate}
+                    className="text-xs text-slate-500 hover:text-slate-700 font-semibold transition-colors cursor-pointer hover:underline"
+                  >
+                    Voltar para o login
+                  </button>
+                </div>
+              </form>
+            )}
+
+            <div className="pt-1 text-center space-y-0.5 border-t border-slate-100">
+              <p className="text-[10px] text-slate-400 font-medium">
+                Zemda • Sessão Restrita de Regularização • Dados Protegidos
+              </p>
+            </div>
+          </div>
+        ) : (
         <div className="auth-login-card bg-white rounded-3xl p-6 sm:p-8 shadow-xl shadow-teal-900/5 border border-slate-200/80 space-y-5">
           <div className="space-y-1">
             <h2 className="text-lg font-black text-slate-900">Acessar Plataforma</h2>
@@ -393,6 +662,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
             </p>
           </div>
         </div>
+        )}
       </div>
 
       </>}

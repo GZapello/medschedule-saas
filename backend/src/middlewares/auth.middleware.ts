@@ -34,6 +34,15 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
     return;
   }
 
+  // Tokens com escopo restrito de WhatsApp NUNCA têm acesso a nenhuma rota operacional do sistema
+  if (payload.scope === 'whatsapp_update_only') {
+    res.status(403).json({
+      error: 'Acesso restrito exclusivamente à regularização do WhatsApp cadastrado.',
+      code: 'WHATSAPP_UPDATE_RESTRICTED'
+    });
+    return;
+  }
+
   const account = db.prepare('SELECT id, role, status, tenant_id, session_version, onboarding_status FROM users WHERE id = ?').get(payload.userId) as any;
   const isOnboarding = Boolean(account && account.onboarding_status && account.onboarding_status !== 'active');
   if (!account || ['blocked','inactive','rejected'].includes(account.status) || (account.status !== 'active' && !pendingBillingManager(account) && !isOnboarding) || (account.role === 'superadmin') !== (payload.role === 'superadmin') ||
@@ -65,6 +74,84 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
   req.user = payload;
   if (payload.tenantId) {
     req.tenantId = payload.tenantId;
+  }
+
+  next();
+}
+
+/**
+ * Middleware de autorização restrita para consulta e atualização de WhatsApp.
+ * Permite:
+ * 1. Usuários ativos normais com sessão válida.
+ * 2. Usuários com bloqueio por WhatsApp que possuem token restrito (scope === 'whatsapp_update_only')
+ *    com verificação válida de integridade da conta e sessão.
+ */
+export function whatsappUpdateAuthMiddleware(req: Request, res: Response, next: NextFunction): void {
+  const authHeader = req.headers.authorization;
+  let token: string | null = null;
+
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.split(' ')[1];
+  } else if (req.query.token && typeof req.query.token === 'string') {
+    token = req.query.token;
+  }
+
+  if (!token) {
+    res.status(401).json({ error: 'Token de autenticação não fornecido ou inválido' });
+    return;
+  }
+
+  const payload = verifyToken(token);
+  if (!payload) {
+    res.status(401).json({ error: 'Token expirado ou inválido' });
+    return;
+  }
+
+  const account = db.prepare('SELECT id, name, email, role, status, tenant_id, session_version FROM users WHERE id = ?').get(payload.userId) as any;
+  if (!account) {
+    res.status(401).json({ error: 'Usuário não encontrado' });
+    return;
+  }
+
+  // Validação de versão de sessão
+  if ((payload.userSessionVersion || 0) !== (account.session_version || 0)) {
+    res.status(401).json({ error: 'Sessão expirada ou invalidada. Faça login novamente.' });
+    return;
+  }
+
+  // Se o usuário estiver bloqueado
+  if (account.status === 'blocked') {
+    // Só é autorizado se o token for especificamente para regularização de WhatsApp
+    if (payload.scope !== 'whatsapp_update_only') {
+      res.status(403).json({
+        error: 'Sua conta de usuário está bloqueada pela administração.',
+        code: 'USER_BLOCKED'
+      });
+      return;
+    }
+
+    // Verifica se há solicitação pendente no banco
+    const pending = db.prepare(`
+      SELECT id FROM user_whatsapp_requests
+      WHERE user_id = ? AND status IN ('pending', 'awaiting_correction')
+      LIMIT 1
+    `).get(account.id);
+
+    if (!pending) {
+      res.status(403).json({
+        error: 'Não há solicitação pendente de atualização de WhatsApp para esta conta.',
+        code: 'NO_PENDING_WHATSAPP_UPDATE'
+      });
+      return;
+    }
+  } else if (account.status !== 'active') {
+    res.status(403).json({ error: 'Conta em estado inválido para esta operação.' });
+    return;
+  }
+
+  req.user = payload;
+  if (account.tenant_id) {
+    req.tenantId = account.tenant_id;
   }
 
   next();

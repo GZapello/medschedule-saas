@@ -161,7 +161,7 @@ export class ApiClient {
       ...(options.headers as Record<string, string> || {})
     };
 
-    if (token) {
+    if (token && !headers['Authorization']) {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
@@ -196,11 +196,12 @@ export class ApiClient {
       let errorMsg = `Erro ${response.status}: ${response.statusText}`;
       let errorCode: string | undefined = undefined;
       let errorField: string | undefined;
+      let errorData: any = undefined;
       try {
         const text = await response.text();
         if (isJson) {
           try {
-            const errorData = JSON.parse(text);
+            errorData = JSON.parse(text);
             if (errorData.error) errorMsg = errorData.error;
             if (errorData.code) errorCode = errorData.code;
             if (typeof errorData.field === 'string') errorField = errorData.field;
@@ -229,6 +230,7 @@ export class ApiClient {
       err.status = response.status;
       err.contentType = contentType;
       err.requestUrl = requestUrl;
+      err.data = errorData;
       throw err;
     }
 
@@ -260,7 +262,7 @@ export class ApiClient {
     return this.request<T>(endpoint, { method: 'GET', ...options });
   }
 
-  static post<T>(endpoint: string, data?: any, options: { signal?: AbortSignal } = {}): Promise<T> {
+  static post<T>(endpoint: string, data?: any, options: { signal?: AbortSignal; headers?: HeadersInit } = {}): Promise<T> {
     return this.request<T>(endpoint, {
       method: 'POST',
       ...options,
