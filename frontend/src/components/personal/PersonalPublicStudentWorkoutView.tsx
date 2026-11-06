@@ -135,28 +135,27 @@ export const PersonalPublicStudentWorkoutView: React.FC<PersonalPublicStudentWor
   const [showPhotoShareModal, setShowPhotoShareModal] = useState(false);
   const [photoShareInitialMode, setPhotoShareInitialMode] = useState<'default' | 'camera' | 'gallery'>('default');
   const [photoShareInitialPhotoUrl, setPhotoShareInitialPhotoUrl] = useState<string | null>(null);
+  const [photoShareInitialFile, setPhotoShareInitialFile] = useState<File | null>(null);
 
   const handlePublicGalleryFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (file.type && !file.type.startsWith('image/')) {
+      alert('Por favor, selecione um arquivo de imagem válido (JPEG, PNG ou WebP).');
+      e.target.value = '';
+      return;
+    }
+
+    setPhotoShareInitialFile(file);
     try {
       const objectUrl = URL.createObjectURL(file);
       setPhotoShareInitialPhotoUrl(objectUrl);
-      setPhotoShareInitialMode('default');
-      setShowPhotoShareModal(true);
     } catch {
-      const reader = new FileReader();
-      reader.onload = ev => {
-        const result = ev.target?.result;
-        if (typeof result === 'string') {
-          setPhotoShareInitialPhotoUrl(result);
-          setPhotoShareInitialMode('default');
-          setShowPhotoShareModal(true);
-        }
-      };
-      reader.readAsDataURL(file);
+      // Fallback para leitura do arquivo tratada diretamente no modal
     }
+    setPhotoShareInitialMode('default');
+    setShowPhotoShareModal(true);
     e.target.value = '';
   };
 
@@ -655,19 +654,18 @@ export const PersonalPublicStudentWorkoutView: React.FC<PersonalPublicStudentWor
                 Tirar foto agora
               </button>
               <label
-                htmlFor="public-student-gallery-file-input"
-                className="py-2 px-3 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-xl text-[11px] font-bold text-slate-300 flex items-center justify-center gap-1.5 transition cursor-pointer select-none"
+                className="relative overflow-hidden py-2 px-3 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-xl text-[11px] font-bold text-slate-300 flex items-center justify-center gap-1.5 transition cursor-pointer select-none"
               >
                 <ImageIcon className="w-3.5 h-3.5 text-teal-400" />
-                Escolher da galeria
+                <span>Escolher da galeria</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  aria-label="Escolher foto da galeria"
+                  className="absolute inset-0 h-full w-full opacity-0 cursor-pointer z-10"
+                  onChange={handlePublicGalleryFileChange}
+                />
               </label>
-              <input
-                id="public-student-gallery-file-input"
-                type="file"
-                accept="image/*,image/jpeg,image/png,image/webp,image/heic,image/heif"
-                className="sr-only opacity-0 fixed -top-[1000px] -left-[1000px] w-px h-px pointer-events-none"
-                onChange={handlePublicGalleryFileChange}
-              />
             </div>
           </div>
 
@@ -698,7 +696,11 @@ export const PersonalPublicStudentWorkoutView: React.FC<PersonalPublicStudentWor
           isOpen={showPhotoShareModal}
           onClose={() => {
             setShowPhotoShareModal(false);
+            if (photoShareInitialPhotoUrl && photoShareInitialPhotoUrl.startsWith('blob:')) {
+              try { URL.revokeObjectURL(photoShareInitialPhotoUrl); } catch (_) {}
+            }
             setPhotoShareInitialPhotoUrl(null);
+            setPhotoShareInitialFile(null);
           }}
           studentName={studentName}
           clinicName={clinicName}
@@ -727,6 +729,7 @@ export const PersonalPublicStudentWorkoutView: React.FC<PersonalPublicStudentWor
           newPRs={newPRsList}
           initialMode={photoShareInitialMode}
           initialPhotoUrl={photoShareInitialPhotoUrl}
+          initialFile={photoShareInitialFile}
         />
 
         {/* Modal de Recordes acessível pelo pós-treino */}

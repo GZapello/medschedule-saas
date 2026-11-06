@@ -19,7 +19,8 @@
     "test:billing": "node tests/billing-access.cjs && node tests/billing-loading.cjs",
     "test:billing:loading": "node tests/billing-loading.cjs",
     "test:mobile": "node tests/mobile-overflow.cjs",
-    "test:mobile:interactions": "node tests/mobile-interactions.cjs"
+    "test:mobile:interactions": "node tests/mobile-interactions.cjs",
+    "test:personal-photo-mobile": "node tests/personal-photo-mobile-browser.cjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.1",

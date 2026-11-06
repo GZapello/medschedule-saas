@@ -52,6 +52,7 @@ export interface PersonalWorkoutPhotoShareModalProps {
   newPRs: WorkoutPRItem[];
   initialMode?: 'default' | 'camera' | 'gallery';
   initialPhotoUrl?: string | null;
+  initialFile?: File | null;
 }
 
 export interface WeekTrainedDayStatus {
@@ -297,7 +298,8 @@ export const PersonalWorkoutPhotoShareModal: React.FC<PersonalWorkoutPhotoShareM
   workoutContext,
   newPRs,
   initialMode = 'default',
-  initialPhotoUrl = null
+  initialPhotoUrl = null,
+  initialFile = null
 }) => {
   // Formato da arte: Story (9:16) ou Quadrado/Feed (1:1)
   const [format, setFormat] = useState<ArtFormat>('story');
@@ -308,6 +310,7 @@ export const PersonalWorkoutPhotoShareModal: React.FC<PersonalWorkoutPhotoShareM
   const [photoImageElement, setPhotoImageElement] = useState<HTMLImageElement | null>(null);
   const [photoZoom, setPhotoZoom] = useState<number>(1);
   const [overlayOpacity, setOverlayOpacity] = useState<number>(0.55);
+  const [photoError, setPhotoError] = useState<string | null>(null);
 
   // Câmera ao vivo no navegador
   const [cameraActive, setCameraActive] = useState(false);
@@ -316,8 +319,7 @@ export const PersonalWorkoutPhotoShareModal: React.FC<PersonalWorkoutPhotoShareM
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
-  // Inputs de arquivo nativos (galeria e captura mobile)
-  const galleryInputRef = useRef<HTMLInputElement | null>(null);
+  // Input de arquivo nativo para fallback de câmera no mobile
   const cameraCaptureInputRef = useRef<HTMLInputElement | null>(null);
 
   // Logo do Zemda pré-carregada para o Canvas
@@ -464,6 +466,7 @@ export const PersonalWorkoutPhotoShareModal: React.FC<PersonalWorkoutPhotoShareM
     if (!isOpen) {
       stopCamera();
       setShareStatusMessage(null);
+      setPhotoError(null);
       if (photoDataUrl && photoDataUrl.startsWith('blob:')) {
         try { URL.revokeObjectURL(photoDataUrl); } catch (_) {}
       }
@@ -471,11 +474,22 @@ export const PersonalWorkoutPhotoShareModal: React.FC<PersonalWorkoutPhotoShareM
   }, [isOpen, stopCamera, photoDataUrl]);
 
   // Carrega foto inicial se fornecida via prop (ex: selecionada na tela pós-treino)
+  const lastLoadedInitialRef = useRef<string | File | null>(null);
+
   useEffect(() => {
-    if (isOpen && initialPhotoUrl) {
+    if (!isOpen) {
+      lastLoadedInitialRef.current = null;
+      return;
+    }
+
+    if (initialFile && initialFile !== lastLoadedInitialRef.current) {
+      lastLoadedInitialRef.current = initialFile;
+      loadPhotoFromFile(initialFile);
+    } else if (initialPhotoUrl && initialPhotoUrl !== lastLoadedInitialRef.current) {
+      lastLoadedInitialRef.current = initialPhotoUrl;
       loadPhotoFromDataUrl(initialPhotoUrl);
     }
-  }, [isOpen, initialPhotoUrl]);
+  }, [isOpen, initialFile, initialPhotoUrl]);
 
   const startCamera = useCallback(
     async (facing: 'user' | 'environment' = cameraFacingMode) => {
@@ -544,49 +558,95 @@ export const PersonalWorkoutPhotoShareModal: React.FC<PersonalWorkoutPhotoShareM
   };
 
   const loadPhotoFromDataUrl = (dataUrl: string) => {
+    if (!dataUrl) return;
+    setPhotoError(null);
     const img = new Image();
-    img.onload = () => {
+    img.onload = async () => {
+      try {
+        if ('decode' in img) {
+          await img.decode();
+        }
+      } catch (_) {}
+
       setPhotoDataUrl(dataUrl);
       setPhotoImageElement(img);
       setPhotoZoom(1);
+      setPhotoError(null);
+    };
+    img.onerror = () => {
+      setPhotoError('Não foi possível carregar a imagem. Verifique o formato ou tente outra foto.');
     };
     img.src = dataUrl;
   };
 
   const loadPhotoFromFile = (file: File) => {
     if (!file) return;
+    setPhotoError(null);
 
-    // Tenta primeiro via URL.createObjectURL para resposta instantânea no mobile sem consumo excessivo de memória
-    try {
-      const objectUrl = URL.createObjectURL(file);
+    // Validação básica do arquivo de imagem
+    if (file.type && !file.type.startsWith('image/')) {
+      setPhotoError('Por favor, selecione um arquivo de imagem válido (JPEG, PNG ou WebP).');
+      return;
+    }
+
+    const processImageSource = (src: string, isObjectUrl: boolean) => {
       const img = new Image();
-      img.onload = () => {
-        if (photoDataUrl && photoDataUrl.startsWith('blob:')) {
+      img.onload = async () => {
+        try {
+          if ('decode' in img) {
+            await img.decode();
+          }
+        } catch (_) {}
+
+        if (photoDataUrl && photoDataUrl.startsWith('blob:') && photoDataUrl !== src) {
           try { URL.revokeObjectURL(photoDataUrl); } catch (_) {}
         }
-        setPhotoDataUrl(objectUrl);
+
+        setPhotoDataUrl(src);
         setPhotoImageElement(img);
         setPhotoZoom(1);
+        setPhotoError(null);
       };
+
       img.onerror = () => {
-        // Fallback robusto para FileReader
-        const reader = new FileReader();
-        reader.onload = ev => {
-          const result = ev.target?.result;
-          if (typeof result === 'string') {
-            loadPhotoFromDataUrl(result);
-          }
-        };
-        reader.readAsDataURL(file);
+        if (isObjectUrl) {
+          // Fallback robusto para FileReader
+          const reader = new FileReader();
+          reader.onload = ev => {
+            const result = ev.target?.result;
+            if (typeof result === 'string') {
+              processImageSource(result, false);
+            } else {
+              setPhotoError('Não foi possível processar a imagem selecionada.');
+            }
+          };
+          reader.onerror = () => {
+            setPhotoError('Erro ao ler a foto do seu dispositivo.');
+          };
+          reader.readAsDataURL(file);
+        } else {
+          setPhotoError('Formato de foto não suportado. Por favor, escolha outra imagem.');
+        }
       };
-      img.src = objectUrl;
+
+      img.src = src;
+    };
+
+    try {
+      const objectUrl = URL.createObjectURL(file);
+      processImageSource(objectUrl, true);
     } catch {
       const reader = new FileReader();
       reader.onload = ev => {
         const result = ev.target?.result;
         if (typeof result === 'string') {
-          loadPhotoFromDataUrl(result);
+          processImageSource(result, false);
+        } else {
+          setPhotoError('Não foi possível processar a foto selecionada.');
         }
+      };
+      reader.onerror = () => {
+        setPhotoError('Erro ao acessar a foto no aparelho.');
       };
       reader.readAsDataURL(file);
     }
@@ -618,7 +678,7 @@ export const PersonalWorkoutPhotoShareModal: React.FC<PersonalWorkoutPhotoShareM
       ctx.clearRect(0, 0, width, height);
 
       // 1. FUNDO (Foto do aluno OU Arte Esportiva)
-      if (photoImageElement) {
+      if (photoImageElement && (photoImageElement.naturalWidth > 0 || photoImageElement.width > 0)) {
         const imgW = photoImageElement.naturalWidth || photoImageElement.width;
         const imgH = photoImageElement.naturalHeight || photoImageElement.height;
         const baseScale = Math.max(width / imgW, height / imgH) * photoZoom;
@@ -1214,24 +1274,15 @@ export const PersonalWorkoutPhotoShareModal: React.FC<PersonalWorkoutPhotoShareM
           </button>
         </div>
 
-        {/* Inputs acessíveis e não-bloqueados para seleção de foto / captura nativa no mobile */}
-        <input
-          id="personal-workout-photo-gallery-input"
-          ref={galleryInputRef}
-          type="file"
-          accept="image/*,image/jpeg,image/png,image/webp,image/heic,image/heif"
-          aria-label="Selecionar foto da galeria"
-          className="sr-only opacity-0 fixed -top-[1000px] -left-[1000px] w-px h-px pointer-events-none"
-          onChange={handleFileChange}
-        />
+        {/* Input para captura de câmera mobile fallback */}
         <input
           id="personal-workout-camera-capture-input"
           ref={cameraCaptureInputRef}
           type="file"
-          accept="image/*,image/jpeg,image/png,image/webp,image/heic,image/heif"
+          accept="image/*"
           capture="environment"
           aria-label="Capturar foto com a câmera"
-          className="sr-only opacity-0 fixed -top-[1000px] -left-[1000px] w-px h-px pointer-events-none"
+          className="sr-only opacity-0 fixed -top-[1000px] -left-[1000px] w-px h-px"
           onChange={handleFileChange}
         />
 
@@ -1337,11 +1388,17 @@ export const PersonalWorkoutPhotoShareModal: React.FC<PersonalWorkoutPhotoShareM
                 Tirar foto
               </button>
               <label
-                htmlFor="personal-workout-photo-gallery-input"
-                className="flex items-center justify-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2.5 text-xs font-extrabold text-slate-200 transition hover:bg-slate-700 cursor-pointer select-none"
+                className="relative overflow-hidden flex items-center justify-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2.5 text-xs font-extrabold text-slate-200 transition hover:bg-slate-700 cursor-pointer select-none"
               >
                 <ImageIcon className="h-4 w-4 text-teal-400" />
-                Escolher da galeria
+                <span>Escolher da galeria</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileChange}
+                  className="absolute inset-0 h-full w-full opacity-0 cursor-pointer z-10"
+                  aria-label="Escolher foto da galeria"
+                />
               </label>
             </div>
 
@@ -1357,6 +1414,7 @@ export const PersonalWorkoutPhotoShareModal: React.FC<PersonalWorkoutPhotoShareM
                       }
                       setPhotoDataUrl(null);
                       setPhotoImageElement(null);
+                      setPhotoError(null);
                     }}
                     className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-400 hover:text-rose-300 cursor-pointer"
                   >
@@ -1418,6 +1476,12 @@ export const PersonalWorkoutPhotoShareModal: React.FC<PersonalWorkoutPhotoShareM
                   ))}
                 </div>
               </div>
+            )}
+
+            {photoError && (
+              <p className="text-[11px] text-rose-300 bg-rose-950/40 border border-rose-500/30 rounded-xl p-2.5 text-center">
+                {photoError}
+              </p>
             )}
 
             {cameraError && (
