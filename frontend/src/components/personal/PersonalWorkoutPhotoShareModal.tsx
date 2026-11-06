@@ -159,66 +159,10 @@ const RECORD_BADGE_PRESETS = [
 
 const OFFICIAL_ZEMDA_LOGO_SRC = '/brand/zemda-logo.png';
 let cachedZemdaLogoElement: HTMLImageElement | null = null;
-let cachedZemdaLogoTransparentCanvas: HTMLCanvasElement | null = null;
 let cachedZemdaLogoPromise: Promise<HTMLImageElement | null> | null = null;
-
-/**
- * Garante que a logo oficial do Zemda tenha fundo 100% transparente (sem fundo branco)
- * e excelente legibilidade sobre fundos escuros e claros, preservando proporções e ícone originais.
- */
-function buildTransparentZemdaLogoCanvas(img: HTMLImageElement): HTMLCanvasElement | null {
-  if (cachedZemdaLogoTransparentCanvas) return cachedZemdaLogoTransparentCanvas;
-  const w = img.naturalWidth || img.width;
-  const h = img.naturalHeight || img.height;
-  if (!w || !h) return null;
-
-  const off = document.createElement('canvas');
-  off.width = w;
-  off.height = h;
-  const octx = off.getContext('2d');
-  if (!octx) return null;
-
-  octx.drawImage(img, 0, 0, w, h);
-  try {
-    const imageData = octx.getImageData(0, 0, w, h);
-    const d = imageData.data;
-    const textStartX = Math.floor(w * 0.32);
-
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        const idx = (y * w + x) * 4;
-        const r = d[idx];
-        const g = d[idx + 1];
-        const b = d[idx + 2];
-        const a = d[idx + 3];
-        if (a === 0) continue;
-
-        // Remove qualquer resquício de fundo branco (mantendo o círculo menta do ícone)
-        if (r > 242 && g > 245 && b > 245) {
-          d[idx + 3] = 0;
-          continue;
-        }
-
-        // Ilumina suavemente as letras "Zemda" (originalmente petróleo escuro) para leitura nítida sem caixa branca
-        if (x >= textStartX && g < 140 && r < 40) {
-          d[idx] = 226;     // #e2f8f5 / #5eead4
-          d[idx + 1] = 248;
-          d[idx + 2] = 245;
-        }
-      }
-    }
-    octx.putImageData(imageData, 0, 0);
-  } catch {
-    // Caso o navegador restrinja getImageData, mantém o desenho original transparente
-  }
-
-  cachedZemdaLogoTransparentCanvas = off;
-  return off;
-}
 
 function loadOfficialZemdaLogo(): Promise<HTMLImageElement | null> {
   if (cachedZemdaLogoElement && cachedZemdaLogoElement.complete && cachedZemdaLogoElement.naturalWidth > 0) {
-    buildTransparentZemdaLogoCanvas(cachedZemdaLogoElement);
     return Promise.resolve(cachedZemdaLogoElement);
   }
   if (cachedZemdaLogoPromise) {
@@ -228,7 +172,6 @@ function loadOfficialZemdaLogo(): Promise<HTMLImageElement | null> {
     const img = new Image();
     img.onload = () => {
       cachedZemdaLogoElement = img;
-      buildTransparentZemdaLogoCanvas(img);
       resolve(img);
     };
     img.onerror = () => {
@@ -891,22 +834,10 @@ export const PersonalWorkoutPhotoShareModal: React.FC<PersonalWorkoutPhotoShareM
       const logoDrawY = Math.round(urlBaselineY - (isStory ? 28 : 22) - logoH);
 
       if (logoToDraw && logoToDraw.complete && logoToDraw.naturalWidth > 0) {
-        const transparentLogoCanvas = buildTransparentZemdaLogoCanvas(logoToDraw);
         ctx.save();
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
-        ctx.shadowColor = 'rgba(2, 6, 23, 0.92)';
-        ctx.shadowBlur = 16;
-        ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = 3;
-
-        // Registra a chamada oficial da imagem da logo e renderiza com fundo 100% transparente e alta legibilidade
-        ctx.globalAlpha = transparentLogoCanvas ? 0.02 : 1;
         ctx.drawImage(logoToDraw, logoDrawX, logoDrawY, logoW, logoH);
-        if (transparentLogoCanvas) {
-          ctx.globalAlpha = 1;
-          ctx.drawImage(transparentLogoCanvas, logoDrawX, logoDrawY, logoW, logoH);
-        }
         ctx.restore();
       }
 
