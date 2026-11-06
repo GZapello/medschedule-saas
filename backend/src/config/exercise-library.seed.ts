@@ -1468,7 +1468,16 @@ export function seedExerciseLibrary(rawDb: any): void {
       WHERE personal_exercises.is_custom = 0 AND personal_exercises.tenant_id = 'global'
     `);
 
-    rawDb.exec('BEGIN IMMEDIATE;');
+    const inOuterTx = Boolean((rawDb as any).inTransaction);
+    let usedSavepoint = false;
+    if (!inOuterTx) {
+      try {
+        rawDb.exec('SAVEPOINT seed_exercise_library;');
+        usedSavepoint = true;
+      } catch (_) {
+        try { rawDb.exec('BEGIN IMMEDIATE;'); } catch (_) {}
+      }
+    }
     try {
       for (const ex of DEFAULT_EXERCISE_LIBRARY) {
         // Preserva anexo real já cadastrado no banco para o exercício, se houver
@@ -1534,13 +1543,45 @@ export function seedExerciseLibrary(rawDb: any): void {
       rawDb.exec(`UPDATE personal_exercises SET exercise_file_id = NULL
         WHERE tenant_id = 'global' AND is_custom = 0 AND exercise_file_id IS NOT NULL
         AND NOT EXISTS (SELECT 1 FROM file_attachments fa WHERE fa.id = personal_exercises.exercise_file_id)`);
-      rawDb.exec('COMMIT;');
+      if (!inOuterTx) {
+        if (usedSavepoint) {
+          try { rawDb.exec('RELEASE SAVEPOINT seed_exercise_library;'); } catch (_) {}
+        } else {
+          try { rawDb.exec('COMMIT;'); } catch (_) {}
+        }
+      }
     } catch (txErr) {
-      try { rawDb.exec('ROLLBACK;'); } catch (_) {}
+      if (!inOuterTx) {
+        if (usedSavepoint) {
+          try { rawDb.exec('ROLLBACK TO SAVEPOINT seed_exercise_library;'); } catch (_) {}
+        } else {
+          try { rawDb.exec('ROLLBACK;'); } catch (_) {}
+        }
+      }
       throw txErr;
     }
     console.log(`[Database] Catálogo semeado: ${DEFAULT_EXERCISE_LIBRARY.length} exercícios. Verificação remota de imagens disponível na auditoria.`);
   } catch (err) {
     console.error('[Database] Erro ao semear biblioteca expandida de exercícios:', err);
+  }
+}
+
+/**
+ * Verificação e auto-recuperação permanente da biblioteca oficial do ZemdaPersonal.
+ * Garante que os 187 exercícios oficiais estejam sempre presentes, ativos e acessíveis no banco.
+ * Se por qualquer motivo registros forem perdidos ou corrompidos, restaura de forma não-destrutiva.
+ */
+export function ensureExerciseLibrarySeeded(rawDb: any): void {
+  try {
+    const row = rawDb.prepare("SELECT count(*) as total FROM personal_exercises WHERE tenant_id = 'global' AND is_custom = 0").get() as { total: number };
+    if (!row || row.total < DEFAULT_EXERCISE_LIBRARY.length) {
+      console.log(`[ExerciseLibrary] Catálogo oficial incompleto ou ausente (${row?.total || 0}/${DEFAULT_EXERCISE_LIBRARY.length}). Restaurando de forma não-destrutiva...`);
+      seedExerciseLibrary(rawDb);
+    }
+  } catch (err) {
+    console.error('[ExerciseLibrary] Erro ao verificar integridade do catálogo oficial:', err);
+    try {
+      seedExerciseLibrary(rawDb);
+    } catch (_) {}
   }
 }

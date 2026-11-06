@@ -178,3 +178,4 @@ stripped before anything is sent to Google Gemini, see `backend/src/utils/ai-pri
 - `docs/ANALISE-POSTGRES.md` — why this project stays on SQLite for now, and the concrete triggers
   for when to reconsider Postgres.
 - `docs/LGPD-CHECKLIST.md` — compliance status per LGPD article, with code evidence and priority.
+- `AGENTS.md` — engineering rules and mandatory protection guidelines for the ZemdaPersonal Exercise Library.

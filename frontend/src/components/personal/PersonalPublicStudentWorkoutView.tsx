@@ -134,6 +134,31 @@ export const PersonalPublicStudentWorkoutView: React.FC<PersonalPublicStudentWor
   const [lastCompletedWorkout, setLastCompletedWorkout] = useState<PublicWorkout | null>(null);
   const [showPhotoShareModal, setShowPhotoShareModal] = useState(false);
   const [photoShareInitialMode, setPhotoShareInitialMode] = useState<'default' | 'camera' | 'gallery'>('default');
+  const [photoShareInitialPhotoUrl, setPhotoShareInitialPhotoUrl] = useState<string | null>(null);
+
+  const handlePublicGalleryFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const objectUrl = URL.createObjectURL(file);
+      setPhotoShareInitialPhotoUrl(objectUrl);
+      setPhotoShareInitialMode('default');
+      setShowPhotoShareModal(true);
+    } catch {
+      const reader = new FileReader();
+      reader.onload = ev => {
+        const result = ev.target?.result;
+        if (typeof result === 'string') {
+          setPhotoShareInitialPhotoUrl(result);
+          setPhotoShareInitialMode('default');
+          setShowPhotoShareModal(true);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+    e.target.value = '';
+  };
 
   // Saudação de boas-vindas dinâmica pelo horário do dia
   const greeting = useMemo(() => {
@@ -629,17 +654,20 @@ export const PersonalPublicStudentWorkoutView: React.FC<PersonalPublicStudentWor
                 <Camera className="w-3.5 h-3.5" />
                 Tirar foto agora
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setPhotoShareInitialMode('gallery');
-                  setShowPhotoShareModal(true);
-                }}
-                className="py-2 px-3 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-xl text-[11px] font-bold text-slate-300 flex items-center justify-center gap-1.5 transition cursor-pointer"
+              <label
+                htmlFor="public-student-gallery-file-input"
+                className="py-2 px-3 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-xl text-[11px] font-bold text-slate-300 flex items-center justify-center gap-1.5 transition cursor-pointer select-none"
               >
                 <ImageIcon className="w-3.5 h-3.5 text-teal-400" />
                 Escolher da galeria
-              </button>
+              </label>
+              <input
+                id="public-student-gallery-file-input"
+                type="file"
+                accept="image/*,image/jpeg,image/png,image/webp,image/heic,image/heif"
+                className="sr-only opacity-0 fixed -top-[1000px] -left-[1000px] w-px h-px pointer-events-none"
+                onChange={handlePublicGalleryFileChange}
+              />
             </div>
           </div>
 
@@ -668,7 +696,10 @@ export const PersonalPublicStudentWorkoutView: React.FC<PersonalPublicStudentWor
         {/* Modal de Foto e Compartilhamento Pós-Treino */}
         <PersonalWorkoutPhotoShareModal
           isOpen={showPhotoShareModal}
-          onClose={() => setShowPhotoShareModal(false)}
+          onClose={() => {
+            setShowPhotoShareModal(false);
+            setPhotoShareInitialPhotoUrl(null);
+          }}
           studentName={studentName}
           clinicName={clinicName}
           personalName={personalName}
@@ -695,6 +726,7 @@ export const PersonalPublicStudentWorkoutView: React.FC<PersonalPublicStudentWor
           }}
           newPRs={newPRsList}
           initialMode={photoShareInitialMode}
+          initialPhotoUrl={photoShareInitialPhotoUrl}
         />
 
         {/* Modal de Recordes acessível pelo pós-treino */}

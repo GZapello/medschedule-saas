@@ -3037,21 +3037,23 @@ export function initializeDatabase(): void {
   } catch (err) {
     console.error('[Database] Erro ao inicializar banco de dados:', err);
   }
-  migrateBilling(rawDb);
-  migrateLongitudinalClinical(rawDb);
-  migrateProfessionalActivities(rawDb);
-  migratePersonalStudentLinks(rawDb);
-  migrateConsents(rawDb);
-  seedExerciseLibrary(rawDb);
-  seedNutritionFoodDatabase(rawDb);
-  migrateClinicBooking(rawDb);
-  repairLegacyPhotoUrls(rawDb);
-  migrateClinicalInventoryUsageCapability(rawDb);
-  backfillMissingDefaultSchedules(rawDb);
-}
+  try { migrateBilling(rawDb); } catch (e) { console.error('[Database] Erro ao migrar faturamento:', e); }
+  try { migrateLongitudinalClinical(rawDb); } catch (e) { console.error('[Database] Erro ao migrar prontuário longitudinal:', e); }
+  try { migrateProfessionalActivities(rawDb); } catch (e) { console.error('[Database] Erro ao migrar atividades profissionais:', e); }
+  try { migratePersonalStudentLinks(rawDb); } catch (e) { console.error('[Database] Erro ao migrar links de alunos:', e); }
+  try { migrateConsents(rawDb); } catch (e) { console.error('[Database] Erro ao migrar termos de consentimento:', e); }
+  try { seedExerciseLibrary(rawDb); } catch (e) { console.error('[Database] Erro ao semear biblioteca de exercícios:', e); }
+  try { seedNutritionFoodDatabase(rawDb); } catch (e) { console.error('[Database] Erro ao semear banco de alimentos:', e); }
+  try { migrateClinicBooking(rawDb); } catch (e) { console.error('[Database] Erro ao migrar agendamento online:', e); }
+  try { repairLegacyPhotoUrls(rawDb); } catch (e) { console.error('[Database] Erro ao reparar fotos legadas:', e); }
+  try { migrateClinicalInventoryUsageCapability(rawDb); } catch (e) { console.error('[Database] Erro ao semear capability:', e); }
+  try { backfillMissingDefaultSchedules(rawDb); } catch (e) { console.error('[Database] Erro ao semear horários padrão:', e); }
 
 function migrateClinicalInventoryUsageCapability(rawDb: any): void {
   try {
+    const tableExists = rawDb.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='capabilities'").get();
+    if (!tableExists) return;
+
     rawDb.prepare(`
       INSERT OR IGNORE INTO capabilities (id, category, name, description, active)
       VALUES ('CLINICAL_INVENTORY_USAGE', 'CLINICAL', 'Consumo de Insumos Clínicos', 'Pode registrar consumo clínico de produtos/insumos do estoque da clínica', 1)
@@ -3135,6 +3137,7 @@ function repairLegacyPhotoUrls(rawDb: any): void {
   } catch (repairErr) {
     console.warn('[Database] Aviso ao executar repairLegacyPhotoUrls:', repairErr);
   }
+}
 
   // ============================================================================
   // TABELAS: CERTIFICADOS DIGITAIS ICP-BRASIL E ASSINATURA PAdES
@@ -3853,6 +3856,7 @@ function repairLegacyPhotoUrls(rawDb: any): void {
 
   try {
     migrateModularArchitecture(rawDb);
+    migrateClinicalInventoryUsageCapability(rawDb);
   } catch (err) {
     console.error('[Database] Erro ao executar migrateModularArchitecture:', err);
   }
@@ -3900,10 +3904,10 @@ function repairLegacyPhotoUrls(rawDb: any): void {
   } catch (err) {
     console.error('[Database] Erro ao executar migrateProfessionalSlugs:', err);
   }
-  migrateMulticlinic(rawDb);
-  migrateAttendanceTimes(rawDb);
-  migrateGoogleCalendar(rawDb);
-  migrateSuperAdminVisits(rawDb);
+  try { migrateMulticlinic(rawDb); } catch (e) { console.error('[Database] Erro ao migrar multiclinic:', e); }
+  try { migrateAttendanceTimes(rawDb); } catch (e) { console.error('[Database] Erro ao migrar attendance times:', e); }
+  try { migrateGoogleCalendar(rawDb); } catch (e) { console.error('[Database] Erro ao migrar Google Calendar:', e); }
+  try { migrateSuperAdminVisits(rawDb); } catch (e) { console.error('[Database] Erro ao migrar superadmin visits:', e); }
 }
 
 // Inicialização automática e idempotente da base de dados e migrações no carregamento do módulo

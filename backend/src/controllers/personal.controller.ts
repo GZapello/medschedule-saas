@@ -7,6 +7,7 @@ import { ASSESSMENT_COLUMNS } from '../config/personal-assessment.migration';
 import { exerciseAnimation, getExerciseMaxCompletedLoad } from '../services/exercise-media';
 import { validatePosture, postureSummary, validatePosturePhotoAccess } from '../services/personal-posture.service';
 import { matchesExercise, insertWorkoutExercise, imageAttribution } from '../services/personal-exercise-utils';
+import { ensureExerciseLibrarySeeded } from '../config/exercise-library.seed';
 import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
@@ -1770,6 +1771,9 @@ export class PersonalController {
         res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
         return;
       }
+      // Proteção permanente e auto-recuperação: garante os 187 exercícios oficiais intactos e ativos
+      ensureExerciseLibrarySeeded(db);
+
       const tenantId = req.tenantId!;
       const muscle = req.query.muscle ? String(req.query.muscle).trim() : '';
       const region = req.query.region || req.query.body_region ? String(req.query.region || req.query.body_region).trim() : '';

@@ -51,6 +51,7 @@ export interface PersonalWorkoutPhotoShareModalProps {
   workoutContext: CompletedWorkoutContext;
   newPRs: WorkoutPRItem[];
   initialMode?: 'default' | 'camera' | 'gallery';
+  initialPhotoUrl?: string | null;
 }
 
 export interface WeekTrainedDayStatus {
@@ -295,7 +296,8 @@ export const PersonalWorkoutPhotoShareModal: React.FC<PersonalWorkoutPhotoShareM
   completedWorkoutDates,
   workoutContext,
   newPRs,
-  initialMode = 'default'
+  initialMode = 'default',
+  initialPhotoUrl = null
 }) => {
   // Formato da arte: Story (9:16) ou Quadrado/Feed (1:1)
   const [format, setFormat] = useState<ArtFormat>('story');
@@ -462,8 +464,18 @@ export const PersonalWorkoutPhotoShareModal: React.FC<PersonalWorkoutPhotoShareM
     if (!isOpen) {
       stopCamera();
       setShareStatusMessage(null);
+      if (photoDataUrl && photoDataUrl.startsWith('blob:')) {
+        try { URL.revokeObjectURL(photoDataUrl); } catch (_) {}
+      }
     }
-  }, [isOpen, stopCamera]);
+  }, [isOpen, stopCamera, photoDataUrl]);
+
+  // Carrega foto inicial se fornecida via prop (ex: selecionada na tela pós-treino)
+  useEffect(() => {
+    if (isOpen && initialPhotoUrl) {
+      loadPhotoFromDataUrl(initialPhotoUrl);
+    }
+  }, [isOpen, initialPhotoUrl]);
 
   const startCamera = useCallback(
     async (facing: 'user' | 'environment' = cameraFacingMode) => {
@@ -504,13 +516,11 @@ export const PersonalWorkoutPhotoShareModal: React.FC<PersonalWorkoutPhotoShareM
     [cameraFacingMode, stopCamera]
   );
 
-  // Aciona modo inicial se solicitado pelo botão de atalho
+  // Aciona modo câmera se solicitado pelo botão de atalho
   useEffect(() => {
     if (!isOpen) return;
     if (initialMode === 'camera') {
       startCamera('user');
-    } else if (initialMode === 'gallery') {
-      setTimeout(() => galleryInputRef.current?.click(), 100);
     }
   }, [isOpen, initialMode]);
 
@@ -543,17 +553,49 @@ export const PersonalWorkoutPhotoShareModal: React.FC<PersonalWorkoutPhotoShareM
     img.src = dataUrl;
   };
 
+  const loadPhotoFromFile = (file: File) => {
+    if (!file) return;
+
+    // Tenta primeiro via URL.createObjectURL para resposta instantânea no mobile sem consumo excessivo de memória
+    try {
+      const objectUrl = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        if (photoDataUrl && photoDataUrl.startsWith('blob:')) {
+          try { URL.revokeObjectURL(photoDataUrl); } catch (_) {}
+        }
+        setPhotoDataUrl(objectUrl);
+        setPhotoImageElement(img);
+        setPhotoZoom(1);
+      };
+      img.onerror = () => {
+        // Fallback robusto para FileReader
+        const reader = new FileReader();
+        reader.onload = ev => {
+          const result = ev.target?.result;
+          if (typeof result === 'string') {
+            loadPhotoFromDataUrl(result);
+          }
+        };
+        reader.readAsDataURL(file);
+      };
+      img.src = objectUrl;
+    } catch {
+      const reader = new FileReader();
+      reader.onload = ev => {
+        const result = ev.target?.result;
+        if (typeof result === 'string') {
+          loadPhotoFromDataUrl(result);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => {
-      const result = ev.target?.result;
-      if (typeof result === 'string') {
-        loadPhotoFromDataUrl(result);
-      }
-    };
-    reader.readAsDataURL(file);
+    loadPhotoFromFile(file);
     e.target.value = '';
   };
 
@@ -1172,22 +1214,24 @@ export const PersonalWorkoutPhotoShareModal: React.FC<PersonalWorkoutPhotoShareM
           </button>
         </div>
 
-        {/* Inputs ocultos para seleção de foto / captura nativa */}
+        {/* Inputs acessíveis e não-bloqueados para seleção de foto / captura nativa no mobile */}
         <input
+          id="personal-workout-photo-gallery-input"
           ref={galleryInputRef}
           type="file"
-          accept="image/*"
+          accept="image/*,image/jpeg,image/png,image/webp,image/heic,image/heif"
           aria-label="Selecionar foto da galeria"
-          className="hidden"
+          className="sr-only opacity-0 fixed -top-[1000px] -left-[1000px] w-px h-px pointer-events-none"
           onChange={handleFileChange}
         />
         <input
+          id="personal-workout-camera-capture-input"
           ref={cameraCaptureInputRef}
           type="file"
-          accept="image/*"
+          accept="image/*,image/jpeg,image/png,image/webp,image/heic,image/heif"
           capture="environment"
           aria-label="Capturar foto com a câmera"
-          className="hidden"
+          className="sr-only opacity-0 fixed -top-[1000px] -left-[1000px] w-px h-px pointer-events-none"
           onChange={handleFileChange}
         />
 
@@ -1292,14 +1336,13 @@ export const PersonalWorkoutPhotoShareModal: React.FC<PersonalWorkoutPhotoShareM
                 <Camera className="h-4 w-4" />
                 Tirar foto
               </button>
-              <button
-                type="button"
-                onClick={() => galleryInputRef.current?.click()}
-                className="flex items-center justify-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2.5 text-xs font-extrabold text-slate-200 transition hover:bg-slate-700 cursor-pointer"
+              <label
+                htmlFor="personal-workout-photo-gallery-input"
+                className="flex items-center justify-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2.5 text-xs font-extrabold text-slate-200 transition hover:bg-slate-700 cursor-pointer select-none"
               >
                 <ImageIcon className="h-4 w-4 text-teal-400" />
                 Escolher da galeria
-              </button>
+              </label>
             </div>
 
             {photoDataUrl ? (
@@ -1309,6 +1352,9 @@ export const PersonalWorkoutPhotoShareModal: React.FC<PersonalWorkoutPhotoShareM
                   <button
                     type="button"
                     onClick={() => {
+                      if (photoDataUrl && photoDataUrl.startsWith('blob:')) {
+                        try { URL.revokeObjectURL(photoDataUrl); } catch (_) {}
+                      }
                       setPhotoDataUrl(null);
                       setPhotoImageElement(null);
                     }}
