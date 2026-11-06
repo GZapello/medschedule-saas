@@ -334,9 +334,68 @@ export class EsteticController {
         groupsByView[key].push(ph);
       }
 
+      // Monta pares com pareamento temporal e suporte a fotos isoladas de ANTES e DEPOIS
+      const groups: Record<string, { before: any[]; after: any[] }> = {};
+      for (const ph of photos) {
+        if (ph.photo_type !== 'ANTES' && ph.photo_type !== 'DEPOIS') continue;
+        const key = `${ph.area}::${ph.view_type}`;
+        if (!groups[key]) groups[key] = { before: [], after: [] };
+        if (ph.photo_type === 'ANTES') groups[key].before.push(ph);
+        else groups[key].after.push(ph);
+      }
+
+      const pairs: any[] = [];
+      for (const key of Object.keys(groups)) {
+        const group = groups[key];
+        group.before.sort((a, b) => (a.photo_date || '').localeCompare(b.photo_date || '') || (a.created_at || '').localeCompare(b.created_at || ''));
+        group.after.sort((a, b) => (a.photo_date || '').localeCompare(b.photo_date || '') || (a.created_at || '').localeCompare(b.created_at || ''));
+
+        const usedAfterIds = new Set<string>();
+        for (const before of group.before) {
+          const matchAfter = group.after.find(a => !usedAfterIds.has(a.id) && (a.photo_date || '') >= (before.photo_date || ''))
+            || group.after.find(a => !usedAfterIds.has(a.id));
+          if (matchAfter) {
+            usedAfterIds.add(matchAfter.id);
+            pairs.push({
+              id: `${before.id}:${matchAfter.id}`,
+              area: before.area,
+              view_angle: before.view_type,
+              before,
+              after: matchAfter
+            });
+          } else {
+            pairs.push({
+              id: `${before.id}:waiting-after`,
+              area: before.area,
+              view_angle: before.view_type,
+              before,
+              after: null
+            });
+          }
+        }
+        for (const after of group.after) {
+          if (!usedAfterIds.has(after.id)) {
+            pairs.push({
+              id: `waiting-before:${after.id}`,
+              area: after.area,
+              view_angle: after.view_type,
+              before: null,
+              after
+            });
+          }
+        }
+      }
+
+      pairs.sort((a, b) => {
+        const dateA = a.after?.photo_date || a.before?.photo_date || '';
+        const dateB = b.after?.photo_date || b.before?.photo_date || '';
+        return dateB.localeCompare(dateA);
+      });
+
       res.json({
         photos,
-        groupsByView
+        groupsByView,
+        pairs
       });
     } catch (err: any) {
       console.error('[EsteticController.getBeforeAfter]', err);

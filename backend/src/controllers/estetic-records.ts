@@ -134,16 +134,18 @@ function updatePlanProgress(req: Request, row: any) {
   db.prepare("UPDATE estetic_plans SET items_json = ?, status = ?, updated_at = datetime('now') WHERE id = ? AND tenant_id = ?").run(JSON.stringify(items), status, row.plan_id, req.tenantId);
 }
 function sync(req: Request, kind: Kind, row: any) {
-  if (kind === 'photos' || kind === 'plans') return;
-  const title = { assessments: 'Avaliação estética', procedures: 'Procedimento estético', evolutions: 'Evolução estética', returns: 'Retorno estético' }[kind];
-  const text = [row.chief_complaint, row.objectives, row.clinical_history, row.procedure_name,
+  if (kind === 'plans') return;
+  const title = { assessments: 'Avaliação estética', procedures: 'Procedimento estético', evolutions: 'Evolução estética', returns: 'Retorno estético', photos: 'Registro fotográfico' }[kind];
+  const text = kind === 'photos'
+    ? `Registro fotográfico: ${row.photo_type || 'ACOMPANHAMENTO'} (${row.view_type || 'FRONTAL'}). ${row.observation || row.observations ? `Observações: ${row.observation || row.observations}` : ''}`
+    : [row.chief_complaint, row.objectives, row.clinical_history, row.procedure_name,
     row.region && `Região: ${row.region}`, row.product_name && `Produto: ${row.product_name}`,
     row.batch_lot && `Lote: ${row.batch_lot}`, row.expiry_date && `Validade: ${row.expiry_date}`,
     row.quantity != null && `Quantidade: ${row.quantity} ${row.unit || ''}`,
     row.post_instructions && `Orientações: ${row.post_instructions}`, row.adverse_events && `Intercorrências: ${row.adverse_events}`,
     row.evolution_text, row.observed_response, row.return_assessment, row.conduct, row.observations, row.technique_notes].filter(Boolean).join('\n');
-  const record = ClinicalRecordService.recordClinicalEvent({ tenantId: req.tenantId!, patientId: row.patient_id, professionalId: row.professional_id, appointmentId: row.appointment_id || null, moduleType: 'ZemdaEstetic', sourceId: row.id, sourceType: `estetic_${kind === 'assessments' ? 'assessment' : kind === 'procedures' ? 'procedure' : kind === 'evolutions' ? 'evolution' : 'return'}`, title: `${title}: ${row.area}`, procedureName: row.procedure_name || title, sessionDate: row.assessment_date || row.date_performed || row.evolution_date || row.actual_date || row.scheduled_date || row.created_at?.slice(0, 10), clinicalEvolution: text || title, moduleData: { ...row, specificData: row.specific_data_json ? JSON.parse(row.specific_data_json) : undefined }, createdBy: req.user?.name || 'Profissional' });
-  db.prepare('UPDATE records SET appointment_id = COALESCE(?, appointment_id), session_date = COALESCE(?, session_date) WHERE id = ? AND tenant_id = ? AND is_sealed = 0').run(row.appointment_id || null, row.assessment_date || row.date_performed || row.evolution_date || row.actual_date || row.scheduled_date || null, record.id, req.tenantId);
+  const record = ClinicalRecordService.recordClinicalEvent({ tenantId: req.tenantId!, patientId: row.patient_id, professionalId: row.professional_id, appointmentId: row.appointment_id || null, moduleType: 'ZemdaEstetic', sourceId: row.id, sourceType: `estetic_${kind === 'assessments' ? 'assessment' : kind === 'procedures' ? 'procedure' : kind === 'evolutions' ? 'evolution' : kind === 'returns' ? 'return' : 'photo'}`, title: `${title}: ${row.area}`, procedureName: row.procedure_name || title, sessionDate: row.assessment_date || row.date_performed || row.evolution_date || row.actual_date || row.scheduled_date || row.photo_date || row.created_at?.slice(0, 10), clinicalEvolution: text || title, moduleData: { ...row, specificData: row.specific_data_json ? JSON.parse(row.specific_data_json) : undefined }, createdBy: req.user?.name || 'Profissional' });
+  db.prepare('UPDATE records SET appointment_id = COALESCE(?, appointment_id), session_date = COALESCE(?, session_date) WHERE id = ? AND tenant_id = ? AND is_sealed = 0').run(row.appointment_id || null, row.assessment_date || row.date_performed || row.evolution_date || row.actual_date || row.scheduled_date || row.photo_date || null, record.id, req.tenantId);
 }
 export function esteticRecords(req: Request, res: Response, access: Access, kind: Kind, operation: 'list' | 'create' | 'update' | 'delete' | 'item'): void {
   try {
@@ -172,7 +174,7 @@ export function esteticRecords(req: Request, res: Response, access: Access, kind
         db.prepare(`DELETE FROM ${table} WHERE id = ? AND tenant_id = ?`).run(old.id, req.tenantId);
         if (kind === 'procedures') updatePlanProgress(req, old);
         // O prontuário mantém a trilha clínica do registro excluído.
-        if (kind !== 'photos' && kind !== 'plans') sync(req, kind, { ...old, observations: 'Registro excluído pelo profissional. ' + (old.observations || '') });
+        if (kind !== 'plans') sync(req, kind, { ...old, observation: 'Registro fotográfico excluído pelo profissional. ' + (old.observation || ''), observations: 'Registro excluído pelo profissional. ' + (old.observations || '') });
         return { success: true, id: old.id };
       }
       if (operation === 'item') {

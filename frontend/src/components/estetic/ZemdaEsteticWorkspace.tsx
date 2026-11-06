@@ -52,7 +52,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { ApiClient } from '../../api/client';
-import { esteticPayload, loadEsteticPatient } from './estetic-api';
+import { buildBeforeAfterPairs, esteticPayload, loadEsteticPatient } from './estetic-api';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { PatientSearchSelect, PatientSearchResult } from '../common/PatientSearchSelect';
@@ -530,6 +530,10 @@ interface EsteticPlanItemForm {
       if (request === dataRequest.current) setLoadingOverview(false);
     }
   };
+
+  useEffect(() => {
+    setBeforeAfterPairs(buildBeforeAfterPairs(photos));
+  }, [photos]);
 
   useEffect(() => {
     ++dataRequest.current;
@@ -2806,7 +2810,18 @@ interface EsteticPlanItemForm {
                       </div>
                       <button
                         type="button"
-                        onClick={() => setIsNewPhotoModalOpen(true)}
+                        onClick={() => {
+                          setEditing(null);
+                          setPhotoForm({
+                            photo_url: '',
+                            photo_type: 'ANTES',
+                            view_angle: 'FRONTAL',
+                            area: activeArea,
+                            taken_at: new Date().toISOString().slice(0, 10),
+                            notes: ''
+                          });
+                          setIsNewPhotoModalOpen(true);
+                        }}
                         className="px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 shadow-md transition-colors cursor-pointer"
                       >
                         + Anexar Fotos
@@ -2816,15 +2831,33 @@ interface EsteticPlanItemForm {
                     {beforeAfterPairs.length === 0 ? (
                       <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
                         <ArrowLeftRight className="w-10 h-10 text-slate-400 mx-auto mb-2" />
-                        <p className="text-sm font-semibold text-slate-600">Nenhum par Antes × Depois identificado.</p>
+                        <p className="text-sm font-semibold text-slate-600">Nenhum registro de Antes ou Depois identificado.</p>
                         <p className="text-xs text-slate-400 max-w-sm mx-auto mt-1">
-                          Anexe pelo menos uma foto com tipo <strong>ANTES</strong> e outra com tipo <strong>DEPOIS</strong> sob o mesmo ângulo de vista (ex: Frontal) para visualizar a comparação.
+                          Anexe fotos clínicas com os tipos <strong>ANTES</strong> ou <strong>DEPOIS</strong> sob o mesmo ângulo de vista (ex: Frontal) para visualização e acompanhamento direto.
                         </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditing(null);
+                            setPhotoForm({
+                              photo_url: '',
+                              photo_type: 'ANTES',
+                              view_angle: 'FRONTAL',
+                              area: activeArea,
+                              taken_at: new Date().toISOString().slice(0, 10),
+                              notes: ''
+                            });
+                            setIsNewPhotoModalOpen(true);
+                          }}
+                          className="mt-4 px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl hover:bg-indigo-700 cursor-pointer shadow-xs"
+                        >
+                          + Anexar Primeira Foto
+                        </button>
                       </div>
                     ) : (
                       <div className="space-y-8">
                         {beforeAfterPairs.map((pair, idx) => (
-                          <div key={idx} className="bg-slate-50 p-6 rounded-3xl border border-slate-200 space-y-4">
+                          <div key={pair.id || idx} className="bg-slate-50 p-6 rounded-3xl border border-slate-200 space-y-4">
                             <div className="flex items-center justify-between border-b border-slate-200/80 pb-3">
                               <div className="flex items-center gap-2">
                                 <span className="font-extrabold text-slate-900 text-sm">
@@ -2834,61 +2867,207 @@ interface EsteticPlanItemForm {
                                   {pair.area}
                                 </span>
                               </div>
-                              <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-200">
-                                Pareamento Clínico
+                              <span className={`text-xs font-bold px-2.5 py-1 rounded-lg border ${
+                                pair.before && pair.after
+                                  ? 'text-indigo-600 bg-indigo-50 border-indigo-200'
+                                  : 'text-amber-700 bg-amber-50 border-amber-200'
+                              }`}>
+                                {pair.before && pair.after ? 'Pareamento Clínico Concluído' : 'Aguardando Pareamento'}
                               </span>
                             </div>
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                               {/* Foto ANTES */}
-                              <div className="bg-white p-3 rounded-2xl border border-slate-200 space-y-2">
-                                <div className="flex items-center justify-between text-xs">
-                                  <span className="font-extrabold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-md border border-amber-200 uppercase">
-                                    Antes
-                                  </span>
-                                  <span className="text-slate-400 font-mono text-[11px]">
-                                    {new Date(pair.before.taken_at).toLocaleDateString('pt-BR')}
-                                  </span>
+                              {pair.before ? (
+                                <div className="bg-white p-3.5 rounded-2xl border border-slate-200 space-y-2.5 flex flex-col justify-between">
+                                  <div className="space-y-2">
+                                    <div className="flex items-center justify-between text-xs">
+                                      <span className="font-extrabold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-md border border-amber-200 uppercase">
+                                        Antes
+                                      </span>
+                                      <span className="text-slate-400 font-mono text-[11px]">
+                                        {new Date(pair.before.taken_at).toLocaleDateString('pt-BR')}
+                                      </span>
+                                    </div>
+                                    <div
+                                      onClick={() => setLightboxPhoto(pair.before)}
+                                      className="aspect-square bg-slate-100 rounded-xl overflow-hidden cursor-pointer relative group"
+                                    >
+                                      <img
+                                        src={pair.before.photo_url}
+                                        alt={`Foto Antes - ${pair.view_angle}`}
+                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                                      />
+                                      <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold">
+                                        Ampliar
+                                      </div>
+                                    </div>
+                                    {pair.before.notes && (
+                                      <p className="text-[11px] text-slate-500 italic line-clamp-2">{pair.before.notes}</p>
+                                    )}
+                                  </div>
+                                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                                    <button
+                                      type="button"
+                                      onClick={() => setLightboxPhoto(pair.before)}
+                                      className="text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer"
+                                    >
+                                      Ampliar
+                                    </button>
+                                    <div className="flex items-center gap-1.5 text-xs">
+                                      <button
+                                        type="button"
+                                        onClick={() => editRecord('photos', pair.before)}
+                                        className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 font-medium cursor-pointer transition-colors"
+                                      >
+                                        Substituir
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => { setDeleteError(null); setPendingDelete({ kind: 'photos', id: pair.before.id, row: pair.before }); }}
+                                        className="px-2.5 py-1 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 font-medium cursor-pointer transition-colors"
+                                      >
+                                        Excluir
+                                      </button>
+                                    </div>
+                                  </div>
                                 </div>
-                                <div
-                                  onClick={() => setLightboxPhoto(pair.before)}
-                                  className="aspect-square bg-slate-100 rounded-xl overflow-hidden cursor-pointer"
-                                >
-                                  <img
-                                    src={pair.before.photo_url}
-                                    alt="Foto Antes"
-                                    className="w-full h-full object-cover hover:scale-105 transition-transform"
-                                  />
+                              ) : (
+                                <div className="bg-slate-50/80 p-3.5 rounded-2xl border-2 border-dashed border-amber-200/80 space-y-2.5 flex flex-col justify-between min-h-[280px]">
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="font-extrabold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-md border border-amber-200 uppercase">
+                                      Antes
+                                    </span>
+                                    <span className="text-amber-600 font-semibold text-[11px]">
+                                      Pendente
+                                    </span>
+                                  </div>
+                                  <div className="flex-1 flex flex-col items-center justify-center text-center p-4">
+                                    <div className="w-12 h-12 rounded-2xl bg-amber-100/70 text-amber-600 flex items-center justify-center mb-3">
+                                      <Camera className="w-6 h-6" />
+                                    </div>
+                                    <h4 className="text-sm font-bold text-slate-800">Aguardando foto Antes</h4>
+                                    <p className="text-xs text-slate-500 max-w-xs mt-1 leading-relaxed">
+                                      Adicione a fotografia de referência inicial sob o ângulo <strong>{pair.view_angle}</strong>.
+                                    </p>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditing(null);
+                                        setPhotoForm({
+                                          photo_url: '',
+                                          photo_type: 'ANTES',
+                                          view_angle: pair.view_angle,
+                                          area: pair.area || activeArea,
+                                          taken_at: new Date().toISOString().slice(0, 10),
+                                          notes: ''
+                                        });
+                                        setIsNewPhotoModalOpen(true);
+                                      }}
+                                      className="mt-4 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                                    >
+                                      <Plus className="w-3.5 h-3.5" />
+                                      <span>Adicionar foto Antes</span>
+                                    </button>
+                                  </div>
                                 </div>
-                                {pair.before.notes && (
-                                  <p className="text-[11px] text-slate-500 italic line-clamp-1">{pair.before.notes}</p>
-                                )}
-                              </div>
+                              )}
 
                               {/* Foto DEPOIS */}
-                              <div className="bg-white p-3 rounded-2xl border border-slate-200 space-y-2">
-                                <div className="flex items-center justify-between text-xs">
-                                  <span className="font-extrabold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-md border border-emerald-200 uppercase">
-                                    Depois
-                                  </span>
-                                  <span className="text-slate-400 font-mono text-[11px]">
-                                    {new Date(pair.after.taken_at).toLocaleDateString('pt-BR')}
-                                  </span>
+                              {pair.after ? (
+                                <div className="bg-white p-3.5 rounded-2xl border border-slate-200 space-y-2.5 flex flex-col justify-between">
+                                  <div className="space-y-2">
+                                    <div className="flex items-center justify-between text-xs">
+                                      <span className="font-extrabold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-md border border-emerald-200 uppercase">
+                                        Depois
+                                      </span>
+                                      <span className="text-slate-400 font-mono text-[11px]">
+                                        {new Date(pair.after.taken_at).toLocaleDateString('pt-BR')}
+                                      </span>
+                                    </div>
+                                    <div
+                                      onClick={() => setLightboxPhoto(pair.after)}
+                                      className="aspect-square bg-slate-100 rounded-xl overflow-hidden cursor-pointer relative group"
+                                    >
+                                      <img
+                                        src={pair.after.photo_url}
+                                        alt={`Foto Depois - ${pair.view_angle}`}
+                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                                      />
+                                      <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold">
+                                        Ampliar
+                                      </div>
+                                    </div>
+                                    {pair.after.notes && (
+                                      <p className="text-[11px] text-slate-500 italic line-clamp-2">{pair.after.notes}</p>
+                                    )}
+                                  </div>
+                                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                                    <button
+                                      type="button"
+                                      onClick={() => setLightboxPhoto(pair.after)}
+                                      className="text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer"
+                                    >
+                                      Ampliar
+                                    </button>
+                                    <div className="flex items-center gap-1.5 text-xs">
+                                      <button
+                                        type="button"
+                                        onClick={() => editRecord('photos', pair.after)}
+                                        className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 font-medium cursor-pointer transition-colors"
+                                      >
+                                        Substituir
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => { setDeleteError(null); setPendingDelete({ kind: 'photos', id: pair.after.id, row: pair.after }); }}
+                                        className="px-2.5 py-1 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 font-medium cursor-pointer transition-colors"
+                                      >
+                                        Excluir
+                                      </button>
+                                    </div>
+                                  </div>
                                 </div>
-                                <div
-                                  onClick={() => setLightboxPhoto(pair.after)}
-                                  className="aspect-square bg-slate-100 rounded-xl overflow-hidden cursor-pointer"
-                                >
-                                  <img
-                                    src={pair.after.photo_url}
-                                    alt="Foto Depois"
-                                    className="w-full h-full object-cover hover:scale-105 transition-transform"
-                                  />
+                              ) : (
+                                <div className="bg-slate-50/80 p-3.5 rounded-2xl border-2 border-dashed border-emerald-200/80 space-y-2.5 flex flex-col justify-between min-h-[280px]">
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="font-extrabold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-md border border-emerald-200 uppercase">
+                                      Depois
+                                    </span>
+                                    <span className="text-emerald-600 font-semibold text-[11px]">
+                                      Pendente
+                                    </span>
+                                  </div>
+                                  <div className="flex-1 flex flex-col items-center justify-center text-center p-4">
+                                    <div className="w-12 h-12 rounded-2xl bg-emerald-100/70 text-emerald-600 flex items-center justify-center mb-3">
+                                      <Camera className="w-6 h-6" />
+                                    </div>
+                                    <h4 className="text-sm font-bold text-slate-800">Aguardando foto Depois</h4>
+                                    <p className="text-xs text-slate-500 max-w-xs mt-1 leading-relaxed">
+                                      Adicione a fotografia de evolução ou resultado pós-procedimento sob o ângulo <strong>{pair.view_angle}</strong>.
+                                    </p>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditing(null);
+                                        setPhotoForm({
+                                          photo_url: '',
+                                          photo_type: 'DEPOIS',
+                                          view_angle: pair.view_angle,
+                                          area: pair.area || activeArea,
+                                          taken_at: new Date().toISOString().slice(0, 10),
+                                          notes: ''
+                                        });
+                                        setIsNewPhotoModalOpen(true);
+                                      }}
+                                      className="mt-4 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                                    >
+                                      <Plus className="w-3.5 h-3.5" />
+                                      <span>Adicionar foto Depois</span>
+                                    </button>
+                                  </div>
                                 </div>
-                                {pair.after.notes && (
-                                  <p className="text-[11px] text-slate-500 italic line-clamp-1">{pair.after.notes}</p>
-                                )}
-                              </div>
+                              )}
                             </div>
                           </div>
                         ))}
@@ -3332,7 +3511,7 @@ interface EsteticPlanItemForm {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs mobile-modal">
           <div role="dialog" aria-label="Fotografia clínica" className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-md p-6 space-y-4 animate-in zoom-in-95">
             <div className="flex items-center justify-between border-b pb-3">
-              <h3 className="font-bold text-slate-900 text-base">Anexar Fotografia Clínica</h3>
+              <h3 className="font-bold text-slate-900 text-base">{editing && editing.kind === 'photos' ? 'Substituir / Editar Fotografia Clínica' : 'Anexar Fotografia Clínica'}</h3>
               <button aria-label="Fechar" onClick={() => { cancelEdit(); setIsNewPhotoModalOpen(false); }} className="p-1 text-slate-400 hover:text-slate-700">
                 <X className="w-5 h-5" />
               </button>
@@ -3424,7 +3603,7 @@ interface EsteticPlanItemForm {
                   type="submit" disabled={savingRecord}
                   className="px-4 py-2 rounded-xl bg-sky-600 text-white font-bold hover:bg-sky-700 shadow-md"
                 >
-                  Salvar Foto
+                  {editing && editing.kind === 'photos' ? 'Salvar Alterações' : 'Salvar Foto'}
                 </button>
               </div>
             </form>

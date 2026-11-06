@@ -33,10 +33,75 @@ export async function loadEsteticPatient(patientId: string, area: string) {
   kinds.forEach((kind, index) => { data[kind] = responses[index].map(row => esteticRecord(kind, row)); });
   data.overview = { ...overview, lastAssessment: esteticRecord('assessments', overview.lastAssessment), lastProcedure: esteticRecord('procedures', overview.lastProcedure), nextReturn: esteticRecord('returns', overview.nextReturn), recentPhotos: (overview.recentPhotos || []).map((row: any) => esteticRecord('photos', row)) };
   data.timeline = responses[6].map(row => ({ ...row, event_type: row.type.toLowerCase(), event_date: row.date, description: [row.subtitle, row.details].filter(Boolean).join(' • ') }));
-  data.pairs = [];
-  for (const before of data.photos.filter((photo: any) => photo.photo_type === 'ANTES')) {
-    const after = data.photos.filter((photo: any) => photo.photo_type === 'DEPOIS' && photo.area === before.area && photo.view_angle === before.view_angle && photo.taken_at >= before.taken_at).sort((a: any, b: any) => a.taken_at.localeCompare(b.taken_at))[0];
-    if (after) data.pairs.push({ id: `${before.id}:${after.id}`, area: before.area, view_angle: before.view_angle, before, after });
-  }
+  data.pairs = buildBeforeAfterPairs(data.photos);
   return data;
+}
+
+export function buildBeforeAfterPairs(photos: any[] = []): any[] {
+  const candidates = (photos || []).filter((p: any) => p && (p.photo_type === 'ANTES' || p.photo_type === 'DEPOIS'));
+
+  const groups: Record<string, { before: any[]; after: any[] }> = {};
+  for (const ph of candidates) {
+    const area = ph.area || 'FACIAL';
+    const viewAngle = ph.view_angle || ph.view_type || 'FRONTAL';
+    const key = `${area}::${viewAngle}`;
+    if (!groups[key]) groups[key] = { before: [], after: [] };
+    if (ph.photo_type === 'ANTES') {
+      groups[key].before.push(ph);
+    } else {
+      groups[key].after.push(ph);
+    }
+  }
+
+  const pairs: any[] = [];
+  for (const key of Object.keys(groups)) {
+    const group = groups[key];
+    group.before.sort((a, b) => (a.taken_at || a.photo_date || '').localeCompare(b.taken_at || b.photo_date || '') || (a.created_at || '').localeCompare(b.created_at || ''));
+    group.after.sort((a, b) => (a.taken_at || a.photo_date || '').localeCompare(b.taken_at || b.photo_date || '') || (a.created_at || '').localeCompare(b.created_at || ''));
+
+    const usedAfterIds = new Set<string>();
+    for (const before of group.before) {
+      const bDate = before.taken_at || before.photo_date || '';
+      const matchAfter = group.after.find(a => !usedAfterIds.has(a.id) && (a.taken_at || a.photo_date || '') >= bDate)
+        || group.after.find(a => !usedAfterIds.has(a.id));
+      if (matchAfter) {
+        usedAfterIds.add(matchAfter.id);
+        pairs.push({
+          id: `${before.id}:${matchAfter.id}`,
+          area: before.area,
+          view_angle: before.view_angle || before.view_type || 'FRONTAL',
+          before,
+          after: matchAfter
+        });
+      } else {
+        pairs.push({
+          id: `${before.id}:waiting-after`,
+          area: before.area,
+          view_angle: before.view_angle || before.view_type || 'FRONTAL',
+          before,
+          after: null
+        });
+      }
+    }
+
+    for (const after of group.after) {
+      if (!usedAfterIds.has(after.id)) {
+        pairs.push({
+          id: `waiting-before:${after.id}`,
+          area: after.area,
+          view_angle: after.view_angle || after.view_type || 'FRONTAL',
+          before: null,
+          after
+        });
+      }
+    }
+  }
+
+  pairs.sort((a, b) => {
+    const dateA = a.after?.taken_at || a.after?.photo_date || a.before?.taken_at || a.before?.photo_date || '';
+    const dateB = b.after?.taken_at || b.after?.photo_date || b.before?.taken_at || b.before?.photo_date || '';
+    return dateB.localeCompare(dateA);
+  });
+
+  return pairs;
 }
