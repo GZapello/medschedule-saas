@@ -17,7 +17,11 @@ import {
   QrCode,
   Banknote,
   X,
-  Receipt
+  Receipt,
+  ArrowUpRight,
+  ArrowDownRight,
+  AlertCircle,
+  FileSpreadsheet
 } from 'lucide-react';
 
 export const FinancialView: React.FC = () => {
@@ -36,7 +40,9 @@ export const FinancialView: React.FC = () => {
   // Estado do Caixa
   const [cashRegister, setCashRegister] = useState<any>(null);
   const [cashMovements, setCashMovements] = useState<any[]>([]);
+  const [drawerMovements, setDrawerMovements] = useState<any[]>([]);
   const [cashTotals, setCashTotals] = useState<any>({});
+  const [cashDrawerSummary, setCashDrawerSummary] = useState<any>(null);
   const [cashHistory, setCashHistory] = useState<any[]>([]);
   const [showOpenCashModal, setShowOpenCashModal] = useState<boolean>(false);
   const [initialBalance, setInitialBalance] = useState<string>('0');
@@ -44,9 +50,16 @@ export const FinancialView: React.FC = () => {
   const [countedCash, setCountedCash] = useState<string>('');
   const [differenceJustification, setDifferenceJustification] = useState<string>('');
 
+  // Modal Suprimento / Sangria / Despesa
+  const [showMovementModal, setShowMovementModal] = useState<boolean>(false);
+  const [movementType, setMovementType] = useState<'SUPRIMENTO' | 'SANGRIA' | 'DESPESA'>('SUPRIMENTO');
+  const [movementAmount, setMovementAmount] = useState<string>('');
+  const [movementDescription, setMovementDescription] = useState<string>('');
+
   // Modal Novo Pagamento
   const [showModal, setShowModal] = useState<boolean>(false);
   const [amount, setAmount] = useState<string>('');
+  const [amountTendered, setAmountTendered] = useState<string>('');
   const [paymentMethod, setPaymentMethod] = useState<string>('pix');
   const [paymentStatus, setPaymentStatus] = useState<string>('paid');
   const [patientId, setPatientId] = useState<string>('');
@@ -78,7 +91,9 @@ export const FinancialView: React.FC = () => {
       ]);
       setCashRegister(curr.openRegister);
       setCashMovements(curr.movements || []);
+      setDrawerMovements(curr.cashMovements || []);
       setCashTotals(curr.totalsByMethod || {});
+      setCashDrawerSummary(curr.drawerSummary || null);
       setCashHistory(hist || []);
     } catch (err: any) {
       console.error(err);
@@ -95,8 +110,13 @@ export const FinancialView: React.FC = () => {
 
   const handleOpenCash = async () => {
     try {
+      const initVal = parseFloat(initialBalance);
+      if (isNaN(initVal) || initVal < 0) {
+        showToast('Informe um fundo inicial válido (maior ou igual a zero)', 'error');
+        return;
+      }
       await ApiClient.post('/v1/cash-register/open', {
-        initialBalance: parseFloat(initialBalance) || 0
+        initialBalance: initVal
       });
       showToast('Caixa aberto com sucesso!', 'success');
       setShowOpenCashModal(false);
@@ -107,11 +127,51 @@ export const FinancialView: React.FC = () => {
     }
   };
 
+  const handleRecordMovement = async () => {
+    if (!cashRegister) return;
+    const val = parseFloat(movementAmount);
+    if (!val || val <= 0) {
+      showToast('Informe um valor válido maior que zero', 'error');
+      return;
+    }
+    if (!movementDescription.trim()) {
+      showToast('A descrição / justificativa é obrigatória', 'error');
+      return;
+    }
+    try {
+      await ApiClient.post(`/v1/cash-register/${cashRegister.id}/movement`, {
+        type: movementType,
+        amount: val,
+        description: movementDescription.trim()
+      });
+      const label = movementType === 'SUPRIMENTO' ? 'Suprimento' : movementType === 'SANGRIA' ? 'Sangria' : 'Despesa';
+      showToast(`${label} lançado com sucesso!`, 'success');
+      setShowMovementModal(false);
+      setMovementAmount('');
+      setMovementDescription('');
+      fetchCashRegister();
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao registrar movimentação', 'error');
+    }
+  };
+
   const handleCloseCash = async () => {
     if (!cashRegister) return;
+    const counted = parseFloat(countedCash);
+    if (isNaN(counted) || counted < 0) {
+      showToast('Informe o valor físico contado na gaveta', 'error');
+      return;
+    }
+    const expected = cashDrawerSummary?.expectedCash ?? ((cashRegister.initial_balance || 0) + (cashTotals.cash || 0));
+    const diff = Math.round((counted - expected) * 100) / 100;
+    if (Math.abs(diff) >= 0.01 && !differenceJustification.trim()) {
+      showToast('Justificativa obrigatória quando há diferença de caixa!', 'error');
+      return;
+    }
+
     try {
       await ApiClient.post(`/v1/cash-register/${cashRegister.id}/close`, {
-        countedCash: parseFloat(countedCash) || 0,
+        countedCash: counted,
         differenceJustification
       });
       showToast('Caixa fechado com sucesso!', 'success');
@@ -124,11 +184,22 @@ export const FinancialView: React.FC = () => {
     }
   };
 
+  const handleExportCashCsv = async (regId: string) => {
+    try {
+      const csvText = await ApiClient.get<string>(`/v1/cash-register/${regId}/export`);
+      downloadBlob(new Blob([csvText], { type: 'text/csv;charset=utf-8;' }), `caixa_${regId}.csv`);
+      showToast('Exportação do caixa baixada com sucesso!', 'success');
+    } catch (err: any) {
+      showToast('Erro ao exportar CSV do caixa', 'error');
+    }
+  };
+
   const handleMarkAsPaid = async (paymentId: string) => {
     try {
       await ApiClient.put(`/v1/payments/${paymentId}/status`, { status: 'paid' });
       showToast('Pagamento marcado como recebido com sucesso!', 'success');
       fetchPayments();
+      if (financialTab === 'cash_register') fetchCashRegister();
     } catch (err: any) {
       showToast('Erro ao atualizar pagamento', 'error');
     }
@@ -141,21 +212,30 @@ export const FinancialView: React.FC = () => {
     }
 
     try {
+      const parsedAmount = parseFloat(amount) || 0;
+      const parsedTendered = amountTendered ? parseFloat(amountTendered) : undefined;
+      const calculatedChange = parsedTendered !== undefined ? Math.max(0, parsedTendered - parsedAmount) : undefined;
+
       await ApiClient.post('/v1/payments', {
         patientId,
-        amount: Number(amount),
+        amount: parsedAmount,
         paymentMethod,
         status: paymentStatus,
-        notes: notes || null
+        notes: notes || null,
+        amountTendered: parsedTendered,
+        changeAmount: calculatedChange
       });
 
-      showToast('Pagamento registrado com sucesso!', 'success');
+      showToast('Recebimento lançado com sucesso!', 'success');
       setShowModal(false);
       setAmount('');
+      setAmountTendered('');
+      setPatientId('');
       setNotes('');
       fetchPayments();
+      fetchCashRegister();
     } catch (err: any) {
-      showToast('Erro ao cadastrar pagamento', 'error');
+      showToast(err.message || 'Erro ao registrar pagamento', 'error');
     }
   };
 
@@ -398,87 +478,197 @@ export const FinancialView: React.FC = () => {
           {/* Status do Caixa Atual */}
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
             {cashRegister ? (
-              <div className="space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+              <div className="space-y-5">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100 pb-4">
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 font-bold text-xs">
                         <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" /> Caixa Aberto
                       </span>
-                      <span className="text-xs text-slate-400">Operador: <strong>{cashRegister.operator_name}</strong></span>
+                      <span className="text-xs text-slate-500">Operador: <strong>{cashRegister.operator_name || 'Operador'}</strong></span>
                     </div>
                     <p className="text-xs text-slate-500 mt-1">
                       Aberto em: <strong>{new Date(cashRegister.opened_at).toLocaleString('pt-BR')}</strong> • Fundo de Troco Inicial: <strong>{formatCurrency(cashRegister.initial_balance)}</strong>
                     </p>
                   </div>
 
-                  <button
-                    onClick={() => {
-                      setCountedCash('');
-                      setDifferenceJustification('');
-                      setShowCloseCashModal(true);
-                    }}
-                    className="flex items-center gap-1.5 px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all"
-                  >
-                    <CheckCircle2 className="w-4 h-4" /> Fechar Caixa & Conferência
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={() => {
+                        setMovementType('SUPRIMENTO');
+                        setMovementAmount('');
+                        setMovementDescription('');
+                        setShowMovementModal(true);
+                      }}
+                      className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-xs rounded-xl border border-emerald-200 transition-all"
+                    >
+                      <ArrowUpRight className="w-3.5 h-3.5" /> + Suprimento
+                    </button>
+                    <button
+                      onClick={() => {
+                        setMovementType('SANGRIA');
+                        setMovementAmount('');
+                        setMovementDescription('');
+                        setShowMovementModal(true);
+                      }}
+                      className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold text-xs rounded-xl border border-amber-200 transition-all"
+                    >
+                      <ArrowDownRight className="w-3.5 h-3.5" /> - Sangria
+                    </button>
+                    <button
+                      onClick={() => {
+                        setMovementType('DESPESA');
+                        setMovementAmount('');
+                        setMovementDescription('');
+                        setShowMovementModal(true);
+                      }}
+                      className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs rounded-xl border border-rose-200 transition-all"
+                    >
+                      <ArrowDownRight className="w-3.5 h-3.5" /> - Despesa em Gaveta
+                    </button>
+                    <button
+                      onClick={() => {
+                        setCountedCash('');
+                        setDifferenceJustification('');
+                        setShowCloseCashModal(true);
+                      }}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all"
+                    >
+                      <CheckCircle2 className="w-4 h-4" /> Fechar Caixa & Conferência
+                    </button>
+                  </div>
                 </div>
 
-                {/* Resumo por Forma de Pagamento */}
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs">
-                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                    <span className="text-slate-400 font-medium">Dinheiro em Gaveta:</span>
-                    <p className="text-base font-extrabold text-emerald-600 mt-0.5">
-                      {formatCurrency((cashRegister.initial_balance || 0) + (cashTotals.cash || 0))}
+                {/* Resumo por Forma de Pagamento e Gaveta Física */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
+                  <div className="bg-emerald-50/70 p-3 rounded-xl border border-emerald-100">
+                    <span className="text-emerald-700 font-semibold flex items-center justify-between">
+                      Dinheiro Físico Esperado:
+                      <Banknote className="w-3.5 h-3.5 text-emerald-600" />
+                    </span>
+                    <p className="text-base font-extrabold text-emerald-800 mt-1">
+                      {formatCurrency(cashDrawerSummary?.expectedCash ?? ((cashRegister.initial_balance || 0) + (cashTotals.cash || 0)))}
                     </p>
-                    <span className="text-[10px] text-slate-400">Troco + Entradas</span>
+                    <span className="text-[10px] text-emerald-600">Troco + Entradas - Saídas</span>
                   </div>
+
                   <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                    <span className="text-slate-400 font-medium">PIX Recebido:</span>
-                    <p className="text-base font-extrabold text-teal-600 mt-0.5">
+                    <span className="text-slate-500 font-medium">Entradas em Dinheiro:</span>
+                    <p className="text-base font-extrabold text-slate-800 mt-1">
+                      {formatCurrency(cashDrawerSummary?.cashIn ?? cashTotals.cash ?? 0)}
+                    </p>
+                    <span className="text-[10px] text-slate-400">Recebimentos no caixa</span>
+                  </div>
+
+                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                    <span className="text-slate-500 font-medium">Suprimentos (+):</span>
+                    <p className="text-base font-extrabold text-emerald-600 mt-1">
+                      {formatCurrency(cashDrawerSummary?.suprimentos ?? 0)}
+                    </p>
+                    <span className="text-[10px] text-slate-400">Aportes para troco</span>
+                  </div>
+
+                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                    <span className="text-slate-500 font-medium">Sangrias / Despesas (-):</span>
+                    <p className="text-base font-extrabold text-rose-600 mt-1">
+                      {formatCurrency(((cashDrawerSummary?.sangrias ?? 0) + (cashDrawerSummary?.despesas ?? 0)))}
+                    </p>
+                    <span className="text-[10px] text-slate-400">Retiradas e pagtos gaveta</span>
+                  </div>
+
+                  <div className="bg-teal-50/60 p-3 rounded-xl border border-teal-100">
+                    <span className="text-teal-700 font-semibold flex items-center justify-between">
+                      PIX Recebido:
+                      <QrCode className="w-3.5 h-3.5 text-teal-600" />
+                    </span>
+                    <p className="text-base font-extrabold text-teal-800 mt-1">
                       {formatCurrency(cashTotals.pix || 0)}
                     </p>
+                    <span className="text-[10px] text-teal-600">Eletrônico (não afeta gaveta)</span>
                   </div>
-                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                    <span className="text-slate-400 font-medium">Cartão Crédito:</span>
-                    <p className="text-base font-extrabold text-indigo-600 mt-0.5">
-                      {formatCurrency(cashTotals.credit_card || 0)}
+
+                  <div className="bg-indigo-50/60 p-3 rounded-xl border border-indigo-100">
+                    <span className="text-indigo-700 font-semibold flex items-center justify-between">
+                      Cartões (Créd./Déb.):
+                      <CreditCard className="w-3.5 h-3.5 text-indigo-600" />
+                    </span>
+                    <p className="text-base font-extrabold text-indigo-800 mt-1">
+                      {formatCurrency((cashTotals.credit_card || 0) + (cashTotals.debit_card || 0))}
                     </p>
-                  </div>
-                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                    <span className="text-slate-400 font-medium">Cartão Débito:</span>
-                    <p className="text-base font-extrabold text-blue-600 mt-0.5">
-                      {formatCurrency(cashTotals.debit_card || 0)}
-                    </p>
-                  </div>
-                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 col-span-2 sm:col-span-1">
-                    <span className="text-slate-400 font-medium">Total do Turno:</span>
-                    <p className="text-base font-extrabold text-slate-900 mt-0.5">
-                      {formatCurrency(cashTotals.total || 0)}
-                    </p>
+                    <span className="text-[10px] text-indigo-600">Eletrônico (não afeta gaveta)</span>
                   </div>
                 </div>
 
-                {/* Movimentações do Turno */}
-                <div className="mt-4">
-                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2">
-                    Recebimentos Registrados neste Caixa
-                  </h4>
-                  {cashMovements.length === 0 ? (
-                    <p className="text-xs text-slate-400 italic">Nenhuma movimentação realizada desde a abertura.</p>
-                  ) : (
-                    <div className="max-h-48 overflow-y-auto space-y-1.5">
-                      {cashMovements.map(m => (
-                        <div key={m.id} className="p-2.5 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between text-xs">
-                          <div>
-                            <span className="font-bold text-slate-900">{m.patient_name || 'Recebimento Avulso'}</span>
-                            <span className="text-slate-400 ml-2">({m.payment_method?.toUpperCase()})</span>
+                {/* Movimentações do Turno e Ajustes de Gaveta */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-2">
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2 flex items-center justify-between">
+                      <span>Recebimentos Clínicos ({cashMovements.length})</span>
+                      <span className="text-[11px] font-normal text-slate-400">Total: {formatCurrency(cashTotals.total || 0)}</span>
+                    </h4>
+                    {cashMovements.length === 0 ? (
+                      <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 text-center text-xs text-slate-400 italic">
+                        Nenhum recebimento registrado desde a abertura.
+                      </div>
+                    ) : (
+                      <div className="max-h-56 overflow-y-auto space-y-1.5 pr-1">
+                        {cashMovements.map(m => (
+                          <div key={m.id} className="p-2.5 bg-slate-50 hover:bg-slate-100/80 rounded-xl border border-slate-100 flex items-center justify-between text-xs transition-colors">
+                            <div>
+                              <div className="font-bold text-slate-900">{m.patient_name || 'Recebimento Avulso'}</div>
+                              <div className="text-[10px] text-slate-400 flex items-center gap-1.5 mt-0.5">
+                                <span className="uppercase font-semibold text-slate-600">{m.payment_method}</span>
+                                <span>•</span>
+                                <span>{new Date(m.created_at).toLocaleTimeString('pt-BR').slice(0, 5)}</span>
+                                {m.amount_tendered ? (
+                                  <span>• Entregue: {formatCurrency(m.amount_tendered)} (Troco: {formatCurrency(m.change_amount || 0)})</span>
+                                ) : null}
+                              </div>
+                            </div>
+                            <span className="font-extrabold text-slate-900 text-sm">{formatCurrency(m.amount)}</span>
                           </div>
-                          <span className="font-extrabold text-slate-800">{formatCurrency(m.amount)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2 flex items-center justify-between">
+                      <span>Aportes & Sangrias em Gaveta ({drawerMovements.length})</span>
+                    </h4>
+                    {drawerMovements.length === 0 ? (
+                      <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 text-center text-xs text-slate-400 italic">
+                        Nenhuma sangria ou suprimento lançado neste turno.
+                      </div>
+                    ) : (
+                      <div className="max-h-56 overflow-y-auto space-y-1.5 pr-1">
+                        {drawerMovements.map(dm => {
+                          const isSuprimento = dm.type === 'SUPRIMENTO';
+                          const isSangria = dm.type === 'SANGRIA';
+                          return (
+                            <div key={dm.id} className="p-2.5 bg-slate-50 hover:bg-slate-100/80 rounded-xl border border-slate-100 flex items-center justify-between text-xs transition-colors">
+                              <div>
+                                <div className="flex items-center gap-1.5">
+                                  <span className={`px-1.5 py-0.5 rounded-md font-bold text-[10px] ${
+                                    isSuprimento ? 'bg-emerald-100 text-emerald-800' : isSangria ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'
+                                  }`}>
+                                    {dm.type}
+                                  </span>
+                                  <span className="font-bold text-slate-800">{dm.description}</span>
+                                </div>
+                                <div className="text-[10px] text-slate-400 mt-0.5">
+                                  {new Date(dm.created_at).toLocaleTimeString('pt-BR').slice(0, 5)} • Operador: {dm.user_name || 'Operador'}
+                                </div>
+                              </div>
+                              <span className={`font-extrabold text-sm ${isSuprimento ? 'text-emerald-700' : 'text-rose-700'}`}>
+                                {isSuprimento ? '+' : '-'}{formatCurrency(dm.amount)}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             ) : (
@@ -489,11 +679,14 @@ export const FinancialView: React.FC = () => {
                   </span>
                   <h3 className="text-lg font-bold text-slate-900 mt-1">Nenhum caixa aberto no momento</h3>
                   <p className="text-xs text-slate-500">
-                    Abra uma nova sessão de caixa informando o fundo de troco para iniciar os recebimentos do dia.
+                    Abra uma nova sessão de caixa informando o fundo de troco inicial para habilitar os recebimentos do dia.
                   </p>
                 </div>
                 <button
-                  onClick={() => setShowOpenCashModal(true)}
+                  onClick={() => {
+                    setInitialBalance('0');
+                    setShowOpenCashModal(true);
+                  }}
                   className="flex items-center gap-1.5 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all"
                 >
                   <Plus className="w-4 h-4" /> Abrir Caixa
@@ -504,7 +697,7 @@ export const FinancialView: React.FC = () => {
 
           {/* Histórico de Caixas Anteriores */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-            <div className="p-4 border-b border-slate-100">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
               <h3 className="font-bold text-slate-900 text-sm">Histórico de Fechamentos de Caixa</h3>
             </div>
             <div className="overflow-x-auto mobile-table-container">
@@ -517,12 +710,13 @@ export const FinancialView: React.FC = () => {
                     <th className="px-6 py-3.5">Saldo Físico Informado</th>
                     <th className="px-6 py-3.5">Diferença (Sobra/Falta)</th>
                     <th className="px-6 py-3.5">Status</th>
+                    <th className="px-6 py-3.5 text-right">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700">
                   {cashHistory.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-12 text-center text-slate-400">
+                      <td colSpan={7} className="py-12 text-center text-slate-400">
                         Nenhum histórico de caixa arquivado.
                       </td>
                     </tr>
@@ -535,13 +729,13 @@ export const FinancialView: React.FC = () => {
                             {new Date(h.opened_at).toLocaleTimeString('pt-BR').slice(0, 5)} até {h.closed_at ? new Date(h.closed_at).toLocaleTimeString('pt-BR').slice(0, 5) : 'Em aberto'}
                           </div>
                         </td>
-                        <td className="px-6 py-4 font-medium text-slate-800">{h.operator_name}</td>
+                        <td className="px-6 py-4 font-medium text-slate-800">{h.operator_name || 'Operador'}</td>
                         <td className="px-6 py-4 font-semibold">{formatCurrency(h.initial_balance)}</td>
-                        <td className="px-6 py-4 font-bold text-slate-900">{h.final_balance !== null ? formatCurrency(h.final_balance) : '—'}</td>
+                        <td className="px-6 py-4 font-bold text-slate-900">{h.final_balance !== null && h.final_balance !== undefined ? formatCurrency(h.final_balance) : '—'}</td>
                         <td className="px-6 py-4">
                           {h.difference === null || h.difference === undefined ? (
                             <span className="text-slate-400">—</span>
-                          ) : h.difference === 0 ? (
+                          ) : Math.abs(h.difference) < 0.01 ? (
                             <span className="text-emerald-600 font-bold">Sem diferença (R$ 0,00)</span>
                           ) : h.difference > 0 ? (
                             <span className="text-blue-600 font-bold">Sobra: +{formatCurrency(h.difference)}</span>
@@ -556,11 +750,90 @@ export const FinancialView: React.FC = () => {
                             {h.status === 'open' ? 'Aberto' : 'Fechado'}
                           </span>
                         </td>
+                        <td className="px-6 py-4 text-right">
+                          <button
+                            onClick={() => handleExportCashCsv(h.id)}
+                            title="Exportar CSV da sessão de caixa"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-slate-600 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition-colors"
+                          >
+                            <FileSpreadsheet className="w-3.5 h-3.5" /> CSV
+                          </button>
+                        </td>
                       </tr>
                     ))
                   )}
                 </tbody>
               </ResponsiveTable>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Suprimento / Sangria / Despesa */}
+      {showMovementModal && cashRegister && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto mobile-modal">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-4 sm:p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-base font-bold text-slate-900">
+                {movementType === 'SUPRIMENTO' ? 'Lançar Suprimento de Troco' : movementType === 'SANGRIA' ? 'Lançar Sangria de Caixa' : 'Lançar Despesa em Espécie'}
+              </h3>
+              <button aria-label="Fechar" onClick={() => setShowMovementModal(false)} className="p-1 text-slate-400 hover:text-slate-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="text-xs space-y-3">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Tipo de Movimentação</label>
+                <select
+                  value={movementType}
+                  onChange={e => setMovementType(e.target.value as any)}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-bold"
+                >
+                  <option value="SUPRIMENTO">Suprimento (+ Aporte de Troco)</option>
+                  <option value="SANGRIA">Sangria (- Retirada para Cofre / Banco)</option>
+                  <option value="DESPESA">Despesa em Gaveta (- Pagamento em Dinheiro)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Valor (R$) *</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  required
+                  value={movementAmount}
+                  onChange={e => setMovementAmount(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-900"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Justificativa / Descrição *</label>
+                <input
+                  type="text"
+                  required
+                  value={movementDescription}
+                  onChange={e => setMovementDescription(e.target.value)}
+                  placeholder={movementType === 'SUPRIMENTO' ? 'Ex: Reforço de troco notas de R$ 5 e R$ 10' : movementType === 'SANGRIA' ? 'Ex: Retirada de segurança para o cofre' : 'Ex: Compra urgente de material de limpeza'}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-3 border-t border-slate-100 text-xs">
+              <button onClick={() => setShowMovementModal(false)} className="w-full sm:w-auto px-3 py-2 border rounded-xl text-slate-600 min-h-[40px]">
+                Cancelar
+              </button>
+              <button
+                onClick={handleRecordMovement}
+                className={`w-full sm:w-auto px-5 py-2 font-bold text-white rounded-xl shadow-xs min-h-[40px] ${
+                  movementType === 'SUPRIMENTO' ? 'bg-emerald-600 hover:bg-emerald-700' : movementType === 'SANGRIA' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-rose-600 hover:bg-rose-700'
+                }`}
+              >
+                Confirmar Lançamento
+              </button>
             </div>
           </div>
         </div>
@@ -587,6 +860,9 @@ export const FinancialView: React.FC = () => {
                   placeholder="0.00"
                   className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-900"
                 />
+                <span className="text-[10px] text-slate-400 mt-1 block">
+                  Informe o montante em cédulas e moedas físicas disponibilizado na gaveta (ex: R$ 200,00 ou R$ 0,00).
+                </span>
               </div>
             </div>
             <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-3 border-t border-slate-100 text-xs">
@@ -619,13 +895,28 @@ export const FinancialView: React.FC = () => {
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500">Entradas em Dinheiro:</span>
-                <strong className="text-slate-800">{formatCurrency(cashTotals.cash || 0)}</strong>
+                <strong className="text-slate-800">{formatCurrency(cashDrawerSummary?.cashIn ?? cashTotals.cash ?? 0)}</strong>
               </div>
+              {(cashDrawerSummary?.suprimentos || 0) > 0 && (
+                <div className="flex justify-between text-emerald-700">
+                  <span>Suprimentos (+):</span>
+                  <strong>+{formatCurrency(cashDrawerSummary.suprimentos)}</strong>
+                </div>
+              )}
+              {((cashDrawerSummary?.sangrias || 0) + (cashDrawerSummary?.despesas || 0)) > 0 && (
+                <div className="flex justify-between text-rose-700">
+                  <span>Sangrias & Despesas (-):</span>
+                  <strong>-{formatCurrency((cashDrawerSummary.sangrias || 0) + (cashDrawerSummary.despesas || 0))}</strong>
+                </div>
+              )}
               <div className="flex justify-between border-t border-slate-200 pt-1.5 font-bold">
                 <span className="text-slate-700">Dinheiro Físico Esperado na Gaveta:</span>
                 <span className="text-indigo-600 text-sm">
-                  {formatCurrency((cashRegister.initial_balance || 0) + (cashTotals.cash || 0))}
+                  {formatCurrency(cashDrawerSummary?.expectedCash ?? ((cashRegister.initial_balance || 0) + (cashTotals.cash || 0)))}
                 </span>
+              </div>
+              <div className="text-[10px] text-slate-400 pt-1 border-t border-slate-100">
+                PIX ({formatCurrency(cashTotals.pix || 0)}) e Cartões ({formatCurrency((cashTotals.credit_card || 0) + (cashTotals.debit_card || 0))}) são registrados eletronicamente e não compõem a gaveta de dinheiro físico.
               </div>
             </div>
 
@@ -648,26 +939,31 @@ export const FinancialView: React.FC = () => {
               {countedCash !== '' && (
                 <div className="p-3 rounded-xl border text-xs font-bold">
                   {(() => {
-                    const expected = (cashRegister.initial_balance || 0) + (cashTotals.cash || 0);
-                    const diff = (parseFloat(countedCash) || 0) - expected;
-                    if (diff === 0) {
-                      return <span className="text-emerald-700">Conferência Exata: Sem diferença de valores.</span>;
+                    const expected = cashDrawerSummary?.expectedCash ?? ((cashRegister.initial_balance || 0) + (cashTotals.cash || 0));
+                    const diff = Math.round(((parseFloat(countedCash) || 0) - expected) * 100) / 100;
+                    if (Math.abs(diff) < 0.01) {
+                      return <span className="text-emerald-700">✓ Conferência Exata: Sem diferença de valores.</span>;
                     } else if (diff > 0) {
-                      return <span className="text-blue-700">Sobra de Caixa Identificada: +{formatCurrency(diff)}</span>;
+                      return <span className="text-blue-700">▲ Sobra de Caixa Identificada: +{formatCurrency(diff)}</span>;
                     } else {
-                      return <span className="text-rose-700">Falta de Caixa Identificada: {formatCurrency(diff)}</span>;
+                      return <span className="text-rose-700">▼ Falta de Caixa Identificada: {formatCurrency(diff)}</span>;
                     }
                   })()}
                 </div>
               )}
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Justificativa de Diferença / Observações</label>
+                <label className="block font-bold text-slate-700 mb-1">
+                  Justificativa de Diferença / Observações
+                  {countedCash !== '' && Math.abs((parseFloat(countedCash) || 0) - (cashDrawerSummary?.expectedCash ?? ((cashRegister.initial_balance || 0) + (cashTotals.cash || 0)))) >= 0.01 ? (
+                    <span className="text-rose-600 font-bold ml-1">* (Obrigatória em caso de sobra ou falta)</span>
+                  ) : null}
+                </label>
                 <textarea
                   rows={2}
                   value={differenceJustification}
                   onChange={e => setDifferenceJustification(e.target.value)}
-                  placeholder="Ex: Troco arredondado, sangria realizada..."
+                  placeholder="Ex: Troco arredondado, retirada urgente para farmácia..."
                   className="w-full border border-slate-200 rounded-xl px-3 py-2"
                 />
               </div>
@@ -677,7 +973,7 @@ export const FinancialView: React.FC = () => {
               <button onClick={() => setShowCloseCashModal(false)} className="w-full sm:w-auto px-3 py-2 border rounded-xl text-slate-600 min-h-[40px]">
                 Cancelar
               </button>
-              <button onClick={handleCloseCash} className="w-full sm:w-auto px-5 py-2 bg-rose-600 text-white font-bold rounded-xl shadow-xs min-h-[40px]">
+              <button onClick={handleCloseCash} className="w-full sm:w-auto px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl shadow-xs min-h-[40px]">
                 Encerrar Caixa
               </button>
             </div>
@@ -708,7 +1004,7 @@ export const FinancialView: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Valor (R$) *</label>
+                <label className="block font-semibold text-slate-700 mb-1">Valor Cobrado (R$) *</label>
                 <input
                   type="number"
                   step="0.01"
@@ -730,7 +1026,7 @@ export const FinancialView: React.FC = () => {
                     <option value="pix">PIX</option>
                     <option value="credit_card">Cartão de Crédito</option>
                     <option value="debit_card">Cartão de Débito</option>
-                    <option value="cash">Dinheiro</option>
+                    <option value="cash">Dinheiro em Espécie</option>
                   </select>
                 </div>
                 <div>
@@ -740,11 +1036,36 @@ export const FinancialView: React.FC = () => {
                     onChange={e => setPaymentStatus(e.target.value)}
                     className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 min-h-[38px]"
                   >
-                    <option value="paid">Pago</option>
+                    <option value="paid">Pago / Concluído</option>
                     <option value="pending">Pendente</option>
                   </select>
                 </div>
               </div>
+
+              {/* Se for dinheiro em espécie, exibe cálculo de troco */}
+              {paymentMethod === 'cash' && (
+                <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="font-bold text-emerald-800">Valor em Dinheiro Entregue (R$):</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={amountTendered}
+                      onChange={e => setAmountTendered(e.target.value)}
+                      placeholder={amount || '0.00'}
+                      className="w-28 border border-emerald-300 rounded-lg px-2 py-1 text-right text-xs font-bold bg-white text-emerald-900"
+                    />
+                  </div>
+                  {amountTendered && parseFloat(amountTendered) > (parseFloat(amount) || 0) && (
+                    <div className="flex items-center justify-between text-xs pt-1 border-t border-emerald-200">
+                      <span className="font-bold text-emerald-800">Troco a Devolver:</span>
+                      <strong className="text-emerald-900 text-sm">
+                        {formatCurrency(parseFloat(amountTendered) - (parseFloat(amount) || 0))}
+                      </strong>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Observações</label>
@@ -752,7 +1073,7 @@ export const FinancialView: React.FC = () => {
                   type="text"
                   value={notes}
                   onChange={e => setNotes(e.target.value)}
-                  placeholder="Ex: Pago via chave PIX CNPJ"
+                  placeholder="Ex: Recebido no balcão da clínica"
                   className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
                 />
               </div>

@@ -498,6 +498,9 @@ CREATE TABLE IF NOT EXISTS payments (
   appointment_id TEXT,
   patient_id TEXT NOT NULL,
   amount REAL NOT NULL,
+  amount_tendered REAL,
+  change_amount REAL,
+  cash_register_id TEXT,
   payment_method TEXT NOT NULL DEFAULT 'pix' CHECK(payment_method IN ('pix', 'credit_card', 'debit_card', 'cash', 'bank_transfer', 'insurance')),
   status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('paid', 'pending', 'partial', 'cancelled', 'refunded')),
   transaction_id TEXT,
@@ -510,6 +513,45 @@ CREATE TABLE IF NOT EXISTS payments (
 );
 
 CREATE INDEX IF NOT EXISTS idx_payments_tenant_date ON payments (tenant_id, status, created_at);
+
+-- 21.1 Controle de Sessão de Caixa
+CREATE TABLE IF NOT EXISTS cash_registers (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  user_id TEXT,
+  operator_user_id TEXT,
+  operator_name TEXT,
+  opened_at TEXT NOT NULL DEFAULT (datetime('now')),
+  closed_at TEXT,
+  initial_balance REAL NOT NULL DEFAULT 0.0,
+  closing_balance_expected REAL,
+  closing_balance_actual REAL,
+  final_balance REAL,
+  difference REAL,
+  status TEXT NOT NULL DEFAULT 'open',
+  notes_open TEXT,
+  notes_close TEXT,
+  notes TEXT,
+  summary_json TEXT,
+  FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+CREATE INDEX IF NOT EXISTS idx_cash_registers ON cash_registers (tenant_id, status);
+
+CREATE TABLE IF NOT EXISTS cash_register_movements (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  cash_register_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  user_name TEXT,
+  type TEXT NOT NULL, -- 'SUPRIMENTO', 'SANGRIA', 'DESPESA', 'ESTORNO'
+  amount REAL NOT NULL,
+  description TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+  FOREIGN KEY (cash_register_id) REFERENCES cash_registers(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_cash_movements_reg ON cash_register_movements (tenant_id, cash_register_id);
 
 -- 22. Configuração de Recibos por Clínica (Dados do Emitente e Numeração Própria)
 CREATE TABLE IF NOT EXISTS receipt_settings (

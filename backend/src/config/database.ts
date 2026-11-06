@@ -432,8 +432,26 @@ export function initializeDatabase(): void {
     addColIfMissing('appointments', 'clinical_module', 'TEXT');
     addColIfMissing('appointments', 'profession_id', 'TEXT');
 
-    // Colunas em pagamentos para vínculo com caixa
+    // Colunas em pagamentos para vínculo com caixa e troco
     addColIfMissing('payments', 'cash_register_id', 'TEXT');
+    addColIfMissing('payments', 'amount_tendered', 'REAL');
+    addColIfMissing('payments', 'change_amount', 'REAL');
+
+    // Colunas em cash_registers para compatibilidade com operadores e fechamentos
+    addColIfMissing('cash_registers', 'operator_user_id', 'TEXT');
+    addColIfMissing('cash_registers', 'operator_name', 'TEXT');
+    addColIfMissing('cash_registers', 'notes', 'TEXT');
+    addColIfMissing('cash_registers', 'final_balance', 'REAL');
+    addColIfMissing('cash_registers', 'summary_json', 'TEXT');
+
+    // Colunas em inventory_items para NCM, código de barras e EAN
+    addColIfMissing('inventory_items', 'ncm', 'TEXT');
+    addColIfMissing('inventory_items', 'barcode', 'TEXT');
+    addColIfMissing('inventory_items', 'ean', 'TEXT');
+    addColIfMissing('inventory_movements', 'invoice_number', 'TEXT');
+    addColIfMissing('inventory_movements', 'unit_cost', 'REAL');
+    addColIfMissing('inventory_movements', 'batch_number', 'TEXT');
+    addColIfMissing('inventory_movements', 'expiration_date', 'TEXT');
 
     // Colunas em pacientes para status explícito de alergias e sexo canônico
     addColIfMissing('patients', 'allergies_status', "TEXT DEFAULT 'not_informed'");
@@ -983,20 +1001,40 @@ export function initializeDatabase(): void {
       CREATE TABLE IF NOT EXISTS cash_registers (
         id TEXT PRIMARY KEY,
         tenant_id TEXT NOT NULL,
-        user_id TEXT NOT NULL,
+        user_id TEXT,
+        operator_user_id TEXT,
+        operator_name TEXT,
         opened_at TEXT NOT NULL DEFAULT (datetime('now')),
         closed_at TEXT,
         initial_balance REAL NOT NULL DEFAULT 0.0,
         closing_balance_expected REAL,
         closing_balance_actual REAL,
+        final_balance REAL,
         difference REAL,
         status TEXT NOT NULL DEFAULT 'open',
         notes_open TEXT,
         notes_close TEXT,
+        notes TEXT,
+        summary_json TEXT,
         FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
         FOREIGN KEY (user_id) REFERENCES users(id)
       );
       CREATE INDEX IF NOT EXISTS idx_cash_registers ON cash_registers (tenant_id, status);
+
+      CREATE TABLE IF NOT EXISTS cash_register_movements (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        cash_register_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        user_name TEXT,
+        type TEXT NOT NULL, -- 'SUPRIMENTO', 'SANGRIA', 'DESPESA', 'ESTORNO'
+        amount REAL NOT NULL,
+        description TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (cash_register_id) REFERENCES cash_registers(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_cash_movements_reg ON cash_register_movements (tenant_id, cash_register_id);
 
       CREATE TABLE IF NOT EXISTS patient_consents (
         id TEXT PRIMARY KEY,

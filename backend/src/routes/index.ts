@@ -48,6 +48,7 @@ import { PersonalController } from '../controllers/personal.controller';
 import { PersonalAIController } from '../controllers/personal-ai.controller';
 import { PersonalStudentLinkController } from '../controllers/personal-student-link.controller';
 import { IntegrationsController } from '../controllers/integrations.controller';
+import { ClinicalExportController } from '../controllers/clinical-export.controller';
 import { GoogleCalendarController } from '../controllers/google-calendar.controller';
 import { UserModerationController } from '../controllers/user-moderation.controller';
 import { AdminVisitsController } from '../controllers/admin-visits.controller';
@@ -849,6 +850,9 @@ api.get('/v1/reports/attendance', requireTenant, requireRole('clinic_admin'), Re
 api.get('/v1/reports/financial', requireTenant, requireRole('clinic_admin'), ReportController.getFinancialReport);
 api.get('/v1/reports/export-csv', requireTenant, requireRole('clinic_admin'), ReportController.exportCsv);
 api.get('/v1/reports/export-docx', requireTenant, requireRole('clinic_admin', 'professional'), ReportController.exportDocx);
+api.get('/v1/clinical-export/preview', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalExportController.preview);
+api.get('/v1/clinical-export/download', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalExportController.download);
+api.post('/v1/clinical-export/download', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalExportController.download);
 api.get('/v1/reports/insurances', requireTenant, requireRole('clinic_admin'), InsuranceController.getInsuranceReport);
 
 // 360° Linha do Tempo e Prontuário Clínico Integrado
@@ -911,7 +915,9 @@ api.delete('/v1/patients/:patientId/insurances/:id', requireTenant, requireRole(
 api.get('/v1/cash-register/current', requireTenant, CashRegisterController.getCurrent);
 api.post('/v1/cash-register/open', requireTenant, requireRole('clinic_admin', 'receptionist'), CashRegisterController.openRegister);
 api.post('/v1/cash-register/:id/close', requireTenant, requireRole('clinic_admin', 'receptionist'), CashRegisterController.closeRegister);
+api.post('/v1/cash-register/:id/movement', requireTenant, requireRole('clinic_admin', 'receptionist'), CashRegisterController.recordMovement);
 api.get('/v1/cash-register/history', requireTenant, requireRole('clinic_admin', 'receptionist'), CashRegisterController.listHistory);
+api.get('/v1/cash-register/:id/export', requireTenant, requireRole('clinic_admin', 'receptionist'), CashRegisterController.exportCsv);
 api.get('/v1/cash-register/:id', requireTenant, CashRegisterController.getById);
 
 // Assistente de Inteligência Artificial Integrado (Zemda AI)
@@ -968,6 +974,8 @@ api.delete('/v1/inventory/:id', requireTenant, requireRole('clinic_admin', 'rece
 api.delete('/v1/inventory/items/:id', requireTenant, requireRole('clinic_admin', 'receptionist'), InventoryController.deleteItem);
 api.post('/v1/inventory/movements', requireTenant, requireRole('clinic_admin', 'receptionist'), InventoryController.recordMovement);
 api.get('/v1/inventory/movements', requireTenant, requireRole('clinic_admin', 'receptionist'), InventoryController.listMovements);
+api.post('/v1/inventory/invoices/parse', requireTenant, requireRole('clinic_admin', 'receptionist'), InventoryController.parseInvoice);
+api.post('/v1/inventory/invoices/confirm', requireTenant, requireRole('clinic_admin', 'receptionist'), InventoryController.confirmInvoiceImport);
 
 // Estoque Clínico Central Compartilhado (Todos os Módulos Clínicos & Profissionais)
 api.get('/v1/clinical-inventory/items', requireTenant, ClinicalInventoryController.listItems);

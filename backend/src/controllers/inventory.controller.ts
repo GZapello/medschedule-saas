@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '../middlewares/audit.middleware';
+import { InvoiceParserService } from '../services/invoice-parser.service';
 
 export class InventoryController {
   // Lista itens de estoque com status de alertas (baixo, zerado, validade próxima)
@@ -347,6 +348,216 @@ export class InventoryController {
     } catch (err: any) {
       console.error('[InventoryController.deleteItem] Erro:', err);
       res.status(500).json({ success: false, error: 'Erro ao desativar item de estoque' });
+    }
+  }
+
+  // Extração inteligente de Nota Fiscal em memória (Zero Retention)
+  static async parseInvoice(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.tenantId;
+      if (!tenantId) {
+        res.status(400).json({ error: 'Tenant não informado' });
+        return;
+      }
+
+      const { fileBase64, fileName, mimeType } = req.body;
+      if (!fileBase64 || !fileName) {
+        res.status(400).json({ error: 'Arquivo da nota fiscal não informado.' });
+        return;
+      }
+
+      const buffer = Buffer.from(fileBase64, 'base64');
+      const extraction = await InvoiceParserService.parseInvoice({
+        buffer,
+        fileName,
+        mimeType,
+        tenantId
+      });
+
+      res.json(extraction);
+    } catch (err: any) {
+      console.error('[InventoryController.parseInvoice] Erro:', err);
+      res.status(500).json({ error: 'Erro ao processar nota fiscal: ' + (err?.message || 'Falha de leitura') });
+    }
+  }
+
+  // Confirmação e persistência transacional dos itens revisados na conferência
+  static confirmInvoiceImport(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      if (!tenantId) {
+        res.status(400).json({ error: 'Tenant não informado' });
+        return;
+      }
+
+      const { invoiceInfo, items } = req.body;
+      if (!items || !Array.isArray(items) || items.length === 0) {
+        res.status(400).json({ error: 'Nenhum item selecionado para importação.' });
+        return;
+      }
+
+      const userId = (req.user as any)?.userId || (req.user as any)?.id || null;
+      const nfNum = invoiceInfo?.invoiceNumber || 'S/N';
+      const supplierName = invoiceInfo?.supplier?.name || invoiceInfo?.supplier?.tradeName || '';
+
+      let createdCount = 0;
+      let updatedCount = 0;
+      let ignoredCount = 0;
+
+      const runImportTransaction = db.transaction(() => {
+        for (const item of items) {
+          const action = item.action || 'create';
+          if (action === 'ignore') {
+            ignoredCount++;
+            continue;
+          }
+
+          const qty = Number(item.quantity) || 0;
+          if (qty <= 0) continue;
+
+          const unitCost = Number(item.unitCost) || 0;
+          const cleanName = (item.cleanName || item.name || 'Insumo').trim();
+
+          if (action === 'update' && item.matchedItemId) {
+            // Atualização de estoque de item existente
+            const existing = db.prepare(`
+              SELECT id, quantity, unit_cost, batch_number, expiration_date
+              FROM inventory_items
+              WHERE id = ? AND tenant_id = ?
+            `).get(item.matchedItemId, tenantId) as any;
+
+            if (existing) {
+              const previousQty = Number(existing.quantity) || 0;
+              const newQty = previousQty + qty;
+
+              db.prepare(`
+                UPDATE inventory_items SET
+                  quantity = ?,
+                  unit_cost = CASE WHEN ? > 0 THEN ? ELSE unit_cost END,
+                  batch_number = COALESCE(?, batch_number),
+                  expiration_date = COALESCE(?, expiration_date),
+                  brand = COALESCE(?, brand),
+                  supplier = COALESCE(?, supplier),
+                  ean = COALESCE(?, ean),
+                  ncm = COALESCE(?, ncm),
+                  updated_at = datetime('now')
+                WHERE id = ? AND tenant_id = ?
+              `).run(
+                newQty,
+                unitCost,
+                unitCost,
+                item.batchNumber || null,
+                item.expirationDate || null,
+                item.brand || null,
+                supplierName || null,
+                item.ean || null,
+                item.ncm || null,
+                existing.id,
+                tenantId
+              );
+
+              // Registra movimentação de entrada
+              db.prepare(`
+                INSERT INTO inventory_movements (
+                  id, tenant_id, item_id, movement_type, quantity, previous_quantity, new_quantity,
+                  reason, user_id, invoice_number, unit_cost, batch_number, expiration_date, created_at
+                )
+                VALUES (?, ?, ?, 'in', ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+              `).run(
+                'mov-' + uuidv4().slice(0, 8),
+                tenantId,
+                existing.id,
+                qty,
+                previousQty,
+                newQty,
+                `Entrada via NF nº ${nfNum}${supplierName ? ` (${supplierName})` : ''}`,
+                userId,
+                nfNum,
+                unitCost,
+                item.batchNumber || null,
+                item.expirationDate || null
+              );
+
+              updatedCount++;
+              continue;
+            }
+          }
+
+          // Criação de novo item de estoque
+          const newItemId = 'inv-' + uuidv4().slice(0, 8);
+          db.prepare(`
+            INSERT INTO inventory_items (
+              id, tenant_id, name, category, product_type, brand, presentation, volume_ml,
+              quantity, unit, batch_number, expiration_date, unit_cost, supplier, min_stock,
+              notes, active, ean, ncm, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, datetime('now'), datetime('now'))
+          `).run(
+            newItemId,
+            tenantId,
+            cleanName,
+            item.category || 'Geral',
+            item.productType || 'insumo',
+            item.brand || null,
+            item.presentation || 'unidade',
+            item.volumeMl ? Number(item.volumeMl) : null,
+            qty,
+            (item.unit || 'UN').toUpperCase(),
+            item.batchNumber || null,
+            item.expirationDate || null,
+            unitCost,
+            supplierName || null,
+            item.minStock !== undefined ? Number(item.minStock) : 5,
+            item.notes || (nfNum !== 'S/N' ? `Importado via NF nº ${nfNum}` : null),
+            item.ean || null,
+            item.ncm || null
+          );
+
+          // Registra movimentação inicial
+          db.prepare(`
+            INSERT INTO inventory_movements (
+              id, tenant_id, item_id, movement_type, quantity, previous_quantity, new_quantity,
+              reason, user_id, invoice_number, unit_cost, batch_number, expiration_date, created_at
+            )
+            VALUES (?, ?, ?, 'in', ?, 0, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+          `).run(
+            'mov-' + uuidv4().slice(0, 8),
+            tenantId,
+            newItemId,
+            qty,
+            qty,
+            `Entrada inicial via NF nº ${nfNum}${supplierName ? ` (${supplierName})` : ''}`,
+            userId,
+            nfNum,
+            unitCost,
+            item.batchNumber || null,
+            item.expirationDate || null
+          );
+
+          createdCount++;
+        }
+      });
+
+      runImportTransaction();
+
+      logAudit(req, 'IMPORT_INVOICE_ITEMS', 'inventory_items', nfNum, {
+        invoiceNumber: nfNum,
+        supplierName,
+        createdCount,
+        updatedCount,
+        ignoredCount
+      });
+
+      res.status(201).json({
+        message: 'Itens da Nota Fiscal importados com sucesso!',
+        createdCount,
+        updatedCount,
+        ignoredCount,
+        totalProcessed: createdCount + updatedCount
+      });
+    } catch (err: any) {
+      console.error('[InventoryController.confirmInvoiceImport] Erro:', err);
+      res.status(500).json({ error: 'Erro ao confirmar importação da nota fiscal: ' + (err?.message || 'Falha de banco de dados') });
     }
   }
 }

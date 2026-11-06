@@ -1,5 +1,6 @@
 import { PatientConsentsPanel } from '../consents/PatientConsentsPanel';
 import { ConsentPendingAlert } from '../consents/ConsentPendingAlert';
+import { ClinicalExportModal } from '../clinical/ClinicalExportModal';
 import React, { useState, useEffect } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { buildApiUrl, getApiBaseUrl } from '../../api/client';
@@ -86,6 +87,7 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
   const [loading, setLoading] = useState<boolean>(true);
   const [patientData, setPatientData] = useState<any>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
 
   // Timeline state
   const [timeline, setTimeline] = useState<any[]>([]);
@@ -545,30 +547,9 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
 
   // Consent Handlers
 
-  // Export DOCX
-  const handleExportDocx = async () => {
-    if (Capacitor.isNativePlatform()) {
-      try {
-        const response = await fetch(buildApiUrl(getApiBaseUrl(), `/v1/reports/export-docx?type=patient_records&patientId=${encodeURIComponent(patientId)}`), {
-          headers: { Authorization: `Bearer ${localStorage.getItem('auth_token') || ''}`, 'X-Tenant-ID': localStorage.getItem('active_tenant_id') || '' }, cache: 'no-store'
-        });
-        if (!response.ok) throw new Error('Falha ao exportar prontuário.');
-        await downloadBlob(await response.blob(), `Prontuario_${patientData?.patient?.full_name || patientData?.patient?.name || 'Paciente'}.docx`);
-      } catch { showToast('Não foi possível exportar o documento Word.', 'error'); }
-      return;
-    }
-    const token = localStorage.getItem('token');
-    const tenantId = localStorage.getItem('tenantId');
-    const url = `/api/v1/reports/export-docx?type=patient_records&patientId=${patientId}`;
-    
-    // Download via link com autenticação
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Prontuario_${patientData?.patient?.full_name || 'Paciente'}.docx`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    showToast('Download do documento Word (.docx) iniciado!', 'success');
+  // Export DOCX / Prontuário 360°
+  const handleExportDocx = () => {
+    setIsExportModalOpen(true);
   };
 
   if (loading) {
@@ -652,12 +633,12 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
               Editar Paciente
             </button>
             <button
-              onClick={handleExportDocx}
-              title="Exportar Prontuário em Word (.docx)"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold text-white transition-all shadow-xs"
+              onClick={() => setIsExportModalOpen(true)}
+              title="Exportar Prontuário Clínico Completo (Word .docx Oficial, PDF, JSON ou ZIP)"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-xs font-semibold text-white transition-all shadow-xs cursor-pointer"
             >
-              <Download className="w-4 h-4 text-teal-300" />
-              Exportar DOCX
+              <Download className="w-4 h-4 text-white" />
+              Exportar Prontuário
             </button>
             <button aria-label="Fechar"
               onClick={onClose}
@@ -2408,6 +2389,16 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
             loadPatientBase();
             if (onUpdated) onUpdated();
           }}
+        />
+      )}
+
+      {/* Modal Unificado de Exportação de Prontuário (DOCX Oficial, PDF, JSON, ZIP) */}
+      {isExportModalOpen && (
+        <ClinicalExportModal
+          isOpen={isExportModalOpen}
+          onClose={() => setIsExportModalOpen(false)}
+          initialPatientId={patientId}
+          patientName={patientData?.patient?.full_name || patientData?.patient?.name}
         />
       )}
     </div>

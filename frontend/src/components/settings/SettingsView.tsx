@@ -13,6 +13,7 @@ import { ServicesView } from '../services/ServicesView';
 import { ProfileSpecialties } from '../profile/ProfileSpecialties';
 import { ImportDataView } from '../import/ImportDataView';
 import { ProfessionalPayrollView } from '../payroll/ProfessionalPayrollView';
+import { ClinicalExportModal } from '../clinical/ClinicalExportModal';
 import {
   Settings,
   Building2,
@@ -32,6 +33,7 @@ import {
   CheckCircle2,
   Trash2,
   Upload,
+  Download,
   Image as ImageIcon,
   Clock,
   Edit2,
@@ -91,6 +93,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
       if (initialSection === 'services') return 'services';
       if (['resources', 'my-resources'].includes(initialSection)) return 'profile_professional';
       if (['import', 'importar-dados'].includes(initialSection)) return 'import';
+      if (['export', 'export_clinical', 'exportar-prontuarios'].includes(initialSection)) return 'export_clinical';
       if (['financial', 'comissoes', 'payroll'].includes(initialSection)) return 'financial';
       if (['billing', 'assinatura'].includes(initialSection)) return 'billing';
       if (['clinic', 'clinica'].includes(initialSection)) return 'clinic';
@@ -102,6 +105,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
   });
 
   const [hubSearchTerm, setHubSearchTerm] = useState<string>('');
+  const [showClinicalExportModal, setShowClinicalExportModal] = useState<boolean>(false);
 
   useEffect(() => {
     if (initialSection) {
@@ -109,6 +113,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
       else if (initialSection === 'services') setActiveSection('services');
       else if (['resources', 'my-resources'].includes(initialSection)) setActiveSection('profile_professional');
       else if (['import', 'importar-dados'].includes(initialSection)) setActiveSection('import');
+      else if (['export', 'export_clinical', 'exportar-prontuarios'].includes(initialSection)) setActiveSection('export_clinical');
       else if (['financial', 'comissoes', 'payroll'].includes(initialSection)) setActiveSection('financial');
       else if (['billing', 'assinatura'].includes(initialSection)) setActiveSection('billing');
       else if (['clinic', 'clinica'].includes(initialSection)) setActiveSection('clinic');
@@ -724,6 +729,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
     }
   };
 
+  const exportCard = {
+    id: 'export_clinical',
+    title: 'Exportação de Prontuários & Documentos',
+    desc: 'Exporte prontuários clínicos completos com histórico 360°, laudos e especialidades em Word (.docx Oficial), PDF, JSON ou ZIP.',
+    icon: Download,
+    iconBg: 'bg-indigo-50',
+    iconColor: 'text-indigo-600',
+    tags: ['DOCX Oficial', 'PDF', 'JSON', 'Prontuário 360°'],
+    defaultTab: 'export_clinical'
+  };
+
   const adminCards = [
     {
       id: 'clinic',
@@ -771,6 +787,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
       iconColor: 'text-amber-600',
       tags: ['Planilhas CSV', 'Pacientes', 'Migração']
     },
+    exportCard,
     {
       id: 'account',
       title: 'Conta & Segurança',
@@ -833,7 +850,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
     }
   ];
 
+
   const canImportData = isClinicAdmin || hasPermission('can_import_data');
+  const canExportData = isClinicAdmin || isProfessional || hasPermission('can_export_records');
 
   const importCard = {
     id: 'import',
@@ -846,9 +865,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
     defaultTab: 'import'
   };
 
-  const effectiveStaffCards = canImportData
-    ? [...staffCards.slice(0, 3), importCard, ...staffCards.slice(3)]
+  const staffCardsWithExport = canExportData
+    ? [...staffCards.slice(0, 3), exportCard, ...staffCards.slice(3)]
     : staffCards;
+  const effectiveStaffCards = canImportData
+    ? [...staffCardsWithExport.slice(0, 3), importCard, ...staffCardsWithExport.slice(3)]
+    : staffCardsWithExport;
 
   const cards = isClinicAdmin
     ? (currentUser?.professionalId ? [
@@ -931,8 +953,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
                   onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.currentTarget.click(); } }}
                   data-tour={`settings-${card.id}`}
                   onClick={() => {
+                    if (card.id === 'export_clinical') {
+                      setShowClinicalExportModal(true);
+                      return;
+                    }
                     setActiveSection(card.id as any);
-                    if (card.defaultTab) setActiveTab(card.defaultTab as any);
+                    if ((card as any).defaultTab) setActiveTab((card as any).defaultTab as any);
                   }}
                   className="bg-white rounded-3xl border border-slate-200 p-6 shadow-xs hover:shadow-md hover:border-indigo-300 transition-all cursor-pointer group flex flex-col justify-between gap-4"
                 >
@@ -1007,6 +1033,55 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
 
       {/* SEÇÃO: IMPORTAÇÃO DE DADOS */}
       {activeSection === 'import' && <ImportDataView onNavigate={onNavigateView} />}
+
+      {activeSection === 'export_clinical' && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-3xl border border-slate-200 p-8 shadow-xs">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-6 border-b border-slate-100">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
+                    <Download className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-slate-900">Exportação de Prontuários & Documentos Clínicos</h2>
+                    <p className="text-xs text-slate-500">Central unificada de exportação de prontuários em Word (.docx Oficial), PDF, JSON e Pacote ZIP.</p>
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowClinicalExportModal(true)}
+                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold flex items-center gap-2 shadow-xs transition-colors cursor-pointer"
+              >
+                <Sparkles className="w-4 h-4 text-indigo-200" />
+                Abrir Central de Exportação
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-6">
+              <div className="p-5 rounded-2xl bg-indigo-50/50 border border-indigo-100/60">
+                <div className="font-bold text-sm text-indigo-900 mb-1">Word (.docx Oficial)</div>
+                <p className="text-xs text-indigo-700/80 leading-relaxed">
+                  Documento padrão ECMA-376 OpenXML com formatação clínica formal, cabeçalho institucional, sumário do paciente e seções categorizadas.
+                </p>
+              </div>
+              <div className="p-5 rounded-2xl bg-rose-50/50 border border-rose-100/60">
+                <div className="font-bold text-sm text-rose-900 mb-1">PDF Vetorial Completo</div>
+                <p className="text-xs text-rose-700/80 leading-relaxed">
+                  Prontuário paginado para impressão e entrega judicial ou pericial, gerado via PDFKit com total isolamento e segurança.
+                </p>
+              </div>
+              <div className="p-5 rounded-2xl bg-emerald-50/50 border border-emerald-100/60">
+                <div className="font-bold text-sm text-emerald-900 mb-1">JSON & Pacote ZIP</div>
+                <p className="text-xs text-emerald-700/80 leading-relaxed">
+                  Interoperabilidade máxima para migração de dados e backup completo contendo os documentos e o arquivo manifest.json.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
 
       {/* SEÇÃO: ASSINATURA & PLANO */}
       {activeSection === 'billing' && (
@@ -2619,6 +2694,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
           </div>
         </div>
       )}
+      <ClinicalExportModal
+        isOpen={showClinicalExportModal}
+        onClose={() => setShowClinicalExportModal(false)}
+      />
     </div>
   );
 };

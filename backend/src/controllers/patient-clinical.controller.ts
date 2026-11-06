@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import { logAudit } from '../middlewares/audit.middleware';
 import { hasClinicalAccess } from './clinical.controller';
 import { hasConsentAccess, hasConsentDocumentAccess } from '../utils/consent-access';
+import { ClinicalExportService } from '../services/clinical-export.service';
 
 export class PatientClinicalController {
   // 1. LINHA DO TEMPO CRONOLÓGICA 360° DO PACIENTE
@@ -1055,18 +1056,8 @@ export class PatientClinicalController {
         WHERE patient_id = ? AND clinic_id = ?
       `).all(patientId, tenantId);
 
-      // Módulos de especialidade: cobertura de exemplo (padrão extensível), não exaustiva.
-      const physiotherapyAssessments = db.prepare(
-        'SELECT * FROM physiotherapy_assessments WHERE patient_id = ? AND tenant_id = ?'
-      ).all(patientId, tenantId);
-
-      const nutritionAssessments = db.prepare(
-        'SELECT * FROM nutrition_assessments WHERE patient_id = ? AND tenant_id = ?'
-      ).all(patientId, tenantId);
-
-      const psychologySessions = db.prepare(
-        'SELECT * FROM psychology_sessions WHERE patient_id = ? AND tenant_id = ?'
-      ).all(patientId, tenantId);
+      // Módulos de especialidade: cobertura completa de todas as especialidades clínicas
+      const fullData = ClinicalExportService.fetchFullClinicalData(tenantId, patientId);
 
       const exportPayload = {
         exportedAt: new Date().toISOString(),
@@ -1083,21 +1074,7 @@ export class PatientClinicalController {
         payments,
         receipts,
         attachments,
-        specialtyModules: {
-          // Exemplo do padrão para módulos por especialidade. NÃO incluídos ainda (extensível
-          // seguindo o mesmo padrão: SELECT * FROM <tabela> WHERE patient_id = ? AND tenant_id = ?):
-          //  - Odontologia: dental_tooth_records, dental_periodontal_records,
-          //    dental_endodontic_records, dental_anamnesis, dental_treatment_plans,
-          //    dental_prosthetics_lab, dental_orthodontics, dental_hof
-          //  - Fonoaudiologia: fono_audiology_records, fono_abfw_records
-          //  - Fisioterapia (parcial): physiotherapy_evolutions (só as avaliações estão abaixo)
-          //  - Avaliação física/Personal: body_assessments, body_markers,
-          //    personal_assessment_*, personal_workout_*
-          //  - Psicologia (parcial): psychology_goals, psychology_documents, psychology_audit_logs
-          physiotherapyAssessments,
-          nutritionAssessments,
-          psychologySessions
-        }
+        specialtyModules: fullData?.specialtyModules || {}
       };
 
       logAudit(req, 'EXPORT_PATIENT_DATA', 'patients', patientId, { patientId });

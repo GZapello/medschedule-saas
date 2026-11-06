@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
 import { db } from '../config/database';
+import { ClinicalExportService } from '../services/clinical-export.service';
+import { hasClinicalAccess } from './clinical.controller';
 
 export class ReportController {
   static getAttendanceReport(req: Request, res: Response): void {
@@ -180,8 +182,44 @@ export class ReportController {
 
   static exportDocx(req: Request, res: Response): void {
     try {
-      const tenantId = req.tenantId;
+      const tenantId = req.tenantId as string;
+      if (!tenantId) {
+        res.status(401).json({ error: 'Tenant não informado' });
+        return;
+      }
       const { type, patientId } = req.query; // 'patient_records' | 'attendance' | 'financial'
+
+      // Se for exportação de prontuário do paciente (OpenXML ECMA-376 Autêntico):
+      if (type === 'patient_records') {
+        const pId = patientId as string;
+        if (!pId) {
+          res.status(400).json({ error: 'ID do paciente é obrigatório para exportação do prontuário.' });
+          return;
+        }
+
+        if (!hasClinicalAccess(req, pId)) {
+          res.status(403).json({
+            error: 'Acesso clínico restrito: profissional não possui vínculo assistencial com este paciente (Sigilo LGPD).',
+            code: 'CLINICAL_PRIVACY_RESTRICTION'
+          });
+          return;
+        }
+
+        const data = ClinicalExportService.fetchFullClinicalData(tenantId, pId);
+        if (!data || !data.patient) {
+          res.status(404).json({ error: 'Paciente não encontrado para exportação.' });
+          return;
+        }
+
+        const docxBuffer = ClinicalExportService.generateDocxBuffer(data);
+        const fileName = `Prontuario_${(data.patient.full_name || data.patient.name || 'Paciente').replace(/[^a-zA-Z0-9_\-]/g, '_')}.docx`;
+
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+        res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+        res.send(docxBuffer);
+        return;
+      }
 
       const clinic = db.prepare('SELECT name, trade_name, cnpj_cpf, phone, email, street, number, neighborhood, city, state, address FROM tenants WHERE id = ?').get(tenantId) as any;
       const clinicName = clinic?.trade_name || clinic?.name || 'Clínica Emissora';
@@ -194,81 +232,8 @@ export class ReportController {
       let title = 'Relatório';
       let contentHtml = '';
 
-      if (type === 'patient_records' && patientId) {
-        const patient = db.prepare('SELECT * FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId) as any;
-        const records = db.prepare(`
-          SELECT r.*, p.name as prof_name, p.registration_type, p.registration_number, p.specialty
-          FROM records r
-          JOIN professionals p ON p.id = r.professional_id
-          WHERE r.patient_id = ? AND r.tenant_id = ?
-          ORDER BY r.session_date DESC
-        `).all(patientId, tenantId) as any[];
-
-        const allergies = db.prepare('SELECT * FROM patient_allergies WHERE patient_id = ? AND tenant_id = ?').all(patientId, tenantId) as any[];
-        const medications = db.prepare('SELECT * FROM patient_medications WHERE patient_id = ? AND tenant_id = ? AND status = "active"').all(patientId, tenantId) as any[];
-
-        title = `Prontuário Clínico - ${patient?.full_name || 'Paciente'}`;
-
-        contentHtml = `
-          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12pt; margin-bottom: 18pt;">
-            <h2 style="margin-top: 0; color: #0369a1; font-size: 14pt;">Dados do Paciente</h2>
-            <p><strong>Nome:</strong> ${patient?.full_name || '-'} | <strong>CPF:</strong> ${patient?.cpf || '-'} | <strong>Nascimento:</strong> ${patient?.birth_date || '-'}</p>
-            <p><strong>Telefone:</strong> ${patient?.phone || '-'} | <strong>E-mail:</strong> ${patient?.email || '-'}</p>
-            <p><strong>Status de Alergias:</strong> ${patient?.allergies_status === 'has_allergies' ? '<span style="color: #dc2626; font-weight: bold;">Possui alergias declaradas</span>' : (patient?.allergies_status === 'none_known' ? 'Nenhuma alergia conhecida' : 'Não informado')}</p>
-          </div>
-        `;
-
-        if (allergies.length > 0) {
-          contentHtml += `
-            <h3 style="color: #b91c1c; font-size: 12pt; border-bottom: 1px solid #fecaca; padding-bottom: 4pt;">Alergias Identificadas</h3>
-            <table>
-              <thead>
-                <tr><th>Substância</th><th>Reação</th><th>Gravidade</th><th>Data Identificação</th></tr>
-              </thead>
-              <tbody>
-                ${allergies.map(a => `<tr><td><strong>${a.substance}</strong></td><td>${a.reaction_type || '-'}</td><td>${a.severity}</td><td>${a.identified_at || '-'}</td></tr>`).join('')}
-              </tbody>
-            </table>
-            <br/>
-          `;
-        }
-
-        if (medications.length > 0) {
-          contentHtml += `
-            <h3 style="color: #047857; font-size: 12pt; border-bottom: 1px solid #a7f3d0; padding-bottom: 4pt;">Medicamentos em Uso</h3>
-            <table>
-              <thead>
-                <tr><th>Medicamento</th><th>Dosagem</th><th>Frequência</th><th>Via</th><th>Prescritor</th></tr>
-              </thead>
-              <tbody>
-                ${medications.map(m => `<tr><td><strong>${m.medication_name}</strong></td><td>${m.dosage || '-'}</td><td>${m.frequency || '-'}</td><td>${m.route || 'oral'}</td><td>${m.prescriber_name || '-'}</td></tr>`).join('')}
-              </tbody>
-            </table>
-            <br/>
-          `;
-        }
-
-        contentHtml += `<h3 style="color: #0f172a; font-size: 13pt; margin-top: 18pt;">Histórico de Evoluções Clínicas</h3>`;
-
-        if (records.length === 0) {
-          contentHtml += `<p style="color: #64748b; font-style: italic;">Nenhuma evolução clínica registrada até o momento.</p>`;
-        } else {
-          for (const rec of records) {
-            contentHtml += `
-              <div style="border: 1px solid #cbd5e1; border-radius: 6px; padding: 12pt; margin-bottom: 12pt; background-color: #ffffff;">
-                <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #e2e8f0; padding-bottom: 6pt; margin-bottom: 8pt;">
-                  <strong style="color: #0f172a; font-size: 12pt;">${rec.title || 'Consulta'}</strong>
-                  <span style="color: #64748b;">${rec.session_date} | Prof. ${rec.prof_name} (${rec.registration_type || 'CRM'} ${rec.registration_number || ''})</span>
-                </div>
-                <div style="font-size: 10.5pt; line-height: 1.5; white-space: pre-wrap;">${rec.clinical_evolution || 'Sem notas textuais.'}</div>
-                ${rec.technical_notes ? `<p style="margin-top: 6pt; color: #475569; font-size: 9.5pt;"><em>Notas Técnicas:</em> ${rec.technical_notes}</p>` : ''}
-              </div>
-            `;
-          }
-        }
-      } else {
-        // Relatório de Atendimentos Geral
-        title = 'Relatório Geral de Atendimentos';
+      // Relatório Geral de Atendimentos da Clínica
+      title = 'Relatório Geral de Atendimentos';
         const appts = db.prepare(`
           SELECT 
             a.appointment_number, a.start_time, a.status, a.modality,
@@ -294,7 +259,6 @@ export class ReportController {
             </tbody>
           </table>
         `;
-      }
 
       const docxHtml = `
         <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>

@@ -80,7 +80,10 @@ export class PaymentController {
   static create(req: Request, res: Response): void {
     try {
       const tenantId = req.tenantId;
-      const { appointmentId, patientId, amount, paymentMethod, status, transactionId, notes } = req.body;
+      const {
+        appointmentId, patientId, amount, paymentMethod, status, transactionId, notes,
+        amountTendered, changeAmount
+      } = req.body;
 
       if (!patientId || !amount) {
         res.status(400).json({ error: 'Paciente e valor são obrigatórios' });
@@ -88,11 +91,43 @@ export class PaymentController {
       }
 
       const id = 'pay-' + uuidv4().slice(0, 8);
-      const paymentDate = status === 'paid' ? new Date().toISOString() : null;
+      const isPaid = status === 'paid';
+      const paymentDate = isPaid ? new Date().toISOString() : null;
+
+      // Vincula ao caixa aberto atual se existir
+      let cashRegisterId: string | null = null;
+      try {
+        const openReg = db.prepare(`
+          SELECT id FROM cash_registers
+          WHERE tenant_id = ? AND status = 'open'
+          ORDER BY opened_at DESC LIMIT 1
+        `).get(tenantId) as any;
+        if (openReg) {
+          cashRegisterId = openReg.id;
+        }
+      } catch (e) {
+        // silencioso se tabela ainda não criada
+      }
+
+      const amt = Number(amount);
+      let amtTenderedVal: number | null = null;
+      let changeAmtVal: number | null = null;
+
+      const m = paymentMethod || 'pix';
+      if ((m === 'cash' || m === 'dinheiro') && amountTendered !== undefined && amountTendered !== null) {
+        amtTenderedVal = Number(amountTendered) || 0;
+        changeAmtVal = changeAmount !== undefined && changeAmount !== null
+          ? Number(changeAmount) || 0
+          : Math.max(0, amtTenderedVal - amt);
+      }
 
       const insertStmt = db.prepare(`
-        INSERT INTO payments (id, tenant_id, appointment_id, patient_id, amount, payment_method, status, transaction_id, payment_date, notes)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO payments (
+          id, tenant_id, appointment_id, patient_id, amount, payment_method,
+          status, transaction_id, payment_date, notes,
+          cash_register_id, amount_tendered, change_amount
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       insertStmt.run(
@@ -100,15 +135,18 @@ export class PaymentController {
         tenantId,
         appointmentId || null,
         patientId,
-        Number(amount),
-        paymentMethod || 'pix',
+        amt,
+        m,
         status || 'pending',
         transactionId || null,
         paymentDate,
-        notes || null
+        notes || null,
+        cashRegisterId,
+        amtTenderedVal,
+        changeAmtVal
       );
 
-      logAudit(req, 'CREATE_PAYMENT', 'payments', id, { amount, paymentMethod, status });
+      logAudit(req, 'CREATE_PAYMENT', 'payments', id, { amount: amt, paymentMethod: m, status, cashRegisterId });
       res.status(201).json({ id, message: 'Pagamento registrado com sucesso' });
     } catch (err: any) {
       console.error('[PaymentController.create] Erro:', err);
@@ -120,7 +158,21 @@ export class PaymentController {
     try {
       const { id } = req.params;
       const tenantId = req.tenantId;
-      const { status, paymentMethod, transactionId, notes } = req.body;
+      const { status, paymentMethod, transactionId, notes, amountTendered, changeAmount } = req.body;
+
+      // Se virou 'paid' e não possui vínculo com caixa, vincula ao caixa aberto atual
+      let activeRegisterId: string | null = null;
+      if (status === 'paid') {
+        try {
+          const currentPay = db.prepare('SELECT cash_register_id, amount FROM payments WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
+          if (currentPay && !currentPay.cash_register_id) {
+            const openReg = db.prepare(`
+              SELECT id FROM cash_registers WHERE tenant_id = ? AND status = 'open' ORDER BY opened_at DESC LIMIT 1
+            `).get(tenantId) as any;
+            if (openReg) activeRegisterId = openReg.id;
+          }
+        } catch (e) {}
+      }
 
       const updateStmt = db.prepare(`
         UPDATE payments SET
@@ -128,7 +180,10 @@ export class PaymentController {
           payment_method = COALESCE(?, payment_method),
           transaction_id = COALESCE(?, transaction_id),
           payment_date = CASE WHEN ? = 'paid' THEN datetime('now') ELSE payment_date END,
-          notes = COALESCE(?, notes)
+          notes = COALESCE(?, notes),
+          cash_register_id = COALESCE(?, cash_register_id),
+          amount_tendered = COALESCE(?, amount_tendered),
+          change_amount = COALESCE(?, change_amount)
         WHERE id = ? AND tenant_id = ?
       `);
 
@@ -138,11 +193,14 @@ export class PaymentController {
         transactionId || null,
         status || null,
         notes || null,
+        activeRegisterId || null,
+        amountTendered !== undefined ? Number(amountTendered) : null,
+        changeAmount !== undefined ? Number(changeAmount) : null,
         id,
         tenantId
       );
 
-      logAudit(req, 'UPDATE_PAYMENT_STATUS', 'payments', id, { status, paymentMethod });
+      logAudit(req, 'UPDATE_PAYMENT_STATUS', 'payments', id, { status, paymentMethod, cashRegisterId: activeRegisterId });
       res.json({ message: 'Status do pagamento atualizado com sucesso' });
     } catch (err: any) {
       console.error('[PaymentController.updateStatus] Erro:', err);
