@@ -723,7 +723,101 @@ export class GeminiService {
       return null;
     }
   }
+
+  /**
+   * Extração Multimodal Efêmera de Notas Fiscais e DANFEs (PDF ou Imagem)
+   * REGRA CRÍTICA: Os bytes do arquivo são passados diretamente em memória via inlineData.
+   * Nenhum arquivo é persistido em disco ou banco.
+   */
+  static async extractInvoiceFromDocument(params: {
+    file: { mimeType: string; base64: string; fileName?: string };
+    timeoutMs?: number;
+  }): Promise<any | null> {
+    const { file, timeoutMs = 45000 } = params;
+    if (!file || !file.base64) return null;
+
+    if (process.env.MOCK_GEMINI_OCR === 'true' || !getApiKey()) {
+      return getMockInvoiceExtraction(file);
+    }
+
+    try {
+      const parts: any[] = [
+        {
+          text: `Você é um especialista em documentos fiscais brasileiros (NF-e, NFC-e, DANFE e Cupons Fiscais de clínicas e consultórios).
+Analise o documento/imagem anexado e extraia com exatidão todos os dados da nota fiscal e a lista completa de produtos e insumos para estoque.
+
+Retorne ESTRITAMENTE um objeto JSON válido (sem tags markdown, sem explicações adicionais) com o seguinte formato:
+{
+  "invoiceNumber": "número da NF",
+  "series": "série da NF ou null",
+  "issueDate": "AAAA-MM-DD ou null",
+  "accessKey": "chave de acesso de 44 dígitos se visível ou null",
+  "supplier": {
+    "name": "Razão Social ou Nome do Fornecedor",
+    "tradeName": "Nome Fantasia ou null",
+    "cnpj": "CNPJ do emitente formatado ou números"
+  },
+  "totalAmount": 0.00,
+  "items": [
+    {
+      "code": "código interno se houver",
+      "ean": "código de barras EAN/GTIN se houver",
+      "ncm": "NCM do item se houver",
+      "name": "descrição completa do produto",
+      "cleanName": "nome padronizado limpo",
+      "brand": "marca ou fabricante se identificado",
+      "quantity": 1,
+      "unit": "UN, CX, FR, PCT, AMP, KG, L, ML",
+      "unitCost": 0.00,
+      "totalCost": 0.00,
+      "batchNumber": "lote se impresso",
+      "expirationDate": "AAAA-MM-DD se impresso",
+      "packMultiplier": 1
+    }
+  ]
+}`
+        },
+        {
+          inlineData: {
+            mimeType: file.mimeType,
+            data: file.base64
+          }
+        }
+      ];
+
+      const contents = [{ role: 'user', parts }];
+
+      const result = await generateWithCascade(
+        'Você é um extrator de alta precisão para documentos fiscais brasileiros de clínicas e consultórios. Retorne exclusivamente JSON válido.',
+        contents,
+        {
+          temperature: 0.1,
+          topP: 0.8,
+          maxOutputTokens: 8192,
+          responseMimeType: 'application/json'
+        },
+        timeoutMs,
+        true
+      );
+
+      if (result && result.text) {
+        const cleaned = result.text.replace(/```json/gi, '').replace(/```/g, '').trim();
+        const startIdx = cleaned.indexOf('{');
+        const endIdx = cleaned.lastIndexOf('}');
+        if (startIdx !== -1 && endIdx !== -1) {
+          const parsed = JSON.parse(cleaned.substring(startIdx, endIdx + 1));
+          return sanitizeExtractedInvoice(parsed);
+        }
+      }
+
+      return null;
+    } catch (err: any) {
+      console.warn('[GeminiService.extractInvoiceFromDocument] Falha na extração com IA:', err?.message || err);
+      return null;
+    }
+  }
 }
+
 
 export interface ExtractedMedicalRecord {
   patient: {
@@ -1123,4 +1217,71 @@ function parseStructuredSections(text: string): {
   }
 
   return defaultResult;
+}
+
+
+function sanitizeExtractedInvoice(parsed: any): any {
+  const inv = parsed?.invoiceInfo || parsed || {};
+  const items = Array.isArray(parsed?.items) ? parsed.items : [];
+
+  return {
+    invoiceInfo: {
+      invoiceNumber: inv.invoiceNumber ? String(inv.invoiceNumber).trim() : undefined,
+      series: inv.series ? String(inv.series).trim() : undefined,
+      issueDate: inv.issueDate && /^\d{4}-\d{2}-\d{2}$/.test(inv.issueDate) ? inv.issueDate : undefined,
+      accessKey: inv.accessKey && String(inv.accessKey).length >= 44 ? String(inv.accessKey).replace(/\D/g, '') : undefined,
+      supplier: {
+        name: inv.supplier?.name ? String(inv.supplier.name).trim() : 'Fornecedor Identificado',
+        tradeName: inv.supplier?.tradeName ? String(inv.supplier.tradeName).trim() : undefined,
+        cnpj: inv.supplier?.cnpj ? String(inv.supplier.cnpj).trim() : undefined
+      },
+      totalAmount: Number(inv.totalAmount) || 0
+    },
+    items: items.map((it: any, idx: number) => ({
+      code: it.code ? String(it.code).trim() : undefined,
+      ean: it.ean ? String(it.ean).replace(/\D/g, '') : undefined,
+      ncm: it.ncm ? String(it.ncm).replace(/\D/g, '') : undefined,
+      name: it.name ? String(it.name).trim() : `Item ${idx + 1}`,
+      cleanName: it.cleanName ? String(it.cleanName).trim() : (it.name ? String(it.name).trim() : `Item ${idx + 1}`),
+      brand: it.brand ? String(it.brand).trim() : undefined,
+      quantity: Number(it.quantity) > 0 ? Number(it.quantity) : 1,
+      unit: it.unit ? String(it.unit).toUpperCase().trim() : 'UN',
+      unitCost: Number(it.unitCost) >= 0 ? Number(it.unitCost) : 0,
+      totalCost: Number(it.totalCost) >= 0 ? Number(it.totalCost) : (Number(it.quantity || 1) * Number(it.unitCost || 0)),
+      batchNumber: it.batchNumber ? String(it.batchNumber).trim() : undefined,
+      expirationDate: it.expirationDate && /^\d{4}-\d{2}-\d{2}$/.test(it.expirationDate) ? it.expirationDate : undefined,
+      packMultiplier: Number(it.packMultiplier) > 1 ? Number(it.packMultiplier) : undefined
+    }))
+  };
+}
+
+function getMockInvoiceExtraction(file: { mimeType: string; base64?: string; fileName?: string }): any {
+  return {
+    invoiceInfo: {
+      invoiceNumber: '89452',
+      series: '1',
+      issueDate: '2026-05-10',
+      accessKey: '35240512345678000199550010000894521234567890',
+      supplier: {
+        name: 'Distrimed Distribuidora de Produtos Hospitalares e Estéticos Ltda',
+        tradeName: 'Distrimed Estética',
+        cnpj: '12.345.678/0001-99'
+      },
+      totalAmount: 18450.00
+    },
+    items: [
+      { code: 'EST-001', ean: '7891000000011', ncm: '30029090', name: 'Toxina Botulínica Tipo A 100U Pó Liofilizado', cleanName: 'Toxina Botulínica 100U', brand: 'Botulift', quantity: 5, unit: 'FR', unitCost: 650.00, totalCost: 3250.00, batchNumber: 'TB2601', expirationDate: '2027-12-31' },
+      { code: 'EST-002', ean: '7891000000022', ncm: '33049990', name: 'Ácido Hialurônico Reticulado 24mg/ml com Lidocaína 1ml', cleanName: 'Ácido Hialurônico Reticulado 1ml', brand: 'Restylane', quantity: 10, unit: 'AMP', unitCost: 450.00, totalCost: 4500.00, batchNumber: 'AH2602', expirationDate: '2027-08-31' },
+      { code: 'EST-003', ean: '7891000000033', ncm: '90183999', name: 'Fios de Sustentação PDO Espiculados 19G 100mm (Envelope com 4 un)', cleanName: 'Fios de PDO Espiculados', brand: 'Silhouette', quantity: 8, unit: 'ENV', unitCost: 320.00, totalCost: 2560.00, batchNumber: 'FP2603', expirationDate: '2028-01-31' },
+      { code: 'EST-004', ean: '7891000000044', ncm: '33049990', name: 'Bioestimulador de Colágeno Hidroxiapatita de Cálcio 1.5cc', cleanName: 'Bioestimulador Hidroxiapatita 1.5cc', brand: 'Radiesse', quantity: 4, unit: 'AMP', unitCost: 890.00, totalCost: 3560.00, batchNumber: 'BIO2604', expirationDate: '2027-06-30' },
+      { code: 'EST-005', ean: '7891000000055', ncm: '90183929', name: 'Microcânula Dermatológica Descartável 22G 50mm (Caixa com 20 un)', cleanName: 'Microcânula 22G 50mm', brand: 'SoftFil', quantity: 3, unit: 'CX', unitCost: 180.00, totalCost: 540.00, batchNumber: 'CAN2605', expirationDate: '2028-10-31', packMultiplier: 20 },
+      { code: 'EST-006', ean: '7891000000066', ncm: '90183219', name: 'Agulha Hipodérmica Descartável 30G 4mm para Mesoterapia (Caixa com 100 un)', cleanName: 'Agulha Hipodérmica 30G 4mm', brand: 'BD', quantity: 2, unit: 'CX', unitCost: 65.00, totalCost: 130.00, batchNumber: 'AG2606', expirationDate: '2028-05-31', packMultiplier: 100 },
+      { code: 'EST-007', ean: '7891000000077', ncm: '30049099', name: 'Anestésico Tópico Pomada Lidocaína 4% Bisnaga 30g', cleanName: 'Anestésico Tópico Lidocaína 4% 30g', brand: 'Dermomax', quantity: 6, unit: 'TB', unitCost: 45.00, totalCost: 270.00, batchNumber: 'LID2607', expirationDate: '2026-11-30' },
+      { code: 'EST-008', ean: '7891000000088', ncm: '38089419', name: 'Solução Antisséptica Clorexidina Aquosa 0.5% Frasco 100ml', cleanName: 'Clorexidina Aquosa 0.5% 100ml', brand: 'Rioquímica', quantity: 10, unit: 'FR', unitCost: 12.00, totalCost: 120.00, batchNumber: 'CLO2608', expirationDate: '2027-03-31' },
+      { code: 'EST-009', ean: '7891000000099', ncm: '40151100', name: 'Luva para Procedimento Não Cirúrgico Látex Tam P (Caixa com 100 un)', cleanName: 'Luva de Procedimento Látex P', brand: 'Supermax', quantity: 15, unit: 'CX', unitCost: 38.00, totalCost: 570.00, batchNumber: 'LUV2609', expirationDate: '2029-01-31', packMultiplier: 100 },
+      { code: 'EST-010', ean: '7891000000100', ncm: '30059090', name: 'Compressa de Gaze Hidrófila Estéril 7.5x7.5cm 13 Fios (Pacote com 50 un)', cleanName: 'Gaze Estéril 7.5x7.5cm', brand: 'Marth', quantity: 20, unit: 'PCT', unitCost: 8.50, totalCost: 170.00, batchNumber: 'GAZ2610', expirationDate: '2028-12-31', packMultiplier: 50 },
+      { code: 'EST-011', ean: '7891000000111', ncm: '63079010', name: 'Máscara Cirúrgica Descartável Tripla com Elástico Azul (Caixa com 50 un)', cleanName: 'Máscara Descartável Tripla', brand: 'Descarpack', quantity: 10, unit: 'CX', unitCost: 22.00, totalCost: 220.00, batchNumber: 'MAS2611', expirationDate: '2029-04-30', packMultiplier: 50 },
+      { code: 'EST-012', ean: '7891000000122', ncm: '90183119', name: 'Seringa Descartável 1ml Luer Lock Sem Agulha (Caixa com 100 un)', cleanName: 'Seringa 1ml Luer Lock', brand: 'Injex', quantity: 5, unit: 'CX', unitCost: 112.00, totalCost: 560.00, batchNumber: 'SER2612', expirationDate: '2028-09-30', packMultiplier: 100 }
+    ]
+  };
 }

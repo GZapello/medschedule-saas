@@ -40,6 +40,7 @@ export const InventoryView: React.FC = () => {
 
   // Importação Inteligente de Nota Fiscal
   const invoiceFileInputRef = React.useRef<HTMLInputElement | null>(null);
+  const invoiceAbortControllerRef = React.useRef<AbortController | null>(null);
   const [isParsingInvoice, setIsParsingInvoice] = useState<boolean>(false);
   const [isConfirmingInvoice, setIsConfirmingInvoice] = useState<boolean>(false);
   const [showInvoiceConferenceModal, setShowInvoiceConferenceModal] = useState<boolean>(false);
@@ -47,6 +48,16 @@ export const InventoryView: React.FC = () => {
     invoiceInfo: any;
     items: Array<any>;
   } | null>(null);
+
+  const cancelInvoiceUpload = () => {
+    if (invoiceAbortControllerRef.current) {
+      invoiceAbortControllerRef.current.abort();
+      invoiceAbortControllerRef.current = null;
+    }
+    setIsParsingInvoice(false);
+    if (invoiceFileInputRef.current) invoiceFileInputRef.current.value = '';
+    showToast('Processamento da nota fiscal cancelado.', 'info');
+  };
 
   // Tabs & Filtros
   const [activeTab, setActiveTab] = useState<'items' | 'history'>('items');
@@ -270,11 +281,42 @@ export const InventoryView: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // Cancela requisição anterior se houver
+    if (invoiceAbortControllerRef.current) {
+      invoiceAbortControllerRef.current.abort();
+    }
+
+    const abortController = new AbortController();
+    invoiceAbortControllerRef.current = abortController;
+
+    // Timeout de segurança no cliente (45 segundos)
+    const timeoutId = setTimeout(() => {
+      if (invoiceAbortControllerRef.current === abortController) {
+        abortController.abort();
+        setIsParsingInvoice(false);
+        showToast('Tempo limite excedido ao processar a nota fiscal. Tente novamente ou use o arquivo XML.', 'error');
+      }
+    }, 45000);
+
     try {
       setIsParsingInvoice(true);
       showToast('Processando nota fiscal em memória...', 'info');
 
       const reader = new FileReader();
+
+      reader.onerror = () => {
+        clearTimeout(timeoutId);
+        setIsParsingInvoice(false);
+        if (invoiceFileInputRef.current) invoiceFileInputRef.current.value = '';
+        showToast('Erro ao ler arquivo da nota fiscal.', 'error');
+      };
+
+      reader.onabort = () => {
+        clearTimeout(timeoutId);
+        setIsParsingInvoice(false);
+        if (invoiceFileInputRef.current) invoiceFileInputRef.current.value = '';
+      };
+
       reader.onload = async () => {
         try {
           const base64Content = (reader.result as string).split(',')[1];
@@ -282,7 +324,7 @@ export const InventoryView: React.FC = () => {
             fileBase64: base64Content,
             fileName: file.name,
             mimeType: file.type
-          });
+          }, { signal: abortController.signal });
 
           if (!res.items || res.items.length === 0) {
             showToast('Nenhum item foi detectado na nota fiscal.', 'error');
@@ -293,15 +335,22 @@ export const InventoryView: React.FC = () => {
           setShowInvoiceConferenceModal(true);
           showToast(`${res.items.length} itens detectados para conferência!`, 'success');
         } catch (err: any) {
+          if (err.name === 'AbortError' || abortController.signal.aborted) {
+            return;
+          }
           showToast(err.message || 'Erro ao processar arquivo da nota fiscal', 'error');
         } finally {
+          clearTimeout(timeoutId);
           setIsParsingInvoice(false);
+          invoiceAbortControllerRef.current = null;
           if (invoiceFileInputRef.current) invoiceFileInputRef.current.value = '';
         }
       };
       reader.readAsDataURL(file);
     } catch (err: any) {
+      clearTimeout(timeoutId);
       setIsParsingInvoice(false);
+      invoiceAbortControllerRef.current = null;
       showToast('Erro ao ler arquivo da nota fiscal', 'error');
     }
   };
@@ -376,16 +425,26 @@ export const InventoryView: React.FC = () => {
 
         <div className="flex flex-wrap items-center gap-2.5 self-start md:self-auto">
           <button
-            onClick={() => invoiceFileInputRef.current?.click()}
-            disabled={isParsingInvoice}
-            className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-xs transition-all cursor-pointer text-xs disabled:opacity-50"
+            onClick={() => {
+              if (isParsingInvoice) {
+                cancelInvoiceUpload();
+              } else {
+                invoiceFileInputRef.current?.click();
+              }
+            }}
+            className={`flex items-center gap-2 px-4 py-2.5 ${isParsingInvoice ? 'bg-amber-600 hover:bg-amber-700' : 'bg-emerald-600 hover:bg-emerald-700'} text-white font-bold rounded-xl shadow-xs transition-all cursor-pointer text-xs`}
           >
             {isParsingInvoice ? (
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              <>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Cancelar Processamento
+              </>
             ) : (
-              <FileUp className="w-4 h-4" />
+              <>
+                <FileUp className="w-4 h-4" />
+                Importar Nota Fiscal
+              </>
             )}
-            Importar Nota Fiscal
           </button>
 
           <button
@@ -397,6 +456,26 @@ export const InventoryView: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Banner de Processamento Ativo em Memória */}
+      {isParsingInvoice && (
+        <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-pulse">
+          <div className="flex items-center gap-3">
+            <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin shrink-0" />
+            <div>
+              <p className="text-sm font-bold text-indigo-950">Processando nota fiscal em memória com IA...</p>
+              <p className="text-xs text-indigo-700 mt-0.5">Identificando fornecedor, produtos, quantidades, lotes, validade e multiplicadores. Nenhum arquivo é salvo em disco (Zero Retention).</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={cancelInvoiceUpload}
+            className="px-3 py-1.5 bg-white border border-indigo-300 hover:bg-rose-50 hover:border-rose-300 hover:text-rose-600 text-xs font-semibold text-slate-700 rounded-lg shadow-2xs transition-colors cursor-pointer shrink-0 self-start sm:self-auto"
+          >
+            Cancelar
+          </button>
+        </div>
+      )}
 
       {/* Cards de Alertas de Estoque */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">

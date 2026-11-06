@@ -1742,10 +1742,10 @@ export class ImportController {
       if (Array.isArray(evolutions) && evolutions.length > 0) {
         for (let i = 0; i < evolutions.length; i++) {
           const ev = evolutions[i];
-          if (!ev || (!ev.evolution && !ev.conduct)) continue;
+          if (!ev || (!ev.evolution && !ev.conduct && !ev.notes && !ev.description)) continue;
 
           const evolDate = ev.date && String(ev.date).trim() ? String(ev.date).trim() : new Date().toISOString().slice(0, 10);
-          const evolText = String(ev.evolution || '').trim();
+          const evolText = String(ev.evolution || ev.notes || ev.description || '').trim();
           const evolConduct = String(ev.conduct || '').trim();
 
           let fullClinicalEvolution = evolText;

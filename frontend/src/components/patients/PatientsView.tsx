@@ -24,8 +24,9 @@ import {
 
 interface PatientsViewProps {
   onOpenNewPatient: () => void;
-  onNavigate?: (view: string) => void;
+  onNavigate?: (view: string, subId?: string | null) => void;
   initialPatientId?: string | null;
+  initialTab?: string | null;
   onSelectPatient?: (patientId: string | null) => void;
 }
 
@@ -33,6 +34,7 @@ export const PatientsView: React.FC<PatientsViewProps> = ({
   onOpenNewPatient,
   onNavigate,
   initialPatientId,
+  initialTab,
   onSelectPatient
 }) => {
   const { clientTermLabel } = useAuth();
@@ -297,6 +299,7 @@ export const PatientsView: React.FC<PatientsViewProps> = ({
       {selectedPatientId && (
         <PatientProfileModal
           patientId={selectedPatientId}
+          initialTab={(initialTab as any) || undefined}
           onClose={() => handleSelectPatient(null)}
           onUpdated={fetchPatients}
         />

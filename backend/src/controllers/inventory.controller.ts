@@ -366,17 +366,35 @@ export class InventoryController {
         return;
       }
 
+      // Limite de segurança de payload (25MB base64 ≈ 18MB binário)
+      if (typeof fileBase64 === 'string' && fileBase64.length > 25 * 1024 * 1024) {
+        res.status(413).json({ error: 'Arquivo excede o tamanho máximo suportado de 20MB.' });
+        return;
+      }
+
       const buffer = Buffer.from(fileBase64, 'base64');
-      const extraction = await InvoiceParserService.parseInvoice({
-        buffer,
-        fileName,
-        mimeType,
-        tenantId
-      });
+      
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('TIMEOUT_EXCEEDED')), 45000)
+      );
+
+      const extraction = await Promise.race([
+        InvoiceParserService.parseInvoice({
+          buffer,
+          fileName,
+          mimeType,
+          tenantId
+        }),
+        timeoutPromise
+      ]);
 
       res.json(extraction);
     } catch (err: any) {
       console.error('[InventoryController.parseInvoice] Erro:', err);
+      if (err?.message === 'TIMEOUT_EXCEEDED') {
+        res.status(504).json({ error: 'Tempo limite esgotado ao analisar o documento fiscal. Tente novamente ou prefira o arquivo XML da NF-e.' });
+        return;
+      }
       res.status(500).json({ error: 'Erro ao processar nota fiscal: ' + (err?.message || 'Falha de leitura') });
     }
   }

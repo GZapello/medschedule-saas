@@ -77,7 +77,7 @@ interface ImportBatch {
 }
 
 interface ImportDataViewProps {
-  onNavigate?: (view: string) => void;
+  onNavigate?: (view: string, subId?: string | null, forceOrTab?: boolean | string, tab?: string) => void;
 }
 
 export const ImportDataView: React.FC<ImportDataViewProps> = ({ onNavigate }) => {

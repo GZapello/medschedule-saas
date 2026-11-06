@@ -80,7 +80,7 @@ export const COMMON_INSURANCE_PRESETS = [
 
 export interface SettingsViewProps {
   initialSection?: string;
-  onNavigateView?: (view: string) => void;
+  onNavigateView?: (view: string, subId?: string | null, forceOrTab?: boolean | string, tab?: string) => void;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNavigateView }) => {

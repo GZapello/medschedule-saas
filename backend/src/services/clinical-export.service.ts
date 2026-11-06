@@ -2,6 +2,7 @@ import AdmZip from 'adm-zip';
 import PDFDocument from 'pdfkit';
 import crypto from 'crypto';
 import { db } from '../config/database';
+import { GeminiService } from './gemini.service';
 
 function escapeXml(str: any): string {
   if (str === null || str === undefined) return '';
@@ -14,11 +15,49 @@ function escapeXml(str: any): string {
 }
 
 export interface ClinicalExportOptions {
-  modules?: string[]; // 'records', 'documents', 'exams', 'consents', 'dental', 'physio', 'fono', 'nutri', 'psico', 'to', 'pp', 'personal', 'estetic'
+  modules?: string[] | Record<string, boolean>; // 'records', 'documents', 'allergies', 'exams', 'consents', 'dental', 'physio', 'fono', 'nutri', 'psico', 'to', 'pp', 'personal', 'estetic'
   dateFrom?: string;
   dateTo?: string;
   order?: 'asc' | 'desc';
   coverNotes?: string;
+}
+
+function normalizeModules(modules?: any): Record<string, boolean> {
+  const defaults: Record<string, boolean> = {
+    records: true,
+    documents: true,
+    allergies: true,
+    exams: true,
+    consents: true,
+    dental: true,
+    physio: true,
+    fono: true,
+    nutri: true,
+    psico: true,
+    to: true,
+    pp: true,
+    personal: true,
+    estetic: true
+  };
+  if (!modules) return defaults;
+  if (Array.isArray(modules)) {
+    const res: Record<string, boolean> = {};
+    for (const m of modules) res[m] = true;
+    return res;
+  }
+  if (typeof modules === 'string') {
+    try {
+      return normalizeModules(JSON.parse(modules));
+    } catch {
+      const res: Record<string, boolean> = {};
+      for (const m of modules.split(',')) res[m.trim()] = true;
+      return res;
+    }
+  }
+  if (typeof modules === 'object') {
+    return { ...defaults, ...modules };
+  }
+  return defaults;
 }
 
 export class ClinicalExportService {
@@ -232,12 +271,25 @@ export class ClinicalExportService {
    */
   static generateDocxBuffer(data: any, options: ClinicalExportOptions = {}): Buffer {
     const { clinic, patient, records = [], prescriptions = [], certificates = [], examRequests = [], exams = [], consents = [], allergies = [], medications = [], specialtyModules = {} } = data;
+    
+    const modMap = normalizeModules(options.modules);
+    const fromTime = options.dateFrom ? new Date(options.dateFrom).getTime() : 0;
+    const toTime = options.dateTo ? new Date(options.dateTo + 'T23:59:59').getTime() : Infinity;
+    const inDateRange = (dateStr: any) => {
+      if (!dateStr) return true;
+      const t = new Date(dateStr).getTime();
+      if (isNaN(t)) return true;
+      return t >= fromTime && t <= toTime;
+    };
+
     const isAsc = options.order === 'asc';
-    const sortedRecords = [...records].sort((a, b) => {
-      const dateA = new Date(a.session_date || a.created_at).getTime();
-      const dateB = new Date(b.session_date || b.created_at).getTime();
-      return isAsc ? dateA - dateB : dateB - dateA;
-    });
+    const sortedRecords = [...records]
+      .filter((r: any) => inDateRange(r.session_date || r.created_at))
+      .sort((a, b) => {
+        const dateA = new Date(a.session_date || a.created_at).getTime();
+        const dateB = new Date(b.session_date || b.created_at).getTime();
+        return isAsc ? dateA - dateB : dateB - dateA;
+      });
 
     const clinicName = escapeXml(clinic?.trade_name || clinic?.name || 'Clínica Zemda');
     const clinicAddress = escapeXml([clinic?.street, clinic?.number, clinic?.city, clinic?.state].filter(Boolean).join(', ') || 'Brasil');
@@ -350,7 +402,7 @@ export class ClinicalExportService {
     `;
 
     // Alergias e Medicamentos
-    if (allergies.length > 0 || medications.length > 0) {
+    if ((allergies.length > 0 || medications.length > 0) && modMap.allergies) {
       bodyElements += `
         <w:p><w:pPr><w:spacing w:before="140" w:after="60"/></w:pPr>
           <w:r><w:rPr><w:b/><w:color w:val="B91C1C"/></w:rPr><w:t>ALERGIAS REGISTRADAS: </w:t></w:r>
@@ -364,45 +416,47 @@ export class ClinicalExportService {
     }
 
     // Evoluções Clínicas
-    bodyElements += `
-      <w:p>
-        <w:pPr><w:pBdr><w:bottom w:val="single" w:sz="12" w:space="4" w:color="0284C7"/></w:pBdr><w:spacing w:before="260" w:after="120"/></w:pPr>
-        <w:r><w:rPr><w:b/><w:sz w:val="24"/><w:color w:val="0F172A"/></w:rPr><w:t>2. EVOLUÇÕES CLÍNICAS &amp; ATENDIMENTOS (${sortedRecords.length})</w:t></w:r>
-      </w:p>
-    `;
+    if (modMap.records) {
+      bodyElements += `
+        <w:p>
+          <w:pPr><w:pBdr><w:bottom w:val="single" w:sz="12" w:space="4" w:color="0284C7"/></w:pBdr><w:spacing w:before="260" w:after="120"/></w:pPr>
+          <w:r><w:rPr><w:b/><w:sz w:val="24"/><w:color w:val="0F172A"/></w:rPr><w:t>2. EVOLUÇÕES CLÍNICAS &amp; ATENDIMENTOS (${sortedRecords.length})</w:t></w:r>
+        </w:p>
+      `;
 
-    if (sortedRecords.length === 0) {
-      bodyElements += `<w:p><w:r><w:rPr><w:i/></w:rPr><w:t>Nenhuma evolução clínica registrada até o momento.</w:t></w:r></w:p>`;
-    } else {
-      for (const rec of sortedRecords) {
-        const sessionDate = rec.session_date ? new Date(rec.session_date).toLocaleDateString('pt-BR') : 'Data não informada';
-        const profInfo = escapeXml(`Prof. ${rec.professional_name || 'Profissional'} (${rec.registration_type || 'Conselho'} ${rec.registration_number || ''})`);
-        const title = escapeXml(rec.title || 'Consulta / Atendimento Clínico');
-        const evolutionText = escapeXml(rec.clinical_evolution || 'Sem notas textuais.');
+      if (sortedRecords.length === 0) {
+        bodyElements += `<w:p><w:r><w:rPr><w:i/></w:rPr><w:t>Nenhuma evolução clínica registrada até o momento.</w:t></w:r></w:p>`;
+      } else {
+        for (const rec of sortedRecords) {
+          const sessionDate = rec.session_date ? new Date(rec.session_date).toLocaleDateString('pt-BR') : 'Data não informada';
+          const profInfo = escapeXml(`Prof. ${rec.professional_name || 'Profissional'} (${rec.registration_type || 'Conselho'} ${rec.registration_number || ''})`);
+          const title = escapeXml(rec.title || 'Consulta / Atendimento Clínico');
+          const evolutionText = escapeXml(rec.clinical_evolution || 'Sem notas textuais.');
 
-        bodyElements += `
-          <w:p><w:pPr><w:spacing w:before="180" w:after="40"/></w:pPr>
-            <w:r><w:rPr><w:b/><w:sz w:val="22"/><w:color w:val="0284C7"/></w:rPr><w:t>${sessionDate} — ${title}</w:t></w:r>
-          </w:p>
-          <w:p><w:pPr><w:spacing w:after="60"/></w:pPr>
-            <w:r><w:rPr><w:sz w:val="18"/><w:color w:val="64748B"/></w:rPr><w:t>${profInfo}</w:t></w:r>
-          </w:p>
-          <w:p><w:pPr><w:spacing w:after="100"/></w:pPr>
-            <w:r><w:t>${evolutionText}</w:t></w:r>
-          </w:p>
-        `;
-        if (rec.technical_notes) {
           bodyElements += `
+            <w:p><w:pPr><w:spacing w:before="180" w:after="40"/></w:pPr>
+              <w:r><w:rPr><w:b/><w:sz w:val="22"/><w:color w:val="0284C7"/></w:rPr><w:t>${sessionDate} — ${title}</w:t></w:r>
+            </w:p>
+            <w:p><w:pPr><w:spacing w:after="60"/></w:pPr>
+              <w:r><w:rPr><w:sz w:val="18"/><w:color w:val="64748B"/></w:rPr><w:t>${profInfo}</w:t></w:r>
+            </w:p>
             <w:p><w:pPr><w:spacing w:after="100"/></w:pPr>
-              <w:r><w:rPr><w:i/><w:color w:val="475569"/></w:rPr><w:t>Notas Técnicas: ${escapeXml(rec.technical_notes)}</w:t></w:r>
+              <w:r><w:t>${evolutionText}</w:t></w:r>
             </w:p>
           `;
+          if (rec.technical_notes) {
+            bodyElements += `
+              <w:p><w:pPr><w:spacing w:after="100"/></w:pPr>
+                <w:r><w:rPr><w:i/><w:color w:val="475569"/></w:rPr><w:t>Notas Técnicas: ${escapeXml(rec.technical_notes)}</w:t></w:r>
+              </w:p>
+            `;
+          }
         }
       }
     }
 
     // Prescrições e Documentos
-    if (prescriptions.length > 0 || certificates.length > 0) {
+    if ((prescriptions.length > 0 || certificates.length > 0) && modMap.documents) {
       bodyElements += `
         <w:p>
           <w:pPr><w:pBdr><w:bottom w:val="single" w:sz="12" w:space="4" w:color="0284C7"/></w:pBdr><w:spacing w:before="260" w:after="120"/></w:pPr>
@@ -434,7 +488,7 @@ export class ClinicalExportService {
     }
 
     // Odontologia
-    if (specialtyModules.dental && specialtyModules.dental.treatmentPlans?.length > 0) {
+    if (modMap.dental && specialtyModules.dental && specialtyModules.dental.treatmentPlans?.length > 0) {
       bodyElements += `
         <w:p>
           <w:pPr><w:pBdr><w:bottom w:val="single" w:sz="12" w:space="4" w:color="0284C7"/></w:pBdr><w:spacing w:before="260" w:after="120"/></w:pPr>
@@ -454,7 +508,7 @@ export class ClinicalExportService {
     }
 
     // Fisioterapia
-    if (specialtyModules.physio && (specialtyModules.physio.assessments?.length > 0 || specialtyModules.physio.evolutions?.length > 0)) {
+    if (modMap.physio && specialtyModules.physio && (specialtyModules.physio.assessments?.length > 0 || specialtyModules.physio.evolutions?.length > 0)) {
       bodyElements += `
         <w:p>
           <w:pPr><w:pBdr><w:bottom w:val="single" w:sz="12" w:space="4" w:color="0284C7"/></w:pBdr><w:spacing w:before="260" w:after="120"/></w:pPr>
@@ -474,7 +528,7 @@ export class ClinicalExportService {
     }
 
     // Nutrição
-    if (specialtyModules.nutri && specialtyModules.nutri.mealPlans?.length > 0) {
+    if (modMap.nutri && specialtyModules.nutri && specialtyModules.nutri.mealPlans?.length > 0) {
       bodyElements += `
         <w:p>
           <w:pPr><w:pBdr><w:bottom w:val="single" w:sz="12" w:space="4" w:color="0284C7"/></w:pBdr><w:spacing w:before="260" w:after="120"/></w:pPr>
@@ -494,7 +548,7 @@ export class ClinicalExportService {
     }
 
     // Estética
-    if (specialtyModules.estetic && specialtyModules.estetic.procedures?.length > 0) {
+    if (modMap.estetic && specialtyModules.estetic && specialtyModules.estetic.procedures?.length > 0) {
       bodyElements += `
         <w:p>
           <w:pPr><w:pBdr><w:bottom w:val="single" w:sz="12" w:space="4" w:color="0284C7"/></w:pBdr><w:spacing w:before="260" w:after="120"/></w:pPr>
@@ -552,6 +606,25 @@ export class ClinicalExportService {
   static async generatePdfBuffer(data: any, options: ClinicalExportOptions = {}): Promise<Buffer> {
     const { clinic, patient, records = [], prescriptions = [], certificates = [], allergies = [], medications = [], specialtyModules = {} } = data;
 
+    const modMap = normalizeModules(options.modules);
+    const fromTime = options.dateFrom ? new Date(options.dateFrom).getTime() : 0;
+    const toTime = options.dateTo ? new Date(options.dateTo + 'T23:59:59').getTime() : Infinity;
+    const inDateRange = (dateStr: any) => {
+      if (!dateStr) return true;
+      const t = new Date(dateStr).getTime();
+      if (isNaN(t)) return true;
+      return t >= fromTime && t <= toTime;
+    };
+
+    const isAsc = options.order === 'asc';
+    const sortedRecords = [...records]
+      .filter((r: any) => inDateRange(r.session_date || r.created_at))
+      .sort((a, b) => {
+        const dateA = new Date(a.session_date || a.created_at).getTime();
+        const dateB = new Date(b.session_date || b.created_at).getTime();
+        return isAsc ? dateA - dateB : dateB - dateA;
+      });
+
     return new Promise((resolve, reject) => {
       const doc = new PDFDocument({
         size: 'A4',
@@ -591,7 +664,7 @@ export class ClinicalExportService {
       doc.moveDown(1);
 
       // Alergias
-      if (allergies.length > 0 || medications.length > 0) {
+      if (modMap.allergies && (allergies.length > 0 || medications.length > 0)) {
         doc.fontSize(9).font('Helvetica-Bold').fillColor('#b91c1c').text('ALERGIAS: ', { continued: true });
         doc.font('Helvetica').fillColor('#0f172a').text(allergies.map((a: any) => a.agent || a.allergen || a.name).join(', ') || 'Nenhuma relatada.');
         doc.fontSize(9).font('Helvetica-Bold').fillColor('#0284c7').text('MEDICAÇÕES: ', { continued: true });
@@ -600,29 +673,31 @@ export class ClinicalExportService {
       }
 
       // Evoluções Clínicas
-      doc.fontSize(11).font('Helvetica-Bold').fillColor('#0f172a').text(`EVOLUÇÕES CLÍNICAS (${records.length})`);
-      doc.strokeColor('#0284c7').lineWidth(1).moveTo(40, doc.y).lineTo(555, doc.y).stroke();
-      doc.moveDown(0.5);
+      if (modMap.records) {
+        doc.fontSize(11).font('Helvetica-Bold').fillColor('#0f172a').text(`EVOLUÇÕES CLÍNICAS (${sortedRecords.length})`);
+        doc.strokeColor('#0284c7').lineWidth(1).moveTo(40, doc.y).lineTo(555, doc.y).stroke();
+        doc.moveDown(0.5);
 
-      if (records.length === 0) {
-        doc.fontSize(9).font('Helvetica-Oblique').fillColor('#64748b').text('Nenhuma evolução clínica registrada.');
-        doc.moveDown(1);
-      } else {
-        for (const rec of records) {
-          if (doc.y > 720) doc.addPage();
-          const dStr = rec.session_date ? new Date(rec.session_date).toLocaleDateString('pt-BR') : 'Data n/i';
-          doc.fontSize(9).font('Helvetica-Bold').fillColor('#0369a1').text(`${dStr} — ${rec.title || 'Consulta'}`);
-          doc.fontSize(7.5).font('Helvetica').fillColor('#64748b').text(`Prof. ${rec.professional_name || 'Profissional'} (${rec.registration_type || 'CRM'} ${rec.registration_number || ''})`);
-          doc.fontSize(8.5).font('Helvetica').fillColor('#1e293b').text(rec.clinical_evolution || 'Sem notas textuais.', { lineGap: 2 });
-          if (rec.technical_notes) {
-            doc.fontSize(8).font('Helvetica-Oblique').fillColor('#64748b').text(`Notas Técnicas: ${rec.technical_notes}`);
+        if (sortedRecords.length === 0) {
+          doc.fontSize(9).font('Helvetica-Oblique').fillColor('#64748b').text('Nenhuma evolução clínica registrada.');
+          doc.moveDown(1);
+        } else {
+          for (const rec of sortedRecords) {
+            if (doc.y > 720) doc.addPage();
+            const dStr = rec.session_date ? new Date(rec.session_date).toLocaleDateString('pt-BR') : 'Data n/i';
+            doc.fontSize(9).font('Helvetica-Bold').fillColor('#0369a1').text(`${dStr} — ${rec.title || 'Consulta'}`);
+            doc.fontSize(7.5).font('Helvetica').fillColor('#64748b').text(`Prof. ${rec.professional_name || 'Profissional'} (${rec.registration_type || 'CRM'} ${rec.registration_number || ''})`);
+            doc.fontSize(8.5).font('Helvetica').fillColor('#1e293b').text(rec.clinical_evolution || 'Sem notas textuais.', { lineGap: 2 });
+            if (rec.technical_notes) {
+              doc.fontSize(8).font('Helvetica-Oblique').fillColor('#64748b').text(`Notas Técnicas: ${rec.technical_notes}`);
+            }
+            doc.moveDown(0.8);
           }
-          doc.moveDown(0.8);
         }
       }
 
       // Prescrições e Atestados
-      if (prescriptions.length > 0 || certificates.length > 0) {
+      if (modMap.documents && (prescriptions.length > 0 || certificates.length > 0)) {
         if (doc.y > 700) doc.addPage();
         doc.fontSize(11).font('Helvetica-Bold').fillColor('#0f172a').text('PRESCRIÇÕES & ATESTADOS');
         doc.strokeColor('#0284c7').lineWidth(1).moveTo(40, doc.y).lineTo(555, doc.y).stroke();
@@ -633,6 +708,62 @@ export class ClinicalExportService {
           doc.fontSize(8.5).font('Helvetica-Bold').fillColor('#0369a1').text(`Receita em ${new Date(p.created_at).toLocaleDateString('pt-BR')} (Prof. ${p.professional_name || ''}):`);
           doc.fontSize(8).font('Helvetica').fillColor('#1e293b').text(p.medications_text || p.content_text || 'Prescrição.');
           doc.moveDown(0.5);
+        }
+      }
+
+      // Odontologia
+      if (modMap.dental && specialtyModules.dental?.treatmentPlans?.length > 0) {
+        if (doc.y > 700) doc.addPage();
+        doc.fontSize(11).font('Helvetica-Bold').fillColor('#0f172a').text('ODONTOLOGIA — PLANOS DE TRATAMENTO');
+        doc.strokeColor('#0284c7').lineWidth(1).moveTo(40, doc.y).lineTo(555, doc.y).stroke();
+        doc.moveDown(0.5);
+        for (const tp of specialtyModules.dental.treatmentPlans) {
+          if (doc.y > 720) doc.addPage();
+          doc.fontSize(8.5).font('Helvetica-Bold').fillColor('#0369a1').text(`Plano: ${tp.title || 'Tratamento'} (${tp.status || 'Ativo'})`);
+          doc.fontSize(8).font('Helvetica').fillColor('#1e293b').text(tp.description || tp.notes || 'Procedimentos.');
+          doc.moveDown(0.4);
+        }
+      }
+
+      // Fisioterapia
+      if (modMap.physio && specialtyModules.physio?.evolutions?.length > 0) {
+        if (doc.y > 700) doc.addPage();
+        doc.fontSize(11).font('Helvetica-Bold').fillColor('#0f172a').text('FISIOTERAPIA — EVOLUÇÕES');
+        doc.strokeColor('#0284c7').lineWidth(1).moveTo(40, doc.y).lineTo(555, doc.y).stroke();
+        doc.moveDown(0.5);
+        for (const ev of specialtyModules.physio.evolutions) {
+          if (doc.y > 720) doc.addPage();
+          doc.fontSize(8.5).font('Helvetica-Bold').fillColor('#0369a1').text(`Data: ${new Date(ev.created_at).toLocaleDateString('pt-BR')}`);
+          doc.fontSize(8).font('Helvetica').fillColor('#1e293b').text(ev.notes || ev.conduct || 'Conduta.');
+          doc.moveDown(0.4);
+        }
+      }
+
+      // Nutrição
+      if (modMap.nutri && specialtyModules.nutri?.mealPlans?.length > 0) {
+        if (doc.y > 700) doc.addPage();
+        doc.fontSize(11).font('Helvetica-Bold').fillColor('#0f172a').text('NUTRIÇÃO — PLANOS ALIMENTARES');
+        doc.strokeColor('#0284c7').lineWidth(1).moveTo(40, doc.y).lineTo(555, doc.y).stroke();
+        doc.moveDown(0.5);
+        for (const mp of specialtyModules.nutri.mealPlans) {
+          if (doc.y > 720) doc.addPage();
+          doc.fontSize(8.5).font('Helvetica-Bold').fillColor('#0369a1').text(`Plano: ${mp.title || 'Dieta'} (${new Date(mp.created_at).toLocaleDateString('pt-BR')})`);
+          doc.fontSize(8).font('Helvetica').fillColor('#1e293b').text(mp.notes || mp.guidelines || 'Orientações nutricionais.');
+          doc.moveDown(0.4);
+        }
+      }
+
+      // Estética
+      if (modMap.estetic && specialtyModules.estetic?.procedures?.length > 0) {
+        if (doc.y > 700) doc.addPage();
+        doc.fontSize(11).font('Helvetica-Bold').fillColor('#0f172a').text('ESTÉTICA AVANÇADA — PROCEDIMENTOS');
+        doc.strokeColor('#0284c7').lineWidth(1).moveTo(40, doc.y).lineTo(555, doc.y).stroke();
+        doc.moveDown(0.5);
+        for (const pr of specialtyModules.estetic.procedures) {
+          if (doc.y > 720) doc.addPage();
+          doc.fontSize(8.5).font('Helvetica-Bold').fillColor('#0369a1').text(`${pr.procedure_name || pr.area} (${new Date(pr.created_at).toLocaleDateString('pt-BR')})`);
+          doc.fontSize(8).font('Helvetica').fillColor('#1e293b').text(`Área: ${pr.area || 'N/A'} | Lote: ${pr.lot_number || 'N/A'} | Notas: ${pr.notes || '—'}`);
+          doc.moveDown(0.4);
         }
       }
 
@@ -731,5 +862,133 @@ export class ClinicalExportService {
     zip.addFile('manifest.json', Buffer.from(JSON.stringify(manifest, null, 2), 'utf-8'));
 
     return zip.toBuffer();
+  }
+
+  /**
+   * Exportação em lote de prontuários da clínica (ZIP com manifest.json)
+   * Processamento efêmero em streaming/memória com Zero Retention.
+   */
+  static async generateBatchZip(
+    tenantId: string,
+    options: {
+      patientIds?: string[];
+      dateFrom?: string;
+      dateTo?: string;
+      format?: 'docx' | 'pdf' | 'all';
+      coverNotes?: string;
+      modules?: any;
+    } = {}
+  ): Promise<Buffer> {
+    const clinic = db.prepare('SELECT * FROM tenants WHERE id = ?').get(tenantId) as any || { name: 'Clínica Zemda' };
+
+    let patientRows: any[] = [];
+    if (options.patientIds && options.patientIds.length > 0) {
+      const placeholders = options.patientIds.map(() => '?').join(',');
+      patientRows = db.prepare(`
+        SELECT DISTINCT id, full_name, cpf, birth_date
+        FROM patients
+        WHERE id IN (${placeholders}) AND tenant_id = ?
+        ORDER BY full_name ASC
+      `).all(...options.patientIds, tenantId) as any[];
+    } else {
+      // Busca pacientes com histórico no período ou ativos
+      patientRows = db.prepare(`
+        SELECT DISTINCT p.id, p.full_name, p.cpf, p.birth_date
+        FROM patients p
+        WHERE p.tenant_id = ? AND (p.active IS NULL OR p.active = 1)
+        ORDER BY p.full_name ASC
+        LIMIT 100
+      `).all(tenantId) as any[];
+    }
+
+    const zip = new AdmZip();
+    const manifestPatients: any[] = [];
+    const exportFormat = options.format || 'docx';
+
+    for (const p of patientRows) {
+      const fullData = this.fetchFullClinicalData(tenantId, p.id);
+      if (!fullData) continue;
+
+      const pCleanName = (fullData.patient.full_name || fullData.patient.name || 'Paciente')
+        .replace(/[^a-zA-Z0-9_\-]/g, '_')
+        .slice(0, 40);
+
+      const patientFolder = `paciente_${pCleanName}_${p.id.slice(-6)}`;
+      const patientFiles: Record<string, string> = {};
+
+      if (exportFormat === 'docx' || exportFormat === 'all') {
+        const docxBuf = this.generateDocxBuffer(fullData, options);
+        zip.addFile(`${patientFolder}/prontuario_${pCleanName}.docx`, docxBuf);
+        patientFiles.docx = `${patientFolder}/prontuario_${pCleanName}.docx`;
+      }
+
+      if (exportFormat === 'pdf' || exportFormat === 'all') {
+        const pdfBuf = await this.generatePdfBuffer(fullData, options);
+        zip.addFile(`${patientFolder}/prontuario_${pCleanName}.pdf`, pdfBuf);
+        patientFiles.pdf = `${patientFolder}/prontuario_${pCleanName}.pdf`;
+      }
+
+      manifestPatients.push({
+        patientId: p.id,
+        patientName: fullData.patient.full_name || fullData.patient.name,
+        cpf: fullData.patient.cpf,
+        recordsCount: fullData.records?.length || 0,
+        prescriptionsCount: fullData.prescriptions?.length || 0,
+        files: patientFiles
+      });
+    }
+
+    const manifest = {
+      schemaVersion: '2.0.0',
+      system: 'Zemda SaaS Saúde',
+      exportType: 'BATCH_CLINICAL_EXPORT',
+      tenantId,
+      clinicName: clinic.name || clinic.trade_name,
+      exportedAt: new Date().toISOString(),
+      totalPatients: manifestPatients.length,
+      filters: {
+        dateFrom: options.dateFrom || null,
+        dateTo: options.dateTo || null,
+        format: exportFormat
+      },
+      compliance: 'CFM 1.821/2007 & LGPD Lei 13.709/2018',
+      retentionPolicy: 'ZERO RETENTION ON CLOUD - STREAMED DIRECTLY TO AUTHORIZED CLIENT',
+      patients: manifestPatients
+    };
+
+    zip.addFile('manifest.json', Buffer.from(JSON.stringify(manifest, null, 2), 'utf-8'));
+    return zip.toBuffer();
+  }
+
+  /**
+   * Assistente de IA para revisão estrita de formatação de folha de rosto / notas clínicas
+   * REGRA INEGOCIÁVEL: Não inventa dados clínicos, diagnósticos ou condutas.
+   */
+  static async reviewClinicalFormattingWithAi(inputText: string): Promise<string> {
+    if (process.env.MOCK_GEMINI_OCR === 'true' || !GeminiService.isAvailable()) {
+      return inputText.trim() + '\n\n[Revisão documental: Emitido formalmente para fins assistenciais e periciais nos termos da LGPD e resoluções dos conselhos de classe de saúde].';
+    }
+
+    const prompt = `Você é um assistente de documentação e padronização formal de prontuários clínicos e laudos de saúde (CFM, CFP, COFFITO, CFO, CFN).
+Sua tarefa é aperfeiçoar a gramática, pontuação, formalidade e clareza do texto a seguir para fins de folha de rosto, justificativa de transferência ou entrega pericial/judicial.
+
+REGRAS CRÍTICAS E OBRIGATÓRIAS:
+1. NUNCA invente, infira ou adicione sintomas, diagnósticos, medicações, condutas ou dados clínicos inexistentes no texto original.
+2. Mantenha 100% dos dados, nomes, datas e números informados pelo profissional.
+3. Retorne EXCLUSIVAMENTE o texto formal revisado, sem introduções ou explicações adicionais.
+
+Texto a revisar:
+"""${inputText.trim()}"""`;
+
+    try {
+      const response = await GeminiService.chat({
+        message: prompt,
+        conversationHistory: [],
+        contextData: 'Revisão formal de prontuário e folha de rosto'
+      });
+      return response ? response.trim() : inputText.trim();
+    } catch (err) {
+      return inputText.trim();
+    }
   }
 }

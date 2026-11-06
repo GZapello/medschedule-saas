@@ -853,6 +853,9 @@ api.get('/v1/reports/export-docx', requireTenant, requireRole('clinic_admin', 'p
 api.get('/v1/clinical-export/preview', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalExportController.preview);
 api.get('/v1/clinical-export/download', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalExportController.download);
 api.post('/v1/clinical-export/download', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalExportController.download);
+api.post('/v1/clinical-export/ai-format-review', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalExportController.aiFormatReview);
+api.get('/v1/clinical-export/batch-download', requireTenant, requireRole('clinic_admin'), ClinicalExportController.batchDownload);
+api.post('/v1/clinical-export/batch-download', requireTenant, requireRole('clinic_admin'), ClinicalExportController.batchDownload);
 api.get('/v1/reports/insurances', requireTenant, requireRole('clinic_admin'), InsuranceController.getInsuranceReport);
 
 // 360° Linha do Tempo e Prontuário Clínico Integrado

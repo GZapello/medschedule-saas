@@ -93,6 +93,9 @@ export class ClinicalExportController {
       const format = ((req.query.format || req.body.format || 'docx') as string).toLowerCase();
       const order = ((req.query.order || req.body.order || 'desc') as string).toLowerCase() as 'asc' | 'desc';
       const coverNotes = (req.query.coverNotes || req.body.coverNotes) as string;
+      const modules = req.query.modules || req.body.modules;
+      const dateFrom = (req.query.dateFrom || req.body.dateFrom) as string;
+      const dateTo = (req.query.dateTo || req.body.dateTo) as string;
 
       if (!patientId) {
         res.status(400).json({ error: 'ID do paciente é obrigatório para exportação de prontuário.' });
@@ -117,7 +120,7 @@ export class ClinicalExportController {
         .replace(/[^a-zA-Z0-9_\-]/g, '_')
         .slice(0, 40);
 
-      const options = { order, coverNotes };
+      const options = { order, coverNotes, modules, dateFrom, dateTo };
 
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
       res.setHeader('Pragma', 'no-cache');
@@ -148,6 +151,73 @@ export class ClinicalExportController {
     } catch (err: any) {
       console.error('[ClinicalExportController.download] Erro:', err);
       res.status(500).json({ error: 'Erro ao gerar exportação: ' + (err?.message || 'Falha interna') });
+    }
+  }
+
+  /**
+   * Revisão de formatação formal de folha de rosto e anotações com IA
+   * REGRA INEGOCIÁVEL: Não inventa dados clínicos, diagnósticos ou condutas.
+   */
+  static async aiFormatReview(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.tenantId;
+      if (!tenantId) {
+        res.status(400).json({ error: 'Tenant obrigatório' });
+        return;
+      }
+
+      const { text } = req.body;
+      if (!text || typeof text !== 'string' || !text.trim()) {
+        res.status(400).json({ error: 'Texto para revisão é obrigatório.' });
+        return;
+      }
+
+      const reviewed = await ClinicalExportService.reviewClinicalFormattingWithAi(text);
+      res.json({
+        originalText: text,
+        reviewedText: reviewed
+      });
+    } catch (err: any) {
+      console.error('[ClinicalExportController.aiFormatReview] Erro:', err);
+      res.status(500).json({ error: 'Erro ao revisar formatação com IA: ' + (err?.message || 'Falha interna') });
+    }
+  }
+
+  /**
+   * Exportação em lote para administradores da clínica (Pacote ZIP com manifest.json)
+   */
+  static async batchDownload(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.tenantId;
+      if (!tenantId) {
+        res.status(400).json({ error: 'Tenant obrigatório' });
+        return;
+      }
+
+      const { patientIds, dateFrom, dateTo, format, coverNotes, modules } = req.body || req.query;
+      const parsedPatientIds = Array.isArray(patientIds)
+        ? patientIds
+        : (typeof patientIds === 'string' && patientIds.trim() ? patientIds.split(',') : undefined);
+
+      const zipBuf = await ClinicalExportService.generateBatchZip(tenantId, {
+        patientIds: parsedPatientIds,
+        dateFrom: dateFrom as string,
+        dateTo: dateTo as string,
+        format: (format as any) || 'docx',
+        coverNotes: coverNotes as string,
+        modules
+      });
+
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', `attachment; filename="Lote_Prontuarios_Clinica_${new Date().toISOString().slice(0, 10)}.zip"`);
+      res.send(zipBuf);
+
+      logAudit(req, 'EXPORT_BATCH_CLINICAL_RECORDS', 'tenants', tenantId, { count: parsedPatientIds?.length || 'all' });
+    } catch (err: any) {
+      console.error('[ClinicalExportController.batchDownload] Erro:', err);
+      res.status(500).json({ error: 'Erro ao gerar exportação em lote: ' + (err?.message || 'Falha interna') });
     }
   }
 }

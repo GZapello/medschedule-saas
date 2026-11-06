@@ -57,18 +57,12 @@ export class InvoiceParserService {
       // Prioridade 1: Parser determinístico SEFAZ NF-e / NFC-e XML
       parsedResult = this.parseNFeXml(buffer.toString('utf-8'));
     } else if (isPdf) {
-      // Prioridade 2: Tenta extração textual de DANFE digital; se for escaneado, cascateia para IA
-      const text = buffer.toString('utf-8');
-      const hasEmbeddedText = text.includes('/Font') || text.includes('DANFE') || text.includes('CNPJ');
-      if (hasEmbeddedText && this.canExtractDanfeText(text)) {
-        parsedResult = this.parseDanfeText(text);
-      } else {
-        parsedResult = await this.parseWithGeminiAi({
-          base64: buffer.toString('base64'),
-          mimeType: 'application/pdf',
-          fileName
-        });
-      }
+      // Prioridade 2: DANFE PDF (digital ou escaneado) via Gemini Multimodal em memória
+      parsedResult = await this.parseWithGeminiAi({
+        base64: buffer.toString('base64'),
+        mimeType: 'application/pdf',
+        fileName
+      });
     } else if (isImage) {
       // Prioridade 3: Foto de nota física / cupom / captura de câmera via Gemini Multimodal
       parsedResult = await this.parseWithGeminiAi({
@@ -252,100 +246,55 @@ export class InvoiceParserService {
 
   /**
    * Extração via IA Multimodal (Gemini Cascade) para fotos de notas, recibos e PDFs digitalizados
+   * REGRA CRÍTICA: Os bytes do arquivo são passados diretamente em memória via inlineData.
+   * Nenhum arquivo é persistido em disco ou banco (Zero Data Retention).
    */
   private static async parseWithGeminiAi(params: {
     base64: string;
     mimeType: string;
     fileName: string;
   }): Promise<{ invoiceInfo: ExtractedInvoiceInfo; items: ExtractedInvoiceItem[] }> {
-    const prompt = `Você é um especialista em documentos fiscais brasileiros (NF-e, NFC-e, DANFE e Cupons Fiscais de clínicas e consultórios).
-Analise o documento/imagem anexado e extraia com exatidão todos os dados da nota fiscal e a lista completa de produtos e insumos para estoque.
-
-Retorne ESTRITAMENTE um objeto JSON válido (sem tags markdown, sem explicações adicionais) com o seguinte formato:
-{
-  "invoiceNumber": "número da NF",
-  "series": "série da NF ou null",
-  "issueDate": "AAAA-MM-DD ou null",
-  "accessKey": "chave de acesso de 44 dígitos se visível ou null",
-  "supplier": {
-    "name": "Razão Social ou Nome do Fornecedor",
-    "tradeName": "Nome Fantasia ou null",
-    "cnpj": "CNPJ do emitente formatado ou números"
-  },
-  "totalAmount": 0.00,
-  "items": [
-    {
-      "code": "código interno ou referência se houver",
-      "ean": "código de barras EAN/GTIN se houver",
-      "ncm": "NCM do item se houver",
-      "name": "descrição completa do produto",
-      "cleanName": "nome padronizado limpo e legível do item",
-      "brand": "marca ou fabricante se identificado",
-      "quantity": 1.0,
-      "unit": "UN, CX, PCT, FR, AMP, etc",
-      "unitCost": 0.00,
-      "totalCost": 0.00,
-      "batchNumber": "lote se identificado ou null",
-      "expirationDate": "AAAA-MM-DD se identificado ou null",
-      "packMultiplier": 1
-    }
-  ]
-}`;
-
     try {
-      const parts: any[] = [
-        { text: prompt },
-        {
-          inlineData: {
-            mimeType: params.mimeType,
-            data: params.base64
-          }
-        }
-      ];
-
-      const responseText = await GeminiService.chat({
-        message: prompt,
-        conversationHistory: [],
-        contextData: `[ARQUIVO: ${params.fileName}]`
+      const extracted = await GeminiService.extractInvoiceFromDocument({
+        file: {
+          mimeType: params.mimeType,
+          base64: params.base64,
+          fileName: params.fileName
+        },
+        timeoutMs: 40000
       });
 
-      if (responseText) {
-        const cleaned = responseText.replace(/```json/gi, '').replace(/```/g, '').trim();
-        const start = cleaned.indexOf('{');
-        const end = cleaned.lastIndexOf('}');
-        if (start !== -1 && end !== -1) {
-          const parsed = JSON.parse(cleaned.substring(start, end + 1));
-          return {
-            invoiceInfo: {
-              invoiceNumber: parsed.invoiceNumber,
-              series: parsed.series,
-              issueDate: parsed.issueDate,
-              accessKey: parsed.accessKey,
-              supplier: parsed.supplier,
-              totalAmount: Number(parsed.totalAmount) || 0
-            },
-            items: (parsed.items || []).map((it: any, i: number) => ({
-              id: `nf-item-${i + 1}`,
-              code: it.code || undefined,
-              ean: it.ean || undefined,
-              ncm: it.ncm || undefined,
-              name: it.name || 'Item Importado',
-              cleanName: it.cleanName || it.name || 'Item Importado',
-              brand: it.brand || undefined,
-              quantity: Number(it.quantity) || 1,
-              unit: (it.unit || 'UN').toUpperCase(),
-              unitCost: Number(it.unitCost) || 0,
-              totalCost: Number(it.totalCost) || (Number(it.quantity) * Number(it.unitCost)) || 0,
-              batchNumber: it.batchNumber || undefined,
-              expirationDate: it.expirationDate || undefined,
-              action: 'create',
-              packMultiplier: it.packMultiplier && it.packMultiplier > 1 ? it.packMultiplier : undefined
-            }))
-          };
-        }
+      if (extracted && extracted.items && extracted.items.length > 0) {
+        return {
+          invoiceInfo: {
+            invoiceNumber: extracted.invoiceInfo?.invoiceNumber,
+            series: extracted.invoiceInfo?.series,
+            issueDate: extracted.invoiceInfo?.issueDate,
+            accessKey: extracted.invoiceInfo?.accessKey,
+            supplier: extracted.invoiceInfo?.supplier,
+            totalAmount: Number(extracted.invoiceInfo?.totalAmount) || 0
+          },
+          items: extracted.items.map((it: any, i: number) => ({
+            id: `nf-item-${i + 1}`,
+            code: it.code || undefined,
+            ean: it.ean || undefined,
+            ncm: it.ncm || undefined,
+            name: it.name || 'Item Importado',
+            cleanName: it.cleanName || it.name || 'Item Importado',
+            brand: it.brand || undefined,
+            quantity: Number(it.quantity) || 1,
+            unit: (it.unit || 'UN').toUpperCase(),
+            unitCost: Number(it.unitCost) || 0,
+            totalCost: Number(it.totalCost) || (Number(it.quantity) * Number(it.unitCost)) || 0,
+            batchNumber: it.batchNumber || undefined,
+            expirationDate: it.expirationDate || undefined,
+            action: 'create',
+            packMultiplier: it.packMultiplier && it.packMultiplier > 1 ? it.packMultiplier : undefined
+          }))
+        };
       }
-    } catch (err) {
-      console.warn('[InvoiceParserService.parseWithGeminiAi] Falha na extração por IA:', err);
+    } catch (err: any) {
+      console.warn('[InvoiceParserService.parseWithGeminiAi] Falha na extração por IA:', err?.message || err);
     }
 
     // Fallback gracioso se a IA falhar

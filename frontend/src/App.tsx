@@ -297,8 +297,21 @@ const AppContent: React.FC = () => {
   const [currentView, setCurrentView] = useState<string>(initialRoute.view);
   const [subRouteId, setSubRouteId] = useState<string | null>(initialRoute.subId || null);
   const [settingsSection, setSettingsSection] = useState<string>(getInitialSettingsSection);
+  const [patientInitialTab, setPatientInitialTab] = useState<string | null>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('tab');
+    } catch {
+      return null;
+    }
+  });
 
-  const handleNavigateView = (view: string, subId?: string | null, force?: boolean) => {
+  const handleNavigateView = (view: string, subId?: string | null, forceOrTab?: boolean | string, tabParam?: string) => {
+    const force = typeof forceOrTab === 'boolean' ? forceOrTab : false;
+    const tab = typeof forceOrTab === 'string' ? forceOrTab : tabParam;
+    if (view === 'patients' && tab) {
+      setPatientInitialTab(tab);
+    }
     if ((view === 'superadmin' || view === 'superadmin-visits' || view === 'audit') && currentUserRef.current?.role !== 'superadmin' && !force) {
       return;
     }
@@ -353,7 +366,7 @@ const AppContent: React.FC = () => {
     if (view === 'zemda-personal' && subId) {
       targetPath = `/zemda-personal/alunos/${subId}`;
     } else if (view === 'patients' && subId) {
-      targetPath = `/pacientes/${subId}`;
+      targetPath = `/pacientes/${subId}${tab ? '?tab=' + tab : ''}`;
     } else if (view === 'zemda-estetic' && subId) {
       targetPath = `/zemda-estetic/pacientes/${subId}`;
     }
@@ -1358,6 +1371,7 @@ const AppContent: React.FC = () => {
               onOpenNewPatient={() => setIsNewPatientOpen(true)}
               onNavigate={handleNavigateView}
               initialPatientId={subRouteId}
+              initialTab={patientInitialTab}
               onSelectPatient={(pId) => handleNavigateView('patients', pId)}
             />
           )}

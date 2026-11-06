@@ -103,7 +103,7 @@ export interface MatchedPatientInfo {
 export interface MedicalRecordScannerProps {
   onCancel: () => void;
   onSuccess: (result: { patientId: string; recordsCreated: number; isNewPatient: boolean }) => void;
-  onNavigate?: (view: string) => void;
+  onNavigate?: (view: string, subId?: string | null, forceOrTab?: boolean | string, tab?: string) => void;
   initialMode?: 'camera' | 'photos' | 'document';
 }
 
@@ -1795,15 +1795,20 @@ export const MedicalRecordScanner: React.FC<MedicalRecordScannerProps> = ({
 
         {/* Botões de Ação */}
         <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
-          {onNavigate && (
-            <button
-              type="button"
-              onClick={() => onNavigate('records')}
-              className="px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold transition-all shadow-xs"
-            >
-              Ver Prontuário do Paciente
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => {
+              if (onNavigate && completionResult.patientId) {
+                onNavigate('patients', completionResult.patientId, 'timeline');
+              } else if (completionResult.patientId) {
+                window.location.href = `/pacientes/${completionResult.patientId}?tab=timeline`;
+              }
+            }}
+            className="px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center gap-2"
+          >
+            <FileText className="w-4 h-4" />
+            Ver Prontuário do Paciente
+          </button>
 
           <button
             type="button"
