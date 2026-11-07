@@ -52,12 +52,33 @@ test('Novo Agendamento: conta sem serviços exibe estado vazio, onboarding expli
   const confirmBtn = appointmentModal.getByRole('button', { name: 'Confirmar Agendamento', exact: true });
   await confirmBtn.click();
 
-  // 3. Verifica exibição do onboarding explicativo e profissional
-  await expect(appointmentModal.getByRole('heading', { name: 'Cadastre seu primeiro serviço' })).toBeVisible();
+  // 3. Verifica exibição do onboarding como popover flutuante
+  const popover = appointmentModal.getByTestId('service-onboarding-popover');
+  await expect(popover).toBeVisible();
   await expect(appointmentModal.getByText('Para concluir o agendamento, primeiro cadastre um serviço. Isso ajuda a organizar duração, valor e relatórios dos atendimentos.')).toBeVisible();
 
+  // Verifica que o popover possui posicionamento absoluto (não empurra o layout)
+  await expect(popover).toHaveCSS('position', 'absolute');
+
+  // 3.1 Testa fechar ao clicar no botão "X" do popover
+  const closeBtn = appointmentModal.getByRole('button', { name: 'Fechar aviso' });
+  await closeBtn.click();
+  await expect(appointmentModal.getByRole('heading', { name: 'Cadastre seu primeiro serviço' })).toHaveCount(0);
+
+  // 3.2 Reabre ao tentar confirmar novamente
+  await confirmBtn.click();
+  await expect(appointmentModal.getByRole('heading', { name: 'Cadastre seu primeiro serviço' })).toBeVisible();
+
+  // 3.3 Testa fechar ao clicar fora (ex: campo Observações)
+  await appointmentModal.getByPlaceholder('Ex: Primeira consulta, indicação da Dra. Camila').click();
+  await expect(appointmentModal.getByRole('heading', { name: 'Cadastre seu primeiro serviço' })).toHaveCount(0);
+
+  // Reabre para continuar o fluxo
+  await confirmBtn.click();
+  await expect(appointmentModal.getByRole('heading', { name: 'Cadastre seu primeiro serviço' })).toBeVisible();
+
   // 4. Clica no botão de adicionar serviço do onboarding
-  const onboardingAddBtn = appointmentModal.getByRole('heading', { name: 'Cadastre seu primeiro serviço' }).locator('xpath=..').getByRole('button', { name: 'Adicionar serviço' });
+  const onboardingAddBtn = popover.getByRole('button', { name: 'Adicionar serviço' });
   await onboardingAddBtn.click();
 
   // 5. Verifica abertura do modal de cadastro de serviço

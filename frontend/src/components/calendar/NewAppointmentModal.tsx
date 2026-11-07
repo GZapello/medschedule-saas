@@ -81,6 +81,30 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
   const [conflictError, setConflictError] = useState<string | null>(null);
   const [showServiceOnboarding, setShowServiceOnboarding] = useState(false);
   const serviceFieldRef = useRef<HTMLDivElement>(null);
+  const onboardingPopoverRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showServiceOnboarding) return;
+
+    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as Node;
+      if (
+        onboardingPopoverRef.current &&
+        !onboardingPopoverRef.current.contains(target) &&
+        serviceFieldRef.current &&
+        !serviceFieldRef.current.contains(target)
+      ) {
+        setShowServiceOnboarding(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [showServiceOnboarding]);
 
   const [date, setDate] = useState<string>(() => {
     const tomorrow = new Date();
@@ -471,10 +495,10 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                 ))}
               </select>
             </div>
-            <div ref={serviceFieldRef} className="min-w-0">
+            <div ref={serviceFieldRef} className="min-w-0 relative">
               <label className="block font-semibold text-slate-700 mb-0.5">Serviço *</label>
               {services.length === 0 ? (
-                <div className="space-y-2">
+                <>
                   <div
                     className={`flex items-center justify-between border rounded-xl px-3 py-2 text-xs min-h-[38px] transition-all duration-200 ${
                       showServiceOnboarding
@@ -494,13 +518,33 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                   </div>
 
                   {showServiceOnboarding && (
-                    <div className="p-3 bg-indigo-50/90 border border-indigo-200/90 rounded-xl text-left animate-in fade-in duration-200">
-                      <div className="flex items-start gap-2.5">
+                    <div
+                      ref={onboardingPopoverRef}
+                      data-testid="service-onboarding-popover"
+                      className="absolute top-full mt-2 left-0 right-0 sm:left-auto sm:right-0 sm:w-[320px] max-w-[calc(100vw-2.5rem)] z-50 p-3 bg-indigo-50/95 border border-indigo-200 rounded-xl shadow-xl text-left animate-in fade-in zoom-in-95 duration-150 backdrop-blur-xs"
+                    >
+                      {/* Seta indicando a origem (campo Serviço) */}
+                      <div className="absolute -top-1.5 left-6 w-3 h-3 bg-indigo-50 border-t border-l border-indigo-200 rotate-45 pointer-events-none" />
+
+                      <div className="flex items-start gap-2.5 relative z-10">
                         <div className="p-1.5 bg-indigo-100 text-indigo-600 rounded-lg shrink-0 mt-0.5">
                           <Sparkles className="w-4 h-4" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <h4 className="text-xs font-bold text-indigo-950">Cadastre seu primeiro serviço</h4>
+                          <div className="flex items-center justify-between gap-1">
+                            <h4 className="text-xs font-bold text-indigo-950">Cadastre seu primeiro serviço</h4>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setShowServiceOnboarding(false);
+                              }}
+                              className="p-0.5 text-indigo-400 hover:text-indigo-700 rounded-md -mr-1 -mt-1 cursor-pointer transition-colors"
+                              aria-label="Fechar aviso"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                           <p className="text-[11px] text-indigo-800/90 mt-0.5 leading-relaxed">
                             Para concluir o agendamento, primeiro cadastre um serviço. Isso ajuda a organizar duração, valor e relatórios dos atendimentos.
                           </p>
@@ -516,7 +560,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                       </div>
                     </div>
                   )}
-                </div>
+                </>
               ) : (
                 <QuickActionDropdown
                   value={serviceId}
