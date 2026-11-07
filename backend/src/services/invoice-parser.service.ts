@@ -1,6 +1,12 @@
 import { db } from '../config/database';
 import { GeminiService } from './gemini.service';
 
+export interface ExtractedInvoiceInstallment {
+  number: number;
+  dueDate: string;
+  amount: number;
+}
+
 export interface ExtractedInvoiceInfo {
   invoiceNumber?: string;
   series?: string;
@@ -11,7 +17,14 @@ export interface ExtractedInvoiceInfo {
     tradeName?: string;
     cnpj?: string;
   };
+  productsAmount?: number;
+  freightAmount?: number;
+  discountAmount?: number;
+  otherExpensesAmount?: number;
   totalAmount?: number;
+  suggestedPaymentMethod?: string;
+  suggestedPaymentCondition?: 'paid' | 'pending' | 'partial' | 'installment' | 'unspecified';
+  installments?: ExtractedInvoiceInstallment[];
 }
 
 export interface ExtractedInvoiceItem {
@@ -113,10 +126,78 @@ export class InvoiceParserService {
     const supplierTrade = getTag(emitXml, 'xFant');
     const supplierCnpj = getTag(emitXml, 'CNPJ') || getTag(emitXml, 'CPF');
 
-    // Total da Nota
+    // Totais discriminados da Nota
     const totalMatch = xmlContent.match(/<ICMSTot[^>]*>([\s\S]*?)<\/ICMSTot>/i);
     const totalXml = totalMatch ? totalMatch[1] : '';
-    const totalAmount = parseFloat(getTag(totalXml, 'vNF')) || 0;
+    const productsAmount = parseFloat(getTag(totalXml, 'vProd')) || 0;
+    const freightAmount = parseFloat(getTag(totalXml, 'vFrete')) || 0;
+    const discountAmount = parseFloat(getTag(totalXml, 'vDesc')) || 0;
+    const otherExpensesAmount = (parseFloat(getTag(totalXml, 'vOutro')) || 0) + (parseFloat(getTag(totalXml, 'vSeg')) || 0);
+    const totalAmount = parseFloat(getTag(totalXml, 'vNF')) || (productsAmount + freightAmount + otherExpensesAmount - discountAmount);
+
+    // Duplicatas e Fatura (<cobr><dup>)
+    const installments: ExtractedInvoiceInstallment[] = [];
+    const dupRegex = /<dup[^>]*>([\s\S]*?)<\/dup>/gi;
+    let dupMatch: RegExpExecArray | null;
+    let dupIdx = 1;
+    while ((dupMatch = dupRegex.exec(xmlContent)) !== null) {
+      const dupXml = dupMatch[1];
+      const nDup = getTag(dupXml, 'nDup') || String(dupIdx);
+      const dVenc = getTag(dupXml, 'dVenc');
+      const vDup = parseFloat(getTag(dupXml, 'vDup')) || 0;
+      installments.push({
+        number: parseInt(nDup, 10) || dupIdx,
+        dueDate: dVenc ? dVenc.slice(0, 10) : new Date().toISOString().slice(0, 10),
+        amount: vDup
+      });
+      dupIdx++;
+    }
+
+    // Informações de Pagamento (<pag><detPag>)
+    const detPagRegex = /<detPag[^>]*>([\s\S]*?)<\/detPag>/gi;
+    let detPagMatch: RegExpExecArray | null;
+    const foundPaymentMethods: string[] = [];
+    let detectedIndPag: string | undefined;
+
+    while ((detPagMatch = detPagRegex.exec(xmlContent)) !== null) {
+      const dpXml = detPagMatch[1];
+      const tPag = getTag(dpXml, 'tPag');
+      const indPag = getTag(dpXml, 'indPag');
+      if (indPag) detectedIndPag = indPag;
+
+      let method = 'other';
+      if (tPag === '01') method = 'cash';
+      else if (tPag === '03') method = 'credit_card';
+      else if (tPag === '04') method = 'debit_card';
+      else if (tPag === '15') method = 'boleto';
+      else if (tPag === '16' || tPag === '18') method = 'bank_transfer';
+      else if (tPag === '17') method = 'pix';
+      else if (tPag === '99') method = 'other';
+      if (!foundPaymentMethods.includes(method)) {
+        foundPaymentMethods.push(method);
+      }
+    }
+
+    let suggestedPaymentMethod: string = 'pix';
+    if (foundPaymentMethods.length > 1) {
+      suggestedPaymentMethod = 'mixed';
+    } else if (foundPaymentMethods.length === 1) {
+      suggestedPaymentMethod = foundPaymentMethods[0];
+    } else if (installments.length > 0) {
+      suggestedPaymentMethod = 'boleto';
+    }
+
+    let suggestedPaymentCondition: 'paid' | 'pending' | 'installment' | 'unspecified' = 'unspecified';
+    if (installments.length > 1) {
+      suggestedPaymentCondition = 'installment';
+    } else if (installments.length === 1) {
+      const today = new Date().toISOString().slice(0, 10);
+      suggestedPaymentCondition = installments[0].dueDate > today ? 'pending' : 'paid';
+    } else if (detectedIndPag === '0' || suggestedPaymentMethod === 'cash' || suggestedPaymentMethod === 'pix' || suggestedPaymentMethod === 'debit_card') {
+      suggestedPaymentCondition = 'paid';
+    } else if (detectedIndPag === '1') {
+      suggestedPaymentCondition = 'pending';
+    }
 
     const invoiceInfo: ExtractedInvoiceInfo = {
       invoiceNumber: nNF,
@@ -128,7 +209,14 @@ export class InvoiceParserService {
         tradeName: supplierTrade || undefined,
         cnpj: supplierCnpj || undefined
       },
-      totalAmount
+      productsAmount,
+      freightAmount,
+      discountAmount,
+      otherExpensesAmount,
+      totalAmount,
+      suggestedPaymentMethod,
+      suggestedPaymentCondition,
+      installments: installments.length > 0 ? installments : undefined
     };
 
     // Itens da Nota (<det nItem="X">)
@@ -235,7 +323,8 @@ export class InvoiceParserService {
       issueDate: dateMatch ? dateMatch[1].split('/').reverse().join('-') : undefined,
       supplier: {
         cnpj: cnpjMatch ? cnpjMatch[1] : undefined
-      }
+      },
+      totalAmount: 0
     };
 
     return {
@@ -272,7 +361,14 @@ export class InvoiceParserService {
             issueDate: extracted.invoiceInfo?.issueDate,
             accessKey: extracted.invoiceInfo?.accessKey,
             supplier: extracted.invoiceInfo?.supplier,
-            totalAmount: Number(extracted.invoiceInfo?.totalAmount) || 0
+            productsAmount: Number(extracted.invoiceInfo?.productsAmount) || 0,
+            freightAmount: Number(extracted.invoiceInfo?.freightAmount) || 0,
+            discountAmount: Number(extracted.invoiceInfo?.discountAmount) || 0,
+            otherExpensesAmount: Number(extracted.invoiceInfo?.otherExpensesAmount) || 0,
+            totalAmount: Number(extracted.invoiceInfo?.totalAmount) || 0,
+            suggestedPaymentMethod: extracted.invoiceInfo?.suggestedPaymentMethod,
+            suggestedPaymentCondition: extracted.invoiceInfo?.suggestedPaymentCondition,
+            installments: extracted.invoiceInfo?.installments
           },
           items: extracted.items.map((it: any, i: number) => ({
             id: `nf-item-${i + 1}`,

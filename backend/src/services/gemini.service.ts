@@ -757,7 +757,16 @@ Retorne ESTRITAMENTE um objeto JSON válido (sem tags markdown, sem explicaçõe
     "tradeName": "Nome Fantasia ou null",
     "cnpj": "CNPJ do emitente formatado ou números"
   },
+  "productsAmount": 0.00,
+  "freightAmount": 0.00,
+  "discountAmount": 0.00,
+  "otherExpensesAmount": 0.00,
   "totalAmount": 0.00,
+  "suggestedPaymentMethod": "pix | cash | credit_card | debit_card | boleto | bank_transfer | other",
+  "suggestedPaymentCondition": "paid | pending | installment | unspecified",
+  "installments": [
+    { "number": 1, "dueDate": "AAAA-MM-DD", "amount": 0.00 }
+  ],
   "items": [
     {
       "code": "código interno se houver",
@@ -1224,6 +1233,13 @@ function sanitizeExtractedInvoice(parsed: any): any {
   const inv = parsed?.invoiceInfo || parsed || {};
   const items = Array.isArray(parsed?.items) ? parsed.items : [];
 
+  const rawInstallments = Array.isArray(inv.installments) ? inv.installments : [];
+  const installments = rawInstallments.map((inst: any, idx: number) => ({
+    number: Number(inst.number) || idx + 1,
+    dueDate: inst.dueDate && /^\d{4}-\d{2}-\d{2}$/.test(inst.dueDate) ? inst.dueDate : new Date().toISOString().slice(0, 10),
+    amount: Number(inst.amount) || 0
+  })).filter((i: any) => i.amount > 0);
+
   return {
     invoiceInfo: {
       invoiceNumber: inv.invoiceNumber ? String(inv.invoiceNumber).trim() : undefined,
@@ -1235,7 +1251,14 @@ function sanitizeExtractedInvoice(parsed: any): any {
         tradeName: inv.supplier?.tradeName ? String(inv.supplier.tradeName).trim() : undefined,
         cnpj: inv.supplier?.cnpj ? String(inv.supplier.cnpj).trim() : undefined
       },
-      totalAmount: Number(inv.totalAmount) || 0
+      productsAmount: Number(inv.productsAmount) || 0,
+      freightAmount: Number(inv.freightAmount) || 0,
+      discountAmount: Number(inv.discountAmount) || 0,
+      otherExpensesAmount: Number(inv.otherExpensesAmount) || 0,
+      totalAmount: Number(inv.totalAmount) || 0,
+      suggestedPaymentMethod: inv.suggestedPaymentMethod ? String(inv.suggestedPaymentMethod).trim().toLowerCase() : undefined,
+      suggestedPaymentCondition: inv.suggestedPaymentCondition ? String(inv.suggestedPaymentCondition).trim().toLowerCase() : undefined,
+      installments: installments.length > 0 ? installments : undefined
     },
     items: items.map((it: any, idx: number) => ({
       code: it.code ? String(it.code).trim() : undefined,
@@ -1267,7 +1290,17 @@ function getMockInvoiceExtraction(file: { mimeType: string; base64?: string; fil
         tradeName: 'Distrimed Estética',
         cnpj: '12.345.678/0001-99'
       },
-      totalAmount: 18450.00
+      productsAmount: 18450.00,
+      freightAmount: 0.00,
+      discountAmount: 0.00,
+      otherExpensesAmount: 0.00,
+      totalAmount: 18450.00,
+      suggestedPaymentMethod: 'boleto',
+      suggestedPaymentCondition: 'installment',
+      installments: [
+        { number: 1, dueDate: '2026-06-10', amount: 9225.00 },
+        { number: 2, dueDate: '2026-07-10', amount: 9225.00 }
+      ]
     },
     items: [
       { code: 'EST-001', ean: '7891000000011', ncm: '30029090', name: 'Toxina Botulínica Tipo A 100U Pó Liofilizado', cleanName: 'Toxina Botulínica 100U', brand: 'Botulift', quantity: 5, unit: 'FR', unitCost: 650.00, totalCost: 3250.00, batchNumber: 'TB2601', expirationDate: '2027-12-31' },

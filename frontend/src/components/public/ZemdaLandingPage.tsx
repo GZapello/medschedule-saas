@@ -7,7 +7,9 @@ import { RevealSection, RevealItem } from './RevealOnScroll';
 import { AnimatedStat } from './AnimatedStat';
 import { LANDING_MODULES, LANDING_PLANS, LANDING_STEPS, LANDING_LAYERS, LANDING_FAQS, moduleHref } from '../../../../backend/src/seo/landingContent';
 import { LandingProductDemo } from './LandingProductDemo';
+import { LandingModuleCards } from './LandingModuleCards';
 import './zemda-landing.css';
+import './landing-module-cards.css';
 
 interface ZemdaLandingPageProps {
   onLogin: () => void;
@@ -92,6 +94,41 @@ const moduleIcons: Record<string, LucideIcon> = {
 const Bullets = ({ items }: { items: string[] }) => <ul className="zl-bullets">{items.map(item => <li key={item}><Check aria-hidden="true" size={16} /><span>{item}</span></li>)}</ul>;
 const Heading = ({ label, title, children }: { label: string; title: string; children?: React.ReactNode }) => <div className="zl-heading"><span className="zl-eyebrow">{label}</span><h2>{title}</h2>{children && <p>{children}</p>}</div>;
 
+const HeroTitle = () => {
+  const total = LANDING_HERO_TITLE_LINES.join('').length;
+  const [visible, setVisible] = useState(0);
+  useEffect(() => {
+    const preference = window.matchMedia('(prefers-reduced-motion: reduce)');
+    let timer: ReturnType<typeof setInterval> | undefined;
+    let count = 0;
+    const finish = () => { clearInterval(timer); setVisible(total); };
+    const onPreferenceChange = () => { if (preference.matches) finish(); };
+    if (preference.matches) finish();
+    else timer = setInterval(() => {
+      count += 1;
+      setVisible(count);
+      if (count >= total) clearInterval(timer);
+    }, 35);
+    preference.addEventListener('change', onPreferenceChange);
+    return () => { clearInterval(timer); preference.removeEventListener('change', onPreferenceChange); };
+  }, [total]);
+
+  let index = 0;
+  // Keep every character in flow, including unrevealed words, so balanced wrapping
+  // and the space below the title never depend on the current typing position.
+  const line = (text: string) => text.split(/(\s+)/).map((word, wordIndex) => (
+    <span className={/^\s+$/.test(word) ? undefined : 'zl-title-word'} key={wordIndex}>{Array.from(word).map(character => {
+      const position = index++;
+      return <span key={position} className="zl-title-character" data-visible={position < visible}
+        data-cursor={position === Math.max(0, visible - 1)}>{character}</span>;
+    })}</span>
+  ));
+  return <h1 className="zl-typewriter-title" aria-label={LANDING_HERO_TITLE_LINES.join(' ')} data-complete={visible >= total}>
+    <span className="zl-title-first" aria-hidden="true">{line(LANDING_HERO_TITLE_LINES[0])}</span><br />{' '}
+    <span aria-hidden="true">{line(LANDING_HERO_TITLE_LINES[1])}</span>
+  </h1>;
+};
+
 export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({ onLogin, onRegisterClinic, onNavigateSeoPage }) => {
   // Preserve direct links from SEO pages and the old public landing anchors.
   useEffect(() => {
@@ -124,7 +161,7 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({ onLogin, onR
             <div className="zl-hero-grid">
               <div className="zl-hero-text">
                 <p className="zl-hero-kicker">Zemda · software de gestão em saúde</p>
-                <h1>{LANDING_HERO_TITLE_LINES[0]}<br />{' '}<span>{LANDING_HERO_TITLE_LINES[1]}</span></h1>
+                <HeroTitle />
                 <div className="zl-hero-copy">
                   <p>{LANDING_HERO.description}</p>
                   <div className="zl-actions">
@@ -162,7 +199,7 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({ onLogin, onR
       <RevealSection id="profissoes" className="zl-section zl-tinted"><div className="zl-container">
         <RevealItem distancePx={16} durationMs={550}><Heading label="Ecossistema profissional" title="Ferramentas específicas para sua profissão.">Avalie, registre e acompanhe cada atendimento com os recursos da sua área.</Heading></RevealItem>
         <RevealItem distancePx={18} delayMs={100} durationMs={600}><article id="zemda360" className="zl-body"><span className="zl-body-symbol"><Crosshair size={30} strokeWidth={1.4} /></span><div><span className="zl-eyebrow">Módulo transversal</span><h3>Zemda360</h3><p>Mapeamento anatômico visual integrado ao atendimento. Um recurso compartilhado entre a medicina e as especialidades multiprofissionais para registro corporal e facial, marcações com caneta e borracha e histórico de avaliações.</p></div><div className="zl-body-tags"><span>Mapeamento anatômico visual</span><span>Mapeamento corporal e facial</span><span>Marcações e histórico</span></div></article></RevealItem>
-        <div className="zl-modules">{LANDING_MODULES.map((module, index) => { const Icon = moduleIcons[module.id] || Stethoscope; return <React.Fragment key={module.id}><RevealItem distancePx={16} delayMs={(index % 5) * 50} durationMs={550} className="zl-full-height"><article id={`modulo-${module.id}`} className={`zl-module zl-module-${module.id}`}><span className="zl-module-icon"><Icon size={16} /></span><p className="zl-profession">{module.profession}</p><h3>{module.name}</h3><Bullets items={module.features} /><a href={moduleHref(module)} onClick={event => navigateModule(event, module)} className="zl-module-link" aria-label={`Conhecer módulo ${module.name}`}>Conhecer módulo <ArrowRight size={13} /></a></article></RevealItem></React.Fragment>; })}</div>
+        <LandingModuleCards icons={moduleIcons} onNavigate={navigateModule} />
         <aside className="zl-care-editorial">
           <div className="zl-care-copy"><span className="zl-eyebrow">Tecnologia a serviço do cuidado</span><h3>Feito para quem cuida.</h3><p>Da rotina clínica à gestão, o Zemda acompanha cada profissional.</p></div>
         </aside>

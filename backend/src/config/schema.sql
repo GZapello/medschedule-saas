@@ -938,3 +938,89 @@ CREATE TABLE IF NOT EXISTS user_whatsapp_requests (
   resolved_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_user_wa_req_user ON user_whatsapp_requests(user_id, status);
+
+-- 34. Compras de Produtos / Insumos, Contas a Pagar e Despesas Financeiras
+CREATE TABLE IF NOT EXISTS purchases (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  supplier_name TEXT NOT NULL,
+  supplier_trade_name TEXT,
+  supplier_cnpj TEXT,
+  invoice_number TEXT,
+  invoice_series TEXT,
+  invoice_access_key TEXT,
+  issue_date TEXT,
+  products_amount REAL NOT NULL DEFAULT 0,
+  freight_amount REAL NOT NULL DEFAULT 0,
+  discount_amount REAL NOT NULL DEFAULT 0,
+  other_expenses_amount REAL NOT NULL DEFAULT 0,
+  total_amount REAL NOT NULL DEFAULT 0,
+  payment_status TEXT NOT NULL DEFAULT 'unspecified' CHECK(payment_status IN ('paid', 'pending', 'partial', 'installment', 'unspecified')),
+  payment_method TEXT,
+  amount_paid REAL NOT NULL DEFAULT 0,
+  amount_pending REAL NOT NULL DEFAULT 0,
+  cash_register_id TEXT,
+  notes TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+  FOREIGN KEY (cash_register_id) REFERENCES cash_registers(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_purchases_tenant_access_key ON purchases (tenant_id, invoice_access_key);
+CREATE INDEX IF NOT EXISTS idx_purchases_tenant_supplier_nfe ON purchases (tenant_id, supplier_cnpj, invoice_number);
+CREATE INDEX IF NOT EXISTS idx_purchases_created ON purchases (tenant_id, created_at);
+
+CREATE TABLE IF NOT EXISTS accounts_payable (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  purchase_id TEXT,
+  description TEXT NOT NULL,
+  category TEXT NOT NULL DEFAULT 'Insumos / Produtos',
+  supplier_name TEXT,
+  supplier_cnpj TEXT,
+  amount REAL NOT NULL,
+  installment_number INTEGER NOT NULL DEFAULT 1,
+  total_installments INTEGER NOT NULL DEFAULT 1,
+  due_date TEXT NOT NULL,
+  payment_date TEXT,
+  payment_method TEXT,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'paid', 'overdue', 'cancelled')),
+  amount_paid REAL NOT NULL DEFAULT 0,
+  cash_register_id TEXT,
+  invoice_number TEXT,
+  cancellation_reason TEXT,
+  notes TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+  FOREIGN KEY (purchase_id) REFERENCES purchases(id) ON DELETE CASCADE,
+  FOREIGN KEY (cash_register_id) REFERENCES cash_registers(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_accounts_payable_tenant_status ON accounts_payable (tenant_id, status, due_date);
+CREATE INDEX IF NOT EXISTS idx_accounts_payable_purchase ON accounts_payable (tenant_id, purchase_id);
+
+CREATE TABLE IF NOT EXISTS payment_splits (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  purchase_id TEXT NOT NULL,
+  payable_id TEXT,
+  payment_method TEXT NOT NULL,
+  amount REAL NOT NULL,
+  due_date TEXT,
+  paid_at TEXT,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'paid', 'cancelled')),
+  cash_register_id TEXT,
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+  FOREIGN KEY (purchase_id) REFERENCES purchases(id) ON DELETE CASCADE,
+  FOREIGN KEY (payable_id) REFERENCES accounts_payable(id) ON DELETE CASCADE,
+  FOREIGN KEY (cash_register_id) REFERENCES cash_registers(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_payment_splits_purchase ON payment_splits (tenant_id, purchase_id);
+

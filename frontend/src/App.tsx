@@ -305,12 +305,18 @@ const AppContent: React.FC = () => {
       return null;
     }
   });
+  const [financialInitialTab, setFinancialInitialTab] = useState<'transactions' | 'payables' | 'cash_register'>('transactions');
 
   const handleNavigateView = (view: string, subId?: string | null, forceOrTab?: boolean | string, tabParam?: string) => {
     const force = typeof forceOrTab === 'boolean' ? forceOrTab : false;
     const tab = typeof forceOrTab === 'string' ? forceOrTab : tabParam;
     if (view === 'patients' && tab) {
       setPatientInitialTab(tab);
+    }
+    if (view === 'financial' && tab) {
+      if (tab === 'payables' || tab === 'cash_register' || tab === 'transactions') {
+        setFinancialInitialTab(tab);
+      }
     }
     if ((view === 'superadmin' || view === 'superadmin-visits' || view === 'audit') && currentUserRef.current?.role !== 'superadmin' && !force) {
       return;
@@ -1594,7 +1600,7 @@ const AppContent: React.FC = () => {
 
           {currentView === 'inventory' && (
             (isClinicAdmin || isReceptionist || hasPermission('manage_inventory') || hasPermission('view_inventory')) ? (
-              <InventoryView />
+              <InventoryView onNavigate={handleNavigateView} />
             ) : (
               <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
                 <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mb-4">
@@ -1638,7 +1644,7 @@ const AppContent: React.FC = () => {
 
           {currentView === 'financial' && (
             (isClinicAdmin || hasPermission('view_financial')) ? (
-              <FinancialView />
+              <FinancialView initialTab={financialInitialTab} onNavigate={handleNavigateView} />
             ) : (
               <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
                 <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mb-4">

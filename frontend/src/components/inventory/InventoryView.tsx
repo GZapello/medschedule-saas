@@ -25,13 +25,24 @@ import {
   FileText,
   Check,
   Layers,
-  AlertCircle
+  AlertCircle,
+  Banknote,
+  CreditCard,
+  ArrowRight,
+  ArrowLeft,
+  Calendar,
+  DollarSign
 } from 'lucide-react';
 import { InventoryItem, InventoryMovement } from '../../types';
 
-export const InventoryView: React.FC = () => {
+interface InventoryViewProps {
+  onNavigate?: (view: string, subId?: string, tab?: string) => void;
+}
+
+export const InventoryView: React.FC<InventoryViewProps> = ({ onNavigate }) => {
   const { showToast } = useToast();
   const { isClinicAdmin, isReceptionist, hasPermission, canAccessInventory } = useAuth();
+  const formatCurrency = (val: number) => (val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [movements, setMovements] = useState<InventoryMovement[]>([]);
@@ -48,6 +59,25 @@ export const InventoryView: React.FC = () => {
     invoiceInfo: any;
     items: Array<any>;
   } | null>(null);
+
+  // Etapas da Conferência da NF: 1: Produtos | 2: Pagamento | 3: Revisão & Confirmação | 4: Sucesso
+  const [importStep, setImportStep] = useState<1 | 2 | 3 | 4>(1);
+  const [hasOpenCashRegister, setHasOpenCashRegister] = useState<boolean>(false);
+  const [importSuccessResult, setImportSuccessResult] = useState<any>(null);
+
+  // Dados Financeiros da Compra
+  const [paymentCondition, setPaymentCondition] = useState<'paid' | 'pending' | 'partial' | 'installment' | 'unspecified'>('unspecified');
+  const [paymentMethod, setPaymentMethod] = useState<string>('pix');
+  const [freightAmount, setFreightAmount] = useState<number>(0);
+  const [discountAmount, setDiscountAmount] = useState<number>(0);
+  const [otherExpensesAmount, setOtherExpensesAmount] = useState<number>(0);
+  const [singleDueDate, setSingleDueDate] = useState<string>('');
+  const [partialAmountPaid, setPartialAmountPaid] = useState<number>(0);
+  const [partialPaymentMethod, setPartialPaymentMethod] = useState<string>('pix');
+  const [partialDueDate, setPartialDueDate] = useState<string>('');
+  const [installmentsList, setInstallmentsList] = useState<Array<{ number: number; dueDate: string; amount: number; paymentMethod: string; isPaid: boolean }>>([]);
+  const [paymentSplitsList, setPaymentSplitsList] = useState<Array<{ paymentMethod: string; amount: number; isPaid: boolean }>>([]);
+  const [financialNotes, setFinancialNotes] = useState<string>('');
 
   const cancelInvoiceUpload = () => {
     if (invoiceAbortControllerRef.current) {
@@ -331,6 +361,63 @@ export const InventoryView: React.FC = () => {
             return;
           }
 
+          // Verifica se há caixa aberto no momento
+          try {
+            const regRes = await ApiClient.get<any>('/v1/cash-register/current');
+            setHasOpenCashRegister(Boolean(regRes.openRegister));
+          } catch {}
+
+          // Inicializa campos financeiros
+          const info = res.invoiceInfo || {};
+          const pCond = info.suggestedPaymentCondition || 'unspecified';
+          const pMeth = info.suggestedPaymentMethod || 'pix';
+          const frt = Number(info.freightAmount) || 0;
+          const dsc = Number(info.discountAmount) || 0;
+          const oth = Number(info.otherExpensesAmount) || 0;
+
+          setPaymentCondition(pCond);
+          setPaymentMethod(pMeth);
+          setFreightAmount(frt);
+          setDiscountAmount(dsc);
+          setOtherExpensesAmount(oth);
+
+          const defaultDueDate = new Date();
+          defaultDueDate.setDate(defaultDueDate.getDate() + 30);
+          const defaultDueDateStr = defaultDueDate.toISOString().slice(0, 10);
+          setSingleDueDate(defaultDueDateStr);
+          setPartialDueDate(defaultDueDateStr);
+
+          // Inicializa parcelas
+          if (Array.isArray(info.installments) && info.installments.length > 0) {
+            setInstallmentsList(info.installments.map((inst: any) => ({
+              number: Number(inst.number) || 1,
+              dueDate: inst.dueDate || defaultDueDateStr,
+              amount: Number(inst.amount) || 0,
+              paymentMethod: pMeth,
+              isPaid: false
+            })));
+          } else {
+            // Gera 1 parcela padrão com o total
+            setInstallmentsList([{
+              number: 1,
+              dueDate: defaultDueDateStr,
+              amount: Number(info.totalAmount) || 0,
+              paymentMethod: pMeth,
+              isPaid: false
+            }]);
+          }
+
+          // Inicializa divisão mista padrão
+          setPaymentSplitsList([
+            { paymentMethod: 'pix', amount: Number(info.totalAmount) || 0, isPaid: true }
+          ]);
+
+          setPartialAmountPaid(0);
+          setPartialPaymentMethod(pMeth);
+          setFinancialNotes('');
+          setImportStep(1);
+          setImportSuccessResult(null);
+
           setInvoiceData(res);
           setShowInvoiceConferenceModal(true);
           showToast(`${res.items.length} itens detectados para conferência!`, 'success');
@@ -355,18 +442,76 @@ export const InventoryView: React.FC = () => {
     }
   };
 
+  // Cálculo dinâmico do total dos produtos revisados
+  const computedProductsAmount = (invoiceData?.items || [])
+    .filter(i => i.action !== 'ignore')
+    .reduce((sum, it) => {
+      const q = Number(it.quantity) || 0;
+      const c = Number(it.unitCost) || 0;
+      return sum + (Number(it.totalCost) > 0 ? Number(it.totalCost) : q * c);
+    }, 0);
+
+  const computedTotalAmount = Math.max(0, computedProductsAmount + freightAmount + otherExpensesAmount - discountAmount);
+
+  const generateInstallments = (count: number) => {
+    const n = Math.max(1, Math.min(24, count));
+    const partAmt = parseFloat((computedTotalAmount / n).toFixed(2));
+    const list: any[] = [];
+    const baseDate = new Date(invoiceData?.invoiceInfo?.issueDate || new Date().toISOString().slice(0, 10));
+
+    let accumulated = 0;
+    for (let i = 1; i <= n; i++) {
+      const d = new Date(baseDate);
+      d.setDate(d.getDate() + (i * 30));
+      const amt = i === n ? parseFloat((computedTotalAmount - accumulated).toFixed(2)) : partAmt;
+      accumulated += amt;
+      list.push({
+        number: i,
+        dueDate: d.toISOString().slice(0, 10),
+        amount: amt,
+        paymentMethod: paymentMethod === 'mixed' ? 'boleto' : paymentMethod,
+        isPaid: false
+      });
+    }
+    setInstallmentsList(list);
+  };
+
   const handleConfirmInvoiceImport = async () => {
     if (!invoiceData || !invoiceData.items) return;
     try {
       setIsConfirmingInvoice(true);
-      const res = await ApiClient.post<any>('/v1/inventory/invoices/confirm', {
-        invoiceInfo: invoiceData.invoiceInfo,
+
+      const payload = {
+        invoiceInfo: {
+          ...invoiceData.invoiceInfo,
+          productsAmount: computedProductsAmount,
+          freightAmount,
+          discountAmount,
+          otherExpensesAmount,
+          totalAmount: computedTotalAmount
+        },
+        paymentInfo: {
+          paymentCondition,
+          paymentMethod,
+          amountPaid: paymentCondition === 'paid'
+            ? computedTotalAmount
+            : (paymentCondition === 'partial' ? partialAmountPaid : 0),
+          amountPending: paymentCondition === 'pending' || paymentCondition === 'unspecified'
+            ? computedTotalAmount
+            : (paymentCondition === 'partial' ? Math.max(0, computedTotalAmount - partialAmountPaid) : 0),
+          dueDate: singleDueDate,
+          installments: paymentCondition === 'installment' ? installmentsList : undefined,
+          paymentSplits: paymentMethod === 'mixed' ? paymentSplitsList : undefined,
+          notes: financialNotes
+        },
         items: invoiceData.items
-      });
-      showToast(res.message || 'Itens importados com sucesso para o estoque!', 'success');
-      setShowInvoiceConferenceModal(false);
-      setInvoiceData(null);
+      };
+
+      const res = await ApiClient.post<any>('/v1/inventory/invoices/confirm', payload);
+      setImportSuccessResult(res);
+      setImportStep(4);
       fetchInventory();
+      showToast(res.message || 'Itens importados com sucesso para o estoque e financeiro!', 'success');
     } catch (err: any) {
       showToast(err.message || 'Erro ao confirmar importação da nota fiscal', 'error');
     } finally {
@@ -1116,232 +1261,827 @@ export const InventoryView: React.FC = () => {
         </div>
       )}
 
-      {/* Modal de Conferência de Importação de Nota Fiscal */}
+      {/* Modal de Conferência de Importação de Nota Fiscal (Wizard 3 Etapas) */}
       {showInvoiceConferenceModal && invoiceData && (
         <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto mobile-modal">
           <div className="bg-white rounded-3xl max-w-5xl w-full p-4 sm:p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 space-y-4 max-h-[92vh] flex flex-col">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 shrink-0">
+            
+            {/* Cabeçalho do Modal e Indicador de Etapas */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 shrink-0 gap-3">
               <div className="flex items-center gap-2">
                 <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
                   <FileUp className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-900">Conferência de Entrada por Nota Fiscal</h3>
-                  <p className="text-xs text-slate-500">Revise os produtos identificados antes de atualizar o estoque da clínica.</p>
+                  <h3 className="text-base font-bold text-slate-900">
+                    {importStep === 4 ? 'Importação Concluída' : 'Conferência de Entrada por Nota Fiscal'}
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    {importStep === 1
+                      ? 'Etapa 1 de 3: Conferência de produtos e insumos para o estoque'
+                      : importStep === 2
+                      ? 'Etapa 2 de 3: Dados financeiros, fornecedor e forma de pagamento'
+                      : importStep === 3
+                      ? 'Etapa 3 de 3: Revisão final e confirmação de estoque e financeiro'
+                      : 'Itens importados para o estoque e despesas geradas com sucesso.'}
+                  </p>
                 </div>
               </div>
-              <button
-                aria-label="Fechar"
-                onClick={() => setShowInvoiceConferenceModal(false)}
-                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg"
-              >
-                ✕
-              </button>
+
+              {importStep !== 4 ? (
+                <div className="flex items-center gap-1.5 text-xs font-bold self-end sm:self-center">
+                  <button
+                    type="button"
+                    onClick={() => setImportStep(1)}
+                    className={`px-3 py-1.5 rounded-xl transition-all ${
+                      importStep === 1
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    1. Produtos
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setImportStep(2)}
+                    className={`px-3 py-1.5 rounded-xl transition-all ${
+                      importStep === 2
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    2. Pagamento
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setImportStep(3)}
+                    className={`px-3 py-1.5 rounded-xl transition-all ${
+                      importStep === 3
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    3. Revisão
+                  </button>
+                  <button
+                    aria-label="Fechar"
+                    onClick={() => setShowInvoiceConferenceModal(false)}
+                    className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg ml-2"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <button
+                  aria-label="Fechar"
+                  onClick={() => {
+                    setShowInvoiceConferenceModal(false);
+                    setInvoiceData(null);
+                    setImportStep(1);
+                  }}
+                  className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg self-end sm:self-center"
+                >
+                  ✕
+                </button>
+              )}
             </div>
 
-            {/* Cabeçalho da Nota Fiscal */}
-            <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 text-xs shrink-0 grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div>
-                <span className="text-slate-400 block text-[10px] uppercase font-bold">Nota Fiscal</span>
-                <span className="font-extrabold text-slate-800 text-sm">
-                  {invoiceData.invoiceInfo?.invoiceNumber ? `NF-e ${invoiceData.invoiceInfo.invoiceNumber}` : 'S/N (Cupom/Recibo)'}
-                  {invoiceData.invoiceInfo?.series ? ` • Série ${invoiceData.invoiceInfo.series}` : ''}
-                </span>
-              </div>
-              <div>
-                <span className="text-slate-400 block text-[10px] uppercase font-bold">Fornecedor / Emitente</span>
-                <span className="font-bold text-slate-800 truncate block" title={invoiceData.invoiceInfo?.supplier?.name}>
-                  {invoiceData.invoiceInfo?.supplier?.name || invoiceData.invoiceInfo?.supplier?.tradeName || 'Não identificado'}
-                </span>
-                {invoiceData.invoiceInfo?.supplier?.cnpj && (
-                  <span className="text-[10px] text-slate-400">{invoiceData.invoiceInfo.supplier.cnpj}</span>
-                )}
-              </div>
-              <div>
-                <span className="text-slate-400 block text-[10px] uppercase font-bold">Data de Emissão</span>
-                <span className="font-bold text-slate-800">
-                  {invoiceData.invoiceInfo?.issueDate ? new Date(invoiceData.invoiceInfo.issueDate).toLocaleDateString('pt-BR') : '—'}
-                </span>
-              </div>
-              <div>
-                <span className="text-slate-400 block text-[10px] uppercase font-bold">Valor Total NF</span>
-                <span className="font-extrabold text-emerald-700 text-sm">
-                  R$ {(invoiceData.invoiceInfo?.totalAmount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                </span>
-              </div>
-            </div>
+            {/* ETAPA 1: CONFERÊNCIA DE PRODUTOS */}
+            {importStep === 1 && (
+              <>
+                {/* Cabeçalho da Nota Fiscal */}
+                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 text-xs shrink-0 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div>
+                    <span className="text-slate-400 block text-[10px] uppercase font-bold">Nota Fiscal</span>
+                    <span className="font-extrabold text-slate-800 text-sm">
+                      {invoiceData.invoiceInfo?.invoiceNumber ? `NF-e ${invoiceData.invoiceInfo.invoiceNumber}` : 'S/N (Cupom/Recibo)'}
+                      {invoiceData.invoiceInfo?.series ? ` • Série ${invoiceData.invoiceInfo.series}` : ''}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px] uppercase font-bold">Fornecedor / Emitente</span>
+                    <span className="font-bold text-slate-800 truncate block" title={invoiceData.invoiceInfo?.supplier?.name}>
+                      {invoiceData.invoiceInfo?.supplier?.name || invoiceData.invoiceInfo?.supplier?.tradeName || 'Não identificado'}
+                    </span>
+                    {invoiceData.invoiceInfo?.supplier?.cnpj && (
+                      <span className="text-[10px] text-slate-400">{invoiceData.invoiceInfo.supplier.cnpj}</span>
+                    )}
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px] uppercase font-bold">Data de Emissão</span>
+                    <span className="font-bold text-slate-800">
+                      {invoiceData.invoiceInfo?.issueDate ? new Date(invoiceData.invoiceInfo.issueDate + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px] uppercase font-bold">Valor Total Calculado</span>
+                    <span className="font-extrabold text-emerald-700 text-sm">
+                      R$ {computedTotalAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </div>
 
-            {/* Tabela de Itens para Conferência */}
-            <div className="overflow-y-auto flex-1 border border-slate-200 rounded-2xl">
-              <ResponsiveTable className="w-full text-left text-xs">
-                <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold sticky top-0 z-10">
-                  <tr>
-                    <th className="px-3.5 py-3 w-44">Destino / Ação</th>
-                    <th className="px-3.5 py-3">Descrição do Produto / Insumo</th>
-                    <th className="px-3.5 py-3 w-28">Quantidade</th>
-                    <th className="px-3.5 py-3 w-20">Unidade</th>
-                    <th className="px-3.5 py-3 w-28">Custo Unit. (R$)</th>
-                    <th className="px-3.5 py-3 w-28">Lote</th>
-                    <th className="px-3.5 py-3 w-32">Validade</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-slate-700">
-                  {invoiceData.items.map((it, idx) => {
-                    const isUpdate = it.action === 'update';
-                    const isIgnore = it.action === 'ignore';
-                    return (
-                      <tr key={it.id || idx} className={`hover:bg-slate-50/70 transition-colors ${isIgnore ? 'opacity-40 bg-slate-50/50' : ''}`}>
-                        <td className="px-3.5 py-3">
-                          <select
-                            value={it.action}
-                            onChange={e => updateInvoiceItemField(idx, 'action', e.target.value)}
-                            className={`w-full rounded-xl px-2.5 py-1.5 font-bold text-xs border ${
-                              isUpdate
-                                ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
-                                : it.action === 'create'
-                                ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                                : 'bg-slate-100 border-slate-200 text-slate-500'
-                            }`}
-                          >
-                            <option value="update">Atualizar Estoque</option>
-                            <option value="create">Cadastrar Novo</option>
-                            <option value="ignore">Ignorar Item</option>
-                          </select>
-
-                          {isUpdate && (
-                            <div className="mt-1">
+                {/* Tabela de Itens para Conferência */}
+                <div className="overflow-y-auto flex-1 border border-slate-200 rounded-2xl">
+                  <ResponsiveTable className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold sticky top-0 z-10">
+                      <tr>
+                        <th className="px-3.5 py-3 w-44">Destino / Ação</th>
+                        <th className="px-3.5 py-3">Descrição do Produto / Insumo</th>
+                        <th className="px-3.5 py-3 w-28">Quantidade</th>
+                        <th className="px-3.5 py-3 w-20">Unidade</th>
+                        <th className="px-3.5 py-3 w-28">Custo Unit. (R$)</th>
+                        <th className="px-3.5 py-3 w-28">Lote</th>
+                        <th className="px-3.5 py-3 w-32">Validade</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-slate-700">
+                      {invoiceData.items.map((it, idx) => {
+                        const isUpdate = it.action === 'update';
+                        const isIgnore = it.action === 'ignore';
+                        return (
+                          <tr key={it.id || idx} className={`hover:bg-slate-50/70 transition-colors ${isIgnore ? 'opacity-40 bg-slate-50/50' : ''}`}>
+                            <td className="px-3.5 py-3">
                               <select
-                                value={it.matchedItemId || ''}
-                                onChange={e => updateInvoiceItemField(idx, 'matchedItemId', e.target.value)}
-                                className="w-full text-[11px] border border-slate-200 rounded-lg p-1 bg-white"
+                                value={it.action}
+                                onChange={e => updateInvoiceItemField(idx, 'action', e.target.value)}
+                                className={`w-full rounded-xl px-2.5 py-1.5 font-bold text-xs border ${
+                                  isUpdate
+                                    ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
+                                    : it.action === 'create'
+                                    ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                                    : 'bg-slate-100 border-slate-200 text-slate-500'
+                                }`}
                               >
-                                <option value="">Selecionar item existente...</option>
-                                {items.map(existing => (
-                                  <option key={existing.id} value={existing.id}>
-                                    {existing.name} (Atual: {existing.quantity} {existing.unit})
-                                  </option>
-                                ))}
+                                <option value="update">Atualizar Estoque</option>
+                                <option value="create">Cadastrar Novo</option>
+                                <option value="ignore">Ignorar Item</option>
                               </select>
-                            </div>
-                          )}
-                        </td>
 
-                        <td className="px-3.5 py-3">
-                          <input
-                            type="text"
-                            value={it.cleanName || it.name}
-                            onChange={e => updateInvoiceItemField(idx, 'cleanName', e.target.value)}
-                            disabled={isIgnore}
-                            className="w-full border border-slate-200 rounded-lg px-2 py-1 font-bold text-slate-900 text-xs"
-                          />
-                          {it.name !== it.cleanName && (
-                            <span className="text-[10px] text-slate-400 block truncate mt-0.5" title={it.name}>
-                              Orig: {it.name}
-                            </span>
-                          )}
-                        </td>
+                              {isUpdate && (
+                                <div className="mt-1">
+                                  <select
+                                    value={it.matchedItemId || ''}
+                                    onChange={e => updateInvoiceItemField(idx, 'matchedItemId', e.target.value)}
+                                    className="w-full text-[11px] border border-slate-200 rounded-lg p-1 bg-white"
+                                  >
+                                    <option value="">Selecionar item existente...</option>
+                                    {items.map(existing => (
+                                      <option key={existing.id} value={existing.id}>
+                                        {existing.name} (Atual: {existing.quantity} {existing.unit})
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              )}
+                            </td>
 
-                        <td className="px-3.5 py-3">
-                          <input
-                            type="number"
-                            step="any"
-                            min="0"
-                            value={it.quantity}
-                            onChange={e => updateInvoiceItemField(idx, 'quantity', parseFloat(e.target.value) || 0)}
-                            disabled={isIgnore}
-                            className="w-full border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold text-slate-900"
-                          />
-                          {it.packMultiplier && it.packMultiplier > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => applyPackConversion(idx, it.packMultiplier!)}
-                              className="mt-1 px-1.5 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded text-[9px] font-bold border border-indigo-200 block w-full text-center"
-                              title={`Converter ${it.quantity} caixas para ${it.quantity * it.packMultiplier} unidades`}
-                            >
-                              Converter ({it.quantity * it.packMultiplier} UN)
-                            </button>
-                          )}
-                        </td>
+                            <td className="px-3.5 py-3">
+                              <input
+                                type="text"
+                                value={it.cleanName || it.name}
+                                onChange={e => updateInvoiceItemField(idx, 'cleanName', e.target.value)}
+                                disabled={isIgnore}
+                                className="w-full border border-slate-200 rounded-lg px-2 py-1 font-bold text-slate-900 text-xs"
+                              />
+                              {it.name !== it.cleanName && (
+                                <span className="text-[10px] text-slate-400 block truncate mt-0.5" title={it.name}>
+                                  Orig: {it.name}
+                                </span>
+                              )}
+                            </td>
 
-                        <td className="px-3.5 py-3">
-                          <input
-                            type="text"
-                            value={it.unit}
-                            onChange={e => updateInvoiceItemField(idx, 'unit', e.target.value.toUpperCase())}
-                            disabled={isIgnore}
-                            className="w-full border border-slate-200 rounded-lg px-2 py-1 text-xs font-semibold text-center uppercase"
-                          />
-                        </td>
+                            <td className="px-3.5 py-3">
+                              <input
+                                type="number"
+                                step="any"
+                                min="0"
+                                value={it.quantity}
+                                onChange={e => updateInvoiceItemField(idx, 'quantity', parseFloat(e.target.value) || 0)}
+                                disabled={isIgnore}
+                                className="w-full border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold text-slate-900"
+                              />
+                              {it.packMultiplier && it.packMultiplier > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => applyPackConversion(idx, it.packMultiplier!)}
+                                  className="mt-1 px-1.5 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded text-[9px] font-bold border border-indigo-200 block w-full text-center"
+                                  title={`Converter ${it.quantity} caixas para ${it.quantity * it.packMultiplier} unidades`}
+                                >
+                                  Converter ({it.quantity * it.packMultiplier} UN)
+                                </button>
+                              )}
+                            </td>
 
-                        <td className="px-3.5 py-3">
+                            <td className="px-3.5 py-3">
+                              <input
+                                type="text"
+                                value={it.unit}
+                                onChange={e => updateInvoiceItemField(idx, 'unit', e.target.value.toUpperCase())}
+                                disabled={isIgnore}
+                                className="w-full border border-slate-200 rounded-lg px-2 py-1 text-xs font-semibold text-center uppercase"
+                              />
+                            </td>
+
+                            <td className="px-3.5 py-3">
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={it.unitCost}
+                                onChange={e => updateInvoiceItemField(idx, 'unitCost', parseFloat(e.target.value) || 0)}
+                                disabled={isIgnore}
+                                className="w-full border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold text-slate-900"
+                              />
+                            </td>
+
+                            <td className="px-3.5 py-3">
+                              <input
+                                type="text"
+                                value={it.batchNumber || ''}
+                                onChange={e => updateInvoiceItemField(idx, 'batchNumber', e.target.value)}
+                                placeholder="Lote"
+                                disabled={isIgnore}
+                                className="w-full border border-slate-200 rounded-lg px-2 py-1 text-xs"
+                              />
+                            </td>
+
+                            <td className="px-3.5 py-3">
+                              <input
+                                type="date"
+                                value={it.expirationDate || ''}
+                                onChange={e => updateInvoiceItemField(idx, 'expirationDate', e.target.value)}
+                                disabled={isIgnore}
+                                className="w-full border border-slate-200 rounded-lg px-2 py-1 text-xs"
+                              />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </ResponsiveTable>
+                </div>
+
+                {/* Rodapé Etapa 1 */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-slate-100 shrink-0 text-xs">
+                  <div className="text-slate-500 font-medium">
+                    Resumo: <strong>{invoiceData.items.filter(i => i.action === 'update').length}</strong> para atualizar estoque,{' '}
+                    <strong>{invoiceData.items.filter(i => i.action === 'create').length}</strong> novos itens,{' '}
+                    <strong>{invoiceData.items.filter(i => i.action === 'ignore').length}</strong> ignorados.
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowInvoiceConferenceModal(false)}
+                      className="px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setImportStep(2)}
+                      className="flex items-center gap-1.5 px-6 py-2.5 font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-all"
+                    >
+                      <span>Avançar para Pagamento</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* ETAPA 2: DADOS FINANCEIROS & PAGAMENTO */}
+            {importStep === 2 && (
+              <div className="overflow-y-auto space-y-4 flex-1 text-xs pr-1">
+                {/* Identificação Fiscal */}
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div>
+                    <span className="text-slate-400 block text-[10px] uppercase font-bold">Fornecedor</span>
+                    <strong className="text-slate-900 text-sm truncate block" title={invoiceData.invoiceInfo?.supplier?.name}>
+                      {invoiceData.invoiceInfo?.supplier?.name || invoiceData.invoiceInfo?.supplier?.tradeName || 'Não identificado'}
+                    </strong>
+                    {invoiceData.invoiceInfo?.supplier?.cnpj && (
+                      <span className="text-[10px] text-slate-400">{invoiceData.invoiceInfo.supplier.cnpj}</span>
+                    )}
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px] uppercase font-bold">Nota Fiscal</span>
+                    <strong className="text-slate-800 text-sm">
+                      {invoiceData.invoiceInfo?.invoiceNumber ? `NF ${invoiceData.invoiceInfo.invoiceNumber}` : 'S/N'}
+                      {invoiceData.invoiceInfo?.series ? ` • Série ${invoiceData.invoiceInfo.series}` : ''}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px] uppercase font-bold">Data de Emissão</span>
+                    <strong className="text-slate-800">
+                      {invoiceData.invoiceInfo?.issueDate ? new Date(invoiceData.invoiceInfo.issueDate + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px] uppercase font-bold">Chave de Acesso</span>
+                    <span className="text-slate-600 font-mono text-[10px] break-all block">
+                      {invoiceData.invoiceInfo?.accessKey ? `${invoiceData.invoiceInfo.accessKey.slice(0, 15)}...${invoiceData.invoiceInfo.accessKey.slice(-8)}` : 'Não informada'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Discriminação de Valores */}
+                <div className="bg-white p-4 rounded-2xl border border-slate-200 space-y-3">
+                  <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wider flex items-center gap-1.5">
+                    <DollarSign className="w-4 h-4 text-emerald-600" />
+                    Discriminação dos Valores da Compra
+                  </h4>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div>
+                      <label className="block text-slate-500 font-bold mb-1 text-[11px]">Total dos Produtos (R$)</label>
+                      <input
+                        type="text"
+                        disabled
+                        value={computedProductsAmount.toFixed(2)}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 font-bold text-slate-800"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-700 font-bold mb-1 text-[11px]">Frete (+ R$)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={freightAmount}
+                        onChange={e => setFreightAmount(parseFloat(e.target.value) || 0)}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2 font-bold text-slate-900"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-700 font-bold mb-1 text-[11px]">Descontos (- R$)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={discountAmount}
+                        onChange={e => setDiscountAmount(parseFloat(e.target.value) || 0)}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2 font-bold text-rose-600"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-700 font-bold mb-1 text-[11px]">Outras Despesas (+ R$)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={otherExpensesAmount}
+                        onChange={e => setOtherExpensesAmount(parseFloat(e.target.value) || 0)}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2 font-bold text-slate-900"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 flex items-center justify-between">
+                    <div>
+                      <span className="font-bold text-emerald-900 text-xs">Valor Total Final da Nota Fiscal:</span>
+                      <p className="text-[10px] text-emerald-700">Produtos + Frete + Despesas - Descontos</p>
+                    </div>
+                    <span className="text-xl font-black text-emerald-800">
+                      R$ {computedTotalAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Situação e Forma de Pagamento */}
+                <div className="bg-white p-4 rounded-2xl border border-slate-200 space-y-3">
+                  <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wider flex items-center gap-1.5">
+                    <CreditCard className="w-4 h-4 text-indigo-600" />
+                    Condição & Forma de Pagamento
+                  </h4>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Situação do Pagamento *</label>
+                      <select
+                        value={paymentCondition}
+                        onChange={e => setPaymentCondition(e.target.value as any)}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2 font-bold text-xs bg-slate-50"
+                      >
+                        <option value="paid">Já pago (À vista / Quitado antes ou no ato)</option>
+                        <option value="pending">Ainda não pago / A pagar (Vencimento único)</option>
+                        <option value="partial">Parcialmente pago (Entrada quitada + Saldo a pagar)</option>
+                        <option value="installment">Parcelado (Duas ou mais parcelas)</option>
+                        <option value="unspecified">Sem informação (Registrar como obrigação pendente)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Forma de Pagamento Principal *</label>
+                      <select
+                        value={paymentMethod}
+                        onChange={e => setPaymentMethod(e.target.value)}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2 font-bold text-xs bg-slate-50"
+                      >
+                        <option value="pix">PIX</option>
+                        <option value="cash">Dinheiro em Espécie (Gaveta de Caixa)</option>
+                        <option value="boleto">Boleto Bancário</option>
+                        <option value="credit_card">Cartão de Crédito</option>
+                        <option value="debit_card">Cartão de Débito</option>
+                        <option value="bank_transfer">Transferência Bancária</option>
+                        <option value="mixed">Pagamento Misto</option>
+                        <option value="other">Outro</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Alerta de Integração com Gaveta Física de Caixa */}
+                  {(paymentMethod === 'cash' || paymentMethod === 'dinheiro') && (
+                    <div className={`p-3 rounded-xl border text-[11px] ${
+                      hasOpenCashRegister
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                        : 'bg-amber-50 border-amber-200 text-amber-800'
+                    }`}>
+                      {hasOpenCashRegister ? (
+                        <div className="flex items-start gap-2">
+                          <Banknote className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                          <div>
+                            <strong>Integração com Caixa Aberto:</strong> O valor pago em dinheiro gerará uma movimentação de <strong>DESPESA</strong> no Caixa Aberto da clínica, abatendo do saldo físico da gaveta.
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-start gap-2">
+                          <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                          <div>
+                            <strong>Nenhum caixa físico aberto:</strong> O pagamento em dinheiro será registrado contabilmente no Financeiro, mas sem dedução em sessão de caixa física ativa no momento.
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Campos específicos: Pendente Único */}
+                  {(paymentCondition === 'pending' || paymentCondition === 'unspecified') && (
+                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block font-bold text-slate-700 mb-1 text-[11px]">Data de Vencimento da Conta a Pagar *</label>
+                        <input
+                          type="date"
+                          value={singleDueDate}
+                          onChange={e => setSingleDueDate(e.target.value)}
+                          className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold"
+                        />
+                      </div>
+                      <div className="text-[11px] text-slate-500 flex items-center">
+                        Uma conta a pagar no valor total de R$ {computedTotalAmount.toFixed(2)} será gerada para quitação futura.
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Campos específicos: Parcialmente Pago */}
+                  {paymentCondition === 'partial' && (
+                    <div className="p-3 bg-indigo-50/50 rounded-xl border border-indigo-100 space-y-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                          <label className="block font-bold text-slate-700 mb-1 text-[11px]">Valor Pago de Entrada (R$) *</label>
                           <input
                             type="number"
                             step="0.01"
-                            value={it.unitCost}
-                            onChange={e => updateInvoiceItemField(idx, 'unitCost', parseFloat(e.target.value) || 0)}
-                            disabled={isIgnore}
-                            className="w-full border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold text-slate-900"
+                            min="0"
+                            max={computedTotalAmount}
+                            value={partialAmountPaid}
+                            onChange={e => setPartialAmountPaid(parseFloat(e.target.value) || 0)}
+                            className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-emerald-700"
                           />
-                        </td>
-
-                        <td className="px-3.5 py-3">
-                          <input
-                            type="text"
-                            value={it.batchNumber || ''}
-                            onChange={e => updateInvoiceItemField(idx, 'batchNumber', e.target.value)}
-                            placeholder="Lote"
-                            disabled={isIgnore}
-                            className="w-full border border-slate-200 rounded-lg px-2 py-1 text-xs"
-                          />
-                        </td>
-
-                        <td className="px-3.5 py-3">
+                        </div>
+                        <div>
+                          <label className="block font-bold text-slate-700 mb-1 text-[11px]">Forma da Entrada *</label>
+                          <select
+                            value={partialPaymentMethod}
+                            onChange={e => setPartialPaymentMethod(e.target.value)}
+                            className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold bg-white"
+                          >
+                            <option value="pix">PIX</option>
+                            <option value="cash">Dinheiro em Espécie</option>
+                            <option value="debit_card">Cartão de Débito</option>
+                            <option value="credit_card">Cartão de Crédito</option>
+                            <option value="bank_transfer">Transferência</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block font-bold text-slate-700 mb-1 text-[11px]">Vencimento do Saldo *</label>
                           <input
                             type="date"
-                            value={it.expirationDate || ''}
-                            onChange={e => updateInvoiceItemField(idx, 'expirationDate', e.target.value)}
-                            disabled={isIgnore}
-                            className="w-full border border-slate-200 rounded-lg px-2 py-1 text-xs"
+                            value={partialDueDate}
+                            onChange={e => setPartialDueDate(e.target.value)}
+                            className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold"
                           />
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </ResponsiveTable>
-            </div>
-
-            {/* Rodapé e Ações */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-slate-100 shrink-0 text-xs">
-              <div className="text-slate-500 font-medium">
-                Resumo: <strong>{invoiceData.items.filter(i => i.action === 'update').length}</strong> para atualizar estoque,{' '}
-                <strong>{invoiceData.items.filter(i => i.action === 'create').length}</strong> novos itens,{' '}
-                <strong>{invoiceData.items.filter(i => i.action === 'ignore').length}</strong> ignorados.
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowInvoiceConferenceModal(false)}
-                  className="px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={handleConfirmInvoiceImport}
-                  disabled={isConfirmingInvoice}
-                  className="flex items-center gap-2 px-6 py-2.5 font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs transition-all disabled:opacity-50"
-                >
-                  {isConfirmingInvoice ? (
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <Check className="w-4 h-4" />
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] font-bold border-t border-indigo-200/50 pt-2 text-indigo-900">
+                        <span>Saldo Pendente a Pagar:</span>
+                        <span>R$ {Math.max(0, computedTotalAmount - partialAmountPaid).toFixed(2)}</span>
+                      </div>
+                    </div>
                   )}
-                  Confirmar Entrada no Estoque
-                </button>
+
+                  {/* Campos específicos: Parcelado */}
+                  {paymentCondition === 'installment' && (
+                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <span className="font-bold text-slate-800 text-xs">Gerador Rápido de Parcelas:</span>
+                        <div className="flex items-center gap-1">
+                          {[2, 3, 4, 6, 12].map(n => (
+                            <button
+                              key={n}
+                              type="button"
+                              onClick={() => generateInstallments(n)}
+                              className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-slate-200 bg-white hover:bg-indigo-50 text-indigo-700"
+                            >
+                              {n}x
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Lista de Parcelas */}
+                      <div className="space-y-2">
+                        {installmentsList.map((inst, iIdx) => (
+                          <div key={iIdx} className="grid grid-cols-12 gap-2 items-center bg-white p-2 rounded-xl border border-slate-200 text-xs">
+                            <div className="col-span-2 font-bold text-slate-700">
+                              Parcela {inst.number}:
+                            </div>
+                            <div className="col-span-4">
+                              <input
+                                type="date"
+                                value={inst.dueDate}
+                                onChange={e => {
+                                  const updated = [...installmentsList];
+                                  updated[iIdx].dueDate = e.target.value;
+                                  setInstallmentsList(updated);
+                                }}
+                                className="w-full border border-slate-200 rounded-lg p-1 text-xs"
+                              />
+                            </div>
+                            <div className="col-span-3">
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={inst.amount}
+                                onChange={e => {
+                                  const updated = [...installmentsList];
+                                  updated[iIdx].amount = parseFloat(e.target.value) || 0;
+                                  setInstallmentsList(updated);
+                                }}
+                                className="w-full border border-slate-200 rounded-lg p-1 text-xs font-bold text-right"
+                              />
+                            </div>
+                            <div className="col-span-3 flex items-center gap-1">
+                              <select
+                                value={inst.paymentMethod || 'boleto'}
+                                onChange={e => {
+                                  const updated = [...installmentsList];
+                                  updated[iIdx].paymentMethod = e.target.value;
+                                  setInstallmentsList(updated);
+                                }}
+                                className="w-full border border-slate-200 rounded-lg p-1 text-[11px]"
+                              >
+                                <option value="boleto">Boleto</option>
+                                <option value="pix">PIX</option>
+                                <option value="cash">Dinheiro</option>
+                                <option value="credit_card">Cartão</option>
+                              </select>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="flex items-center justify-between text-[11px] font-bold pt-1">
+                        <span className="text-slate-500">Soma das Parcelas:</span>
+                        <span className="text-indigo-800">
+                          R$ {installmentsList.reduce((s, i) => s + (Number(i.amount) || 0), 0).toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Observações da Compra */}
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1 text-[11px]">Observações / Informações Adicionais</label>
+                    <input
+                      type="text"
+                      value={financialNotes}
+                      onChange={e => setFinancialNotes(e.target.value)}
+                      placeholder="Ex: Compra autorizada pelo Dr. Carlos, entrega via transportadora..."
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                    />
+                  </div>
+                </div>
+
+                {/* Rodapé Etapa 2 */}
+                <div className="flex items-center justify-between pt-3 border-t border-slate-100 shrink-0 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setImportStep(1)}
+                    className="flex items-center gap-1.5 px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                    <span>Voltar aos Produtos</span>
+                  </button>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowInvoiceConferenceModal(false)}
+                      className="px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setImportStep(3)}
+                      className="flex items-center gap-1.5 px-6 py-2.5 font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-all"
+                    >
+                      <span>Avançar para Revisão</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
+
+            {/* ETAPA 3: REVISÃO & CONFIRMAÇÃO */}
+            {importStep === 3 && (
+              <div className="overflow-y-auto space-y-4 flex-1 text-xs pr-1">
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80">
+                  <h4 className="font-extrabold text-slate-900 text-sm mb-1">Revisão Geral antes da Gravação</h4>
+                  <p className="text-slate-500 text-xs">
+                    Ao confirmar, a operação será realizada de forma atômica no banco de dados, integrando Estoque e Financeiro.
+                  </p>
+                </div>
+
+                {/* 3 Cards de Impacto */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {/* Card Estoque */}
+                  <div className="bg-white p-4 rounded-2xl border border-slate-200 space-y-2">
+                    <div className="flex items-center gap-2 text-indigo-700 font-bold">
+                      <Package className="w-4 h-4" />
+                      <span>Impacto no Estoque</span>
+                    </div>
+                    <ul className="text-slate-600 space-y-1 text-[11px]">
+                      <li>• <strong>{invoiceData.items.filter(i => i.action === 'create').length}</strong> novos itens no catálogo</li>
+                      <li>• <strong>{invoiceData.items.filter(i => i.action === 'update').length}</strong> itens existentes atualizados</li>
+                      <li>• <strong>{invoiceData.items.filter(i => i.action === 'ignore').length}</strong> itens ignorados</li>
+                    </ul>
+                    <div className="pt-2 border-t border-slate-100 text-[10px] text-slate-400">
+                      Entradas vinculadas à NF nº {invoiceData.invoiceInfo?.invoiceNumber || 'S/N'}.
+                    </div>
+                  </div>
+
+                  {/* Card Financeiro */}
+                  <div className="bg-white p-4 rounded-2xl border border-slate-200 space-y-2">
+                    <div className="flex items-center gap-2 text-emerald-700 font-bold">
+                      <CreditCard className="w-4 h-4" />
+                      <span>Impacto Financeiro</span>
+                    </div>
+                    <div className="text-slate-600 space-y-1 text-[11px]">
+                      <div>Total da NF: <strong>R$ {computedTotalAmount.toFixed(2)}</strong></div>
+                      <div>Fornecedor: <strong className="truncate inline-block max-w-[140px] align-bottom">{invoiceData.invoiceInfo?.supplier?.name || '—'}</strong></div>
+                      <div>Situação: <strong className="uppercase">{paymentCondition}</strong></div>
+                      <div>Forma: <strong className="uppercase">{paymentMethod}</strong></div>
+                    </div>
+                    <div className="pt-2 border-t border-slate-100 text-[10px] text-slate-400">
+                      {paymentCondition === 'paid' ? 'Obrigação liquidada no ato.' : 'Conta a pagar gerada no financeiro.'}
+                    </div>
+                  </div>
+
+                  {/* Card Caixa Físico */}
+                  <div className="bg-white p-4 rounded-2xl border border-slate-200 space-y-2">
+                    <div className="flex items-center gap-2 text-amber-700 font-bold">
+                      <Banknote className="w-4 h-4" />
+                      <span>Controle de Caixa</span>
+                    </div>
+                    <div className="text-slate-600 text-[11px] leading-relaxed">
+                      {(paymentMethod === 'cash' || paymentMethod === 'dinheiro') && hasOpenCashRegister ? (
+                        <span className="text-emerald-700 font-bold">
+                          ✅ Uma saída (DESPESA) de R$ {(paymentCondition === 'paid' ? computedTotalAmount : partialAmountPaid).toFixed(2)} será registrada na gaveta física do caixa aberto.
+                        </span>
+                      ) : (
+                        <span className="text-slate-500">
+                          ℹ️ A gaveta física de dinheiro <strong>NÃO será alterada</strong> (pagamento eletrônico ou a prazo).
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Rodapé Etapa 3 */}
+                <div className="flex items-center justify-between pt-3 border-t border-slate-100 shrink-0 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setImportStep(2)}
+                    className="flex items-center gap-1.5 px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                    <span>Voltar ao Pagamento</span>
+                  </button>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowInvoiceConferenceModal(false)}
+                      className="px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleConfirmInvoiceImport}
+                      disabled={isConfirmingInvoice}
+                      className="flex items-center gap-2 px-6 py-2.5 font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs transition-all disabled:opacity-50"
+                    >
+                      {isConfirmingInvoice ? (
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <Check className="w-4 h-4" />
+                      )}
+                      Confirmar Entrada no Estoque & Financeiro
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ETAPA 4: SUCESSO & BOTÕES DE AÇÃO */}
+            {importStep === 4 && importSuccessResult && (
+              <div className="py-6 px-4 text-center space-y-6 flex-1 flex flex-col items-center justify-center animate-in zoom-in-95 duration-200">
+                <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
+                  <CheckCircle2 className="w-10 h-10" />
+                </div>
+
+                <div className="space-y-1 max-w-md">
+                  <h3 className="text-xl font-black text-slate-900">
+                    Importação Concluída com Sucesso!
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Os itens da NF nº {importSuccessResult.invoiceNumber} foram integrados ao estoque e as obrigações financeiras foram registradas no módulo Financeiro.
+                  </p>
+                </div>
+
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 text-xs w-full max-w-lg text-left space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Fornecedor:</span>
+                    <strong className="text-slate-800">{importSuccessResult.supplierName}</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Valor Total da Operação:</span>
+                    <strong className="text-emerald-700">{formatCurrency(importSuccessResult.totalAmount)}</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Novos Itens Criados no Estoque:</span>
+                    <strong className="text-slate-800">{importSuccessResult.createdCount} itens</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Itens Existentes Atualizados:</span>
+                    <strong className="text-slate-800">{importSuccessResult.updatedCount} itens</strong>
+                  </div>
+                  <div className="flex justify-between border-t border-slate-200 pt-1 text-[11px]">
+                    <span className="text-slate-500">Gaveta Física de Caixa:</span>
+                    <span className={importSuccessResult.drawerDeductionApplied ? 'text-emerald-700 font-bold' : 'text-slate-500'}>
+                      {importSuccessResult.drawerDeductionApplied
+                        ? `R$ ${importSuccessResult.cashAmountDeducted.toFixed(2)} debitado da gaveta`
+                        : 'Gaveta física inalterada'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-3 w-full max-w-md pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowInvoiceConferenceModal(false);
+                      setInvoiceData(null);
+                      setImportStep(1);
+                    }}
+                    className="w-full sm:flex-1 py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Package className="w-4 h-4" />
+                    <span>Ver Produtos no Estoque</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowInvoiceConferenceModal(false);
+                      setInvoiceData(null);
+                      setImportStep(1);
+                      if (onNavigate) {
+                        onNavigate('financial', undefined, 'payables');
+                      }
+                    }}
+                    className="w-full sm:flex-1 py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-xs transition-colors flex items-center justify-center gap-2"
+                  >
+                    <CreditCard className="w-4 h-4" />
+                    <span>Ver Lançamento no Financeiro</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

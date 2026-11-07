@@ -47,3 +47,4 @@ ExerciseGymGifsDB/
 # Isolated demonstration-tour builds and visual review sheets
 /tmp/onboarding-dist/
 /tmp/onboarding-review-*.jpg
+/tmp/module-cards-validation/

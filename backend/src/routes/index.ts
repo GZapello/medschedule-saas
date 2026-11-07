@@ -17,6 +17,7 @@ import { AppointmentController } from '../controllers/appointment.controller';
 import { SlotController } from '../controllers/slot.controller';
 import { ClinicalController } from '../controllers/clinical.controller';
 import { PaymentController } from '../controllers/payment.controller';
+import { AccountsPayableController } from '../controllers/accounts-payable.controller';
 import { ReceiptController } from '../controllers/receipt.controller';
 import { StaffController } from '../controllers/staff.controller';
 import { OnboardingController } from '../controllers/onboarding.controller';
@@ -841,6 +842,14 @@ api.post('/v1/notifications/:id/retry', requireTenant, requireRole('clinic_admin
 api.get('/v1/payments', requireTenant, requireRole('clinic_admin', 'receptionist'), PaymentController.list);
 api.post('/v1/payments', requireTenant, requireRole('clinic_admin', 'receptionist'), PaymentController.create);
 api.put('/v1/payments/:id/status', requireTenant, requireRole('clinic_admin', 'receptionist'), PaymentController.updateStatus);
+
+// Contas a Pagar & Compras de Fornecedores
+api.get('/v1/accounts-payable', requireTenant, requireRole('clinic_admin', 'receptionist'), AccountsPayableController.list);
+api.post('/v1/accounts-payable/:id/pay', requireTenant, requireRole('clinic_admin', 'receptionist'), AccountsPayableController.pay);
+api.post('/v1/accounts-payable/:id/cancel', requireTenant, requireRole('clinic_admin', 'receptionist'), AccountsPayableController.cancel);
+api.post('/v1/accounts-payable/:id/revert', requireTenant, requireRole('clinic_admin', 'receptionist'), AccountsPayableController.revert);
+api.get('/v1/purchases', requireTenant, requireRole('clinic_admin', 'receptionist'), AccountsPayableController.listPurchases);
+api.get('/v1/purchases/:id', requireTenant, requireRole('clinic_admin', 'receptionist'), AccountsPayableController.getPurchaseDetails);
 
 // Dashboard
 api.get('/v1/dashboard/metrics', requireTenant, DashboardController.getMetrics);
