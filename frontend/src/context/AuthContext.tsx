@@ -300,8 +300,31 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     const refreshSession = () => { if (localStorage.getItem('auth_token')) void reloadSession(); };
     const handleClinicUpdated = (e: any) => {
-      if (e?.detail?.logo_url !== undefined) {
-        setCurrentTenant(prev => prev ? { ...prev, logo_url: e.detail.logo_url } : prev);
+      if (e?.detail) {
+        setCurrentTenant(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            ...e.detail,
+            name: e.detail.name || prev.name,
+            trade_name: e.detail.trade_name !== undefined ? e.detail.trade_name : prev.trade_name,
+            corporate_name: e.detail.corporate_name !== undefined ? e.detail.corporate_name : prev.corporate_name,
+            cnpj_cpf: e.detail.cnpj_cpf !== undefined ? e.detail.cnpj_cpf : prev.cnpj_cpf,
+            email: e.detail.email !== undefined ? e.detail.email : prev.email,
+            phone: e.detail.phone !== undefined ? e.detail.phone : prev.phone,
+            mobile: e.detail.mobile !== undefined ? e.detail.mobile : prev.mobile,
+            whatsapp: e.detail.whatsapp !== undefined ? e.detail.whatsapp : prev.whatsapp,
+            address: e.detail.address !== undefined ? e.detail.address : prev.address,
+            street: e.detail.street !== undefined ? e.detail.street : (prev as any).street,
+            number: e.detail.number !== undefined ? e.detail.number : (prev as any).number,
+            complement: e.detail.complement !== undefined ? e.detail.complement : (prev as any).complement,
+            neighborhood: e.detail.neighborhood !== undefined ? e.detail.neighborhood : (prev as any).neighborhood,
+            city: e.detail.city !== undefined ? e.detail.city : prev.city,
+            state: e.detail.state !== undefined ? e.detail.state : prev.state,
+            zip_code: e.detail.zip_code !== undefined ? e.detail.zip_code : prev.zip_code,
+            logo_url: e.detail.logo_url !== undefined ? e.detail.logo_url : prev.logo_url,
+          };
+        });
       }
       void refreshTenant();
     };

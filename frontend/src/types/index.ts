@@ -70,6 +70,10 @@ export interface Tenant {
   mobile?: string;
   whatsapp?: string;
   address?: string;
+  street?: string;
+  number?: string;
+  complement?: string;
+  neighborhood?: string;
   city?: string;
   state?: string;
   zip_code?: string;

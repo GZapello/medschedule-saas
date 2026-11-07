@@ -306,6 +306,7 @@ const AppContent: React.FC = () => {
     }
   });
   const [financialInitialTab, setFinancialInitialTab] = useState<'transactions' | 'payables' | 'cash_register'>('transactions');
+  const [importInitialTab, setImportInitialTab] = useState<string | null>(null);
 
   const handleNavigateView = (view: string, subId?: string | null, forceOrTab?: boolean | string, tabParam?: string) => {
     const force = typeof forceOrTab === 'boolean' ? forceOrTab : false;
@@ -317,6 +318,9 @@ const AppContent: React.FC = () => {
       if (tab === 'payables' || tab === 'cash_register' || tab === 'transactions') {
         setFinancialInitialTab(tab);
       }
+    }
+    if (view === 'import' && tab) {
+      setImportInitialTab(tab);
     }
     if ((view === 'superadmin' || view === 'superadmin-visits' || view === 'audit') && currentUserRef.current?.role !== 'superadmin' && !force) {
       return;
@@ -1382,7 +1386,7 @@ const AppContent: React.FC = () => {
             />
           )}
 
-          {currentView === 'clinical' && <ClinicalRecordsView />}
+          {currentView === 'clinical' && <ClinicalRecordsView initialPatientId={subRouteId || undefined} onNavigate={handleNavigateView} />}
 
           {currentView === 'zemda-med' && (
             (isDoctor || isZemdaMed || hasCapability('MEDICAL_BASE') || hasCapability('medical_consultations') || isSuperAdmin) ? (
@@ -1739,7 +1743,7 @@ const AppContent: React.FC = () => {
           {currentView === 'support-tickets' && <SupportTicketsView />}
 
           {currentView === 'import' && (
-            <SettingsView initialSection="import" onNavigateView={handleNavigateView} />
+            <SettingsView initialSection="import" initialTab={importInitialTab || undefined} onNavigateView={handleNavigateView} />
           )}
 
           {currentView === 'audit' && <AuditView />}

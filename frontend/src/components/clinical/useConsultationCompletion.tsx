@@ -87,6 +87,8 @@ export function useConsultationCompletion(onFinished?: () => void, contextKey?: 
         <ConsultationPaymentModal
           appointmentId={receipt.appointmentId}
           initialPayment={receipt.payment}
+          initialServiceId={receipt.serviceId || lastPayload?.serviceId}
+          professionalId={receipt.professionalId || lastPayload?.professionalId}
           onClose={() => {
             setPaymentOpen(false);
           }}

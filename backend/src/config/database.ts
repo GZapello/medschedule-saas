@@ -163,6 +163,40 @@ export function initializeDatabase(): void {
     console.warn('[Database] Arquivo schema.sql não encontrado em', schemaPath);
   }
 
+  // Migração: Garante que appointments.service_id é NULLABLE para permitir início de atendimento sem serviço prévio
+  try {
+    const tableInfo = rawDb.prepare("PRAGMA table_info(appointments)").all() as { name: string; notnull: number }[];
+    const serviceCol = tableInfo.find((c: any) => c.name === 'service_id');
+    if (serviceCol && serviceCol.notnull === 1) {
+      const apptSql = rawDb.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'appointments'").get() as { sql: string } | undefined;
+      if (apptSql?.sql) {
+        const indexes = rawDb.prepare("SELECT sql FROM sqlite_master WHERE tbl_name = 'appointments' AND type IN ('index', 'trigger') AND sql IS NOT NULL").all() as { sql: string }[];
+        const replacement = apptSql.sql
+          .replace(/CREATE TABLE\s+(?:IF NOT EXISTS\s+)?["`\[]?appointments["`\]]?/i, 'CREATE TABLE appointments_migration_tmp')
+          .replace(/service_id\s+TEXT\s+NOT\s+NULL/i, 'service_id TEXT');
+        rawDb.exec('PRAGMA foreign_keys = OFF');
+        try {
+          rawDb.exec(replacement);
+          rawDb.exec('INSERT INTO appointments_migration_tmp SELECT * FROM appointments');
+          rawDb.exec('DROP TABLE appointments');
+          rawDb.exec('ALTER TABLE appointments_migration_tmp RENAME TO appointments');
+          for (const index of indexes) {
+            if (index.sql) {
+              try { rawDb.exec(index.sql); } catch (_) {}
+            }
+          }
+          console.log('[Migration] Migração appointments.service_id (nullable) executada com sucesso.');
+        } catch (migErr) {
+          console.warn('[Migration] Erro ao migrar appointments.service_id:', migErr);
+        } finally {
+          rawDb.exec('PRAGMA foreign_keys = ON');
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[Migration] Aviso ao verificar appointments.service_id:', e);
+  }
+
   // Executa seed básico de categorias se necessário para evitar falhas de FK nas migrações
   try {
     const catCount = (rawDb.prepare("SELECT count(*) as total FROM categories").get() as any)?.total || 0;

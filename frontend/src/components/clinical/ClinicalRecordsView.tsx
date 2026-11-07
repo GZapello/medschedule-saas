@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   Lock,
   Plus,
+  FileUp,
   Calendar,
   User,
   Clock,
@@ -39,13 +40,24 @@ import {
   ChevronUp
 } from 'lucide-react';
 
-export const ClinicalRecordsView: React.FC = () => {
+export interface ClinicalRecordsViewProps {
+  initialPatientId?: string;
+  onNavigate?: (view: string, subId?: string | null, forceOrTab?: boolean | string, tab?: string) => void;
+}
+
+export const ClinicalRecordsView: React.FC<ClinicalRecordsViewProps> = ({ initialPatientId, onNavigate }) => {
   const { clientTermLabel, currentTenant } = useAuth();
   const { showToast } = useToast();
 
   const getNowTime = () => new Date().toTimeString().slice(0, 5);
 
-  const [selectedPatientId, setSelectedPatientId] = useState<string>('');
+  const [selectedPatientId, setSelectedPatientId] = useState<string>(initialPatientId || '');
+
+  useEffect(() => {
+    if (initialPatientId) {
+      setSelectedPatientId(initialPatientId);
+    }
+  }, [initialPatientId]);
   const [currentPatient, setCurrentPatient] = useState<any | null>(null);
   const [records, setRecords] = useState<ClinicalRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
@@ -241,20 +253,38 @@ export const ClinicalRecordsView: React.FC = () => {
           </div>
         </div>
 
-        <button
-          onClick={() => {
-            if (!selectedPatientId) {
-              showToast(`Selecione um ${clientTermLabel.toLowerCase()} primeiro`, 'info');
-              return;
-            }
-            setShowNewModal(true);
-          }}
-          disabled={!selectedPatientId}
-          className="flex items-center justify-center gap-1.5 w-full sm:w-auto px-4 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-all whitespace-nowrap cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed min-h-[40px]"
-        >
-          <Plus className="w-4 h-4" />
-          Nova Evolução Clínica
-        </button>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+          <button
+            type="button"
+            onClick={() => {
+              if (onNavigate) {
+                onNavigate('import', null, 'medical-record');
+              } else if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('zemda-navigate', { detail: { view: 'import', tab: 'medical-record' } }));
+              }
+            }}
+            className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl shadow-xs transition-all whitespace-nowrap cursor-pointer min-h-[40px]"
+            title="Importar prontuário de papel, fotos ou PDF"
+          >
+            <FileUp className="w-4 h-4 text-slate-500" />
+            Importar prontuário
+          </button>
+
+          <button
+            onClick={() => {
+              if (!selectedPatientId) {
+                showToast(`Selecione um ${clientTermLabel.toLowerCase()} primeiro`, 'info');
+                return;
+              }
+              setShowNewModal(true);
+            }}
+            disabled={!selectedPatientId}
+            className="flex items-center justify-center gap-1.5 px-4 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-all whitespace-nowrap cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed min-h-[40px]"
+          >
+            <Plus className="w-4 h-4" />
+            Nova Evolução Clínica
+          </button>
+        </div>
       </div>
 
       {selectedPatientId && <SharedClinicalHistory key={selectedPatientId} patientId={selectedPatientId}/>}

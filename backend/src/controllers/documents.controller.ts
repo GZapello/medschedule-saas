@@ -168,8 +168,11 @@ export class DocumentsController {
           p.full_name as patient_name, p.cpf as patient_cpf, p.birth_date as patient_birth,
           pr.name as professional_name, pr.registration_type, pr.registration_number, pr.gender as professional_gender,
           COALESCE(spec.name, pr.practice_areas, 'Profissional de Saúde') as specialty,
-          t.name as clinic_name, t.cnpj_cpf as clinic_cnpj, t.phone as clinic_phone, t.email as clinic_email,
-          t.street, t.number, t.neighborhood, t.city, t.city as clinic_city, t.state, t.state as clinic_state, t.address, t.logo_url
+          COALESCE(t.trade_name, t.name) as clinic_name, t.name as clinic_corporate_fallback,
+          t.trade_name as clinic_trade_name, t.corporate_name as clinic_corporate_name,
+          t.cnpj_cpf as clinic_cnpj, t.phone as clinic_phone, t.whatsapp as clinic_whatsapp, t.email as clinic_email,
+          t.street, t.number, t.complement as clinic_complement, t.neighborhood, t.city, t.city as clinic_city,
+          t.state, t.state as clinic_state, t.zip_code as clinic_zip_code, t.address, t.logo_url
         FROM clinical_certificates c
         JOIN patients p ON p.id = c.patient_id AND p.tenant_id = c.tenant_id
         JOIN professionals pr ON pr.id = c.professional_id AND pr.tenant_id = c.tenant_id
@@ -285,8 +288,11 @@ export class DocumentsController {
           p.full_name as patient_name, p.cpf as patient_cpf, p.birth_date as patient_birth,
           prof.name as professional_name, prof.registration_type, prof.registration_number, prof.gender as professional_gender,
           COALESCE(spec.name, prof.practice_areas, 'Profissional de Saúde') as specialty,
-          t.name as clinic_name, t.cnpj_cpf as clinic_cnpj, t.phone as clinic_phone, t.email as clinic_email,
-          t.street, t.number, t.neighborhood, t.city, t.city as clinic_city, t.state, t.state as clinic_state, t.address, t.logo_url
+          COALESCE(t.trade_name, t.name) as clinic_name, t.name as clinic_corporate_fallback,
+          t.trade_name as clinic_trade_name, t.corporate_name as clinic_corporate_name,
+          t.cnpj_cpf as clinic_cnpj, t.phone as clinic_phone, t.whatsapp as clinic_whatsapp, t.email as clinic_email,
+          t.street, t.number, t.complement as clinic_complement, t.neighborhood, t.city, t.city as clinic_city,
+          t.state, t.state as clinic_state, t.zip_code as clinic_zip_code, t.address, t.logo_url
         FROM clinical_prescriptions pr
         JOIN patients p ON p.id = pr.patient_id AND p.tenant_id = pr.tenant_id
         JOIN professionals prof ON prof.id = pr.professional_id AND prof.tenant_id = pr.tenant_id
@@ -402,8 +408,11 @@ export class DocumentsController {
           p.full_name as patient_name, p.cpf as patient_cpf, p.birth_date as patient_birth,
           prof.name as professional_name, prof.registration_type, prof.registration_number, prof.gender as professional_gender,
           COALESCE(spec.name, prof.practice_areas, 'Profissional de Saúde') as specialty,
-          t.name as clinic_name, t.cnpj_cpf as clinic_cnpj, t.phone as clinic_phone, t.email as clinic_email,
-          t.street, t.number, t.neighborhood, t.city, t.city as clinic_city, t.state, t.state as clinic_state, t.address, t.logo_url
+          COALESCE(t.trade_name, t.name) as clinic_name, t.name as clinic_corporate_fallback,
+          t.trade_name as clinic_trade_name, t.corporate_name as clinic_corporate_name,
+          t.cnpj_cpf as clinic_cnpj, t.phone as clinic_phone, t.whatsapp as clinic_whatsapp, t.email as clinic_email,
+          t.street, t.number, t.complement as clinic_complement, t.neighborhood, t.city, t.city as clinic_city,
+          t.state, t.state as clinic_state, t.zip_code as clinic_zip_code, t.address, t.logo_url
         FROM clinical_exam_requests er
         JOIN patients p ON p.id = er.patient_id AND p.tenant_id = er.tenant_id
         JOIN professionals prof ON prof.id = er.professional_id AND prof.tenant_id = er.tenant_id
@@ -654,6 +663,14 @@ export class DocumentsController {
       if (saveOnly && saved?.payload_json && saved.payload_json !== clinicalPayload) {
         res.status(409).json({ error: 'O prontuário desta consulta já foi salvo. Retome o recebimento pela agenda. Alterações clínicas devem ser registradas no prontuário.' });
         return;
+      }
+      const requestedServiceId = req.body.serviceId || req.body.payment?.serviceId || null;
+      if (requestedServiceId) {
+        const srv = db.prepare('SELECT id FROM services WHERE id = ? AND tenant_id = ?').get(requestedServiceId, tenantId) as any;
+        if (srv) {
+          db.prepare('UPDATE appointments SET service_id = ?, updated_at = datetime(\'now\') WHERE id = ? AND tenant_id = ?').run(requestedServiceId, appointmentId, tenantId);
+          appt.service_id = requestedServiceId;
+        }
       }
       let payment = req.body.payment;
       if (!saveOnly && appt.status !== 'completed') {
@@ -1219,7 +1236,7 @@ export class DocumentsController {
         const existingPayment = db.prepare("SELECT id, amount, payment_method, status, notes FROM payments WHERE appointment_id=? AND tenant_id=? AND status NOT IN ('cancelled','refunded') ORDER BY created_at LIMIT 1").get(appointmentId, tenantId) as any;
         const price = db.prepare('SELECT price FROM services WHERE id=? AND tenant_id=?').get(appt.service_id, tenantId) as any;
         logAudit(req, 'SAVE_CONSULTATION', 'appointments', appointmentId, { generatedDocs });
-        res.json({ ...generatedDocs, generatedDocs, awaitingPayment: true, payment: existingPayment || { amount: price?.price || 0, payment_method: 'pix', status: 'pending' } });
+        res.json({ ...generatedDocs, generatedDocs, awaitingPayment: true, serviceId: appt.service_id, professionalId: appt.professional_id, payment: existingPayment || { amount: price?.price || 0, payment_method: 'pix', status: 'pending' } });
         return;
       }
 
@@ -1245,13 +1262,20 @@ export class DocumentsController {
           return;
         }
       }
+      let activeRegisterId: string | null = null;
+      if (payment.status === 'paid') {
+        try {
+          const openReg = db.prepare(`SELECT id FROM cash_registers WHERE tenant_id = ? AND status = 'open' ORDER BY opened_at DESC LIMIT 1`).get(tenantId) as any;
+          if (openReg) activeRegisterId = openReg.id;
+        } catch (e) {}
+      }
       const paymentId = existingPayment?.id || 'pay-' + uuidv4();
       if (existingPayment) {
-        db.prepare('UPDATE payments SET amount=?, payment_method=?, status=?, payment_date=?, notes=? WHERE id=? AND tenant_id=?')
-          .run(amount, payment.paymentMethod, payment.status, payment.status === 'paid' ? (existingPayment.payment_date || new Date().toISOString()) : null, payment.notes || null, paymentId, tenantId);
+        db.prepare('UPDATE payments SET amount=?, payment_method=?, status=?, payment_date=?, notes=?, cash_register_id=COALESCE(?, cash_register_id) WHERE id=? AND tenant_id=?')
+          .run(amount, payment.paymentMethod, payment.status, payment.status === 'paid' ? (existingPayment.payment_date || new Date().toISOString()) : null, payment.notes || null, activeRegisterId, paymentId, tenantId);
       } else {
-        db.prepare('INSERT INTO payments (id, tenant_id, appointment_id, patient_id, amount, payment_method, status, payment_date, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-          .run(paymentId, tenantId, appointmentId, appt.patient_id, amount, payment.paymentMethod, payment.status, payment.status === 'paid' ? new Date().toISOString() : null, payment.notes || null);
+        db.prepare('INSERT INTO payments (id, tenant_id, appointment_id, patient_id, amount, payment_method, status, payment_date, notes, cash_register_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+          .run(paymentId, tenantId, appointmentId, appt.patient_id, amount, payment.paymentMethod, payment.status, payment.status === 'paid' ? new Date().toISOString() : null, payment.notes || null, activeRegisterId);
       }
       db.prepare("UPDATE consultation_completions SET payment_id=?, completed_at=datetime('now') WHERE appointment_id=? AND tenant_id=?").run(paymentId, appointmentId, tenantId);
       currentStage = 'UPDATE_APPOINTMENT_STATUS';

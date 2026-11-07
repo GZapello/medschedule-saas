@@ -408,7 +408,7 @@ CREATE TABLE IF NOT EXISTS appointments (
   appointment_number TEXT NOT NULL, -- Ex: 'AG-2026-0001'
   patient_id TEXT NOT NULL,
   professional_id TEXT NOT NULL,
-  service_id TEXT NOT NULL,
+  service_id TEXT,
   room_id TEXT,
   start_time TEXT NOT NULL, -- ISO 8601
   end_time TEXT NOT NULL,   -- ISO 8601

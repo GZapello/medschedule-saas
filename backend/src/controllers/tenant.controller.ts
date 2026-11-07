@@ -1255,7 +1255,8 @@ export class TenantController {
         ? (typeof businessHoursJson === 'string' ? businessHoursJson : JSON.stringify(businessHoursJson))
         : (businessHours ? JSON.stringify(businessHours) : null);
 
-      const fullAddress = street && city ? `${street}, ${number || 'S/N'} - ${neighborhood || ''}, ${city}/${state || ''}` : null;
+      const fullAddress = street && city ? `${street}, ${number || 'S/N'}${complement ? ` - ${complement}` : ''} - ${neighborhood || ''}, ${city}/${state || ''}` : null;
+      const resolvedAddress = fullAddress || req.body.address || null;
 
       const updateStmt = db.prepare(`
         UPDATE tenants SET
@@ -1324,7 +1325,7 @@ export class TenantController {
         state || null,
         zipCode || null,
         country || null,
-        fullAddress,
+        resolvedAddress,
         responsibleName || null,
         responsibleCpf || null,
         responsibleEmail || null,
@@ -1372,9 +1373,64 @@ export class TenantController {
         }
       }
 
+      // Mantém receipt_settings sincronizado se configurado
+      try {
+        db.prepare(`
+          UPDATE receipt_settings SET
+            emitter_name = COALESCE(?, emitter_name),
+            emitter_trade_name = COALESCE(?, emitter_trade_name),
+            emitter_document = COALESCE(?, emitter_document),
+            emitter_phone = COALESCE(?, emitter_phone),
+            emitter_email = COALESCE(?, emitter_email),
+            emitter_street = COALESCE(?, emitter_street),
+            emitter_number = COALESCE(?, emitter_number),
+            emitter_neighborhood = COALESCE(?, emitter_neighborhood),
+            emitter_city = COALESCE(?, emitter_city),
+            emitter_state = COALESCE(?, emitter_state),
+            emitter_zip_code = COALESCE(?, emitter_zip_code),
+            updated_at = datetime('now')
+          WHERE tenant_id = ?
+        `).run(
+          name || tradeName || null,
+          tradeName || name || null,
+          cnpjCpf || null,
+          phone || mobile || whatsapp || null,
+          email || null,
+          street || null,
+          number || null,
+          neighborhood || null,
+          city || null,
+          state || null,
+          zipCode || null,
+          req.tenantId
+        );
+      } catch (recSyncErr) {
+        // silencioso se tabela de recibos não existir ainda
+      }
+
       logAudit(req, 'UPDATE_TENANT_SETTINGS', 'tenants', req.tenantId);
-      const updatedTenant = db.prepare('SELECT logo_url FROM tenants WHERE id = ?').get(req.tenantId) as any;
-      res.json({ message: 'Configurações atualizadas com sucesso', logo_url: updatedTenant?.logo_url });
+      const updatedTenant = db.prepare(`
+        SELECT 
+          t.id, t.slug, t.public_booking_enabled, t.public_booking_slug, t.public_booking_sequence, t.name, t.corporate_name, t.trade_name, t.person_type, t.cnpj_cpf,
+          t.municipal_registration, t.state_registration, t.professional_board, t.professional_registry,
+          t.manager_profession, t.manager_practice_areas,
+          t.email, t.phone, t.mobile, t.whatsapp, t.website, t.description,
+          t.address, t.street, t.number, t.complement, t.neighborhood, t.city, t.state, t.zip_code, t.country,
+          t.responsible_name, t.responsible_cpf, t.responsible_email, t.responsible_phone, t.responsible_role,
+          t.logo_url, t.primary_color, t.client_term_label, t.status,
+          t.business_hours_json,
+          t.onboarding_completed, t.onboarding_step, t.manager_confirmed, t.created_at,
+          p.name as plan_name, p.slug as plan_slug, p.features_json
+        FROM tenants t
+        LEFT JOIN plans p ON p.id = t.plan_id
+        WHERE t.id = ?
+      `).get(req.tenantId) as any;
+
+      res.json({
+        message: 'Configurações atualizadas com sucesso',
+        tenant: updatedTenant,
+        logo_url: updatedTenant?.logo_url
+      });
     } catch (err: any) {
       if (respondBillingError(res, err)) return;
       console.error('[TenantController.updateCurrent] Erro:', err);

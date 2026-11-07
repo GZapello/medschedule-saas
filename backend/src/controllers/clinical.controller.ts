@@ -1231,13 +1231,15 @@ export class ClinicalController {
 
       // 3. Se não houver agendamento prévio, cria atendimento canônico direto (Fluxo B)
       let serviceId = providedServiceId || null;
+      if (serviceId) {
+        const validService = db.prepare('SELECT id FROM services WHERE id = ? AND tenant_id = ? AND active = 1').get(serviceId, tenantId);
+        if (!validService) {
+          serviceId = null;
+        }
+      }
       if (!serviceId) {
         const firstService = db.prepare('SELECT id FROM services WHERE tenant_id = ? AND active = 1 LIMIT 1').get(tenantId) as any;
-        serviceId = firstService?.id;
-      }
-      if (!serviceId || !db.prepare('SELECT id FROM services WHERE id = ? AND tenant_id = ? AND active = 1').get(serviceId, tenantId)) {
-        res.status(400).json({ error: 'Cadastre um serviço ativo na clínica antes de iniciar o atendimento.' });
-        return;
+        serviceId = firstService?.id || null;
       }
 
       const now = new Date();

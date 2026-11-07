@@ -78,15 +78,32 @@ interface ImportBatch {
 
 interface ImportDataViewProps {
   onNavigate?: (view: string, subId?: string | null, forceOrTab?: boolean | string, tab?: string) => void;
+  initialScannerMode?: 'camera' | 'photos' | 'document' | null;
 }
 
-export const ImportDataView: React.FC<ImportDataViewProps> = ({ onNavigate }) => {
+export const ImportDataView: React.FC<ImportDataViewProps> = ({ onNavigate, initialScannerMode }) => {
   const { currentTenant, isClinicAdmin } = useAuth();
   const { showToast } = useToast();
 
   const [activeTab, setActiveTab] = useState<'import' | 'history'>('import');
   const [currentStep, setCurrentStep] = useState<number>(1);
-  const [scannerMode, setScannerMode] = useState<'camera' | 'photos' | 'document' | null>(null);
+  const [scannerMode, setScannerMode] = useState<'camera' | 'photos' | 'document' | null>(() => initialScannerMode || null);
+
+  useEffect(() => {
+    if (initialScannerMode) {
+      setScannerMode(initialScannerMode);
+    }
+  }, [initialScannerMode]);
+
+  useEffect(() => {
+    const handleNav = (e: any) => {
+      if (e?.detail?.view === 'import' && e?.detail?.tab === 'medical-record') {
+        setScannerMode('document');
+      }
+    };
+    window.addEventListener('zemda-navigate', handleNav);
+    return () => window.removeEventListener('zemda-navigate', handleNav);
+  }, []);
 
   // Arquivos
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFileItem[]>([]);

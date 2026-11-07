@@ -80,10 +80,11 @@ export const COMMON_INSURANCE_PRESETS = [
 
 export interface SettingsViewProps {
   initialSection?: string;
+  initialTab?: string;
   onNavigateView?: (view: string, subId?: string | null, forceOrTab?: boolean | string, tab?: string) => void;
 }
 
-export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNavigateView }) => {
+export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, initialTab, onNavigateView }) => {
   const { currentUser, currentTenant, isClinicAdmin, isReceptionist, isProfessional, refreshTenant, reloadSession, hasPermission } = useAuth();
   const { showToast } = useToast();
 
@@ -642,7 +643,29 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
       logoDirtyRef.current = false;
       setLogoDirty(false);
       if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('zemda-clinic-updated', { detail: { logo_url: logoUrl } }));
+        window.dispatchEvent(new CustomEvent('zemda-clinic-updated', {
+          detail: {
+            name,
+            corporate_name: corporateName,
+            trade_name: tradeName,
+            person_type: personType,
+            cnpj_cpf: cleanDoc ? cnpjCpf : null,
+            email,
+            phone,
+            whatsapp,
+            address,
+            street,
+            number,
+            complement,
+            neighborhood,
+            city,
+            state,
+            zip_code: zipCode,
+            logo_url: logoUrl,
+            client_term_label: clientTermLabel,
+            primary_color: primaryColor
+          }
+        }));
       }
     } catch (err: any) {
       showToast(err.message || 'Erro ao salvar dados da conta', 'error');
@@ -1032,7 +1055,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
       {activeSection === 'services' && <ServicesView />}
 
       {/* SEÇÃO: IMPORTAÇÃO DE DADOS */}
-      {activeSection === 'import' && <ImportDataView onNavigate={onNavigateView} />}
+      {activeSection === 'import' && (
+        <ImportDataView
+          onNavigate={onNavigateView}
+          initialScannerMode={initialTab === 'medical-record' ? 'document' : null}
+        />
+      )}
 
       {activeSection === 'export_clinical' && (
         <div className="space-y-6">

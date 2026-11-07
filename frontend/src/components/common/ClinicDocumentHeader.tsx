@@ -122,7 +122,30 @@ export function useClinicDocumentData(initialData?: Partial<ClinicData> | null):
 
     fetchClinicCurrent();
 
-    const handleUpdate = () => {
+    const handleUpdate = (e?: any) => {
+      if (e?.detail) {
+        setClinic(prev => ({
+          ...(prev || {}),
+          ...e.detail,
+          name: e.detail.name || prev?.name || '',
+          trade_name: e.detail.trade_name !== undefined ? e.detail.trade_name : prev?.trade_name,
+          corporate_name: e.detail.corporate_name !== undefined ? e.detail.corporate_name : prev?.corporate_name,
+          cnpj_cpf: e.detail.cnpj_cpf !== undefined ? e.detail.cnpj_cpf : prev?.cnpj_cpf,
+          email: e.detail.email !== undefined ? e.detail.email : prev?.email,
+          phone: e.detail.phone !== undefined ? e.detail.phone : prev?.phone,
+          whatsapp: e.detail.whatsapp !== undefined ? e.detail.whatsapp : prev?.whatsapp,
+          street: e.detail.street !== undefined ? e.detail.street : prev?.street,
+          number: e.detail.number !== undefined ? e.detail.number : prev?.number,
+          complement: e.detail.complement !== undefined ? e.detail.complement : prev?.complement,
+          neighborhood: e.detail.neighborhood !== undefined ? e.detail.neighborhood : prev?.neighborhood,
+          city: e.detail.city !== undefined ? e.detail.city : prev?.city,
+          state: e.detail.state !== undefined ? e.detail.state : prev?.state,
+          zip_code: e.detail.zip_code !== undefined ? e.detail.zip_code : prev?.zip_code,
+          address: e.detail.address !== undefined ? e.detail.address : prev?.address,
+          logo_url: e.detail.logo_url !== undefined ? e.detail.logo_url : prev?.logo_url,
+          client_term_label: e.detail.client_term_label !== undefined ? e.detail.client_term_label : prev?.client_term_label
+        }));
+      }
       fetchClinicCurrent();
     };
     if (typeof window !== 'undefined') {
@@ -135,6 +158,33 @@ export function useClinicDocumentData(initialData?: Partial<ClinicData> | null):
         window.removeEventListener('zemda-clinic-updated', handleUpdate);
       }
     };
+  }, [currentTenant]);
+
+  useEffect(() => {
+    if (currentTenant && currentTenant.name) {
+      setClinic(prev => ({
+        ...(prev || {}),
+        id: currentTenant.id,
+        name: currentTenant.name,
+        trade_name: currentTenant.trade_name,
+        corporate_name: currentTenant.corporate_name,
+        cnpj_cpf: currentTenant.cnpj_cpf,
+        email: currentTenant.email,
+        phone: currentTenant.phone,
+        mobile: currentTenant.mobile,
+        whatsapp: currentTenant.whatsapp,
+        address: currentTenant.address,
+        street: (currentTenant as any).street,
+        number: (currentTenant as any).number,
+        complement: (currentTenant as any).complement,
+        neighborhood: (currentTenant as any).neighborhood,
+        city: currentTenant.city,
+        state: currentTenant.state,
+        zip_code: currentTenant.zip_code,
+        logo_url: currentTenant.logo_url,
+        client_term_label: currentTenant.client_term_label
+      }));
+    }
   }, [currentTenant]);
 
   const scopedClinic=currentTenant?.id && clinic?.id!==currentTenant.id ? null : clinic;
@@ -157,21 +207,36 @@ export function formatClinicAddress(clinic: Partial<ClinicData> | null | undefin
   return parts.join(' - ');
 }
 
-/** Formata Cidade e UF */
-export function formatClinicCityState(clinic: Partial<ClinicData> | null | undefined): string {
-  if (!clinic) return '';
-  if (clinic.city && clinic.state) return `${clinic.city} - ${clinic.state}`;
-  return clinic.city || clinic.state || '';
+/** Resolve URL de Logo canônica */
+export function resolveClinicLogoUrl(logoUrl?: string | null): string | undefined {
+  if (!logoUrl) return undefined;
+  const url = logoUrl.trim();
+  if (!url) return undefined;
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) return url;
+  return url.startsWith('/') ? url : `/${url}`;
 }
 
-/** Formata contatos (Telefone / E-mail) */
-export function formatClinicContact(clinic: Partial<ClinicData> | null | undefined): string {
+/** Formata Cidade, UF e CEP */
+export function formatClinicCityState(clinic: Partial<ClinicData> | null | undefined): string {
   if (!clinic) return '';
+  const cityState = [clinic.city, clinic.state].filter(Boolean).join(' - ');
+  const cep = clinic.zip_code ? `CEP: ${clinic.zip_code}` : '';
+  return [cityState, cep].filter(Boolean).join(' • ');
+}
+
+/** Lista de contatos formatados */
+export function formatClinicContactList(clinic: Partial<ClinicData> | null | undefined): string[] {
+  if (!clinic) return [];
   const contacts: string[] = [];
-  const phone = clinic.phone || clinic.mobile || clinic.whatsapp;
-  if (phone) contacts.push(`Tel: ${phone}`);
+  if (clinic.phone) contacts.push(`Tel: ${clinic.phone}`);
+  if (clinic.whatsapp && clinic.whatsapp !== clinic.phone) contacts.push(`WhatsApp: ${clinic.whatsapp}`);
   if (clinic.email) contacts.push(`E-mail: ${clinic.email}`);
-  return contacts.join(' • ');
+  return contacts;
+}
+
+/** Formata contatos (Telefone / WhatsApp / E-mail) em string */
+export function formatClinicContact(clinic: Partial<ClinicData> | null | undefined): string {
+  return formatClinicContactList(clinic).join(' • ');
 }
 
 export interface ClinicDocumentHeaderProps {
@@ -239,13 +304,15 @@ export const ClinicDocumentHeader: React.FC<ClinicDocumentHeaderProps> = ({
   const addressStr = formatClinicAddress(clinic);
   const cityStateStr = formatClinicCityState(clinic);
   const contactStr = formatClinicContact(clinic);
+  const contactList = formatClinicContactList(clinic);
+  const resolvedLogoUrl = resolveClinicLogoUrl(clinic.logo_url);
 
   return (
     <div className={`border-b-2 border-slate-800 pb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${className}`}>
       <div className="flex items-start gap-4">
         {clinic.logo_url && !logoFailed ? (
           <img
-            src={clinic.logo_url}
+            src={resolvedLogoUrl || clinic.logo_url}
             alt={realClinicName}
             onError={() => setLogoFailed(true)}
             className="w-16 h-16 object-contain rounded-xl border border-slate-100 p-1 bg-white shrink-0"
@@ -279,8 +346,12 @@ export const ClinicDocumentHeader: React.FC<ClinicDocumentHeaderProps> = ({
             <p className="text-xs text-slate-600">{cityStateStr}</p>
           )}
 
-          {contactStr && (
-            <p className="text-[11px] text-slate-500">{contactStr}</p>
+          {contactList.length > 0 && (
+            <div className="text-[11px] text-slate-500 flex flex-wrap gap-x-3 gap-y-0.5 pt-0.5">
+              {contactList.map((item, idx) => (
+                <span key={idx} className="whitespace-nowrap">{item}</span>
+              ))}
+            </div>
           )}
         </div>
       </div>

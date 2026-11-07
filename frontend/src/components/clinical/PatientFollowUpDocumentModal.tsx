@@ -235,7 +235,22 @@ export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModal
     if (!printSheetRef.current) return;
 
     const title = `Acompanhamento_${(patientName || 'Paciente').replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}`;
-    const contentHtml = printSheetRef.current.innerHTML;
+    const sheet = printSheetRef.current.cloneNode(true) as HTMLElement;
+    sheet.querySelectorAll('img').forEach(img => {
+      const src = img.getAttribute('src');
+      if (src) {
+        try {
+          img.src = new URL(src, window.location.href).href;
+        } catch {
+          // Mantém original se URL absoluta já existir
+        }
+      }
+    });
+    // Remove bordas e espaçamentos externos da prévia do modal para manter a geometria estrita do papel A4
+    sheet.classList.remove('p-8', 'border', 'rounded-2xl', 'shadow-sm');
+    sheet.style.padding = '0';
+    sheet.style.border = 'none';
+    const contentHtml = sheet.innerHTML;
     const applicationCss = Array.from(document.styleSheets).map(sheet => {
       try {
         return Array.from(sheet.cssRules).map(rule => rule.cssText).join('\n');
@@ -283,7 +298,7 @@ export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModal
       Imprimir / Salvar como PDF
     </button>
   </div>
-  <div class="a4-page p-6">
+  <div class="a4-page">
     ${contentHtml}
   </div>
   <script>
