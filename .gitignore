@@ -48,3 +48,5 @@ ExerciseGymGifsDB/
 /tmp/onboarding-dist/
 /tmp/onboarding-review-*.jpg
 /tmp/module-cards-validation/
+/tmp/practice-photo-check.cjs
+/tmp/practice-photo-validation/

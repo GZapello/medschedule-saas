@@ -24,6 +24,22 @@
 @media (max-width:540px) { .zemda-landing .zl-results { padding-block:24px; } .zl-results .zl-heading { margin-bottom:16px; } .zl-result-card { flex-basis:248px; width:248px; padding:12px; } }
 @media (prefers-reduced-motion:reduce) { .zl-results-track { animation:none; } .zl-results-viewport { overflow-x:auto; scrollbar-width:none; } .zl-results-viewport::-webkit-scrollbar { display:none; } .zl-results-group[aria-hidden="true"] { display:none; } }
 .zl-tinted { background:#f5f9f7; border-block:1px solid #eaf0ed; }
+/* Decorative photo only: the existing heading and white information card stay in flow. */
+.zl-practice-section { position:relative; isolation:isolate; }
+.zl-practice-section::before {
+  content:""; position:absolute; z-index:-1; pointer-events:none;
+  top:24px; right:0; width:min(65%,900px); aspect-ratio:790 / 411;
+  background-image:url('/landing/backgrounds/doctor-patient-consultation.webp');
+  background-size:cover; background-position:center center; background-repeat:no-repeat;
+  mask-image:linear-gradient(to right,transparent,rgba(0,0,0,.4) 22%,black 48%),linear-gradient(to bottom,black 65%,transparent);
+  mask-composite:intersect;
+}
+@media(max-width:800px) {
+  .zl-practice-section::before { top:0; width:60%; opacity:.6; background-position:50% 50%; }
+}
+@media(max-width:540px) {
+  .zl-practice-section::before { width:100%; opacity:.4; background-position:center top; }
+}
 .zl-eyebrow { display:block; color:var(--zl-teal); font-size:11px; line-height:1.6; font-weight:750; letter-spacing:.15em; text-transform:uppercase; }
 .zl-heading { max-width:660px; margin-bottom:40px; }
 .zl-heading h2 { font-size:clamp(29px,3.3vw,43px); font-weight:650; line-height:1.17; letter-spacing:-.035em; margin-top:14px; text-wrap:balance; }

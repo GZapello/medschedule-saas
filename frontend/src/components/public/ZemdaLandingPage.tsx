@@ -237,7 +237,7 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({ onLogin, onR
         <div className="zl-security">{[{ icon: Users, title: 'Controle por usuário', text: 'Acessos individuais e permissões por perfil.' }, { icon: LockKeyhole, title: 'Isolamento por clínica', text: 'Acesso vinculado à clínica e às permissões do usuário.' }, { icon: ShieldCheck, title: 'Acesso clínico restrito', text: 'Ferramentas e registros conforme profissão e autorização.' }, { icon: FileText, title: 'Trilha de auditoria', text: 'Registro de autoria e ações para rastreabilidade.' }].map((item, i) => <RevealItem key={item.title} distancePx={18} delayMs={i * 60} durationMs={550}><article><item.icon size={21} /><h3>{item.title}</h3><p>{item.text}</p></article></RevealItem>)}</div>
       </div></RevealSection>
 
-      <RevealSection id="planos" className="zl-section zl-tinted"><div className="zl-container">
+      <RevealSection id="planos" className="zl-section zl-tinted zl-practice-section"><div className="zl-container">
         <RevealItem distancePx={16} durationMs={550}>
           <Heading label="Plataforma Integrada" title="Uma experiência completa para a sua prática profissional.">
             Do consultório individual à equipe multiprofissional: todas as ferramentas essenciais em um único ambiente integrado, inteligente e seguro.
