@@ -50,3 +50,6 @@ ExerciseGymGifsDB/
 /tmp/module-cards-validation/
 /tmp/practice-photo-check.cjs
 /tmp/practice-photo-validation/
+/tmp/photo-quality-check.cjs
+/tmp/photo-quality-validation/
+/tmp/photo-source/

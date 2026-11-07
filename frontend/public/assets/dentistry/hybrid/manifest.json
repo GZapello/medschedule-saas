@@ -4,34 +4,9 @@
   "height": 256,
   "teeth": [
     {
-      "tooth": 18,
-      "opaque": 19025,
-      "transparent": 20852
-    },
-    {
-      "tooth": 17,
-      "opaque": 21039,
-      "transparent": 14434
-    },
-    {
-      "tooth": 16,
-      "opaque": 19915,
-      "transparent": 13342
-    },
-    {
-      "tooth": 15,
-      "opaque": 14194,
-      "transparent": 20240
-    },
-    {
-      "tooth": 14,
-      "opaque": 13915,
-      "transparent": 17608
-    },
-    {
-      "tooth": 13,
-      "opaque": 13400,
-      "transparent": 20454
+      "tooth": 11,
+      "opaque": 15551,
+      "transparent": 27157
     },
     {
       "tooth": 12,
@@ -39,9 +14,34 @@
       "transparent": 17684
     },
     {
-      "tooth": 11,
-      "opaque": 15551,
-      "transparent": 27157
+      "tooth": 13,
+      "opaque": 13400,
+      "transparent": 20454
+    },
+    {
+      "tooth": 14,
+      "opaque": 13915,
+      "transparent": 17608
+    },
+    {
+      "tooth": 15,
+      "opaque": 14194,
+      "transparent": 20240
+    },
+    {
+      "tooth": 16,
+      "opaque": 19915,
+      "transparent": 13342
+    },
+    {
+      "tooth": 17,
+      "opaque": 21039,
+      "transparent": 14434
+    },
+    {
+      "tooth": 18,
+      "opaque": 19025,
+      "transparent": 20852
     },
     {
       "tooth": 21,
@@ -84,46 +84,6 @@
       "transparent": 22961
     },
     {
-      "tooth": 48,
-      "opaque": 20186,
-      "transparent": 29442
-    },
-    {
-      "tooth": 47,
-      "opaque": 20281,
-      "transparent": 10816
-    },
-    {
-      "tooth": 46,
-      "opaque": 18968,
-      "transparent": 14585
-    },
-    {
-      "tooth": 45,
-      "opaque": 14138,
-      "transparent": 14785
-    },
-    {
-      "tooth": 44,
-      "opaque": 13122,
-      "transparent": 16011
-    },
-    {
-      "tooth": 43,
-      "opaque": 12545,
-      "transparent": 17473
-    },
-    {
-      "tooth": 42,
-      "opaque": 12273,
-      "transparent": 16647
-    },
-    {
-      "tooth": 41,
-      "opaque": 13684,
-      "transparent": 24530
-    },
-    {
       "tooth": 31,
       "opaque": 12028,
       "transparent": 29092
@@ -162,6 +122,146 @@
       "tooth": 38,
       "opaque": 18735,
       "transparent": 23724
+    },
+    {
+      "tooth": 41,
+      "opaque": 13684,
+      "transparent": 24530
+    },
+    {
+      "tooth": 42,
+      "opaque": 12273,
+      "transparent": 16647
+    },
+    {
+      "tooth": 43,
+      "opaque": 12545,
+      "transparent": 17473
+    },
+    {
+      "tooth": 44,
+      "opaque": 13122,
+      "transparent": 16011
+    },
+    {
+      "tooth": 45,
+      "opaque": 14138,
+      "transparent": 14785
+    },
+    {
+      "tooth": 46,
+      "opaque": 18968,
+      "transparent": 14585
+    },
+    {
+      "tooth": 47,
+      "opaque": 20281,
+      "transparent": 10816
+    },
+    {
+      "tooth": 48,
+      "opaque": 20186,
+      "transparent": 29442
+    },
+    {
+      "tooth": 51,
+      "opaque": 18205,
+      "transparent": 29738
+    },
+    {
+      "tooth": 52,
+      "opaque": 15338,
+      "transparent": 32639
+    },
+    {
+      "tooth": 53,
+      "opaque": 13968,
+      "transparent": 34159
+    },
+    {
+      "tooth": 54,
+      "opaque": 13867,
+      "transparent": 34213
+    },
+    {
+      "tooth": 55,
+      "opaque": 22350,
+      "transparent": 25457
+    },
+    {
+      "tooth": 61,
+      "opaque": 17835,
+      "transparent": 30237
+    },
+    {
+      "tooth": 62,
+      "opaque": 15733,
+      "transparent": 32294
+    },
+    {
+      "tooth": 63,
+      "opaque": 14589,
+      "transparent": 33480
+    },
+    {
+      "tooth": 64,
+      "opaque": 14211,
+      "transparent": 33906
+    },
+    {
+      "tooth": 65,
+      "opaque": 22436,
+      "transparent": 25361
+    },
+    {
+      "tooth": 71,
+      "opaque": 14321,
+      "transparent": 33748
+    },
+    {
+      "tooth": 72,
+      "opaque": 13633,
+      "transparent": 34415
+    },
+    {
+      "tooth": 73,
+      "opaque": 12585,
+      "transparent": 35562
+    },
+    {
+      "tooth": 74,
+      "opaque": 13740,
+      "transparent": 34357
+    },
+    {
+      "tooth": 75,
+      "opaque": 25104,
+      "transparent": 22490
+    },
+    {
+      "tooth": 81,
+      "opaque": 16126,
+      "transparent": 31810
+    },
+    {
+      "tooth": 82,
+      "opaque": 15738,
+      "transparent": 32189
+    },
+    {
+      "tooth": 83,
+      "opaque": 13260,
+      "transparent": 34850
+    },
+    {
+      "tooth": 84,
+      "opaque": 14135,
+      "transparent": 33949
+    },
+    {
+      "tooth": 85,
+      "opaque": 24627,
+      "transparent": 22929
     }
   ]
 }

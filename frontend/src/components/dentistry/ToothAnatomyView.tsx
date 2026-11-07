@@ -2,13 +2,20 @@ import React, {useEffect,useRef,useState} from 'react';
 import { ToothStatus } from './odontogramModel';
 import { describeToothStatus,toothName } from './odontogramClinical';
 
+const DECIDUOUS_FALLBACK_MAP: Record<number, number> = {
+  51: 11, 52: 12, 53: 13, 54: 14, 55: 16,
+  61: 21, 62: 22, 63: 23, 64: 24, 65: 26,
+  71: 31, 72: 32, 73: 33, 74: 34, 75: 36,
+  81: 41, 82: 42, 83: 43, 84: 44, 85: 46
+};
+
 interface Props {tooth:number;status:ToothStatus;selected:boolean;highlighted:boolean;onSelect:()=>void;onHover:(tooth:number|null)=>void;}
 /** Selection uses the PNG's actual alpha pixels, never a rectangle/polygon. */
 export function ToothAnatomyView({tooth,status,selected,highlighted,onSelect,onHover}:Props) {
   const canvas=useRef<HTMLCanvasElement>(null), alpha=useRef<Uint8ClampedArray>();
   const [failed,setFailed]=useState(false),[ready,setReady]=useState(false);
   useEffect(()=>{
-    let cancelled=false;const img=new Image();setReady(false);setFailed(false);
+    let cancelled=false;let triedFallback=false;const img=new Image();setReady(false);setFailed(false);
     img.onload=()=>{
       if(cancelled||!canvas.current)return;
       const source=document.createElement('canvas');source.width=img.width;source.height=img.height;
@@ -22,7 +29,16 @@ export function ToothAnatomyView({tooth,status,selected,highlighted,onSelect,onH
       ctx.clearRect(0,0,192,256);ctx.drawImage(img,l,t,w,h,(192-w*scale)/2,(256-h*scale)/2,w*scale,h*scale);
       alpha.current=ctx.getImageData(0,0,192,256).data;setReady(true);
     };
-    img.onerror=()=>{if(!cancelled)setFailed(true);};img.src=`/assets/dentistry/hybrid/tooth-${tooth}.png`;
+    img.onerror=()=>{
+      if(cancelled)return;
+      if(!triedFallback && DECIDUOUS_FALLBACK_MAP[tooth]){
+        triedFallback=true;
+        img.src=`/assets/dentistry/hybrid/tooth-${DECIDUOUS_FALLBACK_MAP[tooth]}.png`;
+        return;
+      }
+      setFailed(true);
+    };
+    img.src=`/assets/dentistry/hybrid/tooth-${tooth}.png`;
     return()=>{cancelled=true;alpha.current=undefined;};
   },[tooth]);
   const painted=(e:React.PointerEvent|React.MouseEvent)=>{

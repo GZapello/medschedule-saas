@@ -12,6 +12,7 @@ export class AnatomicalViewBoundary extends React.Component<{onShowFaces:()=>voi
 interface Props {
   currentData: OdontogramData;
   activeCondition: string;
+  dentitionType?: 'permanent' | 'deciduous' | 'mixed';
   onChange: (data: OdontogramData, changes: ToothChange[]) => void;
   onToothClick?: (tooth: number, face?: ToothFace) => void;
   onOpenToothDossier?: (tooth: number) => void;
@@ -24,7 +25,7 @@ interface Props {
 }
 const button = 'px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:border-cyan-500 focus-visible:ring-2 focus-visible:ring-cyan-500 disabled:opacity-40';
 
-export function HybridOdontogram({ currentData, activeCondition, onChange, onToothClick, onOpenToothDossier, onShowFaces, selectedTeeth, multiSelectMode, onToggleTooth, readOnly = false }: Props) {
+export function HybridOdontogram({ currentData, activeCondition, dentitionType = 'permanent', onChange, onToothClick, onOpenToothDossier, onShowFaces, selectedTeeth, multiSelectMode, onToggleTooth, readOnly = false }: Props) {
   const [selected, setSelected] = useState<number | null>(null);
   const [hovered, setHovered] = useState<number | null>(null);
   const [zoom, setZoom] = useState(1);
@@ -69,12 +70,12 @@ export function HybridOdontogram({ currentData, activeCondition, onChange, onToo
       </div>
     </div>
     <div className="max-w-full overflow-auto rounded-xl" style={{ maxHeight: zoom > 1 ? '70vh' : undefined }} tabIndex={0} aria-label="Arcadas; amplie e deslize para navegar">
-      <div className="bg-slate-50 rounded-xl" style={{ width: `${zoom * 100}%`, minHeight: 180, minWidth: zoom * 880 }}>
+      <div className="bg-slate-50 rounded-xl" style={{ width: `${zoom * 100}%`, minHeight: 180, minWidth: zoom * (dentitionType === 'deciduous' ? 640 : 880) }}>
         <AnatomicalViewBoundary onShowFaces={onShowFaces}>
           <Suspense fallback={<p role="status" className="p-6 text-sm text-slate-500">Carregando visualização anatômica...</p>}>
             <HybridDentalArch currentData={currentData} selected={selected} hovered={hovered}
-              selectedTeeth={selectedTeeth} multiSelectMode={multiSelectMode}
-              onSelect={select} onHover={setHovered} onFaceClick={selectFace} readOnly={readOnly}/>
+              selectedTeeth={selectedTeeth} multiSelectMode={multiSelectMode} dentitionType={dentitionType}
+              onSelect={select} onHover={setHovered} onFaceClick={selectFace} onOpenToothDossier={onOpenToothDossier} readOnly={readOnly}/>
           </Suspense>
         </AnatomicalViewBoundary>
       </div>

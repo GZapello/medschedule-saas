@@ -30,6 +30,7 @@
   content:""; position:absolute; z-index:-1; pointer-events:none;
   top:24px; right:0; width:min(65%,900px); aspect-ratio:790 / 411;
   background-image:url('/landing/backgrounds/doctor-patient-consultation.webp');
+  background-image:image-set(url('/landing/backgrounds/doctor-patient-consultation.webp') 1x,url('/landing/backgrounds/doctor-patient-consultation-retina.webp') 2x);
   background-size:cover; background-position:center center; background-repeat:no-repeat;
   mask-image:linear-gradient(to right,transparent,rgba(0,0,0,.4) 22%,black 48%),linear-gradient(to bottom,black 65%,transparent);
   mask-composite:intersect;

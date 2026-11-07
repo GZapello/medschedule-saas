@@ -18,6 +18,8 @@ export type { OdontogramData, ToothStatus, ToothFace, ToothCondition } from './o
 import { updateToothCondition, describeToothStatus } from './odontogramClinical';
 import { HybridOdontogram } from './HybridOdontogram';
 import { ToothFaceMiniMap } from './ToothFaceMiniMap';
+import { ToothAnatomyView } from './ToothAnatomyView';
+import HybridDentalArch from './HybridDentalArch';
 
 interface OdontogramCanvasProps {
   initialData?: OdontogramData;
@@ -57,7 +59,7 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
   const [multiSelectMode, setMultiSelectMode] = useState<boolean>(false);
   const [selectedToothHistory, setSelectedToothHistory] = useState<number | null>(null);
 
-  const show3D = !anatomyUnavailable && dentitionType === 'permanent' && viewMode !== 'compare';
+  const show3D = !anatomyUnavailable && viewMode !== 'compare';
 
   // Sincronizar estado interno com currentData sempre que atualizado externamente ou via API
   useEffect(() => {
@@ -199,6 +201,25 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
           {isEndo && (
             <span className="w-2 h-2 rounded-full bg-emerald-500" title="Canal Tratado" />
           )}
+        </div>
+
+        {/* Imagem / Ilustração Anatômica do Dente */}
+        <div className="w-10 sm:w-12 mx-auto mb-1">
+          <ToothAnatomyView
+            tooth={toothNumber}
+            status={toothStatus}
+            selected={isSelected}
+            highlighted={isSelected}
+            onSelect={() => {
+              if (multiSelectMode) {
+                toggleToothSelection(toothNumber);
+              } else {
+                setSelectedToothHistory(toothNumber);
+                if (onToothClick) onToothClick(toothNumber);
+              }
+            }}
+            onHover={() => {}}
+          />
         </div>
 
         {/* Desenho Anatômico / Gráfico de Faces (SVG Interativo) */}
@@ -471,6 +492,7 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
       {show3D && <HybridOdontogram
         currentData={viewMode === 'initial' ? initialData : data}
         activeCondition={activeCondition}
+        dentitionType={dentitionType}
         readOnly={readOnly || viewMode === 'initial'}
         selectedTeeth={selectedTeeth} multiSelectMode={multiSelectMode}
         onToggleTooth={toggleToothSelection}
@@ -546,9 +568,9 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
 
       </div>}
 
-      {/* MODO COMPARATIVO (Mostra lado a lado com a mesma unificação de arcada) */}
+      {/* MODO COMPARATIVO (Mostra lado a lado com a mesma unificação de arcada e anatomia rica) */}
       {viewMode === 'compare' && (
-        <div className="p-5 bg-cyan-50/50 border border-cyan-200 rounded-3xl space-y-4">
+        <div className="p-4 sm:p-5 bg-cyan-50/50 border border-cyan-200 rounded-3xl space-y-6">
           <div className="flex items-center gap-2">
             <Info className="w-4 h-4 text-cyan-700" />
             <span className="text-xs font-extrabold text-cyan-950 uppercase tracking-wide">
@@ -556,9 +578,60 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
             </span>
           </div>
 
-          <div className="space-y-4">
-            {renderArchRow(UPPER_RIGHT, UPPER_LEFT, true, false)}
-            {renderArchRow(LOWER_RIGHT, LOWER_LEFT, true, false)}
+          <div className="space-y-6">
+            {/* 1. Odontograma Inicial (Registro de Entrada) */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between px-1">
+                <span className="text-xs font-black uppercase tracking-wider text-slate-700">
+                  1. Odontograma Inicial (Registro de Entrada)
+                </span>
+                <span className="text-[10px] bg-slate-200 text-slate-700 px-2 py-0.5 rounded-full font-bold">
+                  Somente Leitura
+                </span>
+              </div>
+              <div className="bg-white border border-slate-200 rounded-2xl p-2 sm:p-3 overflow-auto">
+                <HybridDentalArch
+                  currentData={initialData}
+                  selected={null}
+                  hovered={null}
+                  selectedTeeth={[]}
+                  multiSelectMode={false}
+                  dentitionType={dentitionType}
+                  readOnly={true}
+                  onSelect={() => {}}
+                  onHover={() => {}}
+                  onFaceClick={() => {}}
+                  onOpenToothDossier={onOpenToothDossier}
+                />
+              </div>
+            </div>
+
+            {/* 2. Odontograma Atual (Evolução Clínica) */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between px-1">
+                <span className="text-xs font-black uppercase tracking-wider text-cyan-800">
+                  2. Odontograma Atual (Evolução Clínica)
+                </span>
+                <span className="text-[10px] bg-cyan-100 text-cyan-800 px-2 py-0.5 rounded-full font-bold">
+                  {readOnly ? 'Somente Leitura' : 'Editável'}
+                </span>
+              </div>
+              <div className="bg-white border border-cyan-200 rounded-2xl p-2 sm:p-3 overflow-auto">
+                <HybridDentalArch
+                  currentData={data}
+                  selected={selectedTeeth.length === 1 ? selectedTeeth[0] : null}
+                  hovered={null}
+                  selectedTeeth={selectedTeeth}
+                  multiSelectMode={multiSelectMode}
+                  dentitionType={dentitionType}
+                  readOnly={readOnly}
+                  onSelect={toggleToothSelection}
+                  onHover={() => {}}
+                  onFaceClick={(tooth, face) => handleFaceClick(tooth, face)}
+                  onOpenToothDossier={onOpenToothDossier}
+                />
+              </div>
+            </div>
           </div>
         </div>
       )}

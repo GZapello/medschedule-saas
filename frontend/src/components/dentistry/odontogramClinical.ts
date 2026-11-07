@@ -7,12 +7,43 @@ export interface ToothChange {
   previousCondition?: string;
 }
 export const isUpperTooth = (n: number) => [1, 2, 5, 6].includes(Math.floor(n / 10));
+export const isDeciduousTooth = (n: number) => [5, 6, 7, 8].includes(Math.floor(n / 10));
 export const toothFaces = (n: number): ToothFace[] => ['vestibular', isUpperTooth(n) ? 'palatina' : 'lingual', 'mesial', 'distal', 'oclusal'];
 export const conditionLabel = (id?: string) => !id ? 'Hígido' : DENTAL_CONDITIONS.find(c => c.id === id)?.label || 'Condição registrada';
 export const faceLabel = (face: ToothFace, tooth: number) => ({ whole: 'Dente inteiro', vestibular: 'Vestibular', palatina: 'Palatina', lingual: 'Lingual', mesial: 'Mesial', distal: 'Distal', oclusal: tooth % 10 <= 3 ? 'Incisal' : 'Oclusal' })[face];
 export const toothName = (n: number) => {
-  const names = ['Incisivo central', 'Incisivo lateral', 'Canino', 'Primeiro pré-molar', 'Segundo pré-molar', 'Primeiro molar', 'Segundo molar', 'Terceiro molar'];
-  return `${names[n % 10 - 1]} ${isUpperTooth(n) ? 'superior' : 'inferior'} ${[1, 4].includes(Math.floor(n / 10)) ? 'direito' : 'esquerdo'}`;
+  const quad = Math.floor(n / 10);
+  const pos = n % 10;
+  const isDeciduous = [5, 6, 7, 8].includes(quad);
+  const upper = isUpperTooth(n);
+  const right = [1, 4, 5, 8].includes(quad);
+  const side = right ? 'direito' : 'esquerdo';
+  const arch = upper ? 'superior' : 'inferior';
+
+  if (isDeciduous) {
+    const deciduousNames = [
+      'Incisivo central decíduo',
+      'Incisivo lateral decíduo',
+      'Canino decíduo',
+      'Primeiro molar decíduo',
+      'Segundo molar decíduo'
+    ];
+    const name = deciduousNames[pos - 1] || `Dente decíduo ${n}`;
+    return `${name} ${arch} ${side}`;
+  }
+
+  const permanentNames = [
+    'Incisivo central',
+    'Incisivo lateral',
+    'Canino',
+    'Primeiro pré-molar',
+    'Segundo pré-molar',
+    'Primeiro molar',
+    'Segundo molar',
+    'Terceiro molar'
+  ];
+  const name = permanentNames[pos - 1] || `Dente ${n}`;
+  return `${name} ${arch} ${side}`;
 };
 export function describeToothStatus(status: ToothStatus = {}, n: number) {
   return (['whole', ...toothFaces(n)] as ToothFace[]).filter(f => status[f] && status[f] !== 'healthy')
