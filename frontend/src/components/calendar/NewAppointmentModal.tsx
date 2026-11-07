@@ -4,7 +4,7 @@ import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
 import { Professional, Service, Patient, AvailableSlot } from '../../types';
-import { X, Calendar, Clock, User, Plus, CheckCircle2 } from 'lucide-react';
+import { X, Calendar, Clock, User, Plus, CheckCircle2, Sparkles } from 'lucide-react';
 import { isMeetingUrl } from '../../utils/teleconsultation';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
 import { QuickActionDropdown } from '../common/QuickActionDropdown';
@@ -79,6 +79,8 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
   const [errorTitle, setErrorTitle] = useState('Não foi possível concluir');
   const slotRequest = useRef(0);
   const [conflictError, setConflictError] = useState<string | null>(null);
+  const [showServiceOnboarding, setShowServiceOnboarding] = useState(false);
+  const serviceFieldRef = useRef<HTMLDivElement>(null);
 
   const [date, setDate] = useState<string>(() => {
     const tomorrow = new Date();
@@ -99,6 +101,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
     priceEdited.current = false;
     setAppointmentPrice('');
     if (isOpen) {
+      setShowServiceOnboarding(false);
       setMeetingUrl('');
       setIsConfiguringTele(false);
       setSelectedSlot(null);
@@ -106,6 +109,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
       setIsRetroactive(false);
       setCustomTime(initialPrefill?.time || '18:30');
     } else {
+      setShowServiceOnboarding(false);
       setPatientId('');
       setSelectedPatientObj(null);
       setIsNewPatientModalOpen(false);
@@ -135,6 +139,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
 
   const handleServiceCreated = async (created: any) => {
     setIsNewServiceModalOpen(false);
+    setShowServiceOnboarding(false);
     try {
       const srvs = await ApiClient.get<Service[]>('/v1/services');
       setServices(srvs || []);
@@ -295,7 +300,19 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
 
   const handleBook = async () => {
     if (submissionPending.current || loadingSlots) return;
-    if (!patientId || !professionalId || !serviceId) {
+
+    if (services.length === 0 || !serviceId) {
+      if (services.length === 0) {
+        setShowServiceOnboarding(true);
+        serviceFieldRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        showToast('Cadastre seu primeiro serviço para prosseguir com o agendamento.', 'info');
+        return;
+      }
+      showToast('Selecione um serviço para continuar.', 'error');
+      return;
+    }
+
+    if (!patientId || !professionalId) {
       showToast('Preencha todos os campos obrigatórios', 'error');
       return;
     }
@@ -454,38 +471,84 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                 ))}
               </select>
             </div>
-            <div className="min-w-0">
+            <div ref={serviceFieldRef} className="min-w-0">
               <label className="block font-semibold text-slate-700 mb-0.5">Serviço *</label>
-              <QuickActionDropdown
-                value={serviceId}
-                onChange={val => setServiceId(val)}
-                options={filteredServices.map(s => ({
-                  value: s.id,
-                  label: s.name,
-                  sublabel: s.duration_minutes ? `${s.duration_minutes} min` : undefined
-                }))}
-                placeholder={filteredServices.length === 0 ? "Nenhum serviço disponível" : "Selecione um serviço..."}
-                emptyMessage="Nenhum serviço disponível para este profissional"
-                actionLabel="+ Adicionar novo serviço"
-                onAction={() => setIsNewServiceModalOpen(true)}
-                showAction={canManageServices}
-                rightContent={
-                  <div className="flex items-center gap-1 w-24 border-l border-slate-200 pl-2">
-                    <span aria-hidden="true" className="shrink-0 whitespace-nowrap text-slate-500">R$</span>
-                    <input id="appointment-price" type="text" inputMode="decimal" required
-                      value={appointmentPrice} disabled={!serviceId}
-                      onChange={event => {
-                        if (!/^[\d.,]*$/.test(event.target.value)) return;
-                        priceEdited.current = true;
-                        setAppointmentPrice(event.target.value);
-                      }}
-                      onBlur={() => { const value = parseAppointmentPrice(appointmentPrice); if (value !== null) setAppointmentPrice(formatAppointmentPrice(value)); }}
-                      aria-label="Valor da consulta *"
-                      aria-invalid={appointmentPrice !== '' && parseAppointmentPrice(appointmentPrice) === null}
-                      className="w-full min-w-0 !min-h-0 flex-1 !p-0 bg-transparent outline-none text-xs" />
+              {services.length === 0 ? (
+                <div className="space-y-2">
+                  <div
+                    className={`flex items-center justify-between border rounded-xl px-3 py-2 text-xs min-h-[38px] transition-all duration-200 ${
+                      showServiceOnboarding
+                        ? 'border-indigo-300 bg-indigo-50/40 ring-2 ring-indigo-500/20'
+                        : 'border-dashed border-slate-300 bg-slate-50/70'
+                    }`}
+                  >
+                    <span className="text-slate-500 font-medium truncate">Nenhum serviço cadastrado ainda</span>
+                    <button
+                      type="button"
+                      onClick={() => setIsNewServiceModalOpen(true)}
+                      className="ml-2 inline-flex items-center gap-1 font-semibold text-indigo-600 hover:text-indigo-800 shrink-0 text-xs cursor-pointer hover:underline"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Adicionar serviço
+                    </button>
                   </div>
-                }
-              />
+
+                  {showServiceOnboarding && (
+                    <div className="p-3 bg-indigo-50/90 border border-indigo-200/90 rounded-xl text-left animate-in fade-in duration-200">
+                      <div className="flex items-start gap-2.5">
+                        <div className="p-1.5 bg-indigo-100 text-indigo-600 rounded-lg shrink-0 mt-0.5">
+                          <Sparkles className="w-4 h-4" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="text-xs font-bold text-indigo-950">Cadastre seu primeiro serviço</h4>
+                          <p className="text-[11px] text-indigo-800/90 mt-0.5 leading-relaxed">
+                            Para concluir o agendamento, primeiro cadastre um serviço. Isso ajuda a organizar duração, valor e relatórios dos atendimentos.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setIsNewServiceModalOpen(true)}
+                            className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-colors cursor-pointer"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            Adicionar serviço
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <QuickActionDropdown
+                  value={serviceId}
+                  onChange={val => setServiceId(val)}
+                  options={filteredServices.map(s => ({
+                    value: s.id,
+                    label: s.name,
+                    sublabel: s.duration_minutes ? `${s.duration_minutes} min` : undefined
+                  }))}
+                  placeholder={filteredServices.length === 0 ? "Nenhum serviço disponível" : "Selecione um serviço..."}
+                  emptyMessage="Nenhum serviço disponível para este profissional"
+                  actionLabel="+ Adicionar novo serviço"
+                  onAction={() => setIsNewServiceModalOpen(true)}
+                  showAction={canManageServices}
+                  rightContent={
+                    <div className="flex items-center gap-1 w-24 border-l border-slate-200 pl-2">
+                      <span aria-hidden="true" className="shrink-0 whitespace-nowrap text-slate-500">R$</span>
+                      <input id="appointment-price" type="text" inputMode="decimal" required
+                        value={appointmentPrice} disabled={!serviceId}
+                        onChange={event => {
+                          if (!/^[\d.,]*$/.test(event.target.value)) return;
+                          priceEdited.current = true;
+                          setAppointmentPrice(event.target.value);
+                        }}
+                        onBlur={() => { const value = parseAppointmentPrice(appointmentPrice); if (value !== null) setAppointmentPrice(formatAppointmentPrice(value)); }}
+                        aria-label="Valor da consulta *"
+                        aria-invalid={appointmentPrice !== '' && parseAppointmentPrice(appointmentPrice) === null}
+                        className="w-full min-w-0 !min-h-0 flex-1 !p-0 bg-transparent outline-none text-xs" />
+                    </div>
+                  }
+                />
+              )}
             </div>
           </div>
 
@@ -827,7 +890,16 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
             <button
               type="button"
               onClick={handleBook}
-              disabled={(isRetroactive ? (!date || !retroStartTime || !retroEndTime) : (!isCustomTime ? !selectedSlot : (!date || !customTime))) || !patientId || !professionalId || !serviceId || loading || loadingSlots}
+              disabled={
+                loading ||
+                loadingSlots ||
+                (services.length > 0 && (
+                  (isRetroactive ? (!date || !retroStartTime || !retroEndTime) : (!isCustomTime ? !selectedSlot : (!date || !customTime))) ||
+                  !patientId ||
+                  !professionalId ||
+                  !serviceId
+                ))
+              }
               className="w-full sm:w-auto px-5 py-2 font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs disabled:opacity-50 cursor-pointer text-xs"
             >
               {isRetroactive ? (loading ? 'Registrando...' : 'Registrar e abrir atendimento') : (loading ? 'Agendando...' : 'Confirmar Agendamento')}

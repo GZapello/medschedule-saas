@@ -2382,9 +2382,8 @@ export class AuthController {
             currentStep = 'billing_default_service';
             try {
               db.prepare('UPDATE tenants SET billing_required=1 WHERE id=?').run(tenantId);
-              ensureDefaultClinicService(tenantId, true);
             } catch (err: any) {
-              console.error('[GoogleAuth.signup] Falha ao configurar billing/serviço padrão:', err.message || err);
+              console.error('[GoogleAuth.signup] Falha ao configurar billing:', err.message || err);
               throw err;
             }
 
@@ -2640,8 +2639,6 @@ export class AuthController {
                 tenant_id = ?, user_id = ?, updated_at = ?
             WHERE id = ?
           `).run(nowIso, trialEndIso, tenantId, userId, nowIso, trial.id);
-
-          ensureDefaultClinicService(tenantId);
         })();
 
         logAudit(req, 'ACTIVATE_FREE_TRIAL_GOOGLE', 'free_trials', trial.id, {

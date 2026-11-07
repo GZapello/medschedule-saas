@@ -393,47 +393,33 @@ async function runTests() {
     const newAdminToken = newClinicRes.data.token;
     const newClinicHeaders = { Authorization: `Bearer ${newAdminToken}` };
 
-    // Teste 16: Confirmar criação automática de: Atendimento / Consulta — R$ 180,00
-    const checkService = db.prepare(`
-      SELECT id, name, price, active, duration_minutes
+    // Teste 16: Confirmar que a nova conta NÃO possui serviço padrão pré-cadastrado (inicia vazio)
+    const checkServices = db.prepare(`
+      SELECT COUNT(*) as total
       FROM services
-      WHERE tenant_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM('Atendimento / Consulta'))
+      WHERE tenant_id = ?
     `).get(newTenantId);
-    assert(checkService !== undefined, '16.1. Serviço "Atendimento / Consulta" criado automaticamente para a nova clínica');
-    assert(Number(checkService.price) === 180.0, '16.2. Valor do serviço padrão é rigorosamente R$ 180,00');
-    assert(checkService.active === 1, '16.3. Status do serviço é Ativo (active = 1)');
+    assert(checkServices.total === 0, '16.1. Conta nova NÃO possui serviço pré-cadastrado (total = 0)');
 
     await makeRequest('POST', '/api/v1/onboarding/select-plan', newClinicHeaders, { planCode: 'SOLO', startTrial: true });
     const completedProfile = await makeRequest('POST', '/api/v1/onboarding/complete-profile', newClinicHeaders, { practiceAreaIds: [] });
-    assert(completedProfile.status === 200, '16.4. Perfil verificado conclui onboarding antes de acessar a agenda');
+    assert(completedProfile.status === 200, '16.2. Perfil verificado conclui onboarding antes de acessar a agenda');
     // Isola o teste da agenda da cobrança após concluir o onboarding real.
     db.prepare("UPDATE tenants SET status = 'active', billing_required = 0 WHERE id = ?").run(newTenantId);
     db.prepare("UPDATE users SET status = 'active' WHERE tenant_id = ?").run(newTenantId);
     db.prepare("UPDATE clinic_users SET status = 'active' WHERE tenant_id = ?").run(newTenantId);
 
-    // Teste 17: Abrir a agenda (GET /v1/services)
+    // Teste 17: Abrir a agenda (GET /v1/services) e verificar que retorna vazio para conta nova
     const servicesListRes = await makeRequest('GET', '/api/v1/services', newClinicHeaders);
     if (servicesListRes.status !== 200) console.log('DEBUG servicesListRes:', servicesListRes);
     assert(servicesListRes.status === 200, '17.1. GET /v1/services na nova clínica retorna HTTP 200');
     assert(Array.isArray(servicesListRes.data), '17.2. Lista de serviços é um array');
-    const defaultServiceFromApi = servicesListRes.data.find(s => s.name === 'Atendimento / Consulta');
-    assert(defaultServiceFromApi !== undefined, '17.3. "Atendimento / Consulta" imediatamente disponível na listagem da agenda');
-    assert(Number(defaultServiceFromApi.price) === 180.0, '17.4. Preço de R$ 180,00 disponível na API');
+    assert(servicesListRes.data.length === 0, '17.3. Lista de serviços para conta nova está vazia (0 serviços)');
 
-    // Teste 18: Criar o primeiro agendamento usando o serviço criado
-    // Cria um paciente para a nova clínica
-    const patientRes = await makeRequest('POST', '/api/v1/patients', newClinicHeaders, {
-      fullName: 'Paciente Primeiro Agendamento',
-      phone: '(11) 91111-2222',
-      email: 'primeiro@paciente.com'
-    });
-    const newPatientId = patientRes.data.id || patientRes.data.patient?.id;
-
-    // Busca o profissional da nova clínica
+    // Busca ou cria o profissional da nova clínica para vincular ao serviço e agendamento
     const profsRes = await makeRequest('GET', '/api/v1/professionals', newClinicHeaders);
     let newProfId = profsRes.data?.[0]?.id;
     if (!newProfId) {
-      // Se ainda não houver profissional, cria um para permitir o agendamento
       const newProfRow = db.prepare('SELECT id FROM professionals WHERE tenant_id = ?').get(newTenantId);
       if (newProfRow) {
         newProfId = newProfRow.id;
@@ -446,34 +432,49 @@ async function runTests() {
       }
     }
 
+    // Teste 18: Cadastrar o primeiro serviço na clínica vinculado ao profissional (fluxo do onboarding / Novo Serviço)
+    const createServiceRes = await makeRequest('POST', '/api/v1/services', newClinicHeaders, {
+      professionalId: newProfId,
+      name: 'Consulta Inicial',
+      price: 180,
+      durationMinutes: 50,
+      modality: 'both'
+    });
+    assert(createServiceRes.status === 201, '18.1. Cadastro do primeiro serviço retorna HTTP 201');
+    const createdService = createServiceRes.data;
+    assert(createdService && createdService.id, '18.2. Serviço criado possui ID');
+
+    // Cria um paciente para a nova clínica
+    const patientRes = await makeRequest('POST', '/api/v1/patients', newClinicHeaders, {
+      fullName: 'Paciente Primeiro Agendamento',
+      phone: '(11) 91111-2222',
+      email: 'primeiro@paciente.com'
+    });
+    const newPatientId = patientRes.data.id || patientRes.data.patient?.id;
+
     require('./dist/utils/schedule-defaults').createDefaultSchedules(db, newTenantId, newProfId);
     const apptRes = await makeRequest('POST', '/api/v1/appointments', newClinicHeaders, {
       patientId: newPatientId,
       professionalId: newProfId,
-      serviceId: defaultServiceFromApi.id,
+      serviceId: createdService.id,
       isCustomTime: true,
       date: '2026-09-18',
       startTime: '2026-09-18T10:00:00',
       endTime: '2026-09-18T10:50:00',
       status: 'scheduled'
     });
-    assert(apptRes.status === 201, '18. Criar primeiro agendamento com serviço padrão retorna HTTP 201: ' + JSON.stringify(apptRes.data));
+    assert(apptRes.status === 201, '18.3. Criar primeiro agendamento com serviço recém-cadastrado retorna HTTP 201: ' + JSON.stringify(apptRes.data));
 
-    // Teste 19: Confirmar que o serviço aparece imediatamente e gerou pagamento com valor R$ 180,00
+    // Teste 19: Confirmar que o agendamento gerou pagamento com valor R$ 180,00
     const paymentRow = db.prepare('SELECT amount, status FROM payments WHERE appointment_id = ?').get(apptRes.data.id || apptRes.data.appointment?.id);
     assert(paymentRow !== undefined, '19.1. Registro financeiro do agendamento provisionado');
     assert(Number(paymentRow.amount) === 180.0, '19.2. Valor faturado corresponde ao valor do serviço: R$ 180,00');
 
-    // Teste 20: Repetir/recarregar fluxo e confirmar que NÃO é criado serviço duplicado (idempotência)
+    // Teste 20: Função ensureDefaultClinicService de compatibilidade funciona sob demanda e é idempotente
+    const manualCall = ensureDefaultClinicService(newTenantId);
+    assert(manualCall !== null && manualCall.created === true, '20.1. ensureDefaultClinicService executado sob demanda cria o serviço de fallback');
     const secondCall = ensureDefaultClinicService(newTenantId);
-    assert(secondCall !== null && secondCall.created === false, '20.1. Execução subsequente de ensureDefaultClinicService detecta existência prévia (created = false)');
-
-    const countServices = db.prepare(`
-      SELECT COUNT(*) as total
-      FROM services
-      WHERE tenant_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM('Atendimento / Consulta'))
-    `).get(newTenantId);
-    assert(countServices.total === 1, '20.2. Idempotência estrita confirmada: existe EXATAMENTE 1 serviço "Atendimento / Consulta" na clínica, sem duplicatas');
+    assert(secondCall !== null && secondCall.created === false, '20.2. Execução subsequente de ensureDefaultClinicService detecta existência prévia (created = false)');
 
     console.log('\n================================================================');
     console.log(`RESUMO DOS TESTES: ${passedTests} PASSOU | ${failedTests} FALHOU`);

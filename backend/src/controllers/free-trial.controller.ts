@@ -641,9 +641,6 @@ export class FreeTrialController {
           trial.id
         );
 
-        // 10.1 Criação automática e idempotente do serviço inicial padrão 'Atendimento / Consulta' (R$ 180,00)
-        ensureDefaultClinicService(tenantId);
-
         // 11. Gerar token JWT para login instantâneo
         const authToken = generateToken({
           userId,
