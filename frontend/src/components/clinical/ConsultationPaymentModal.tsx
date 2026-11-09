@@ -299,22 +299,22 @@ export function ConsultationPaymentModal({
   return (
     <>
       <div
-        className="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 mobile-modal"
+        className="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 mobile-modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby="receipt-title"
       >
         <form
           onSubmit={confirm}
-          className="bg-white rounded-3xl p-6 sm:p-7 w-full max-w-lg space-y-4 shadow-2xl border border-slate-100 relative animate-in fade-in zoom-in-95 duration-200"
+          className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-lg max-h-[90dvh] flex flex-col shadow-2xl border border-slate-100 relative animate-in fade-in zoom-in-95 duration-200 overflow-hidden"
         >
-          {/* Header */}
-          <div className="flex items-start justify-between gap-3 pb-1 border-b border-slate-100">
+          {/* Header (fixo, shrink-0) */}
+          <div className="shrink-0 px-5 sm:px-6 pt-5 pb-3 border-b border-slate-100 flex items-start justify-between gap-3 bg-white">
             <div>
-              <h2 id="receipt-title" className="text-xl font-black text-slate-900 tracking-tight">
+              <h2 id="receipt-title" className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
                 Recebimento do atendimento
               </h2>
-              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+              <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 leading-relaxed">
                 Prontuário salvo com sucesso. Selecione o serviço realizado e confirme as condições financeiras para finalizar a consulta.
               </p>
             </div>
@@ -322,14 +322,16 @@ export function ConsultationPaymentModal({
               type="button"
               onClick={onClose}
               disabled={saving}
-              className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition-colors"
+              className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition-colors shrink-0 cursor-pointer"
               title="Continuar depois"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
 
-          {/* 1. Serviço Realizado */}
+          {/* Conteúdo Central Rolável */}
+          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-5 sm:px-6 py-3.5 space-y-3">
+            {/* 1. Serviço Realizado */}
           <div ref={serviceFieldRef} className="relative space-y-1">
             <div className="flex items-center justify-between">
               <label htmlFor="consultation-service-select" className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
@@ -643,8 +645,10 @@ export function ConsultationPaymentModal({
             </div>
           )}
 
-          {/* Botões de Ação */}
-          <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100">
+          </div>
+
+          {/* Rodapé (fixo, shrink-0, sempre visível) */}
+          <div className="shrink-0 px-5 sm:px-6 py-3 sm:py-3.5 border-t border-slate-100 bg-white flex items-center justify-end gap-3">
             <button
               type="button"
               disabled={saving}
