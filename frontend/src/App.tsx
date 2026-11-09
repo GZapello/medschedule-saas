@@ -1260,11 +1260,13 @@ const AppContent: React.FC = () => {
         onClose={() => {
           setOnboardingSuspended(true);
         }}
-        onSuccess={() => {
+        onSuccess={(targetView) => {
+          const finalView = targetView || 'dashboard';
+          const finalPath = VIEW_TO_PATH[finalView] || `/${finalView}`;
           setOnboardingSuspended(false);
-          setCurrentView('dashboard');
-          sessionStorage.setItem('activeView', 'dashboard');
-          window.history.pushState({ view: 'dashboard' }, '', '/dashboard');
+          setCurrentView(finalView);
+          sessionStorage.setItem('activeView', finalView);
+          window.history.pushState({ view: finalView }, '', finalPath);
         }}
         presentation="page"
       />

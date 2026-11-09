@@ -118,6 +118,7 @@ export class ProfessionTaxonomyService {
         zemda_psico_enabled = ?,
         zemda_personal_enabled = ?,
         zemda_med_enabled = ?,
+        zemda_estetic_enabled = ?,
         updated_at = datetime('now')
       WHERE id = ? AND tenant_id = ?
     `).run(
@@ -137,6 +138,7 @@ export class ProfessionTaxonomyService {
       flags.zemda_psico_enabled,
       flags.zemda_personal_enabled,
       flags.zemda_med_enabled,
+      flags.zemda_estetic_enabled || 0,
       professionalId,
       tenantId
     );
@@ -162,6 +164,7 @@ export class ProfessionTaxonomyService {
           zemda_psico_enabled = ?,
           zemda_personal_enabled = ?,
           zemda_med_enabled = ?,
+          zemda_estetic_enabled = ?,
           updated_at = datetime('now')
         WHERE id = ? AND (SELECT COUNT(*) FROM clinic_users cu WHERE cu.user_id=users.id)<=1
       `).run(
@@ -179,6 +182,7 @@ export class ProfessionTaxonomyService {
         flags.zemda_psico_enabled,
         flags.zemda_personal_enabled,
         flags.zemda_med_enabled,
+        flags.zemda_estetic_enabled || 0,
         userId
       );
 
@@ -208,6 +212,15 @@ export class ProfessionTaxonomyService {
         currentPerms = currentPerms.filter((p: string) => p !== 'access_zemda_med');
       }
 
+      // Permissão ZemdaEstetic: para profissionais de Estética (Biomedicina, Estética, etc.)
+      if (commercialModule === 'ZemdaEstetic') {
+        if (!currentPerms.includes('access_zemda_estetic')) {
+          currentPerms.push('access_zemda_estetic');
+        }
+      } else {
+        currentPerms = currentPerms.filter((p: string) => p !== 'access_zemda_estetic');
+      }
+
       db.prepare(`
         UPDATE clinic_users SET
           profession_id = ?,
@@ -223,7 +236,8 @@ export class ProfessionTaxonomyService {
           zemda_pp_enabled = ?,
           zemda_psico_enabled = ?,
           zemda_personal_enabled = ?,
-          zemda_med_enabled = ?
+          zemda_med_enabled = ?,
+          zemda_estetic_enabled = ?
         WHERE user_id = ? AND tenant_id = ?
       `).run(
         resolution.canonicalId,
@@ -240,6 +254,7 @@ export class ProfessionTaxonomyService {
         flags.zemda_psico_enabled,
         flags.zemda_personal_enabled,
         flags.zemda_med_enabled,
+        flags.zemda_estetic_enabled || 0,
         userId,
         tenantId
       );

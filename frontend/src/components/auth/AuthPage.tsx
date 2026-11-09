@@ -684,12 +684,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           window.dispatchEvent(new PopStateEvent('popstate'));
           if (destination === '/') onBackToLanding?.();
         }}
-        onSuccess={() => {
+        onSuccess={(targetView) => {
           setIsCreateClinicOpen(false);
           setGoogleSignupData(null);
-          sessionStorage.setItem('activeView', 'dashboard');
-          window.history.pushState({ view: 'dashboard' }, '', '/dashboard');
-          window.dispatchEvent(new CustomEvent('zemda-navigate', { detail: { view: 'dashboard' } }));
+          const finalView = targetView || 'dashboard';
+          const finalPath = finalView === 'dashboard' ? '/dashboard' : '/' + finalView;
+          sessionStorage.setItem('activeView', finalView);
+          window.history.pushState({ view: finalView }, '', finalPath);
+          window.dispatchEvent(new CustomEvent('zemda-navigate', { detail: { view: finalView } }));
         }}
         initialPlan={sanitizePlanCode(initialPlan)}
         isTrial={isTrial}

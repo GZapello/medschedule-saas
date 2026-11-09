@@ -340,6 +340,7 @@ export function getAvailableModulesForProfessional(
       Boolean(prof.zemda_fisio_enabled || cu?.zemda_fisio_enabled || u?.zemda_fisio_enabled);
 
     const isBiomed =
+      canonical.canonicalId === 'prof-biomedicina' ||
       (prof.profession_id || '').toLowerCase().includes('biomed') ||
       (prof.profession_name || '').toLowerCase().includes('bioméd');
 

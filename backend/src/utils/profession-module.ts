@@ -135,15 +135,20 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
     combined.includes('biomedic') ||
     (!hasExplicitId && regType === 'CRBM')
   ) {
+    const isAestheticBiomed = combined.includes('estet') || combined.includes('estét') || combined.includes('esteta');
     return {
       canonicalId: 'prof-biomedicina',
       canonicalName: 'Biomédico(a)',
-      commercialModule: null,
-      clinicalWorkspace: 'general',
+      commercialModule: 'ZemdaEstetic',
+      clinicalWorkspace: 'zemda-estetic',
       boardLabel: 'CRBM',
-      taxonomyCategory: 'HEALTH_SUPPORT',
-      isSpecificAlias: false,
-      flags: makeFlags(null)
+      taxonomyCategory: 'CANONICAL',
+      isSpecificAlias: isAestheticBiomed,
+      inferredAreaId: isAestheticBiomed ? 'pa-biomed-estetica' : undefined,
+      inferredAreaName: isAestheticBiomed ? 'Biomedicina Estética' : undefined,
+      automaticPracticeAreaId: isAestheticBiomed ? 'pa-biomed-estetica' : undefined,
+      automaticPracticeAreaName: isAestheticBiomed ? 'Biomedicina Estética' : undefined,
+      flags: makeFlags('ZemdaEstetic')
     };
   }
 
@@ -904,7 +909,7 @@ export function cleanPracticeAreasForNewProfession(newProfessionId: string, curr
     ZemdaOdonto: ['odonto', 'dentis', 'clareamento', 'ortodontia', 'endodontia', 'implante', 'periodontia', 'prótese dentária', 'pa-odonto'],
     ZemdaPersonal: ['personal', 'personal trainer', 'musculação', 'musculacao', 'treinamento', 'condicionamento físico', 'educação física', 'educacao fisica', 'pa-personal'],
     ZemdaMed: ['médic', 'medic', 'clínica médica', 'prescrição', 'soap', 'cid', 'neurologia', 'psiquiatria', 'pediatria', 'cardiologia', 'dermatologia', 'oftalmologia', 'ginecologia', 'urologia', 'otorrino', 'geriatria', 'endocrino', 'pa-med'],
-    ZemdaEstetic: ['estet', 'estétic', 'facial', 'corporal', 'capilar', 'botox', 'preenchimento', 'bioestimulador', 'harmonização', 'harmonizacao', 'pa-estetic']
+    ZemdaEstetic: ['estet', 'estétic', 'facial', 'corporal', 'capilar', 'botox', 'preenchimento', 'bioestimulador', 'harmonização', 'harmonizacao', 'pa-estetic', 'biomed', 'bioméd', 'pa-biomed']
   };
 
   const filtered = rawAreas.filter(area => {

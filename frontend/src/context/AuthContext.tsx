@@ -12,7 +12,7 @@ interface AuthContextType {
   logout: () => void;
   switchTenant: (tenantId: string) => Promise<void>;
   refreshTenant: () => Promise<void>;
-  reloadSession: () => Promise<void>;
+  reloadSession: () => Promise<User | null>;
   isSuperAdmin: boolean;
   isClinicAdmin: boolean;
   isProfessional: boolean;
@@ -38,6 +38,7 @@ interface AuthContextType {
   isZemdaPersonal: boolean;
   isDoctor: boolean;
   isZemdaMed: boolean;
+  isBiomedic: boolean;
   isEsthetician: boolean;
   isZemdaEstetic: boolean;
   isZemda360: boolean;
@@ -280,7 +281,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  const reloadSession = async () => {
+  const reloadSession = async (): Promise<User | null> => {
     try {
       const data = await ApiClient.get<{ user: User; tenant: Tenant | null }>('/v1/auth/me');
       setCurrentUser(data.user);
@@ -292,8 +293,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         localStorage.removeItem('active_tenant_id');
       }
       window.dispatchEvent(new Event('zemda-billing-refresh'));
+      return data.user;
     } catch (err) {
       console.error('Erro ao recarregar sessão:', err);
+      return null;
     }
   };
 
@@ -467,6 +470,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     ) {
       activeModule = 'ZemdaPersonal';
     } else if (
+      profId === 'prof-biomedicina' ||
+      profSlug === 'biomedicina' ||
+      combinedProf.includes('biomedic') ||
+      regType === 'CRBM'
+    ) {
+      activeModule = 'ZemdaEstetic';
+    } else if (
       profId === 'prof-medico' ||
       profId === 'prof-medicina' ||
       profId === 'prof-cardiologista' ||
@@ -489,8 +499,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       profSlug === 'ortopedista' ||
       profSlug === 'endocrinologista' ||
       profSlug === 'reumatologista' ||
-      combinedProf.includes('médic') ||
-      combinedProf.includes('medic') ||
+      ((combinedProf.includes('médic') || combinedProf.includes('medic')) && !combinedProf.includes('biomedic')) ||
       regType === 'CRM'
     ) {
       activeModule = 'ZemdaMed';
@@ -558,17 +567,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const practiceAreaIds = currentUser?.practiceAreaIds || [];
   const selectedOptionalCapabilities = currentUser?.selectedOptionalCapabilities || [];
 
-  const isEsthetician = isEligibleStaff && (
-    activeModule === 'ZemdaEstetic' ||
+  const isBiomedic = isEligibleStaff && (
+    profId === 'prof-biomedicina' ||
+    profSlug === 'biomedicina' ||
+    combinedProf.includes('biomedic') ||
+    regType === 'CRBM'
+  );
+
+  const isEsthetician = isEligibleStaff && !isBiomedic && (
     profId === 'prof-esteticista' ||
     profSlug === 'esteticista' ||
-    combinedProf.includes('estetic') ||
-    combinedProf.includes('estétic')
+    ((combinedProf.includes('estetic') || combinedProf.includes('estétic')) && !combinedProf.includes('biomedic')) ||
+    (activeModule === 'ZemdaEstetic' && !isBiomedic && !isDentist && !isPhysiotherapist)
   );
 
   const isZemdaEstetic = isEligibleStaff && (
     activeModule === 'ZemdaEstetic' ||
     isEsthetician ||
+    isBiomedic ||
     Boolean((currentUser as any)?.zemdaEsteticEnabled) ||
     Boolean((currentUser as any)?.zemda_estetic_enabled) ||
     userPermissions.includes('access_zemda_estetic') ||
@@ -656,6 +672,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         isZemdaPersonal,
         isDoctor,
         isZemdaMed,
+        isBiomedic,
         isEsthetician,
         isZemdaEstetic,
         isZemda360,

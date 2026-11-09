@@ -57,7 +57,7 @@ import { sanitizePlanCode } from '../../utils/planUtils';
 interface CreateClinicModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess?: () => void;
+  onSuccess?: (targetView?: string) => void;
   initialPlan?: string;
   isTrial?: boolean;
   presentation?: 'modal' | 'page';
@@ -862,16 +862,53 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
         professionCode: formData.profession || undefined
       });
 
-      await reloadSession();
+      const refreshedUser = await reloadSession();
       window.dispatchEvent(new Event('zemda-billing-refresh'));
 
-      // Transição direta para o Dashboard com a mesma sessão autenticada (sem logout nem redirect para login)
-      sessionStorage.setItem('activeView', 'dashboard');
-      window.history.pushState({ view: 'dashboard' }, '', '/dashboard');
-      window.dispatchEvent(new CustomEvent('zemda-navigate', { detail: { view: 'dashboard' } }));
+      const isEsteticTarget =
+        refreshedUser?.commercialModule === 'ZemdaEstetic' ||
+        refreshedUser?.clinicalWorkspace === 'zemda-estetic' ||
+        refreshedUser?.professionId === 'prof-biomedicina' ||
+        formData.profession === 'prof-biomedicina' ||
+        refreshedUser?.professionId === 'prof-esteticista' ||
+        formData.profession === 'prof-esteticista';
+
+      let targetView = 'dashboard';
+      let targetPath = '/dashboard';
+
+      if (isEsteticTarget) {
+        targetView = 'zemda-estetic';
+        targetPath = '/zemda-estetic';
+      } else if (refreshedUser?.clinicalWorkspace && refreshedUser.clinicalWorkspace !== 'general') {
+        const mappedWs = refreshedUser.clinicalWorkspace;
+        targetView = mappedWs;
+        targetPath = `/${mappedWs}`;
+      } else if (refreshedUser?.commercialModule && refreshedUser.commercialModule !== 'general') {
+        const modToView: Record<string, string> = {
+          ZemdaMed: 'zemda-med',
+          ZemdaOdonto: 'zemda-odonto',
+          ZemdaFisio: 'zemda-fisio',
+          ZemdaNutri: 'zemda-nutri',
+          ZemdaTO: 'zemda-to',
+          ZemdaFono: 'zemda-fono',
+          ZemdaPsico: 'zemda-psico',
+          ZemdaPP: 'zemda-pp',
+          ZemdaPersonal: 'zemda-personal',
+          ZemdaEstetic: 'zemda-estetic'
+        };
+        if (modToView[refreshedUser.commercialModule]) {
+          targetView = modToView[refreshedUser.commercialModule];
+          targetPath = `/${targetView}`;
+        }
+      }
+
+      // Transição direta para o módulo correspondente com a mesma sessão autenticada (sem logout nem redirect para login)
+      sessionStorage.setItem('activeView', targetView);
+      window.history.pushState({ view: targetView }, '', targetPath);
+      window.dispatchEvent(new CustomEvent('zemda-navigate', { detail: { view: targetView } }));
       window.dispatchEvent(new PopStateEvent('popstate'));
 
-      onSuccess?.();
+      onSuccess?.(targetView);
       showToast('Onboarding concluído com sucesso! Bem-vindo ao Zemda.', 'success');
     } catch (err: any) {
       trackSignupError({

@@ -431,7 +431,8 @@ export class CapabilityService {
     if (
       (commercialModule === 'ZemdaEstetic' || canonicalProfId === 'prof-esteticista' || isEsteticSignal) &&
       canonicalProfId !== 'prof-dentista' &&
-      canonicalProfId !== 'prof-medico'
+      canonicalProfId !== 'prof-medico' &&
+      canonicalProfId !== 'prof-biomedicina'
     ) {
       canonicalProfId = 'prof-esteticista';
       commercialModule = 'ZemdaEstetic';

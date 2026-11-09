@@ -452,4 +452,31 @@ export function migrateEstetic(rawDb: DatabaseSync): void {
       item.default_unit
     );
   }
+
+  // 3. Auto-recuperação não-destrutiva de contas existentes de biomédicos para o ZemdaEstetic
+  try {
+    rawDb.exec(`
+      UPDATE users
+      SET zemda_estetic_enabled = 1
+      WHERE zemda_estetic_enabled = 0 AND (
+        profession_id = 'prof-biomedicina' OR
+        profession_name LIKE '%biomed%' OR
+        registration_type = 'CRBM'
+      );
+      UPDATE clinic_users
+      SET zemda_estetic_enabled = 1
+      WHERE zemda_estetic_enabled = 0 AND (
+        profession_id = 'prof-biomedicina' OR
+        profession_name LIKE '%biomed%' OR
+        profession_custom LIKE '%biomed%'
+      );
+      UPDATE professionals
+      SET zemda_estetic_enabled = 1
+      WHERE zemda_estetic_enabled = 0 AND (
+        profession_id = 'prof-biomedicina' OR
+        profession_name LIKE '%biomed%' OR
+        registration_type = 'CRBM'
+      );
+    `);
+  } catch (_) {}
 }

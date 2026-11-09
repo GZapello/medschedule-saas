@@ -1573,8 +1573,8 @@ export class AuthController {
             profession_id, profession_name, practice_areas, registration_type, registration_number,
             zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled,
             zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled,
-            zemda_med_enabled
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            zemda_med_enabled, zemda_estetic_enabled
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           userId, tenantId, finalName, cleanEmail, hashedPassword, userRole, phone || null,
           canonicalProfessionId, canonicalProfessionName, areasStr || null,
@@ -1588,7 +1588,8 @@ export class AuthController {
           modFlags.zemda_pp_enabled,
           modFlags.zemda_psico_enabled,
           modFlags.zemda_personal_enabled,
-          modFlags.zemda_med_enabled || 0
+          modFlags.zemda_med_enabled || 0,
+          modFlags.zemda_estetic_enabled || 0
         );
 
         // 2. clinic_users
@@ -1598,9 +1599,9 @@ export class AuthController {
             profession_id, profession_name, profession_custom, practice_areas,
             zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled,
             zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled,
-            zemda_med_enabled,
+            zemda_med_enabled, zemda_estetic_enabled,
             approved_at, approved_by, created_at
-          ) VALUES (?, ?, ?, ?, 'active', 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, datetime('now'))
+          ) VALUES (?, ?, ?, ?, 'active', 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, datetime('now'))
         `).run(
           'cu-' + uuidv4().slice(0, 8),
           tenantId,
@@ -1620,6 +1621,7 @@ export class AuthController {
           modFlags.zemda_psico_enabled,
           modFlags.zemda_personal_enabled,
           modFlags.zemda_med_enabled || 0,
+          modFlags.zemda_estetic_enabled || 0,
           inviteData.created_by || 'invite'
         );
 
@@ -1636,8 +1638,8 @@ export class AuthController {
               profession_id, profession_name,
               zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled,
               zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled,
-              zemda_med_enabled
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              zemda_med_enabled, zemda_estetic_enabled
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).run(
             profId,
             tenantId,
@@ -1658,7 +1660,8 @@ export class AuthController {
             modFlags.zemda_pp_enabled,
             modFlags.zemda_psico_enabled,
             modFlags.zemda_personal_enabled,
-            modFlags.zemda_med_enabled || 0
+            modFlags.zemda_med_enabled || 0,
+            modFlags.zemda_estetic_enabled || 0
           );
 
           createDefaultSchedules(db, tenantId, profId);

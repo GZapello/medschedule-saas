@@ -813,21 +813,25 @@ export class OnboardingController {
       const cleanRegType = registrationType ? String(registrationType).trim() : null;
       const areasStr = generalPracticeAreas.join(', ');
 
+      const esteticFlag = professionResolution.flags.zemda_estetic_enabled === 1 ? 1 : 0;
+
       db.prepare(`
         UPDATE professionals
         SET active = 1,
             registration_number = COALESCE(?, registration_number),
             registration_type = COALESCE(?, registration_type),
-            practice_areas = COALESCE(?, practice_areas)
+            practice_areas = COALESCE(?, practice_areas),
+            zemda_estetic_enabled = CASE WHEN ? = 1 THEN 1 ELSE zemda_estetic_enabled END
         WHERE user_id = ? AND tenant_id = ?
-      `).run(cleanRegNum, cleanRegType, areasStr || null, userId, tenantId);
+      `).run(cleanRegNum, cleanRegType, areasStr || null, esteticFlag, userId, tenantId);
 
       db.prepare(`
         UPDATE clinic_users
         SET status = 'active',
-            practice_areas = COALESCE(?, practice_areas)
+            practice_areas = COALESCE(?, practice_areas),
+            zemda_estetic_enabled = CASE WHEN ? = 1 THEN 1 ELSE zemda_estetic_enabled END
         WHERE user_id = ? AND tenant_id = ?
-      `).run(areasStr || null, userId, tenantId);
+      `).run(areasStr || null, esteticFlag, userId, tenantId);
 
       db.prepare(`
         UPDATE users
@@ -836,9 +840,10 @@ export class OnboardingController {
             registration_number = COALESCE(?, registration_number),
             registration_type = COALESCE(?, registration_type),
             practice_areas = COALESCE(?, practice_areas),
+            zemda_estetic_enabled = CASE WHEN ? = 1 THEN 1 ELSE zemda_estetic_enabled END,
             updated_at = datetime('now')
         WHERE id = ?
-      `).run(cleanRegNum, cleanRegType, areasStr || null, userId);
+      `).run(cleanRegNum, cleanRegType, areasStr || null, esteticFlag, userId);
 
       db.prepare(`
         UPDATE tenants
