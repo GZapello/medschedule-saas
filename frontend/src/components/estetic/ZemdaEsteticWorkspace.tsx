@@ -1207,9 +1207,9 @@ interface EsteticPlanItemForm {
               </div>
             )}
 
-            {/* Chip de paciente exibido apenas fora do atendimento agendado (evita duplicação com o cabeçalho compacto) */}
-            {!initialAppointmentId && (
-              <div className="inline-flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200/70 border border-slate-200 rounded-lg px-2 py-0.5 transition-colors shrink-0">
+            {/* Chip de paciente exibido apenas quando em atendimento agendado (quando o cabeçalho superior não está presente) */}
+            {Boolean(initialAppointmentId) && (
+              <div className="inline-flex items-center gap-1.5 bg-slate-100 border border-slate-200 rounded-lg px-2 py-0.5 shrink-0">
                 <div className="w-5 h-5 rounded-md bg-white border border-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center shrink-0">
                   <User className="w-3.5 h-3.5" />
                 </div>
@@ -1221,14 +1221,6 @@ interface EsteticPlanItemForm {
                     ({new Date(overviewData?.patient?.birth_date || selectedPatient?.birth_date!).toLocaleDateString('pt-BR')})
                   </span>
                 )}
-                <button
-                  type="button"
-                  onClick={() => handleSelectPatient('')}
-                  className="p-0.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
-                  title="Desmarcar paciente"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
               </div>
             )}
 
