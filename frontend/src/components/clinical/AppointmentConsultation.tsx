@@ -157,6 +157,8 @@ export function AppointmentConsultation({
       <ConsultationPaymentModal
         appointmentId={appointment.id}
         initialPayment={status.payment}
+        initialServiceId={appointment.service_id || status.serviceId}
+        professionalId={appointment.professional_id || status.professionalId}
         onClose={onClose}
         onFinished={onFinished}
       />

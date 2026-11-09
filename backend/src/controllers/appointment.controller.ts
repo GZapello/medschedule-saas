@@ -697,9 +697,9 @@ export class AppointmentController {
         // Snapshot: zero explicitamente combinado é isenção, nunca cobrança pendente.
         if (agreedAmount > 0 || suppliedPrice !== undefined) {
           db.prepare(`
-            INSERT INTO payments (id, tenant_id, appointment_id, patient_id, amount, payment_method, status, notes)
-            VALUES (?, ?, ?, ?, ?, 'pix', ?, 'Gerado automaticamente pelo agendamento')
-          `).run('pay-' + uuidv4().slice(0, 8), tenantId, appointmentId, resolvedPatientId, agreedAmount, agreedAmount === 0 ? 'exempt' : 'pending');
+            INSERT INTO payments (id, tenant_id, appointment_id, patient_id, amount, payment_method, status, notes, service_id, base_amount)
+            VALUES (?, ?, ?, ?, ?, 'pix', ?, 'Gerado automaticamente pelo agendamento', ?, ?)
+          `).run('pay-' + uuidv4().slice(0, 8), tenantId, appointmentId, resolvedPatientId, agreedAmount, agreedAmount === 0 ? 'exempt' : 'pending', serviceId || null, agreedAmount);
         }
 
         if (shouldUpdateServicePrice) {

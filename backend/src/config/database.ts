@@ -470,6 +470,12 @@ export function initializeDatabase(): void {
     addColIfMissing('payments', 'cash_register_id', 'TEXT');
     addColIfMissing('payments', 'amount_tendered', 'REAL');
     addColIfMissing('payments', 'change_amount', 'REAL');
+    addColIfMissing('payments', 'service_id', 'TEXT');
+    addColIfMissing('payments', 'base_amount', 'REAL');
+    addColIfMissing('payments', 'additional_amount', 'REAL');
+    addColIfMissing('payments', 'additional_reason', 'TEXT');
+    addColIfMissing('payments', 'discount_amount', 'REAL');
+    addColIfMissing('payments', 'discount_reason', 'TEXT');
 
     // Colunas em cash_registers para compatibilidade com operadores e fechamentos
     addColIfMissing('cash_registers', 'operator_user_id', 'TEXT');

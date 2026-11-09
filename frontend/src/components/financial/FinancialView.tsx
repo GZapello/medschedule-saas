@@ -608,13 +608,31 @@ export const FinancialView: React.FC<FinancialViewProps> = ({ initialTab = 'tran
                         </td>
                         <td className="px-6 py-4">
                           <div className="font-bold text-slate-900">{p.patient_name}</div>
+                          {p.service_name && (
+                            <div className="text-[11px] text-teal-700 font-medium">{p.service_name}</div>
+                          )}
                           {p.appointment_number && (
                             <div className="text-[10px] text-slate-400">{p.appointment_number}</div>
                           )}
                         </td>
                         <td className="px-6 py-4">{getMethodBadge(p.payment_method)}</td>
                         <td className="px-6 py-4 font-extrabold text-slate-900 text-sm">
-                          {formatCurrency(p.amount)}
+                          <div>{formatCurrency(p.amount)}</div>
+                          {(Number(p.additional_amount) > 0 || Number(p.discount_amount) > 0) && (
+                            <div className="text-[10px] font-normal text-slate-500 mt-0.5 space-y-0.5">
+                              {Number(p.base_amount) > 0 && <span>Base: {formatCurrency(Number(p.base_amount))} </span>}
+                              {Number(p.additional_amount) > 0 && (
+                                <span className="text-emerald-700 block" title={p.additional_reason || 'Acréscimo'}>
+                                  +{formatCurrency(Number(p.additional_amount))} ({p.additional_reason || 'Acréscimo'})
+                                </span>
+                              )}
+                              {Number(p.discount_amount) > 0 && (
+                                <span className="text-rose-700 block" title={p.discount_reason || 'Desconto'}>
+                                  -{formatCurrency(Number(p.discount_amount))} ({p.discount_reason || 'Desconto'})
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </td>
                         <td className="px-6 py-4">
                           {p.status === 'paid' ? (

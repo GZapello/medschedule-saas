@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ApiClient } from '../../api/client';
 import { Service, Professional } from '../../types';
 import { NewServiceModal } from '../services/NewServiceModal';
-import { Sparkles, Plus, X, AlertCircle, HelpCircle } from 'lucide-react';
+import { Sparkles, Plus, X, AlertCircle } from 'lucide-react';
 
 export interface ConsultationPaymentModalProps {
   appointmentId: string;
@@ -12,6 +12,23 @@ export interface ConsultationPaymentModalProps {
   onFinished: (result: any) => void;
   onClose: () => void;
 }
+
+const ADDITIONAL_REASONS = [
+  'Procedimento complementar',
+  'Material ou insumo adicional',
+  'Atendimento prolongado',
+  'Serviço complementar',
+  'Outro motivo'
+];
+
+const DISCOUNT_REASONS = [
+  'Desconto comercial',
+  'Convênio ou parceria',
+  'Pacote de atendimentos',
+  'Ajuste autorizado',
+  'Cortesia parcial',
+  'Outro motivo'
+];
 
 export function ConsultationPaymentModal({
   appointmentId,
@@ -24,26 +41,117 @@ export function ConsultationPaymentModal({
   const [services, setServices] = useState<Service[]>([]);
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [loadingServices, setLoadingServices] = useState<boolean>(true);
-  const [selectedServiceId, setSelectedServiceId] = useState<string>(initialServiceId || '');
+  const [selectedServiceId, setSelectedServiceId] = useState<string>(
+    initialServiceId || initialPayment?.serviceId || initialPayment?.service_id || ''
+  );
   const [isNewServiceModalOpen, setIsNewServiceModalOpen] = useState<boolean>(false);
   const [showServiceOnboarding, setShowServiceOnboarding] = useState<boolean>(false);
 
-  const [amount, setAmount] = useState<string>(String(initialPayment?.amount ?? ''));
-  const [method, setMethod] = useState<string>(initialPayment?.payment_method || 'pix');
+  // Valores financeiros estruturados
+  const [baseAmount, setBaseAmount] = useState<string>(() => {
+    if (initialPayment?.baseAmount !== undefined && initialPayment?.baseAmount !== null) {
+      return Number(initialPayment.baseAmount).toFixed(2).replace('.', ',');
+    }
+    if (initialPayment?.base_amount !== undefined && initialPayment?.base_amount !== null) {
+      return Number(initialPayment.base_amount).toFixed(2).replace('.', ',');
+    }
+    if (initialPayment?.amount !== undefined && initialPayment?.amount !== null && Number(initialPayment.amount) > 0) {
+      return Number(initialPayment.amount).toFixed(2).replace('.', ',');
+    }
+    return '';
+  });
+
+  const [additionalAmount, setAdditionalAmount] = useState<string>(() => {
+    const raw = initialPayment?.additionalAmount ?? initialPayment?.additional_amount;
+    if (raw !== undefined && raw !== null && Number(raw) > 0) {
+      return Number(raw).toFixed(2).replace('.', ',');
+    }
+    return '0,00';
+  });
+
+  const [additionalReason, setAdditionalReason] = useState<string>(() => {
+    const r = initialPayment?.additionalReason || initialPayment?.additional_reason || '';
+    if (ADDITIONAL_REASONS.includes(r)) return r;
+    if (r) return 'Outro motivo';
+    return '';
+  });
+
+  const [additionalReasonCustom, setAdditionalReasonCustom] = useState<string>(() => {
+    const r = initialPayment?.additionalReason || initialPayment?.additional_reason || '';
+    if (r && !ADDITIONAL_REASONS.slice(0, -1).includes(r)) return r;
+    return '';
+  });
+
+  const [discountAmount, setDiscountAmount] = useState<string>(() => {
+    const raw = initialPayment?.discountAmount ?? initialPayment?.discount_amount;
+    if (raw !== undefined && raw !== null && Number(raw) > 0) {
+      return Number(raw).toFixed(2).replace('.', ',');
+    }
+    return '0,00';
+  });
+
+  const [discountReason, setDiscountReason] = useState<string>(() => {
+    const r = initialPayment?.discountReason || initialPayment?.discount_reason || '';
+    if (DISCOUNT_REASONS.includes(r)) return r;
+    if (r) return 'Outro motivo';
+    return '';
+  });
+
+  const [discountReasonCustom, setDiscountReasonCustom] = useState<string>(() => {
+    const r = initialPayment?.discountReason || initialPayment?.discount_reason || '';
+    if (r && !DISCOUNT_REASONS.slice(0, -1).includes(r)) return r;
+    return '';
+  });
+
+  const [method, setMethod] = useState<string>(
+    initialPayment?.payment_method || initialPayment?.paymentMethod || 'pix'
+  );
   const [status, setStatus] = useState<string>(initialPayment?.status || 'pending');
   const [notes, setNotes] = useState<string>(initialPayment?.notes || '');
   const [saving, setSaving] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
 
+  // Rastreia se o usuário já editou manualmente o valor base ou valores para não sobrescrever indevidamente
+  const [isUserEdited, setIsUserEdited] = useState<boolean>(() => {
+    return Boolean(
+      (initialPayment?.base_amount !== undefined && initialPayment?.base_amount !== null) ||
+      (initialPayment?.additional_amount !== undefined && Number(initialPayment?.additional_amount) > 0) ||
+      (initialPayment?.discount_amount !== undefined && Number(initialPayment?.discount_amount) > 0)
+    );
+  });
+
   const popoverRef = useRef<HTMLDivElement>(null);
   const serviceFieldRef = useRef<HTMLDivElement>(null);
+
+  // Auxiliares de conversão monetária
+  const parseMoney = (val: string | number | undefined | null): number => {
+    if (val === undefined || val === null || val === '') return 0;
+    if (typeof val === 'number') return isNaN(val) ? 0 : val;
+    const cleaned = String(val).replace(/\s/g, '').replace('R$', '').replace(',', '.');
+    const num = parseFloat(cleaned);
+    return isNaN(num) ? 0 : Math.max(0, num);
+  };
+
+  const formatCurrency = (val: number): string => {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+  };
+
+  const numBase = parseMoney(baseAmount);
+  const numAdditional = parseMoney(additionalAmount);
+  const numDiscount = parseMoney(discountAmount);
+
+  // total = valorBase + valorAdicional - desconto
+  const calculatedTotal = status === 'exempt'
+    ? 0
+    : Math.max(0, Math.round((numBase + numAdditional - numDiscount) * 100) / 100);
 
   // Carrega serviços e profissionais disponíveis
   const loadData = async () => {
     try {
       setLoadingServices(true);
+      const url = professionalId ? `/v1/services?professionalId=${encodeURIComponent(professionalId)}` : '/v1/services';
       const [servicesRes, profsRes] = await Promise.all([
-        ApiClient.get<Service[]>('/v1/services').catch(() => []),
+        ApiClient.get<Service[]>(url).catch(() => ApiClient.get<Service[]>('/v1/services').catch(() => [])),
         ApiClient.get<Professional[]>('/v1/professionals').catch(() => [])
       ]);
 
@@ -51,17 +159,17 @@ export function ConsultationPaymentModal({
       setServices(activeServices);
       setProfessionals(profsRes || []);
 
-      // Auto-seleciona se já houver serviço indicado ou se houver um correspondente
-      if (initialServiceId && activeServices.some(s => s.id === initialServiceId)) {
-        setSelectedServiceId(initialServiceId);
-        const match = activeServices.find(s => s.id === initialServiceId);
-        if (match && !amount && match.price !== undefined) {
-          setAmount(String(match.price));
+      const targetId = initialServiceId || selectedServiceId;
+      if (targetId && activeServices.some(s => s.id === targetId)) {
+        setSelectedServiceId(targetId);
+        const match = activeServices.find(s => s.id === targetId);
+        if (match && match.price !== undefined && !isUserEdited) {
+          setBaseAmount(Number(match.price).toFixed(2).replace('.', ','));
         }
       } else if (!selectedServiceId && activeServices.length === 1) {
         setSelectedServiceId(activeServices[0].id);
-        if (!amount && activeServices[0].price !== undefined) {
-          setAmount(String(activeServices[0].price));
+        if (activeServices[0].price !== undefined && !isUserEdited) {
+          setBaseAmount(Number(activeServices[0].price).toFixed(2).replace('.', ','));
         }
       }
     } catch (e) {
@@ -73,7 +181,7 @@ export function ConsultationPaymentModal({
 
   useEffect(() => {
     loadData();
-  }, [appointmentId, initialServiceId]);
+  }, [appointmentId, initialServiceId, professionalId]);
 
   // Fecha o popover ao clicar fora
   useEffect(() => {
@@ -96,8 +204,9 @@ export function ConsultationPaymentModal({
     setSelectedServiceId(serviceId);
     setShowServiceOnboarding(false);
     const found = services.find(s => s.id === serviceId);
-    if (found && found.price !== undefined && status !== 'exempt') {
-      setAmount(String(found.price));
+    if (found && found.price !== undefined) {
+      setBaseAmount(Number(found.price).toFixed(2).replace('.', ','));
+      setIsUserEdited(false);
     }
   };
 
@@ -105,18 +214,16 @@ export function ConsultationPaymentModal({
     setIsNewServiceModalOpen(false);
     setShowServiceOnboarding(false);
     try {
-      const servicesRes = await ApiClient.get<Service[]>('/v1/services');
+      const url = professionalId ? `/v1/services?professionalId=${encodeURIComponent(professionalId)}` : '/v1/services';
+      const servicesRes = await ApiClient.get<Service[]>(url).catch(() => ApiClient.get<Service[]>('/v1/services'));
       const activeServices = (servicesRes || []).filter(s => s.active !== 0);
       setServices(activeServices);
-      setSelectedServiceId(created.id);
-      if (created.price !== undefined && status !== 'exempt') {
-        setAmount(String(created.price));
-      }
-    } catch {
-      setSelectedServiceId(created.id);
-      if (created.price !== undefined && status !== 'exempt') {
-        setAmount(String(created.price));
-      }
+    } catch {}
+
+    setSelectedServiceId(created.id);
+    if (created.price !== undefined) {
+      setBaseAmount(Number(created.price).toFixed(2).replace('.', ','));
+      setIsUserEdited(false);
     }
   };
 
@@ -124,24 +231,57 @@ export function ConsultationPaymentModal({
     event.preventDefault();
     if (saving) return;
 
-    // Se nenhum serviço estiver selecionado ou cadastrado, abre o onboarding profissional flutuante
     if (!selectedServiceId) {
       setShowServiceOnboarding(true);
       return;
     }
 
+    const effectiveAdditionalReason = numAdditional > 0
+      ? (additionalReason === 'Outro motivo' ? additionalReasonCustom.trim() : additionalReason)
+      : null;
+
+    const effectiveDiscountReason = numDiscount > 0
+      ? (discountReason === 'Outro motivo' ? discountReasonCustom.trim() : discountReason)
+      : null;
+
+    // Validações no frontend
+    if (numAdditional > 0 && !effectiveAdditionalReason) {
+      setError('A justificativa do valor adicional é obrigatória quando houver acréscimo.');
+      return;
+    }
+
+    if (numDiscount > 0 && !effectiveDiscountReason) {
+      setError('A justificativa do desconto é obrigatória quando houver abatimento.');
+      return;
+    }
+
+    if (numDiscount > (numBase + numAdditional)) {
+      setError('O desconto não pode ser superior ao valor do serviço com adicionais.');
+      return;
+    }
+
+    if (status !== 'exempt' && calculatedTotal <= 0) {
+      setError('O valor total deve ser maior que zero. Para atendimentos gratuitos ou isentos, selecione o status "Isento".');
+      return;
+    }
+
     setSaving(true);
     setError('');
+
     try {
-      const parsedAmount = status === 'exempt' ? 0 : Number(String(amount).replace(',', '.'));
       const result = await ApiClient.post(`/v1/appointments/${appointmentId}/finish`, {
         serviceId: selectedServiceId,
         payment: {
-          amount: parsedAmount,
+          serviceId: selectedServiceId,
+          baseAmount: numBase,
+          additionalAmount: numAdditional,
+          additionalReason: effectiveAdditionalReason,
+          discountAmount: numDiscount,
+          discountReason: effectiveDiscountReason,
+          amount: calculatedTotal,
           paymentMethod: method,
           status,
-          notes,
-          serviceId: selectedServiceId
+          notes
         }
       });
 
@@ -189,7 +329,7 @@ export function ConsultationPaymentModal({
             </button>
           </div>
 
-          {/* Campo: Serviço Realizado */}
+          {/* 1. Serviço Realizado */}
           <div ref={serviceFieldRef} className="relative space-y-1">
             <div className="flex items-center justify-between">
               <label htmlFor="consultation-service-select" className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
@@ -223,7 +363,7 @@ export function ConsultationPaymentModal({
                 <option value="">Selecione o serviço realizado...</option>
                 {services.map(s => (
                   <option key={s.id} value={s.id}>
-                    {s.name} {s.price !== undefined ? `— R$ ${Number(s.price).toFixed(2)}` : ''}
+                    {s.name} {s.price !== undefined ? `— ${formatCurrency(Number(s.price))}` : ''}
                   </option>
                 ))}
               </select>
@@ -247,7 +387,6 @@ export function ConsultationPaymentModal({
                 data-testid="service-onboarding-popover"
                 className="absolute top-full left-0 right-0 sm:right-auto sm:w-96 mt-2 z-[70] bg-white border border-teal-200 rounded-2xl p-4 shadow-2xl animate-in fade-in slide-in-from-top-2 duration-150"
               >
-                {/* Seta indicativa */}
                 <div className="absolute -top-2 left-6 w-3.5 h-3.5 bg-white border-t border-l border-teal-200 transform rotate-45" />
 
                 <div className="flex items-start justify-between gap-2 mb-2 relative">
@@ -272,7 +411,7 @@ export function ConsultationPaymentModal({
                   <button
                     type="button"
                     onClick={() => setShowServiceOnboarding(false)}
-                    className="px-2.5 py-1 text-[11px] text-slate-500 hover:text-slate-700 font-medium"
+                    className="px-2.5 py-1 text-[11px] text-slate-500 hover:text-slate-700 font-medium cursor-pointer"
                   >
                     Agora não
                   </button>
@@ -292,30 +431,174 @@ export function ConsultationPaymentModal({
             )}
           </div>
 
-          {/* Valor do atendimento */}
-          <label className="block text-xs font-bold text-slate-700 space-y-1">
-            <span>Valor do atendimento (R$)</span>
+          {/* 2. Valor do serviço */}
+          <div className="space-y-1">
+            <label htmlFor="service-base-amount" className="block text-xs font-bold text-slate-700">
+              Valor do serviço (R$) <span className="text-rose-500">*</span>
+            </label>
             <input
-              aria-label="Valor do atendimento"
+              id="service-base-amount"
+              aria-label="Valor do serviço"
               inputMode="decimal"
               required={status !== 'exempt'}
               disabled={status === 'exempt'}
-              value={amount}
-              onChange={e => setAmount(e.target.value)}
+              value={baseAmount}
+              onChange={e => {
+                setBaseAmount(e.target.value);
+                setIsUserEdited(true);
+              }}
               placeholder="0,00"
               className="w-full text-xs font-medium border border-slate-300 rounded-xl p-2.5 bg-white text-slate-800 focus:ring-2 focus:ring-teal-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-400"
             />
-          </label>
+          </div>
 
+          {/* 3. Valor adicional (opcional) */}
+          <div className="space-y-2 p-3 bg-slate-50/70 border border-slate-200/80 rounded-2xl">
+            <div className="space-y-1">
+              <label htmlFor="service-additional-amount" className="block text-xs font-bold text-slate-700">
+                Valor adicional (opcional)
+              </label>
+              <input
+                id="service-additional-amount"
+                aria-label="Valor adicional"
+                inputMode="decimal"
+                disabled={status === 'exempt'}
+                value={additionalAmount}
+                onChange={e => setAdditionalAmount(e.target.value)}
+                placeholder="0,00"
+                className="w-full text-xs font-medium border border-slate-300 rounded-xl p-2.5 bg-white text-slate-800 focus:ring-2 focus:ring-teal-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-400"
+              />
+            </div>
+
+            {numAdditional > 0 && status !== 'exempt' && (
+              <div className="space-y-2 pt-1 border-t border-slate-200/60 animate-in fade-in duration-150">
+                <div className="space-y-1">
+                  <label htmlFor="additional-reason-select" className="block text-xs font-bold text-slate-700">
+                    Motivo do valor adicional <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    id="additional-reason-select"
+                    aria-label="Motivo do valor adicional"
+                    required
+                    value={additionalReason}
+                    onChange={e => setAdditionalReason(e.target.value)}
+                    className="w-full text-xs font-medium border border-slate-300 rounded-xl p-2.5 bg-white text-slate-800 focus:ring-2 focus:ring-teal-500 focus:outline-none"
+                  >
+                    <option value="">Selecione o motivo do adicional...</option>
+                    {ADDITIONAL_REASONS.map(r => (
+                      <option key={r} value={r}>{r}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {additionalReason === 'Outro motivo' && (
+                  <div className="space-y-1">
+                    <label htmlFor="additional-reason-custom" className="block text-xs font-bold text-slate-700">
+                      Descreva o motivo <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      id="additional-reason-custom"
+                      aria-label="Descreva o motivo do adicional"
+                      required
+                      value={additionalReasonCustom}
+                      onChange={e => setAdditionalReasonCustom(e.target.value)}
+                      placeholder="Descreva a razão do acréscimo..."
+                      className="w-full text-xs font-medium border border-slate-300 rounded-xl p-2 bg-white text-slate-800 focus:ring-2 focus:ring-teal-500 focus:outline-none"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* 4. Desconto (opcional) */}
+          <div className="space-y-2 p-3 bg-slate-50/70 border border-slate-200/80 rounded-2xl">
+            <div className="space-y-1">
+              <label htmlFor="service-discount-amount" className="block text-xs font-bold text-slate-700">
+                Desconto (opcional)
+              </label>
+              <input
+                id="service-discount-amount"
+                aria-label="Desconto"
+                inputMode="decimal"
+                disabled={status === 'exempt'}
+                value={discountAmount}
+                onChange={e => setDiscountAmount(e.target.value)}
+                placeholder="0,00"
+                className="w-full text-xs font-medium border border-slate-300 rounded-xl p-2.5 bg-white text-slate-800 focus:ring-2 focus:ring-teal-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-400"
+              />
+            </div>
+
+            {numDiscount > 0 && status !== 'exempt' && (
+              <div className="space-y-2 pt-1 border-t border-slate-200/60 animate-in fade-in duration-150">
+                <div className="space-y-1">
+                  <label htmlFor="discount-reason-select" className="block text-xs font-bold text-slate-700">
+                    Motivo do desconto <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    id="discount-reason-select"
+                    aria-label="Motivo do desconto"
+                    required
+                    value={discountReason}
+                    onChange={e => setDiscountReason(e.target.value)}
+                    className="w-full text-xs font-medium border border-slate-300 rounded-xl p-2.5 bg-white text-slate-800 focus:ring-2 focus:ring-teal-500 focus:outline-none"
+                  >
+                    <option value="">Selecione o motivo do desconto...</option>
+                    {DISCOUNT_REASONS.map(r => (
+                      <option key={r} value={r}>{r}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {discountReason === 'Outro motivo' && (
+                  <div className="space-y-1">
+                    <label htmlFor="discount-reason-custom" className="block text-xs font-bold text-slate-700">
+                      Descreva o motivo <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      id="discount-reason-custom"
+                      aria-label="Descreva o motivo do desconto"
+                      required
+                      value={discountReasonCustom}
+                      onChange={e => setDiscountReasonCustom(e.target.value)}
+                      placeholder="Descreva a razão do desconto..."
+                      className="w-full text-xs font-medium border border-slate-300 rounded-xl p-2 bg-white text-slate-800 focus:ring-2 focus:ring-teal-500 focus:outline-none"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* 5. Valor total do atendimento */}
+          <div className="p-3.5 bg-teal-50/70 border border-teal-200 rounded-2xl flex items-center justify-between gap-3">
+            <div>
+              <span className="text-[11px] font-bold text-teal-800 uppercase tracking-wider block">
+                Valor total do atendimento
+              </span>
+              <span className="text-[11px] text-slate-500">
+                {status === 'exempt'
+                  ? 'Atendimento Isento de cobrança'
+                  : `Serviço ${formatCurrency(numBase)} + Adicional ${formatCurrency(numAdditional)} - Desconto ${formatCurrency(numDiscount)}`}
+              </span>
+            </div>
+            <div className="text-right">
+              <span className="text-lg font-black text-teal-950 block">
+                {status === 'exempt' ? 'Isento' : formatCurrency(calculatedTotal)}
+              </span>
+            </div>
+          </div>
+
+          {/* 6. Forma e Status */}
           <div className="grid grid-cols-2 gap-3">
-            {/* Forma de pagamento */}
             <label className="block text-xs font-bold text-slate-700 space-y-1">
               <span>Forma de pagamento</span>
               <select
                 aria-label="Forma de pagamento"
                 value={method}
+                disabled={status === 'exempt'}
                 onChange={e => setMethod(e.target.value)}
-                className="w-full text-xs font-medium border border-slate-300 rounded-xl p-2.5 bg-white text-slate-800 focus:ring-2 focus:ring-teal-500 focus:outline-none"
+                className="w-full text-xs font-medium border border-slate-300 rounded-xl p-2.5 bg-white text-slate-800 focus:ring-2 focus:ring-teal-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-400"
               >
                 <option value="pix">PIX</option>
                 <option value="cash">Dinheiro</option>
@@ -326,7 +609,6 @@ export function ConsultationPaymentModal({
               </select>
             </label>
 
-            {/* Status do recebimento */}
             <label className="block text-xs font-bold text-slate-700 space-y-1">
               <span>Status</span>
               <select
@@ -342,7 +624,7 @@ export function ConsultationPaymentModal({
             </label>
           </div>
 
-          {/* Observação */}
+          {/* 7. Observação */}
           <label className="block text-xs font-bold text-slate-700 space-y-1">
             <span>Observação (opcional)</span>
             <textarea

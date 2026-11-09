@@ -387,7 +387,13 @@ export interface Payment {
   patient_name: string;
   patient_phone?: string;
   professional_name?: string;
+  service_id?: string;
   service_name?: string;
+  base_amount?: number;
+  additional_amount?: number;
+  additional_reason?: string;
+  discount_amount?: number;
+  discount_reason?: string;
   amount: number;
   payment_method: 'pix' | 'credit_card' | 'debit_card' | 'cash' | 'bank_transfer' | 'insurance' | 'other';
   status: 'paid' | 'pending' | 'partial' | 'cancelled' | 'refunded' | 'exempt';

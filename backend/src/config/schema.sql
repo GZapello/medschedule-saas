@@ -497,19 +497,26 @@ CREATE TABLE IF NOT EXISTS payments (
   tenant_id TEXT NOT NULL,
   appointment_id TEXT,
   patient_id TEXT NOT NULL,
+  service_id TEXT,
+  base_amount REAL,
+  additional_amount REAL,
+  additional_reason TEXT,
+  discount_amount REAL,
+  discount_reason TEXT,
   amount REAL NOT NULL,
   amount_tendered REAL,
   change_amount REAL,
   cash_register_id TEXT,
-  payment_method TEXT NOT NULL DEFAULT 'pix' CHECK(payment_method IN ('pix', 'credit_card', 'debit_card', 'cash', 'bank_transfer', 'insurance')),
-  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('paid', 'pending', 'partial', 'cancelled', 'refunded')),
+  payment_method TEXT NOT NULL DEFAULT 'pix' CHECK(payment_method IN ('pix', 'credit_card', 'debit_card', 'cash', 'bank_transfer', 'insurance', 'other')),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('paid', 'pending', 'partial', 'cancelled', 'refunded', 'exempt')),
   transaction_id TEXT,
   payment_date TEXT,
   notes TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
   FOREIGN KEY (appointment_id) REFERENCES appointments(id) ON DELETE SET NULL,
-  FOREIGN KEY (patient_id) REFERENCES patients(id)
+  FOREIGN KEY (patient_id) REFERENCES patients(id),
+  FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE SET NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_payments_tenant_date ON payments (tenant_id, status, created_at);

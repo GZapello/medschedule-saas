@@ -502,7 +502,11 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
     }
   };
 
-  if (receipt) return <ConsultationPaymentModal appointmentId={appointment.id} initialPayment={receipt.payment}
+  if (receipt) return <ConsultationPaymentModal
+    appointmentId={appointment.id}
+    initialPayment={receipt.payment}
+    initialServiceId={appointment.service_id || receipt.serviceId}
+    professionalId={appointment.professional_id || receipt.professionalId}
     onClose={() => {
       setReceipt(null);
       finishingRef.current = false;

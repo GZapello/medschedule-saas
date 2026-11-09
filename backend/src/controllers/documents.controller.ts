@@ -30,7 +30,7 @@ export class DocumentsController {
       res.status(403).json({ error: 'Sem permissão para este atendimento.' }); return;
     }
     const saved = db.prepare('SELECT * FROM consultation_completions WHERE appointment_id=? AND tenant_id=?').get(appt.id, req.tenantId) as any;
-    const payment = db.prepare("SELECT amount, payment_method, status, notes FROM payments WHERE appointment_id=? AND tenant_id=? AND status NOT IN ('cancelled','refunded') ORDER BY created_at LIMIT 1").get(appt.id, req.tenantId);
+    const payment = db.prepare("SELECT id, service_id, base_amount, additional_amount, additional_reason, discount_amount, discount_reason, amount, payment_method, status, notes FROM payments WHERE appointment_id=? AND tenant_id=? AND status NOT IN ('cancelled','refunded') ORDER BY created_at LIMIT 1").get(appt.id, req.tenantId);
 
     const prof = db.prepare(`
       SELECT p.id, p.profession_id, p.practice_areas, pr.name as profession_name, pr.slug as profession_slug, s.name as service_name
@@ -69,7 +69,7 @@ export class DocumentsController {
       else moduleType = moduleType || 'general';
     }
 
-    res.json({ awaitingPayment: !!saved && !saved.completed_at && appt.status !== 'completed', alreadyCompleted: appt.status === 'completed', generatedDocs: saved ? JSON.parse(saved.generated_docs_json) : {}, payment, moduleType });
+    res.json({ awaitingPayment: !!saved && !saved.completed_at && appt.status !== 'completed', alreadyCompleted: appt.status === 'completed', generatedDocs: saved ? JSON.parse(saved.generated_docs_json) : {}, payment, serviceId: appt.service_id, professionalId: appt.professional_id, moduleType });
   }
   // 1. ATESTADOS
   static createCertificate(req: Request, res: Response): void {
@@ -675,9 +675,15 @@ export class DocumentsController {
       let payment = req.body.payment;
       if (!saveOnly && appt.status !== 'completed') {
         if (!payment) {
-          const existingPayment = db.prepare("SELECT id, amount, payment_method, status, notes FROM payments WHERE appointment_id=? AND tenant_id=? AND status NOT IN ('cancelled','refunded') ORDER BY created_at LIMIT 1").get(appointmentId, tenantId) as any;
+          const existingPayment = db.prepare("SELECT id, service_id, base_amount, additional_amount, additional_reason, discount_amount, discount_reason, amount, payment_method, status, notes FROM payments WHERE appointment_id=? AND tenant_id=? AND status NOT IN ('cancelled','refunded') ORDER BY created_at LIMIT 1").get(appointmentId, tenantId) as any;
           if (existingPayment) {
             payment = {
+              serviceId: existingPayment.service_id || appt.service_id,
+              baseAmount: existingPayment.base_amount !== null && existingPayment.base_amount !== undefined ? Number(existingPayment.base_amount) : Number(existingPayment.amount) || 0,
+              additionalAmount: Number(existingPayment.additional_amount) || 0,
+              additionalReason: existingPayment.additional_reason || null,
+              discountAmount: Number(existingPayment.discount_amount) || 0,
+              discountReason: existingPayment.discount_reason || null,
               amount: Number(existingPayment.amount) || 0,
               paymentMethod: existingPayment.payment_method || 'other',
               status: existingPayment.status || 'paid',
@@ -687,6 +693,12 @@ export class DocumentsController {
             const serviceRow = db.prepare('SELECT price FROM services WHERE id=? AND tenant_id=?').get(appt.service_id, tenantId) as any;
             const servicePrice = Number(serviceRow?.price) || 0;
             payment = {
+              serviceId: appt.service_id,
+              baseAmount: servicePrice,
+              additionalAmount: 0,
+              additionalReason: null,
+              discountAmount: 0,
+              discountReason: null,
               amount: servicePrice,
               paymentMethod: 'other',
               status: servicePrice > 0 ? 'pending' : 'exempt',
@@ -694,13 +706,72 @@ export class DocumentsController {
             };
           }
         } else {
+          // Normalização e extração de valores monetários e justificativas
+          const rawAmount = typeof payment.amount === 'number' ? payment.amount : Number(String(payment.amount ?? 0).replace(',', '.'));
+          const rawBase = payment.baseAmount !== undefined ? (typeof payment.baseAmount === 'number' ? payment.baseAmount : Number(String(payment.baseAmount).replace(',', '.')))
+            : (payment.base_amount !== undefined ? (typeof payment.base_amount === 'number' ? payment.base_amount : Number(String(payment.base_amount).replace(',', '.')))
+            : rawAmount);
+          const rawAdd = payment.additionalAmount !== undefined ? (typeof payment.additionalAmount === 'number' ? payment.additionalAmount : Number(String(payment.additionalAmount).replace(',', '.')))
+            : (payment.additional_amount !== undefined ? (typeof payment.additional_amount === 'number' ? payment.additional_amount : Number(String(payment.additional_amount).replace(',', '.')))
+            : 0);
+          const rawDisc = payment.discountAmount !== undefined ? (typeof payment.discountAmount === 'number' ? payment.discountAmount : Number(String(payment.discountAmount).replace(',', '.')))
+            : (payment.discount_amount !== undefined ? (typeof payment.discount_amount === 'number' ? payment.discount_amount : Number(String(payment.discount_amount).replace(',', '.')))
+            : 0);
+
+          const addReason = typeof payment.additionalReason === 'string' ? payment.additionalReason.trim() : (typeof payment.additional_reason === 'string' ? payment.additional_reason.trim() : '');
+          const discReason = typeof payment.discountReason === 'string' ? payment.discountReason.trim() : (typeof payment.discount_reason === 'string' ? payment.discount_reason.trim() : '');
+
           if (!['paid', 'pending', 'exempt'].includes(payment.status) ||
               !['cash', 'pix', 'credit_card', 'debit_card', 'insurance', 'other'].includes(payment.paymentMethod) ||
-              typeof payment.amount !== 'number' || !Number.isFinite(payment.amount) || payment.amount < 0 ||
-              (payment.status !== 'exempt' && payment.amount <= 0)) {
-            res.status(400).json({ error: 'Informe valor, forma e status do recebimento.' });
+              !Number.isFinite(rawAmount) || !Number.isFinite(rawBase) || !Number.isFinite(rawAdd) || !Number.isFinite(rawDisc) ||
+              rawAmount < 0 || rawBase < 0 || rawAdd < 0 || rawDisc < 0) {
+            res.status(400).json({ error: 'Informe valores válidos, forma e status do recebimento.' });
             return;
           }
+
+          if (rawAdd > 0 && !addReason) {
+            res.status(400).json({ error: 'A justificativa do valor adicional é obrigatória quando houver acréscimo.' });
+            return;
+          }
+
+          if (rawDisc > 0 && !discReason) {
+            res.status(400).json({ error: 'A justificativa do desconto é obrigatória quando houver abatimento.' });
+            return;
+          }
+
+          const baseCents = Math.round(rawBase * 100);
+          const addCents = Math.round(rawAdd * 100);
+          const discCents = Math.round(rawDisc * 100);
+          const totalCents = Math.round(rawAmount * 100);
+
+          if (discCents > baseCents + addCents) {
+            res.status(400).json({ error: 'O desconto não pode ser superior ao valor do serviço com adicionais.' });
+            return;
+          }
+
+          const expectedCents = baseCents + addCents - discCents;
+
+          if (payment.status === 'exempt') {
+            payment.amount = 0;
+          } else {
+            if (totalCents <= 0) {
+              res.status(400).json({ error: 'Para atendimentos com valor total zero, utilize o status Isento.' });
+              return;
+            }
+            if (expectedCents !== totalCents) {
+              res.status(400).json({
+                error: `O valor total informado (R$ ${(totalCents / 100).toFixed(2)}) não confere com o cálculo: Base (R$ ${(baseCents / 100).toFixed(2)}) + Adicional (R$ ${(addCents / 100).toFixed(2)}) - Desconto (R$ ${(discCents / 100).toFixed(2)}) = R$ ${(expectedCents / 100).toFixed(2)}.`
+              });
+              return;
+            }
+            payment.amount = totalCents / 100;
+          }
+
+          payment.baseAmount = baseCents / 100;
+          payment.additionalAmount = addCents / 100;
+          payment.additionalReason = addReason || null;
+          payment.discountAmount = discCents / 100;
+          payment.discountReason = discReason || null;
         }
       }
 
@@ -1233,10 +1304,34 @@ export class DocumentsController {
 
       if (saveOnly) {
         db.exec('COMMIT');
-        const existingPayment = db.prepare("SELECT id, amount, payment_method, status, notes FROM payments WHERE appointment_id=? AND tenant_id=? AND status NOT IN ('cancelled','refunded') ORDER BY created_at LIMIT 1").get(appointmentId, tenantId) as any;
+        const existingPayment = db.prepare("SELECT id, service_id, base_amount, additional_amount, additional_reason, discount_amount, discount_reason, amount, payment_method, status, notes FROM payments WHERE appointment_id=? AND tenant_id=? AND status NOT IN ('cancelled','refunded') ORDER BY created_at LIMIT 1").get(appointmentId, tenantId) as any;
         const price = db.prepare('SELECT price FROM services WHERE id=? AND tenant_id=?').get(appt.service_id, tenantId) as any;
         logAudit(req, 'SAVE_CONSULTATION', 'appointments', appointmentId, { generatedDocs });
-        res.json({ ...generatedDocs, generatedDocs, awaitingPayment: true, serviceId: appt.service_id, professionalId: appt.professional_id, payment: existingPayment || { amount: price?.price || 0, payment_method: 'pix', status: 'pending' } });
+        res.json({
+          ...generatedDocs,
+          generatedDocs,
+          awaitingPayment: true,
+          serviceId: appt.service_id,
+          professionalId: appt.professional_id,
+          payment: existingPayment ? {
+            ...existingPayment,
+            serviceId: existingPayment.service_id || appt.service_id,
+            baseAmount: existingPayment.base_amount !== null && existingPayment.base_amount !== undefined ? Number(existingPayment.base_amount) : Number(existingPayment.amount) || 0,
+            additionalAmount: Number(existingPayment.additional_amount) || 0,
+            additionalReason: existingPayment.additional_reason || '',
+            discountAmount: Number(existingPayment.discount_amount) || 0,
+            discountReason: existingPayment.discount_reason || ''
+          } : {
+            amount: price?.price || 0,
+            baseAmount: price?.price || 0,
+            additionalAmount: 0,
+            additionalReason: '',
+            discountAmount: 0,
+            discountReason: '',
+            paymentMethod: 'pix',
+            status: (price?.price || 0) > 0 ? 'pending' : 'exempt'
+          }
+        });
         return;
       }
 
@@ -1270,12 +1365,70 @@ export class DocumentsController {
         } catch (e) {}
       }
       const paymentId = existingPayment?.id || 'pay-' + uuidv4();
+      const effectiveServiceId = requestedServiceId || payment.serviceId || appt.service_id || null;
+      const baseAmountVal = payment.baseAmount !== undefined ? payment.baseAmount : (payment.status === 'exempt' ? 0 : amount);
+      const additionalAmountVal = payment.additionalAmount || 0;
+      const additionalReasonVal = payment.additionalReason || null;
+      const discountAmountVal = payment.discountAmount || 0;
+      const discountReasonVal = payment.discountReason || null;
+
       if (existingPayment) {
-        db.prepare('UPDATE payments SET amount=?, payment_method=?, status=?, payment_date=?, notes=?, cash_register_id=COALESCE(?, cash_register_id) WHERE id=? AND tenant_id=?')
-          .run(amount, payment.paymentMethod, payment.status, payment.status === 'paid' ? (existingPayment.payment_date || new Date().toISOString()) : null, payment.notes || null, activeRegisterId, paymentId, tenantId);
+        db.prepare(`
+          UPDATE payments SET
+            service_id = COALESCE(?, service_id),
+            base_amount = ?,
+            additional_amount = ?,
+            additional_reason = ?,
+            discount_amount = ?,
+            discount_reason = ?,
+            amount = ?,
+            payment_method = ?,
+            status = ?,
+            payment_date = ?,
+            notes = ?,
+            cash_register_id = COALESCE(?, cash_register_id)
+          WHERE id = ? AND tenant_id = ?
+        `).run(
+          effectiveServiceId,
+          baseAmountVal,
+          additionalAmountVal,
+          additionalReasonVal,
+          discountAmountVal,
+          discountReasonVal,
+          amount,
+          payment.paymentMethod,
+          payment.status,
+          payment.status === 'paid' ? (existingPayment.payment_date || new Date().toISOString()) : null,
+          payment.notes || null,
+          activeRegisterId,
+          paymentId,
+          tenantId
+        );
       } else {
-        db.prepare('INSERT INTO payments (id, tenant_id, appointment_id, patient_id, amount, payment_method, status, payment_date, notes, cash_register_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-          .run(paymentId, tenantId, appointmentId, appt.patient_id, amount, payment.paymentMethod, payment.status, payment.status === 'paid' ? new Date().toISOString() : null, payment.notes || null, activeRegisterId);
+        db.prepare(`
+          INSERT INTO payments (
+            id, tenant_id, appointment_id, patient_id, service_id,
+            base_amount, additional_amount, additional_reason, discount_amount, discount_reason,
+            amount, payment_method, status, payment_date, notes, cash_register_id
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          paymentId,
+          tenantId,
+          appointmentId,
+          appt.patient_id,
+          effectiveServiceId,
+          baseAmountVal,
+          additionalAmountVal,
+          additionalReasonVal,
+          discountAmountVal,
+          discountReasonVal,
+          amount,
+          payment.paymentMethod,
+          payment.status,
+          payment.status === 'paid' ? new Date().toISOString() : null,
+          payment.notes || null,
+          activeRegisterId
+        );
       }
       db.prepare("UPDATE consultation_completions SET payment_id=?, completed_at=datetime('now') WHERE appointment_id=? AND tenant_id=?").run(paymentId, appointmentId, tenantId);
       currentStage = 'UPDATE_APPOINTMENT_STATUS';

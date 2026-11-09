@@ -23,7 +23,10 @@ export class ServiceController {
       let query = `
         SELECT 
           s.id, s.tenant_id, s.professional_id, s.specialty_id, s.name, s.description,
-          s.duration_minutes, s.buffer_minutes, s.price, s.modality, s.active,
+          COALESCE(ps.custom_duration, s.duration_minutes) as duration_minutes,
+          s.buffer_minutes,
+          COALESCE(ps.custom_price, s.price) as price,
+          s.modality, s.active,
           s.min_lead_time_hours, s.max_advance_days, s.cancellation_policy,
           s.reminder_enabled, s.reminder_value, s.reminder_unit,
           s.clinical_module,
@@ -34,13 +37,14 @@ export class ServiceController {
         LEFT JOIN professionals p ON p.id = s.professional_id
         LEFT JOIN professions prof ON prof.id = p.profession_id
         LEFT JOIN specialties spec ON spec.id = s.specialty_id
+        LEFT JOIN professional_services ps ON ps.service_id = s.id AND ps.professional_id = COALESCE(?, s.professional_id)
         WHERE s.tenant_id = ?
       `;
 
-      const params: any[] = [tenantId];
+      const params: any[] = [professionalId || null, tenantId];
       if (professionalId) {
-        query += ` AND s.professional_id = ?`;
-        params.push(professionalId);
+        query += ` AND (s.professional_id = ? OR s.professional_id IS NULL OR ps.professional_id = ?)`;
+        params.push(professionalId, professionalId);
       }
 
       query += ` ORDER BY COALESCE(p.name, 'zzz') ASC, s.name ASC`;
@@ -139,7 +143,22 @@ export class ServiceController {
       } catch (_) {}
 
       logAudit(req, 'CREATE_SERVICE', 'services', id, { name, price, professionalId, professionalName: prof.name, clinicalModule: targetModule });
-      res.status(201).json({ id, name, clinical_module: targetModule, message: 'Serviço criado com sucesso' });
+      res.status(201).json({
+        id,
+        tenant_id: tenantId,
+        professional_id: professionalId,
+        specialty_id: specialtyId || null,
+        name: name.trim(),
+        description: description || null,
+        duration_minutes: durationMinutes !== undefined ? Number(durationMinutes) : 50,
+        buffer_minutes: bufferMinutes !== undefined ? Number(bufferMinutes) : 10,
+        price: price !== undefined && price !== null && price !== '' ? Number(price) : 0,
+        modality: modality || 'both',
+        active: 1,
+        clinical_module: targetModule,
+        professional_name: prof.name,
+        message: 'Serviço criado com sucesso'
+      });
     } catch (err: any) {
       console.error('[ServiceController.create] Erro:', err);
       res.status(500).json({ error: 'Erro ao criar serviço' });
