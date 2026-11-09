@@ -6,7 +6,8 @@ import { ApiClient } from '../../api/client';
 import { ConsultationPaymentModal } from './ConsultationPaymentModal';
 import { PatientFollowUpDocumentModal } from './PatientFollowUpDocumentModal';
 import { PatientPreviousRecordsModal } from './PatientPreviousRecordsModal';
-import { CheckCircle2, Printer, Eye } from 'lucide-react';
+import { CheckCircle2, Printer, Eye, Receipt } from 'lucide-react';
+import { ConsultationReceiptModal } from './ConsultationReceiptModal';
 
 export function useConsultationCompletion(onFinished?: () => void, contextKey?: string, options?: { showPostCompletion?: boolean }) {
   const review = useClinicalReview(contextKey);
@@ -27,6 +28,7 @@ export function useConsultationCompletion(onFinished?: () => void, contextKey?: 
     setShowPostConsultationModal(false);
     setShowFollowUpDocModal(false);
     setShowRecordsModal(false);
+    setShowReceiptModal(false);
   }, [contextKey]);
   const [receipt, setReceipt] = useState<any>(null);
   const [paymentOpen, setPaymentOpen] = useState(false);
@@ -36,6 +38,7 @@ export function useConsultationCompletion(onFinished?: () => void, contextKey?: 
   const [showPostConsultationModal, setShowPostConsultationModal] = useState<boolean>(false);
   const [showFollowUpDocModal, setShowFollowUpDocModal] = useState<boolean>(false);
   const [showRecordsModal, setShowRecordsModal] = useState<boolean>(false);
+  const [showReceiptModal, setShowReceiptModal] = useState<boolean>(false);
 
   const complete = async (endpoint: string, payload: any) => {
     if (!payload.patientId) throw new Error('Selecione um paciente para finalizar o atendimento.');
@@ -101,6 +104,21 @@ export function useConsultationCompletion(onFinished?: () => void, contextKey?: 
           }}
         />
       )}
+      {showReceiptModal && (
+        <ConsultationReceiptModal
+          isOpen={showReceiptModal}
+          onClose={() => setShowReceiptModal(false)}
+          appointmentId={receipt?.appointmentId || lastPayload?.appointmentId || directAppointment.current}
+          patientId={lastPayload?.patientId}
+          patientName={lastPayload?.patientName}
+          patientPhone={lastPayload?.patientPhone || lastPayload?.phone}
+          professionalId={receipt?.professionalId || lastPayload?.professionalId || currentUser?.id}
+          professionalName={lastPayload?.professionalName || currentUser?.name}
+          serviceId={receipt?.serviceId || lastPayload?.serviceId}
+          serviceName={lastPayload?.serviceName}
+          initialPayment={receipt?.payment || lastPayload?.payment}
+        />
+      )}
 
       {showPostConsultationModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 mobile-modal">
@@ -133,6 +151,15 @@ export function useConsultationCompletion(onFinished?: () => void, contextKey?: 
               >
                 <Eye className="w-4 h-4 text-slate-600" />
                 <span>Ver prontuário do paciente</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowReceiptModal(true)}
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs rounded-xl transition-all cursor-pointer border border-emerald-200"
+              >
+                <Receipt className="w-4 h-4 text-emerald-600" />
+                <span>Emitir recibo de atendimento</span>
               </button>
 
               <button

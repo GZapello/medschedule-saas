@@ -14,12 +14,14 @@ import {
   Share2,
   ChevronRight,
   Printer,
-  Eye
+  Eye,
+  Receipt
 } from 'lucide-react';
 import { ConsultationPaymentModal } from './ConsultationPaymentModal';
 import { PrintableDocumentModal } from './PrintableDocumentModal';
 import { PatientFollowUpDocumentModal } from './PatientFollowUpDocumentModal';
 import { PatientPreviousRecordsModal } from './PatientPreviousRecordsModal';
+import { ConsultationReceiptModal } from './ConsultationReceiptModal';
 
 export type CanonicalProfessionCategory = 'doctor' | 'dentist' | 'psychologist' | 'other';
 
@@ -306,6 +308,8 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
 
   const [showFollowUpDocModal, setShowFollowUpDocModal] = useState<boolean>(false);
   const [showRecordsModal, setShowRecordsModal] = useState<boolean>(false);
+  const [showReceiptModal, setShowReceiptModal] = useState<boolean>(false);
+  const [lastPayment, setLastPayment] = useState<any>(null);
 
   const DRAFT_KEY = `zemda_draft_appt_${appointment.id}`;
 
@@ -474,6 +478,8 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
 
       localStorage.removeItem(DRAFT_KEY);
       localStorage.removeItem(`zemda_quick_consult_${appointment.id}`);
+      const directPayment = (res as any)?.payment || null;
+      setLastPayment(directPayment);
 
       window.dispatchEvent(new CustomEvent('appointment-updated', { detail: { appointmentId: appointment.id, status: 'completed' } }));
       window.dispatchEvent(new Event('refresh-appointments'));
@@ -509,6 +515,7 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
     professionalId={appointment.professional_id || receipt.professionalId}
     onClose={() => {
       setReceipt(null);
+      setLastPayment(null);
       finishingRef.current = false;
       setSubmitting(false);
       onClose();
@@ -517,6 +524,8 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
       onCompleted?.();
       localStorage.removeItem(DRAFT_KEY);
       localStorage.removeItem(`zemda_quick_consult_${appointment.id}`);
+      const finishedPayment = (result as any)?.payment || receipt?.payment || null;
+      setLastPayment(finishedPayment);
       setReceipt(null);
       setCompletionSummary({
         hasEvolution: !!receipt.generatedDocs?.recordId,
@@ -644,6 +653,15 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
 
               <button
                 type="button"
+                onClick={() => setShowReceiptModal(true)}
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs rounded-xl transition-all cursor-pointer border border-emerald-200"
+              >
+                <Receipt className="w-4 h-4 text-emerald-600" />
+                <span>Emitir recibo de atendimento</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={() => {
                   setCompletionSummary(null);
                   onFinished();
@@ -689,6 +707,21 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
             documentType={printDoc.type}
             documentId={printDoc.id}
             onClose={() => setPrintDoc(null)}
+          />
+        )}
+
+        {showReceiptModal && (
+          <ConsultationReceiptModal
+            isOpen={showReceiptModal}
+            onClose={() => setShowReceiptModal(false)}
+            appointmentId={appointment.id}
+            patientId={appointment.patient_id}
+            patientName={appointment.patient_name}
+            professionalId={appointment.professional_id}
+            professionalName={appointment.professional_name}
+            serviceId={appointment.service_id}
+            serviceName={appointment.service_name}
+            initialPayment={lastPayment || (appointment as any).payment}
           />
         )}
       </>

@@ -288,7 +288,22 @@ export function ConsultationPaymentModal({
       window.dispatchEvent(new CustomEvent('appointment-updated', { detail: { appointmentId, status: 'completed' } }));
       window.dispatchEvent(new Event('refresh-appointments'));
       window.dispatchEvent(new CustomEvent('zemda-appointment-updated'));
-      onFinished(result);
+      const finalResult = {
+        ...(result || {}),
+        payment: {
+          serviceId: selectedServiceId,
+          baseAmount: numBase,
+          additionalAmount: numAdditional,
+          additionalReason: effectiveAdditionalReason,
+          discountAmount: numDiscount,
+          discountReason: effectiveDiscountReason,
+          amount: calculatedTotal,
+          paymentMethod: method,
+          status,
+          notes
+        }
+      };
+      onFinished(finalResult);
     } catch (err: any) {
       setError(err.message || 'Não foi possível registrar o recebimento.');
     } finally {

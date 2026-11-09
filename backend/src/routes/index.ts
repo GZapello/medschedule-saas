@@ -288,8 +288,9 @@ api.post('/v1/onboarding/complete', requireTenant, requireRole('clinic_admin'), 
 api.get('/v1/receipts/settings', requireTenant, ReceiptController.getSettings);
 api.put('/v1/receipts/settings', requireTenant, requireRole('clinic_admin'), ReceiptController.updateSettings);
 api.get('/v1/receipts', requireTenant, ReceiptController.list);
+api.get('/v1/receipts/by-appointment/:appointmentId', requireTenant, ReceiptController.getByAppointmentId);
 api.get('/v1/receipts/:id', requireTenant, ReceiptController.getById);
-api.post('/v1/receipts', requireTenant, requireRole('clinic_admin', 'receptionist'), ReceiptController.create);
+api.post('/v1/receipts', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), ReceiptController.create);
 
 // Gestão de Funcionários e Equipe da Clínica
 api.get('/v1/staff', requireTenant, requirePermissionOrRole('manage_staff', 'clinic_admin'), StaffController.listStaff);

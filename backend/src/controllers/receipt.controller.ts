@@ -217,23 +217,55 @@ export class ReceiptController {
     }
   }
 
+  // Consulta recibo emitido vinculado a um agendamento específico
+  static getByAppointmentId(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      const { appointmentId } = req.params;
+      if (!tenantId) {
+        res.status(400).json({ error: 'Identificação de clínica obrigatória' });
+        return;
+      }
+
+      const stmt = db.prepare(`
+        SELECT 
+          r.id, r.tenant_id, r.receipt_number, r.sequence_number, r.payment_id, r.appointment_id, r.patient_id,
+          r.emitter_json, r.payer_type, r.payer_name, r.payer_document, r.payer_email, r.payer_phone, r.payer_address,
+          r.service_description, r.service_date, r.professional_name, r.professional_specialty, r.professional_registry,
+          r.gross_amount, r.discount_amount, r.final_amount, r.payment_method, r.payment_status, r.notes, r.custom_text,
+          r.issued_at, r.created_by,
+          t.trade_name as clinic_name, t.logo_url as clinic_logo
+        FROM receipts r
+        JOIN tenants t ON t.id = r.tenant_id
+        WHERE r.appointment_id = ? AND r.tenant_id = ?
+        ORDER BY r.sequence_number DESC LIMIT 1
+      `);
+      const receipt = stmt.get(appointmentId, tenantId) as any;
+
+      if (!receipt) {
+        res.status(404).json({ error: 'Nenhum recibo emitido para este atendimento' });
+        return;
+      }
+
+      try {
+        receipt.emitter = JSON.parse(receipt.emitter_json);
+      } catch {
+        receipt.emitter = {};
+      }
+
+      res.json(receipt);
+    } catch (err: any) {
+      console.error('[ReceiptController.getByAppointmentId] Erro:', err);
+      res.status(500).json({ error: 'Erro ao consultar recibo do atendimento' });
+    }
+  }
+
   // Emite um novo recibo com geração sequencial atômica e proteção de dados
   static create(req: Request, res: Response): void {
     try {
       const tenantId = req.tenantId;
       if (!tenantId) {
         res.status(400).json({ error: 'Identificação de clínica obrigatória' });
-        return;
-      }
-
-      // 1. Valida se a clínica já configurou os dados obrigatórios para emissão de recibos
-      const settingsStmt = db.prepare('SELECT * FROM receipt_settings WHERE tenant_id = ?');
-      const settings = settingsStmt.get(tenantId) as any;
-
-      if (!settings || settings.is_configured === 0) {
-        res.status(400).json({
-          error: 'É obrigatório configurar os "Dados para Emissão de Recibos" antes de emitir recibos pela clínica.'
-        });
         return;
       }
 
@@ -245,8 +277,90 @@ export class ReceiptController {
         notes
       } = req.body;
 
-      if (!payerName || !payerDocument || finalAmount === undefined || !serviceDescription) {
-        res.status(400).json({ error: 'Tomador (nome e documento), serviço e valor são obrigatórios' });
+      // 0. Idempotência absoluta: se já foi emitido recibo para este atendimento ou pagamento, retorna o existente sem duplicar numeração
+      if (appointmentId || paymentId) {
+        let existingReceipt: any = null;
+        if (appointmentId && paymentId) {
+          existingReceipt = db.prepare('SELECT * FROM receipts WHERE tenant_id = ? AND (appointment_id = ? OR payment_id = ?) ORDER BY sequence_number DESC LIMIT 1').get(tenantId, appointmentId, paymentId);
+        } else if (appointmentId) {
+          existingReceipt = db.prepare('SELECT * FROM receipts WHERE tenant_id = ? AND appointment_id = ? ORDER BY sequence_number DESC LIMIT 1').get(tenantId, appointmentId);
+        } else if (paymentId) {
+          existingReceipt = db.prepare('SELECT * FROM receipts WHERE tenant_id = ? AND payment_id = ? ORDER BY sequence_number DESC LIMIT 1').get(tenantId, paymentId);
+        }
+
+        if (existingReceipt) {
+          try {
+            existingReceipt.emitter = JSON.parse(existingReceipt.emitter_json);
+          } catch {
+            existingReceipt.emitter = {};
+          }
+          res.json({
+            id: existingReceipt.id,
+            receiptNumber: existingReceipt.receipt_number,
+            sequenceNumber: existingReceipt.sequence_number,
+            message: 'Recibo já emitido anteriormente para este atendimento',
+            customText: existingReceipt.custom_text,
+            receipt: existingReceipt,
+            alreadyIssued: true
+          });
+          return;
+        }
+      }
+
+      // 1. Valida ou recupera configurações de recibo da clínica
+      const settingsStmt = db.prepare('SELECT * FROM receipt_settings WHERE tenant_id = ?');
+      let settings = settingsStmt.get(tenantId) as any;
+
+      if (!settings || settings.is_configured === 0) {
+        const tenant = db.prepare('SELECT name, trade_name, cnpj_cpf, phone, email, address, city, state, zip_code, logo_url FROM tenants WHERE id = ?').get(tenantId) as any;
+        if (tenant && (tenant.name || tenant.trade_name)) {
+          const defaultSettingsId = 'rec-set-' + tenantId;
+          const defaultName = tenant.name || tenant.trade_name || 'Clínica';
+          const defaultTradeName = tenant.trade_name || tenant.name || defaultName;
+          const defaultDoc = tenant.cnpj_cpf || 'Não informado';
+          const prefix = 'REC-';
+          const template = 'Recebemos de [CLIENTE] a importância de R$ [VALOR], referente à prestação do serviço [SERVIÇO], realizado em [DATA], pelo profissional [PROFISSIONAL].';
+
+          db.prepare(`
+            INSERT INTO receipt_settings (
+              id, tenant_id, emitter_type, emitter_name, emitter_trade_name, emitter_document,
+              emitter_municipal_reg, emitter_board_name, emitter_registry_number, emitter_registry_state,
+              emitter_street, emitter_number, emitter_complement, emitter_neighborhood,
+              emitter_city, emitter_state, emitter_zip_code, emitter_phone, emitter_email,
+              receipt_prefix, default_template_text, is_configured, updated_at
+            ) VALUES (
+              ?, ?, 'pj', ?, ?, ?,
+              null, null, null, ?,
+              ?, null, null, null,
+              ?, ?, ?, ?, ?,
+              ?, ?, 1, datetime('now')
+            )
+            ON CONFLICT(tenant_id) DO UPDATE SET
+              emitter_name = COALESCE(NULLIF(receipt_settings.emitter_name, ''), excluded.emitter_name),
+              emitter_document = COALESCE(NULLIF(receipt_settings.emitter_document, ''), excluded.emitter_document),
+              is_configured = 1
+          `).run(
+            defaultSettingsId, tenantId, defaultName, defaultTradeName, defaultDoc,
+            tenant.state || 'SP', tenant.address || null, tenant.city || null, tenant.state || null,
+            tenant.zip_code || null, tenant.phone || null, tenant.email || null,
+            prefix, template
+          );
+
+          settings = db.prepare('SELECT * FROM receipt_settings WHERE tenant_id = ?').get(tenantId) as any;
+        }
+      }
+
+      if (!settings || settings.is_configured === 0) {
+        res.status(400).json({
+          error: 'É obrigatório configurar os "Dados para Emissão de Recibos" antes de emitir recibos pela clínica.'
+        });
+        return;
+      }
+
+      const resolvedPayerDoc = (payerDocument && String(payerDocument).trim()) ? String(payerDocument).trim() : 'Não informado';
+
+      if (!payerName || finalAmount === undefined || !serviceDescription) {
+        res.status(400).json({ error: 'Tomador (nome), serviço e valor são obrigatórios' });
         return;
       }
 
@@ -306,7 +420,7 @@ export class ReceiptController {
       insertStmt.run(
         receiptId, tenantId, receiptNumber, seqNumber,
         paymentId || null, appointmentId || null, patientId || null,
-        JSON.stringify(emitterSnapshot), payerType || 'pf', payerName, payerDocument,
+        JSON.stringify(emitterSnapshot), payerType || 'pf', payerName, resolvedPayerDoc,
         payerEmail || null, payerPhone || null, payerAddress || null,
         serviceDescription, formattedDate, professionalName || settings.emitter_name,
         professionalSpecialty || null, professionalRegistry || settings.emitter_registry_number,
@@ -321,12 +435,46 @@ export class ReceiptController {
         finalAmount
       });
 
+      const fullReceipt = {
+        id: receiptId,
+        tenant_id: tenantId,
+        receipt_number: receiptNumber,
+        sequence_number: seqNumber,
+        payment_id: paymentId || null,
+        appointment_id: appointmentId || null,
+        patient_id: patientId || null,
+        emitter: emitterSnapshot,
+        payer_type: payerType || 'pf',
+        payer_name: payerName,
+        payer_document: resolvedPayerDoc,
+        payer_email: payerEmail || null,
+        payer_phone: payerPhone || null,
+        payer_address: payerAddress || null,
+        service_description: serviceDescription,
+        service_date: formattedDate,
+        professional_name: professionalName || settings.emitter_name,
+        professional_specialty: professionalSpecialty || null,
+        professional_registry: professionalRegistry || settings.emitter_registry_number,
+        gross_amount: Number(grossAmount || finalAmount),
+        discount_amount: Number(discountAmount || 0),
+        final_amount: Number(finalAmount),
+        payment_method: paymentMethod || 'pix',
+        payment_status: paymentStatus || 'paid',
+        notes: notes || null,
+        custom_text: customText,
+        issued_at: new Date().toISOString(),
+        created_by: req.user?.name || 'Sistema',
+        clinic_name: settings.emitter_name,
+        clinic_logo: tenantRow?.logo_url || null
+      };
+
       res.status(201).json({
         id: receiptId,
         receiptNumber,
         sequenceNumber: seqNumber,
         message: 'Recibo emitido com sucesso',
-        customText
+        customText,
+        receipt: fullReceipt
       });
     } catch (err: any) {
       console.error('[ReceiptController.create] Erro:', err);

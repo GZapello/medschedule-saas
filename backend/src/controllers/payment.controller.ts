@@ -12,7 +12,7 @@ export class PaymentController {
         return;
       }
 
-      const { status, paymentMethod, startDate, endDate } = req.query;
+      const { status, paymentMethod, startDate, endDate, appointmentId, patientId } = req.query;
 
       let query = `
         SELECT 
@@ -33,6 +33,16 @@ export class PaymentController {
         WHERE pay.tenant_id = ?
       `;
       const params: any[] = [tenantId];
+
+      if (appointmentId) {
+        query += ' AND pay.appointment_id = ?';
+        params.push(appointmentId);
+      }
+
+      if (patientId) {
+        query += ' AND pay.patient_id = ?';
+        params.push(patientId);
+      }
 
       if (status) {
         query += ' AND pay.status = ?';
