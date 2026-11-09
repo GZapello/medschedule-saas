@@ -1123,21 +1123,18 @@ export class ClinicalController {
 
       // Identifica o profissional autenticado ou selecionado
       let profId: string | null = providedProfId || null;
-      if (walkIn === true) {
-        const ownProfessional = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ? AND active = 1').get(req.user?.userId, tenantId) as any;
-        if (!ownProfessional) {
-          res.status(400).json({ error: 'Seu usuário precisa estar vinculado a um profissional ativo para atender sem agendamento.' });
-          return;
-        }
-        profId = ownProfessional.id;
-      }
-      if (!profId && req.user?.role === 'professional') {
-        const prof = db.prepare('SELECT id, name FROM professionals WHERE user_id = ? AND tenant_id = ? AND active = 1').get(req.user.userId, tenantId) as any;
-        if (prof) {
-          profId = prof.id;
+      if (req.user?.userId) {
+        const ownProfessional = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ? AND active = 1').get(req.user.userId, tenantId) as any;
+        if (ownProfessional) {
+          profId = ownProfessional.id;
         }
       }
-
+      if (!profId && providedProfId) {
+        const validProf = db.prepare('SELECT id FROM professionals WHERE id = ? AND tenant_id = ? AND active = 1').get(providedProfId, tenantId) as any;
+        if (validProf) {
+          profId = validProf.id;
+        }
+      }
       if (!profId) {
         const prof = db.prepare('SELECT id, name FROM professionals WHERE tenant_id = ? AND active = 1 LIMIT 1').get(tenantId) as any;
         if (prof) {

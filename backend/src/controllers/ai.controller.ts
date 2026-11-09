@@ -523,7 +523,7 @@ export class AIController {
           FROM appointments a
           JOIN patients p ON p.id = a.patient_id
           JOIN professionals pr ON pr.id = a.professional_id
-          JOIN services s ON s.id = a.service_id
+          LEFT JOIN services s ON s.id = a.service_id
           WHERE a.tenant_id = ? AND a.start_time LIKE ? AND a.status != 'cancelled'
           ORDER BY a.start_time ASC
         `).all(tenantId, `${dateIso}%`) as any[];

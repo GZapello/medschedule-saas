@@ -68,7 +68,7 @@ export class NotificationService {
         FROM appointments a
         JOIN patients pat ON pat.id = a.patient_id
         JOIN professionals p ON p.id = a.professional_id
-        JOIN services s ON s.id = a.service_id
+        LEFT JOIN services s ON s.id = a.service_id
         JOIN tenants t ON t.id = a.tenant_id
         WHERE a.id = ? AND t.status = 'active'
       `).get(appointmentId) as any;

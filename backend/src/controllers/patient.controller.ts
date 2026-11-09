@@ -151,7 +151,7 @@ export class PatientController {
           p.name as professional_name, s.name as service_name
         FROM appointments a
         JOIN professionals p ON p.id = a.professional_id
-        JOIN services s ON s.id = a.service_id
+        LEFT JOIN services s ON s.id = a.service_id
         WHERE a.patient_id = ? AND a.tenant_id = ?
         ORDER BY a.start_time DESC
         LIMIT 10

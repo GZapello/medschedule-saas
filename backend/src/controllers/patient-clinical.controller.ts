@@ -40,7 +40,7 @@ export class PatientClinicalController {
           ci.name as insurance_name
         FROM appointments a
         JOIN professionals p ON p.id = a.professional_id
-        JOIN services s ON s.id = a.service_id
+        LEFT JOIN services s ON s.id = a.service_id
         LEFT JOIN clinic_insurances ci ON ci.id = a.insurance_id
         WHERE a.patient_id = ? AND a.tenant_id = ?
       `);
@@ -49,7 +49,7 @@ export class PatientClinicalController {
         timeline.push({
           id: a.id,
           type: 'appointment',
-          title: `Consulta: ${a.service_name}`,
+          title: a.service_name ? `Consulta: ${a.service_name}` : 'Atendimento Clínico',
           description: `Status: ${a.status} | Modalidade: ${a.modality || 'Presencial'} | Convênio: ${a.insurance_name || 'Particular'}`,
           details: {
             appointmentNumber: a.appointment_number,

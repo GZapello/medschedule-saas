@@ -216,7 +216,7 @@ export class AppointmentController {
         FROM appointments a
         JOIN patients pat ON pat.id = a.patient_id
         JOIN professionals p ON p.id = a.professional_id
-        JOIN services s ON s.id = a.service_id
+        LEFT JOIN services s ON s.id = a.service_id
         LEFT JOIN rooms r ON r.id = a.room_id
         WHERE a.tenant_id = ?
       `;
@@ -288,9 +288,9 @@ export class AppointmentController {
           (SELECT pay.amount FROM payments pay WHERE pay.appointment_id = a.id AND pay.tenant_id = a.tenant_id ORDER BY pay.created_at ASC LIMIT 1) as payment_amount,
           (SELECT pay.payment_method FROM payments pay WHERE pay.appointment_id = a.id AND pay.tenant_id = a.tenant_id ORDER BY pay.created_at ASC LIMIT 1) as payment_method
         FROM appointments a
-        JOIN patients pat ON pat.id = a.patient_id AND pat.tenant_id=a.tenant_id
-        JOIN professionals p ON p.id = a.professional_id AND p.tenant_id=a.tenant_id
-        JOIN services s ON s.id = a.service_id AND s.tenant_id=a.tenant_id
+        JOIN patients pat ON pat.id = a.patient_id
+        JOIN professionals p ON p.id = a.professional_id
+        LEFT JOIN services s ON s.id = a.service_id
         LEFT JOIN rooms r ON r.id = a.room_id
         WHERE a.id = ? AND a.tenant_id = ?
       `);
@@ -515,7 +515,7 @@ export class AppointmentController {
         SELECT a.id, a.start_time, a.end_time, p.name as professional_name, s.name as service_name
         FROM appointments a
         JOIN professionals p ON p.id = a.professional_id
-        JOIN services s ON s.id = a.service_id
+        LEFT JOIN services s ON s.id = a.service_id
         WHERE a.tenant_id = ?
           AND a.professional_id = ?
           AND a.status NOT IN ('cancelled')
@@ -543,7 +543,7 @@ export class AppointmentController {
         SELECT a.id, a.start_time, a.end_time, p.name as professional_name, s.name as service_name
         FROM appointments a
         JOIN professionals p ON p.id = a.professional_id
-        JOIN services s ON s.id = a.service_id
+        LEFT JOIN services s ON s.id = a.service_id
         WHERE a.tenant_id = ?
           AND a.patient_id = ?
           AND a.status NOT IN ('cancelled')
@@ -1263,7 +1263,7 @@ export class AppointmentController {
           SELECT a.id, a.start_time, a.end_time, p.name as professional_name, s.name as service_name
           FROM appointments a
           JOIN professionals p ON p.id = a.professional_id
-          JOIN services s ON s.id = a.service_id
+          LEFT JOIN services s ON s.id = a.service_id
           WHERE a.tenant_id = ?
             AND a.patient_id = ?
             AND a.id != ?
@@ -1428,7 +1428,7 @@ export class AppointmentController {
           SELECT a.id, a.start_time, a.end_time, p.name as professional_name, s.name as service_name
           FROM appointments a
           JOIN professionals p ON p.id = a.professional_id
-          JOIN services s ON s.id = a.service_id
+          LEFT JOIN services s ON s.id = a.service_id
           WHERE a.tenant_id = ?
             AND a.professional_id = ?
             AND a.id != ?
@@ -1455,7 +1455,7 @@ export class AppointmentController {
             SELECT a.id, a.start_time, a.end_time, p.name as professional_name, s.name as service_name
             FROM appointments a
             JOIN professionals p ON p.id = a.professional_id
-            JOIN services s ON s.id = a.service_id
+            LEFT JOIN services s ON s.id = a.service_id
             WHERE a.tenant_id = ?
               AND a.patient_id = ?
               AND a.id != ?
@@ -1590,7 +1590,7 @@ export class AppointmentController {
         JOIN patients pat ON pat.id = a.patient_id
         JOIN tenants t ON t.id = a.tenant_id
         JOIN professionals p ON p.id = a.professional_id
-        JOIN services s ON s.id = a.service_id
+        LEFT JOIN services s ON s.id = a.service_id
         WHERE a.id = ? AND a.tenant_id = ?
       `).get(id, tenantId) as any;
 

@@ -160,7 +160,7 @@ export class ReportController {
         FROM appointments a
         JOIN patients pat ON pat.id = a.patient_id
         JOIN professionals p ON p.id = a.professional_id
-        JOIN services s ON s.id = a.service_id
+        LEFT JOIN services s ON s.id = a.service_id
         WHERE a.tenant_id = ?
         ORDER BY a.start_time DESC
       `);
@@ -243,7 +243,7 @@ export class ReportController {
           FROM appointments a
           JOIN patients pat ON pat.id = a.patient_id
           JOIN professionals p ON p.id = a.professional_id
-          JOIN services s ON s.id = a.service_id
+          LEFT JOIN services s ON s.id = a.service_id
           WHERE a.tenant_id = ?
           ORDER BY a.start_time DESC
           LIMIT 200
@@ -255,7 +255,7 @@ export class ReportController {
               <tr><th>Código</th><th>Data / Hora</th><th>Paciente</th><th>Profissional</th><th>Serviço</th><th>Status</th></tr>
             </thead>
             <tbody>
-              ${appts.map(a => `<tr><td><strong>${a.appointment_number}</strong></td><td>${a.start_time}</td><td>${a.patient_name}</td><td>${a.professional_name}</td><td>${a.service_name}</td><td>${a.status}</td></tr>`).join('')}
+              ${appts.map(a => `<tr><td><strong>${a.appointment_number}</strong></td><td>${a.start_time}</td><td>${a.patient_name}</td><td>${a.professional_name}</td><td>${a.service_name || 'Atendimento'}</td><td>${a.status}</td></tr>`).join('')}
             </tbody>
           </table>
         `;
