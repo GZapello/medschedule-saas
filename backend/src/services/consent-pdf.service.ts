@@ -23,13 +23,25 @@ export async function writeConsentPdf(data: any, res: Response): Promise<void> {
   else doc.moveDown(2);
   doc.font('Helvetica-Bold').fontSize(15).fillColor('#134e4a').text('TERMO ASSINADO ELETRONICAMENTE');
   doc.moveDown().font('Helvetica').fontSize(10).fillColor('#0f172a');
-  const fields=[
+  const fields: [string, string][] = [
     ['Paciente',e.patient.name],['Clínica',e.clinic.name],['Profissional solicitante',e.professional.name],
     ['Data e hora',new Date(e.signedAt).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'})+' (America/Sao_Paulo)'],
-    ['Método de autenticação',consentAuthenticationLabel(e.authMethod)],['OTP validado',e.otpVerified?'Sim':'Não utilizado'],
-    ['Identificador da assinatura',e.signatureId],['Versão do documento',e.version],['SHA-256 do conteúdo',e.contentHash],
-    ['SHA-256 das evidências',signature.evidence_hash]
+    ['Método de autenticação',consentAuthenticationLabel(e.authMethod)]
   ];
+  if(e.otpVerified) {
+    fields.push(['Confirmação por e-mail','Validada via código OTP']);
+    if(e.authenticationRecipient) fields.push(['Destinatário do código',e.authenticationRecipient]);
+    if(e.otpVerifiedAt) fields.push(['Data/hora da validação do código',new Date(e.otpVerifiedAt).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'})]);
+  } else {
+    fields.push(['Confirmação por e-mail','Verificação por código não utilizada']);
+  }
+  fields.push(
+    ['Código de verificação',signature.verification_code],
+    ['Identificador da assinatura',e.signatureId],
+    ['Versão do documento',e.version],
+    ['SHA-256 do conteúdo',e.contentHash],
+    ['SHA-256 das evidências',signature.evidence_hash]
+  );
   if(e.signer.kind==='guardian') {
     doc.font('Helvetica-Bold').text('Assinado eletronicamente pelo responsável legal do paciente.').font('Helvetica').moveDown();
     fields.splice(1,0,['Responsável legal',e.signer.name],['CPF do responsável',e.signer.cpf],['Parentesco',e.signer.relationship]);

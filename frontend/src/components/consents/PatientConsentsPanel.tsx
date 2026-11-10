@@ -25,7 +25,7 @@ export function PatientConsentsPanel({patientId,patient,guardians=[]}:{patientId
   const [requesting,setRequesting]=useState(false),[selectedTemplate,setSelectedTemplate]=useState(''),[guardian,setGuardian]=useState(emptyGuardian),[useGuardian,setUseGuardian]=useState(false);
   const [mode,setMode]=useState('device'),[channel]=useState('email'),[link,setLink]=useState<any>(null);
   const [activeToken,setActiveToken]=useState<string|null>(null);
-  const [photoRequested,setPhotoRequested]=useState(false),[evidence,setEvidence]=useState<any>(null);
+  const [photoRequested,setPhotoRequested]=useState(false),[requireOtp,setRequireOtp]=useState(false),[evidence,setEvidence]=useState<any>(null);
   const [signerEmail,setSignerEmail]=useState(''),[addingEmail,setAddingEmail]=useState(false);
   const [cancelId,setCancelId]=useState<string|null>(null),[reason,setReason]=useState(''),[legacy,setLegacy]=useState<any>(null);
   const [whatsappData, setWhatsappData] = useState<{ isOpen: boolean; recipientName: string; phone?: string; templateTitle: string; expiresAt?: string; defaultMessage: string } | null>(null);
@@ -102,8 +102,17 @@ export function PatientConsentsPanel({patientId,patient,guardians=[]}:{patientId
   const request=(action='device')=>run(async()=>{
     if(editor)return;
     setMode(action);
-    if(!useGuardian&&!patient?.email&&!signerEmail&&(action==='send'||settings.auth_level!=='basic')){setAddingEmail(true);setError('Paciente sem e-mail cadastrado. Adicione o e-mail para continuar esta solicitação.');return;}
-    let r=await ApiClient.post<any>(`/v1/consents/patients/${patientId}/request`,{templateId:selectedTemplate,photoRequested,guardian:useGuardian?guardian:undefined,signerEmail:!useGuardian&&signerEmail?signerEmail:undefined});
+    const needsEmail = requireOtp || action === 'send';
+    if(!useGuardian&&!patient?.email&&!signerEmail&&needsEmail){
+      setAddingEmail(true);
+      setError(action==='send'?'Para envio por e-mail, informe o e-mail do paciente.':'E-mail obrigatório para validação por código. Adicione o e-mail para continuar.');
+      return;
+    }
+    if(useGuardian&&!guardian.email&&needsEmail){
+      setError(action==='send'?'Para envio por e-mail, informe o e-mail do responsável legal.':'E-mail obrigatório para validação por código. Adicione o e-mail do responsável legal.');
+      return;
+    }
+    let r=await ApiClient.post<any>(`/v1/consents/patients/${patientId}/request`,{templateId:selectedTemplate,photoRequested,requireOtp,guardian:useGuardian?guardian:undefined,signerEmail:!useGuardian&&signerEmail?signerEmail:undefined});
     setLink(r);await load();notify();setRequesting(false);
     if(action==='device') setActiveToken(r.url.split('/').pop());
     if(action==='copy') {await navigator.clipboard.writeText(r.url);showToast('Link copiado.','success');}
@@ -124,7 +133,7 @@ export function PatientConsentsPanel({patientId,patient,guardians=[]}:{patientId
     const g=guardians.find(g=>g.is_primary)||guardians[0];
     const relationships:Record<string,string>={mother:'Mãe',father:'Pai',legal_guardian:'Responsável legal',tutor:'Tutor',other:'Outro'};
     setSelectedTemplate(templateId);setUseGuardian(isMinor);
-    setSignerEmail('');setAddingEmail(false);setPhotoRequested(!!settings.photo_requested);
+    setSignerEmail('');setAddingEmail(false);setPhotoRequested(!!settings.photo_requested);setRequireOtp(false);
     setGuardian(g?{name:g.full_name||'',cpf:g.cpf||'',relationship:relationships[g.relationship]||g.relationship||'',phone:g.phone||'',email:g.email||''}:emptyGuardian);
     setRequesting(true);setLink(null);setError('');setView('documents');
   };
@@ -163,7 +172,26 @@ export function PatientConsentsPanel({patientId,patient,guardians=[]}:{patientId
       />
     )}
     {activeToken&&<div role="dialog" aria-modal="true" aria-label="Assinar termo" className="fixed inset-0 z-[10001] overflow-y-auto bg-slate-50 mobile-modal"><div className="sticky top-0 z-10 bg-white border-b p-3"><button type="button" className="consent-secondary" onClick={()=>{setActiveToken(null);void run(load);notify();}}>Voltar aos termos</button></div><PublicConsentPage token={activeToken}/></div>}
-    {evidence&&<aside className="border rounded-xl p-4 space-y-3"><h3 className="font-bold">Evidências da assinatura</h3><p>Assinante: {evidence.evidence.signer.name} · {consentDate(evidence.evidence.signedAt)}</p><img src={evidence.signature} alt="Assinatura registrada" className="max-w-xs"/>{evidence.photo&&<><p>Registro fotográfico realizado no momento da assinatura</p><img src={evidence.photo} alt="Foto da assinatura" className="max-w-xs rounded-lg"/></>}<button className="consent-secondary" onClick={()=>setEvidence(null)}>Fechar evidências</button></aside>}<header className="flex flex-wrap justify-between gap-3"><div><h2 className="text-xl font-bold text-slate-900 flex gap-2 items-center"><ShieldCheck className="w-5 h-5 text-teal-700"/>Termos &amp; Consentimentos</h2><p className="text-sm text-slate-500 mt-1">Biblioteca compartilhada por todas as áreas da clínica.</p></div><button className="consent-primary" disabled={busy} onClick={()=>startRequest()}><Plus className="w-4 h-4"/>Solicitar assinatura</button></header>
+    {evidence&&<aside className="border rounded-xl p-4 space-y-3 bg-slate-50">
+      <div className="flex items-center justify-between">
+        <h3 className="font-bold text-slate-800">Evidências da assinatura</h3>
+        <button className="consent-secondary text-xs" onClick={()=>setEvidence(null)}>Fechar evidências</button>
+      </div>
+      <div className="text-xs space-y-1.5 text-slate-600">
+        <p><strong className="text-slate-700">Assinante:</strong> {evidence.evidence.signer.name} {evidence.evidence.signer.kind==='guardian'?'(responsável legal)':''} · {consentDate(evidence.evidence.signedAt)}</p>
+        <p><strong className="text-slate-700">Autenticação:</strong> {evidence.evidence.authMethod.includes('otp_') ? (evidence.evidence.authMethod.includes('whatsapp') ? 'Assinatura manuscrita e OTP por WhatsApp' : 'Assinatura manuscrita e OTP por e-mail') : 'Assinatura manuscrita e registros da sessão'}{evidence.evidence.authMethod.includes('+photo')?' e foto opcional':''}</p>
+        <p><strong className="text-slate-700">Confirmação por e-mail:</strong> {evidence.evidence.otpVerified ? `Validada via código (${evidence.evidence.authenticationRecipient || 'e-mail'})` : 'Verificação por código não utilizada'}</p>
+        <p><strong className="text-slate-700">Código de verificação:</strong> <span className="font-mono">{evidence.evidence.verificationId}</span></p>
+      </div>
+      <div className="pt-2">
+        <p className="text-xs font-semibold text-slate-700 mb-1">Assinatura manuscrita:</p>
+        <img src={evidence.signature} alt="Assinatura registrada" className="max-w-xs border rounded bg-white p-2"/>
+      </div>
+      {evidence.photo&&<div className="pt-2">
+        <p className="text-xs font-semibold text-slate-700 mb-1">Registro fotográfico da assinatura:</p>
+        <img src={evidence.photo} alt="Foto da assinatura" className="max-w-xs rounded-lg border"/>
+      </div>}
+    </aside>}<header className="flex flex-wrap justify-between gap-3"><div><h2 className="text-xl font-bold text-slate-900 flex gap-2 items-center"><ShieldCheck className="w-5 h-5 text-teal-700"/>Termos &amp; Consentimentos</h2><p className="text-sm text-slate-500 mt-1">Biblioteca compartilhada por todas as áreas da clínica.</p></div><button className="consent-primary" disabled={busy} onClick={()=>startRequest()}><Plus className="w-4 h-4"/>Solicitar assinatura</button></header>
     <nav aria-label="Termos e modelos" className="flex flex-wrap gap-2"><button className={`consent-secondary ${view==='documents'?'!border-teal-600 !text-teal-800':''}`} onClick={()=>setView('documents')}>Termos do paciente</button><button className={`consent-secondary ${view==='library'?'!border-teal-600 !text-teal-800':''}`} onClick={()=>setView('library')}>Biblioteca de termos</button><button className="consent-secondary" disabled={busy} onClick={()=>run(load)}>Atualizar</button></nav>
     {error&&<p role="alert" className="rounded-xl p-3 bg-red-50 text-red-700 text-sm">{error}</p>}
     {link&&<aside className="bg-teal-50 border border-teal-200 p-4 rounded-xl space-y-3">
@@ -179,12 +207,56 @@ export function PatientConsentsPanel({patientId,patient,guardians=[]}:{patientId
       <h3 className="font-bold">Solicitar assinatura</h3><label className="block text-sm font-medium">Modelo<select aria-label="Modelo" required className="consent-field mt-1" value={selectedTemplate} onChange={e=>setSelectedTemplate(e.target.value)}><option value="">Selecione um termo</option>{templates.map(t=><option key={t.id} value={t.id}>{t.title} · v{t.current_version}{t.required?' · obrigatório':''}</option>)}</select></label>
       {canEditTemplates&&<button type="button" className="consent-secondary" onClick={()=>createTemplate(true)}>+ Criar termo próprio</button>}
       {preview&&<details><summary className="cursor-pointer text-sm text-teal-700">Ler conteúdo antes de enviar</summary><p className="whitespace-pre-wrap text-sm leading-6 mt-3">{preview.content}</p>{canEditTemplates&&<button type="button" className="consent-secondary mt-3" onClick={()=>edit(preview,!preview.tenant_id,true)}>✏️ Editar / Adaptar termo</button>}</details>}
-      <p className="text-sm text-slate-600">Confirmação: {settings.auth_level==='basic'?'Básico — assinatura manuscrita':settings.auth_level==='recommended'?'Recomendado — assinatura e OTP':'Reforçado — assinatura, OTP e foto opcional'}</p>
+      <label className="flex items-start gap-2.5 cursor-pointer select-none">
+        <input
+          type="checkbox"
+          className="mt-0.5 accent-teal-700 rounded h-4 w-4 shrink-0"
+          checked={requireOtp}
+          onChange={e=>setRequireOtp(e.target.checked)}
+        />
+        <div>
+          <span className="text-sm font-medium text-slate-800">Exigir código de confirmação por e-mail</span>
+          <p className="text-xs text-slate-500">Opcional. Adiciona uma etapa de verificação da identidade do assinante por e-mail.</p>
+        </div>
+      </label>
       <label className="flex gap-2 text-sm"><input type="checkbox" className="accent-teal-700" checked={useGuardian} disabled={isMinor} onChange={e=>setUseGuardian(e.target.checked)}/>{isMinor?'Paciente menor: assinatura obrigatória pelo responsável legal':'Assinatura por responsável legal'}</label>
-      {!useGuardian&&!patient?.email&&<div className="space-y-2"><p className="text-sm text-amber-800">Paciente sem e-mail cadastrado.</p>{addingEmail?<label className="block text-sm">E-mail do paciente<input type="email" required maxLength={254} className="consent-field" value={signerEmail} onChange={e=>setSignerEmail(e.target.value)}/><span className="text-xs text-slate-500">O e-mail será salvo ao continuar a solicitação.</span></label>:<button type="button" className="consent-secondary" onClick={()=>setAddingEmail(true)}>Adicionar e-mail</button>}</div>}
-      {useGuardian&&!guardian.email&&<p className="text-sm text-amber-800">Responsável legal sem e-mail cadastrado. Adicione o e-mail no campo abaixo para continuar. <button type="button" className="consent-secondary" onClick={()=>document.getElementById('consent-guardian-email')?.focus()}>Adicionar e-mail</button></p>}
-      {useGuardian&&<fieldset className="grid sm:grid-cols-2 gap-3"><legend className="text-sm font-semibold mb-2">Responsável legal</legend>{([{key:'name',label:'Nome do responsável',type:'text'},{key:'cpf',label:'CPF',type:'text'},{key:'relationship',label:'Parentesco',type:'text'},{key:'phone',label:'Telefone',type:'tel'},{key:'email',label:'E-mail',type:'email'}] as const).map(f=><label key={f.key} className="text-sm">{f.label}<input required id={f.key==='email'?'consent-guardian-email':undefined} className="consent-field mt-1" type={f.type} maxLength={f.key==='email'?254:180} value={guardian[f.key]} onChange={e=>setGuardian(g=>({...g,[f.key]:e.target.value}))}/></label>)}</fieldset>}
-      <label className="flex gap-2 text-sm"><input type="checkbox" checked={photoRequested} onChange={e=>setPhotoRequested(e.target.checked)}/>Solicitar foto no momento da assinatura</label><p className="text-xs text-slate-500">Opcional para o assinante. Esta escolha vale para esta nova solicitação.</p>
+      {!useGuardian&&!patient?.email&&(
+        requireOtp ? (
+          <div className="space-y-1.5 p-3 bg-amber-50/70 border border-amber-200 rounded-xl">
+            <p className="text-xs font-semibold text-amber-900">E-mail obrigatório para validação por código</p>
+            <label className="block text-xs text-slate-700">E-mail do paciente
+              <input type="email" required maxLength={254} className="consent-field mt-1" value={signerEmail} onChange={e=>setSignerEmail(e.target.value)} placeholder="exemplo@email.com"/>
+            </label>
+            <span className="text-[11px] text-slate-500">O e-mail será salvo ao continuar a solicitação.</span>
+          </div>
+        ) : (
+          <div className="space-y-1">
+            {addingEmail ? (
+              <label className="block text-xs text-slate-700">E-mail do paciente (opcional)
+                <input type="email" maxLength={254} className="consent-field mt-1" value={signerEmail} onChange={e=>setSignerEmail(e.target.value)} placeholder="exemplo@email.com"/>
+              </label>
+            ) : (
+              <button type="button" className="text-xs text-teal-700 hover:underline inline-flex items-center gap-1" onClick={()=>setAddingEmail(true)}>
+                + Informar e-mail do paciente (opcional)
+              </button>
+            )}
+          </div>
+        )
+      )}
+      {useGuardian&&requireOtp&&!guardian.email&&<p className="text-xs text-amber-800 bg-amber-50 p-2 rounded-lg border border-amber-200">Responsável legal sem e-mail cadastrado. Informe o e-mail no campo abaixo para envio do código.</p>}
+      {useGuardian&&<fieldset className="grid sm:grid-cols-2 gap-3"><legend className="text-sm font-semibold mb-2">Responsável legal</legend>{([{key:'name',label:'Nome do responsável',type:'text'},{key:'cpf',label:'CPF',type:'text'},{key:'relationship',label:'Parentesco',type:'text'},{key:'phone',label:'Telefone',type:'tel'},{key:'email',label:`E-mail${requireOtp?'':' (opcional)'}`,type:'email'}] as const).map(f=><label key={f.key} className="text-sm">{f.label}<input required={f.key!=='email'||requireOtp} id={f.key==='email'?'consent-guardian-email':undefined} className="consent-field mt-1" type={f.type} maxLength={f.key==='email'?254:180} value={guardian[f.key]} onChange={e=>setGuardian(g=>({...g,[f.key]:e.target.value}))}/></label>)}</fieldset>}
+      <label className="flex items-start gap-2.5 cursor-pointer select-none">
+        <input
+          type="checkbox"
+          className="mt-0.5 accent-teal-700 rounded h-4 w-4 shrink-0"
+          checked={photoRequested}
+          onChange={e=>setPhotoRequested(e.target.checked)}
+        />
+        <div>
+          <span className="text-sm font-medium text-slate-800">Solicitar foto no momento da assinatura</span>
+          <p className="text-xs text-slate-500">Opcional para o assinante. Esta escolha vale para esta nova solicitação.</p>
+        </div>
+      </label>
       <div className="flex flex-wrap gap-2">{(()=>{
         const targetPhone = useGuardian ? (guardian.phone || (guardians?.find((g: any) => g.phone)?.phone)) : (patient?.whatsapp || patient?.phone);
         const hasPhone = isValidPhoneNumber(targetPhone);

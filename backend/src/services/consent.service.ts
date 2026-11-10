@@ -143,34 +143,55 @@ export class ConsentService {
     const patient = db.prepare('SELECT * FROM patients WHERE id=? AND tenant_id=?').get(patientId,req.tenantId);
     if(req.body.signerEmail!==undefined) {
       const email=text(req.body.signerEmail,254);
-      if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) consentError('Informe um e-mail válido para o paciente.');
-      if(this.minor(patient)||req.body.guardian) consentError('Use o e-mail do responsável legal.');
-      db.prepare('UPDATE patients SET email=? WHERE id=? AND tenant_id=?').run(email,patientId,req.tenantId);
-      patient.email=email;
+      if(email.length>0) {
+        if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) consentError('Informe um e-mail válido para o paciente.');
+        if(this.minor(patient)||req.body.guardian) consentError('Use o e-mail do responsável legal.');
+        db.prepare('UPDATE patients SET email=? WHERE id=? AND tenant_id=?').run(email,patientId,req.tenantId);
+        patient.email=email;
+      }
     }
     const clinic = db.prepare('SELECT name,cnpj_cpf,phone,email,logo_url FROM tenants WHERE id=?').get(req.tenantId);
     const professional = db.prepare('SELECT id,name,registration_type,registration_number FROM professionals WHERE user_id=? AND tenant_id=? AND active=1').get(req.user!.userId,req.tenantId);
     const capabilities=CapabilityService.computeUserCapabilities(req.user!.userId,req.tenantId!);
-    const requester = {...(professional || {id:req.user!.userId,name:req.user!.name}),consentModule:template.module,consentProfession:template.profession_id||null,professionId:capabilities.professionId};
-    let signer: any = {kind:'patient',name:patient.full_name,cpf:patient.cpf,email:patient.email,phone:patient.whatsapp || patient.phone};
+    const requester: any = {...(professional || {id:req.user!.userId,name:req.user!.name}),consentModule:template.module,consentProfession:template.profession_id||null,professionId:capabilities.professionId};
+    const settings=this.settings(req);
+    const requireOtp = req.body.requireOtp !== undefined
+      ? req.body.requireOtp === true
+      : settings.auth_level !== 'basic';
+    const targetAuthLevel = requireOtp
+      ? (settings.auth_level === 'basic' ? 'recommended' : settings.auth_level)
+      : 'basic';
+    requester.photoRequested=typeof req.body.photoRequested==='boolean'?req.body.photoRequested:!!settings.photo_requested;
+    requester.requireOtp=requireOtp;
+
+    let signer: any = {kind:'patient',name:patient.full_name,cpf:patient.cpf,email:patient.email || null,phone:patient.whatsapp || patient.phone};
     if (req.body.guardian) {
       const g=req.body.guardian;
       const cpf=text(g.cpf,20).replace(/\D/g,'');
-      if (text(g.name,180).length<3 || !this.validCpf(cpf) || text(g.relationship,80).length<2 || text(g.phone,30).replace(/\D/g,'').length<10 || (g.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text(g.email,254)))) consentError('Preencha nome, CPF válido, parentesco, telefone e e-mail válido do responsável.');
-      signer={kind:'guardian',name:text(g.name,180),cpf,relationship:text(g.relationship,80),phone:text(g.phone,30),email:text(g.email,254)};
+      const gEmail=text(g.email,254);
+      if (text(g.name,180).length<3 || !this.validCpf(cpf) || text(g.relationship,80).length<2 || text(g.phone,30).replace(/\D/g,'').length<10) {
+        consentError('Preencha nome, CPF válido, parentesco e telefone do responsável.');
+      }
+      if (gEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(gEmail)) {
+        consentError('Informe um e-mail válido do responsável legal.');
+      }
+      if (req.body.requireOtp === true && !gEmail) {
+        consentError('Informe o e-mail do responsável legal para confirmação por código.');
+      }
+      signer={kind:'guardian',name:text(g.name,180),cpf,relationship:text(g.relationship,80),phone:text(g.phone,30),email:gEmail || null};
+    } else if (req.body.requireOtp === true && !patient.email) {
+      consentError('Paciente sem e-mail cadastrado. Informe um e-mail para confirmação por código.');
     }
     if (this.minor(patient) && signer.kind!=='guardian') consentError('Paciente menor de idade: informe o responsável legal.');
-    const settings=this.settings(req);
-    requester.photoRequested=typeof req.body.photoRequested==='boolean'?req.body.photoRequested:!!settings.photo_requested;
     const consentId=id();
     const created=now();
     const expires=new Date(Date.now()+settings.link_hours*3600000).toISOString();
     db.transaction(() => {
       db.prepare(`INSERT INTO patient_consents(id,tenant_id,patient_id,professional_id,consent_type,title,version,content_text,status,
         template_id,template_version_id,document_hash,required,auth_level,signer_json,patient_snapshot_json,clinic_snapshot_json,professional_snapshot_json,created_at,expires_at)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(consentId,req.tenantId,patientId,professional?.id||null,'universal',template.title,String(template.current_version),template.content,'pending',template.id,template.version_id,template.content_hash,template.required,settings.auth_level,JSON.stringify(signer),JSON.stringify({id:patient.id,name:patient.full_name,birthDate:patient.birth_date}),JSON.stringify(clinic),JSON.stringify(requester),created,expires);
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(consentId,req.tenantId,patientId,professional?.id||null,'universal',template.title,String(template.current_version),template.content,'pending',template.id,template.version_id,template.content_hash,template.required,targetAuthLevel,JSON.stringify(signer),JSON.stringify({id:patient.id,name:patient.full_name,birthDate:patient.birth_date}),JSON.stringify(clinic),JSON.stringify(requester),created,expires);
       if(signer.kind==='guardian' && signer.email) db.prepare("UPDATE guardians SET email=? WHERE tenant_id=? AND patient_id=? AND REPLACE(REPLACE(cpf,'.',''),'-','')=?").run(signer.email,req.tenantId,patientId,signer.cpf);
-      this.audit(req,req.tenantId!,consentId,'requested',{version:template.current_version});
+      this.audit(req,req.tenantId!,consentId,'requested',{version:template.current_version,requireOtp,authLevel:targetAuthLevel});
     })();
     return this.newLink(req,consentId);
   }
@@ -223,11 +244,14 @@ export class ConsentService {
     const {token,row}=this.token(raw);
     this.audit(req,row.tenant_id,row.id,'link_opened');
     const signer=JSON.parse(row.signer_json);
+    const professionalSnapshot=JSON.parse(row.professional_snapshot_json||'{}');
+    const photoRequested=professionalSnapshot.photoRequested ?? row.auth_level==='reinforced';
+    const requireOtp=professionalSnapshot.requireOtp !== undefined ? professionalSnapshot.requireOtp : (row.auth_level !== 'basic');
     return {title:row.title,content:row.content_text,version:row.version,documentHash:row.document_hash,
       clinic:JSON.parse(row.clinic_snapshot_json),patient:{name:JSON.parse(row.patient_snapshot_json).name},
-      signer:{name:signer.name,kind:signer.kind,relationship:signer.relationship},authLevel:row.auth_level,expiresAt:token.expires_at,
+      signer:{name:signer.name,kind:signer.kind,relationship:signer.relationship},authLevel:row.auth_level,requireOtp,expiresAt:token.expires_at,
       destinations:{email:signer.email?maskedContact(signer.email,'email'):null},
-      photoRequested:JSON.parse(row.professional_snapshot_json).photoRequested ?? row.auth_level==='reinforced',
+      photoRequested,
       declarations:consentDeclarations,otpVerified:!!token.otp_verified_at && Date.parse(token.otp_expires_at)>Date.now(),
       channels:signer.email?['email']:[]};
   }
@@ -255,7 +279,8 @@ export class ConsentService {
 
   static async requestOtp(req: Request, raw: string): Promise<any> {
     const {token,row}=this.token(raw);
-    const signer=JSON.parse(row.signer_json);
+        if (row.auth_level === 'basic') consentError('Este termo não requer confirmação por código.');
+        const signer=JSON.parse(row.signer_json);
     const channel=req.body.channel;
     if(channel==='email'&&!signer.email) consentError(signer.kind==='guardian'?'O responsável legal não possui e-mail cadastrado para validação da assinatura.':'Este paciente não possui e-mail cadastrado para validação da assinatura.');
     if (channel!=='email' || !signer.email) consentError('Canal de autenticação indisponível.');
@@ -338,9 +363,9 @@ export class ConsentService {
         clinic:JSON.parse(row.clinic_snapshot_json),professional:JSON.parse(row.professional_snapshot_json),templateId:row.template_id,versionId:row.template_version_id,
         title:row.title,version:row.version,contentHash:row.document_hash,signatureImageHash:consentHash(signature),photoHash:photo?consentHash(photo):null,
         module:this.documentModule(row),profession:JSON.parse(row.professional_snapshot_json).professionId||null,verificationId:verificationCode,
-        authenticationRecipient:token.otp_channel?maskedContact(JSON.parse(row.signer_json)[token.otp_channel==='email'?'email':'phone'],token.otp_channel):null,
+        authenticationRecipient:row.auth_level!=='basic'&&token.otp_channel?maskedContact(JSON.parse(row.signer_json)[token.otp_channel==='email'?'email':'phone'],token.otp_channel):null,
         authLevel:row.auth_level,authMethod:`${row.auth_level==='basic'?'handwritten':`handwritten+otp_${token.otp_channel}`}${photo?'+photo':''}`,
-        otpVerified:!!token.otp_verified_at,otpVerifiedAt:token.otp_verified_at||null,ip:req.ip || req.socket.remoteAddress,
+        otpVerified:row.auth_level!=='basic'&&!!token.otp_verified_at,otpVerifiedAt:row.auth_level!=='basic'?(token.otp_verified_at||null):null,ip:req.ip || req.socket.remoteAddress,
         userAgent:req.get('user-agent')?.slice(0,1000)||'',browser:req.get('sec-ch-ua')?.slice(0,500)||req.get('user-agent')?.slice(0,1000)||'',
         device:req.get('sec-ch-ua-platform')?.slice(0,100)||(/Android|iPhone|iPad/i.test(req.get('user-agent')||'')?'Mobile/tablet':'Desktop ou não informado'),
         declarations:consentDeclarations,photoPurpose:photo?'Registro fotográfico opcional como evidência da sessão de assinatura; sem reconhecimento facial.':null,
