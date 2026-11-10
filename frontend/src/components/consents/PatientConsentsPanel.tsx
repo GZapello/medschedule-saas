@@ -257,18 +257,83 @@ export function PatientConsentsPanel({patientId,patient,guardians=[]}:{patientId
           <p className="text-xs text-slate-500">Opcional para o assinante. Esta escolha vale para esta nova solicitação.</p>
         </div>
       </label>
-      <div className="flex flex-wrap gap-2">{(()=>{
+      {(()=>{
         const targetPhone = useGuardian ? (guardian.phone || (guardians?.find((g: any) => g.phone)?.phone)) : (patient?.whatsapp || patient?.phone);
         const hasPhone = isValidPhoneNumber(targetPhone);
-        return (<>
-          {[['device','Assinar agora'],['copy','Copiar link'],['send','Enviar por e-mail'],['qr','QR Code']].map(([value,label])=><button key={value} value={value} type="submit" className={value==='device'?'consent-primary':'consent-secondary'} disabled={busy||!selectedTemplate}>{label}</button>)}
-          <button key="whatsapp" value="whatsapp" type="submit" className="consent-secondary flex items-center gap-1.5" disabled={busy||!selectedTemplate||!hasPhone} title={!hasPhone ? (useGuardian ? 'Responsável legal sem telefone cadastrado.' : 'Paciente sem telefone/WhatsApp cadastrado.') : 'Abrir no WhatsApp'}>
-            <WhatsAppIcon className="w-3.5 h-3.5 fill-emerald-600" />
-            <span>WhatsApp</span>
-          </button>
-          {!hasPhone && <span className="text-[11px] text-amber-700 self-center">{useGuardian ? 'Responsável legal sem telefone cadastrado.' : 'Paciente sem telefone/WhatsApp cadastrado.'}</span>}
-        </>);
-      })()}<button type="button" className="consent-secondary" disabled={busy} onClick={()=>setRequesting(false)}>Voltar</button></div>{busy&&<p role="status">Preparando solicitação...</p>}
+        return (
+          <div className="space-y-2 pt-3 border-t border-slate-100">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
+              <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2">
+                <button
+                  key="device"
+                  value="device"
+                  type="submit"
+                  className="consent-btn consent-btn-primary col-span-2 sm:col-auto min-w-[125px]"
+                  disabled={busy || !selectedTemplate}
+                >
+                  Assinar agora
+                </button>
+                <button
+                  key="copy"
+                  value="copy"
+                  type="submit"
+                  className="consent-btn consent-btn-secondary min-w-[105px]"
+                  disabled={busy || !selectedTemplate}
+                >
+                  Copiar link
+                </button>
+                <button
+                  key="send"
+                  value="send"
+                  type="submit"
+                  className="consent-btn consent-btn-secondary min-w-[130px]"
+                  disabled={busy || !selectedTemplate}
+                >
+                  Enviar por e-mail
+                </button>
+                <button
+                  key="qr"
+                  value="qr"
+                  type="submit"
+                  className="consent-btn consent-btn-secondary min-w-[95px]"
+                  disabled={busy || !selectedTemplate}
+                >
+                  QR Code
+                </button>
+                <button
+                  key="whatsapp"
+                  value="whatsapp"
+                  type="submit"
+                  className="consent-btn consent-btn-secondary min-w-[115px]"
+                  disabled={busy || !selectedTemplate || !hasPhone}
+                  title={!hasPhone ? (useGuardian ? 'Responsável legal sem telefone cadastrado.' : 'Paciente sem telefone/WhatsApp cadastrado.') : 'Abrir no WhatsApp'}
+                >
+                  <WhatsAppIcon className="w-4 h-4 fill-emerald-600 shrink-0" />
+                  <span>WhatsApp</span>
+                </button>
+              </div>
+              <button
+                type="button"
+                className="consent-btn consent-btn-back w-full sm:w-auto min-w-[80px]"
+                disabled={busy}
+                onClick={() => setRequesting(false)}
+              >
+                Voltar
+              </button>
+            </div>
+            {!hasPhone && (
+              <p className="text-[11px] text-amber-700">
+                {useGuardian ? 'Responsável legal sem telefone cadastrado.' : 'Paciente sem telefone/WhatsApp cadastrado.'}
+              </p>
+            )}
+            {busy && (
+              <p role="status" className="text-xs text-slate-500 animate-pulse">
+                Preparando solicitação...
+              </p>
+            )}
+          </div>
+        );
+      })()}
       </fieldset>
     </form>}
     {view==='library'?<div className="space-y-4">
