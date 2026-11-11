@@ -275,6 +275,7 @@ api.get('/v1/admin/visits/establishments/:id', requireRole('superadmin'), AdminV
 api.put('/v1/admin/visits/establishments/:id', requireRole('superadmin'), AdminVisitsController.updateEstablishment);
 api.delete('/v1/admin/visits/establishments/:id', requireRole('superadmin'), AdminVisitsController.archiveEstablishment);
 api.post('/v1/admin/visits/establishments/:id/visits', requireRole('superadmin'), AdminVisitsController.addVisit);
+api.put('/v1/admin/visits/establishments/:id/visits/:visitId', requireRole('superadmin'), AdminVisitsController.updateVisit);
 api.patch('/v1/admin/visits/establishments/:id/status', requireRole('superadmin'), AdminVisitsController.updateStatus);
 api.post('/v1/admin/visits/establishments/:id/link-tenant', requireRole('superadmin'), AdminVisitsController.linkTenant);
 

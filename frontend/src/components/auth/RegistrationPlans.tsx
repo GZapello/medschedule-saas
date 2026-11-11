@@ -66,7 +66,7 @@ export function RegistrationPlans({
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-5 items-stretch">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-5 items-stretch">
         {plans.map(plan => {
           const isSolo = plan.code === 'SOLO' || plan.trial_days > 0;
           const isSelected = selectedCode === plan.code;
@@ -112,7 +112,7 @@ export function RegistrationPlans({
                     {plan.name}
                   </h4>
                 </div>
-                <p className="text-xs text-slate-500 leading-relaxed min-h-[32px]">
+                <p className="text-xs text-slate-500 leading-relaxed min-h-[36px]">
                   {getPlanSubtitle(plan.code)}
                 </p>
               </div>
@@ -127,11 +127,15 @@ export function RegistrationPlans({
                     {plan.cycle === 'MONTHLY' ? '/mês' : ` / ${plan.cycle}`}
                   </span>
                 </div>
-                <div className="mt-1 flex items-center gap-1.5 text-xs font-bold text-slate-700">
-                  <Users className="w-3.5 h-3.5 text-slate-400" />
-                  <span>
-                    {plan.max_users} acessos incluídos · adicional {Number(plan.extra_user_price || 0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}/mês · {plan.total_user_limit ? `até ${plan.total_user_limit} acessos` : 'expansão disponível'}
-                  </span>
+                <div className="mt-2 text-xs text-slate-600">
+                  <div className="flex items-center gap-1.5 font-bold text-slate-700">
+                    <Users className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <span>{plan.max_users} {plan.max_users === 1 ? 'acesso incluído' : 'acessos incluídos'}</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    {plan.extra_user_price ? `Adicional ${Number(plan.extra_user_price).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}/mês` : 'Sem custo por adicional'}
+                    {plan.total_user_limit ? ` · até ${plan.total_user_limit} acessos` : ' · expansão disponível'}
+                  </p>
                 </div>
               </div>
 
@@ -148,11 +152,11 @@ export function RegistrationPlans({
               {/* Microcopy descritivo da forma de ativação */}
               <div className="mb-3">
                 {isSolo ? (
-                  <p className="text-[11px] text-teal-900 font-medium leading-relaxed bg-teal-50/80 p-2.5 rounded-xl border border-teal-100">
+                  <p className="text-[11px] text-teal-900 font-medium leading-relaxed bg-teal-50/80 p-2.5 rounded-xl border border-teal-100 min-h-[48px] flex items-center">
                     Teste gratuito por <strong>7 dias</strong>. Sem compromisso e sem cobrança no cadastro.
                   </p>
                 ) : (
-                  <p className="text-[11px] text-slate-500 leading-relaxed bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                  <p className="text-[11px] text-slate-500 leading-relaxed bg-slate-50 p-2.5 rounded-xl border border-slate-100 min-h-[48px] flex items-center">
                     Ativação com pagamento via PIX, Cartão ou Boleto. Dados de faturamento na próxima tela.
                   </p>
                 )}

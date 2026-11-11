@@ -410,17 +410,38 @@ export class AdminVisitsController {
         return;
       }
 
-      const cleanCnpj = cnpj ? String(cnpj).replace(/\D/g, '') : null;
-      const areasJson = areasOfActivity !== undefined ? JSON.stringify(Array.isArray(areasOfActivity) ? areasOfActivity : []) : undefined;
+      const cleanCnpj = cnpj !== undefined ? (cnpj ? String(cnpj).replace(/\D/g, '') : null) : (existing as any).cnpj;
+      const areasJson = areasOfActivity !== undefined ? JSON.stringify(Array.isArray(areasOfActivity) ? areasOfActivity : []) : (existing as any).areas_of_activity_json;
+      const effectiveTradeName = tradeName !== undefined ? (tradeName ? String(tradeName).trim() : null) : (existing as any).trade_name;
+      const effectiveCorporateName = corporateName !== undefined ? (corporateName ? String(corporateName).trim() : null) : (existing as any).corporate_name;
+      const effectiveEstablishmentType = establishmentType !== undefined ? (establishmentType ? String(establishmentType).trim() : null) : (existing as any).establishment_type;
+      const effectiveCity = city !== undefined ? (city ? String(city).trim() : null) : (existing as any).city;
+      const effectiveState = state !== undefined ? (state ? String(state).trim().toUpperCase() : null) : (existing as any).state;
+      const effectiveAddress = address !== undefined ? (address ? String(address).trim() : null) : (existing as any).address;
+      const effectiveWebsite = website !== undefined ? (website ? String(website).trim() : null) : (existing as any).website;
+      const effectiveInstagram = instagram !== undefined ? (instagram ? String(instagram).trim() : null) : (existing as any).instagram;
+      const effectiveEstimatedProfessionals = estimatedProfessionals !== undefined ? (estimatedProfessionals ? Number(estimatedProfessionals) : null) : (existing as any).estimated_professionals;
+      const effectivePrimaryContactName = primaryContactName !== undefined ? (primaryContactName ? String(primaryContactName).trim() : null) : (existing as any).primary_contact_name;
+      const effectivePrimaryContactRole = primaryContactRole !== undefined ? (primaryContactRole ? String(primaryContactRole).trim() : null) : (existing as any).primary_contact_role;
+      const effectivePrimaryContactPhone = primaryContactPhone !== undefined ? (primaryContactPhone ? String(primaryContactPhone).trim() : null) : (existing as any).primary_contact_phone;
+      const effectivePrimaryContactWhatsapp = primaryContactWhatsapp !== undefined ? (primaryContactWhatsapp ? String(primaryContactWhatsapp).trim() : null) : (existing as any).primary_contact_whatsapp;
+      const effectivePrimaryContactEmail = primaryContactEmail !== undefined ? (primaryContactEmail ? String(primaryContactEmail).trim() : null) : (existing as any).primary_contact_email;
+      const effectiveBestContactTime = bestContactTime !== undefined ? (bestContactTime ? String(bestContactTime).trim() : null) : (existing as any).best_contact_time;
+      const effectivePreferredChannel = preferredChannel !== undefined ? (preferredChannel ? String(preferredChannel).trim() : null) : (existing as any).preferred_channel;
+      const effectiveCurrentStatus = currentStatus !== undefined ? (currentStatus ? String(currentStatus).trim() : null) : (existing as any).current_status;
+      const effectiveTenantId = tenantId !== undefined ? tenantId : (existing as any).tenant_id;
+      const effectiveNextAction = nextAction !== undefined ? (nextAction ? String(nextAction).trim() : null) : (existing as any).next_action;
+      const effectiveNextReturnDate = nextReturnDate !== undefined ? (nextReturnDate ? String(nextReturnDate).trim() : null) : (existing as any).next_return_date;
+      const effectiveName = name !== undefined && name !== null ? String(name).trim() : (existing as any).name;
 
       db.prepare(`
         UPDATE superadmin_visit_establishments
         SET
-          name = COALESCE(?, name),
+          name = ?,
           trade_name = ?,
           corporate_name = ?,
           cnpj = ?,
-          areas_of_activity_json = COALESCE(?, areas_of_activity_json),
+          areas_of_activity_json = ?,
           establishment_type = ?,
           city = ?,
           state = ?,
@@ -435,36 +456,36 @@ export class AdminVisitsController {
           primary_contact_email = ?,
           best_contact_time = ?,
           preferred_channel = ?,
-          current_status = COALESCE(?, current_status),
-          tenant_id = COALESCE(?, tenant_id),
-          next_action = COALESCE(?, next_action),
-          next_return_date = COALESCE(?, next_return_date),
+          current_status = ?,
+          tenant_id = ?,
+          next_action = ?,
+          next_return_date = ?,
           updated_at = datetime('now')
         WHERE id = ?
       `).run(
-        name ? String(name).trim() : null,
-        tradeName !== undefined ? (tradeName ? String(tradeName).trim() : null) : null,
-        corporateName !== undefined ? (corporateName ? String(corporateName).trim() : null) : null,
+        effectiveName,
+        effectiveTradeName,
+        effectiveCorporateName,
         cleanCnpj,
         areasJson,
-        establishmentType !== undefined ? (establishmentType ? String(establishmentType).trim() : null) : null,
-        city !== undefined ? (city ? String(city).trim() : null) : null,
-        state !== undefined ? (state ? String(state).trim().toUpperCase() : null) : null,
-        address !== undefined ? (address ? String(address).trim() : null) : null,
-        website !== undefined ? (website ? String(website).trim() : null) : null,
-        instagram !== undefined ? (instagram ? String(instagram).trim() : null) : null,
-        estimatedProfessionals !== undefined ? (estimatedProfessionals ? Number(estimatedProfessionals) : null) : null,
-        primaryContactName !== undefined ? (primaryContactName ? String(primaryContactName).trim() : null) : null,
-        primaryContactRole !== undefined ? (primaryContactRole ? String(primaryContactRole).trim() : null) : null,
-        primaryContactPhone !== undefined ? (primaryContactPhone ? String(primaryContactPhone).trim() : null) : null,
-        primaryContactWhatsapp !== undefined ? (primaryContactWhatsapp ? String(primaryContactWhatsapp).trim() : null) : null,
-        primaryContactEmail !== undefined ? (primaryContactEmail ? String(primaryContactEmail).trim() : null) : null,
-        bestContactTime !== undefined ? (bestContactTime ? String(bestContactTime).trim() : null) : null,
-        preferredChannel !== undefined ? (preferredChannel ? String(preferredChannel).trim() : null) : null,
-        currentStatus ? String(currentStatus).trim() : null,
-        tenantId !== undefined ? tenantId : null,
-        nextAction !== undefined ? nextAction : null,
-        nextReturnDate !== undefined ? nextReturnDate : null,
+        effectiveEstablishmentType,
+        effectiveCity,
+        effectiveState,
+        effectiveAddress,
+        effectiveWebsite,
+        effectiveInstagram,
+        effectiveEstimatedProfessionals,
+        effectivePrimaryContactName,
+        effectivePrimaryContactRole,
+        effectivePrimaryContactPhone,
+        effectivePrimaryContactWhatsapp,
+        effectivePrimaryContactEmail,
+        effectiveBestContactTime,
+        effectivePreferredChannel,
+        effectiveCurrentStatus,
+        effectiveTenantId,
+        effectiveNextAction,
+        effectiveNextReturnDate,
         id
       );
 
@@ -609,6 +630,150 @@ export class AdminVisitsController {
     } catch (err: any) {
       console.error('[AdminVisitsController.addVisit] Erro:', err);
       res.status(500).json({ error: 'Erro ao registrar visita' });
+    }
+  }
+
+  /**
+   * 5b. Atualizar visita existente (SuperAdmin)
+   */
+  static updateVisit(req: Request, res: Response): void {
+    try {
+      const { id, visitId } = req.params;
+      const {
+        visitDate,
+        visitTime,
+        modality,
+        responsibleName,
+        objective,
+        featuresPresented,
+        needsIdentified,
+        mainDoubts,
+        commercialObjections,
+        notes,
+        result,
+        statusAfterVisit,
+        nextAction,
+        nextReturnDate
+      } = req.body;
+
+      const est = db.prepare('SELECT id, current_status FROM superadmin_visit_establishments WHERE id = ?').get(id) as any;
+      if (!est) {
+        res.status(404).json({ error: 'Estabelecimento não encontrado' });
+        return;
+      }
+
+      const existingVisit = db.prepare('SELECT * FROM superadmin_visits WHERE id = ? AND establishment_id = ?').get(visitId, id) as any;
+      if (!existingVisit) {
+        res.status(404).json({ error: 'Visita não encontrada' });
+        return;
+      }
+
+      const effectiveVisitDate = visitDate !== undefined ? (visitDate ? String(visitDate).trim() : null) : existingVisit.visit_date;
+      if (!effectiveVisitDate) {
+        res.status(400).json({ error: 'A data da visita é obrigatória' });
+        return;
+      }
+
+      const effectiveVisitTime = visitTime !== undefined ? (visitTime ? String(visitTime).trim() : null) : existingVisit.visit_time;
+      const effectiveModality = modality !== undefined ? (modality ? String(modality).trim() : 'presential') : (existingVisit.modality || 'presential');
+      const effectiveResponsibleName = responsibleName !== undefined ? (responsibleName ? String(responsibleName).trim() : null) : existingVisit.responsible_name;
+      const effectiveObjective = objective !== undefined ? (objective ? String(objective).trim() : null) : existingVisit.objective;
+      const effectiveFeaturesJson = featuresPresented !== undefined ? JSON.stringify(Array.isArray(featuresPresented) ? featuresPresented : []) : existingVisit.features_presented_json;
+      const effectiveNeedsIdentified = needsIdentified !== undefined ? (needsIdentified ? String(needsIdentified).trim() : null) : existingVisit.needs_identified;
+      const effectiveMainDoubts = mainDoubts !== undefined ? (mainDoubts ? String(mainDoubts).trim() : null) : existingVisit.main_doubts;
+      const effectiveCommercialObjections = commercialObjections !== undefined ? (commercialObjections ? String(commercialObjections).trim() : null) : existingVisit.commercial_objections;
+      const effectiveNotes = notes !== undefined ? (notes ? String(notes).trim() : null) : existingVisit.notes;
+      const effectiveResult = result !== undefined ? (result ? String(result).trim() : null) : existingVisit.result;
+      const effectiveStatusAfterVisit = statusAfterVisit !== undefined ? (statusAfterVisit ? String(statusAfterVisit).trim() : null) : existingVisit.status_after_visit;
+      const effectiveNextAction = nextAction !== undefined ? (nextAction ? String(nextAction).trim() : null) : existingVisit.next_action;
+      const effectiveNextReturnDate = nextReturnDate !== undefined ? (nextReturnDate ? String(nextReturnDate).trim() : null) : existingVisit.next_return_date;
+
+      db.transaction(() => {
+        db.prepare(`
+          UPDATE superadmin_visits
+          SET
+            visit_date = ?,
+            visit_time = ?,
+            modality = ?,
+            responsible_name = ?,
+            objective = ?,
+            features_presented_json = ?,
+            needs_identified = ?,
+            main_doubts = ?,
+            commercial_objections = ?,
+            notes = ?,
+            result = ?,
+            status_after_visit = ?,
+            next_action = ?,
+            next_return_date = ?,
+            updated_at = datetime('now')
+          WHERE id = ? AND establishment_id = ?
+        `).run(
+          effectiveVisitDate,
+          effectiveVisitTime,
+          effectiveModality,
+          effectiveResponsibleName,
+          effectiveObjective,
+          effectiveFeaturesJson,
+          effectiveNeedsIdentified,
+          effectiveMainDoubts,
+          effectiveCommercialObjections,
+          effectiveNotes,
+          effectiveResult,
+          effectiveStatusAfterVisit,
+          effectiveNextAction,
+          effectiveNextReturnDate,
+          visitId,
+          id
+        );
+
+        // Recalcula campos derivados do estabelecimento com base na visita mais recente
+        const latestVisit = db.prepare(`
+          SELECT * FROM superadmin_visits
+          WHERE establishment_id = ?
+          ORDER BY visit_date DESC, created_at DESC
+          LIMIT 1
+        `).get(id) as any;
+
+        if (latestVisit) {
+          db.prepare(`
+            UPDATE superadmin_visit_establishments
+            SET
+              last_visit_date = ?,
+              current_status = COALESCE(?, current_status),
+              next_action = ?,
+              next_return_date = ?,
+              updated_at = datetime('now')
+            WHERE id = ?
+          `).run(
+            latestVisit.visit_date,
+            latestVisit.status_after_visit,
+            latestVisit.next_action,
+            latestVisit.next_return_date,
+            id
+          );
+        }
+      })();
+
+      logAudit(req, 'UPDATE_CRM_VISIT', 'superadmin_visits', visitId, {
+        establishmentId: id,
+        visitDate: effectiveVisitDate,
+        statusAfterVisit: effectiveStatusAfterVisit,
+        updatedFields: Object.keys(req.body)
+      });
+
+      const updatedVisit = db.prepare('SELECT * FROM superadmin_visits WHERE id = ?').get(visitId) as any;
+      if (updatedVisit) {
+        updatedVisit.features_presented = JSON.parse(updatedVisit.features_presented_json || '[]');
+      }
+
+      res.json({
+        message: 'Visita atualizada com sucesso',
+        visit: updatedVisit
+      });
+    } catch (err: any) {
+      console.error('[AdminVisitsController.updateVisit] Erro:', err);
+      res.status(500).json({ error: 'Erro ao atualizar visita' });
     }
   }
 

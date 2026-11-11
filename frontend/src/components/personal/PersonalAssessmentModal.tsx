@@ -756,10 +756,10 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn mobile-modal">
-      <div className={`bg-white rounded-3xl ${postureOnly || activeTab === 'photos_notes' ? 'max-w-7xl' : 'max-w-5xl'} w-full max-h-[95vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden`}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn mobile-modal">
+      <div className={`bg-white rounded-3xl ${postureOnly || activeTab === 'photos_notes' ? 'max-w-7xl' : 'max-w-5xl'} w-full max-h-[92dvh] h-[92dvh] sm:h-auto sm:max-h-[90dvh] flex flex-col min-h-0 shadow-2xl border border-slate-200 overflow-hidden`}>
         {/* Header */}
-        <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
+        <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between bg-slate-50/70 shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-purple-600 text-white flex items-center justify-center shadow-md shadow-purple-600/20">
               <ClipboardCheck className="w-5 h-5" />
@@ -788,7 +788,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
         </div>
 
         {/* Top Info Strip: Aluno e Data */}
-        <div className="bg-slate-50/80 px-6 py-3 border-b border-slate-200/80 grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs items-center">
+        <div className="bg-slate-50/80 px-4 sm:px-6 py-3 border-b border-slate-200/80 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 text-xs items-center shrink-0">
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1.5">{effectiveTermLabel} <span className="text-purple-600">*</span></label>
             <PatientSearchSelect
@@ -829,7 +829,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
 
         {!postureOnly && !shared && <>
         {/* Mini KPI Preview Flutuante */}
-        <div className="bg-gradient-to-r from-purple-950 via-indigo-950 to-slate-900 text-white px-6 py-2.5 flex items-center justify-around text-xs flex-wrap gap-2.5 border-y border-purple-900/30">
+        <div className="bg-gradient-to-r from-purple-950 via-indigo-950 to-slate-900 text-white px-4 sm:px-6 py-2.5 flex items-center justify-around text-xs flex-wrap gap-2.5 border-y border-purple-900/30 shrink-0">
           <div className="flex items-center gap-1.5">
             <span className="text-purple-200 text-xs font-medium">IMC:</span>
             <strong className="text-amber-300 font-bold text-xs">{bmi > 0 ? `${bmi} kg/m²` : '—'}</strong>
@@ -872,11 +872,12 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
         </div>
 
         </>}
-        {!postureOnly && <div className="flex gap-2 px-6 py-2.5 border-b border-slate-200 bg-slate-50/60 overflow-x-auto mobile-wrap">
-          {availableTabs.map(tab=><button type="button" key={tab.id} disabled={photosUploading || postureBusy} onClick={()=>setActiveTab(tab.id as typeof activeTab)} className={`px-3.5 py-2 text-xs font-semibold rounded-xl whitespace-nowrap transition-all ${activeTab===tab.id?'bg-teal-600 text-white shadow-sm':'bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200/80'}`}>{tab.label}</button>)}
+        {!postureOnly && <div className="flex items-center gap-2 px-4 sm:px-6 py-2.5 border-b border-slate-200 bg-slate-50/60 overflow-x-auto shrink-0 no-scrollbar whitespace-nowrap touch-pan-x">
+          {availableTabs.map(tab=><button type="button" key={tab.id} disabled={photosUploading || postureBusy} onClick={()=>setActiveTab(tab.id as typeof activeTab)} className={`shrink-0 px-3.5 py-2 text-xs font-semibold rounded-xl whitespace-nowrap transition-all ${activeTab===tab.id?'bg-teal-600 text-white shadow-sm':'bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200/80'}`}>{tab.label}</button>)}
         </div>}
         {/* Formulário Principal */}
-        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto flex-1 space-y-6">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+          <div className="p-4 sm:p-6 overflow-y-auto flex-1 min-h-0 space-y-6">
           {/* ========================================================
               ABA 1: ANTROPOMETRIA & PERÍMETROS COMPLETOS (COM D/E)
              ======================================================== */}
@@ -1974,13 +1975,15 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
               <textarea className="block w-full border border-slate-200 rounded-xl p-3 mt-2 text-xs text-slate-800 outline-none focus:ring-2 focus:ring-purple-500" rows={4} value={clinicalFields[key] || ''} onChange={event=>setClinicalFields({...clinicalFields,[key]:event.target.value})}/>
             </label>)}
           </div>}
-          {/* Footer com Botões */}
-          <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
-            <div className="text-xs text-slate-500">
+          </div>
+
+          {/* Footer com Botões Fixo */}
+          <div className="px-4 sm:px-6 py-3 border-t border-slate-200 bg-slate-50/90 flex flex-col-reverse sm:flex-row items-center justify-between gap-3 shrink-0">
+            <div className="text-xs text-slate-500 text-center sm:text-left">
               Campos em branco são salvos com segurança sem alterar histórico prévio.
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
               <button
                 type="button"
                 onClick={onClose}
@@ -1991,7 +1994,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
               <button
                 type="submit"
                 disabled={saving || postureBusy || photosUploading}
-                className="px-6 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs rounded-xl flex items-center gap-2 shadow-sm transition-colors"
+                className="px-6 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-2 shadow-sm transition-colors"
               >
                 <Save className="w-4 h-4" />
                 {saving ? 'Gravando Avaliação...' : postureOnly ? 'Salvar Avaliação Postural' : shared ? 'Salvar Avaliação Clínica' : 'Salvar Avaliação Física Completa'}

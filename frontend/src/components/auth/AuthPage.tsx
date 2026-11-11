@@ -690,7 +690,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           const finalView = targetView || 'dashboard';
           const finalPath = finalView === 'dashboard' ? '/dashboard' : '/' + finalView;
           sessionStorage.setItem('activeView', finalView);
-          window.history.pushState({ view: finalView }, '', finalPath);
+          if (window.location.pathname !== finalPath) {
+            window.history.pushState({ view: finalView }, '', finalPath);
+          }
           window.dispatchEvent(new CustomEvent('zemda-navigate', { detail: { view: finalView } }));
         }}
         initialPlan={sanitizePlanCode(initialPlan)}

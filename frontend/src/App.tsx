@@ -232,6 +232,16 @@ export function parseRouteFromPath(pathname: string): { view: string; subId?: st
   return null;
 }
 
+const VALID_VIEWS = new Set([
+  'dashboard', 'calendar', 'patients', 'clinical', 'zemda-med', 'zemda-body', 'zemda360',
+  'zemda-personal', 'zemda-fisio', 'zemda-odonto', 'zemda-estetic', 'zemda-nutri',
+  'nutrition-workspace', 'zemda-to', 'occupational-therapy-workspace', 'zemda-fono',
+  'speech-therapy-workspace', 'zemda-psico', 'zemda-pp', 'psychopedagogy-workspace',
+  'pending-exams', 'professionals', 'services', 'inventory', 'budgets', 'financial',
+  'payroll', 'receipts', 'staff', 'taxonomy', 'reports', 'support-tickets', 'import',
+  'audit', 'settings', 'my-resources', 'sandbox', 'laboratory', 'superadmin', 'superadmin-visits'
+]);
+
 const AppContent: React.FC = () => {
   const {
     currentUser,
@@ -555,6 +565,7 @@ const AppContent: React.FC = () => {
       const detail = (e as CustomEvent).detail;
       if (detail?.view) {
         if ((detail.view === 'superadmin' || detail.view === 'superadmin-visits' || detail.view === 'audit') && currentUserRef.current?.role !== 'superadmin' && detail?.force !== true) {
+          handleNavigateView('dashboard');
           return;
         }
         handleNavigateView(detail.view, detail.subId || null, detail?.force);
@@ -599,12 +610,23 @@ const AppContent: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (currentUser?.role === 'superadmin') {
+    if (!currentUser) return;
+    if (currentUser.role === 'superadmin') {
       setCurrentView(prev => (prev === 'dashboard' ? 'superadmin' : prev));
     } else {
-      if (!isSandboxSession && sessionStorage.getItem('activeView') !== 'superadmin') {
-        setCurrentView(prev => (prev === 'superadmin' ? 'dashboard' : prev));
+      if (!isSandboxSession) {
+        setCurrentView(prev => (['superadmin', 'superadmin-visits', 'taxonomy', 'audit', 'sandbox', 'laboratory'].includes(prev) ? 'dashboard' : prev));
       }
+    }
+
+    // Se o usuário já estiver autenticado e a URL for /login ou /cadastro, redireciona de imediato para a tela principal
+    const path = window.location.pathname;
+    if (path === '/login' || path === '/cadastro') {
+      const fallbackView = currentUser.role === 'superadmin' ? 'superadmin' : 'dashboard';
+      const fallbackPath = fallbackView === 'superadmin' ? '/superadmin' : '/dashboard';
+      setCurrentView(fallbackView);
+      sessionStorage.setItem('activeView', fallbackView);
+      window.history.replaceState({ view: fallbackView }, '', fallbackPath);
     }
   }, [currentUser?.role, isSandboxSession]);
 
@@ -740,16 +762,20 @@ const AppContent: React.FC = () => {
             setCurrentView('settings');
             setSettingsSection('import');
             sessionStorage.setItem('activeView', 'settings');
+          } else if (['superadmin', 'superadmin-visits', 'taxonomy', 'audit', 'sandbox', 'laboratory'].includes(parsed.view) && currentUserRef.current.role !== 'superadmin') {
+            setCurrentView('dashboard');
+            sessionStorage.setItem('activeView', 'dashboard');
           } else {
             setCurrentView(parsed.view);
             if (parsed.view === 'settings') setSettingsSection('hub');
             sessionStorage.setItem('activeView', parsed.view);
           }
           setSubRouteId(parsed.subId || null);
-        } else if (window.location.pathname === '/' || window.location.pathname === '') {
-          setCurrentView('dashboard');
+        } else {
+          const fallback = currentUserRef.current.role === 'superadmin' ? 'superadmin' : 'dashboard';
+          setCurrentView(fallback);
           setSubRouteId(null);
-          sessionStorage.setItem('activeView', 'dashboard');
+          sessionStorage.setItem('activeView', fallback);
         }
       }
 
@@ -1778,6 +1804,15 @@ const AppContent: React.FC = () => {
                 </p>
               </div>
             )
+          )}
+
+          {/* Fallback de Segurança Robusto: se a rota atual for desconhecida ou não autorizada, exibe Dashboard para o usuário logado */}
+          {(!VALID_VIEWS.has(currentView) || (['superadmin', 'superadmin-visits', 'taxonomy', 'audit', 'sandbox', 'laboratory'].includes(currentView) && !isSuperAdmin)) && (
+            <DashboardView
+              onNavigate={handleNavigateView}
+              onOpenNewAppointment={handleOpenNewAppointment}
+              onOpenNewPatient={() => setIsNewPatientOpen(true)}
+            />
           )}
           </SectionErrorBoundary>
         </main>

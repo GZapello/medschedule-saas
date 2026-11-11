@@ -904,9 +904,10 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
 
       // Transição direta para o módulo correspondente com a mesma sessão autenticada (sem logout nem redirect para login)
       sessionStorage.setItem('activeView', targetView);
-      window.history.pushState({ view: targetView }, '', targetPath);
+      if (window.location.pathname !== targetPath) {
+        window.history.pushState({ view: targetView }, '', targetPath);
+      }
       window.dispatchEvent(new CustomEvent('zemda-navigate', { detail: { view: targetView } }));
-      window.dispatchEvent(new PopStateEvent('popstate'));
 
       onSuccess?.(targetView);
       showToast('Onboarding concluído com sucesso! Bem-vindo ao Zemda.', 'success');
@@ -979,7 +980,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div ref={presentation === 'page' ? contentRef : undefined} className={presentation === 'page' ? 'signup-page' : 'fixed inset-0 z-50 flex items-center justify-center bg-black/70 sm:p-4 backdrop-blur-xs overflow-y-auto'}>
+    <div ref={presentation === 'page' ? contentRef : undefined} className={presentation === 'page' ? `signup-page ${step === 'plans' ? 'signup-step-plans' : ''}` : 'fixed inset-0 z-50 flex items-center justify-center bg-black/70 sm:p-4 backdrop-blur-xs overflow-y-auto'}>
       {linkGoogle&&<GoogleAccountLinkDialog {...linkGoogle} onClose={()=>setLinkGoogle(null)} onLinked={onClose} />}
       {presentation === 'page' && (
         <aside className="signup-intro">
@@ -997,7 +998,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
       )}
       <div
         className={`${presentation === 'page' ? 'signup-card' : ''} bg-white w-full h-[100dvh] sm:h-auto sm:max-h-[94dvh] sm:rounded-2xl flex flex-col ${
-          step === 'plans' ? 'sm:max-w-4xl' : step === 'profile' ? 'sm:max-w-2xl sm:min-h-[680px]' : 'sm:max-w-xl'
+          step === 'plans' ? 'sm:max-w-5xl lg:max-w-6xl' : step === 'profile' ? 'sm:max-w-2xl sm:min-h-[680px]' : 'sm:max-w-xl'
         } overflow-hidden shadow-2xl border border-slate-100 transition-all duration-300`}
       >
         {/* Top Header com Marca e Fechar */}

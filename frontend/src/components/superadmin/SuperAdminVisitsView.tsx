@@ -202,6 +202,7 @@ export const SuperAdminVisitsView: React.FC = () => {
   const [tenantSearchResults, setTenantSearchResults] = useState<any[]>([]);
   const [searchingTenants, setSearchingTenants] = useState(false);
   const [editingEstablishment, setEditingEstablishment] = useState<Establishment | null>(null);
+  const [editingVisit, setEditingVisit] = useState<VisitRecord | null>(null);
 
   // Acompanhamentos / Tarefas
   const [tasks, setTasks] = useState<FollowUpTask[]>([]);
@@ -373,7 +374,49 @@ export const SuperAdminVisitsView: React.FC = () => {
     }
   };
 
-  // Salvar novo estabelecimento
+  // Abrir modal de edição do estabelecimento
+  const handleOpenEditEstablishment = (est: Establishment) => {
+    setEditingEstablishment(est);
+    setEstForm({
+      name: est.name || '',
+      tradeName: est.trade_name || '',
+      corporateName: est.corporate_name || '',
+      cnpj: est.cnpj || '',
+      areasOfActivity: est.areas_of_activity || [],
+      establishmentType: est.establishment_type || 'Clínica Privada',
+      city: est.city || '',
+      state: est.state || '',
+      address: est.address || '',
+      website: est.website || '',
+      instagram: est.instagram || '',
+      estimatedProfessionals: (est.estimated_professionals ?? '') as number | '',
+      primaryContactName: est.primary_contact_name || '',
+      primaryContactRole: est.primary_contact_role || '',
+      primaryContactPhone: est.primary_contact_phone || '',
+      primaryContactWhatsapp: est.primary_contact_whatsapp || '',
+      primaryContactEmail: est.primary_contact_email || '',
+      bestContactTime: est.best_contact_time || '',
+      preferredChannel: est.preferred_channel || 'whatsapp',
+      currentStatus: est.current_status || 'first_contact',
+      includeInitialVisit: false,
+      visitDate: new Date().toISOString().split('T')[0],
+      visitTime: '10:00',
+      modality: 'presential',
+      responsibleName: '',
+      objective: '',
+      featuresPresented: [],
+      needsIdentified: '',
+      mainDoubts: '',
+      commercialObjections: '',
+      notes: '',
+      result: '',
+      nextAction: est.next_action || '',
+      nextReturnDate: est.next_return_date || ''
+    });
+    setShowNewModal(true);
+  };
+
+  // Salvar novo estabelecimento ou atualizar existente
   const handleCreateEstablishment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!estForm.name.trim()) {
@@ -403,41 +446,74 @@ export const SuperAdminVisitsView: React.FC = () => {
         primaryContactEmail: estForm.primaryContactEmail.trim() || null,
         bestContactTime: estForm.bestContactTime.trim() || null,
         preferredChannel: estForm.preferredChannel,
-        currentStatus: estForm.currentStatus
+        currentStatus: estForm.currentStatus,
+        nextAction: estForm.nextAction ? estForm.nextAction.trim() : null,
+        nextReturnDate: estForm.nextReturnDate || null
       };
 
-      if (estForm.includeInitialVisit && estForm.visitDate) {
-        payload.initialVisit = {
-          visitDate: estForm.visitDate,
-          visitTime: estForm.visitTime,
-          modality: estForm.modality,
-          responsibleName: estForm.responsibleName.trim() || 'SuperAdmin',
-          objective: estForm.objective.trim() || null,
-          featuresPresented: estForm.featuresPresented,
-          needsIdentified: estForm.needsIdentified.trim() || null,
-          mainDoubts: estForm.mainDoubts.trim() || null,
-          commercialObjections: estForm.commercialObjections.trim() || null,
-          notes: estForm.notes.trim() || null,
-          result: estForm.result.trim() || null,
-          statusAfterVisit: estForm.currentStatus,
-          nextAction: estForm.nextAction.trim() || null,
-          nextReturnDate: estForm.nextReturnDate || null
-        };
+      if (editingEstablishment) {
+        await ApiClient.put(`/v1/admin/visits/establishments/${editingEstablishment.id}`, payload);
+        showToast('Estabelecimento atualizado com sucesso!', 'success');
+      } else {
+        if (estForm.includeInitialVisit && estForm.visitDate) {
+          payload.initialVisit = {
+            visitDate: estForm.visitDate,
+            visitTime: estForm.visitTime,
+            modality: estForm.modality,
+            responsibleName: estForm.responsibleName.trim() || 'SuperAdmin',
+            objective: estForm.objective.trim() || null,
+            featuresPresented: estForm.featuresPresented,
+            needsIdentified: estForm.needsIdentified.trim() || null,
+            mainDoubts: estForm.mainDoubts.trim() || null,
+            commercialObjections: estForm.commercialObjections.trim() || null,
+            notes: estForm.notes.trim() || null,
+            result: estForm.result.trim() || null,
+            statusAfterVisit: estForm.currentStatus,
+            nextAction: estForm.nextAction.trim() || null,
+            nextReturnDate: estForm.nextReturnDate || null
+          };
+        }
+
+        await ApiClient.post('/v1/admin/visits/establishments', payload);
+        showToast('Estabelecimento cadastrado com sucesso!', 'success');
       }
 
-      await ApiClient.post('/v1/admin/visits/establishments', payload);
-      showToast('Estabelecimento cadastrado com sucesso!', 'success');
       setShowNewModal(false);
+      setEditingEstablishment(null);
       fetchEstablishments();
       fetchMetrics();
     } catch (err: any) {
-      showToast(err.message || 'Erro ao cadastrar estabelecimento', 'error');
+      showToast(err.message || 'Erro ao salvar estabelecimento', 'error');
     } finally {
       setSavingEst(false);
     }
   };
 
-  // Salvar nova visita para estabelecimento existente
+  // Abrir modal de edição de visita existente
+  const handleOpenEditVisit = (v: VisitRecord) => {
+    if (!timelineEstablishment) return;
+    setSelectedEstablishmentForVisit(timelineEstablishment);
+    setEditingVisit(v);
+    setVisitForm({
+      visitDate: v.visit_date || new Date().toISOString().split('T')[0],
+      visitTime: v.visit_time || '14:00',
+      modality: (v.modality as any) || 'presential',
+      responsibleName: v.responsible_name || '',
+      objective: v.objective || '',
+      featuresPresented: v.features_presented || [],
+      needsIdentified: v.needs_identified || '',
+      mainDoubts: v.main_doubts || '',
+      commercialObjections: v.commercial_objections || '',
+      notes: v.notes || '',
+      result: v.result || '',
+      statusAfterVisit: v.status_after_visit || 'visit_completed',
+      nextAction: v.next_action || '',
+      nextReturnDate: v.next_return_date || ''
+    });
+    setShowAddVisitModal(true);
+  };
+
+  // Salvar nova visita ou atualizar visita existente
   const handleAddVisit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedEstablishmentForVisit) return;
@@ -448,7 +524,7 @@ export const SuperAdminVisitsView: React.FC = () => {
 
     try {
       setSavingVisit(true);
-      await ApiClient.post(`/v1/admin/visits/establishments/${selectedEstablishmentForVisit.id}/visits`, {
+      const payload = {
         visitDate: visitForm.visitDate,
         visitTime: visitForm.visitTime,
         modality: visitForm.modality,
@@ -463,13 +539,21 @@ export const SuperAdminVisitsView: React.FC = () => {
         statusAfterVisit: visitForm.statusAfterVisit,
         nextAction: visitForm.nextAction.trim() || null,
         nextReturnDate: visitForm.nextReturnDate || null
-      });
+      };
 
-      showToast('Visita registrada com sucesso!', 'success');
+      if (editingVisit) {
+        await ApiClient.put(`/v1/admin/visits/establishments/${selectedEstablishmentForVisit.id}/visits/${editingVisit.id}`, payload);
+        showToast('Visita atualizada com sucesso!', 'success');
+      } else {
+        await ApiClient.post(`/v1/admin/visits/establishments/${selectedEstablishmentForVisit.id}/visits`, payload);
+        showToast('Visita registrada com sucesso!', 'success');
+      }
+
       setShowAddVisitModal(false);
+      setEditingVisit(null);
       fetchEstablishments();
       fetchMetrics();
-      if (showTimelineModal && timelineEstablishment?.id === selectedEstablishmentForVisit.id) {
+      if (showTimelineModal && (timelineEstablishment?.id === selectedEstablishmentForVisit.id)) {
         handleOpenTimeline(selectedEstablishmentForVisit);
       }
     } catch (err: any) {
@@ -572,7 +656,46 @@ export const SuperAdminVisitsView: React.FC = () => {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => setShowNewModal(true)}
+            onClick={() => {
+              setEditingEstablishment(null);
+              setEstForm({
+                name: '',
+                tradeName: '',
+                corporateName: '',
+                cnpj: '',
+                areasOfActivity: [],
+                establishmentType: 'Clínica Privada',
+                city: '',
+                state: '',
+                address: '',
+                website: '',
+                instagram: '',
+                estimatedProfessionals: '',
+                primaryContactName: '',
+                primaryContactRole: '',
+                primaryContactPhone: '',
+                primaryContactWhatsapp: '',
+                primaryContactEmail: '',
+                bestContactTime: '',
+                preferredChannel: 'whatsapp',
+                currentStatus: 'first_contact',
+                includeInitialVisit: false,
+                visitDate: new Date().toISOString().split('T')[0],
+                visitTime: '10:00',
+                modality: 'presential',
+                responsibleName: '',
+                objective: '',
+                featuresPresented: [],
+                needsIdentified: '',
+                mainDoubts: '',
+                commercialObjections: '',
+                notes: '',
+                result: '',
+                nextAction: '',
+                nextReturnDate: ''
+              });
+              setShowNewModal(true);
+            }}
             className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-gradient-to-r from-teal-600 to-indigo-600 hover:from-teal-700 hover:to-indigo-700 text-white font-bold rounded-xl shadow-xs transition-all cursor-pointer text-xs min-h-[42px]"
           >
             <Plus className="w-4 h-4" />
@@ -952,12 +1075,34 @@ export const SuperAdminVisitsView: React.FC = () => {
                             <div className="inline-flex items-center gap-1">
                               <button
                                 type="button"
+                                onClick={() => handleOpenEditEstablishment(est)}
+                                title="Editar Cadastro do Estabelecimento"
+                                className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors"
+                              >
+                                <Edit3 className="w-4 h-4" />
+                              </button>
+
+                              <button
+                                type="button"
                                 onClick={() => {
                                   setSelectedEstablishmentForVisit(est);
-                                  setVisitForm(prev => ({
-                                    ...prev,
-                                    statusAfterVisit: est.current_status
-                                  }));
+                                  setEditingVisit(null);
+                                  setVisitForm({
+                                    visitDate: new Date().toISOString().split('T')[0],
+                                    visitTime: '14:00',
+                                    modality: 'presential',
+                                    responsibleName: '',
+                                    objective: '',
+                                    featuresPresented: [],
+                                    needsIdentified: '',
+                                    mainDoubts: '',
+                                    commercialObjections: '',
+                                    notes: '',
+                                    result: '',
+                                    statusAfterVisit: est.current_status || 'visit_completed',
+                                    nextAction: '',
+                                    nextReturnDate: ''
+                                  });
                                   setShowAddVisitModal(true);
                                 }}
                                 title="Adicionar Visita / Contato"
@@ -1242,12 +1387,19 @@ export const SuperAdminVisitsView: React.FC = () => {
           <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200">
             <div className="p-5 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white/95 backdrop-blur-xs z-10">
               <div>
-                <h3 className="text-base font-bold text-slate-900">Novo Estabelecimento / Visita Comercial</h3>
-                <p className="text-xs text-slate-500">Cadastre os dados da clínica e registre o primeiro contato ou visita realizada.</p>
+                <h3 className="text-base font-bold text-slate-900">
+                  {editingEstablishment ? 'Editar Estabelecimento Comercial' : 'Novo Estabelecimento / Visita Comercial'}
+                </h3>
+                <p className="text-xs text-slate-500">
+                  {editingEstablishment ? 'Atualize os dados cadastrais da clínica ou estabelecimento.' : 'Cadastre os dados da clínica e registre o primeiro contato ou visita realizada.'}
+                </p>
               </div>
               <button
                 type="button"
-                onClick={() => setShowNewModal(false)}
+                onClick={() => {
+                  setShowNewModal(false);
+                  setEditingEstablishment(null);
+                }}
                 className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
               >
                 <X className="w-5 h-5" />
@@ -1416,20 +1568,22 @@ export const SuperAdminVisitsView: React.FC = () => {
                   <h4 className="text-xs font-black uppercase text-teal-800 tracking-wider flex items-center gap-1.5">
                     <CalendarCheck className="w-3.5 h-3.5" /> 3. Registro do Contato / Visita Inicial
                   </h4>
-                  <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
-                    <input
-                      type="checkbox"
-                      checked={estForm.includeInitialVisit}
-                      onChange={e => setEstForm(prev => ({ ...prev, includeInitialVisit: e.target.checked }))}
-                      className="w-4 h-4 rounded text-teal-600 focus:ring-teal-500"
-                    />
-                    Registrar visita ou interação agora
-                  </label>
+                  {!editingEstablishment && (
+                    <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={estForm.includeInitialVisit}
+                        onChange={e => setEstForm(prev => ({ ...prev, includeInitialVisit: e.target.checked }))}
+                        className="w-4 h-4 rounded text-teal-600 focus:ring-teal-500"
+                      />
+                      Registrar visita ou interação agora
+                    </label>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Status Comercial Inicial</label>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Status Comercial</label>
                     <select
                       value={estForm.currentStatus}
                       onChange={e => setEstForm(prev => ({ ...prev, currentStatus: e.target.value }))}
@@ -1441,7 +1595,30 @@ export const SuperAdminVisitsView: React.FC = () => {
                     </select>
                   </div>
 
-                  {estForm.includeInitialVisit && (
+                  {editingEstablishment ? (
+                    <>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Próxima Ação de Acompanhamento</label>
+                        <input
+                          type="text"
+                          value={estForm.nextAction}
+                          onChange={e => setEstForm(prev => ({ ...prev, nextAction: e.target.value }))}
+                          placeholder="Ex: Enviar proposta, Ligar após teste..."
+                          className="w-full border border-slate-200 rounded-xl p-2.5 text-xs font-medium"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Data Prevista para Retorno</label>
+                        <input
+                          type="date"
+                          value={estForm.nextReturnDate}
+                          onChange={e => setEstForm(prev => ({ ...prev, nextReturnDate: e.target.value }))}
+                          className="w-full border border-slate-200 rounded-xl p-2 text-xs font-medium"
+                        />
+                      </div>
+                    </>
+                  ) : estForm.includeInitialVisit && (
                     <>
                       <div>
                         <label className="block text-xs font-bold text-slate-700 mb-1">Data da Visita</label>
@@ -1517,7 +1694,10 @@ export const SuperAdminVisitsView: React.FC = () => {
               <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setShowNewModal(false)}
+                  onClick={() => {
+                    setShowNewModal(false);
+                    setEditingEstablishment(null);
+                  }}
                   className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
                 >
                   Cancelar
@@ -1527,7 +1707,7 @@ export const SuperAdminVisitsView: React.FC = () => {
                   disabled={savingEst}
                   className="px-6 py-2 bg-gradient-to-r from-teal-600 to-indigo-600 hover:from-teal-700 hover:to-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer disabled:opacity-50"
                 >
-                  {savingEst ? 'Salvando...' : 'Salvar Estabelecimento'}
+                  {savingEst ? 'Salvando...' : editingEstablishment ? 'Salvar Alterações' : 'Salvar Estabelecimento'}
                 </button>
               </div>
             </form>
@@ -1541,14 +1721,19 @@ export const SuperAdminVisitsView: React.FC = () => {
           <div className="bg-white rounded-3xl max-w-xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200">
             <div className="p-5 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white/95 backdrop-blur-xs z-10">
               <div>
-                <h3 className="text-base font-bold text-slate-900">Registrar Nova Visita / Interação</h3>
+                <h3 className="text-base font-bold text-slate-900">
+                  {editingVisit ? 'Editar Visita / Interação' : 'Registrar Nova Visita / Interação'}
+                </h3>
                 <p className="text-xs text-slate-500 font-semibold text-teal-700">
                   {selectedEstablishmentForVisit.name} ({selectedEstablishmentForVisit.city || 'Sem cidade'})
                 </p>
               </div>
               <button
                 type="button"
-                onClick={() => setShowAddVisitModal(false)}
+                onClick={() => {
+                  setShowAddVisitModal(false);
+                  setEditingVisit(null);
+                }}
                 className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
               >
                 <X className="w-5 h-5" />
@@ -1655,7 +1840,10 @@ export const SuperAdminVisitsView: React.FC = () => {
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setShowAddVisitModal(false)}
+                  onClick={() => {
+                    setShowAddVisitModal(false);
+                    setEditingVisit(null);
+                  }}
                   className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
                 >
                   Cancelar
@@ -1665,7 +1853,7 @@ export const SuperAdminVisitsView: React.FC = () => {
                   disabled={savingVisit}
                   className="px-6 py-2 bg-gradient-to-r from-teal-600 to-indigo-600 hover:from-teal-700 hover:to-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer disabled:opacity-50"
                 >
-                  {savingVisit ? 'Salvando...' : 'Registrar Visita'}
+                  {savingVisit ? 'Salvando...' : editingVisit ? 'Salvar Alterações' : 'Registrar Visita'}
                 </button>
               </div>
             </form>
@@ -1708,7 +1896,23 @@ export const SuperAdminVisitsView: React.FC = () => {
                   type="button"
                   onClick={() => {
                     setSelectedEstablishmentForVisit(timelineEstablishment);
-                    setVisitForm(prev => ({ ...prev, statusAfterVisit: timelineEstablishment.current_status }));
+                    setEditingVisit(null);
+                    setVisitForm({
+                      visitDate: new Date().toISOString().split('T')[0],
+                      visitTime: '14:00',
+                      modality: 'presential',
+                      responsibleName: '',
+                      objective: '',
+                      featuresPresented: [],
+                      needsIdentified: '',
+                      mainDoubts: '',
+                      commercialObjections: '',
+                      notes: '',
+                      result: '',
+                      statusAfterVisit: timelineEstablishment.current_status || 'visit_completed',
+                      nextAction: '',
+                      nextReturnDate: ''
+                    });
                     setShowAddVisitModal(true);
                   }}
                   className="px-3 py-1.5 bg-teal-600 text-white rounded-xl text-xs font-bold hover:bg-teal-700 cursor-pointer flex items-center gap-1"
@@ -1740,9 +1944,19 @@ export const SuperAdminVisitsView: React.FC = () => {
                             {v.modality}
                           </span>
                         </span>
-                        <span className="text-[10px] font-bold text-slate-600 bg-teal-50 px-2 py-0.5 rounded border border-teal-100">
-                          {STATUS_CONFIG[v.status_after_visit]?.label || v.status_after_visit}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] font-bold text-slate-600 bg-teal-50 px-2 py-0.5 rounded border border-teal-100">
+                            {STATUS_CONFIG[v.status_after_visit]?.label || v.status_after_visit}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditVisit(v)}
+                            title="Editar Dados Desta Visita"
+                            className="p-1 text-slate-400 hover:text-teal-700 hover:bg-teal-50 rounded-lg cursor-pointer transition-colors"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
 
                       <div className="text-xs text-slate-600 font-medium">
