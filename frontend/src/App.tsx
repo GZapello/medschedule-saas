@@ -1,5 +1,7 @@
 import { BillingAccessStatus } from './components/billing/BillingAccessStatus';
 import { PublicConsentPage } from './components/consents/PublicConsentPage';
+import { PublicPreConsultationPage } from './components/pre-consultation/PublicPreConsultationPage';
+import { CheckInFloatingAlert } from './components/checkin/CheckInFloatingAlert';
 import { App as CapacitorApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import { dismissTopOverlay } from './utils/mobileOverlay';
@@ -1875,7 +1877,7 @@ const AppContent: React.FC = () => {
 const PrivateOverlays: React.FC = () => {
   const { currentUser } = useAuth();
   if (!currentUser) return null;
-  return <Suspense fallback={null}><LegalReacceptanceModal /><OnboardingSpotlight /><OnboardingWelcomeModal /><OnboardingHelpModal /><WhatsNewModal /></Suspense>;
+  return <Suspense fallback={null}><LegalReacceptanceModal /><OnboardingSpotlight /><OnboardingWelcomeModal /><OnboardingHelpModal /><WhatsNewModal /><CheckInFloatingAlert /></Suspense>;
 };
 
 export const App: React.FC = () => {
@@ -1887,6 +1889,8 @@ export const App: React.FC = () => {
   }, []);
   const consentRoute = entryPath.match(/^\/(assinar-termo|verificar)\/([A-Za-z0-9_-]+)\/?$/);
   if (consentRoute) return <PublicConsentPage key={entryPath} token={consentRoute[1] === 'assinar-termo' ? consentRoute[2] : undefined} verificationCode={consentRoute[1] === 'verificar' ? consentRoute[2] : undefined} />;
+  const preConsultRoute = entryPath.match(/^\/pre-consulta\/([A-Za-z0-9_-]+)\/?$/);
+  if (preConsultRoute) return <PublicPreConsultationPage key={entryPath} token={preConsultRoute[1]} />;
   return (
     <AuthProvider>
       <ToastProvider>

@@ -75,6 +75,7 @@ import { OnlineConsultationTools } from './OnlineConsultationTools';
 import { ZemdaBodyModal } from '../zemda-body/ZemdaBodyModal';
 import { ConsentPendingAlert } from '../consents/ConsentPendingAlert';
 import { PatientConsentsDialog } from '../consents/PatientConsentsPanel';
+import { PreConsultationAppointmentModal } from '../pre-consultation/PreConsultationFormsModal';
 
 interface QuickConsultationModalProps {
   appointment: {
@@ -245,6 +246,7 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
     (currentUser?.professionSlug || '').toLowerCase().includes('psicopedag');
 
   const [loadingPatient, setLoadingPatient] = useState<boolean>(true);
+  const [showPreConsultModal, setShowPreConsultModal] = useState<boolean>(false);
   const [patientData, setPatientData] = useState<any>(null);
   const [allergiesList, setAllergiesList] = useState<any[]>([]);
   const [medicationsList, setMedicationsList] = useState<any[]>([]);
@@ -1600,6 +1602,17 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
             >
               <History className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
               <span>Prontuários Anteriores</span>
+            </button>
+
+            {/* Pré-consulta Digital */}
+            <button
+              type="button"
+              onClick={() => setShowPreConsultModal(true)}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold text-teal-800 bg-teal-50/80 hover:bg-teal-100 border border-teal-200 shadow-2xs transition-colors cursor-pointer whitespace-nowrap"
+              title="Visualizar respostas da Pré-consulta Digital ou enviar link"
+            >
+              <FileText className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+              <span>Pré-consulta</span>
             </button>
 
             {/* Salvar rascunho */}
@@ -3575,6 +3588,15 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
         <PatientConsentsDialog
           patientId={appointment.patient_id}
           onClose={() => setShowConsentsDialog(false)}
+        />
+      )}
+
+      {/* Modal de Pré-consulta Digital */}
+      {showPreConsultModal && appointment.id && (
+        <PreConsultationAppointmentModal
+          appointmentId={appointment.id}
+          patientName={patientName}
+          onClose={() => setShowPreConsultModal(false)}
         />
       )}
 

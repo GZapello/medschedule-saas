@@ -29,6 +29,23 @@ export function requireRole(...allowedRoles: Role[]) {
   };
 }
 
+export function getUserPermissions(userId: string, tenantId: string, fallbackRole: string): string[] {
+  let perms: string[] = [];
+  let userRole = fallbackRole;
+  try {
+    const cu = db.prepare('SELECT permissions_json, role FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(userId, tenantId) as any;
+    if (cu?.role) userRole = cu.role;
+    if (cu?.permissions_json) {
+      try {
+        const parsed = JSON.parse(cu.permissions_json);
+        if (Array.isArray(parsed)) perms = parsed;
+      } catch (_) {}
+    }
+  } catch (_) {}
+  const defaultPerms = getDefaultPermissionsForRole(userRole);
+  return Array.from(new Set([...perms, ...defaultPerms]));
+}
+
 export function requirePermissionOrRole(permissionId: string, ...allowedRoles: Role[]) {
   return (req: Request, res: Response, next: NextFunction): void => {
     if (!req.user) {

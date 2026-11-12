@@ -43,6 +43,34 @@ const minutesToTime = (m: number): string => {
   return `${h}:${min}`;
 };
 
+export interface CalculateSlotsOptions {
+  ignoreLeadTime?: boolean;
+}
+
+function subtractBreakFromSegments(
+  segments: Array<{ start: number; end: number }>,
+  breakStart: number | null,
+  breakEnd: number | null
+): Array<{ start: number; end: number }> {
+  if (breakStart === null || breakEnd === null || breakEnd <= breakStart) {
+    return segments;
+  }
+  const result: Array<{ start: number; end: number }> = [];
+  for (const seg of segments) {
+    if (breakEnd <= seg.start || breakStart >= seg.end) {
+      result.push(seg);
+    } else {
+      if (breakStart > seg.start) {
+        result.push({ start: seg.start, end: Math.min(seg.end, breakStart) });
+      }
+      if (breakEnd < seg.end) {
+        result.push({ start: Math.max(seg.start, breakEnd), end: seg.end });
+      }
+    }
+  }
+  return result;
+}
+
 export function calculateAvailableSlots(
   tenantId: string,
   professionalId: string,
@@ -51,7 +79,8 @@ export function calculateAvailableSlots(
   roomId?: string,
   mockNow?: Date,
   externalBusyIntervals?: Array<{ startMin: number; endMin: number }>,
-  patientId?: string
+  patientId?: string,
+  options?: CalculateSlotsOptions
 ): AvailableSlot[] {
   if (!db.prepare('SELECT 1 FROM professionals WHERE id = ? AND tenant_id = ? AND active = 1').get(professionalId, tenantId)) return [];
   if (roomId && !db.prepare('SELECT 1 FROM rooms WHERE id = ? AND tenant_id = ? AND active = 1').get(roomId, tenantId)) return [];
@@ -217,9 +246,12 @@ export function calculateAvailableSlots(
   const seenTimes = new Set<string>();
   
   // Antecedência mínima configurada no serviço (se 0 ou não definido, respeita apenas o minuto atual)
-  const minLeadHours = (service.min_lead_time_hours !== undefined && service.min_lead_time_hours !== null)
+  const rawMinLeadHours = (service.min_lead_time_hours !== undefined && service.min_lead_time_hours !== null)
     ? Number(service.min_lead_time_hours)
     : 0;
+  const minLeadHours = options?.ignoreLeadTime ? 0 : Math.max(0, rawMinLeadHours);
+  const minAllowedTimestampMs = referenceDate.getTime() + minLeadHours * 3600000;
+  const dayStartTimestampMs = Date.parse(`${dateStr}T00:00:00-03:00`);
 
   const isToday = dateStr === todayStr;
 
@@ -237,7 +269,9 @@ export function calculateAvailableSlots(
 
   const slotStep = totalSlotDuration > 0 ? totalSlotDuration : duration;
 
-  // 8. Itera sobre cada período/turno de trabalho configurado para o profissional
+  // 8. Itera sobre cada período/turno de trabalho configurado para o profissional,
+  // dividindo o expediente em sub-janelas ao redor dos intervalos de almoço/descanso
+  // para que o retorno do intervalo comece exatamente no fim da pausa (ex: 13:00 ou 13:30, e não 13:50).
   for (const schedule of activeSchedules) {
     const workStartMin = timeToMinutes(schedule.start_time);
     const workEndMin = timeToMinutes(schedule.end_time);
@@ -246,70 +280,204 @@ export function calculateAvailableSlots(
 
     const effectiveStartMin = Math.max(workStartMin, clinicStartMin);
     const effectiveEndMin = Math.min(workEndMin, clinicEndMin);
+    if (effectiveStartMin >= effectiveEndMin) continue;
 
-    for (let current = effectiveStartMin; current + duration <= effectiveEndMin; current += slotStep) {
-      const slotEndMin = current + duration;
+    let workingSegments = [{ start: effectiveStartMin, end: effectiveEndMin }];
+    workingSegments = subtractBreakFromSegments(workingSegments, breakStartMin, breakEndMin);
+    workingSegments = subtractBreakFromSegments(workingSegments, clinicBreakStartMin, clinicBreakEndMin);
 
-      // Se for hoje, filtra apenas horários que já passaram no relógio de Brasília.
-      // Horários futuros do mesmo turno (ex: agora 10:00 -> vaga 11:00) aparecem normalmente.
-      if (isToday && current < currentMinutesInDay) {
-        continue;
-      }
+    for (const seg of workingSegments) {
+      let current = seg.start;
+      while (current + duration <= seg.end) {
+        const slotEndMin = current + duration;
+        const slotStartIso = `${dateStr}T${minutesToTime(current)}:00`;
+        const slotStartMs = Date.parse(`${slotStartIso}-03:00`);
 
-      // Checa conflito com intervalo de descanso deste turno
-      if (breakStartMin !== null && breakEndMin !== null) {
-        if (current < breakEndMin && slotEndMin > breakStartMin) {
+        // Se for hoje (ou estiver dentro da janela de antecedência mínima), avança
+        const isBeforeMinTime = (isToday && current < currentMinutesInDay) || (slotStartMs < minAllowedTimestampMs);
+        if (isBeforeMinTime) {
+          const nextGrid = current + slotStep;
+          const cutoffFromMs = Math.max(0, Math.ceil((minAllowedTimestampMs - dayStartTimestampMs) / 60000));
+          const cutoffMin = Math.max(isToday ? currentMinutesInDay : 0, cutoffFromMs);
+          const alignedCutoff = Math.ceil(cutoffMin / 10) * 10;
+          if (
+            alignedCutoff > current &&
+            alignedCutoff < nextGrid &&
+            nextGrid + duration > seg.end &&
+            alignedCutoff + duration <= seg.end
+          ) {
+            current = alignedCutoff;
+          } else {
+            current = nextGrid;
+          }
           continue;
         }
-      }
 
-      // Checa conflito com intervalo da clínica
-      if (clinicBreakStartMin !== null && clinicBreakEndMin !== null) {
-        if (current < clinicBreakEndMin && slotEndMin > clinicBreakStartMin) {
+        // Checa conflito com agendamentos existentes, bloqueios e Google Agenda
+        let maxConflictRecovery = -1;
+
+        for (const appt of existingApptIntervals) {
+          if (current < appt.endMin && slotEndMin > appt.startMin) {
+            maxConflictRecovery = Math.max(maxConflictRecovery, appt.endMin + buffer);
+          }
+        }
+
+        for (const blk of blockedIntervals) {
+          if (current < blk.endMin && slotEndMin > blk.startMin) {
+            maxConflictRecovery = Math.max(maxConflictRecovery, blk.endMin);
+          }
+        }
+
+        if (externalBusyIntervals && externalBusyIntervals.length > 0) {
+          for (const ext of externalBusyIntervals) {
+            if (current < ext.endMin && slotEndMin > ext.startMin) {
+              maxConflictRecovery = Math.max(maxConflictRecovery, ext.endMin);
+            }
+          }
+        }
+
+        if (maxConflictRecovery > current) {
+          const nextGrid = current + slotStep;
+          if (maxConflictRecovery > nextGrid) {
+            current = maxConflictRecovery;
+          } else if (nextGrid + duration > seg.end && maxConflictRecovery + duration <= seg.end) {
+            current = maxConflictRecovery;
+          } else {
+            current = nextGrid;
+          }
           continue;
         }
+
+        const slotEndIso = `${dateStr}T${minutesToTime(slotEndMin)}:00`;
+
+        if (!seenTimes.has(slotStartIso)) {
+          seenTimes.add(slotStartIso);
+          slots.push({
+            time: minutesToTime(current),
+            startTime: slotStartIso,
+            endTime: slotEndIso,
+            durationMinutes: duration,
+            bufferMinutes: buffer
+          });
+        }
+
+        current += slotStep;
       }
-
-      // Checa conflito com agendamentos existentes (interseção de intervalos)
-      const hasApptConflict = existingApptIntervals.some(appt => {
-        return current < appt.endMin && slotEndMin > appt.startMin;
-      });
-      if (hasApptConflict) continue;
-
-      // Checa conflito com bloqueios pontuais, férias e ausências
-      const hasBlockConflict = blockedIntervals.some(blk => {
-        return current < blk.endMin && slotEndMin > blk.startMin;
-      });
-      if (hasBlockConflict) continue;
-
-      // Checa conflito com compromissos externos da Google Agenda (FreeBusy)
-      if (externalBusyIntervals && externalBusyIntervals.length > 0) {
-        const hasExternalConflict = externalBusyIntervals.some(ext => {
-          return current < ext.endMin && slotEndMin > ext.startMin;
-        });
-        if (hasExternalConflict) continue;
-      }
-
-      const slotStartIso = `${dateStr}T${minutesToTime(current)}:00`;
-      if (Date.parse(`${slotStartIso}-03:00`) < referenceDate.getTime() + minLeadHours * 3600000) continue;
-      const slotEndIso = `${dateStr}T${minutesToTime(slotEndMin)}:00`;
-
-      if (seenTimes.has(slotStartIso)) continue;
-      seenTimes.add(slotStartIso);
-
-      slots.push({
-        time: minutesToTime(current),
-        startTime: slotStartIso,
-        endTime: slotEndIso,
-        durationMinutes: duration,
-        bufferMinutes: buffer
-      });
     }
   }
 
   // Ordena por horário crescente
   slots.sort((a, b) => a.startTime.localeCompare(b.startTime));
   return slots;
+}
+
+export function explainEmptySlots(
+  tenantId: string,
+  professionalId: string,
+  serviceId: string,
+  dateStr: string,
+  roomId?: string,
+  mockNow?: Date,
+  externalBusyIntervals?: Array<{ startMin: number; endMin: number }>,
+  patientId?: string,
+  options?: CalculateSlotsOptions
+): { reasonCode: string; message: string } {
+  const referenceDate = mockNow || new Date();
+  const spDateFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' });
+  const todayStr = spDateFormatter.format(referenceDate);
+
+  if (dateStr < todayStr) {
+    return {
+      reasonCode: 'PAST_DATE',
+      message: 'Não há horários disponíveis porque a data selecionada já passou.'
+    };
+  }
+
+  const holiday = db.prepare(`
+    SELECT name FROM holidays
+    WHERE date = ? AND (tenant_id = ? OR is_national = 1) AND active = 1
+  `).get(dateStr, tenantId) as { name?: string } | undefined;
+  if (holiday) {
+    return {
+      reasonCode: 'HOLIDAY',
+      message: 'Não há horários disponíveis pois a data selecionada está cadastrada como feriado.'
+    };
+  }
+
+  const [targetYear, targetMonth, targetDay] = dateStr.split('-').map(Number);
+  const dayOfWeek = new Date(Date.UTC(targetYear, targetMonth - 1, targetDay, 12, 0, 0)).getUTCDay();
+
+  const tenantRow = db.prepare('SELECT business_hours_json FROM tenants WHERE id = ?').get(tenantId) as { business_hours_json?: string } | undefined;
+  if (tenantRow?.business_hours_json) {
+    try {
+      const bhList = JSON.parse(tenantRow.business_hours_json);
+      if (Array.isArray(bhList)) {
+        const found = bhList.find((bh: any) => Number(bh.dayOfWeek) === dayOfWeek);
+        if (found && (found.isOpen === false || found.active === false)) {
+          return {
+            reasonCode: 'CLINIC_CLOSED',
+            message: 'A clínica não possui expediente aberto neste dia da semana.'
+          };
+        }
+      }
+    } catch (_) {}
+  }
+
+  const activeSchedules = db.prepare(`
+    SELECT start_time, end_time
+    FROM schedules
+    WHERE tenant_id = ? AND professional_id = ? AND day_of_week = ? AND is_active = 1
+  `).all(tenantId, professionalId, dayOfWeek) as { start_time: string; end_time: string }[];
+
+  if (!activeSchedules || activeSchedules.length === 0) {
+    return {
+      reasonCode: 'NO_SCHEDULE',
+      message: 'O profissional não possui escala de atendimento configurada para este dia da semana.'
+    };
+  }
+
+  if (dateStr === todayStr) {
+    const nowSpFormatted = new Intl.DateTimeFormat('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23'
+    }).format(referenceDate);
+    const [spHStr, spMStr] = nowSpFormatted.split(':');
+    const currentMin = (parseInt(spHStr, 10) || 0) * 60 + (parseInt(spMStr, 10) || 0);
+    const maxShiftEnd = Math.max(...activeSchedules.map(s => timeToMinutes(s.end_time)));
+    if (currentMin >= maxShiftEnd) {
+      return {
+        reasonCode: 'SHIFT_ENDED',
+        message: 'O expediente do profissional para hoje já foi encerrado.'
+      };
+    }
+  }
+
+  if (!options?.ignoreLeadTime) {
+    const slotsWithoutLead = calculateAvailableSlots(
+      tenantId,
+      professionalId,
+      serviceId,
+      dateStr,
+      roomId,
+      referenceDate,
+      externalBusyIntervals,
+      patientId,
+      { ignoreLeadTime: true }
+    );
+    if (slotsWithoutLead.length > 0) {
+      return {
+        reasonCode: 'MIN_LEAD_TIME',
+        message: 'Os horários restantes para esta data estão dentro do prazo de antecedência mínima do serviço.'
+      };
+    }
+  }
+
+  return {
+    reasonCode: 'ALL_OCCUPIED_OR_BLOCKED',
+    message: 'Todos os horários da grade para esta data e profissional já estão ocupados ou bloqueados.'
+  };
 }
 
 export interface NextAvailableDateInfo {

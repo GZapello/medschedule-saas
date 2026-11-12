@@ -103,6 +103,13 @@ export class ServiceController {
         targetModule = availableModules.length === 1 ? availableModules[0].code : (availableModules[0]?.code || null);
       }
 
+      const resolvedMinLeadTimeHours = (minLeadTimeHours !== undefined && minLeadTimeHours !== null && minLeadTimeHours !== '' && !Number.isNaN(Number(minLeadTimeHours)))
+        ? Math.max(0, Number(minLeadTimeHours))
+        : 2;
+      const resolvedMaxAdvanceDays = (maxAdvanceDays !== undefined && maxAdvanceDays !== null && maxAdvanceDays !== '' && !Number.isNaN(Number(maxAdvanceDays)))
+        ? Math.max(1, Number(maxAdvanceDays))
+        : 60;
+
       const id = 'srv-' + uuidv4().slice(0, 8);
       const insertStmt = db.prepare(`
         INSERT INTO services (
@@ -124,8 +131,8 @@ export class ServiceController {
         bufferMinutes !== undefined ? Number(bufferMinutes) : 10,
         price !== undefined ? Number(price) : 0.0,
         modality || 'both',
-        minLeadTimeHours || 2,
-        maxAdvanceDays || 60,
+        resolvedMinLeadTimeHours,
+        resolvedMaxAdvanceDays,
         cancellationPolicy || null,
         reminderEnabled ? 1 : 0,
         reminderEnabled && reminderValue ? Number(reminderValue) : null,
@@ -152,6 +159,8 @@ export class ServiceController {
         description: description || null,
         duration_minutes: durationMinutes !== undefined ? Number(durationMinutes) : 50,
         buffer_minutes: bufferMinutes !== undefined ? Number(bufferMinutes) : 10,
+        min_lead_time_hours: resolvedMinLeadTimeHours,
+        max_advance_days: resolvedMaxAdvanceDays,
         price: price !== undefined && price !== null && price !== '' ? Number(price) : 0,
         modality: modality || 'both',
         active: 1,
@@ -237,8 +246,10 @@ export class ServiceController {
         price !== undefined ? 1 : 0, price !== undefined ? Number(price) : 0,
         modality !== undefined ? 1 : 0, modality || 'both',
         active !== undefined ? 1 : 0, active ? 1 : 0,
-        minLeadTimeHours !== undefined ? 1 : 0, minLeadTimeHours !== undefined ? Number(minLeadTimeHours) : 2,
-        maxAdvanceDays !== undefined ? 1 : 0, maxAdvanceDays !== undefined ? Number(maxAdvanceDays) : 60,
+        (minLeadTimeHours !== undefined && minLeadTimeHours !== null && minLeadTimeHours !== '' && !Number.isNaN(Number(minLeadTimeHours))) ? 1 : 0,
+        (minLeadTimeHours !== undefined && minLeadTimeHours !== null && minLeadTimeHours !== '' && !Number.isNaN(Number(minLeadTimeHours))) ? Math.max(0, Number(minLeadTimeHours)) : 2,
+        (maxAdvanceDays !== undefined && maxAdvanceDays !== null && maxAdvanceDays !== '' && !Number.isNaN(Number(maxAdvanceDays))) ? 1 : 0,
+        (maxAdvanceDays !== undefined && maxAdvanceDays !== null && maxAdvanceDays !== '' && !Number.isNaN(Number(maxAdvanceDays))) ? Math.max(1, Number(maxAdvanceDays)) : 60,
         cancellationPolicy !== undefined ? 1 : 0, cancellationPolicy || null,
         reminderEnabled !== undefined ? 1 : 0, reminderEnabled ? 1 : 0,
         reminderValue !== undefined ? 1 : 0, reminderEnabled && reminderValue ? Number(reminderValue) : null,

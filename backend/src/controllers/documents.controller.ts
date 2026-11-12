@@ -20,6 +20,7 @@ import { getEsteticAccess } from './estetic.controller';
 import { persistEsteticCompletion } from './estetic-records';
 import { resolveCanonicalProfession } from '../utils/profession-module';
 import { ClinicalInventoryService } from '../services/clinical-inventory.service';
+import { syncReceptionStatusFromClinical } from './checkin.controller';
 
 export class DocumentsController {
   static consultationStatus(req: Request, res: Response): void {
@@ -1439,6 +1440,9 @@ export class DocumentsController {
           updated_at = datetime('now')
         WHERE id = ? AND tenant_id = ?
       `).run(evolution?.moduleType || null, appointmentId, tenantId);
+      if (tenantId) {
+        syncReceptionStatusFromClinical(tenantId, appointmentId, 'completed');
+      }
 
       // 8. Grava no histórico de status
       try {

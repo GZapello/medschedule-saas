@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useOnboarding } from './OnboardingContext';
 import { useToast } from '../../context/ToastContext';
 import { BookingLinksContent } from '../public-booking/BookingLinksContent';
+import { CheckInConfigPanel } from '../checkin/CheckInFloatingAlert';
 import {
   HelpCircle,
   Compass,
@@ -13,7 +14,8 @@ import {
   ArrowLeft,
   Briefcase,
   Activity,
-  Link
+  Link,
+  BellRing
 } from 'lucide-react';
 
 export const OnboardingHelpModal: React.FC = () => {
@@ -34,11 +36,13 @@ export const OnboardingHelpModal: React.FC = () => {
   const { showToast } = useToast();
   const [selectingModule, setSelectingModule] = useState<boolean>(false);
   const [showingBookingLinks, setShowingBookingLinks] = useState<boolean>(false);
+  const [showingCheckInConfig, setShowingCheckInConfig] = useState<boolean>(false);
 
   useEffect(() => {
     if (!isHelpOpen) {
       setSelectingModule(false);
       setShowingBookingLinks(false);
+      setShowingCheckInConfig(false);
     }
   }, [isHelpOpen]);
 
@@ -89,12 +93,13 @@ export const OnboardingHelpModal: React.FC = () => {
         {/* Header do Menu de Ajuda */}
         <div className="flex items-center justify-between pb-2 border-b border-slate-100">
           <div className="flex items-center gap-2.5">
-            {(selectingModule || showingBookingLinks) && (
+            {(selectingModule || showingBookingLinks || showingCheckInConfig) && (
               <button
                 type="button"
                 onClick={() => {
                   setSelectingModule(false);
                   setShowingBookingLinks(false);
+                  setShowingCheckInConfig(false);
                 }}
                 className="p-1 -ml-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
                 title="Voltar"
@@ -103,12 +108,20 @@ export const OnboardingHelpModal: React.FC = () => {
               </button>
             )}
             <div className="w-8 h-8 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center">
-              {showingBookingLinks ? <Link className="w-4 h-4" /> : <HelpCircle className="w-4 h-4" />}
+              {showingBookingLinks ? (
+                <Link className="w-4 h-4" />
+              ) : showingCheckInConfig ? (
+                <BellRing className="w-4 h-4" />
+              ) : (
+                <HelpCircle className="w-4 h-4" />
+              )}
             </div>
             <div>
               <h2 id="help-modal-title" className="text-sm font-bold text-slate-900 leading-tight">
                 {showingBookingLinks
                   ? 'Links de agendamento'
+                  : showingCheckInConfig
+                  ? 'Ativar Check-In'
                   : selectingModule
                   ? 'Qual módulo deseja conhecer?'
                   : 'Central de Ajuda Zemda'}
@@ -116,6 +129,8 @@ export const OnboardingHelpModal: React.FC = () => {
               <p className="text-[11px] text-slate-500">
                 {showingBookingLinks
                   ? 'Acesse e compartilhe os links públicos com seus pacientes'
+                  : showingCheckInConfig
+                  ? 'Configuração de chegada na recepção e avisos em tempo real'
                   : selectingModule
                   ? 'Selecione o módulo para iniciar o tour'
                   : 'Tours guiados, links e suporte rápido'}
@@ -127,6 +142,7 @@ export const OnboardingHelpModal: React.FC = () => {
             onClick={() => {
               setSelectingModule(false);
               setShowingBookingLinks(false);
+              setShowingCheckInConfig(false);
               closeHelp();
             }}
             className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
@@ -136,9 +152,11 @@ export const OnboardingHelpModal: React.FC = () => {
           </button>
         </div>
 
-        {/* Exibição dos Links de Agendamento */}
+        {/* Exibição dos Links de Agendamento ou Configuração de Check-In */}
         {showingBookingLinks ? (
           <BookingLinksContent />
+        ) : showingCheckInConfig ? (
+          <CheckInConfigPanel />
         ) : selectingModule ? (
           /* Seleção de Módulo Específico (apenas exibido quando há mais de 1 módulo autorizado) */
           <div className="flex flex-col gap-2 max-h-80 overflow-y-auto pr-1">
@@ -286,7 +304,30 @@ export const OnboardingHelpModal: React.FC = () => {
               <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-teal-600 shrink-0" />
             </button>
 
-            {/* 5. Central de suporte */}
+            {/* 5. Ativar Check-In */}
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => setShowingCheckInConfig(true)}
+              className="w-full flex items-center justify-between p-3 rounded-2xl border border-slate-100 bg-slate-50/70 hover:bg-teal-50 hover:border-teal-200 transition-all text-left cursor-pointer group"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100 flex items-center justify-center shadow-xs">
+                  <BellRing className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-slate-800 group-hover:text-teal-900 block">
+                    Ativar Check-In
+                  </span>
+                  <span className="text-[11px] text-slate-500">
+                    Receba avisos quando a recepção registrar a chegada de um paciente e acompanhe o fluxo de atendimento em tempo real.
+                  </span>
+                </div>
+              </div>
+              <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-teal-600 shrink-0" />
+            </button>
+
+            {/* 6. Central de suporte */}
             <button
               type="button"
               onClick={handleSupportClick}

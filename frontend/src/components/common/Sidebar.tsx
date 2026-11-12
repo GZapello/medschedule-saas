@@ -233,7 +233,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           id: 'reports',
           label: 'Relatórios',
           icon: BarChart3,
-          visible: isClinicAdmin || hasPermission('view_reports')
+          visible: isClinicAdmin || isProfessional || isReceptionist || hasPermission('view_reports')
         },
       ]
     }

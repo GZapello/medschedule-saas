@@ -38,6 +38,12 @@ import { AppointmentEditModal } from '../calendar/AppointmentEditModal';
 import { isValidPhoneNumber, openManualWhatsApp } from '../../utils/phone.utils';
 import { GoogleIcon } from '../auth/GoogleAuthButton';
 import { useGoogleCalendarStatus } from '../../hooks/useGoogleCalendarStatus';
+import {
+  PreConsultationFormsModal,
+  PreConsultationAppointmentModal,
+  PRE_CONSULTATION_BADGE_CONFIG
+} from '../pre-consultation/PreConsultationFormsModal';
+import { Users, BellRing, SlidersHorizontal, X } from 'lucide-react';
 
 interface DashboardViewProps {
   onNavigate: (view: string, subId?: string | null) => void;
@@ -73,6 +79,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [whatsappReminderAppt, setWhatsappReminderAppt] = useState<any | null>(null);
   const [editingAppt, setEditingAppt] = useState<any | null>(null);
   const [pendingWhatsAppNotice, setPendingWhatsAppNotice] = useState<any | null>(null);
+  const [checkInQueueData, setCheckInQueueData] = useState<{
+    waitingCount: number;
+    waitingPatients: any[];
+    previousAlerts: any[];
+  }>({ waitingCount: 0, waitingPatients: [], previousAlerts: [] });
+  const [isWaitingQueueModalOpen, setIsWaitingQueueModalOpen] = useState<boolean>(false);
+  const [isPreConsultLibraryOpen, setIsPreConsultLibraryOpen] = useState<boolean>(false);
+  const [preConsultApptModal, setPreConsultApptModal] = useState<{ id: string; patientName?: string } | null>(null);
   const [openMenuState, setOpenMenuState] = useState<{
     appt: any;
     top?: number;
@@ -191,12 +205,35 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     try {
       setLoading(true);
       const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
-      const data = await ApiClient.get<any>(`/v1/dashboard/metrics?date=${todayStr}`);
+      const [data, queueRes] = await Promise.all([
+        ApiClient.get<any>(`/v1/dashboard/metrics?date=${todayStr}`),
+        ApiClient.get<any>(`/v1/checkin/queue?date=${todayStr}`).catch(() => null)
+      ]);
       setMetrics(data);
+      if (queueRes) {
+        setCheckInQueueData({
+          waitingCount: Number(queueRes.waitingCount || 0),
+          waitingPatients: Array.isArray(queueRes.waitingPatients) ? queueRes.waitingPatients : [],
+          previousAlerts: Array.isArray(queueRes.previousAlerts) ? queueRes.previousAlerts : []
+        });
+      }
     } catch (err: any) {
       showToast(err.message || 'Erro ao carregar indicadores', 'error');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleUpdateReceptionStatus = async (appointmentId: string, receptionStatus: string) => {
+    try {
+      await ApiClient.put(`/v1/appointments/${appointmentId}/reception-status`, {
+        receptionStatus
+      });
+      showToast('Status da recepção atualizado!', 'success');
+      window.dispatchEvent(new CustomEvent('zemda-checkin-updated'));
+      fetchMetrics();
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao atualizar status da recepção', 'error');
     }
   };
 
@@ -225,8 +262,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       checkWhatsAppNotice();
     };
     window.addEventListener('zemda-appointment-updated', handleRemoteUpdate);
+    window.addEventListener('zemda-checkin-updated', handleRemoteUpdate);
     return () => {
       window.removeEventListener('zemda-appointment-updated', handleRemoteUpdate);
+      window.removeEventListener('zemda-checkin-updated', handleRemoteUpdate);
     };
   }, []);
 
@@ -397,6 +436,30 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          {(auth.isProfessional || auth.isClinicAdmin) && (
+            <button
+              type="button"
+              onClick={() => setIsWaitingQueueModalOpen(true)}
+              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg border transition-all min-h-[36px] cursor-pointer ${
+                checkInQueueData.waitingCount > 0
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100 shadow-2xs'
+                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+              }`}
+              title="Ver pacientes aguardando na recepção e histórico de avisos de chegada"
+            >
+              <BellRing className={`w-3.5 h-3.5 ${checkInQueueData.waitingCount > 0 ? 'text-emerald-600' : 'text-slate-400'}`} />
+              <span>Pacientes aguardando: {checkInQueueData.waitingCount}</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setIsPreConsultLibraryOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-lg transition-all min-h-[36px] cursor-pointer"
+            title="Abrir biblioteca de Formulários de Pré-consulta Digital"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            <span>Formulários de Pré-consulta</span>
+          </button>
           {canCreatePatient && (
             <button
               onClick={onOpenNewPatient}
@@ -654,6 +717,48 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                             {appt.patient_name}
                           </h4>
                           {getStatusBadge(appt.status)}
+
+                          {/* Status de Recepção (Seção 2.2) */}
+                          {appt.status !== 'cancelled' && appt.status !== 'no_show' && (
+                            <select
+                              value={appt.reception_status || 'waiting_arrival'}
+                              onChange={e => handleUpdateReceptionStatus(appt.id, e.target.value)}
+                              aria-label="Status de Recepção"
+                              title="Fluxo Administrativo da Recepção (não altera o status clínico)"
+                              className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border cursor-pointer outline-none ${
+                                appt.reception_status === 'waiting_attendance'
+                                  ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                                  : appt.reception_status === 'called'
+                                  ? 'bg-amber-50 text-amber-800 border-amber-300'
+                                  : appt.reception_status === 'in_attendance'
+                                  ? 'bg-sky-50 text-sky-800 border-sky-300'
+                                  : appt.reception_status === 'checked_out'
+                                  ? 'bg-slate-100 text-slate-600 border-slate-300'
+                                  : 'bg-slate-50 text-slate-500 border-slate-200'
+                              }`}
+                            >
+                              <option value="waiting_arrival">Recepção: Aguardando chegada</option>
+                              <option value="waiting_attendance">Recepção: Aguardando atendimento</option>
+                              <option value="called">Recepção: Chamado para atendimento</option>
+                              <option value="in_attendance">Recepção: Em atendimento</option>
+                              <option value="checked_out">Recepção: Saída registrada</option>
+                            </select>
+                          )}
+
+                          {/* Badge de Pré-consulta Digital (Seção 4.5) */}
+                          <button
+                            type="button"
+                            onClick={() => setPreConsultApptModal({ id: appt.id, patientName: appt.patient_name })}
+                            className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border cursor-pointer ${
+                              (PRE_CONSULTATION_BADGE_CONFIG[appt.pre_consultation_status || 'not_sent'] || PRE_CONSULTATION_BADGE_CONFIG.not_sent).className
+                            }`}
+                            title="Abrir Pré-consulta Digital (envio ou visualização)"
+                          >
+                            <FileText className="w-3 h-3" />
+                            <span>
+                              {(PRE_CONSULTATION_BADGE_CONFIG[appt.pre_consultation_status || 'not_sent'] || PRE_CONSULTATION_BADGE_CONFIG.not_sent).label}
+                            </span>
+                          </button>
 
                           {appt.has_evolution > 0 && (
                             <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 text-[11px] font-medium px-2 py-0.5 rounded-full border border-emerald-200/80">
@@ -1143,6 +1248,156 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         onClose={() => setEditingAppt(null)}
         onSuccess={() => {
           setEditingAppt(null);
+          fetchMetrics();
+          notifyAppointmentChange();
+        }}
+      />
+
+      {/* Modal: Pacientes Aguardando & Histórico de Avisos de Check-In (Seções 2.3 e 2.4) */}
+      {isWaitingQueueModalOpen && (
+        <div className="fixed inset-0 z-[9990] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 max-w-xl w-full max-h-[85vh] flex flex-col overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/60">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-teal-600 text-white flex items-center justify-center">
+                  <Users className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-extrabold text-slate-900">
+                    Pacientes aguardando: {checkInQueueData.waitingCount}
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Pacientes sob sua responsabilidade aguardando atendimento hoje
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    window.dispatchEvent(new CustomEvent('zemda-open-checkin-settings'));
+                  }}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-[11px] font-bold cursor-pointer"
+                  title="Configurar preferências de Check-In"
+                >
+                  <SlidersHorizontal className="w-3.5 h-3.5" /> Configurar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsWaitingQueueModalOpen(false)}
+                  className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-1 flex flex-col gap-5">
+              <div>
+                <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-500 mb-2.5">
+                  Fila de Espera Atual ({checkInQueueData.waitingPatients.length})
+                </h4>
+                {checkInQueueData.waitingPatients.length === 0 ? (
+                  <div className="p-5 rounded-2xl border border-dashed border-slate-200 text-center text-xs text-slate-400">
+                    Nenhum paciente aguardando na recepção para o seu perfil neste momento.
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2.5">
+                    {checkInQueueData.waitingPatients.map((wp: any) => {
+                      const timeStr = wp.start_time?.split('T')[1]?.slice(0, 5) || '';
+                      const arrivedStr = wp.arrived_at?.split('T')[1]?.slice(0, 5) || '';
+                      return (
+                        <div
+                          key={wp.id}
+                          className="p-3.5 rounded-2xl border border-emerald-200 bg-emerald-50/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                        >
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-extrabold text-slate-900">
+                                {wp.patient_name}
+                              </span>
+                              <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                                {wp.reception_status_label || 'Aguardando'}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-600 mt-0.5">
+                              Horário agendado: <strong>{timeStr}</strong>
+                              {arrivedStr ? ` • Chegada: ${arrivedStr}` : ''}
+                              {wp.wait_minutes !== null && wp.wait_minutes !== undefined
+                                ? ` • Espera: ${wp.wait_minutes} min`
+                                : ''}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {wp.reception_status !== 'called' && (
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateReceptionStatus(wp.id, 'called')}
+                                className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold cursor-pointer"
+                              >
+                                Chamar
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsWaitingQueueModalOpen(false);
+                                handleUpdateStatus(wp.id, 'in_progress');
+                              }}
+                              className="px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold cursor-pointer flex items-center gap-1"
+                            >
+                              <Stethoscope className="w-3.5 h-3.5" /> Iniciar atendimento
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Histórico de avisos anteriores do dia */}
+              <div>
+                <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-500 mb-2.5">
+                  Avisos de Chegada Recebidos Hoje ({checkInQueueData.previousAlerts.length})
+                </h4>
+                {checkInQueueData.previousAlerts.length === 0 ? (
+                  <p className="text-xs text-slate-400">
+                    Nenhum aviso de chegada registrado hoje.
+                  </p>
+                ) : (
+                  <div className="flex flex-col gap-2 max-h-48 overflow-y-auto pr-1">
+                    {checkInQueueData.previousAlerts.map((al: any) => (
+                      <div
+                        key={al.id}
+                        className="p-2.5 rounded-xl border border-slate-100 bg-slate-50 flex items-center justify-between gap-2 text-xs"
+                      >
+                        <span className="text-slate-700 font-medium">{al.message}</span>
+                        <span className="text-[10px] text-slate-400 shrink-0">
+                          {String(al.created_at || '').split('T')[1]?.slice(0, 5) || ''}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal da Biblioteca de Formulários de Pré-consulta */}
+      <PreConsultationFormsModal
+        isOpen={isPreConsultLibraryOpen}
+        onClose={() => setIsPreConsultLibraryOpen(false)}
+      />
+
+      {/* Modal de Envio e Respostas da Pré-consulta por Agendamento */}
+      <PreConsultationAppointmentModal
+        appointmentId={preConsultApptModal?.id || null}
+        patientName={preConsultApptModal?.patientName}
+        onClose={() => setPreConsultApptModal(null)}
+        onUpdated={() => {
           fetchMetrics();
           notifyAppointmentChange();
         }}

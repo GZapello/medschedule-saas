@@ -21,6 +21,7 @@ import { migrateProfessionalSlugs, migrateClinicBooking } from './slug-migration
 import { migrateGoogleCalendar } from './google-calendar.migration';
 import { migrateSuperAdminVisits } from './superadmin-visits.migration';
 import { migrateProfessionalActivities } from './professional-activities.migration';
+import { migrateIntegratedImprovements } from './integrated-improvements-migration';
 import { dbPath } from './db-path';
 import { backfillMissingDefaultSchedules } from '../utils/schedule-defaults';
 
@@ -4071,6 +4072,7 @@ function repairLegacyPhotoUrls(rawDb: any): void {
   try { migrateAttendanceTimes(rawDb); } catch (e) { console.error('[Database] Erro ao migrar attendance times:', e); }
   try { migrateGoogleCalendar(rawDb); } catch (e) { console.error('[Database] Erro ao migrar Google Calendar:', e); }
   try { migrateSuperAdminVisits(rawDb); } catch (e) { console.error('[Database] Erro ao migrar superadmin visits:', e); }
+  try { migrateIntegratedImprovements(rawDb); } catch (e) { console.error('[Database] Erro ao migrar melhorias integradas:', e); }
 }
 
 // Inicialização automática e idempotente da base de dados e migrações no carregamento do módulo

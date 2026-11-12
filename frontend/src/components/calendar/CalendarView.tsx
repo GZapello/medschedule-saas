@@ -43,6 +43,11 @@ import { SelectConsultationModuleModal, getCompatibleClinicalModules, getModuleF
 import { WhatsAppReminderModal, WhatsAppIcon } from '../common/WhatsAppReminderModal';
 import { isValidPhoneNumber, formatPhoneDisplay, openManualWhatsApp } from '../../utils/phone.utils';
 import { useMobileLayout } from '../../hooks/useMobileLayout';
+import {
+  PreConsultationFormsModal,
+  PreConsultationAppointmentModal,
+  PRE_CONSULTATION_BADGE_CONFIG
+} from '../pre-consultation/PreConsultationFormsModal';
 
 interface CalendarViewProps {
   onOpenNewAppointment: (prefill?: { date?: string; time?: string; professionalId?: string }) => void;
@@ -52,6 +57,8 @@ interface CalendarViewProps {
 export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment }) => {
   const mobile = useMobileLayout();
   const [consentPatientId, setConsentPatientId] = useState<string | null>(null);
+  const [isPreConsultLibraryOpen, setIsPreConsultLibraryOpen] = useState<boolean>(false);
+  const [preConsultApptModal, setPreConsultApptModal] = useState<{ id: string; patientName?: string } | null>(null);
   const auth = useAuth();
   const { currentTenant, clientTermLabel } = auth;
   const { showToast } = useToast();
@@ -1662,6 +1669,62 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                   );
                 })()}
 
+                {/* FAIXA OPERACIONAL: STATUS DE RECEPÇÃO (CHECK-IN) & PRÉ-CONSULTA DIGITAL */}
+                <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[11px] font-bold text-slate-600">Fluxo Recepção:</span>
+                    <select
+                      value={(selectedAppt as any).reception_status || 'waiting_arrival'}
+                      onChange={async (e) => {
+                        const nextRec = e.target.value;
+                        try {
+                          await ApiClient.put(`/v1/appointments/${selectedAppt.id}/reception-status`, {
+                            receptionStatus: nextRec
+                          });
+                          setSelectedAppt((prev: any) => prev ? { ...prev, reception_status: nextRec } : prev);
+                          fetchCalendarData();
+                          window.dispatchEvent(new CustomEvent('zemda-checkin-updated'));
+                          showToast('Status da recepção atualizado!', 'success');
+                        } catch (err: any) {
+                          showToast(err?.message || 'Erro ao atualizar status da recepção', 'error');
+                        }
+                      }}
+                      className="px-2.5 py-1 rounded-xl border border-slate-200 bg-white font-semibold text-xs text-slate-800 cursor-pointer"
+                    >
+                      <option value="waiting_arrival">Aguardando chegada</option>
+                      <option value="waiting_attendance">Aguardando atendimento (Chegou)</option>
+                      <option value="called">Chamado para atendimento</option>
+                      <option value="in_attendance">Em atendimento</option>
+                      <option value="checked_out">Saída registrada / atendimento encerrado</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span
+                      className={`px-2.5 py-1 rounded-full text-[11px] font-bold border ${
+                        (PRE_CONSULTATION_BADGE_CONFIG[(selectedAppt as any).pre_consultation_status || 'not_sent'] || PRE_CONSULTATION_BADGE_CONFIG.not_sent).className
+                      }`}
+                    >
+                      Pré-consulta: {(PRE_CONSULTATION_BADGE_CONFIG[(selectedAppt as any).pre_consultation_status || 'not_sent'] || PRE_CONSULTATION_BADGE_CONFIG.not_sent).label}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setPreConsultApptModal({ id: selectedAppt.id, patientName: selectedAppt.patient_name })}
+                      className="inline-flex items-center gap-1 px-3 py-1 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold cursor-pointer"
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      <span>Enviar / Ver Pré-consulta</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsPreConsultLibraryOpen(true)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-[11px] font-semibold cursor-pointer"
+                    >
+                      <span>Modelos</span>
+                    </button>
+                  </div>
+                </div>
+
                 {/* CARD DE DETALHES DA SINCRONIZAÇÃO GOOGLE AGENDA */}
                 {(selectedAppt.google_sync_status || selectedAppt.google_account_email || selectedAppt.google_event_id) && (
                   <div className="bg-slate-50/90 border border-slate-200/90 rounded-2xl p-3.5 space-y-3">
@@ -2428,6 +2491,19 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
         document.body
       )}
       {consentPatientId && <PatientConsentsDialog patientId={consentPatientId} onClose={() => setConsentPatientId(null)} />}
+      <PreConsultationFormsModal
+        isOpen={isPreConsultLibraryOpen}
+        onClose={() => setIsPreConsultLibraryOpen(false)}
+      />
+      <PreConsultationAppointmentModal
+        appointmentId={preConsultApptModal?.id || null}
+        patientName={preConsultApptModal?.patientName}
+        onClose={() => setPreConsultApptModal(null)}
+        onUpdated={() => {
+          fetchCalendarData();
+          notifyAppointmentChange();
+        }}
+      />
       {viewingRecordsAppt && createPortal(
         <div className="relative z-[10050]">
           <PatientPreviousRecordsModal

@@ -2,6 +2,7 @@ import { clinicalPatientIdentity } from '../middlewares/shared-patient.middlewar
 import { extractDatePart, extractTimePart, getClinicLocalNowIso } from '../services/document-context.service';
 import { canAccessPatient, sharedOrigins, canReadSharedRecord } from '../services/patient-sharing.service';
 import { isPrimaryClinicalModule, resolveClinicalModule } from '../utils/clinical-module';
+import { syncReceptionStatusFromClinical } from './checkin.controller';
 import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
@@ -1212,6 +1213,7 @@ export class ClinicalController {
           SET status = 'in_progress', clinical_module = ?, updated_at = datetime('now')
           WHERE id = ? AND tenant_id = ?
         `).run(targetModule, todayAppt.id, tenantId);
+        syncReceptionStatusFromClinical(tenantId, todayAppt.id, 'in_progress');
 
         todayAppt.status = 'in_progress';
         todayAppt.clinical_module = targetModule;
@@ -1255,6 +1257,7 @@ export class ClinicalController {
         apptId, tenantId, apptNumber, patientId, profId,
         serviceId, startTime, endTime, effectiveModule
       );
+      syncReceptionStatusFromClinical(tenantId, apptId, 'in_progress');
 
       const createdAppt = db.prepare(`
         SELECT a.*, p.name as professional_name, s.name as service_name, pat.full_name as patient_name

@@ -5,6 +5,8 @@ import { resolveBookingTenant, publicBookingProfessional, professionalBookingSer
 import { calculateAvailableSlots } from '../utils/slot-calculator';
 import { hasClinicalAccess } from './clinical.controller';
 import { isPrimaryClinicalModule, resolveClinicalModule } from '../utils/clinical-module';
+import { syncReceptionStatusFromClinical } from './checkin.controller';
+import { createPreConsultationSubmissionForAppointment } from './pre-consultation.controller';
 import { Request, Response } from 'express';
 import { canOperate, BillingService } from '../services/billing.service';
 import { db } from '../config/database';
@@ -190,6 +192,10 @@ export class AppointmentController {
           a.service_id, a.room_id, a.start_time, a.end_time, a.attendance_start_at, a.attendance_expected_end_at, a.attendance_end_at, a.status, a.modality, a.meeting_url, a.google_drive_url,
           a.patient_notes, a.internal_notes, a.cancellation_reason, a.created_at,
           a.clinical_module,
+          COALESCE(a.reception_status, 'waiting_arrival') as reception_status,
+          a.arrived_at, a.called_at, a.checked_out_at,
+          COALESCE(a.pre_consultation_status, 'not_sent') as pre_consultation_status,
+          a.pre_consultation_submission_id, a.pre_consultation_form_id,
           s.clinical_module as service_clinical_module,
           pat.full_name as patient_name, pat.phone as patient_phone, pat.email as patient_email,
           pat.is_child as patient_is_child,
@@ -491,7 +497,27 @@ export class AppointmentController {
 
 
       const isRetroactive = !isPublic && Boolean(req.body.isRetroactive || req.body.is_retroactive);
-      const isCustomTime = Boolean(req.body.isCustomTime || req.body.is_custom_time || isRetroactive);
+      const isCustomTime = !isPublic && Boolean(req.body.isCustomTime || req.body.is_custom_time || isRetroactive);
+
+      const mockNow = (process.env.NODE_ENV === 'test' && req.body._mockNow)
+        ? new Date(String(req.body._mockNow))
+        : new Date();
+      const todaySp = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(mockNow);
+      const nowSpTime = new Intl.DateTimeFormat('pt-BR', {
+        timeZone: 'America/Sao_Paulo',
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23'
+      }).format(mockNow);
+      const nowSpIso = `${todaySp}T${nowSpTime}:00`;
+
+      if (!isRetroactive && normalizedStartTime < nowSpIso) {
+        res.status(400).json({
+          code: 'PAST_BOOKING_NOT_ALLOWED',
+          error: 'Não é permitido agendar horários no passado. Para registrar atendimentos já ocorridos, utilize o fluxo de atendimento realizado.'
+        });
+        return;
+      }
 
       // 0. Validação dos horários de funcionamento da clínica (Item 3) e escala de trabalho (Item 1)
       // Agendamento em horário avulso (!isPublic && isCustomTime) é exceção pontual que permite horário fora da disponibilidade habitual
@@ -592,8 +618,17 @@ export class AppointmentController {
         }
       }
 
-      if (!isCustomTime && !isPublic && !calculateAvailableSlots(tenantId, professionalId, serviceId, normalizedStartTime.slice(0, 10), roomId || undefined)
-        .some(slot => slot.startTime === normalizedStartTime && slot.endTime === normalizedEndTime)) {
+      if (!isCustomTime && !isPublic && !calculateAvailableSlots(
+        tenantId,
+        professionalId,
+        serviceId,
+        normalizedStartTime.slice(0, 10),
+        roomId || undefined,
+        mockNow,
+        undefined,
+        resolvedPatientId,
+        { ignoreLeadTime: true }
+      ).some(slot => slot.startTime === normalizedStartTime && slot.endTime === normalizedEndTime)) {
         res.status(409).json({ code: 'SLOT_UNAVAILABLE', error: 'Este horário não está mais disponível para a duração do serviço. Atualize os horários e escolha novamente.' }); return;
       }
 
@@ -795,6 +830,25 @@ export class AppointmentController {
         console.warn('[AppointmentController] Falha assíncrona ao sincronizar criação com Google Calendar:', err?.message || err);
       });
 
+      let preConsultationData: any = null;
+      const requestedPreConsultFormId = req.body.preConsultationFormId ? String(req.body.preConsultationFormId).trim() : '';
+      if (requestedPreConsultFormId && requestedPreConsultFormId !== 'none') {
+        try {
+          const originHeader = typeof req.headers.origin === 'string' ? req.headers.origin.replace(/\/+$/, '') : '';
+          const baseUrl = process.env.FRONTEND_URL || originHeader || 'http://localhost:5173';
+          preConsultationData = createPreConsultationSubmissionForAppointment({
+            tenantId,
+            appointmentId,
+            formId: requestedPreConsultFormId,
+            expirationHours: req.body.preConsultationExpirationHours ? Number(req.body.preConsultationExpirationHours) : 168,
+            createdBy: req.user?.userId || null,
+            baseUrl
+          });
+        } catch (pcErr) {
+          console.warn('[AppointmentController] Aviso ao gerar Pré-consulta Digital na criação:', pcErr);
+        }
+      }
+
       res.status(201).json({
         id: appointmentId,
         appointmentNumber,
@@ -806,6 +860,8 @@ export class AppointmentController {
         clinical_module: initialClinicalModule || (isRetroactive ? 'general' : null),
         isRetroactive,
         google_sync_status: gcalConn ? 'pending' : null,
+        pre_consultation_status: preConsultationData ? 'pending' : 'not_sent',
+        preConsultation: preConsultationData,
         message: isRetroactive ? 'Atendimento retroativo registrado com sucesso!' : 'Atendimento agendado com sucesso!'
       });
       return;
@@ -954,6 +1010,9 @@ export class AppointmentController {
 
       const updateStmt = db.prepare(`UPDATE appointments SET status = ?, cancellation_reason = CASE WHEN ? = 'cancelled' THEN ? ELSE cancellation_reason END, cancellation_reason_category = CASE WHEN ? = 'cancelled' THEN ? ELSE cancellation_reason_category END, cancelled_by = CASE WHEN ? = 'cancelled' THEN ? ELSE cancelled_by END, cancelled_at = CASE WHEN ? = 'cancelled' THEN datetime('now') ELSE cancelled_at END, clinical_module = COALESCE(?, NULLIF(NULLIF(clinical_module, 'ZemdaBody'), 'Zemda360')), profession_id = COALESCE(?, profession_id), attendance_start_at = COALESCE(?, attendance_start_at), attendance_expected_end_at = COALESCE(?, attendance_expected_end_at), updated_at = datetime('now') WHERE id = ? AND tenant_id = ?`);
       updateStmt.run(status, status, reason || null, status, cancellationReasonCategory || (status === 'cancelled' ? 'Outro' : null), status, status === 'cancelled' ? cancelledBy : null, status, clinicalModule || null, resolvedProfessionId || null, nextAttendanceStartAt, nextAttendanceExpectedEndAt, id, tenantId);
+      if (tenantId && (status === 'in_progress' || status === 'completed')) {
+        syncReceptionStatusFromClinical(tenantId, id as string, status);
+      }
       // Registra histórico
       db.prepare(`
         INSERT INTO appointment_status_history (id, appointment_id, previous_status, new_status, changed_by, reason)

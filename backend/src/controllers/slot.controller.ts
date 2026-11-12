@@ -1,15 +1,16 @@
 import { canAccessPatient } from '../services/patient-sharing.service';
 import { resolveBookingTenant, publicBookingProfessional, professionalBookingService, validBookingDate } from '../utils/public-booking';
 import { Request, Response } from 'express';
-import { calculateAvailableSlots, buildPublicAvailabilityInsights } from '../utils/slot-calculator';
+import { calculateAvailableSlots, explainEmptySlots, buildPublicAvailabilityInsights } from '../utils/slot-calculator';
 import { GoogleCalendarService } from '../services/google-calendar.service';
 import { db } from '../config/database';
+import { getUserPermissions } from '../middlewares/rbac.middleware';
 
 export class SlotController {
   static async getAvailableSlots(req: Request, res: Response): Promise<void> {
     try {
       let tenantId = req.tenantId;
-      const { tenantSlug, professionalId, serviceId, date, roomId, patientId } = req.query;
+      const { tenantSlug, professionalId, serviceId, date, roomId, patientId, ignoreLeadTime } = req.query;
 
       const isPublic = req.path.startsWith('/v1/public/');
       if (isPublic) {
@@ -32,6 +33,21 @@ export class SlotController {
       if (patientId && (isPublic || typeof patientId !== 'string' || (!db.prepare('SELECT 1 FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId) && (!req.user || !canAccessPatient(req.user.userId, tenantId, patientId, 'appointments'))))) {
         res.status(403).json({ error: 'Paciente não autorizado nesta clínica.' }); return;
       }
+
+      // Valida se o usuário interno tem permissão para agendamento direto sem a restrição de antecedência do link público
+      let allowIgnoreLeadTime = false;
+      if (!isPublic && req.user && (ignoreLeadTime === '1' || ignoreLeadTime === 'true')) {
+        const role = req.user.role;
+        if (['superadmin', 'clinic_admin', 'professional', 'receptionist', 'secretary'].includes(role)) {
+          allowIgnoreLeadTime = true;
+        } else {
+          const perms = getUserPermissions(req.user.userId, tenantId, role);
+          if (perms.includes('create_appointment') || perms.includes('edit_appointment')) {
+            allowIgnoreLeadTime = true;
+          }
+        }
+      }
+
       // Consulta FreeBusy da Google Agenda com cache em memória e fallback resiliente
       let externalBusyIntervals: Array<{ startMin: number; endMin: number }> = [];
       try {
@@ -42,16 +58,37 @@ export class SlotController {
         return;
       }
 
+      const mockNow = (process.env.NODE_ENV === 'test' && req.query._mockNow)
+        ? new Date(String(req.query._mockNow))
+        : undefined;
+
+      const slotOptions = { ignoreLeadTime: allowIgnoreLeadTime };
+
       const slots = calculateAvailableSlots(
         tenantId,
         String(professionalId),
         String(serviceId),
         String(date),
         roomId ? String(roomId) : undefined,
-        undefined,
+        mockNow,
         externalBusyIntervals,
-        typeof patientId === 'string' ? patientId : undefined
+        typeof patientId === 'string' ? patientId : undefined,
+        slotOptions
       );
+
+      const emptyExplanation = slots.length === 0
+        ? explainEmptySlots(
+            tenantId,
+            String(professionalId),
+            String(serviceId),
+            String(date),
+            roomId ? String(roomId) : undefined,
+            mockNow,
+            externalBusyIntervals,
+            typeof patientId === 'string' ? patientId : undefined,
+            slotOptions
+          )
+        : undefined;
 
       const publicInsights = isPublic
         ? buildPublicAvailabilityInsights(
@@ -69,6 +106,7 @@ export class SlotController {
         serviceId: String(serviceId),
         totalAvailable: slots.length,
         slots,
+        ...(emptyExplanation ? { emptyReason: emptyExplanation.message, emptyReasonCode: emptyExplanation.reasonCode } : {}),
         ...(publicInsights || {})
       });
     } catch (err: any) {

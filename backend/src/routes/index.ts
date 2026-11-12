@@ -58,6 +58,8 @@ import { FileController } from '../controllers/file.controller';
 import { ClinicalReassessmentController } from '../controllers/clinical-reassessment.controller';
 import { ClinicalGoalsController } from '../controllers/clinical-goals.controller';
 import { DigitalCertificateController } from '../controllers/digital-certificate.controller';
+import { CheckInController } from '../controllers/checkin.controller';
+import { PreConsultationController } from '../controllers/pre-consultation.controller';
 import { PsychopedagogyController } from '../controllers/psychopedagogy.controller';
 import { PsychologyController } from '../controllers/psychology.controller';
 import { ExternalTestsController } from '../controllers/external-tests.controller';
@@ -184,6 +186,10 @@ api.get('/v1/public/download-android', (req, res) => {
 // 2. ROTAS AUTENTICADAS (COM JWT + TENANT)
 // ==========================================
 mountPublicConsentRoutes(api);
+
+// Rotas Públicas de Pré-consulta Digital (token seguro imprevisível, sem expor dados sensíveis na URL)
+api.get('/v1/public/pre-consultation/:token', PreConsultationController.getPublicFormByToken);
+api.post('/v1/public/pre-consultation/:token/submit', PreConsultationController.submitPublicFormByToken);
 
 // Google Calendar OAuth 2.0 Callback e Webhook público de push
 api.get('/v1/integrations/google-calendar/callback', GoogleCalendarController.callback);
@@ -369,6 +375,28 @@ api.put('/v1/appointments/:id/reschedule', requireTenant, AppointmentController.
 api.post('/v1/appointments/:id/whatsapp-reminder', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), AppointmentController.sendWhatsAppReminder);
 api.get('/v1/appointments/:id/communications', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), AppointmentController.getCommunications);
 api.get('/v1/whatsapp/status', requireTenant, InfobipController.getClientStatus);
+
+// Check-In de Pacientes & Fluxo de Recepção com Avisos aos Profissionais (Seção 2)
+api.get('/v1/checkin/settings', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), CheckInController.getSettings);
+api.put('/v1/checkin/settings', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), CheckInController.updateSettings);
+api.get('/v1/checkin/queue', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), CheckInController.getQueueAndAlerts);
+api.post('/v1/checkin/alerts/:alertId/dismiss', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), CheckInController.dismissAlert);
+api.put('/v1/appointments/:id/reception-status', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), CheckInController.updateReceptionStatus);
+api.patch('/v1/appointments/:id/reception-status', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), CheckInController.updateReceptionStatus);
+
+// Biblioteca de Formulários de Pré-consulta Digital & Envios (Seção 4)
+api.get('/v1/pre-consultation/forms', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), PreConsultationController.listForms);
+api.post('/v1/pre-consultation/forms', requireTenant, requireRole('clinic_admin', 'professional'), PreConsultationController.createForm);
+api.put('/v1/pre-consultation/forms/:id', requireTenant, requireRole('clinic_admin', 'professional'), PreConsultationController.updateForm);
+api.post('/v1/pre-consultation/forms/:id/duplicate', requireTenant, requireRole('clinic_admin', 'professional'), PreConsultationController.duplicateForm);
+api.patch('/v1/pre-consultation/forms/:id/archive', requireTenant, requireRole('clinic_admin', 'professional'), PreConsultationController.archiveForm);
+api.delete('/v1/pre-consultation/forms/:id', requireTenant, requireRole('clinic_admin', 'professional'), PreConsultationController.archiveForm);
+
+api.post('/v1/pre-consultation/appointments/:appointmentId/prepare-send', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), PreConsultationController.prepareOrSendForAppointment);
+api.get('/v1/pre-consultation/appointments/:appointmentId', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), PreConsultationController.getByAppointment);
+api.get('/v1/pre-consultation/patients/:patientId', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), PreConsultationController.listByPatient);
+api.post('/v1/pre-consultation/submissions/:id/revoke', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), PreConsultationController.revokeSubmission);
+api.post('/v1/pre-consultation/submissions/:id/import-body-map', requireTenant, requireRole('clinic_admin', 'professional'), PreConsultationController.importBodyMapToClinical);
 
 // ==========================================
 // INTEGRAÇÃO GOOGLE CALENDAR ↔ AGENDA ZEMDA
@@ -857,9 +885,13 @@ api.get('/v1/purchases/:id', requireTenant, requireRole('clinic_admin', 'recepti
 api.get('/v1/dashboard/metrics', requireTenant, DashboardController.getMetrics);
 
 // Relatórios e Exportação CSV e DOCX
-api.get('/v1/reports/attendance', requireTenant, requireRole('clinic_admin'), ReportController.getAttendanceReport);
-api.get('/v1/reports/financial', requireTenant, requireRole('clinic_admin'), ReportController.getFinancialReport);
-api.get('/v1/reports/export-csv', requireTenant, requireRole('clinic_admin'), ReportController.exportCsv);
+api.get('/v1/reports/attendance', requireTenant, requirePermissionOrRole('view_reports', 'clinic_admin', 'professional', 'receptionist'), ReportController.getAttendanceReport);
+api.get('/v1/reports/performance', requireTenant, requirePermissionOrRole('view_reports', 'clinic_admin', 'professional', 'receptionist'), ReportController.getAttendanceReport);
+api.get('/v1/reports/care-continuity', requireTenant, requirePermissionOrRole('view_reports', 'clinic_admin', 'professional', 'receptionist'), ReportController.getCareContinuityReport);
+api.put('/v1/reports/care-continuity/patient/:patientId', requireTenant, requirePermissionOrRole('view_reports', 'clinic_admin', 'professional', 'receptionist'), ReportController.updatePatientContinuityConfig);
+api.put('/v1/reports/care-continuity/service/:serviceId', requireTenant, requirePermissionOrRole('manage_services', 'clinic_admin', 'professional'), ReportController.updateServiceContinuityConfig);
+api.get('/v1/reports/financial', requireTenant, requirePermissionOrRole('manage_financial', 'clinic_admin'), ReportController.getFinancialReport);
+api.get('/v1/reports/export-csv', requireTenant, requirePermissionOrRole('view_reports', 'clinic_admin', 'professional', 'receptionist'), ReportController.exportCsv);
 api.get('/v1/reports/export-docx', requireTenant, requireRole('clinic_admin', 'professional'), ReportController.exportDocx);
 api.get('/v1/clinical-export/preview', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalExportController.preview);
 api.get('/v1/clinical-export/download', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalExportController.download);
