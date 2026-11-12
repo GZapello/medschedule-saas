@@ -6,7 +6,7 @@ import { PREDICTED_TAV_PROTOCOL, normalizeMeasuredTavInput, classifyTav as class
 import { ASSESSMENT_COLUMNS } from '../config/personal-assessment.migration';
 import { exerciseAnimation, getExerciseMaxCompletedLoad } from '../services/exercise-media';
 import { validatePosture, postureSummary, validatePosturePhotoAccess } from '../services/personal-posture.service';
-import { matchesExercise, insertWorkoutExercise, imageAttribution } from '../services/personal-exercise-utils';
+import { matchesExercise, insertWorkoutExercise, imageAttribution, sanitizeVideoUrl } from '../services/personal-exercise-utils';
 import { ensureExerciseLibrarySeeded } from '../config/exercise-library.seed';
 import { Request, Response } from 'express';
 import { db } from '../config/database';
@@ -1816,7 +1816,7 @@ export class PersonalController {
       const {
         name, muscle_group, secondary_muscles_json,
         body_region, equipment, category, execution_type, mechanics, level,
-        instructions, technical_notes, photo_url, exercise_file_id, is_active
+        instructions, technical_notes, photo_url, video_url, exercise_file_id, is_active
       } = req.body;
 
       if (!name || !muscle_group) {
@@ -1826,19 +1826,20 @@ export class PersonalController {
 
       const id = 'pex-' + uuidv4().slice(0, 8);
       const effectiveExerciseFileId = requireExerciseAttachment(exercise_file_id, tenantId);
+      const sanitizedVideoUrl = sanitizeVideoUrl(video_url);
 
       db.prepare(`
         INSERT INTO personal_exercises (
           id, tenant_id, name, muscle_group, secondary_muscles_json,
           body_region, equipment, category, execution_type, mechanics, level,
-          instructions, technical_notes, photo_url, exercise_file_id, is_custom, is_active, created_by
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+          instructions, technical_notes, photo_url, video_url, exercise_file_id, is_custom, is_active, created_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
       `).run(
         id, tenantId, name.trim(), muscle_group.trim(),
         secondary_muscles_json ? (typeof secondary_muscles_json === 'string' ? secondary_muscles_json : JSON.stringify(secondary_muscles_json)) : null,
         body_region || null, equipment || null, category || 'Musculação',
         execution_type || 'bilateral', mechanics || null, level || 'todos',
-        instructions || null, technical_notes || null, null, effectiveExerciseFileId || null,
+        instructions || null, technical_notes || null, null, sanitizedVideoUrl, effectiveExerciseFileId || null,
         is_active !== undefined ? (is_active ? 1 : 0) : 1,
         req.user?.userId || null
       );
@@ -1862,7 +1863,7 @@ export class PersonalController {
       const {
         name, muscle_group, secondary_muscles_json,
         body_region, equipment, category, execution_type, mechanics, level,
-        instructions, technical_notes, photo_url, exercise_file_id, is_active
+        instructions, technical_notes, photo_url, video_url, exercise_file_id, is_active
       } = req.body;
 
       // Verifica se o exercício existe (na clínica ou no global)
@@ -1877,6 +1878,9 @@ export class PersonalController {
       const effectiveExerciseFileId = exercise_file_id !== undefined
         ? requireExerciseAttachment(exercise_file_id, tenantId)
         : undefined;
+
+      const hasVideoUrl = video_url !== undefined;
+      const sanitizedVideoUrl = hasVideoUrl ? sanitizeVideoUrl(video_url) : null;
 
       let targetId = existing.id;
       if (existing.tenant_id === tenantId) {
@@ -1895,6 +1899,7 @@ export class PersonalController {
             instructions = COALESCE(?, instructions),
             technical_notes = COALESCE(?, technical_notes),
             photo_url = CASE WHEN ? = 1 THEN ? ELSE photo_url END,
+            video_url = CASE WHEN ? = 1 THEN ? ELSE video_url END,
             exercise_file_id = CASE WHEN ? = 1 THEN ? ELSE exercise_file_id END,
             is_active = COALESCE(?, is_active),
             updated_at = datetime('now')
@@ -1913,6 +1918,8 @@ export class PersonalController {
           technical_notes !== undefined ? technical_notes : null,
           exercise_file_id !== undefined ? 1 : 0,
           null,
+          hasVideoUrl ? 1 : 0,
+          sanitizedVideoUrl,
           effectiveExerciseFileId !== undefined ? 1 : 0,
           effectiveExerciseFileId || null,
           is_active !== undefined ? (is_active ? 1 : 0) : null,
@@ -1925,8 +1932,8 @@ export class PersonalController {
           INSERT INTO personal_exercises (
             id, tenant_id, name, muscle_group, secondary_muscles_json,
             body_region, equipment, category, execution_type, mechanics, level,
-            instructions, technical_notes, photo_url, exercise_file_id, is_custom, is_active, created_by
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+            instructions, technical_notes, photo_url, video_url, exercise_file_id, is_custom, is_active, created_by
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
         `).run(
           targetId, tenantId,
           name ? name.trim() : existing.name,
@@ -1941,6 +1948,7 @@ export class PersonalController {
           instructions !== undefined ? instructions : existing.instructions,
           technical_notes !== undefined ? technical_notes : existing.technical_notes,
           exercise_file_id !== undefined ? null : existing.photo_url,
+          hasVideoUrl ? sanitizedVideoUrl : existing.video_url,
           effectiveExerciseFileId !== undefined ? (effectiveExerciseFileId || null) : existing.exercise_file_id,
           is_active !== undefined ? (is_active ? 1 : 0) : 1,
           req.user?.userId || null
@@ -2260,7 +2268,7 @@ export class PersonalController {
         LEFT JOIN professionals pr ON pr.id = t.professional_id
         LEFT JOIN users u ON u.id = pr.user_id
         WHERE t.tenant_id = ?
-        ORDER BY t.created_at DESC
+        ORDER BY COALESCE(t.updated_at, t.created_at) DESC
       `).all(tenantId) as any[];
 
       templates.forEach((t: any) => {
@@ -2269,6 +2277,15 @@ export class PersonalController {
         } catch {
           t.workouts = [];
         }
+        let totalExercises = 0;
+        if (Array.isArray(t.workouts)) {
+          for (const w of t.workouts) {
+            if (Array.isArray(w.exercises)) {
+              totalExercises += w.exercises.length;
+            }
+          }
+        }
+        t.exercises_count = totalExercises;
       });
 
       res.json({ templates });
@@ -2305,6 +2322,73 @@ export class PersonalController {
     } catch (err: any) {
       console.error('[PersonalController.createTemplate] Erro:', err);
       res.status(500).json({ error: 'Erro ao salvar modelo' });
+    }
+  }
+
+  static async updateTemplate(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const { id } = req.params;
+      const { title, structure_type, description, workouts } = req.body;
+
+      if (!title || !workouts) {
+        res.status(400).json({ error: 'Título e estrutura de treinos são obrigatórios' });
+        return;
+      }
+
+      const existing = db.prepare('SELECT id FROM personal_workout_templates WHERE id = ? AND tenant_id = ?').get(id, tenantId);
+      if (!existing) {
+        res.status(404).json({ error: 'Modelo não encontrado' });
+        return;
+      }
+
+      const workoutsJson = typeof workouts === 'string' ? workouts : JSON.stringify(workouts);
+
+      db.prepare(`
+        UPDATE personal_workout_templates
+        SET title = ?, structure_type = ?, description = ?, workouts_json = ?, updated_at = datetime('now')
+        WHERE id = ? AND tenant_id = ?
+      `).run(title.trim(), structure_type || 'ABC', description || null, workoutsJson, id, tenantId);
+
+      res.json({ id, message: 'Modelo de treino atualizado com sucesso' });
+    } catch (err: any) {
+      console.error('[PersonalController.updateTemplate] Erro:', err);
+      res.status(500).json({ error: 'Erro ao atualizar modelo' });
+    }
+  }
+
+  static async duplicateTemplate(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const professionalId = getProfessionalId(req);
+      const { id } = req.params;
+
+      const existing = db.prepare('SELECT * FROM personal_workout_templates WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
+      if (!existing) {
+        res.status(404).json({ error: 'Modelo não encontrado' });
+        return;
+      }
+
+      const newId = 'ptpl-' + uuidv4().slice(0, 8);
+      const newTitle = `${existing.title} (Cópia)`;
+
+      db.prepare(`
+        INSERT INTO personal_workout_templates (id, tenant_id, professional_id, title, structure_type, description, workouts_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(newId, tenantId, professionalId, newTitle, existing.structure_type, existing.description, existing.workouts_json);
+
+      res.status(201).json({ id: newId, message: 'Modelo duplicado com sucesso' });
+    } catch (err: any) {
+      console.error('[PersonalController.duplicateTemplate] Erro:', err);
+      res.status(500).json({ error: 'Erro ao duplicar modelo' });
     }
   }
 

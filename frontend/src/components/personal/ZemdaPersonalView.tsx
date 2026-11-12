@@ -21,11 +21,21 @@ import {
   Activity,
   CheckCircle2,
   FileText,
-  X
+  X,
+  Eye,
+  Copy,
+  Edit2,
+  Trash2,
+  Check,
+  AlertCircle,
+  Filter,
+  Play,
+  RotateCcw,
+  RefreshCw
 } from 'lucide-react';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
-import { Student, Workout } from './types';
+import { Student, Workout, WorkoutTemplate } from './types';
 import { PersonalDashboard } from './PersonalDashboard';
 import { PersonalStudentProfile } from './PersonalStudentProfile';
 import { PersonalExerciseLibraryModal } from './PersonalExerciseLibraryModal';
@@ -36,6 +46,123 @@ import { PatientSearchSelect } from '../common/PatientSearchSelect';
 import { ProfessionalModuleHeader } from '../common/ProfessionalModuleHeader';
 import { useAuth } from '../../context/AuthContext';
 import { ZemdaBodyModal } from '../zemda-body/ZemdaBodyModal';
+import { PersonalTemplateBuilder } from './PersonalTemplateBuilder';
+import { PersonalVideoPlayerModal } from './PersonalVideoPlayerModal';
+
+const BASE_TEMPLATES = [
+  {
+    title: 'Treino ABC Tradicional',
+    structure_type: 'ABC',
+    description: 'Divisão clássica e balanceada: Peito/Tríceps, Costas/Bíceps e Pernas/Ombros.',
+    workouts: [
+      {
+        title: 'Treino A - Peitoral e Tríceps',
+        division: 'A',
+        notes: 'Foco em peito, tríceps e abdômen.',
+        exercises: []
+      },
+      {
+        title: 'Treino B - Costas e Bíceps',
+        division: 'B',
+        notes: 'Foco em dorsal, trapézio e bíceps.',
+        exercises: []
+      },
+      {
+        title: 'Treino C - Pernas Completas e Ombros',
+        division: 'C',
+        notes: 'Foco em quadríceps, posteriores, glúteos, panturrilhas e deltóides.',
+        exercises: []
+      }
+    ]
+  },
+  {
+    title: 'Treino ABCD Intensivo',
+    structure_type: 'ABCD',
+    description: 'Maior volume e especialização por agrupamento: Peito/Ombros, Costas/Trapézio, Pernas e Braços.',
+    workouts: [
+      {
+        title: 'Treino A - Peito e Deltóides',
+        division: 'A',
+        notes: 'Ênfase em peitoral e deltóide anterior/lateral.',
+        exercises: []
+      },
+      {
+        title: 'Treino B - Costas e Trapézio',
+        division: 'B',
+        notes: 'Ênfase em puxadas verticais, remadas e lombar.',
+        exercises: []
+      },
+      {
+        title: 'Treino C - Membros Inferiores Completo',
+        division: 'C',
+        notes: 'Foco em pernas completas e panturrilhas.',
+        exercises: []
+      },
+      {
+        title: 'Treino D - Bíceps, Tríceps e Antebraços',
+        division: 'D',
+        notes: 'Volume dedicado para braços completos.',
+        exercises: []
+      }
+    ]
+  },
+  {
+    title: 'Upper / Lower (Superior e Inferior)',
+    structure_type: 'Upper/Lower',
+    description: 'Ideal para 4 dias na semana: 2 sessões superiores e 2 inferiores com alta frequência.',
+    workouts: [
+      {
+        title: 'Treino A - Superior 1 (Força)',
+        division: 'A',
+        notes: 'Supino, remada curvada, desenvolvimento e puxadas.',
+        exercises: []
+      },
+      {
+        title: 'Treino B - Inferior 1 (Quadríceps/Glúteo)',
+        division: 'B',
+        notes: 'Agachamento, leg press, passadas e panturrilhas.',
+        exercises: []
+      },
+      {
+        title: 'Treino C - Superior 2 (Hipertrofia)',
+        division: 'C',
+        notes: 'Crucifixo, puxada articulada, elevações e braços.',
+        exercises: []
+      },
+      {
+        title: 'Treino D - Inferior 2 (Posteriores/Glúteo)',
+        division: 'D',
+        notes: 'Levantamento terra/stiff, mesa flexora e passadas.',
+        exercises: []
+      }
+    ]
+  },
+  {
+    title: 'Full Body (Corpo Inteiro 3x)',
+    structure_type: 'Fullbody',
+    description: 'Estímulo sistêmico para iniciantes ou alunos com frequência de 3 dias por semana.',
+    workouts: [
+      {
+        title: 'Treino A - Sessão 1 (Segunda-feira)',
+        division: 'A',
+        notes: 'Movimentos compostos com ênfase em cadeia anterior.',
+        exercises: []
+      },
+      {
+        title: 'Treino B - Sessão 2 (Quarta-feira)',
+        division: 'B',
+        notes: 'Movimentos compostos com ênfase em cadeia posterior.',
+        exercises: []
+      },
+      {
+        title: 'Treino C - Sessão 3 (Sexta-feira)',
+        division: 'C',
+        notes: 'Estímulo completo de força e estabilização core.',
+        exercises: []
+      }
+    ]
+  }
+];
 
 interface ZemdaPersonalViewProps {
   initialStudentId?: string | null;
@@ -144,8 +271,18 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
   const [loadingStudents, setLoadingStudents] = useState(false);
 
   // Modelos de Treino (Templates)
-  const [templates, setTemplates] = useState<any[]>([]);
+  const [templates, setTemplates] = useState<WorkoutTemplate[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [isTemplateBuilderOpen, setIsTemplateBuilderOpen] = useState(false);
+  const [templateToEdit, setTemplateToEdit] = useState<WorkoutTemplate | null>(null);
+  const [initialTemplateBase, setInitialTemplateBase] = useState<any | null>(null);
+  const [previewTemplate, setPreviewTemplate] = useState<WorkoutTemplate | null>(null);
+  const [applyModalTemplate, setApplyModalTemplate] = useState<WorkoutTemplate | null>(null);
+  const [applyingTemplate, setApplyingTemplate] = useState(false);
+  const [selectedApplyStudentId, setSelectedApplyStudentId] = useState('');
+  const [templateSearch, setTemplateSearch] = useState('');
+  const [templateStructureFilter, setTemplateStructureFilter] = useState('Todos');
+  const [videoPlayerExercise, setVideoPlayerExercise] = useState<{ url: string; name: string } | null>(null);
 
   // Busca Rápida Global (Smart Search)
   const [searchQuery, setSearchQuery] = useState('');
@@ -249,12 +386,35 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
   const loadTemplates = async () => {
     try {
       setLoadingTemplates(true);
-      const res = await ApiClient.get<{ templates: any[] }>('/v1/personal/templates');
+      const res = await ApiClient.get<{ templates: WorkoutTemplate[] }>('/v1/personal/templates');
       setTemplates(res.templates || []);
     } catch (err) {
       console.error('Erro ao carregar modelos:', err);
     } finally {
       setLoadingTemplates(false);
+    }
+  };
+
+  const handleDuplicateTemplate = async (templateId: string) => {
+    try {
+      await ApiClient.post(`/v1/personal/templates/${templateId}/duplicate`, {});
+      showToast('Modelo duplicado com sucesso!', 'success');
+      loadTemplates();
+    } catch (err: any) {
+      console.error('Erro ao duplicar modelo:', err);
+      showToast(err.message || 'Erro ao duplicar modelo', 'error');
+    }
+  };
+
+  const handleDeleteTemplate = async (templateId: string, templateTitle: string) => {
+    if (!window.confirm(`Tem certeza que deseja excluir o modelo "${templateTitle}"?`)) return;
+    try {
+      await ApiClient.delete(`/v1/personal/templates/${templateId}`);
+      showToast('Modelo excluído com sucesso!', 'success');
+      loadTemplates();
+    } catch (err: any) {
+      console.error('Erro ao excluir modelo:', err);
+      showToast(err.message || 'Erro ao excluir modelo', 'error');
     }
   };
 
@@ -743,62 +903,304 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
 
           {/* CONTEÚDO: MODELOS DE TREINO (TEMPLATES) */}
           {currentTab === 'templates' && (
-            <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2">
-                    <Layers className="w-4 h-4 text-indigo-600" />
-                    <span>Modelos de Treino Padronizados (Templates)</span>
+            <div className="space-y-6">
+              {/* Header do Módulo de Templates */}
+              <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <h4 className="font-bold text-slate-800 text-base flex items-center gap-2">
+                    <Layers className="w-5 h-5 text-emerald-600" />
+                    <span>Biblioteca de Modelos de Treino (Templates)</span>
                   </h4>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Estruturas prontas (ABC, ABCD, Upper/Lower) que você pode aplicar em 1 clique a qualquer aluno.
+                  <p className="text-xs text-slate-500 max-w-2xl leading-relaxed">
+                    Crie, personalize e gerencie seus próprios modelos de treino completos. Você pode começar do zero, usar uma estrutura base ou duplicar um modelo existente para aplicar em 1 clique a qualquer aluno.
                   </p>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTemplateToEdit(null);
+                      setInitialTemplateBase(null);
+                      setIsTemplateBuilderOpen(true);
+                    }}
+                    className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md shadow-emerald-600/20 flex items-center gap-2 transition-all hover:scale-[1.02] cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>+ Criar Modelo de Treino</span>
+                  </button>
                 </div>
               </div>
 
-              {loadingTemplates ? (
-                <div className="py-16 text-center text-slate-400 text-xs">Carregando modelos...</div>
-              ) : templates.length === 0 ? (
-                <div className="py-16 text-center text-slate-400 text-xs flex flex-col items-center gap-2">
-                  <Layers className="w-10 h-10 text-slate-300" />
-                  <span>Nenhum modelo customizado salvo ainda.</span>
-                  <span className="text-slate-500 text-[11px]">
-                    Ao prescrever treinos, você pode salvá-los como modelos reutilizáveis.
-                  </span>
+              {/* Filtros e Busca */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
+                <div className="relative w-full sm:w-80">
+                  <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={templateSearch}
+                    onChange={(e) => setTemplateSearch(e.target.value)}
+                    placeholder="Buscar modelos por nome ou descrição..."
+                    className="w-full pl-10 pr-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                  />
+                  {templateSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setTemplateSearch('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {templates.map((tpl) => (
-                    <div key={tpl.id} className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <h5 className="font-bold text-slate-800 text-xs">{tpl.title}</h5>
-                        <span className="text-[10px] uppercase font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md">
-                          {tpl.structure_type}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-500">{tpl.description || 'Sem descrição'}</p>
-                      <div className="text-[11px] text-slate-400">
-                        {tpl.workouts?.length || 0} divisões de treino inclusas
-                      </div>
 
-                      <div className="pt-2 border-t border-slate-200 flex items-center justify-between">
-                        <div className="w-full sm:w-64">
-                          <PatientSearchSelect
-                            isStudent
-                            clientTermLabel="Aluno"
-                            compact
-                            value=""
-                            onChange={(studentId) => {
-                              if (studentId) handleApplyTemplate(tpl.id, studentId);
-                            }}
-                            placeholder="Aplicar a um aluno..."
-                          />
-                        </div>
-                      </div>
+                {/* Filtro por Estrutura */}
+                <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto py-1">
+                  {['Todos', 'ABC', 'ABCD', 'Upper/Lower', 'Fullbody'].map((filterKey) => {
+                    const isSelected = templateStructureFilter === filterKey;
+                    return (
+                      <button
+                        key={filterKey}
+                        type="button"
+                        onClick={() => setTemplateStructureFilter(filterKey)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all whitespace-nowrap cursor-pointer ${
+                          isSelected
+                            ? 'bg-slate-900 text-white shadow-xs'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        {filterKey === 'Upper/Lower' ? 'Upper/Lower' : filterKey === 'Fullbody' ? 'Full Body' : filterKey}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Seção 1: Modelos Base Organizacionais (Sugestões de Início Rápido) */}
+              {!templateSearch && templateStructureFilter === 'Todos' && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h5 className="font-bold text-xs uppercase tracking-wider text-slate-500 flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-amber-500" />
+                        <span>Estruturas Base para Início Rápido</span>
+                      </h5>
+                      <p className="text-[11px] text-slate-400">
+                        Inicie um novo modelo preenchido com as divisões anatômicas recomendadas.
+                      </p>
                     </div>
-                  ))}
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                    {BASE_TEMPLATES.map((base, bIdx) => (
+                      <div
+                        key={bIdx}
+                        className="bg-white rounded-2xl border border-slate-200 hover:border-emerald-300 p-4 shadow-xs transition-all flex flex-col justify-between space-y-3 group"
+                      >
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              {base.structure_type}
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-semibold">
+                              {base.workouts.length} divisões
+                            </span>
+                          </div>
+                          <h6 className="font-bold text-xs text-slate-800 group-hover:text-emerald-700 transition-colors">
+                            {base.title}
+                          </h6>
+                          <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed">
+                            {base.description}
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTemplateToEdit(null);
+                            setInitialTemplateBase(base);
+                            setIsTemplateBuilderOpen(true);
+                          }}
+                          className="w-full py-2 px-3 bg-slate-50 hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 border border-slate-200 hover:border-emerald-200 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                        >
+                          <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                          <span>Usar como base</span>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
+
+              {/* Seção 2: Meus Modelos Salvos */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h5 className="font-bold text-xs uppercase tracking-wider text-slate-500 flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-emerald-600" />
+                    <span>Meus Modelos Personalizados ({templates.filter((tpl) => {
+                      const matchesSearch = !templateSearch || tpl.title?.toLowerCase().includes(templateSearch.toLowerCase()) || tpl.description?.toLowerCase().includes(templateSearch.toLowerCase());
+                      const matchesFilter = templateStructureFilter === 'Todos' || tpl.structure_type?.toLowerCase() === templateStructureFilter.toLowerCase();
+                      return matchesSearch && matchesFilter;
+                    }).length})</span>
+                  </h5>
+                </div>
+
+                {loadingTemplates ? (
+                  <div className="py-16 text-center text-slate-400 text-xs bg-white rounded-3xl border border-slate-200">
+                    <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-slate-300" />
+                    Carregando modelos de treino...
+                  </div>
+                ) : templates.filter((tpl) => {
+                    const matchesSearch = !templateSearch || tpl.title?.toLowerCase().includes(templateSearch.toLowerCase()) || tpl.description?.toLowerCase().includes(templateSearch.toLowerCase());
+                    const matchesFilter = templateStructureFilter === 'Todos' || tpl.structure_type?.toLowerCase() === templateStructureFilter.toLowerCase();
+                    return matchesSearch && matchesFilter;
+                  }).length === 0 ? (
+                  <div className="py-16 text-center text-slate-400 text-xs flex flex-col items-center gap-3 bg-white rounded-3xl border border-dashed border-slate-200 p-8">
+                    <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400">
+                      <Layers className="w-7 h-7" />
+                    </div>
+                    <div className="space-y-1">
+                      <h6 className="font-bold text-slate-700 text-sm">
+                        {templateSearch ? 'Nenhum modelo encontrado para esta busca.' : 'Nenhum modelo personalizado salvo ainda.'}
+                      </h6>
+                      <p className="text-slate-500 text-xs max-w-sm">
+                        {templateSearch
+                          ? 'Tente utilizar outras palavras-chave ou remover os filtros de estrutura.'
+                          : 'Crie seu primeiro modelo reutilizável ou utilize uma das estruturas base sugeridas acima.'}
+                      </p>
+                    </div>
+                    {!templateSearch && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTemplateToEdit(null);
+                          setInitialTemplateBase(null);
+                          setIsTemplateBuilderOpen(true);
+                        }}
+                        className="mt-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all cursor-pointer"
+                      >
+                        + Criar Meu Primeiro Modelo
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {templates
+                      .filter((tpl) => {
+                        const matchesSearch = !templateSearch || tpl.title?.toLowerCase().includes(templateSearch.toLowerCase()) || tpl.description?.toLowerCase().includes(templateSearch.toLowerCase());
+                        const matchesFilter = templateStructureFilter === 'Todos' || tpl.structure_type?.toLowerCase() === templateStructureFilter.toLowerCase();
+                        return matchesSearch && matchesFilter;
+                      })
+                      .map((tpl) => {
+                        const totalExercises =
+                          tpl.exercises_count ??
+                          tpl.workouts?.reduce((sum: number, w: any) => sum + (w.exercises?.length || 0), 0) ??
+                          0;
+                        const divisionsCount = tpl.workouts?.length || 0;
+                        const updatedDate = tpl.updated_at || tpl.created_at;
+
+                        return (
+                          <div
+                            key={tpl.id}
+                            className="bg-white rounded-3xl border border-slate-200 hover:border-emerald-300 p-5 shadow-xs transition-all flex flex-col justify-between space-y-4 group"
+                          >
+                            <div className="space-y-3">
+                              {/* Topo do card: título e estrutura */}
+                              <div className="flex items-start justify-between gap-2">
+                                <h5 className="font-bold text-slate-800 text-sm group-hover:text-emerald-700 transition-colors line-clamp-1">
+                                  {tpl.title}
+                                </h5>
+                                <span className="text-[10px] uppercase font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md shrink-0">
+                                  {tpl.structure_type}
+                                </span>
+                              </div>
+
+                              {/* Descrição */}
+                              <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed min-h-[32px]">
+                                {tpl.description || 'Modelo de treino personalizado.'}
+                              </p>
+
+                              {/* Estatísticas e Divisões */}
+                              <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-bold text-slate-700">{divisionsCount}</span>
+                                  <span>{divisionsCount === 1 ? 'divisão' : 'divisões'}</span>
+                                  <span>•</span>
+                                  <span className="font-bold text-slate-700">{totalExercises}</span>
+                                  <span>{totalExercises === 1 ? 'exercício' : 'exercícios'}</span>
+                                </div>
+                              </div>
+
+                              {/* Data de atualização */}
+                              {updatedDate && (
+                                <p className="text-[10px] text-slate-400">
+                                  Atualizado em {new Date(updatedDate).toLocaleDateString('pt-BR')}
+                                </p>
+                              )}
+                            </div>
+
+                            {/* Ações do Card */}
+                            <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setPreviewTemplate(tpl)}
+                                  title="Visualizar estrutura do modelo"
+                                  className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                                >
+                                  <Eye className="w-4 h-4" />
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setTemplateToEdit(tpl);
+                                    setInitialTemplateBase(null);
+                                    setIsTemplateBuilderOpen(true);
+                                  }}
+                                  title="Editar modelo"
+                                  className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors cursor-pointer"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleDuplicateTemplate(tpl.id)}
+                                  title="Duplicar modelo"
+                                  className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors cursor-pointer"
+                                >
+                                  <Copy className="w-4 h-4" />
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteTemplate(tpl.id, tpl.title)}
+                                  title="Excluir modelo"
+                                  className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedApplyStudentId('');
+                                  setApplyModalTemplate(tpl);
+                                }}
+                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer hover:scale-[1.02]"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                                <span>Aplicar</span>
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
+              </div>
             </div>
           )}
             </>
@@ -963,6 +1365,315 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
           readOnly={false}
         />
       )}
+
+      {/* MODAL: CRIAR / EDITAR MODELO DE TREINO */}
+      <PersonalTemplateBuilder
+        isOpen={isTemplateBuilderOpen}
+        onClose={() => {
+          setIsTemplateBuilderOpen(false);
+          setTemplateToEdit(null);
+          setInitialTemplateBase(null);
+        }}
+        onSaved={() => {
+          loadTemplates();
+        }}
+        templateToEdit={templateToEdit}
+        initialTemplate={initialTemplateBase}
+      />
+
+      {/* MODAL: APLICAR MODELO A UM ALUNO */}
+      {applyModalTemplate && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fadeIn"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-scaleUp"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
+                  <Layers className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-800">
+                    Aplicar Modelo ao Aluno
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Cria rotinas independentes no perfil do aluno selecionado.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setApplyModalTemplate(null);
+                  setSelectedApplyStudentId('');
+                }}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                title="Fechar"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {/* Resumo do modelo */}
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-sm text-slate-800">{applyModalTemplate.title}</h4>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-md">
+                    {applyModalTemplate.structure_type}
+                  </span>
+                </div>
+                {applyModalTemplate.description && (
+                  <p className="text-xs text-slate-600">{applyModalTemplate.description}</p>
+                )}
+                <div className="flex items-center gap-3 text-xs text-slate-500 pt-1 border-t border-slate-200">
+                  <span>
+                    <strong>{applyModalTemplate.workouts?.length || 0}</strong> divisões
+                  </span>
+                  <span>•</span>
+                  <span>
+                    <strong>
+                      {applyModalTemplate.exercises_count ??
+                        applyModalTemplate.workouts?.reduce((a: number, w: any) => a + (w.exercises?.length || 0), 0) ??
+                        0}
+                    </strong> exercícios totais
+                  </span>
+                </div>
+              </div>
+
+              {/* Seleção do Aluno */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  Selecione o Aluno de Destino <span className="text-rose-500">*</span>
+                </label>
+                <PatientSearchSelect
+                  isStudent
+                  clientTermLabel="Aluno"
+                  value={selectedApplyStudentId}
+                  onChange={(studentId) => setSelectedApplyStudentId(studentId || '')}
+                  placeholder="Pesquise o aluno pelo nome..."
+                />
+              </div>
+
+              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-800 flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <p>
+                  Os treinos criados no perfil do aluno são totalmente independentes. Alterações futuras no aluno não afetam este modelo.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end px-6 py-4 border-t border-slate-200 bg-slate-50 space-x-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setApplyModalTemplate(null);
+                  setSelectedApplyStudentId('');
+                }}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={!selectedApplyStudentId || applyingTemplate}
+                onClick={async () => {
+                  if (!selectedApplyStudentId || applyingTemplate) return;
+                  setApplyingTemplate(true);
+                  try {
+                    await handleApplyTemplate(applyModalTemplate.id, selectedApplyStudentId);
+                    setApplyModalTemplate(null);
+                    setSelectedApplyStudentId('');
+                  } finally {
+                    setApplyingTemplate(false);
+                  }
+                }}
+                className="px-5 py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 rounded-xl shadow-lg shadow-emerald-600/20 flex items-center space-x-2 transition-all hover:scale-[1.02] cursor-pointer"
+              >
+                <Check className="w-4 h-4" />
+                <span>{applyingTemplate ? 'Aplicando ao Aluno...' : 'Aplicar Modelo ao Aluno'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: VISUALIZAR ESTRUTURA DO MODELO */}
+      {previewTemplate && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fadeIn"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden animate-scaleUp"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50 shrink-0">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-500/10 text-indigo-600 flex items-center justify-center">
+                  <Layers className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                    <span>{previewTemplate.title}</span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-700 bg-indigo-100/70 px-2 py-0.5 rounded-md">
+                      {previewTemplate.structure_type}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    {previewTemplate.description || 'Modelo de treino salvo na sua biblioteca'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setPreviewTemplate(null)}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                title="Fechar"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-5">
+              {!previewTemplate.workouts || previewTemplate.workouts.length === 0 ? (
+                <p className="text-xs text-slate-500 text-center py-8">Nenhuma divisão cadastrada neste modelo.</p>
+              ) : (
+                previewTemplate.workouts.map((w, wIdx) => (
+                  <div key={wIdx} className="bg-slate-50 rounded-2xl p-4 border border-slate-200 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-bold text-xs text-slate-800 flex items-center gap-2">
+                        <span className="w-6 h-6 rounded-lg bg-emerald-600 text-white font-bold text-xs flex items-center justify-center">
+                          {w.division || String.fromCharCode(65 + wIdx)}
+                        </span>
+                        <span>{w.title}</span>
+                      </h4>
+                      <span className="text-[11px] text-slate-500">
+                        {w.exercises?.length || 0} exercícios
+                      </span>
+                    </div>
+
+                    {w.notes && (
+                      <p className="text-xs text-slate-500 italic bg-white p-2.5 rounded-xl border border-slate-200">
+                        Orientação: {w.notes}
+                      </p>
+                    )}
+
+                    <div className="space-y-1.5">
+                      {!w.exercises || w.exercises.length === 0 ? (
+                        <p className="text-[11px] text-slate-400 italic">Sem exercícios adicionados nesta divisão.</p>
+                      ) : (
+                        w.exercises.map((ex, eIdx) => (
+                          <div
+                            key={eIdx}
+                            className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-slate-200 text-xs gap-3"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                              <span className="text-[11px] font-bold text-slate-400 w-4 text-center shrink-0">
+                                {eIdx + 1}
+                              </span>
+                              <div className="min-w-0">
+                                <span className="font-semibold text-slate-800 truncate block">
+                                  {ex.name}
+                                </span>
+                                <span className="text-[10px] text-slate-400 uppercase font-bold">
+                                  {ex.muscle_group}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-3 shrink-0 text-slate-600">
+                              <span className="bg-slate-100 px-2 py-0.5 rounded-md font-semibold text-[11px]">
+                                {ex.sets} x {ex.reps}
+                              </span>
+                              {ex.load_kg !== undefined && ex.load_kg !== null && (
+                                <span className="text-[11px] font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md">
+                                  {ex.load_kg} kg
+                                </span>
+                              )}
+                              {ex.rest_seconds && (
+                                <span className="text-[11px] text-slate-500">
+                                  {ex.rest_seconds}s
+                                </span>
+                              )}
+                              {ex.technique && ex.technique !== 'Direta' && (
+                                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
+                                  {ex.technique}
+                                </span>
+                              )}
+                              {ex.video_url && (
+                                <button
+                                  type="button"
+                                  onClick={() => setVideoPlayerExercise({ url: ex.video_url!, name: ex.name })}
+                                  className="p-1 text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-md transition-colors cursor-pointer"
+                                  title="Assistir demonstração em vídeo"
+                                >
+                                  <Play className="w-3.5 h-3.5 fill-current" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="flex items-center justify-between px-6 py-4 border-t border-slate-200 bg-slate-50 shrink-0">
+              <button
+                type="button"
+                onClick={() => setPreviewTemplate(null)}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
+              >
+                Fechar
+              </button>
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const toEdit = previewTemplate;
+                    setPreviewTemplate(null);
+                    setTemplateToEdit(toEdit);
+                    setInitialTemplateBase(null);
+                    setIsTemplateBuilderOpen(true);
+                  }}
+                  className="px-4 py-2 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  <Edit2 className="w-3.5 h-3.5" />
+                  <span>Editar Modelo</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const toApply = previewTemplate;
+                    setPreviewTemplate(null);
+                    setSelectedApplyStudentId('');
+                    setApplyModalTemplate(toApply);
+                  }}
+                  className="px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-md transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Aplicar ao Aluno</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PLAYER DE VÍDEO DEMONSTRATIVO */}
+      <PersonalVideoPlayerModal
+        isOpen={Boolean(videoPlayerExercise)}
+        onClose={() => setVideoPlayerExercise(null)}
+        videoUrl={videoPlayerExercise?.url}
+        exerciseName={videoPlayerExercise?.name || 'Exercício'}
+      />
     </div>
   );
 };

@@ -16,7 +16,9 @@ import {
   RefreshCw,
   ChevronLeft,
   ChevronRight,
-  Filter
+  Filter,
+  Video,
+  Play
 } from 'lucide-react';
 import { Exercise } from './types';
 import { ExerciseImageCredit } from './ExerciseImageCredit';
@@ -24,6 +26,7 @@ import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { FileImageUploader } from '../common/FileImageUploader';
 import { SecureFileImage } from '../common/SecureFileImage';
+import { PersonalVideoPlayerModal } from './PersonalVideoPlayerModal';
 
 interface PersonalExerciseLibraryModalProps {
   isOpen: boolean;
@@ -131,10 +134,12 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
   const [formInstructions, setFormInstructions] = useState('');
   const [formTechnicalNotes, setFormTechnicalNotes] = useState('');
   const [formPhotoUrl, setFormPhotoUrl] = useState('');
+  const [formVideoUrl, setFormVideoUrl] = useState('');
   const [formFileId, setFormFileId] = useState('');
   const [formIsActive, setFormIsActive] = useState(1);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [videoPlayerExercise, setVideoPlayerExercise] = useState<Exercise | null>(null);
 
   // Reset animations when state changes
   useEffect(() => { setActiveAnimationId(null); }, [isOpen, currentPage, selectedMuscle, selectedEquipment, selectedCategory]);
@@ -255,6 +260,7 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
     setFormInstructions('');
     setFormTechnicalNotes('');
     setFormPhotoUrl('');
+    setFormVideoUrl('');
     setFormFileId('');
     setFormIsActive(1);
     setIsFormOpen(true);
@@ -273,6 +279,7 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
     setFormInstructions(ex.instructions || '');
     setFormTechnicalNotes(ex.technical_notes || '');
     setFormPhotoUrl(ex.photo_url || '');
+    setFormVideoUrl(ex.video_url || '');
     setFormFileId(ex.exercise_file_id || '');
     setFormIsActive(ex.is_active !== undefined ? ex.is_active : 1);
     setIsFormOpen(true);
@@ -298,6 +305,7 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
         level: formLevel,
         instructions: formInstructions,
         technical_notes: formTechnicalNotes,
+        video_url: formVideoUrl.trim() || null,
         exercise_file_id: formFileId || null,
         is_active: formIsActive
       };
@@ -649,6 +657,20 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                               {ex.equipment}
                             </span>
                           )}
+                          {ex.video_url && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setVideoPlayerExercise(ex);
+                              }}
+                              className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-1.5 py-0.5 rounded-md flex items-center gap-1 transition-colors cursor-pointer"
+                              title="Assistir demonstração em vídeo"
+                            >
+                              <Play className="w-2.5 h-2.5 fill-current" />
+                              <span>Vídeo</span>
+                            </button>
+                          )}
                           {ex.level && (
                             <span className="text-[9px] font-medium text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded-md capitalize">
                               {ex.level}
@@ -886,6 +908,17 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                 </div>
               )}
 
+              {zoomedExercise.video_url && (
+                <button
+                  type="button"
+                  onClick={() => setVideoPlayerExercise(zoomedExercise)}
+                  className="w-full py-2.5 px-4 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold text-xs rounded-xl flex items-center justify-center gap-2 border border-emerald-200 transition-colors cursor-pointer"
+                >
+                  <Play className="w-4 h-4 fill-current" />
+                  <span>Assistir demonstração em vídeo</span>
+                </button>
+              )}
+
               {isPickerMode && (
                 <button
                   onClick={() => {
@@ -1079,6 +1112,39 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                 />
               </div>
 
+              {/* Link externo de vídeo demonstrativo */}
+              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-1.5">
+                <label className="block text-xs font-semibold text-slate-700 flex items-center justify-between">
+                  <span className="flex items-center space-x-1.5">
+                    <Video className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Link externo de vídeo demonstrativo (opcional)</span>
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-normal">YouTube, Shorts, Drive, Vimeo</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="url"
+                    value={formVideoUrl}
+                    onChange={(e) => setFormVideoUrl(e.target.value)}
+                    placeholder="https://www.youtube.com/watch?v=... ou https://youtu.be/..."
+                    className="w-full text-xs px-3 py-2 pr-8 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none bg-white text-slate-800 placeholder:text-slate-400"
+                  />
+                  {formVideoUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setFormVideoUrl('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                      title="Limpar link"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-500 leading-tight">
+                  Cole o link do vídeo de execução. O vídeo não consome espaço no servidor, sendo reproduzido diretamente do link externo.
+                </p>
+              </div>
+
               {/* Instruções e Notas Técnicas */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
@@ -1131,6 +1197,14 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
           </div>
         </div>
       )}
+
+      {/* Player de Vídeo Demonstrativo */}
+      <PersonalVideoPlayerModal
+        isOpen={Boolean(videoPlayerExercise)}
+        onClose={() => setVideoPlayerExercise(null)}
+        videoUrl={videoPlayerExercise?.video_url}
+        exerciseName={videoPlayerExercise?.name || 'Exercício'}
+      />
     </div>
   );
 };

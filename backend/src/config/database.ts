@@ -583,6 +583,10 @@ export function initializeDatabase(): void {
     addColIfMissing('file_attachments', 'module_type', 'TEXT');
     addColIfMissing('file_attachments', 'test_id', 'TEXT');
 
+    // Colunas de vídeo demonstrativo externo nos exercícios do ZemdaPersonal
+    addColIfMissing('personal_exercises', 'video_url', 'TEXT');
+    addColIfMissing('personal_workout_exercises', 'video_url', 'TEXT');
+
     // Assinatura eletrônica e selamento imutável de prontuários e documentos
     addColIfMissing('records', 'signature_hash', 'TEXT');
     addColIfMissing('records', 'signed_at', 'TEXT');
@@ -2838,6 +2842,7 @@ export function initializeDatabase(): void {
         instructions TEXT,
         technical_notes TEXT,
         photo_url TEXT,
+        video_url TEXT,
         exercise_file_id TEXT,
         is_custom INTEGER DEFAULT 0,
         is_active INTEGER DEFAULT 1,
@@ -2889,6 +2894,7 @@ export function initializeDatabase(): void {
         technique_custom TEXT,
         notes TEXT,
         photo_url TEXT,
+        video_url TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now')),
         FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
@@ -3048,7 +3054,7 @@ export function initializeDatabase(): void {
 
   // Fallback artwork is shipped locally. R2 imports are explicit maintenance operations.
   for (const [column, definition] of Object.entries({
-    instructions: 'TEXT', category: 'TEXT', duration_seconds: 'REAL', side: 'TEXT', snapshot_version: 'INTEGER', image_attribution_json: 'TEXT'
+    instructions: 'TEXT', category: 'TEXT', duration_seconds: 'REAL', side: 'TEXT', snapshot_version: 'INTEGER', image_attribution_json: 'TEXT', video_url: 'TEXT'
   })) {
     const columns = rawDb.prepare('PRAGMA table_info(personal_workout_exercises)').all().map((c: any) => c.name);
     if (!columns.includes(column)) rawDb.exec(`ALTER TABLE personal_workout_exercises ADD COLUMN ${column} ${definition}`);

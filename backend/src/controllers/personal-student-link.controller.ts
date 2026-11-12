@@ -366,7 +366,7 @@ export class PersonalStudentLinkController {
         const exercises = db.prepare(`
           SELECT id, workout_id, exercise_id, order_index, name, muscle_group, sets, reps, load_kg,
                  rest_seconds, cadence, tempo, rpe, rir, technique, technique_custom, notes,
-                 photo_url, exercise_file_id, instructions, category, duration_seconds, side
+                 photo_url, video_url, exercise_file_id, instructions, category, duration_seconds, side
           FROM personal_workout_exercises
           WHERE workout_id = ? AND tenant_id = ?
           ORDER BY order_index ASC

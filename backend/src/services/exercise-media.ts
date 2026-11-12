@@ -73,6 +73,7 @@ export function resolveExerciseMediaAndDetails(db: any, ex: {
   exercise_id?: string | null;
   name: string;
   photo_url?: string | null;
+  video_url?: string | null;
   instructions?: string | null;
   technical_notes?: string | null;
   equipment?: string | null;
@@ -121,6 +122,7 @@ export function resolveExerciseMediaAndDetails(db: any, ex: {
   return {
     exercise_id: targetId || null,
     photo_url: resolvedPhoto,
+    video_url: ex.video_url || pe?.video_url || null,
     gif_url: gifUrl,
     gif_attribution: gifAttribution,
     instructions: ex.instructions || pe?.instructions || null,

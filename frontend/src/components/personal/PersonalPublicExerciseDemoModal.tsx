@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Play, Dumbbell, Sparkles, AlertCircle, Info, Flame, Check } from 'lucide-react';
+import { PersonalVideoPlayerModal } from './PersonalVideoPlayerModal';
 
 export interface ExerciseDemoDetails {
   id?: string;
@@ -7,6 +8,7 @@ export interface ExerciseDemoDetails {
   name: string;
   muscle_group: string;
   photo_url?: string | null;
+  video_url?: string | null;
   gif_url?: string | null;
   gif_attribution?: string | null;
   instructions?: string | null;
@@ -34,10 +36,12 @@ export const PersonalPublicExerciseDemoModal: React.FC<PersonalPublicExerciseDem
 }) => {
   const [gifFailed, setGifFailed] = useState(false);
   const [photoFailed, setPhotoFailed] = useState(false);
+  const [showVideoModal, setShowVideoModal] = useState(false);
 
   useEffect(() => {
     setGifFailed(false);
     setPhotoFailed(false);
+    setShowVideoModal(false);
   }, [exercise]);
 
   // Fecha com ESC
@@ -141,6 +145,18 @@ export const PersonalPublicExerciseDemoModal: React.FC<PersonalPublicExerciseDem
           </p>
         )}
 
+        {/* Demonstração em Vídeo se disponível */}
+        {exercise.video_url && (
+          <button
+            type="button"
+            onClick={() => setShowVideoModal(true)}
+            className="w-full py-2.5 px-4 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 rounded-2xl flex items-center justify-center gap-2 font-bold text-xs transition-all shadow-md active:scale-98 cursor-pointer"
+          >
+            <Play className="w-4 h-4 fill-current text-emerald-400" />
+            <span>Assistir demonstração em vídeo</span>
+          </button>
+        )}
+
         {/* Parâmetros Prescritos (quando disponíveis no contexto) */}
         {(exercise.sets || exercise.reps || exercise.load_kg || exercise.rest_seconds) && (
           <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 text-center text-xs">
@@ -224,6 +240,14 @@ export const PersonalPublicExerciseDemoModal: React.FC<PersonalPublicExerciseDem
           </button>
         </div>
       </div>
+
+      {/* Player de Vídeo Demonstrativo */}
+      <PersonalVideoPlayerModal
+        isOpen={showVideoModal}
+        onClose={() => setShowVideoModal(false)}
+        videoUrl={exercise.video_url}
+        exerciseName={exercise.name}
+      />
     </div>
   );
 };

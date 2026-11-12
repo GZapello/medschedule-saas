@@ -44,6 +44,7 @@ export interface PublicExercise {
   technique_custom?: string;
   notes?: string;
   photo_url?: string;
+  video_url?: string | null;
   exercise_id?: string | null;
   gif_url?: string | null;
   gif_attribution?: string | null;
@@ -1354,9 +1355,17 @@ export const PersonalPublicStudentWorkoutView: React.FC<PersonalPublicStudentWor
                       </div>
                     </div>
 
-                    <span className="px-2 py-0.5 bg-slate-950 text-slate-400 border border-slate-800 text-[10px] font-semibold rounded-lg shrink-0">
-                      {ex.muscle_group || 'Geral'}
-                    </span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {ex.video_url && (
+                        <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-semibold rounded-lg flex items-center gap-1">
+                          <Play className="w-2.5 h-2.5 fill-current" />
+                          Vídeo
+                        </span>
+                      )}
+                      <span className="px-2 py-0.5 bg-slate-950 text-slate-400 border border-slate-800 text-[10px] font-semibold rounded-lg">
+                        {ex.muscle_group || 'Geral'}
+                      </span>
+                    </div>
                   </div>
 
                   {/* Botão "Ver como fazer" */}

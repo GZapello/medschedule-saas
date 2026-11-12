@@ -30,6 +30,41 @@ export function stableExercisePhoto(value: unknown): string | null {
   return typeof value === 'string' && (reviewedMedia.some(item => item.photo_url === value) || /^\/exercise-(?:fallbacks|photos)\/[a-z0-9-]+\.webp$/.test(value)) ? value : null;
 }
 
+/**
+ * Sanitiza links externos de vídeos demonstrativos dos exercícios (YouTube, Vimeo, Drive, URLs HTTP/HTTPS públicas).
+ * Bloqueia estritamente protocolos perigosos (javascript:, data:, file:) e hostnames internos/privados.
+ */
+export function sanitizeVideoUrl(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 1000) return null;
+
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return null;
+    }
+    const host = parsed.hostname.toLowerCase();
+    if (
+      host === 'localhost' ||
+      host === '127.0.0.1' ||
+      host === '::1' ||
+      host === '0.0.0.0' ||
+      host.endsWith('.local') ||
+      host.endsWith('.internal') ||
+      /^10\./.test(host) ||
+      /^192\.168\./.test(host) ||
+      /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(host) ||
+      /^169\.254\./.test(host)
+    ) {
+      return null;
+    }
+    return parsed.href;
+  } catch {
+    return null;
+  }
+}
+
 export function imageAttribution(db: any, fileId: string | null, photoUrl?: string | null): string | null {
   if (!fileId) {
     const photo = licensedPhotos.find(item => item.photo_url === photoUrl);
@@ -52,14 +87,15 @@ export function insertWorkoutExercise(db: any, id: string, tenantId: string, wor
   const duration = number(ex.duration_seconds, null);
   if (duration !== null && duration < 0) throw new Error('Duração inválida');
   if (ex.side && !['direito','esquerdo','ambos','alternado'].includes(ex.side)) throw new Error('Lado inválido');
+  const videoUrl = sanitizeVideoUrl(ex.video_url || (copy ? null : source?.video_url));
   db.prepare(`INSERT INTO personal_workout_exercises (
     id, tenant_id, workout_id, exercise_id, order_index, name, muscle_group, sets, reps, load_kg, tempo, rest_seconds,
-    cadence, rpe, rir, technique, technique_custom, notes, photo_url, exercise_file_id, instructions, category, duration_seconds, side, snapshot_version, image_attribution_json
-  ) VALUES (${Array(26).fill('?').join(',')})`).run(
+    cadence, rpe, rir, technique, technique_custom, notes, photo_url, video_url, exercise_file_id, instructions, category, duration_seconds, side, snapshot_version, image_attribution_json
+  ) VALUES (${Array(27).fill('?').join(',')})`).run(
     id, tenantId, workoutId, ex.exercise_id || null, order, ex.name || source?.name || 'Exercício', ex.muscle_group || source?.muscle_group || 'Geral',
     number(ex.sets, 3), String(ex.reps ?? (stretch ? '' : '10-12')), number(ex.load_kg, null), ex.tempo || null, number(ex.rest_seconds, stretch ? 0 : 60),
     ex.cadence || null, number(ex.rpe, null), number(ex.rir, null), ex.technique || 'Direta', ex.technique_custom || null, ex.notes || null,
-    stableExercisePhoto(ex.photo_url) || (copy ? ex.photo_url || null : stableExercisePhoto(source?.photo_url)), fileId || null,
+    stableExercisePhoto(ex.photo_url) || (copy ? ex.photo_url || null : stableExercisePhoto(source?.photo_url)), videoUrl, fileId || null,
     ex.instructions ?? (copy ? null : source?.instructions) ?? null, category, duration, ex.side || null, 1,
     copy ? ex.image_attribution_json || null : imageAttribution(db, fileId, stableExercisePhoto(ex.photo_url) || source?.photo_url)
   );

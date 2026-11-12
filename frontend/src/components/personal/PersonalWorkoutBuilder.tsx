@@ -14,7 +14,8 @@ import {
   Flame,
   ArrowUp,
   ArrowDown,
-  RefreshCw
+  RefreshCw,
+  Play
 } from 'lucide-react';
 import { Student, Workout, WorkoutExercise, Exercise } from './types';
 import { ApiClient } from '../../api/client';
@@ -24,6 +25,7 @@ import { SecureFileImage } from '../common/SecureFileImage';
 import { isStretch } from './exercisePresentation';
 import { ExerciseImageCredit } from './ExerciseImageCredit';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
+import { PersonalVideoPlayerModal } from './PersonalVideoPlayerModal';
 
 interface PersonalWorkoutBuilderProps {
   isOpen: boolean;
@@ -70,6 +72,7 @@ export const PersonalWorkoutBuilder: React.FC<PersonalWorkoutBuilderProps> = ({
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   const [replaceIndex, setReplaceIndex] = useState<number | null>(null);
   const [zoomedPhoto, setZoomedPhoto] = useState<{ fileId?: string; url?: string } | null>(null);
+  const [playingVideo, setPlayingVideo] = useState<{ url: string; name: string } | null>(null);
 
   useEffect(() => {
     if (student) {
@@ -112,6 +115,7 @@ export const PersonalWorkoutBuilder: React.FC<PersonalWorkoutBuilderProps> = ({
         name: exercise.name,
         muscle_group: exercise.muscle_group,
         photo_url: exercise.photo_url,
+        video_url: exercise.video_url || null,
         exercise_file_id: exercise.exercise_file_id,
         exercise_default_photo: exercise.photo_url,
         category: exercise.category,
@@ -137,6 +141,7 @@ export const PersonalWorkoutBuilder: React.FC<PersonalWorkoutBuilderProps> = ({
         rir: isStretch(exercise) ? undefined : 2,
         technique: 'Direta',
         photo_url: exercise.photo_url,
+        video_url: exercise.video_url || null,
         exercise_file_id: exercise.exercise_file_id,
         exercise_default_photo: exercise.photo_url,
         category: exercise.category,
@@ -473,6 +478,19 @@ export const PersonalWorkoutBuilder: React.FC<PersonalWorkoutBuilderProps> = ({
                           </button>
                         </div>
 
+                        {/* Botão de Vídeo Demonstrativo */}
+                        {ex.video_url && (
+                          <button
+                            type="button"
+                            onClick={() => setPlayingVideo({ url: ex.video_url!, name: ex.name })}
+                            title="Assistir demonstração em vídeo"
+                            className="px-2 py-1 text-[11px] font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
+                          >
+                            <Play className="w-3 h-3 fill-current" />
+                            <span>Vídeo</span>
+                          </button>
+                        )}
+
                         {/* Botão de Substituição Preservando Parâmetros */}
                         <button
                           type="button"
@@ -680,6 +698,14 @@ export const PersonalWorkoutBuilder: React.FC<PersonalWorkoutBuilderProps> = ({
             </div>
           </div>
         )}
+
+        {/* Player de Vídeo Demonstrativo */}
+        <PersonalVideoPlayerModal
+          isOpen={Boolean(playingVideo)}
+          onClose={() => setPlayingVideo(null)}
+          videoUrl={playingVideo?.url}
+          exerciseName={playingVideo?.name || 'Exercício'}
+        />
       </div>
     </div>
   );

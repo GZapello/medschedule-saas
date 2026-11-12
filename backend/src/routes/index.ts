@@ -841,6 +841,8 @@ api.post('/v1/personal/workouts/:id/duplicate', requireTenant, requireRole('clin
 // Templates / Modelos
 api.get('/v1/personal/templates', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.listTemplates);
 api.post('/v1/personal/templates', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.createTemplate);
+api.put('/v1/personal/templates/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.updateTemplate);
+api.post('/v1/personal/templates/:id/duplicate', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.duplicateTemplate);
 api.post('/v1/personal/templates/:id/apply', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.applyTemplate);
 api.delete('/v1/personal/templates/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.deleteTemplate);
 

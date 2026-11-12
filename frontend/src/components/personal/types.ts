@@ -53,6 +53,7 @@ export interface Exercise {
   gif_url?: string;
   gif_attribution?: string;
   photo_url?: string;
+  video_url?: string | null;
   exercise_file_id?: string;
   is_active?: number;
   is_custom?: number;
@@ -82,6 +83,7 @@ export interface WorkoutExercise {
   technique_custom?: string;
   notes?: string;
   photo_url?: string;
+  video_url?: string | null;
   exercise_file_id?: string;
   exercise_default_photo?: string;
   instructions?: string;
@@ -321,18 +323,25 @@ export interface PersonalRecord {
   reps?: string;
 }
 
+export interface WorkoutTemplateDivision {
+  title: string;
+  division: string;
+  notes?: string;
+  exercises: WorkoutExercise[];
+}
+
 export interface WorkoutTemplate {
   id: string;
+  tenant_id?: string;
+  professional_id?: string;
+  professional_name?: string;
   title: string;
   structure_type: string;
   description?: string;
-  workouts: Array<{
-    title: string;
-    division: string;
-    notes?: string;
-    exercises: WorkoutExercise[];
-  }>;
+  workouts: WorkoutTemplateDivision[];
+  exercises_count?: number;
   created_at: string;
+  updated_at?: string;
 }
 
 export interface AttendanceStats {
