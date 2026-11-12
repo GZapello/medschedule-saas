@@ -80,10 +80,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [editingAppt, setEditingAppt] = useState<any | null>(null);
   const [pendingWhatsAppNotice, setPendingWhatsAppNotice] = useState<any | null>(null);
   const [checkInQueueData, setCheckInQueueData] = useState<{
+    hasReceptionTeam: boolean;
+    clinicCheckinEnabled: boolean;
     waitingCount: number;
     waitingPatients: any[];
     previousAlerts: any[];
-  }>({ waitingCount: 0, waitingPatients: [], previousAlerts: [] });
+  }>({
+    hasReceptionTeam: false,
+    clinicCheckinEnabled: false,
+    waitingCount: 0,
+    waitingPatients: [],
+    previousAlerts: []
+  });
   const [isWaitingQueueModalOpen, setIsWaitingQueueModalOpen] = useState<boolean>(false);
   const [isPreConsultLibraryOpen, setIsPreConsultLibraryOpen] = useState<boolean>(false);
   const [preConsultApptModal, setPreConsultApptModal] = useState<{ id: string; patientName?: string } | null>(null);
@@ -210,13 +218,25 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         ApiClient.get<any>(`/v1/checkin/queue?date=${todayStr}`).catch(() => null)
       ]);
       setMetrics(data);
-      if (queueRes) {
-        setCheckInQueueData({
-          waitingCount: Number(queueRes.waitingCount || 0),
-          waitingPatients: Array.isArray(queueRes.waitingPatients) ? queueRes.waitingPatients : [],
-          previousAlerts: Array.isArray(queueRes.previousAlerts) ? queueRes.previousAlerts : []
-        });
-      }
+      const hasReception = Boolean(
+        queueRes?.hasReceptionTeam ?? data?.checkin?.hasReceptionTeam
+      );
+      const checkinEnabled = Boolean(
+        (queueRes?.clinicCheckinEnabled ?? data?.checkin?.clinicCheckinEnabled) !== false
+      );
+      setCheckInQueueData({
+        hasReceptionTeam: hasReception,
+        clinicCheckinEnabled: checkinEnabled,
+        waitingCount: hasReception && checkinEnabled ? Number(queueRes?.waitingCount || 0) : 0,
+        waitingPatients:
+          hasReception && checkinEnabled && Array.isArray(queueRes?.waitingPatients)
+            ? queueRes.waitingPatients
+            : [],
+        previousAlerts:
+          hasReception && checkinEnabled && Array.isArray(queueRes?.previousAlerts)
+            ? queueRes.previousAlerts
+            : []
+      });
     } catch (err: any) {
       showToast(err.message || 'Erro ao carregar indicadores', 'error');
     } finally {
@@ -422,6 +442,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     }
   })();
 
+  const isReceptionFlowActive = Boolean(
+    checkInQueueData.hasReceptionTeam && checkInQueueData.clinicCheckinEnabled
+  );
+
   return (
     <div data-tour-loading={loading} className="space-y-2 min-w-0">
       {/* Header & Quick Actions */}
@@ -436,7 +460,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-          {(auth.isProfessional || auth.isClinicAdmin) && (
+          {(auth.isProfessional || auth.isClinicAdmin) && isReceptionFlowActive && (
             <button
               type="button"
               onClick={() => setIsWaitingQueueModalOpen(true)}
@@ -451,15 +475,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <span>Pacientes aguardando: {checkInQueueData.waitingCount}</span>
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => setIsPreConsultLibraryOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-lg transition-all min-h-[36px] cursor-pointer"
-            title="Abrir biblioteca de Formulários de Pré-consulta Digital"
-          >
-            <FileText className="w-3.5 h-3.5" />
-            <span>Formulários de Pré-consulta</span>
-          </button>
           {canCreatePatient && (
             <button
               onClick={onOpenNewPatient}
@@ -718,8 +733,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           </h4>
                           {getStatusBadge(appt.status)}
 
-                          {/* Status de Recepção (Seção 2.2) */}
-                          {appt.status !== 'cancelled' && appt.status !== 'no_show' && (
+                          {/* Status de Recepção (Seção 2.2) — Exibido somente quando há recepcionista ativo e Check-In habilitado */}
+                          {isReceptionFlowActive && appt.status !== 'cancelled' && appt.status !== 'no_show' && (
                             <select
                               value={appt.reception_status || 'waiting_arrival'}
                               onChange={e => handleUpdateReceptionStatus(appt.id, e.target.value)}
@@ -745,20 +760,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                             </select>
                           )}
 
-                          {/* Badge de Pré-consulta Digital (Seção 4.5) */}
-                          <button
-                            type="button"
-                            onClick={() => setPreConsultApptModal({ id: appt.id, patientName: appt.patient_name })}
-                            className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border cursor-pointer ${
-                              (PRE_CONSULTATION_BADGE_CONFIG[appt.pre_consultation_status || 'not_sent'] || PRE_CONSULTATION_BADGE_CONFIG.not_sent).className
-                            }`}
-                            title="Abrir Pré-consulta Digital (envio ou visualização)"
-                          >
-                            <FileText className="w-3 h-3" />
-                            <span>
-                              {(PRE_CONSULTATION_BADGE_CONFIG[appt.pre_consultation_status || 'not_sent'] || PRE_CONSULTATION_BADGE_CONFIG.not_sent).label}
-                            </span>
-                          </button>
+                          {/* Badge de Pré-consulta Digital (quando enviado/respondido/expirado) */}
+                          {appt.pre_consultation_status && appt.pre_consultation_status !== 'not_sent' && (
+                            <button
+                              type="button"
+                              onClick={() => setPreConsultApptModal({ id: appt.id, patientName: appt.patient_name })}
+                              className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border cursor-pointer ${
+                                (PRE_CONSULTATION_BADGE_CONFIG[appt.pre_consultation_status] || PRE_CONSULTATION_BADGE_CONFIG.pending).className
+                              }`}
+                              title="Abrir Pré-consulta Digital (envio ou visualização)"
+                            >
+                              <FileText className="w-3 h-3" />
+                              <span>
+                                {(PRE_CONSULTATION_BADGE_CONFIG[appt.pre_consultation_status] || PRE_CONSULTATION_BADGE_CONFIG.pending).label}
+                              </span>
+                            </button>
+                          )}
 
                           {appt.has_evolution > 0 && (
                             <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 text-[11px] font-medium px-2 py-0.5 rounded-full border border-emerald-200/80">
@@ -1047,6 +1064,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       <span>Termos de consentimento</span>
                     </button>
                   )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpenMenuState(null);
+                      setPreConsultApptModal({
+                        id: menuAppt.id,
+                        patientName: menuAppt.patient_name
+                      });
+                    }}
+                    className="w-full px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                    <span>Formulário de pré-consulta</span>
+                  </button>
 
                   {menuHasPhone && (
                     <button
@@ -1397,6 +1429,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         appointmentId={preConsultApptModal?.id || null}
         patientName={preConsultApptModal?.patientName}
         onClose={() => setPreConsultApptModal(null)}
+        onOpenLibrary={() => setIsPreConsultLibraryOpen(true)}
         onUpdated={() => {
           fetchMetrics();
           notifyAppointmentChange();

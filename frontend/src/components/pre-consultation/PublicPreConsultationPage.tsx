@@ -32,6 +32,25 @@ export const PublicPreConsultationPage: React.FC<{ token: string }> = ({ token }
   const [bodyMapRegions, setBodyMapRegions] = useState<PatientBodyMapRegion[]>([]);
 
   useEffect(() => {
+    document.title = 'Pré-consulta Digital | Zemda';
+    const upsertMeta = (name: string, content: string) => {
+      let el = document.querySelector(`meta[name="${name}"]`);
+      if (!el) {
+        el = document.createElement('meta');
+        el.setAttribute('name', name);
+        document.head.appendChild(el);
+      }
+      el.setAttribute('content', content);
+    };
+    upsertMeta('robots', 'noindex, nofollow');
+    upsertMeta('referrer', 'no-referrer');
+    const canonicalLink = document.querySelector('link[rel="canonical"]');
+    if (canonicalLink) {
+      canonicalLink.remove();
+    }
+  }, []);
+
+  useEffect(() => {
     const loadPublicForm = async () => {
       setLoading(true);
       setError(null);
@@ -408,11 +427,12 @@ export const PublicPreConsultationPage: React.FC<{ token: string }> = ({ token }
                 </div>
               ))}
 
-            {/* Mapa Corporal Zemda360 Simplificado */}
+            {/* Mapa Corporal Zemda360 Oficial */}
             {showBodyMap && (
               <PreConsultationBodyMapSimple
                 regions={bodyMapRegions}
                 onChange={setBodyMapRegions}
+                initialBodyModel={data?.patientBodyModel === 'male' ? 'male' : 'female'}
               />
             )}
           </div>

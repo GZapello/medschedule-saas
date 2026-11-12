@@ -335,6 +335,33 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
     return () => { ++slotRequest.current; };
   }, [isOpen, professionalId, serviceId, date, roomId, patientId, initialPrefill]);
 
+  const activeServiceDuration = useMemo(() => {
+    const selectedService = services.find(s => s.id === serviceId);
+    return selectedService?.duration_minutes || (selectedService as any)?.duration || 50;
+  }, [services, serviceId]);
+
+  const customCalculatedEndTime = useMemo(
+    () => computeEndTimeStr(customTime, activeServiceDuration),
+    [customTime, activeServiceDuration]
+  );
+
+  const customTimeSlotConflict = useMemo(() => {
+    if (!isCustomTime || !customTime) return null;
+    const cleanStart = customTime.trim().slice(0, 5);
+    if (!/^\d{2}:\d{2}$/.test(cleanStart)) return null;
+    const nowSpDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+    const nowSpTime = new Intl.DateTimeFormat('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23'
+    }).format(new Date());
+    if (!isRetroactive && (date < nowSpDate || (date === nowSpDate && cleanStart < nowSpTime))) {
+      return 'O horário informado já passou. Para atendimentos passados, utilize "Registrar atendimento já realizado".';
+    }
+    return null;
+  }, [isCustomTime, isRetroactive, date, customTime]);
+
   if (!isOpen) return null;
 
   const computeStartAndEnd = (dateStr: string, timeStr: string, durationMinutes: number) => {
@@ -497,33 +524,6 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
       setLoading(false);
     }
   };
-
-  const activeServiceDuration = useMemo(() => {
-    const selectedService = services.find(s => s.id === serviceId);
-    return selectedService?.duration_minutes || (selectedService as any)?.duration || 50;
-  }, [services, serviceId]);
-
-  const customCalculatedEndTime = useMemo(
-    () => computeEndTimeStr(customTime, activeServiceDuration),
-    [customTime, activeServiceDuration]
-  );
-
-  const customTimeSlotConflict = useMemo(() => {
-    if (!isCustomTime || !customTime) return null;
-    const cleanStart = customTime.trim().slice(0, 5);
-    if (!/^\d{2}:\d{2}$/.test(cleanStart)) return null;
-    const nowSpDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
-    const nowSpTime = new Intl.DateTimeFormat('pt-BR', {
-      timeZone: 'America/Sao_Paulo',
-      hour: '2-digit',
-      minute: '2-digit',
-      hourCycle: 'h23'
-    }).format(new Date());
-    if (!isRetroactive && (date < nowSpDate || (date === nowSpDate && cleanStart < nowSpTime))) {
-      return 'O horário informado já passou. Para atendimentos passados, utilize "Registrar atendimento já realizado".';
-    }
-    return null;
-  }, [isCustomTime, isRetroactive, date, customTime]);
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto mobile-modal">

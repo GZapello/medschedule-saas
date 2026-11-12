@@ -1,4 +1,5 @@
 import { dashboardWorklist } from '../services/dashboard-worklist.service';
+import { getClinicReceptionAvailability } from './checkin.controller';
 import { Request, Response } from 'express';
 import { db } from '../config/database';
 
@@ -153,8 +154,11 @@ export class DashboardController {
         });
       }
 
+      const checkinAvailability = getClinicReceptionAvailability(tenantId);
+
       res.json({
         permissions: { finance: canViewFinance },
+        checkin: checkinAvailability,
         worklist: dashboardWorklist(req, today),
         today: {
           date: today,

@@ -40,12 +40,36 @@ function parseAppointmentDurationMinutes(startStr: string, endStr: string, fallb
 }
 
 /**
+ * Verifica se o usuário autenticado é exclusivamente da recepção/secretaria na clínica.
+ * Perfis de recepção possuem acesso apenas à Continuidade do Cuidado em Relatórios.
+ */
+export function isUserReceptionOnly(req: Request, tenantId: string): boolean {
+  if (!req.user) return false;
+  const role = String(req.user.role || '').toLowerCase();
+  if (role === 'superadmin' || role === 'clinic_admin' || role === 'professional') {
+    return false;
+  }
+  try {
+    const cu = db
+      .prepare('SELECT is_manager, role FROM clinic_users WHERE user_id = ? AND tenant_id = ? LIMIT 1')
+      .get(req.user.userId, tenantId) as any;
+    if (cu?.is_manager === 1 || cu?.role === 'clinic_admin' || cu?.role === 'professional') {
+      return false;
+    }
+    const effectiveRole = String(cu?.role || role).toLowerCase();
+    return effectiveRole === 'receptionist' || effectiveRole === 'secretary';
+  } catch {
+    return role === 'receptionist' || role === 'secretary';
+  }
+}
+
+/**
  * Verifica se o usuário autenticado pode visualizar valores financeiros/receita nos relatórios.
- * A recepção tem acesso apenas aos indicadores operacionais e de continuidade do cuidado,
- * exceto se for administradora/gestora ou possuir manage_financial.
+ * A recepção nunca acessa relatórios financeiros ou indicadores de desempenho.
  */
 export function canUserAccessReportFinancials(req: Request, tenantId: string): boolean {
   if (!req.user) return false;
+  if (isUserReceptionOnly(req, tenantId)) return false;
   const role = String(req.user.role || '');
   if (role === 'superadmin' || role === 'clinic_admin' || role === 'financial') {
     return true;
@@ -59,7 +83,6 @@ export function canUserAccessReportFinancials(req: Request, tenantId: string): b
     if (perms.includes('manage_financial')) {
       return true;
     }
-    // Profissionais com permissão financeira explícita (mas não recepção por padrão)
     if (role === 'professional' && perms.includes('view_financial')) {
       return true;
     }
@@ -199,6 +222,14 @@ export class ReportController {
       const tenantId = req.tenantId as string;
       if (!tenantId) {
         res.status(400).json({ error: 'Clínica não identificada' });
+        return;
+      }
+
+      if (isUserReceptionOnly(req, tenantId)) {
+        res.status(403).json({
+          error: 'Acesso restrito: a recepção possui acesso exclusivamente à área de Continuidade do Cuidado.',
+          code: 'PERFORMANCE_REPORT_FORBIDDEN'
+        });
         return;
       }
 
@@ -882,10 +913,32 @@ export class ReportController {
         return b.daysSinceLastAttendance - a.daysSinceLastAttendance;
       });
 
+      const filterProfessionals = db.prepare(`
+        SELECT p.id, p.name, p.profession_id, p.specialty_id,
+               COALESCE(prof.name, p.profession_name) as profession_name,
+               COALESCE(p.specialty_custom, spec.name) as specialty_name
+        FROM professionals p
+        LEFT JOIN professions prof ON prof.id = p.profession_id
+        LEFT JOIN specialties spec ON spec.id = p.specialty_id
+        WHERE p.tenant_id = ? AND p.active = 1
+        ORDER BY p.name ASC
+      `).all(tenantId);
+
+      const filterServices = db.prepare(`
+        SELECT id, name, professional_id, specialty_id, duration_minutes, return_periodicity_days, reminder_enabled, reminder_value, reminder_unit
+        FROM services
+        WHERE tenant_id = ? AND active = 1
+        ORDER BY name ASC
+      `).all(tenantId);
+
       res.json({
         bandCounts,
         totalMatching: items.length,
-        items
+        items,
+        filters: {
+          professionals: filterProfessionals,
+          services: filterServices
+        }
       });
     } catch (err: any) {
       console.error('[ReportController.getCareContinuityReport] Erro:', err);
@@ -1056,6 +1109,14 @@ export class ReportController {
     try {
       const tenantId = req.tenantId as string;
       const { type } = req.query; // 'appointments' | 'payments'
+
+      if (!tenantId || isUserReceptionOnly(req, tenantId)) {
+        res.status(403).json({
+          error: 'Acesso restrito: exportações gerenciais não estão disponíveis para a recepção.',
+          code: 'EXPORT_REPORT_FORBIDDEN'
+        });
+        return;
+      }
 
       if (type === 'payments') {
         if (!tenantId || !canUserAccessReportFinancials(req, tenantId)) {

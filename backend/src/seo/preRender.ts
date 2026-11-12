@@ -108,8 +108,17 @@ export function renderPreRenderedHtml(baseIndexHtml: string, reqPath: string): s
     return html;
   }
 
-  // 4. Se for rota interna legítima (deep link autenticado / área privada)
+  // 4. Se for rota interna legítima (deep link autenticado / área privada / pré-consulta digital)
   if (isValidInternalRoute(normPath) && !isPublicRoute(normPath)) {
+    if (/^\/pre-consulta\/[a-zA-Z0-9_-]+$/i.test(normPath)) {
+      html = setTitleTag(html, 'Pré-consulta Digital | Zemda');
+      html = setMetaTag(html, 'name', 'description', 'Formulário seguro de Pré-consulta Digital na plataforma Zemda.');
+      html = setMetaTag(html, 'name', 'robots', 'noindex, nofollow');
+      html = setMetaTag(html, 'name', 'referrer', 'no-referrer');
+      html = setMetaTag(html, 'property', 'og:title', 'Pré-consulta Digital | Zemda');
+      html = setCanonicalTag(html, null);
+      return html;
+    }
     html = setTitleTag(html, 'Zemda • Acesso Seguro');
     html = setMetaTag(html, 'name', 'robots', 'noindex, nofollow');
     html = setCanonicalTag(html, null);

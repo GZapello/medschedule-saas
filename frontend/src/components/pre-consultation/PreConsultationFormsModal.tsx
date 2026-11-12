@@ -679,11 +679,14 @@ export const PreConsultationAppointmentModal: React.FC<{
   patientName?: string;
   onClose: () => void;
   onUpdated?: () => void;
-}> = ({ appointmentId, patientName, onClose, onUpdated }) => {
+  onOpenLibrary?: () => void;
+}> = ({ appointmentId, patientName, onClose, onUpdated, onOpenLibrary }) => {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<any>(null);
   const [forms, setForms] = useState<PreConsultationFormTemplate[]>([]);
+  const [canManageForms, setCanManageForms] = useState(false);
+  const [isInternalLibraryOpen, setIsInternalLibraryOpen] = useState(false);
   const [selectedFormId, setSelectedFormId] = useState<string>('');
   const [sending, setSending] = useState(false);
   const [importingMap, setImportingMap] = useState(false);
@@ -695,15 +698,18 @@ export const PreConsultationAppointmentModal: React.FC<{
     try {
       const [subRes, formsRes] = await Promise.all([
         api.get<any>(`/v1/pre-consultation/appointments/${appointmentId}`),
-        api.get<{ forms: PreConsultationFormTemplate[] }>('/v1/pre-consultation/forms')
+        api.get<{ forms: PreConsultationFormTemplate[]; permissions?: { canManage?: boolean } }>(
+          '/v1/pre-consultation/forms'
+        )
       ]);
       setData(subRes);
       const list = formsRes.forms || [];
       setForms(list);
+      setCanManageForms(Boolean(formsRes.permissions?.canManage));
       if (subRes?.submission?.formId) {
         setSelectedFormId(subRes.submission.formId);
       } else if (list.length > 0) {
-        setSelectedFormId(list[0].id);
+        setSelectedFormId(prev => (prev && list.some(f => f.id === prev) ? prev : list[0].id));
       }
     } catch (err: any) {
       showToast(err?.message || 'Erro ao carregar Pré-consulta do agendamento', 'error');
@@ -785,236 +791,286 @@ export const PreConsultationAppointmentModal: React.FC<{
   const statusKey = data?.status || 'not_sent';
   const badge = PRE_CONSULTATION_BADGE_CONFIG[statusKey] || PRE_CONSULTATION_BADGE_CONFIG.not_sent;
 
+  const handleOpenLibraryClick = () => {
+    if (onOpenLibrary) {
+      onOpenLibrary();
+    } else {
+      setIsInternalLibraryOpen(true);
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-[9992] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
-      <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 max-w-2xl w-full max-h-[88vh] flex flex-col overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/60">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-teal-600 text-white flex items-center justify-center">
-              <FileText className="w-4 h-4" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-extrabold text-slate-900">
-                  Pré-consulta Digital {patientName ? `— ${patientName}` : ''}
-                </h3>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${badge.className}`}>
-                  {badge.label}
-                </span>
+    <>
+      <div className="fixed inset-0 z-[9992] flex items-center justify-center p-3 sm:p-4 bg-slate-900/50 backdrop-blur-xs">
+        <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden min-w-0">
+          <div className="px-4 sm:px-6 py-4 border-b border-slate-100 flex items-start sm:items-center justify-between gap-3 bg-slate-50/60 min-w-0">
+            <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
+              <div className="w-9 h-9 rounded-xl bg-teal-600 text-white flex items-center justify-center shrink-0">
+                <FileText className="w-4 h-4" />
               </div>
-              <p className="text-[11px] text-slate-500">
-                Envio de link seguro e acompanhamento de respostas
-              </p>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2 min-w-0">
+                  <h3 className="text-sm font-extrabold text-slate-900 break-words min-w-0">
+                    Pré-consulta Digital {patientName ? `— ${patientName}` : ''}
+                  </h3>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border shrink-0 ${badge.className}`}>
+                    {badge.label}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Envio de link seguro e acompanhamento de respostas
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {canManageForms && (
+                <button
+                  type="button"
+                  onClick={handleOpenLibraryClick}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-teal-200 bg-teal-50/80 hover:bg-teal-100 text-teal-800 text-[11px] font-bold transition-colors cursor-pointer"
+                  title="Abrir biblioteca de modelos de pré-consulta"
+                >
+                  <FileText className="w-3.5 h-3.5 shrink-0" />
+                  <span className="hidden sm:inline">Gerenciar formulários</span>
+                  <span className="sm:hidden">Modelos</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={onClose}
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl cursor-pointer shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl cursor-pointer"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
 
-        <div className="p-6 overflow-y-auto flex-1 flex flex-col gap-4">
-          {loading ? (
-            <div className="py-10 text-center text-xs text-slate-400">
-              Carregando informações da Pré-consulta...
-            </div>
-          ) : (
-            <>
-              {/* Seção de preparação de envio / reenvio */}
-              {statusKey !== 'submitted' && (
-                <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50/70 flex flex-col gap-3">
-                  <label className="block text-xs font-bold text-slate-700">
-                    Modelo de Formulário de Pré-consulta
-                  </label>
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <select
-                      value={selectedFormId}
-                      onChange={e => setSelectedFormId(e.target.value)}
-                      className="flex-1 px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold"
-                    >
-                      {forms.map(f => (
-                        <option key={f.id} value={f.id}>
-                          {f.title} (v{f.version || 1})
-                          {f.include_zemda360_body_map ? ' • Com Mapa Zemda360' : ''}
-                        </option>
-                      ))}
-                    </select>
+          <div className="p-4 sm:p-6 overflow-y-auto flex-1 flex flex-col gap-4 min-w-0">
+            {loading ? (
+              <div className="py-10 text-center text-xs text-slate-400">
+                Carregando informações da Pré-consulta...
+              </div>
+            ) : (
+              <>
+                {/* Seção de preparação de envio / reenvio */}
+                <div className="p-3.5 sm:p-4 rounded-2xl border border-slate-200 bg-slate-50/70 flex flex-col gap-3 min-w-0">
+                  <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
+                    <label className="block text-xs font-bold text-slate-700">
+                      Modelo de Formulário de Pré-consulta
+                    </label>
+                    {canManageForms && (
+                      <button
+                        type="button"
+                        onClick={handleOpenLibraryClick}
+                        className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-700 hover:text-teal-800 cursor-pointer"
+                      >
+                        <Edit3 className="w-3 h-3 shrink-0" />
+                        Gerenciar formulários
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex flex-col md:flex-row md:items-center gap-2.5 min-w-0 w-full">
+                    <div className="w-full md:flex-1 min-w-0">
+                      <select
+                        value={selectedFormId}
+                        onChange={e => setSelectedFormId(e.target.value)}
+                        className="w-full min-w-0 max-w-full truncate px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                      >
+                        {forms.map(f => (
+                          <option key={f.id} value={f.id}>
+                            {f.title} (v{f.version || 1})
+                            {f.include_zemda360_body_map ? ' • Com Mapa Zemda360' : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                     <button
                       type="button"
                       disabled={sending || !selectedFormId}
                       onClick={handlePrepareOrResend}
-                      className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold cursor-pointer shrink-0"
+                      className="w-full md:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-xs font-bold cursor-pointer shrink-0 whitespace-nowrap transition-colors"
                     >
-                      {sub ? <RefreshCw className="w-3.5 h-3.5" /> : <Send className="w-3.5 h-3.5" />}
-                      {sending
-                        ? 'Gerando link...'
-                        : sub
-                        ? 'Gerar novo link / Reenviar'
-                        : 'Preparar envio do formulário'}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Ações de compartilhamento quando há link pendente */}
-              {sub && statusKey === 'pending' && (
-                <div className="p-4 rounded-2xl border border-teal-200 bg-teal-50/40 flex flex-col gap-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-teal-950">
-                      Link seguro pronto para envio ({sub.formTitle} • v{sub.formVersion})
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleRevoke}
-                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-600 hover:text-rose-800 cursor-pointer"
-                    >
-                      <Ban className="w-3 h-3" /> Revogar link
-                    </button>
-                  </div>
-                  <div className="flex items-center gap-2 bg-white p-2 rounded-xl border border-slate-200">
-                    <input
-                      type="text"
-                      readOnly
-                      value={sub.publicUrl}
-                      className="flex-1 text-xs text-slate-600 bg-transparent outline-none px-1"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleCopyLink(sub.publicUrl)}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold cursor-pointer"
-                    >
-                      {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Link2 className="w-3.5 h-3.5" />}
-                      {copied ? 'Copiado' : 'Copiar link'}
-                    </button>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <a
-                      href={sub.whatsappUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs"
-                    >
-                      <Share2 className="w-3.5 h-3.5" /> Compartilhar via WhatsApp
-                    </a>
-                    <span className="text-[11px] text-slate-500 flex items-center gap-1">
-                      <Clock className="w-3 h-3" /> Válido até{' '}
-                      {sub.expiresAt ? new Date(sub.expiresAt).toLocaleDateString('pt-BR') : 'o atendimento'}
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {/* Visualização de Respostas (ou Aviso de Sigilo para Recepção) */}
-              {sub && statusKey === 'submitted' && (
-                <div className="flex flex-col gap-4">
-                  <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-between flex-wrap gap-2">
-                    <div>
-                      <p className="text-xs font-bold text-emerald-950">
-                        Respondido por: {sub.respondentName || 'Paciente'}
-                        {sub.isGuardian ? ` (Responsável legal)` : ''}
-                      </p>
-                      <p className="text-[11px] text-emerald-800">
-                        Formulário: {sub.formTitle} (Versão v{sub.formVersion} preservada)
-                      </p>
-                    </div>
-                    {sub.submittedAt && (
-                      <span className="text-[11px] font-semibold text-emerald-800">
-                        Recebido em {String(sub.submittedAt).replace('T', ' ').slice(0, 16)}
+                      {sub ? <RefreshCw className="w-3.5 h-3.5 shrink-0" /> : <Send className="w-3.5 h-3.5 shrink-0" />}
+                      <span>
+                        {sending
+                          ? 'Gerando link...'
+                          : sub
+                          ? 'Preparar novo envio'
+                          : 'Preparar envio do formulário'}
                       </span>
-                    )}
+                    </button>
                   </div>
+                </div>
 
-                  {data.clinicalRestricted ? (
-                    <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex items-start gap-3">
-                      <ShieldAlert className="w-5 h-5 text-slate-500 shrink-0 mt-0.5" />
-                      <div>
-                        <p className="text-xs font-bold text-slate-800">
-                          Respostas clínicas protegidas por sigilo profissional
+                {/* Ações de compartilhamento quando há link pendente */}
+                {sub && statusKey === 'pending' && (
+                  <div className="p-3.5 sm:p-4 rounded-2xl border border-teal-200 bg-teal-50/40 flex flex-col gap-3 min-w-0">
+                    <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
+                      <span className="text-xs font-bold text-teal-950 break-words min-w-0">
+                        Link seguro pronto para envio ({sub.formTitle} • v{sub.formVersion})
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleRevoke}
+                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-600 hover:text-rose-800 cursor-pointer shrink-0"
+                      >
+                        <Ban className="w-3 h-3 shrink-0" /> Revogar link
+                      </button>
+                    </div>
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-white p-2 rounded-xl border border-slate-200 min-w-0">
+                      <input
+                        type="text"
+                        readOnly
+                        value={sub.publicUrl}
+                        className="w-full sm:flex-1 min-w-0 text-xs text-slate-600 bg-transparent outline-none px-1.5 py-1 truncate"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleCopyLink(sub.publicUrl)}
+                        className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold cursor-pointer shrink-0"
+                      >
+                        {copied ? <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /> : <Link2 className="w-3.5 h-3.5 shrink-0" />}
+                        <span>{copied ? 'Copiado' : 'Copiar link'}</span>
+                      </button>
+                    </div>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 min-w-0">
+                      <a
+                        href={sub.whatsappUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs shrink-0"
+                      >
+                        <Share2 className="w-3.5 h-3.5 shrink-0" /> Compartilhar via WhatsApp
+                      </a>
+                      <span className="text-[11px] text-slate-500 flex items-center gap-1 min-w-0">
+                        <Clock className="w-3 h-3 shrink-0" /> Válido até{' '}
+                        {sub.expiresAt ? new Date(sub.expiresAt).toLocaleDateString('pt-BR') : 'o atendimento'}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Visualização de Respostas (ou Aviso de Sigilo para Recepção) */}
+                {sub && statusKey === 'submitted' && (
+                  <div className="flex flex-col gap-4 min-w-0">
+                    <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-between flex-wrap gap-2 min-w-0">
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-emerald-950 break-words">
+                          Respondido por: {sub.respondentName || 'Paciente'}
+                          {sub.isGuardian ? ` (Responsável legal)` : ''}
                         </p>
-                        <p className="text-[11px] text-slate-500 mt-0.5">
-                          A recepção visualiza apenas o status administrativo de preenchimento. O conteúdo das respostas e o mapa corporal ficam disponíveis exclusivamente para o profissional responsável no prontuário.
+                        <p className="text-[11px] text-emerald-800 break-words">
+                          Formulário: {sub.formTitle} (Versão v{sub.formVersion} preservada)
                         </p>
                       </div>
+                      {sub.submittedAt && (
+                        <span className="text-[11px] font-semibold text-emerald-800 shrink-0">
+                          Recebido em {String(sub.submittedAt).replace('T', ' ').slice(0, 16)}
+                        </span>
+                      )}
                     </div>
-                  ) : (
-                    <>
-                      {/* Respostas dos campos */}
-                      <div className="flex flex-col gap-2.5">
-                        <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-500">
-                          Respostas Informadas pelo Paciente
-                        </h4>
-                        {(sub.fields || [])
-                          .filter((f: any) => f.type !== 'zemda360_body_map')
-                          .map((f: PreConsultationFieldItem) => {
-                            const ans = sub.answers ? sub.answers[f.id] : undefined;
-                            const displayAns = Array.isArray(ans)
-                              ? ans.join(', ')
-                              : typeof ans === 'boolean'
-                              ? ans
-                                ? 'Sim'
-                                : 'Não'
-                              : ans !== undefined && ans !== null && String(ans).trim() !== ''
-                              ? String(ans)
-                              : 'Não informado';
-                            return (
-                              <div
-                                key={f.id}
-                                className="p-3 rounded-xl border border-slate-100 bg-slate-50/70"
-                              >
-                                <p className="text-xs font-bold text-slate-700">{f.label}</p>
-                                <p className="text-xs text-slate-900 mt-1 whitespace-pre-wrap">
-                                  {displayAns}
+
+                    {data.clinicalRestricted ? (
+                      <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex items-start gap-3 min-w-0">
+                        <ShieldAlert className="w-5 h-5 text-slate-500 shrink-0 mt-0.5" />
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-slate-800">
+                            Respostas clínicas protegidas por sigilo profissional
+                          </p>
+                          <p className="text-[11px] text-slate-500 mt-0.5">
+                            A recepção visualiza apenas o status administrativo de preenchimento. O conteúdo das respostas e o mapa corporal ficam disponíveis exclusivamente para o profissional responsável no prontuário.
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        {/* Respostas dos campos */}
+                        <div className="flex flex-col gap-2.5 min-w-0">
+                          <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-500">
+                            Respostas Informadas pelo Paciente
+                          </h4>
+                          {(sub.fields || [])
+                            .filter((f: any) => f.type !== 'zemda360_body_map')
+                            .map((f: PreConsultationFieldItem) => {
+                              const ans = sub.answers ? sub.answers[f.id] : undefined;
+                              const displayAns = Array.isArray(ans)
+                                ? ans.join(', ')
+                                : typeof ans === 'boolean'
+                                ? ans
+                                  ? 'Sim'
+                                  : 'Não'
+                                : ans !== undefined && ans !== null && String(ans).trim() !== ''
+                                ? String(ans)
+                                : 'Não informado';
+                              return (
+                                <div
+                                  key={f.id}
+                                  className="p-3 rounded-xl border border-slate-100 bg-slate-50/70 min-w-0"
+                                >
+                                  <p className="text-xs font-bold text-slate-700 break-words">{f.label}</p>
+                                  <p className="text-xs text-slate-900 mt-1 whitespace-pre-wrap break-words">
+                                    {displayAns}
+                                  </p>
+                                </div>
+                              );
+                            })}
+                        </div>
+
+                        {/* Mapa Corporal Zemda360 Informado pelo Paciente + Importação Opcional */}
+                        {sub.bodyMap && Array.isArray(sub.bodyMap.regions) && sub.bodyMap.regions.length > 0 && (
+                          <div className="flex flex-col gap-3 min-w-0">
+                            <PreConsultationBodyMapSimple
+                              regions={sub.bodyMap.regions as PatientBodyMapRegion[]}
+                              readOnly
+                            />
+                            <div className="p-3.5 rounded-2xl border border-indigo-200 bg-indigo-50/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 min-w-0">
+                              <div className="min-w-0">
+                                <p className="text-xs font-bold text-indigo-950">
+                                  Revisão Clínica — Zemda360
+                                </p>
+                                <p className="text-[11px] text-indigo-800 break-words">
+                                  {sub.bodyMapImportedAt
+                                    ? `Marcações já importadas para a avaliação clínica em ${String(sub.bodyMapImportedAt).replace('T', ' ').slice(0, 16)}.`
+                                    : 'Deseja importar as regiões demarcadas pelo paciente para a avaliação clínica do Zemda360?'}
                                 </p>
                               </div>
-                            );
-                          })}
-                      </div>
-
-                      {/* Mapa Corporal Zemda360 Informado pelo Paciente + Importação Opcional */}
-                      {sub.bodyMap && Array.isArray(sub.bodyMap.regions) && sub.bodyMap.regions.length > 0 && (
-                        <div className="flex flex-col gap-3">
-                          <PreConsultationBodyMapSimple
-                            regions={sub.bodyMap.regions as PatientBodyMapRegion[]}
-                            readOnly
-                          />
-                          <div className="p-3.5 rounded-2xl border border-indigo-200 bg-indigo-50/60 flex items-center justify-between flex-wrap gap-3">
-                            <div>
-                              <p className="text-xs font-bold text-indigo-950">
-                                Revisão Clínica — Zemda360
-                              </p>
-                              <p className="text-[11px] text-indigo-800">
-                                {sub.bodyMapImportedAt
-                                  ? `Marcações já importadas para a avaliação clínica em ${String(sub.bodyMapImportedAt).replace('T', ' ').slice(0, 16)}.`
-                                  : 'Deseja importar as regiões demarcadas pelo paciente para a avaliação clínica do Zemda360?'}
-                              </p>
+                              <button
+                                type="button"
+                                disabled={importingMap}
+                                onClick={handleImportBodyMap}
+                                className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs cursor-pointer shrink-0"
+                              >
+                                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                                <span>
+                                  {importingMap
+                                    ? 'Importando...'
+                                    : sub.bodyMapImportedAt
+                                    ? 'Reimportar para Avaliação Zemda360'
+                                    : 'Importar para Avaliação Clínica (Zemda360)'}
+                                </span>
+                              </button>
                             </div>
-                            <button
-                              type="button"
-                              disabled={importingMap}
-                              onClick={handleImportBodyMap}
-                              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs cursor-pointer"
-                            >
-                              <CheckCircle2 className="w-4 h-4" />
-                              {importingMap
-                                ? 'Importando...'
-                                : sub.bodyMapImportedAt
-                                ? 'Reimportar para Avaliação Zemda360'
-                                : 'Importar para Avaliação Clínica (Zemda360)'}
-                            </button>
                           </div>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
-            </>
-          )}
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         </div>
       </div>
-    </div>
+
+      {isInternalLibraryOpen && (
+        <PreConsultationFormsModal
+          isOpen={isInternalLibraryOpen}
+          onClose={() => {
+            setIsInternalLibraryOpen(false);
+            loadDetails();
+          }}
+        />
+      )}
+    </>
   );
 };

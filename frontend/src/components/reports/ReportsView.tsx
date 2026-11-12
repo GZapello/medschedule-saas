@@ -41,8 +41,11 @@ export const ReportsView: React.FC = () => {
   const { showToast } = useToast();
   const { isClinicAdmin, isReceptionist, isProfessional, hasPermission, clientTermLabel } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<ReportTab>('performance');
-  const [loading, setLoading] = useState<boolean>(true);
+  const isReceptionOnly = Boolean(isReceptionist && !isClinicAdmin && !isProfessional);
+  const [activeTab, setActiveTab] = useState<ReportTab>(() =>
+    isReceptionist && !isClinicAdmin && !isProfessional ? 'continuity' : 'performance'
+  );
+  const [loading, setLoading] = useState<boolean>(!isReceptionOnly);
   const [attendanceData, setAttendanceData] = useState<any>(null);
   const [financialData, setFinancialData] = useState<any>(null);
 
@@ -93,6 +96,10 @@ export const ReportsView: React.FC = () => {
     isClinicAdmin || isProfessional || isReceptionist || hasPermission('edit_patient') || hasPermission('create_patient');
 
   const fetchPerformanceReports = async () => {
+    if (isReceptionOnly) {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       const query = new URLSearchParams();
@@ -142,18 +149,31 @@ export const ReportsView: React.FC = () => {
       showToast('Erro ao carregar Continuidade do Cuidado', 'error');
     } finally {
       setLoadingContinuity(false);
+      if (isReceptionOnly) {
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
-    fetchPerformanceReports();
-  }, [startDate, endDate, selectedProfessionalId, selectedServiceId, selectedSpecialtyId]);
+    if (isReceptionOnly && activeTab !== 'continuity') {
+      setActiveTab('continuity');
+    }
+  }, [isReceptionOnly, activeTab]);
 
   useEffect(() => {
-    if (activeTab === 'continuity') {
+    if (!isReceptionOnly) {
+      fetchPerformanceReports();
+    } else {
+      setLoading(false);
+    }
+  }, [isReceptionOnly, startDate, endDate, selectedProfessionalId, selectedServiceId, selectedSpecialtyId]);
+
+  useEffect(() => {
+    if (isReceptionOnly || activeTab === 'continuity') {
       fetchCareContinuity();
     }
-  }, [activeTab, continuityBand, continuitySituation, selectedProfessionalId, selectedServiceId, selectedSpecialtyId]);
+  }, [isReceptionOnly, activeTab, continuityBand, continuitySituation, selectedProfessionalId, selectedServiceId, selectedSpecialtyId]);
 
   const applyPeriodPreset = (days: number) => {
     const end = new Date();
@@ -165,6 +185,7 @@ export const ReportsView: React.FC = () => {
   };
 
   const handleDownloadCsv = async (type: 'appointments' | 'payments') => {
+    if (isReceptionOnly) return;
     try {
       const csvText = await ApiClient.get<string>(`/v1/reports/export-csv?type=${type}`);
       const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8;' });
@@ -207,8 +228,8 @@ export const ReportsView: React.FC = () => {
         returnPeriodicityDays: parsedDays
       });
       showToast('Periodicidade do serviço atualizada!', 'success');
-      fetchPerformanceReports();
-      if (activeTab === 'continuity') fetchCareContinuity();
+      if (!isReceptionOnly) fetchPerformanceReports();
+      if (isReceptionOnly || activeTab === 'continuity') fetchCareContinuity();
     } catch (err: any) {
       showToast('Erro ao salvar periodicidade do serviço', 'error');
     } finally {
@@ -217,8 +238,10 @@ export const ReportsView: React.FC = () => {
   };
 
   const summary = attendanceData?.summary || {};
-  const filterProfessionals: any[] = attendanceData?.filters?.professionals || [];
-  const filterServices: any[] = attendanceData?.filters?.services || [];
+  const filterProfessionals: any[] =
+    attendanceData?.filters?.professionals || continuityData?.filters?.professionals || [];
+  const filterServices: any[] =
+    attendanceData?.filters?.services || continuityData?.filters?.services || [];
 
   const specialtyOptions = useMemo(() => {
     const map = new Map<string, string>();
@@ -237,61 +260,69 @@ export const ReportsView: React.FC = () => {
       {/* Header Principal */}
       <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight">Relatórios & Métricas Analíticas</h2>
+          <h2 className="text-xl font-bold text-slate-900 tracking-tight">
+            {isReceptionOnly ? 'Relatórios & Acompanhamento de Pacientes' : 'Relatórios & Métricas Analíticas'}
+          </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Indicadores de desempenho operacional, ocupação real da agenda e continuidade do cuidado dos {clientTermLabel.toLowerCase()}s.
+            {isReceptionOnly
+              ? `Continuidade do Cuidado — acompanhamento operacional de retornos, prazos recomendados e próximos agendamentos dos ${clientTermLabel.toLowerCase()}s.`
+              : `Indicadores de desempenho operacional, ocupação real da agenda e continuidade do cuidado dos ${clientTermLabel.toLowerCase()}s.`}
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => handleDownloadCsv('appointments')}
-            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all cursor-pointer"
-          >
-            <FileSpreadsheet className="w-4 h-4 text-emerald-600" /> Exportar Atendimentos (CSV)
-          </button>
-          {canViewFinancial && (
+        {!isReceptionOnly && (
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={() => handleDownloadCsv('payments')}
-              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-all border border-indigo-200 cursor-pointer"
+              onClick={() => handleDownloadCsv('appointments')}
+              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all cursor-pointer"
             >
-              <Download className="w-4 h-4 text-indigo-600" /> Exportar Financeiro (CSV)
+              <FileSpreadsheet className="w-4 h-4 text-emerald-600" /> Exportar Atendimentos (CSV)
             </button>
-          )}
-        </div>
+            {canViewFinancial && (
+              <button
+                type="button"
+                onClick={() => handleDownloadCsv('payments')}
+                className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-all border border-indigo-200 cursor-pointer"
+              >
+                <Download className="w-4 h-4 text-indigo-600" /> Exportar Financeiro (CSV)
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Abas Internas: Indicadores de Desempenho | Continuidade do Cuidado */}
-      <div className="bg-white p-1.5 rounded-2xl border border-slate-200 shadow-xs inline-flex flex-wrap gap-1">
-        <button
-          type="button"
-          data-testid="tab-performance"
-          onClick={() => setActiveTab('performance')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'performance'
-              ? 'bg-indigo-600 text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          <BarChart3 className="w-4 h-4" />
-          Indicadores de Desempenho
-        </button>
-        <button
-          type="button"
-          data-testid="tab-continuity"
-          onClick={() => setActiveTab('continuity')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'continuity'
-              ? 'bg-indigo-600 text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          <HeartHandshake className="w-4 h-4" />
-          Continuidade do Cuidado
-        </button>
-      </div>
+      {/* Abas Internas: Indicadores de Desempenho | Continuidade do Cuidado (Oculto para Recepção) */}
+      {!isReceptionOnly && (
+        <div className="bg-white p-1.5 rounded-2xl border border-slate-200 shadow-xs inline-flex flex-wrap gap-1">
+          <button
+            type="button"
+            data-testid="tab-performance"
+            onClick={() => setActiveTab('performance')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'performance'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            <BarChart3 className="w-4 h-4" />
+            Indicadores de Desempenho
+          </button>
+          <button
+            type="button"
+            data-testid="tab-continuity"
+            onClick={() => setActiveTab('continuity')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'continuity'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            <HeartHandshake className="w-4 h-4" />
+            Continuidade do Cuidado
+          </button>
+        </div>
+      )}
 
       {/* Barra de Filtros Compartilhada */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
@@ -300,7 +331,7 @@ export const ReportsView: React.FC = () => {
             <Filter className="w-3.5 h-3.5 text-indigo-600" />
             <span>Filtros de Análise</span>
           </div>
-          {activeTab === 'performance' && (
+          {!isReceptionOnly && activeTab === 'performance' && (
             <div className="flex flex-wrap items-center gap-1.5">
               <button
                 type="button"
@@ -328,7 +359,7 @@ export const ReportsView: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 text-xs">
-          {activeTab === 'performance' && (
+          {!isReceptionOnly && activeTab === 'performance' && (
             <>
               <div>
                 <label className="block text-[11px] font-semibold text-slate-600 mb-1">Data inicial</label>
@@ -392,7 +423,7 @@ export const ReportsView: React.FC = () => {
         </div>
       </div>
 
-      {activeTab === 'performance' ? (
+      {!isReceptionOnly && activeTab === 'performance' ? (
         <>
           {/* Cards de Indicadores de Desempenho (1.1) */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
@@ -823,7 +854,7 @@ export const ReportsView: React.FC = () => {
                         </td>
 
                         <td className="py-3 px-4 text-right">
-                          <div className="inline-flex items-center gap-1.5">
+                          <div className="inline-flex items-center gap-1.5 flex-wrap justify-end">
                             {canOpenPatientProfile && (
                               <button
                                 type="button"
@@ -831,6 +862,21 @@ export const ReportsView: React.FC = () => {
                                 className="px-2.5 py-1 text-[11px] font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg cursor-pointer"
                               >
                                 Cadastro
+                              </button>
+                            )}
+                            {(isClinicAdmin || isProfessional || isReceptionist || hasPermission('create_appointment')) && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  window.dispatchEvent(
+                                    new CustomEvent('zemda-navigate', {
+                                      detail: { view: 'calendar', patientId: item.patientId }
+                                    })
+                                  );
+                                }}
+                                className="px-2.5 py-1 text-[11px] font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-lg cursor-pointer"
+                              >
+                                Agendar retorno
                               </button>
                             )}
                             <button

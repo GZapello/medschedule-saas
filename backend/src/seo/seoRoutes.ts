@@ -1295,8 +1295,8 @@ export function isValidInternalRoute(rawPath: string): boolean {
     return true;
   }
 
-  // Consent signing and minimal public verification (private, non-indexable pages).
-  if (/^\/(?:assinar-termo|verificar)\/[a-zA-Z0-9_-]+$/i.test(norm)) return true;
+  // Consent signing, pre-consultation digital form, and minimal public verification (private, non-indexable pages).
+  if (/^\/(?:assinar-termo|verificar|pre-consulta)\/[a-zA-Z0-9_-]+$/i.test(norm)) return true;
 
   // Validação pública oficial de documentos: /verificar-documento/:token
   if (/^\/verificar-documento\/[a-zA-Z0-9_-]+$/i.test(norm)) {

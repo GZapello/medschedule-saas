@@ -238,10 +238,18 @@ export const CheckInFloatingAlert: React.FC = () => {
     if (!canPoll) return;
     try {
       const data = await api.get<{
+        hasReceptionTeam?: boolean;
+        clinicCheckinEnabled?: boolean;
         alertsEnabled: boolean;
         activeAlerts: any[];
       }>('/v1/checkin/queue');
-      if (data && data.alertsEnabled && Array.isArray(data.activeAlerts)) {
+      if (
+        data &&
+        data.hasReceptionTeam &&
+        data.clinicCheckinEnabled !== false &&
+        data.alertsEnabled &&
+        Array.isArray(data.activeAlerts)
+      ) {
         setActiveAlerts(data.activeAlerts);
       } else {
         setActiveAlerts([]);

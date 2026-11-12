@@ -90,6 +90,65 @@ export function syncReceptionStatusFromClinical(
   }
 }
 
+export function getClinicReceptionAvailability(tenantId: string): {
+  clinicCheckinEnabled: boolean;
+  hasReceptionTeam: boolean;
+  receptionStaffCount: number;
+  receptionFlowActive: boolean;
+} {
+  try {
+    const tenantRow = db.prepare('SELECT checkin_enabled FROM tenants WHERE id = ?').get(tenantId) as
+      | { checkin_enabled?: number }
+      | undefined;
+    const clinicCheckinEnabled = tenantRow?.checkin_enabled !== 0;
+
+    // Considera exclusivamente usuários de recepção com vínculo ativo na clínica atual
+    // (exclui inativos, desativados/removidos e convites pendentes)
+    const receptionCountRow = db.prepare(`
+      SELECT COUNT(DISTINCT id) as c FROM (
+        SELECT u.id
+        FROM clinic_users cu
+        JOIN users u ON u.id = cu.user_id
+        WHERE cu.tenant_id = ?
+          AND cu.role IN ('receptionist', 'secretary', 'assistant')
+          AND COALESCE(cu.status, u.status) = 'active'
+          AND cu.deactivated_at IS NULL
+          AND u.deactivated_at IS NULL
+        UNION
+        SELECT u.id
+        FROM users u
+        WHERE u.tenant_id = ?
+          AND u.role IN ('receptionist', 'secretary', 'assistant')
+          AND u.status = 'active'
+          AND u.deactivated_at IS NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM clinic_users cu2
+            WHERE cu2.user_id = u.id
+              AND cu2.tenant_id = ?
+              AND (COALESCE(cu2.status, 'active') != 'active' OR cu2.deactivated_at IS NOT NULL)
+          )
+      )
+    `).get(tenantId, tenantId, tenantId) as { c: number } | undefined;
+
+    const receptionStaffCount = Number(receptionCountRow?.c || 0);
+    const hasReceptionTeam = receptionStaffCount > 0;
+    return {
+      clinicCheckinEnabled,
+      hasReceptionTeam,
+      receptionStaffCount,
+      receptionFlowActive: hasReceptionTeam && clinicCheckinEnabled
+    };
+  } catch (err) {
+    console.warn('[CheckIn.getClinicReceptionAvailability] Aviso:', err);
+    return {
+      clinicCheckinEnabled: false,
+      hasReceptionTeam: false,
+      receptionStaffCount: 0,
+      receptionFlowActive: false
+    };
+  }
+}
+
 export class CheckInController {
   /**
    * Retorna a configuração de Check-In da clínica e do profissional/usuário logado,
@@ -104,19 +163,8 @@ export class CheckInController {
         return;
       }
 
-      const tenantRow = db.prepare('SELECT checkin_enabled FROM tenants WHERE id = ?').get(tenantId) as { checkin_enabled?: number } | undefined;
-      const clinicCheckinEnabled = tenantRow?.checkin_enabled !== 0;
-
-      // Verifica se há recepção cadastrada (em users ou clinic_users)
-      const receptionCountRow = db.prepare(`
-        SELECT COUNT(*) as c FROM (
-          SELECT id FROM users WHERE tenant_id = ? AND role IN ('receptionist', 'secretary', 'assistant') AND status = 'active'
-          UNION
-          SELECT user_id as id FROM clinic_users WHERE tenant_id = ? AND role IN ('receptionist', 'secretary', 'assistant') AND status = 'active'
-        )
-      `).get(tenantId, tenantId) as { c: number } | undefined;
-      const receptionStaffCount = receptionCountRow?.c || 0;
-      const hasReceptionTeam = receptionStaffCount > 0;
+      const { clinicCheckinEnabled, hasReceptionTeam, receptionStaffCount } =
+        getClinicReceptionAvailability(tenantId);
 
       const profRow = db.prepare(`
         SELECT id, name, checkin_alerts_enabled, checkin_sound_enabled
@@ -172,14 +220,7 @@ export class CheckInController {
       const { alertsEnabled, soundEnabled, clinicCheckinEnabled } = req.body;
 
       // Verifica se existe recepção ativa na clínica
-      const receptionCountRow = db.prepare(`
-        SELECT COUNT(*) as c FROM (
-          SELECT id FROM users WHERE tenant_id = ? AND role IN ('receptionist', 'secretary', 'assistant') AND status = 'active'
-          UNION
-          SELECT user_id as id FROM clinic_users WHERE tenant_id = ? AND role IN ('receptionist', 'secretary', 'assistant') AND status = 'active'
-        )
-      `).get(tenantId, tenantId) as { c: number } | undefined;
-      const hasReceptionTeam = (receptionCountRow?.c || 0) > 0;
+      const { hasReceptionTeam, receptionStaffCount } = getClinicReceptionAvailability(tenantId);
 
       if (alertsEnabled === true && !hasReceptionTeam && req.body.allowWithoutReception !== true) {
         res.status(400).json({
@@ -402,6 +443,13 @@ export class CheckInController {
         ? String(req.query.date).slice(0, 10)
         : new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
 
+      const {
+        clinicCheckinEnabled,
+        hasReceptionTeam,
+        receptionStaffCount,
+        receptionFlowActive
+      } = getClinicReceptionAvailability(tenantId);
+
       // Identifica o profissional vinculado ao usuário logado
       const myProf = db.prepare(`
         SELECT id, name, checkin_alerts_enabled, checkin_sound_enabled
@@ -418,15 +466,16 @@ export class CheckInController {
         SELECT alerts_enabled, sound_enabled FROM checkin_preferences WHERE tenant_id = ? AND user_id = ?
       `).get(tenantId, userId) as { alerts_enabled?: number; sound_enabled?: number } | undefined;
 
-      const alertsEnabled = prefRow
+      const configuredAlerts = prefRow
         ? prefRow.alerts_enabled === 1
         : Boolean(myProf?.checkin_alerts_enabled === 1);
+      const alertsEnabled = receptionFlowActive && configuredAlerts;
 
       let waitingPatients: any[] = [];
       let activeAlerts: any[] = [];
       let previousAlerts: any[] = [];
 
-      if (targetProfId) {
+      if (targetProfId && receptionFlowActive) {
         const waitingRows = db.prepare(`
           SELECT
             a.id,
@@ -506,11 +555,15 @@ export class CheckInController {
       res.json({
         date: todayStr,
         professionalId: targetProfId,
+        hasReceptionTeam,
+        receptionStaffCount,
+        clinicCheckinEnabled,
+        receptionFlowActive,
         alertsEnabled,
-        waitingCount: waitingPatients.length,
-        waitingPatients,
-        activeAlerts,
-        previousAlerts
+        waitingCount: receptionFlowActive ? waitingPatients.length : 0,
+        waitingPatients: receptionFlowActive ? waitingPatients : [],
+        activeAlerts: receptionFlowActive ? activeAlerts : [],
+        previousAlerts: receptionFlowActive ? previousAlerts : []
       });
     } catch (err: any) {
       console.error('[CheckInController.getQueueAndAlerts] Erro:', err);

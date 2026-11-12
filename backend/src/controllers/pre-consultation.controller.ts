@@ -439,6 +439,65 @@ export function createPreConsultationSubmissionForAppointment(params: {
   };
 }
 
+const SIMPLIFIED_LEGACY_TO_CANONICAL: Record<string, string> = {
+  head_front: 'cabeca',
+  head_back: 'cabeca',
+  neck_front: 'cervical',
+  cervical_back: 'joint_cervical',
+  shoulder_right: 'shoulder_right',
+  shoulder_left: 'shoulder_left',
+  chest: 'thorax',
+  abdomen: 'abdomen_upper',
+  arm_right: 'upper_arm_right',
+  arm_left: 'upper_arm_left',
+  hand_right: 'hand_right',
+  hand_left: 'hand_left',
+  pelvis_front: 'pelvis',
+  thigh_knee_right: 'thigh_anterior_right',
+  thigh_knee_left: 'thigh_anterior_left',
+  leg_foot_right: 'leg_anterior_right',
+  leg_foot_left: 'leg_anterior_left',
+  scapula_right: 'scapula_right',
+  scapula_left: 'scapula_left',
+  thoracic_spine: 'thoracic_back',
+  lumbar_spine: 'lumbar',
+  glute_hip: 'pelvis',
+  posterior_thigh_left: 'thigh_posterior_left',
+  posterior_thigh_right: 'thigh_posterior_right',
+  calf_heel_left: 'leg_posterior_left',
+  calf_heel_right: 'leg_posterior_right',
+  coluna_cervical: 'joint_cervical',
+  coluna_toracica: 'thoracic_back',
+  coluna_lombar: 'lumbar',
+  pelve: 'pelvis',
+  ombro_direito: 'shoulder_right',
+  ombro_esquerdo: 'shoulder_left',
+  cotovelo_direito: 'elbow_right',
+  cotovelo_esquerdo: 'elbow_left',
+  punho_direito: 'wrist_right',
+  punho_esquerdo: 'wrist_left',
+  quadril_direito: 'hip_right',
+  quadril_esquerdo: 'hip_left',
+  joelho_direito: 'knee_right',
+  joelho_esquerdo: 'knee_left',
+  tornozelo_direito: 'ankle_right',
+  tornozelo_esquerdo: 'ankle_left',
+  pe_direito: 'foot_right',
+  pe_esquerdo: 'foot_left',
+  antebraco_direito: 'forearm_right',
+  antebraco_esquerdo: 'forearm_left',
+  quadriceps_direito: 'thigh_anterior_right',
+  quadriceps_esquerdo: 'thigh_anterior_left',
+  posteriores_direito: 'thigh_posterior_right',
+  posteriores_esquerdo: 'thigh_posterior_left'
+};
+
+function resolveCanonicalZemda360RegionId(rawId: string): string {
+  const trimmed = String(rawId || '').trim();
+  if (!trimmed) return 'regiao';
+  return SIMPLIFIED_LEGACY_TO_CANONICAL[trimmed] || trimmed;
+}
+
 export class PreConsultationController {
   /**
    * 4.1. Lista os modelos da Biblioteca "Formulários de Pré-consulta"
@@ -1337,16 +1396,27 @@ export class PreConsultationController {
       const importedMarkers: any[] = [];
       for (const reg of regionsToImport) {
         const markerId = 'bm-pc-' + uuidv4().slice(0, 8);
-        const regionKey = String(reg.regionId || reg.id || 'regiao');
-        const side = /_right$|direit/i.test(regionKey) ? 'right' : /_left$|esquerd/i.test(regionKey) ? 'left' : 'midline';
-        const view = reg.view === 'back' ? 'back' : 'front';
+        const rawRegionKey = String(reg.canonicalRegionId || reg.regionId || reg.id || 'regiao');
+        const canonicalKey = resolveCanonicalZemda360RegionId(rawRegionKey);
+        const side =
+          reg.side === 'right' || reg.side === 'left' || reg.side === 'midline'
+            ? reg.side
+            : /_right$|direit/i.test(canonicalKey)
+            ? 'right'
+            : /_left$|esquerd/i.test(canonicalKey)
+            ? 'left'
+            : 'midline';
+        const view =
+          reg.view === 'back' || reg.view === 'left' || reg.view === 'right' ? reg.view : 'front';
         const markerType = String(reg.complaintType || 'pain');
         const severity = reg.intensity !== undefined ? String(reg.intensity) : null;
         const noteText = `[Informado pelo paciente na Pré-consulta] ${reg.notes || ''}`.trim();
         const details = JSON.stringify({
           source: 'patient_pre_consultation',
           submissionId: sub.id,
-          regionLabel: reg.regionLabel || regionKey,
+          canonicalRegionId: canonicalKey,
+          originalRegionId: rawRegionKey,
+          regionLabel: reg.regionLabel || canonicalKey,
           complaintType: markerType,
           intensity: reg.intensity ?? null,
           patientNotes: reg.notes || null
@@ -1356,16 +1426,24 @@ export class PreConsultationController {
           markerId,
           tenantId,
           assessmentId,
-          reg.regionLabel || regionKey,
+          canonicalKey,
           side,
           view,
           markerType,
-          reg.regionLabel || regionKey,
+          reg.regionLabel || canonicalKey,
           severity,
           noteText,
           details
         );
-        importedMarkers.push({ markerId, region: reg.regionLabel || regionKey, view, complaintType: markerType, intensity: reg.intensity });
+        importedMarkers.push({
+          markerId,
+          canonicalRegionId: canonicalKey,
+          region: reg.regionLabel || canonicalKey,
+          side,
+          view,
+          complaintType: markerType,
+          intensity: reg.intensity
+        });
       }
 
       const now = nowBrazilIso();
@@ -1428,6 +1506,10 @@ export class PreConsultationController {
    */
   static getPublicFormByToken(req: Request, res: Response): void {
     try {
+      res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+      res.setHeader('Referrer-Policy', 'no-referrer');
+      res.setHeader('Cache-Control', 'no-store, max-age=0');
+
       const token = String(req.params.token || '').trim();
       if (!token || token.length < 16) {
         res.status(404).json({ error: 'Link de Pré-consulta inválido ou não encontrado.' });
@@ -1448,6 +1530,8 @@ export class PreConsultationController {
                f.fields_json as fallback_fields_json,
                pat.full_name as patient_name,
                pat.is_child as patient_is_child,
+               pat.gender as patient_gender,
+               pat.anthropometric_sex as patient_anthropometric_sex,
                (SELECT g.full_name FROM guardians g WHERE g.patient_id = pat.id LIMIT 1) as patient_guardian_name,
                p.name as professional_name,
                a.start_time as appointment_start_time,
@@ -1527,6 +1611,14 @@ export class PreConsultationController {
           ? `${nameParts[0]} ${nameParts[nameParts.length - 1][0]}.`
           : nameParts[0];
 
+      const patientBodyModel: 'female' | 'male' =
+        sub.patient_anthropometric_sex === 'male' ||
+        sub.patient_gender === 'male' ||
+        sub.patient_gender === 'M' ||
+        sub.patient_gender === 'Masculino'
+          ? 'male'
+          : 'female';
+
       res.json({
         alreadySubmitted: false,
         status: 'pending',
@@ -1537,6 +1629,7 @@ export class PreConsultationController {
         appointmentStartTime: sub.appointment_start_time || null,
         patientDisplayName: safePatientDisplayName,
         patientFullName: sub.patient_name,
+        patientBodyModel,
         isChild: Boolean(sub.patient_is_child),
         suggestedGuardianName: sub.patient_guardian_name || null,
         form: {
@@ -1561,6 +1654,10 @@ export class PreConsultationController {
    */
   static submitPublicFormByToken(req: Request, res: Response): void {
     try {
+      res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+      res.setHeader('Referrer-Policy', 'no-referrer');
+      res.setHeader('Cache-Control', 'no-store, max-age=0');
+
       const token = String(req.params.token || '').trim();
       if (!token || token.length < 16) {
         res.status(404).json({ error: 'Link de Pré-consulta inválido.' });
@@ -1675,16 +1772,34 @@ export class PreConsultationController {
           source: 'patient_pre_consultation',
           sourceLabel: 'Informado pelo paciente na Pré-consulta Digital',
           submittedBy: finalRespondentName,
-          regions: bodyMap.regions.map((r: any, idx: number) => ({
-            id: String(r.id || `pcr-${idx + 1}`),
-            regionId: String(r.regionId || r.id || `reg-${idx + 1}`),
-            regionLabel: String(r.regionLabel || r.regionId || 'Região corporal'),
-            view: r.view === 'back' ? 'back' : 'front',
-            complaintType: String(r.complaintType || 'dor'),
-            intensity: typeof r.intensity === 'number' ? Math.max(0, Math.min(10, r.intensity)) : 5,
-            notes: r.notes ? String(r.notes).trim() : '',
-            source: 'patient_pre_consultation'
-          }))
+          regions: bodyMap.regions.map((r: any, idx: number) => {
+            const rawRegId = String(r.canonicalRegionId || r.regionId || r.id || `reg-${idx + 1}`);
+            const canonicalId = resolveCanonicalZemda360RegionId(rawRegId);
+            const resolvedSide =
+              r.side === 'right' || r.side === 'left' || r.side === 'midline'
+                ? r.side
+                : /_right$|direit/i.test(canonicalId)
+                ? 'right'
+                : /_left$|esquerd/i.test(canonicalId)
+                ? 'left'
+                : 'midline';
+            const resolvedView =
+              r.view === 'back' || r.view === 'left' || r.view === 'right' ? r.view : 'front';
+            return {
+              id: String(r.id || `pcr-${canonicalId}`),
+              regionId: canonicalId,
+              canonicalRegionId: canonicalId,
+              regionLabel: String(r.regionLabel || canonicalId || 'Região corporal'),
+              view: resolvedView,
+              side: resolvedSide,
+              group: r.group ? String(r.group) : undefined,
+              kind: r.kind === 'joint' ? 'joint' : 'region',
+              complaintType: String(r.complaintType || 'dor'),
+              intensity: typeof r.intensity === 'number' ? Math.max(0, Math.min(10, r.intensity)) : 5,
+              notes: r.notes ? String(r.notes).trim() : '',
+              source: 'patient_pre_consultation'
+            };
+          })
         };
       }
 

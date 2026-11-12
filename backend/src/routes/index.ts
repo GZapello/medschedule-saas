@@ -885,13 +885,13 @@ api.get('/v1/purchases/:id', requireTenant, requireRole('clinic_admin', 'recepti
 api.get('/v1/dashboard/metrics', requireTenant, DashboardController.getMetrics);
 
 // Relatórios e Exportação CSV e DOCX
-api.get('/v1/reports/attendance', requireTenant, requirePermissionOrRole('view_reports', 'clinic_admin', 'professional', 'receptionist'), ReportController.getAttendanceReport);
-api.get('/v1/reports/performance', requireTenant, requirePermissionOrRole('view_reports', 'clinic_admin', 'professional', 'receptionist'), ReportController.getAttendanceReport);
+api.get('/v1/reports/attendance', requireTenant, requirePermissionOrRole('view_reports', 'clinic_admin', 'professional'), ReportController.getAttendanceReport);
+api.get('/v1/reports/performance', requireTenant, requirePermissionOrRole('view_reports', 'clinic_admin', 'professional'), ReportController.getAttendanceReport);
 api.get('/v1/reports/care-continuity', requireTenant, requirePermissionOrRole('view_reports', 'clinic_admin', 'professional', 'receptionist'), ReportController.getCareContinuityReport);
 api.put('/v1/reports/care-continuity/patient/:patientId', requireTenant, requirePermissionOrRole('view_reports', 'clinic_admin', 'professional', 'receptionist'), ReportController.updatePatientContinuityConfig);
 api.put('/v1/reports/care-continuity/service/:serviceId', requireTenant, requirePermissionOrRole('manage_services', 'clinic_admin', 'professional'), ReportController.updateServiceContinuityConfig);
 api.get('/v1/reports/financial', requireTenant, requirePermissionOrRole('manage_financial', 'clinic_admin'), ReportController.getFinancialReport);
-api.get('/v1/reports/export-csv', requireTenant, requirePermissionOrRole('view_reports', 'clinic_admin', 'professional', 'receptionist'), ReportController.exportCsv);
+api.get('/v1/reports/export-csv', requireTenant, requirePermissionOrRole('view_reports', 'clinic_admin', 'professional'), ReportController.exportCsv);
 api.get('/v1/reports/export-docx', requireTenant, requireRole('clinic_admin', 'professional'), ReportController.exportDocx);
 api.get('/v1/clinical-export/preview', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalExportController.preview);
 api.get('/v1/clinical-export/download', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalExportController.download);
