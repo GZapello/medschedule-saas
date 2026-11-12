@@ -63,6 +63,91 @@ export function isUserReceptionOnly(req: Request, tenantId: string): boolean {
   }
 }
 
+export interface ReportAccessScope {
+  scope: 'manager' | 'professional_own' | 'reception_only' | 'forbidden';
+  professionalId: string | null;
+  reason?: string;
+}
+
+/**
+ * Resolve o escopo de acesso aos relatórios na clínica ativa:
+ * - 'manager': clinic_admin, gestor (is_manager=1) ou superadmin -> visão geral da clínica
+ * - 'professional_own': profissional de saúde ativo sem perfil de gestor -> exclusivamente dados próprios
+ * - 'reception_only': recepção/secretaria -> exclusivamente Continuidade do Cuidado
+ * - 'forbidden': profissional sem vínculo ativo na clínica ou usuário sem autorização -> 403
+ */
+export function resolveReportAccessScope(req: Request, tenantId: string): ReportAccessScope {
+  if (!req.user || !tenantId) {
+    return { scope: 'forbidden', professionalId: null, reason: 'Usuário ou clínica não identificados.' };
+  }
+
+  const role = String(req.user.role || '').toLowerCase();
+  if (role === 'superadmin') {
+    return { scope: 'manager', professionalId: null };
+  }
+
+  let cu: { is_manager?: number; role?: string; status?: string } | undefined;
+  let tu: { role?: string; status?: string } | undefined;
+  try {
+    cu = db
+      .prepare('SELECT is_manager, role, status FROM clinic_users WHERE user_id = ? AND tenant_id = ? LIMIT 1')
+      .get(req.user.userId, tenantId) as any;
+    tu = db
+      .prepare('SELECT role, status FROM tenant_users WHERE user_id = ? AND tenant_id = ? LIMIT 1')
+      .get(req.user.userId, tenantId) as any;
+  } catch (_) {}
+
+  if (cu?.status && !['active', 'approved'].includes(String(cu.status).toLowerCase())) {
+    return { scope: 'forbidden', professionalId: null, reason: 'Vínculo inativo nesta clínica.' };
+  }
+  if (tu?.status && !['active', 'approved'].includes(String(tu.status).toLowerCase())) {
+    return { scope: 'forbidden', professionalId: null, reason: 'Vínculo inativo nesta clínica.' };
+  }
+
+  // A. Gestor (clinic_admin ou is_manager = 1)
+  if (
+    role === 'clinic_admin' ||
+    cu?.is_manager === 1 ||
+    String(cu?.role || '').toLowerCase() === 'clinic_admin' ||
+    String(tu?.role || '').toLowerCase() === 'clinic_admin'
+  ) {
+    return { scope: 'manager', professionalId: null };
+  }
+
+  // C. Recepção (receptionist / secretary)
+  if (isUserReceptionOnly(req, tenantId)) {
+    return { scope: 'reception_only', professionalId: null };
+  }
+
+  // B. Profissional da saúde — não gestor (acesso exclusivamente aos próprios dados)
+  const effectiveRole = String(cu?.role || tu?.role || role).toLowerCase();
+  if (effectiveRole === 'professional') {
+    const activeProf = db
+      .prepare('SELECT id FROM professionals WHERE tenant_id = ? AND user_id = ? AND active = 1 LIMIT 1')
+      .get(tenantId, req.user.userId) as { id: string } | undefined;
+
+    if (!activeProf?.id) {
+      return {
+        scope: 'forbidden',
+        professionalId: null,
+        reason: 'Acesso negado: profissional sem vínculo ativo nesta clínica.'
+      };
+    }
+
+    return {
+      scope: 'professional_own',
+      professionalId: String(activeProf.id)
+    };
+  }
+
+  const perms = getUserPermissions(req.user.userId, tenantId, role);
+  if (perms.includes('view_reports')) {
+    return { scope: 'manager', professionalId: null };
+  }
+
+  return { scope: 'forbidden', professionalId: null, reason: 'Sem permissão para acessar relatórios.' };
+}
+
 /**
  * Verifica se o usuário autenticado pode visualizar valores financeiros/receita nos relatórios.
  * A recepção nunca acessa relatórios financeiros ou indicadores de desempenho.
@@ -225,15 +310,41 @@ export class ReportController {
         return;
       }
 
-      if (isUserReceptionOnly(req, tenantId)) {
+      const access = resolveReportAccessScope(req, tenantId);
+      if (access.scope === 'reception_only') {
         res.status(403).json({
           error: 'Acesso restrito: a recepção possui acesso exclusivamente à área de Continuidade do Cuidado.',
           code: 'PERFORMANCE_REPORT_FORBIDDEN'
         });
         return;
       }
+      if (access.scope === 'forbidden') {
+        res.status(403).json({
+          error: access.reason || 'Acesso negado aos relatórios desta clínica.',
+          code: 'REPORT_ACCESS_FORBIDDEN'
+        });
+        return;
+      }
 
-      const { startDate, endDate, professionalId, serviceId, specialtyId } = req.query;
+      const { startDate, endDate, professionalId: rawProfQuery, serviceId, specialtyId } = req.query;
+      if (
+        access.scope === 'professional_own' &&
+        rawProfQuery &&
+        String(rawProfQuery) !== 'all' &&
+        String(rawProfQuery) !== access.professionalId
+      ) {
+        res.status(403).json({
+          error: 'Acesso negado: você possui permissão para consultar exclusivamente os seus próprios indicadores.',
+          code: 'PROFESSIONAL_SCOPE_FORBIDDEN'
+        });
+        return;
+      }
+
+      const professionalId =
+        access.scope === 'professional_own'
+          ? access.professionalId
+          : (rawProfQuery && String(rawProfQuery) !== 'all' ? String(rawProfQuery) : undefined);
+
       const canViewFinancial = canUserAccessReportFinancials(req, tenantId);
 
       // Define intervalo padrão de 30 dias para cálculo de capacidade se não informado
@@ -556,16 +667,25 @@ export class ReportController {
       })).sort((a, b) => b.completed - a.completed || b.total - a.total);
 
       // Por Módulo Clínico (apenas contagem estatística, sem expor conteúdo clínico)
-      const byModuleStmt = db.prepare(`
-        SELECT 
-          COALESCE(r.module_type, 'Geral') as module_type,
-          COUNT(*) as total
-        FROM records r
-        WHERE r.tenant_id = ?
-        GROUP BY r.module_type
-        ORDER BY total DESC
-      `);
-      const byModule = byModuleStmt.all(tenantId);
+      const byModule = professionalId
+        ? db.prepare(`
+            SELECT 
+              COALESCE(r.module_type, 'Geral') as module_type,
+              COUNT(*) as total
+            FROM records r
+            WHERE r.tenant_id = ? AND r.professional_id = ?
+            GROUP BY r.module_type
+            ORDER BY total DESC
+          `).all(tenantId, String(professionalId))
+        : db.prepare(`
+            SELECT 
+              COALESCE(r.module_type, 'Geral') as module_type,
+              COUNT(*) as total
+            FROM records r
+            WHERE r.tenant_id = ?
+            GROUP BY r.module_type
+            ORDER BY total DESC
+          `).all(tenantId);
 
       const validScheduledCount = Math.max(0, totalScheduled - cancelledCount);
       const noShowPercent = validScheduledCount > 0
@@ -593,26 +713,46 @@ export class ReportController {
         }))
         .sort((a, b) => a.date.localeCompare(b.date));
 
-      // Opções de filtro disponíveis na clínica
-      const filterProfessionals = db.prepare(`
-        SELECT p.id, p.name, p.profession_id, p.specialty_id,
-               COALESCE(prof.name, p.profession_name) as profession_name,
-               COALESCE(p.specialty_custom, spec.name) as specialty_name
-        FROM professionals p
-        LEFT JOIN professions prof ON prof.id = p.profession_id
-        LEFT JOIN specialties spec ON spec.id = p.specialty_id
-        WHERE p.tenant_id = ? AND p.active = 1
-        ORDER BY p.name ASC
-      `).all(tenantId);
+      // Opções de filtro disponíveis conforme escopo de acesso
+      const filterProfessionals = access.scope === 'professional_own' && access.professionalId
+        ? db.prepare(`
+            SELECT p.id, p.name, p.profession_id, p.specialty_id,
+                   COALESCE(prof.name, p.profession_name) as profession_name,
+                   COALESCE(p.specialty_custom, spec.name) as specialty_name
+            FROM professionals p
+            LEFT JOIN professions prof ON prof.id = p.profession_id
+            LEFT JOIN specialties spec ON spec.id = p.specialty_id
+            WHERE p.tenant_id = ? AND p.active = 1 AND p.id = ?
+            ORDER BY p.name ASC
+          `).all(tenantId, access.professionalId)
+        : db.prepare(`
+            SELECT p.id, p.name, p.profession_id, p.specialty_id,
+                   COALESCE(prof.name, p.profession_name) as profession_name,
+                   COALESCE(p.specialty_custom, spec.name) as specialty_name
+            FROM professionals p
+            LEFT JOIN professions prof ON prof.id = p.profession_id
+            LEFT JOIN specialties spec ON spec.id = p.specialty_id
+            WHERE p.tenant_id = ? AND p.active = 1
+            ORDER BY p.name ASC
+          `).all(tenantId);
 
-      const filterServices = db.prepare(`
-        SELECT id, name, professional_id, specialty_id, duration_minutes, return_periodicity_days, reminder_enabled, reminder_value, reminder_unit
-        FROM services
-        WHERE tenant_id = ? AND active = 1
-        ORDER BY name ASC
-      `).all(tenantId);
+      const filterServices = access.scope === 'professional_own' && access.professionalId
+        ? db.prepare(`
+            SELECT id, name, professional_id, specialty_id, duration_minutes, return_periodicity_days, reminder_enabled, reminder_value, reminder_unit
+            FROM services
+            WHERE tenant_id = ? AND active = 1 AND (professional_id = ? OR professional_id IS NULL)
+            ORDER BY name ASC
+          `).all(tenantId, access.professionalId)
+        : db.prepare(`
+            SELECT id, name, professional_id, specialty_id, duration_minutes, return_periodicity_days, reminder_enabled, reminder_value, reminder_unit
+            FROM services
+            WHERE tenant_id = ? AND active = 1
+            ORDER BY name ASC
+          `).all(tenantId);
 
       res.json({
+        scope: access.scope,
+        lockedProfessionalId: access.professionalId,
         period: { startDate: resolvedStartDay, endDate: resolvedEndDay },
         permissions: { canViewFinancial },
         summary: {
@@ -668,7 +808,33 @@ export class ReportController {
         return;
       }
 
-      const { band, professionalId, serviceId, specialtyId, situation, search } = req.query;
+      const access = resolveReportAccessScope(req, tenantId);
+      if (access.scope === 'forbidden') {
+        res.status(403).json({
+          error: access.reason || 'Acesso negado aos relatórios desta clínica.',
+          code: 'REPORT_ACCESS_FORBIDDEN'
+        });
+        return;
+      }
+
+      const { band, professionalId: rawProfQuery, serviceId, specialtyId, situation, search } = req.query;
+      if (
+        access.scope === 'professional_own' &&
+        rawProfQuery &&
+        String(rawProfQuery) !== 'all' &&
+        String(rawProfQuery) !== access.professionalId
+      ) {
+        res.status(403).json({
+          error: 'Acesso negado: você possui permissão para consultar exclusivamente os seus próprios pacientes e acompanhamentos.',
+          code: 'PROFESSIONAL_SCOPE_FORBIDDEN'
+        });
+        return;
+      }
+
+      const professionalId =
+        access.scope === 'professional_own'
+          ? access.professionalId
+          : (rawProfQuery && String(rawProfQuery) !== 'all' ? String(rawProfQuery) : undefined);
 
       const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
       const [ty, tm, td] = todayStr.split('-').map(Number);
@@ -744,6 +910,9 @@ export class ReportController {
 
       const nextApptByPatient = new Map<string, any>();
       for (const up of upcomingAppts) {
+        if (access.scope === 'professional_own' && up.professional_id !== access.professionalId) {
+          continue;
+        }
         if (!nextApptByPatient.has(up.patient_id)) {
           nextApptByPatient.set(up.patient_id, up);
         }
@@ -913,25 +1082,45 @@ export class ReportController {
         return b.daysSinceLastAttendance - a.daysSinceLastAttendance;
       });
 
-      const filterProfessionals = db.prepare(`
-        SELECT p.id, p.name, p.profession_id, p.specialty_id,
-               COALESCE(prof.name, p.profession_name) as profession_name,
-               COALESCE(p.specialty_custom, spec.name) as specialty_name
-        FROM professionals p
-        LEFT JOIN professions prof ON prof.id = p.profession_id
-        LEFT JOIN specialties spec ON spec.id = p.specialty_id
-        WHERE p.tenant_id = ? AND p.active = 1
-        ORDER BY p.name ASC
-      `).all(tenantId);
+      const filterProfessionals = access.scope === 'professional_own' && access.professionalId
+        ? db.prepare(`
+            SELECT p.id, p.name, p.profession_id, p.specialty_id,
+                   COALESCE(prof.name, p.profession_name) as profession_name,
+                   COALESCE(p.specialty_custom, spec.name) as specialty_name
+            FROM professionals p
+            LEFT JOIN professions prof ON prof.id = p.profession_id
+            LEFT JOIN specialties spec ON spec.id = p.specialty_id
+            WHERE p.tenant_id = ? AND p.active = 1 AND p.id = ?
+            ORDER BY p.name ASC
+          `).all(tenantId, access.professionalId)
+        : db.prepare(`
+            SELECT p.id, p.name, p.profession_id, p.specialty_id,
+                   COALESCE(prof.name, p.profession_name) as profession_name,
+                   COALESCE(p.specialty_custom, spec.name) as specialty_name
+            FROM professionals p
+            LEFT JOIN professions prof ON prof.id = p.profession_id
+            LEFT JOIN specialties spec ON spec.id = p.specialty_id
+            WHERE p.tenant_id = ? AND p.active = 1
+            ORDER BY p.name ASC
+          `).all(tenantId);
 
-      const filterServices = db.prepare(`
-        SELECT id, name, professional_id, specialty_id, duration_minutes, return_periodicity_days, reminder_enabled, reminder_value, reminder_unit
-        FROM services
-        WHERE tenant_id = ? AND active = 1
-        ORDER BY name ASC
-      `).all(tenantId);
+      const filterServices = access.scope === 'professional_own' && access.professionalId
+        ? db.prepare(`
+            SELECT id, name, professional_id, specialty_id, duration_minutes, return_periodicity_days, reminder_enabled, reminder_value, reminder_unit
+            FROM services
+            WHERE tenant_id = ? AND active = 1 AND (professional_id = ? OR professional_id IS NULL)
+            ORDER BY name ASC
+          `).all(tenantId, access.professionalId)
+        : db.prepare(`
+            SELECT id, name, professional_id, specialty_id, duration_minutes, return_periodicity_days, reminder_enabled, reminder_value, reminder_unit
+            FROM services
+            WHERE tenant_id = ? AND active = 1
+            ORDER BY name ASC
+          `).all(tenantId);
 
       res.json({
+        scope: access.scope,
+        lockedProfessionalId: access.professionalId,
         bandCounts,
         totalMatching: items.length,
         items,
@@ -959,6 +1148,23 @@ export class ReportController {
       if (!existing) {
         res.status(404).json({ error: 'Paciente não encontrado nesta clínica' });
         return;
+      }
+
+      const access = resolveReportAccessScope(req, tenantId);
+      if (access.scope === 'forbidden') {
+        res.status(403).json({ error: access.reason || 'Acesso negado.' });
+        return;
+      }
+      if (access.scope === 'professional_own' && access.professionalId) {
+        const attendedByProf = db
+          .prepare('SELECT 1 FROM appointments WHERE tenant_id = ? AND patient_id = ? AND professional_id = ? LIMIT 1')
+          .get(tenantId, patientId, access.professionalId);
+        if (!attendedByProf) {
+          res.status(403).json({
+            error: 'Acesso negado: você só pode editar a continuidade de pacientes que foram atendidos por você.'
+          });
+          return;
+        }
       }
 
       const validStatuses = ['active', 'completed', 'discharged', 'paused'];
@@ -1011,9 +1217,25 @@ export class ReportController {
       const { serviceId } = req.params;
       const { returnPeriodicityDays } = req.body;
 
-      const existing = db.prepare('SELECT id FROM services WHERE id = ? AND tenant_id = ?').get(serviceId, tenantId);
+      const existing = db.prepare('SELECT id, professional_id FROM services WHERE id = ? AND tenant_id = ?').get(serviceId, tenantId) as { id: string; professional_id?: string | null } | undefined;
       if (!existing) {
         res.status(404).json({ error: 'Serviço não encontrado nesta clínica' });
+        return;
+      }
+
+      const access = resolveReportAccessScope(req, tenantId);
+      if (access.scope === 'forbidden' || access.scope === 'reception_only') {
+        res.status(403).json({ error: 'Sem permissão para alterar periodicidade de serviços.' });
+        return;
+      }
+      if (
+        access.scope === 'professional_own' &&
+        existing.professional_id &&
+        existing.professional_id !== access.professionalId
+      ) {
+        res.status(403).json({
+          error: 'Acesso negado: você não pode alterar a periodicidade de serviços exclusivos de outro profissional.'
+        });
         return;
       }
 
@@ -1053,7 +1275,8 @@ export class ReportController {
   static getFinancialReport(req: Request, res: Response): void {
     try {
       const tenantId = req.tenantId as string;
-      if (!tenantId || !canUserAccessReportFinancials(req, tenantId)) {
+      const access = resolveReportAccessScope(req, tenantId);
+      if (!tenantId || access.scope === 'forbidden' || access.scope === 'reception_only' || !canUserAccessReportFinancials(req, tenantId)) {
         res.status(403).json({
           error: 'Acesso restrito: seu perfil não possui autorização para relatórios financeiros.',
           code: 'FINANCIAL_REPORT_FORBIDDEN'
@@ -1065,6 +1288,10 @@ export class ReportController {
 
       let dateFilter = '';
       const params: any[] = [tenantId];
+      if (access.scope === 'professional_own' && access.professionalId) {
+        dateFilter += ' AND a.professional_id = ?';
+        params.push(access.professionalId);
+      }
       if (startDate) {
         const sVal = String(startDate).length === 10 ? `${startDate} 00:00:00` : String(startDate);
         dateFilter += " AND REPLACE(pay.created_at, 'T', ' ') >= REPLACE(?, 'T', ' ')";
@@ -1078,23 +1305,25 @@ export class ReportController {
 
       const byMethodStmt = db.prepare(`
         SELECT 
-          payment_method,
+          pay.payment_method,
           COUNT(*) as count,
-          SUM(amount) as total_amount
+          SUM(pay.amount) as total_amount
         FROM payments pay
-        WHERE tenant_id = ? AND status = 'paid' ${dateFilter}
-        GROUP BY payment_method
+        LEFT JOIN appointments a ON a.id = pay.appointment_id AND a.tenant_id = pay.tenant_id
+        WHERE pay.tenant_id = ? AND pay.status = 'paid' ${dateFilter}
+        GROUP BY pay.payment_method
       `);
       const byMethod = byMethodStmt.all(...params);
 
       const byStatusStmt = db.prepare(`
         SELECT 
-          status,
+          pay.status,
           COUNT(*) as count,
-          SUM(amount) as total_amount
+          SUM(pay.amount) as total_amount
         FROM payments pay
-        WHERE tenant_id = ? ${dateFilter}
-        GROUP BY status
+        LEFT JOIN appointments a ON a.id = pay.appointment_id AND a.tenant_id = pay.tenant_id
+        WHERE pay.tenant_id = ? ${dateFilter}
+        GROUP BY pay.status
       `);
       const byStatus = byStatusStmt.all(...params);
 
@@ -1110,10 +1339,25 @@ export class ReportController {
       const tenantId = req.tenantId as string;
       const { type } = req.query; // 'appointments' | 'payments'
 
-      if (!tenantId || isUserReceptionOnly(req, tenantId)) {
+      const access = resolveReportAccessScope(req, tenantId);
+      if (!tenantId || access.scope === 'reception_only' || access.scope === 'forbidden') {
         res.status(403).json({
-          error: 'Acesso restrito: exportações gerenciais não estão disponíveis para a recepção.',
+          error: access.reason || 'Acesso restrito: exportações gerenciais não estão disponíveis para este perfil.',
           code: 'EXPORT_REPORT_FORBIDDEN'
+        });
+        return;
+      }
+
+      const rawProfQuery = req.query.professionalId;
+      if (
+        access.scope === 'professional_own' &&
+        rawProfQuery &&
+        String(rawProfQuery) !== 'all' &&
+        String(rawProfQuery) !== access.professionalId
+      ) {
+        res.status(403).json({
+          error: 'Acesso negado: você só pode exportar relatórios dos seus próprios atendimentos.',
+          code: 'PROFESSIONAL_SCOPE_FORBIDDEN'
         });
         return;
       }
@@ -1127,20 +1371,34 @@ export class ReportController {
           return;
         }
 
-        const stmt = db.prepare(`
-          SELECT 
-            pay.created_at as Data,
-            pat.full_name as Paciente,
-            pay.amount as Valor,
-            pay.payment_method as Forma_Pagamento,
-            pay.status as Status,
-            pay.notes as Observacoes
-          FROM payments pay
-          JOIN patients pat ON pat.id = pay.patient_id
-          WHERE pay.tenant_id = ?
-          ORDER BY pay.created_at DESC
-        `);
-        const rows = stmt.all(tenantId) as any[];
+        const rows = access.scope === 'professional_own' && access.professionalId
+          ? (db.prepare(`
+              SELECT 
+                pay.created_at as Data,
+                pat.full_name as Paciente,
+                pay.amount as Valor,
+                pay.payment_method as Forma_Pagamento,
+                pay.status as Status,
+                pay.notes as Observacoes
+              FROM payments pay
+              JOIN patients pat ON pat.id = pay.patient_id
+              JOIN appointments a ON a.id = pay.appointment_id AND a.tenant_id = pay.tenant_id
+              WHERE pay.tenant_id = ? AND a.professional_id = ?
+              ORDER BY pay.created_at DESC
+            `).all(tenantId, access.professionalId) as any[])
+          : (db.prepare(`
+              SELECT 
+                pay.created_at as Data,
+                pat.full_name as Paciente,
+                pay.amount as Valor,
+                pay.payment_method as Forma_Pagamento,
+                pay.status as Status,
+                pay.notes as Observacoes
+              FROM payments pay
+              JOIN patients pat ON pat.id = pay.patient_id
+              WHERE pay.tenant_id = ?
+              ORDER BY pay.created_at DESC
+            `).all(tenantId) as any[]);
 
         let csv = 'Data,Paciente,Valor,Forma_Pagamento,Status,Observacoes\n';
         for (const r of rows) {
@@ -1154,24 +1412,41 @@ export class ReportController {
       }
 
       // Default: Appointments CSV (Operacional)
-      const stmt = db.prepare(`
-        SELECT 
-          a.appointment_number as Codigo,
-          a.start_time as Inicio,
-          a.end_time as Fim,
-          pat.full_name as Paciente,
-          p.name as Profissional,
-          s.name as Servico,
-          a.status as Status,
-          a.modality as Modalidade
-        FROM appointments a
-        JOIN patients pat ON pat.id = a.patient_id
-        JOIN professionals p ON p.id = a.professional_id
-        LEFT JOIN services s ON s.id = a.service_id
-        WHERE a.tenant_id = ?
-        ORDER BY a.start_time DESC
-      `);
-      const rows = stmt.all(tenantId) as any[];
+      const rows = access.scope === 'professional_own' && access.professionalId
+        ? (db.prepare(`
+            SELECT 
+              a.appointment_number as Codigo,
+              a.start_time as Inicio,
+              a.end_time as Fim,
+              pat.full_name as Paciente,
+              p.name as Profissional,
+              s.name as Servico,
+              a.status as Status,
+              a.modality as Modalidade
+            FROM appointments a
+            JOIN patients pat ON pat.id = a.patient_id
+            JOIN professionals p ON p.id = a.professional_id
+            LEFT JOIN services s ON s.id = a.service_id
+            WHERE a.tenant_id = ? AND a.professional_id = ?
+            ORDER BY a.start_time DESC
+          `).all(tenantId, access.professionalId) as any[])
+        : (db.prepare(`
+            SELECT 
+              a.appointment_number as Codigo,
+              a.start_time as Inicio,
+              a.end_time as Fim,
+              pat.full_name as Paciente,
+              p.name as Profissional,
+              s.name as Servico,
+              a.status as Status,
+              a.modality as Modalidade
+            FROM appointments a
+            JOIN patients pat ON pat.id = a.patient_id
+            JOIN professionals p ON p.id = a.professional_id
+            LEFT JOIN services s ON s.id = a.service_id
+            WHERE a.tenant_id = ?
+            ORDER BY a.start_time DESC
+          `).all(tenantId) as any[]);
 
       let csv = 'Codigo,Inicio,Fim,Paciente,Profissional,Servico,Status,Modalidade\n';
       for (const r of rows) {
@@ -1228,6 +1503,15 @@ export class ReportController {
         return;
       }
 
+      const access = resolveReportAccessScope(req, tenantId);
+      if (access.scope === 'reception_only' || access.scope === 'forbidden') {
+        res.status(403).json({
+          error: access.reason || 'Acesso restrito para exportação deste relatório.',
+          code: 'EXPORT_REPORT_FORBIDDEN'
+        });
+        return;
+      }
+
       const clinic = db.prepare('SELECT name, trade_name, cnpj_cpf, phone, email, street, number, neighborhood, city, state, address FROM tenants WHERE id = ?').get(tenantId) as any;
       const clinicName = clinic?.trade_name || clinic?.name || 'Clínica Emissora';
       const clinicAddress = clinic?.address || [
@@ -1236,21 +1520,38 @@ export class ReportController {
         (clinic?.city && clinic?.state) ? `${clinic.city}/${clinic.state}` : (clinic?.city || '')
       ].filter(Boolean).join(' - ') + (clinic?.phone ? ` | Tel: ${clinic.phone}` : '');
 
-      const title = 'Relatório Geral de Atendimentos';
-      const appts = db.prepare(`
-        SELECT 
-          a.appointment_number, a.start_time, a.status, a.modality,
-          pat.full_name as patient_name,
-          p.name as professional_name,
-          s.name as service_name
-        FROM appointments a
-        JOIN patients pat ON pat.id = a.patient_id
-        JOIN professionals p ON p.id = a.professional_id
-        LEFT JOIN services s ON s.id = a.service_id
-        WHERE a.tenant_id = ?
-        ORDER BY a.start_time DESC
-        LIMIT 200
-      `).all(tenantId) as any[];
+      const title = access.scope === 'professional_own'
+        ? 'Relatório Individual de Atendimentos'
+        : 'Relatório Geral de Atendimentos';
+      const appts = access.scope === 'professional_own' && access.professionalId
+        ? (db.prepare(`
+            SELECT 
+              a.appointment_number, a.start_time, a.status, a.modality,
+              pat.full_name as patient_name,
+              p.name as professional_name,
+              s.name as service_name
+            FROM appointments a
+            JOIN patients pat ON pat.id = a.patient_id
+            JOIN professionals p ON p.id = a.professional_id
+            LEFT JOIN services s ON s.id = a.service_id
+            WHERE a.tenant_id = ? AND a.professional_id = ?
+            ORDER BY a.start_time DESC
+            LIMIT 200
+          `).all(tenantId, access.professionalId) as any[])
+        : (db.prepare(`
+            SELECT 
+              a.appointment_number, a.start_time, a.status, a.modality,
+              pat.full_name as patient_name,
+              p.name as professional_name,
+              s.name as service_name
+            FROM appointments a
+            JOIN patients pat ON pat.id = a.patient_id
+            JOIN professionals p ON p.id = a.professional_id
+            LEFT JOIN services s ON s.id = a.service_id
+            WHERE a.tenant_id = ?
+            ORDER BY a.start_time DESC
+            LIMIT 200
+          `).all(tenantId) as any[]);
 
       const contentHtml = `
         <table>

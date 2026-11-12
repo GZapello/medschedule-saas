@@ -58,6 +58,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 }) => {
   const auth = useAuth();
   const { clientTermLabel } = auth;
+  const canPerformClinicalAttendance = (auth.isProfessional || auth.isClinicAdmin) && !auth.isReceptionist;
   const canCreatePatient = auth.isClinicAdmin || auth.hasPermission('create_patient') || auth.hasPermission('edit_patient');
   const canCreateAppointment = auth.isClinicAdmin || auth.hasPermission('create_appointment');
   const { showToast } = useToast();
@@ -696,13 +697,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   ? Number(amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
                   : null;
 
-                const canStart = appt.status === 'scheduled' || appt.status === 'confirmed' || appt.status === 'rescheduled';
-                const isInProgress = appt.status === 'in_progress';
-                const isCompleted = appt.status === 'completed';
+                const canStart = canPerformClinicalAttendance && (appt.status === 'scheduled' || appt.status === 'confirmed' || appt.status === 'rescheduled');
+                const isInProgress = canPerformClinicalAttendance && appt.status === 'in_progress';
+                const isCompleted = canPerformClinicalAttendance && appt.status === 'completed';
                 const canMarkNoShow = appt.status === 'scheduled' || appt.status === 'confirmed' || appt.status === 'rescheduled';
                 const canCancel = appt.status === 'scheduled' || appt.status === 'confirmed' || appt.status === 'rescheduled';
                 const canConfirm = appt.status === 'scheduled' || appt.status === 'rescheduled';
-                const canFinish = appt.status === 'in_progress' || appt.status === 'confirmed';
+                const canFinish = canPerformClinicalAttendance && (appt.status === 'in_progress' || appt.status === 'confirmed');
 
                 return (
                   <div
@@ -725,9 +726,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                             {getInitials(appt.patient_name)}
                           </div>
                           <h4
-                            onClick={() => setViewPatientId(appt.patient_id)}
-                            className="font-bold text-slate-900 text-sm hover:text-teal-700 cursor-pointer transition-colors truncate max-w-full"
-                            title="Clique para abrir o prontuário do paciente"
+                            onClick={canPerformClinicalAttendance ? () => setViewPatientId(appt.patient_id) : undefined}
+                            className={`font-bold text-slate-900 text-sm truncate max-w-full ${canPerformClinicalAttendance ? 'hover:text-teal-700 cursor-pointer transition-colors' : ''}`}
+                            title={canPerformClinicalAttendance ? 'Clique para abrir o prontuário do paciente' : appt.patient_name}
                           >
                             {appt.patient_name}
                           </h4>
@@ -848,14 +849,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                             </>
                           )}
 
-                          <span className="text-slate-300">|</span>
-                          <button
-                            type="button"
-                            onClick={() => setViewPatientId(appt.patient_id)}
-                            className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-800 hover:underline font-medium cursor-pointer"
-                          >
-                            <ExternalLink className="w-3 h-3" /> Prontuário vinculado
-                          </button>
+                          {canPerformClinicalAttendance && (
+                            <>
+                              <span className="text-slate-300">|</span>
+                              <button
+                                type="button"
+                                onClick={() => setViewPatientId(appt.patient_id)}
+                                className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-800 hover:underline font-medium cursor-pointer"
+                              >
+                                <ExternalLink className="w-3 h-3" /> Prontuário vinculado
+                              </button>
+                            </>
+                          )}
 
                           {auth.canAccessConsents && appt.patient_id && (
                             <>
@@ -980,7 +985,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               const menuAppt = openMenuState.appt;
               const menuHasPhone = isValidPhoneNumber(menuAppt.patient_phone);
               const menuCanConfirm = menuAppt.status === 'scheduled' || menuAppt.status === 'rescheduled';
-              const menuCanFinish = menuAppt.status === 'in_progress' || menuAppt.status === 'confirmed';
+              const menuCanFinish = canPerformClinicalAttendance && (menuAppt.status === 'in_progress' || menuAppt.status === 'confirmed');
               const menuCanEdit = !['completed', 'cancelled'].includes(menuAppt.status);
               const menuCanMarkNoShow = menuAppt.status === 'scheduled' || menuAppt.status === 'confirmed' || menuAppt.status === 'rescheduled';
               const menuCanCancel = menuAppt.status === 'scheduled' || menuAppt.status === 'confirmed' || menuAppt.status === 'rescheduled';
@@ -1025,17 +1030,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     </button>
                   )}
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setOpenMenuState(null);
-                      setViewPatientId(menuAppt.patient_id);
-                    }}
-                    className="w-full px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
-                  >
-                    <FileText className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                    <span>Abrir prontuário</span>
-                  </button>
+                  {canPerformClinicalAttendance && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpenMenuState(null);
+                        setViewPatientId(menuAppt.patient_id);
+                      }}
+                      className="w-full px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
+                    >
+                      <FileText className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                      <span>Abrir prontuário</span>
+                    </button>
+                  )}
 
                   {menuCanEdit && (
                     <button
@@ -1370,16 +1377,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                                 Chamar
                               </button>
                             )}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setIsWaitingQueueModalOpen(false);
-                                handleUpdateStatus(wp.id, 'in_progress');
-                              }}
-                              className="px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold cursor-pointer flex items-center gap-1"
-                            >
-                              <Stethoscope className="w-3.5 h-3.5" /> Iniciar atendimento
-                            </button>
+                            {canPerformClinicalAttendance && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsWaitingQueueModalOpen(false);
+                                  handleUpdateStatus(wp.id, 'in_progress');
+                                }}
+                                className="px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold cursor-pointer flex items-center gap-1"
+                              >
+                                <Stethoscope className="w-3.5 h-3.5" /> Iniciar atendimento
+                              </button>
+                            )}
                           </div>
                         </div>
                       );

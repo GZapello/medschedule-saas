@@ -39,7 +39,7 @@ const formatDateBr = (iso?: string | null): string => {
 
 export const ReportsView: React.FC = () => {
   const { showToast } = useToast();
-  const { isClinicAdmin, isReceptionist, isProfessional, hasPermission, clientTermLabel } = useAuth();
+  const { isClinicAdmin, isReceptionist, isProfessional, hasPermission, clientTermLabel, currentUser } = useAuth();
 
   const isReceptionOnly = Boolean(isReceptionist && !isClinicAdmin && !isProfessional);
   const [activeTab, setActiveTab] = useState<ReportTab>(() =>
@@ -65,6 +65,11 @@ export const ReportsView: React.FC = () => {
   // Estado da Continuidade do Cuidado (1.2)
   const [loadingContinuity, setLoadingContinuity] = useState<boolean>(false);
   const [continuityData, setContinuityData] = useState<any>(null);
+  const isProfessionalOnly = Boolean(
+    (isProfessional && !isClinicAdmin) ||
+    attendanceData?.scope === 'professional_own' ||
+    continuityData?.scope === 'professional_own'
+  );
   const [continuityBand, setContinuityBand] = useState<ContinuityBand>('all');
   const [continuitySituation, setContinuitySituation] = useState<string>('all');
   const [continuitySearch, setContinuitySearch] = useState<string>('');
@@ -381,19 +386,28 @@ export const ReportsView: React.FC = () => {
               </div>
             </>
           )}
-          <div>
-            <label className="block text-[11px] font-semibold text-slate-600 mb-1">Profissional</label>
-            <select
-              value={selectedProfessionalId}
-              onChange={e => setSelectedProfessionalId(e.target.value)}
-              className="w-full border border-slate-200 rounded-xl px-3 py-1.5 bg-slate-50 text-xs"
-            >
-              <option value="">Todos os profissionais</option>
-              {filterProfessionals.map((p: any) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-          </div>
+          {!isProfessionalOnly ? (
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-600 mb-1">Profissional</label>
+              <select
+                value={selectedProfessionalId}
+                onChange={e => setSelectedProfessionalId(e.target.value)}
+                className="w-full border border-slate-200 rounded-xl px-3 py-1.5 bg-slate-50 text-xs"
+              >
+                <option value="">Todos os profissionais</option>
+                {filterProfessionals.map((p: any) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-600 mb-1">Escopo do Profissional</label>
+              <div className="w-full border border-teal-200 rounded-xl px-3 py-1.5 bg-teal-50/60 text-xs font-bold text-teal-900 truncate">
+                {filterProfessionals[0]?.name || currentUser?.name || 'Meus próprios atendimentos'}
+              </div>
+            </div>
+          )}
           <div>
             <label className="block text-[11px] font-semibold text-slate-600 mb-1">Serviço</label>
             <select
@@ -407,19 +421,21 @@ export const ReportsView: React.FC = () => {
               ))}
             </select>
           </div>
-          <div>
-            <label className="block text-[11px] font-semibold text-slate-600 mb-1">Especialidade / Área</label>
-            <select
-              value={selectedSpecialtyId}
-              onChange={e => setSelectedSpecialtyId(e.target.value)}
-              className="w-full border border-slate-200 rounded-xl px-3 py-1.5 bg-slate-50 text-xs"
-            >
-              <option value="">Todas as áreas</option>
-              {specialtyOptions.map(sp => (
-                <option key={sp.id} value={sp.id}>{sp.name}</option>
-              ))}
-            </select>
-          </div>
+          {!isProfessionalOnly && (
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-600 mb-1">Especialidade / Área</label>
+              <select
+                value={selectedSpecialtyId}
+                onChange={e => setSelectedSpecialtyId(e.target.value)}
+                className="w-full border border-slate-200 rounded-xl px-3 py-1.5 bg-slate-50 text-xs"
+              >
+                <option value="">Todas as áreas</option>
+                {specialtyOptions.map(sp => (
+                  <option key={sp.id} value={sp.id}>{sp.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
       </div>
 
@@ -500,7 +516,8 @@ export const ReportsView: React.FC = () => {
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
-                  <Users className="w-4 h-4 text-indigo-600" /> Desempenho e Ocupação por Profissional
+                  <Users className="w-4 h-4 text-indigo-600" />{' '}
+                  {isProfessionalOnly ? 'Meu Desempenho e Ocupação da Agenda' : 'Desempenho e Ocupação por Profissional'}
                 </h3>
                 <span className="text-[10px] text-slate-400">Baseado na escala real descontando intervalos e bloqueios</span>
               </div>

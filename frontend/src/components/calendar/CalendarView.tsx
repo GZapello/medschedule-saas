@@ -62,6 +62,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
   const [isReceptionFlowActive, setIsReceptionFlowActive] = useState<boolean>(false);
   const auth = useAuth();
   const { currentTenant, clientTermLabel } = auth;
+  const canPerformClinicalAttendance = (auth.isProfessional || auth.isClinicAdmin) && !auth.isReceptionist;
   const { showToast } = useToast();
 
   const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>(() => (typeof window !== 'undefined' && window.innerWidth < 768 ? 'day' : 'week'));
@@ -771,6 +772,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
   };
 
   const startConsultation = async (appointment: Appointment) => {
+    if (!canPerformClinicalAttendance) return;
     if (['completed', 'cancelled', 'no_show'].includes(appointment.status)) {
       showToast('Abra o prontuário para consultar um atendimento encerrado.', 'info');
       return;
@@ -1631,7 +1633,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                         </p>
                         <p className="text-[11px] font-semibold text-teal-700">
                           {formattedTime ? `às ${formattedTime}` : ''}
-                        {!selectedAppt.attendance_start_at && !['cancelled', 'no_show'].includes(selectedAppt.status) && !isEditingAttendanceTime && (
+                        {canPerformClinicalAttendance && !selectedAppt.attendance_start_at && !['cancelled', 'no_show'].includes(selectedAppt.status) && !isEditingAttendanceTime && (
                           <button
                             type="button"
                             onClick={() => openAttendanceTimeEditor(selectedAppt)}
@@ -1874,7 +1876,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                           ) : null}
                         </span>
                       </div>
-                      {!['cancelled', 'no_show'].includes(selectedAppt.status) && (
+                      {canPerformClinicalAttendance && !['cancelled', 'no_show'].includes(selectedAppt.status) && (
                         <button
                           type="button"
                           onClick={() => openAttendanceTimeEditor(selectedAppt)}
@@ -2017,49 +2019,51 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
 
                 {/* 13-14. AÇÃO PRINCIPAL BASEADA NO STATUS + AÇÕES SECUNDÁRIAS */}
                 <div className="pt-2 border-t border-slate-100 space-y-2.5">
-                  {selectedAppt.status === 'completed' ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setViewingRecordsAppt(selectedAppt);
-                      }}
-                      className="w-full flex items-center justify-center gap-2 py-3 px-5 rounded-xl text-sm font-bold text-white bg-teal-600 hover:bg-teal-700 shadow-sm transition-all cursor-pointer"
-                    >
-                      <FileText className="w-4 h-4" />
-                      <span>Ver evolução</span>
-                    </button>
-                  ) : selectedAppt.status === 'cancelled' || selectedAppt.status === 'no_show' ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setViewingRecordsAppt(selectedAppt);
-                      }}
-                      className="w-full flex items-center justify-center gap-2 py-3 px-5 rounded-xl text-sm font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 transition-all cursor-pointer"
-                    >
-                      <FileText className="w-4 h-4" />
-                      <span>Ver prontuário do paciente</span>
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      disabled={isStartingConsultation}
-                      onClick={() => {
-                        startConsultation(selectedAppt);
-                      }}
-                      className="w-full flex items-center justify-center gap-2 py-3 px-5 rounded-xl text-sm font-bold text-white bg-teal-600 hover:bg-teal-700 disabled:opacity-60 shadow-sm shadow-teal-600/15 transition-all cursor-pointer notranslate"
-                      translate="no"
-                    >
-                      <Stethoscope className="w-4 h-4 shrink-0" />
-                      <span className="notranslate" translate="no">
-                        {isStartingConsultation ? (
-                          <span key="starting">Iniciando...</span>
-                        ) : selectedAppt.status === 'in_progress' ? (
-                          <span key="continue">Continuar atendimento</span>
-                        ) : (
-                          <span key="start">Iniciar atendimento</span>
-                        )}
-                      </span>
-                    </button>
+                  {canPerformClinicalAttendance && (
+                    selectedAppt.status === 'completed' ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setViewingRecordsAppt(selectedAppt);
+                        }}
+                        className="w-full flex items-center justify-center gap-2 py-3 px-5 rounded-xl text-sm font-bold text-white bg-teal-600 hover:bg-teal-700 shadow-sm transition-all cursor-pointer"
+                      >
+                        <FileText className="w-4 h-4" />
+                        <span>Ver evolução</span>
+                      </button>
+                    ) : selectedAppt.status === 'cancelled' || selectedAppt.status === 'no_show' ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setViewingRecordsAppt(selectedAppt);
+                        }}
+                        className="w-full flex items-center justify-center gap-2 py-3 px-5 rounded-xl text-sm font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 transition-all cursor-pointer"
+                      >
+                        <FileText className="w-4 h-4" />
+                        <span>Ver prontuário do paciente</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={isStartingConsultation}
+                        onClick={() => {
+                          startConsultation(selectedAppt);
+                        }}
+                        className="w-full flex items-center justify-center gap-2 py-3 px-5 rounded-xl text-sm font-bold text-white bg-teal-600 hover:bg-teal-700 disabled:opacity-60 shadow-sm shadow-teal-600/15 transition-all cursor-pointer notranslate"
+                        translate="no"
+                      >
+                        <Stethoscope className="w-4 h-4 shrink-0" />
+                        <span className="notranslate" translate="no">
+                          {isStartingConsultation ? (
+                            <span key="starting">Iniciando...</span>
+                          ) : selectedAppt.status === 'in_progress' ? (
+                            <span key="continue">Continuar atendimento</span>
+                          ) : (
+                            <span key="start">Iniciar atendimento</span>
+                          )}
+                        </span>
+                      </button>
+                    )
                   )}
 
                   {/* Linha de Ações Secundárias: Enviar pelo WhatsApp + Gerenciar agendamento */}
@@ -2100,7 +2104,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                           </button>
                         )}
 
-                        {['scheduled', 'confirmed', 'rescheduled'].includes(selectedAppt.status) && (
+                        {canPerformClinicalAttendance && ['scheduled', 'confirmed', 'rescheduled'].includes(selectedAppt.status) && (
                           <button
                             type="button"
                             disabled={isStartingConsultation}
@@ -2118,7 +2122,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                           </button>
                         )}
 
-                        {['in_progress', 'confirmed', 'scheduled', 'rescheduled'].includes(selectedAppt.status) && (
+                        {canPerformClinicalAttendance && ['in_progress', 'confirmed', 'scheduled', 'rescheduled'].includes(selectedAppt.status) && (
                           <button
                             type="button"
                             onClick={() => {

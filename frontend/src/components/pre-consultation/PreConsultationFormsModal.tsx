@@ -114,7 +114,9 @@ export const PRE_CONSULTATION_BADGE_CONFIG: Record<
 export const PreConsultationFormsModal: React.FC<{
   isOpen: boolean;
   onClose: () => void;
-}> = ({ isOpen, onClose }) => {
+  initialCreateMode?: boolean;
+  onFormCreated?: (created: { id: string; title: string }) => void;
+}> = ({ isOpen, onClose, initialCreateMode = false, onFormCreated }) => {
   const { showToast } = useToast();
   const [forms, setForms] = useState<PreConsultationFormTemplate[]>([]);
   const [canManage, setCanManage] = useState(false);
@@ -133,6 +135,27 @@ export const PreConsultationFormsModal: React.FC<{
   const [includeBodyMap, setIncludeBodyMap] = useState(false);
   const [fields, setFields] = useState<PreConsultationFieldItem[]>([]);
   const [saving, setSaving] = useState(false);
+
+  const startCreate = useCallback(() => {
+    setEditingForm(null);
+    setIsCreating(true);
+    setTitle('');
+    setPurpose('Primeira Consulta');
+    setDescription('');
+    setInstructions('Preencha as informações abaixo com antecedência para agilizar seu atendimento.');
+    setVisibility('clinic');
+    setIncludeBodyMap(false);
+    setFields([
+      {
+        id: 'fld-1',
+        type: 'long_text',
+        label: 'Qual é o motivo principal da sua consulta?',
+        instructions: '',
+        required: true,
+        order: 1
+      }
+    ]);
+  }, []);
 
   const loadForms = useCallback(async () => {
     setLoading(true);
@@ -157,31 +180,16 @@ export const PreConsultationFormsModal: React.FC<{
   useEffect(() => {
     if (isOpen) {
       loadForms();
+      if (initialCreateMode) {
+        startCreate();
+      } else {
+        setIsCreating(false);
+        setEditingForm(null);
+      }
     }
-  }, [isOpen, loadForms]);
+  }, [isOpen, initialCreateMode, loadForms, startCreate]);
 
   if (!isOpen) return null;
-
-  const startCreate = () => {
-    setEditingForm(null);
-    setIsCreating(true);
-    setTitle('');
-    setPurpose('Primeira Consulta');
-    setDescription('');
-    setInstructions('Preencha as informações abaixo com antecedência para agilizar seu atendimento.');
-    setVisibility('clinic');
-    setIncludeBodyMap(false);
-    setFields([
-      {
-        id: 'fld-1',
-        type: 'long_text',
-        label: 'Qual é o motivo principal da sua consulta?',
-        instructions: '',
-        required: true,
-        order: 1
-      }
-    ]);
-  };
 
   const startEdit = (form: PreConsultationFormTemplate) => {
     setEditingForm(form);
@@ -244,13 +252,19 @@ export const PreConsultationFormsModal: React.FC<{
       if (editingForm) {
         await api.put(`/v1/pre-consultation/forms/${editingForm.id}`, payload);
         showToast('Formulário atualizado (nova versão gerada preservando submissões anteriores).', 'success');
+        setIsCreating(false);
+        setEditingForm(null);
+        await loadForms();
       } else {
-        await api.post('/v1/pre-consultation/forms', payload);
+        const created = await api.post<{ id: string; title: string }>('/v1/pre-consultation/forms', payload);
         showToast('Formulário de Pré-consulta criado com sucesso!', 'success');
+        setIsCreating(false);
+        setEditingForm(null);
+        await loadForms();
+        if (onFormCreated && created?.id) {
+          onFormCreated(created);
+        }
       }
-      setIsCreating(false);
-      setEditingForm(null);
-      await loadForms();
     } catch (err: any) {
       showToast(err?.message || 'Erro ao salvar formulário', 'error');
     } finally {
@@ -280,8 +294,8 @@ export const PreConsultationFormsModal: React.FC<{
   };
 
   return (
-    <div className="fixed inset-0 z-[9990] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
-      <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-[9995] flex items-center justify-center p-3 sm:p-4 bg-slate-900/50 backdrop-blur-xs">
+      <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden min-w-0">
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
           <div className="flex items-center gap-3">
@@ -537,8 +551,12 @@ export const PreConsultationFormsModal: React.FC<{
                 <button
                   type="button"
                   onClick={() => {
-                    setIsCreating(false);
-                    setEditingForm(null);
+                    if (initialCreateMode && !editingForm) {
+                      onClose();
+                    } else {
+                      setIsCreating(false);
+                      setEditingForm(null);
+                    }
                   }}
                   className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
                 >
@@ -680,33 +698,39 @@ export const PreConsultationAppointmentModal: React.FC<{
   onClose: () => void;
   onUpdated?: () => void;
   onOpenLibrary?: () => void;
-}> = ({ appointmentId, patientName, onClose, onUpdated, onOpenLibrary }) => {
+}> = ({ appointmentId, patientName, onClose, onUpdated }) => {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<any>(null);
   const [forms, setForms] = useState<PreConsultationFormTemplate[]>([]);
   const [canManageForms, setCanManageForms] = useState(false);
   const [isInternalLibraryOpen, setIsInternalLibraryOpen] = useState(false);
+  const [openLibraryInCreateMode, setOpenLibraryInCreateMode] = useState(false);
   const [selectedFormId, setSelectedFormId] = useState<string>('');
   const [sending, setSending] = useState(false);
   const [importingMap, setImportingMap] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const loadDetails = useCallback(async () => {
+  const loadDetails = useCallback(async (preferredFormId?: string) => {
     if (!appointmentId) return;
     setLoading(true);
     try {
       const [subRes, formsRes] = await Promise.all([
         api.get<any>(`/v1/pre-consultation/appointments/${appointmentId}`),
-        api.get<{ forms: PreConsultationFormTemplate[]; permissions?: { canManage?: boolean } }>(
-          '/v1/pre-consultation/forms'
-        )
+        api.get<{
+          forms: PreConsultationFormTemplate[];
+          permissions?: { canManageForms?: boolean; canManage?: boolean };
+        }>('/v1/pre-consultation/forms')
       ]);
       setData(subRes);
       const list = formsRes.forms || [];
       setForms(list);
-      setCanManageForms(Boolean(formsRes.permissions?.canManage));
-      if (subRes?.submission?.formId) {
+      setCanManageForms(
+        Boolean(formsRes.permissions?.canManageForms ?? formsRes.permissions?.canManage)
+      );
+      if (preferredFormId && list.some(f => f.id === preferredFormId)) {
+        setSelectedFormId(preferredFormId);
+      } else if (subRes?.submission?.formId) {
         setSelectedFormId(subRes.submission.formId);
       } else if (list.length > 0) {
         setSelectedFormId(prev => (prev && list.some(f => f.id === prev) ? prev : list[0].id));
@@ -792,11 +816,13 @@ export const PreConsultationAppointmentModal: React.FC<{
   const badge = PRE_CONSULTATION_BADGE_CONFIG[statusKey] || PRE_CONSULTATION_BADGE_CONFIG.not_sent;
 
   const handleOpenLibraryClick = () => {
-    if (onOpenLibrary) {
-      onOpenLibrary();
-    } else {
-      setIsInternalLibraryOpen(true);
-    }
+    setOpenLibraryInCreateMode(false);
+    setIsInternalLibraryOpen(true);
+  };
+
+  const handleOpenCreateFormClick = () => {
+    setOpenLibraryInCreateMode(true);
+    setIsInternalLibraryOpen(true);
   };
 
   return (
@@ -859,14 +885,24 @@ export const PreConsultationAppointmentModal: React.FC<{
                       Modelo de Formulário de Pré-consulta
                     </label>
                     {canManageForms && (
-                      <button
-                        type="button"
-                        onClick={handleOpenLibraryClick}
-                        className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-700 hover:text-teal-800 cursor-pointer"
-                      >
-                        <Edit3 className="w-3 h-3 shrink-0" />
-                        Gerenciar formulários
-                      </button>
+                      <div className="flex flex-wrap items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={handleOpenCreateFormClick}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-[11px] font-bold transition-colors cursor-pointer shrink-0 shadow-2xs"
+                        >
+                          <Plus className="w-3.5 h-3.5 shrink-0" />
+                          <span>Criar formulário</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleOpenLibraryClick}
+                          className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-700 hover:text-teal-800 cursor-pointer shrink-0"
+                        >
+                          <Edit3 className="w-3 h-3 shrink-0" />
+                          <span>Gerenciar formulários</span>
+                        </button>
+                      </div>
                     )}
                   </div>
                   <div className="flex flex-col md:flex-row md:items-center gap-2.5 min-w-0 w-full">
@@ -1065,8 +1101,15 @@ export const PreConsultationAppointmentModal: React.FC<{
       {isInternalLibraryOpen && (
         <PreConsultationFormsModal
           isOpen={isInternalLibraryOpen}
+          initialCreateMode={openLibraryInCreateMode}
+          onFormCreated={created => {
+            setIsInternalLibraryOpen(false);
+            setOpenLibraryInCreateMode(false);
+            loadDetails(created.id);
+          }}
           onClose={() => {
             setIsInternalLibraryOpen(false);
+            setOpenLibraryInCreateMode(false);
             loadDetails();
           }}
         />

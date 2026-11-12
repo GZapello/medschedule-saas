@@ -1749,7 +1749,7 @@ const AppContent: React.FC = () => {
           {currentView === 'taxonomy' && isSuperAdmin && <TaxonomyView />}
 
           {currentView === 'reports' && (
-            (isClinicAdmin || hasPermission('view_reports')) ? (
+            (isClinicAdmin || isProfessional || isReceptionist || hasPermission('view_reports')) ? (
               <ReportsView />
             ) : (
               <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">

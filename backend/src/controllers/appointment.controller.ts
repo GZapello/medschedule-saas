@@ -378,7 +378,7 @@ export class AppointmentController {
         res.status(400).json({ error: 'Informe um link HTTPS válido para a teleconsulta ou Google Drive.' }); return;
       }
 
-      const isPublic = req.path.startsWith('/v1/public/');
+      const isPublic = String(req.path || '').startsWith('/v1/public/');
       if (isPublic) {
         const tenant = resolveBookingTenant(tenantSlug, req.body.bookingSequence);
         const individualSlug = typeof req.body.professionalSlug === 'string' ? req.body.professionalSlug : undefined;
@@ -497,6 +497,15 @@ export class AppointmentController {
 
 
       const isRetroactive = !isPublic && Boolean(req.body.isRetroactive || req.body.is_retroactive);
+      if (isRetroactive) {
+        const userRole = String(req.user?.role || '').toLowerCase();
+        if (!req.user || !['professional', 'clinic_admin', 'superadmin'].includes(userRole)) {
+          res.status(403).json({
+            error: 'A recepção não possui permissão para iniciar ou registrar atendimentos clínicos realizados.'
+          });
+          return;
+        }
+      }
       const isCustomTime = !isPublic && Boolean(req.body.isCustomTime || req.body.is_custom_time || isRetroactive);
 
       const mockNow = (process.env.NODE_ENV === 'test' && req.body._mockNow)
@@ -908,14 +917,17 @@ export class AppointmentController {
         return;
       }
 
-      if (status === 'in_progress') {
+      if (status === 'in_progress' || status === 'completed') {
         const assignedProfessional = db.prepare('SELECT user_id, active FROM professionals WHERE id=? AND tenant_id=?')
           .get(current.professional_id, tenantId) as any;
-        if (!req.user || !['professional', 'clinic_admin'].includes(req.user.role) ||
+        const userRole = String(req.user?.role || '').toLowerCase();
+        if (!req.user || !['professional', 'clinic_admin', 'superadmin'].includes(userRole) ||
             !assignedProfessional || assignedProfessional.active !== 1 ||
-            (req.user.role === 'professional' && assignedProfessional.user_id !== req.user.userId) ||
+            (userRole === 'professional' && assignedProfessional.user_id !== req.user.userId) ||
             !hasClinicalAccess(req, current.patient_id)) {
-          res.status(403).json({ error: 'Sem permissão para iniciar o atendimento. Verifique o vínculo ativo do profissional com esta clínica.' });
+          res.status(403).json({
+            error: 'Sem permissão para iniciar, continuar ou concluir o atendimento clínico. Verifique o vínculo ativo do profissional com esta clínica.'
+          });
           return;
         }
       }
@@ -1078,6 +1090,14 @@ export class AppointmentController {
 
       if (!current) {
         res.status(404).json({ error: 'Agendamento não encontrado' });
+        return;
+      }
+
+      const userRole = String(req.user?.role || '').toLowerCase();
+      if (!req.user || !['professional', 'clinic_admin', 'superadmin'].includes(userRole)) {
+        res.status(403).json({
+          error: 'A recepção não possui permissão para ajustar o horário real de atendimento clínico.'
+        });
         return;
       }
 
