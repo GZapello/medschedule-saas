@@ -869,7 +869,7 @@ api.post('/v1/notifications/:id/cancel', requireTenant, requireRole('clinic_admi
 api.post('/v1/notifications/:id/retry', requireTenant, requireRole('clinic_admin', 'receptionist'), NotificationController.retry);
 
 // Financeiro & Pagamentos
-api.get('/v1/payments', requireTenant, requireRole('clinic_admin', 'receptionist'), PaymentController.list);
+api.get('/v1/payments', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), PaymentController.list);
 api.post('/v1/payments', requireTenant, requireRole('clinic_admin', 'receptionist'), PaymentController.create);
 api.put('/v1/payments/:id/status', requireTenant, requireRole('clinic_admin', 'receptionist'), PaymentController.updateStatus);
 
@@ -940,7 +940,7 @@ api.get('/v1/clinical/exam-requests/:id', requireTenant, DocumentsController.get
 api.get('/v1/clinics/document-templates', requireTenant, DocumentsController.listTemplates);
 api.put('/v1/clinics/document-templates/:documentType', requireTenant, requireRole('clinic_admin'), DocumentsController.upsertTemplate);
 api.post('/v1/appointments/:id/finish', requireTenant, requireRole('clinic_admin', 'professional'), DocumentsController.finishConsultation);
-api.get('/v1/appointments/:id/completion', requireTenant, requireRole('clinic_admin', 'professional'), DocumentsController.consultationStatus);
+api.get('/v1/appointments/:id/completion', requireTenant, requireRole('clinic_admin', 'professional', 'receptionist'), DocumentsController.consultationStatus);
 api.post('/v1/clinical/consultations/start', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalController.startConsultation);
 
 // Gestão de Convênios

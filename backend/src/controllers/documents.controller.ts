@@ -1477,7 +1477,23 @@ export class DocumentsController {
       logAudit(req, 'FINISH_CONSULTATION', 'appointments', appointmentId, { generatedDocs });
       res.json({
         message: 'Consulta finalizada com sucesso!',
-        generatedDocs
+        generatedDocs,
+        appointmentId,
+        serviceId: effectiveServiceId,
+        payment: {
+          id: paymentId,
+          appointmentId,
+          serviceId: effectiveServiceId,
+          baseAmount: baseAmountVal,
+          additionalAmount: additionalAmountVal,
+          additionalReason: additionalReasonVal,
+          discountAmount: discountAmountVal,
+          discountReason: discountReasonVal,
+          amount,
+          paymentMethod: payment.paymentMethod,
+          status: payment.status,
+          notes: payment.notes || null
+        }
       });
     } catch (err: any) {
       try {

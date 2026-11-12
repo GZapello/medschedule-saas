@@ -278,14 +278,20 @@ export class ReceiptController {
       } = req.body;
 
       // 0. Idempotência absoluta: se já foi emitido recibo para este atendimento ou pagamento, retorna o existente sem duplicar numeração
-      if (appointmentId || paymentId) {
+      let resolvedPaymentId = paymentId || null;
+      if (!resolvedPaymentId && appointmentId) {
+        const apptPay = db.prepare("SELECT id FROM payments WHERE appointment_id = ? AND tenant_id = ? AND status NOT IN ('cancelled', 'refunded') ORDER BY created_at ASC LIMIT 1").get(appointmentId, tenantId) as any;
+        if (apptPay?.id) resolvedPaymentId = apptPay.id;
+      }
+
+      if (appointmentId || resolvedPaymentId) {
         let existingReceipt: any = null;
-        if (appointmentId && paymentId) {
-          existingReceipt = db.prepare('SELECT * FROM receipts WHERE tenant_id = ? AND (appointment_id = ? OR payment_id = ?) ORDER BY sequence_number DESC LIMIT 1').get(tenantId, appointmentId, paymentId);
+        if (appointmentId && resolvedPaymentId) {
+          existingReceipt = db.prepare('SELECT * FROM receipts WHERE tenant_id = ? AND (appointment_id = ? OR payment_id = ?) ORDER BY sequence_number DESC LIMIT 1').get(tenantId, appointmentId, resolvedPaymentId);
         } else if (appointmentId) {
           existingReceipt = db.prepare('SELECT * FROM receipts WHERE tenant_id = ? AND appointment_id = ? ORDER BY sequence_number DESC LIMIT 1').get(tenantId, appointmentId);
-        } else if (paymentId) {
-          existingReceipt = db.prepare('SELECT * FROM receipts WHERE tenant_id = ? AND payment_id = ? ORDER BY sequence_number DESC LIMIT 1').get(tenantId, paymentId);
+        } else if (resolvedPaymentId) {
+          existingReceipt = db.prepare('SELECT * FROM receipts WHERE tenant_id = ? AND payment_id = ? ORDER BY sequence_number DESC LIMIT 1').get(tenantId, resolvedPaymentId);
         }
 
         if (existingReceipt) {
@@ -419,7 +425,7 @@ export class ReceiptController {
 
       insertStmt.run(
         receiptId, tenantId, receiptNumber, seqNumber,
-        paymentId || null, appointmentId || null, patientId || null,
+        resolvedPaymentId || null, appointmentId || null, patientId || null,
         JSON.stringify(emitterSnapshot), payerType || 'pf', payerName, resolvedPayerDoc,
         payerEmail || null, payerPhone || null, payerAddress || null,
         serviceDescription, formattedDate, professionalName || settings.emitter_name,
@@ -440,7 +446,7 @@ export class ReceiptController {
         tenant_id: tenantId,
         receipt_number: receiptNumber,
         sequence_number: seqNumber,
-        payment_id: paymentId || null,
+        payment_id: resolvedPaymentId || null,
         appointment_id: appointmentId || null,
         patient_id: patientId || null,
         emitter: emitterSnapshot,

@@ -288,10 +288,15 @@ export function ConsultationPaymentModal({
       window.dispatchEvent(new CustomEvent('appointment-updated', { detail: { appointmentId, status: 'completed' } }));
       window.dispatchEvent(new Event('refresh-appointments'));
       window.dispatchEvent(new CustomEvent('zemda-appointment-updated'));
+      const selectedService = services.find(s => s.id === selectedServiceId);
       const finalResult = {
         ...(result || {}),
+        serviceId: selectedServiceId,
+        serviceName: selectedService?.name,
         payment: {
+          id: (result as any)?.payment?.id,
           serviceId: selectedServiceId,
+          serviceName: selectedService?.name,
           baseAmount: numBase,
           additionalAmount: numAdditional,
           additionalReason: effectiveAdditionalReason,

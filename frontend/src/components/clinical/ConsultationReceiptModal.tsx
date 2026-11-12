@@ -95,11 +95,19 @@ export const ConsultationReceiptModal: React.FC<ConsultationReceiptModalProps> =
 
         // 2. Busca informações do pagamento vinculado ao agendamento
         let payment = initialPayment;
-        if (!payment || !payment.status) {
+        if (!payment || !payment.status || payment.status === 'pending') {
           try {
-            const payments = await ApiClient.get<any[]>(`/v1/payments?appointmentId=${encodeURIComponent(appointmentId)}`);
-            if (payments && payments.length > 0) {
-              payment = payments[0];
+            const completionRes = await ApiClient.get<any>(`/v1/appointments/${encodeURIComponent(appointmentId)}/completion`).catch(() => null);
+            if (completionRes?.payment && completionRes.payment.status && completionRes.payment.status !== 'pending') {
+              payment = completionRes.payment;
+            } else {
+              const paymentsRes = await ApiClient.get<any>(`/v1/payments?appointmentId=${encodeURIComponent(appointmentId)}`).catch(() => null);
+              const paymentList = Array.isArray(paymentsRes) ? paymentsRes : (paymentsRes?.payments || []);
+              if (paymentList && paymentList.length > 0) {
+                payment = paymentList[0];
+              } else if (completionRes?.payment) {
+                payment = completionRes.payment;
+              }
             }
           } catch (payErr) {
             console.warn('[ConsultationReceiptModal] Não foi possível consultar pagamento:', payErr);
@@ -151,7 +159,17 @@ export const ConsultationReceiptModal: React.FC<ConsultationReceiptModalProps> =
           ? `${resolvedPatient.address}, ${resolvedPatient.city || ''}/${resolvedPatient.state || ''}`
           : '';
 
-        const effectiveServiceName = serviceName || payment?.service_name || 'Atendimento Clínico';
+        let effectiveServiceName = serviceName || payment?.service_name || payment?.serviceName;
+        const effectiveServiceId = serviceId || payment?.service_id || payment?.serviceId;
+        if (!effectiveServiceName && effectiveServiceId) {
+          try {
+            const srv = await ApiClient.get<any>(`/v1/services/${effectiveServiceId}`).catch(() => null);
+            if (srv?.name) effectiveServiceName = srv.name;
+          } catch {}
+        }
+        if (!effectiveServiceName) {
+          effectiveServiceName = 'Atendimento Clínico';
+        }
         const effectiveProfName = professionalName || resolvedProf?.name || currentUser?.name || 'Profissional Responsável';
         const effectiveProfSpecialty = resolvedProf?.specialty || currentUser?.canonicalProfessionName || currentUser?.professionName || '';
         const effectiveProfReg = resolvedProf?.registration_number || currentUser?.registrationNumber || '';

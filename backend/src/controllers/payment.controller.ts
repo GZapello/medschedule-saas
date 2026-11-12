@@ -34,6 +34,14 @@ export class PaymentController {
       `;
       const params: any[] = [tenantId];
 
+      if (req.user?.role === 'professional') {
+        const ownProf = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ? AND active = 1').get(req.user.userId, tenantId) as any;
+        if (ownProf) {
+          query += ' AND (a.professional_id = ? OR a.professional_id IS NULL)';
+          params.push(ownProf.id);
+        }
+      }
+
       if (appointmentId) {
         query += ' AND pay.appointment_id = ?';
         params.push(appointmentId);

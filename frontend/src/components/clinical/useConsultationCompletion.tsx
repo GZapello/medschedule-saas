@@ -95,9 +95,24 @@ export function useConsultationCompletion(onFinished?: () => void, contextKey?: 
           onClose={() => {
             setPaymentOpen(false);
           }}
-          onFinished={() => {
+          onFinished={(result: any) => {
             if (currentContext.current !== contextKey) return;
-            setReceipt((saved: any) => ({ ...saved, awaitingPayment: false }));
+            const updatedPayment = result?.payment || receipt?.payment;
+            const updatedServiceId = result?.payment?.serviceId || result?.serviceId || receipt?.serviceId || lastPayload?.serviceId;
+            const updatedServiceName = result?.payment?.serviceName || result?.serviceName || receipt?.serviceName || lastPayload?.serviceName;
+            setReceipt((saved: any) => ({
+              ...saved,
+              awaitingPayment: false,
+              payment: updatedPayment,
+              serviceId: updatedServiceId,
+              serviceName: updatedServiceName
+            }));
+            setLastPayload((prev: any) => ({
+              ...prev,
+              serviceId: updatedServiceId,
+              serviceName: updatedServiceName,
+              payment: updatedPayment
+            }));
             setPaymentOpen(false);
             setIsCompleted(true);
             setShowPostConsultationModal(options?.showPostCompletion !== false);
@@ -115,7 +130,7 @@ export function useConsultationCompletion(onFinished?: () => void, contextKey?: 
           professionalId={receipt?.professionalId || lastPayload?.professionalId || currentUser?.id}
           professionalName={lastPayload?.professionalName || currentUser?.name}
           serviceId={receipt?.serviceId || lastPayload?.serviceId}
-          serviceName={lastPayload?.serviceName}
+          serviceName={receipt?.serviceName || lastPayload?.serviceName}
           initialPayment={receipt?.payment || lastPayload?.payment}
         />
       )}
