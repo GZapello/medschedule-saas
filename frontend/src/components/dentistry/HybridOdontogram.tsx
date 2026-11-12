@@ -1,6 +1,7 @@
 import React, { useState, lazy, Suspense } from 'react';
 import { DENTAL_CONDITIONS, OdontogramData, ToothFace } from './odontogramModel';
 import { conditionLabel, describeToothStatus, faceLabel, toothFaces, toothName, ToothChange, updateToothCondition, isUpperTooth } from './odontogramClinical';
+import { MobileGraphicViewport } from '../common/MobileGraphicViewport';
 const HybridDentalArch = lazy(() => import('./HybridDentalArch'));
 
 export class AnatomicalViewBoundary extends React.Component<{onShowFaces:()=>void;children:React.ReactNode},{failed:boolean}> {
@@ -69,16 +70,18 @@ export function HybridOdontogram({ currentData, activeCondition, dentitionType =
         <button type="button" className={button} onClick={() => setZoom(1)}>Reset</button>
       </div>
     </div>
-    <div className="max-w-full overflow-auto rounded-xl" style={{ maxHeight: zoom > 1 ? '70vh' : undefined }} tabIndex={0} aria-label="Arcadas; amplie e deslize para navegar">
-      <div className="bg-slate-50 rounded-xl" style={{ width: `${zoom * 100}%`, minHeight: 180, minWidth: zoom * (dentitionType === 'deciduous' ? 640 : 880) }}>
-        <AnatomicalViewBoundary onShowFaces={onShowFaces}>
-          <Suspense fallback={<p role="status" className="p-6 text-sm text-slate-500">Carregando visualização anatômica...</p>}>
-            <HybridDentalArch currentData={currentData} selected={selected} hovered={hovered}
-              selectedTeeth={selectedTeeth} multiSelectMode={multiSelectMode} dentitionType={dentitionType}
-              onSelect={select} onHover={setHovered} onFaceClick={selectFace} onOpenToothDossier={onOpenToothDossier} readOnly={readOnly}/>
-          </Suspense>
-        </AnatomicalViewBoundary>
-      </div>
+    <div className="max-w-full overflow-hidden rounded-xl">
+      <MobileGraphicViewport>
+        <div className="bg-slate-50 rounded-xl" style={{ width: `${zoom * 100}%`, minHeight: 180, minWidth: zoom * (dentitionType === 'deciduous' ? 640 : 880) }}>
+          <AnatomicalViewBoundary onShowFaces={onShowFaces}>
+            <Suspense fallback={<p role="status" className="p-6 text-sm text-slate-500">Carregando visualização anatômica...</p>}>
+              <HybridDentalArch currentData={currentData} selected={selected} hovered={hovered}
+                selectedTeeth={selectedTeeth} multiSelectMode={multiSelectMode} dentitionType={dentitionType}
+                onSelect={select} onHover={setHovered} onFaceClick={selectFace} onOpenToothDossier={onOpenToothDossier} readOnly={readOnly}/>
+            </Suspense>
+          </AnatomicalViewBoundary>
+        </div>
+      </MobileGraphicViewport>
     </div>
     <div className="min-h-8 text-xs text-slate-600" role="status">{hovered ? `Dente ${hovered} — ${toothName(hovered)} · ${describeToothStatus(currentData[hovered], hovered)}` : 'Use Tab e Enter para selecionar pelo teclado. O zoom permite navegar pelas arcadas em telas menores.'}</div>
     {(selected || (multiSelectMode && targets.length > 0)) && <div className="border border-cyan-200 rounded-xl p-4 space-y-3" aria-label="Painel do dente selecionado">

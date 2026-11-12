@@ -3,6 +3,7 @@ import { downloadBlob } from '../../utils/download';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
+import { ResponsiveTable } from '../common/ResponsiveTable';
 import {
   BarChart3,
   Download,
@@ -785,8 +786,8 @@ export const ReportsView: React.FC = () => {
                 Nenhum {clientTermLabel.toLowerCase()} encontrado para os filtros informativos selecionados.
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs">
+              <div className="overflow-x-auto mobile-table-container">
+                <ResponsiveTable className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-600 uppercase">
                       <th className="py-3 px-4">{clientTermLabel}</th>
@@ -917,7 +918,7 @@ export const ReportsView: React.FC = () => {
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </ResponsiveTable>
               </div>
             )}
           </div>

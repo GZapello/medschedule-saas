@@ -431,8 +431,8 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
       </div>
 
       {/* Cartão de Perfil do Aluno */}
-      <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-        <div className="flex items-center gap-4">
+      <div className="bg-white rounded-3xl border border-slate-200 p-4 sm:p-6 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4 sm:gap-6 min-w-0 max-w-full">
+        <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0 max-w-full flex-1">
           <div className="relative group shrink-0">
             <input
               type="file"
@@ -484,9 +484,9 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
             </div>
           </div>
 
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-xl font-bold text-slate-800">{student.name}</h2>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap min-w-0">
+              <h2 className="text-xl font-bold text-slate-800 break-words">{student.name}</h2>
               <span
                 className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                   student.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'
@@ -505,7 +505,7 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
             </div>
 
             {/* Ações de Foto do Aluno */}
-            <div className="flex items-center gap-2 mt-2">
+            <div className="flex items-center gap-2 mt-2 flex-wrap min-w-0">
               {student.avatar_url ? (
                 <>
                   <button
@@ -541,7 +541,7 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
               )}
             </div>
 
-            <div className="flex flex-wrap items-center gap-3 mt-1.5 text-xs text-slate-500">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-1.5 text-xs text-slate-500 min-w-0">
               <span>Objetivo: <strong className="text-slate-700">{student.goal || 'Não informado'}</strong></span>
               <span>•</span>
               <span>Nível: <strong className="text-slate-700 capitalize">{student.experience_level || 'Geral'}</strong></span>

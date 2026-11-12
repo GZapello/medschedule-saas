@@ -253,7 +253,7 @@ export const ClinicalModuleShell: React.FC<ClinicalModuleShellProps> = ({
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
             {filterSlot}
             {!hasCustomEmptyState && (
-              <div className="w-64 sm:w-72 lg:w-80" data-tour="clinical-patient-select">
+              <div className="w-full sm:w-72 lg:w-80 max-w-full min-w-0" data-tour="clinical-patient-select">
                 <PatientSearchSelect
                   value={selectedPatientId || ''}
                   selectedPatient={selectedPatient as any}

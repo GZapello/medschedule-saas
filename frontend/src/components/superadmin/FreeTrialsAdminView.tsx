@@ -439,7 +439,7 @@ export const FreeTrialsAdminView: React.FC = () => {
       </div>
 
       {/* Abas de Navegação */}
-      <div className="flex items-center gap-2 p-1.5 bg-slate-200/60 rounded-2xl w-fit">
+      <div className="flex items-center gap-1.5 sm:gap-2 p-1.5 bg-slate-200/60 rounded-2xl max-w-full overflow-x-auto">
         <button
           type="button"
           onClick={() => setActiveTab('solo')}

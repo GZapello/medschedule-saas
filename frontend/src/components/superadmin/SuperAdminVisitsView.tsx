@@ -39,6 +39,7 @@ import {
   Archive,
   ExternalLink
 } from 'lucide-react';
+import { ResponsiveTable } from '../common/ResponsiveTable';
 
 interface Establishment {
   id: string;
@@ -958,8 +959,8 @@ export const SuperAdminVisitsView: React.FC = () => {
                 </p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
+              <div className="overflow-x-auto mobile-table-container">
+                <ResponsiveTable className="w-full text-left border-collapse">
                   <thead>
                     <tr className="border-b border-slate-100 bg-slate-50/60 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                       <th className="py-3 px-4">Clínica / Estabelecimento</th>
@@ -1137,7 +1138,7 @@ export const SuperAdminVisitsView: React.FC = () => {
                       );
                     })}
                   </tbody>
-                </table>
+                </ResponsiveTable>
               </div>
             )}
 
@@ -1343,8 +1344,8 @@ export const SuperAdminVisitsView: React.FC = () => {
                     Estabelecimentos e Resultados ({reportsData.rows?.length || 0})
                   </h3>
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs border-collapse">
+                <div className="overflow-x-auto mobile-table-container">
+                  <ResponsiveTable className="w-full text-left text-xs border-collapse">
                     <thead>
                       <tr className="border-b border-slate-100 bg-slate-50/30 text-[10px] font-bold text-slate-500 uppercase">
                         <th className="py-2.5 px-4">Estabelecimento</th>
@@ -1373,7 +1374,7 @@ export const SuperAdminVisitsView: React.FC = () => {
                         </tr>
                       ))}
                     </tbody>
-                  </table>
+                  </ResponsiveTable>
                 </div>
               </div>
             </div>

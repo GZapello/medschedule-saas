@@ -10,7 +10,7 @@ const baseline = process.env.MOBILE_BASELINE === '1';
 const interactions = process.env.MOBILE_INTERACTIONS === '1';
 const outputName = process.env.MOBILE_OUTPUT_NAME?.replace(/[^a-z0-9_-]/gi, '_');
 const out = path.join(root, outputName ? 'test-results/' + outputName : process.env.DESKTOP_DIAGNOSTIC ? 'test-results/desktop-diagnostic-' + (baseline ? 'before' : 'after') : baseline ? 'test-results/mobile-baseline' : interactions ? 'test-results/mobile-interactions' : process.env.DESKTOP_COMPARE ? 'test-results/mobile-desktop-current' : 'test-results/mobile');
-const modalButtons = { '/dashboard': ['Novo Paciente', 'Novo Agendamento'], '/agenda': ['Agendar'], '/pacientes': ['Novo Paciente'], '/financeiro': ['Novo Recebimento'], '/estoque': ['Novo Item de Estoque'], '/orcamentos': ['Novo Orçamento de Paciente'], '/zemda-personal/patient': ['Nova Avaliação'] };
+const modalButtons = { '/dashboard': ['Novo Paciente', 'Novo Agendamento'], '/agenda': ['Agendar'], '/pacientes': ['Novo Paciente'], '/financeiro': ['Novo Recebimento'], '/estoque': ['Novo Item'], '/orcamentos': ['Novo Orçamento de Paciente'], '/zemda-personal/patient': ['Nova Avaliação'] };
 fs.mkdirSync(out, { recursive: true });
 const modules = {
   '/zemda-personal': 'ZemdaPersonal', '/zemda-estetic': 'ZemdaEstetic', '/zemda-fisio': 'ZemdaFisio',

@@ -589,20 +589,22 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
                   Somente Leitura
                 </span>
               </div>
-              <div className="bg-white border border-slate-200 rounded-2xl p-2 sm:p-3 overflow-auto">
-                <HybridDentalArch
-                  currentData={initialData}
-                  selected={null}
-                  hovered={null}
-                  selectedTeeth={[]}
-                  multiSelectMode={false}
-                  dentitionType={dentitionType}
-                  readOnly={true}
-                  onSelect={() => {}}
-                  onHover={() => {}}
-                  onFaceClick={() => {}}
-                  onOpenToothDossier={onOpenToothDossier}
-                />
+              <div className="bg-white border border-slate-200 rounded-2xl p-2 sm:p-3 overflow-hidden">
+                <MobileGraphicViewport>
+                  <HybridDentalArch
+                    currentData={initialData}
+                    selected={null}
+                    hovered={null}
+                    selectedTeeth={[]}
+                    multiSelectMode={false}
+                    dentitionType={dentitionType}
+                    readOnly={true}
+                    onSelect={() => {}}
+                    onHover={() => {}}
+                    onFaceClick={() => {}}
+                    onOpenToothDossier={onOpenToothDossier}
+                  />
+                </MobileGraphicViewport>
               </div>
             </div>
 
@@ -616,20 +618,22 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
                   {readOnly ? 'Somente Leitura' : 'Editável'}
                 </span>
               </div>
-              <div className="bg-white border border-cyan-200 rounded-2xl p-2 sm:p-3 overflow-auto">
-                <HybridDentalArch
-                  currentData={data}
-                  selected={selectedTeeth.length === 1 ? selectedTeeth[0] : null}
-                  hovered={null}
-                  selectedTeeth={selectedTeeth}
-                  multiSelectMode={multiSelectMode}
-                  dentitionType={dentitionType}
-                  readOnly={readOnly}
-                  onSelect={toggleToothSelection}
-                  onHover={() => {}}
-                  onFaceClick={(tooth, face) => handleFaceClick(tooth, face)}
-                  onOpenToothDossier={onOpenToothDossier}
-                />
+              <div className="bg-white border border-cyan-200 rounded-2xl p-2 sm:p-3 overflow-hidden">
+                <MobileGraphicViewport>
+                  <HybridDentalArch
+                    currentData={data}
+                    selected={selectedTeeth.length === 1 ? selectedTeeth[0] : null}
+                    hovered={null}
+                    selectedTeeth={selectedTeeth}
+                    multiSelectMode={multiSelectMode}
+                    dentitionType={dentitionType}
+                    readOnly={readOnly}
+                    onSelect={toggleToothSelection}
+                    onHover={() => {}}
+                    onFaceClick={(tooth, face) => handleFaceClick(tooth, face)}
+                    onOpenToothDossier={onOpenToothDossier}
+                  />
+                </MobileGraphicViewport>
               </div>
             </div>
           </div>

@@ -29,6 +29,7 @@ import { FileImageUploader } from '../common/FileImageUploader';
 import { useClinicalAutosave } from '../../hooks/useClinicalAutosave';
 import { ClinicalAutosaveIndicator } from '../clinical/ClinicalAutosaveIndicator';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
+import { useHorizontalTabScroll, HorizontalTabNav } from '../../hooks/useHorizontalTabScroll';
 
 const PersonalPostureEditor = lazy(() => import('./PersonalPostureEditor'));
 
@@ -69,6 +70,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
   const { showToast } = useToast();
 
   const [activeTab, setActiveTab] = useState<'anthropometry' | 'composition' | 'skinfolds' | 'cardio_tests' | 'photos_notes' | 'clinical'>('anthropometry');
+  const tabScroll = useHorizontalTabScroll(activeTab);
 
   const [selectedStudentId, setSelectedStudentId] = useState(patientId || student?.id || '');
   const [selectedStudent, setSelectedStudent] = useState<Student | any | null>(student || null);
@@ -872,9 +874,30 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
         </div>
 
         </>}
-        {!postureOnly && <div className="flex items-center gap-2 px-4 sm:px-6 py-2.5 border-b border-slate-200 bg-slate-50/60 overflow-x-auto shrink-0 no-scrollbar whitespace-nowrap touch-pan-x">
-          {availableTabs.map(tab=><button type="button" key={tab.id} disabled={photosUploading || postureBusy} onClick={()=>setActiveTab(tab.id as typeof activeTab)} className={`shrink-0 px-3.5 py-2 text-xs font-semibold rounded-xl whitespace-nowrap transition-all ${activeTab===tab.id?'bg-teal-600 text-white shadow-sm':'bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200/80'}`}>{tab.label}</button>)}
-        </div>}
+        {!postureOnly && (
+          <div className="border-b border-slate-200 bg-slate-50/60 shrink-0">
+            <HorizontalTabNav scroll={tabScroll} bgTheme="slate-50">
+              <div {...tabScroll.tabScrollProps} className={`${tabScroll.tabScrollProps.className} flex items-center gap-2 px-4 sm:px-6 py-2.5 whitespace-nowrap`}>
+                {availableTabs.map(tab => (
+                  <button
+                    type="button"
+                    key={tab.id}
+                    data-active={activeTab === tab.id}
+                    disabled={photosUploading || postureBusy}
+                    onClick={() => setActiveTab(tab.id as typeof activeTab)}
+                    className={`shrink-0 px-3.5 py-2 text-xs font-semibold rounded-xl whitespace-nowrap transition-all ${
+                      activeTab === tab.id
+                        ? 'bg-teal-600 text-white shadow-sm'
+                        : 'bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200/80'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </HorizontalTabNav>
+          </div>
+        )}
         {/* Formulário Principal */}
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
           <div className="p-4 sm:p-6 overflow-y-auto flex-1 min-h-0 space-y-6">

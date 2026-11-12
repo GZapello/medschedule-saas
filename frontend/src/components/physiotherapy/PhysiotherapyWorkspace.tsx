@@ -40,6 +40,7 @@ import { ExternalTestsManager } from '../common/ExternalTestsManager';
 import { MeasurableGoalsManager } from '../common/MeasurableGoalsManager';
 import { ProfessionalActivityLibrary } from '../common/ProfessionalActivityLibrary';
 import { PatientFollowUpDocumentModal } from '../clinical/PatientFollowUpDocumentModal';
+import { ResponsiveTable } from '../common/ResponsiveTable';
 import { useClinicalAutosave } from '../../hooks/useClinicalAutosave';
 import { useHorizontalTabScroll, HorizontalTabNav } from '../../hooks/useHorizontalTabScroll';
 import { ClinicalQuickHeaderActions, ClinicalQuickToolItem } from '../clinical/ClinicalQuickHeaderActions';
@@ -1595,8 +1596,8 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
                     </p>
                   </div>
 
-                  <div className="overflow-x-auto border border-slate-200 rounded-xl">
-                    <table className="w-full text-left border-collapse text-xs">
+                  <div className="overflow-x-auto border border-slate-200 rounded-xl mobile-table-container">
+                    <ResponsiveTable className="w-full text-left border-collapse text-xs">
                       <thead>
                         <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
                           <th className="py-2.5 px-3">Articulação</th>
@@ -1641,7 +1642,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
                           </tr>
                         ))}
                       </tbody>
-                    </table>
+                    </ResponsiveTable>
                   </div>
                 </div>
 

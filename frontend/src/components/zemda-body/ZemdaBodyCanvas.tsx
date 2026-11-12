@@ -650,7 +650,7 @@ export const ZemdaBodyCanvas: React.FC<ZemdaBodyCanvasProps> = ({
 
       {/* Legenda de Heatmap de Volume (quando ativo) */}
       {volumeHeatmap && (
-        <div className="mt-3 flex items-center gap-3 text-xs bg-slate-50 border border-slate-200 px-4 py-1.5 rounded-full text-slate-600">
+        <div className="mt-3 flex items-center justify-center gap-2 sm:gap-3 text-xs bg-slate-50 border border-slate-200 px-3 sm:px-4 py-1.5 rounded-2xl sm:rounded-full text-slate-600 flex-wrap max-w-full">
           <span className="font-bold">Volume Semanal:</span>
           <span className="inline-flex items-center gap-1">
             <span className="w-3 h-3 rounded-full bg-emerald-500/40 border border-emerald-600" />

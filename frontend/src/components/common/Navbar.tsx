@@ -65,8 +65,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, onNavigate }) =
           title="Central de Ajuda (Alt + H)"
           aria-label="Ajuda"
         >
-          <HelpCircle className="w-3.5 h-3.5 text-slate-400" />
-          <span>Ajuda</span>
+          <HelpCircle className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+          <span className="hidden sm:inline">Ajuda</span>
         </button>
 
         {/* Configurações */}
@@ -78,8 +78,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, onNavigate }) =
           title="Configurações"
           aria-label="Configurações"
         >
-          <Settings className="w-3.5 h-3.5 text-slate-400" />
-          <span>Configurações</span>
+          <Settings className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+          <span className="hidden sm:inline">Configurações</span>
         </button>
 
         {/* Sair */}
@@ -90,8 +90,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, onNavigate }) =
           title={isSandboxSession ? "Encerrar Simulação Sandbox (Voltar ao SuperAdmin)" : "Sair do sistema"}
           aria-label="Sair"
         >
-          <LogOut className="w-3.5 h-3.5" />
-          <span>Sair</span>
+          <LogOut className="w-3.5 h-3.5 shrink-0" />
+          <span className="hidden sm:inline">Sair</span>
         </button>
       </div>
     </div>

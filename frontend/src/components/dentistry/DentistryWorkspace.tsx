@@ -1304,8 +1304,8 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
           {/* ========================================================================= */}
           {activeTab === 'odontogram' && (
             <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="min-w-0">
                   <h3 className="text-base font-black text-slate-900">
                     Odontograma Anatômico Interativo (FDI)
                   </h3>
@@ -1314,7 +1314,7 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap shrink-0">
                   <button
                     type="button"
                     onClick={() => setIsDictationModalOpen(true)}

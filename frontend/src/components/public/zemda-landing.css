@@ -1,4 +1,4 @@
-.zemda-landing { --zl-ink:#163634; --zl-teal:#0f766e; --zl-muted:#5c706f; --zl-line:#dce8e5; color:var(--zl-ink); background:#fff; font-family:Inter,ui-sans-serif,system-ui,sans-serif; -webkit-font-smoothing:antialiased; }
+.zemda-landing { --zl-ink:#163634; --zl-teal:#0f766e; --zl-muted:#5c706f; --zl-line:#dce8e5; color:var(--zl-ink); background:#fff; font-family:Inter,ui-sans-serif,system-ui,sans-serif; -webkit-font-smoothing:antialiased; overflow-x:clip; }
 .zemda-landing *, .zemda-landing *::before, .zemda-landing *::after { box-sizing:border-box; }
 .zemda-landing [id] { scroll-margin-top:104px; }
 .zemda-landing button, .zemda-landing a { -webkit-tap-highlight-color:transparent; }

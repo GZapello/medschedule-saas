@@ -955,7 +955,7 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
                 </div>
 
                 {/* Filtro por Estrutura */}
-                <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto py-1">
+                <div className="flex items-center gap-1.5 flex-wrap w-full sm:w-auto py-1">
                   {['Todos', 'ABC', 'ABCD', 'Upper/Lower', 'Fullbody'].map((filterKey) => {
                     const isSelected = templateStructureFilter === filterKey;
                     return (

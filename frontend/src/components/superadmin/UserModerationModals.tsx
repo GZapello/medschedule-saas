@@ -335,7 +335,7 @@ export const UserModerationDetailModal: React.FC<UserModerationDetailModalProps>
                     {!data?.clinics?.length ? (
                       <p className="text-slate-400 text-xs italic">Nenhuma clínica vinculada.</p>
                     ) : (
-                      <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                      <div className="border border-slate-200 rounded-2xl overflow-x-auto mobile-table-container">
                         <table className="w-full text-left">
                           <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 text-[11px]">
                             <tr>
@@ -378,7 +378,7 @@ export const UserModerationDetailModal: React.FC<UserModerationDetailModalProps>
                       Nenhum registro de moderação ou ocorrência administrativa para este usuário.
                     </div>
                   ) : (
-                    <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                    <div className="border border-slate-200 rounded-2xl overflow-x-auto mobile-table-container">
                       <table className="w-full text-left">
                         <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 text-[11px]">
                           <tr>
@@ -444,7 +444,7 @@ export const UserModerationDetailModal: React.FC<UserModerationDetailModalProps>
                       Nenhuma solicitação de WhatsApp registrada para este usuário.
                     </div>
                   ) : (
-                    <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                    <div className="border border-slate-200 rounded-2xl overflow-x-auto mobile-table-container">
                       <table className="w-full text-left">
                         <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 text-[11px]">
                           <tr>
