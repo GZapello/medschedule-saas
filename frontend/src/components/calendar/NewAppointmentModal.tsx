@@ -254,10 +254,12 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
     }
   };
 
-  // Filtra serviços pelo profissional selecionado
+  // Filtra serviços pelo profissional selecionado (responsável ou instrutor vinculado)
   const filteredServices = useMemo(() => {
     if (!professionalId) return services;
-    const match = services.filter(s => s.professional_id === professionalId);
+    const match = services.filter(
+      s => s.professional_id === professionalId || s.linked_professional_ids?.includes(professionalId)
+    );
     if (match.length > 0) return match;
     const unassigned = services.filter(s => !s.professional_id);
     return unassigned.length > 0 ? unassigned : services;
@@ -297,7 +299,9 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
             ? userProfId
             : (profs.length > 0 ? profs[0].id : ''));
         setProfessionalId(targetProfId);
-        const matchingSrvs = targetProfId ? srvs.filter(s => s.professional_id === targetProfId) : srvs;
+        const matchingSrvs = targetProfId
+          ? srvs.filter(s => s.professional_id === targetProfId || s.linked_professional_ids?.includes(targetProfId))
+          : srvs;
         if (matchingSrvs.length > 0) {
           setServiceId(matchingSrvs[0].id);
         } else if (srvs.length > 0) {
@@ -427,7 +431,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
     [selectedServiceObj]
   );
 
-  const canEditSelectedService = isClinicAdmin && Boolean(selectedServiceObj);
+  const canEditSelectedService = canManageServices && Boolean(selectedServiceObj);
 
   useEffect(() => {
     if (!serviceRecurrenceConfig.allowRecurrence || serviceRecurrenceConfig.allowedFrequencies.length === 0) {

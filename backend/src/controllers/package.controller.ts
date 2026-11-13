@@ -52,7 +52,14 @@ function getLinkedPublicProfessionals(tenantId: string, serviceId: string, prefe
       AND p.active = 1
       AND p.public_booking_enabled = 1
       AND s.active = 1
-      AND (s.professional_id = p.id OR ps.professional_id = p.id)
+      AND (
+        s.professional_id = p.id
+        OR ps.professional_id = p.id
+        OR EXISTS (
+          SELECT 1 FROM class_schedules cs
+          WHERE cs.service_id = s.id AND cs.tenant_id = p.tenant_id AND cs.professional_id = p.id AND cs.active = 1
+        )
+      )
       ${extraFilter}
     ORDER BY p.name ASC
   `).all(serviceId, serviceId, tenantId, ...(preferredProfId && preferredProfId !== 'any' ? [preferredProfId] : [])) as any[];
@@ -559,10 +566,13 @@ export class PackageController {
           ...(wantDate && dayResult.slots.length === 0 ? { emptyReason: dayResult.emptyReason } : {}),
           ...(!wantDate && upcomingSlots.length === 0
             ? {
-                emptyReason:
-                  weeklySchedules.length === 0
-                    ? 'Esta aula coletiva ainda não possui horários cadastrados na grade semanal.'
-                    : 'Não há turmas com vagas disponíveis nos próximos dias.'
+                emptyReason: ClassScheduleService.explainEmptyPublicAvailability({
+                  tenantId: tenant.id,
+                  serviceRow: srv,
+                  professionalId: reqProfId,
+                  startDate: upcomingStart,
+                  daysAhead: 21
+                })
               }
             : {})
         });
@@ -576,13 +586,17 @@ export class PackageController {
           serviceKind: srv.service_kind,
           serviceModality: srv.modality || 'presential',
           allowedModalities,
-          professionals: [],
+          professionals: allLinkedProfs,
           weeklySchedules: [],
           weeklySummary: [],
           totalAvailable: 0,
           slots: [],
           upcomingSlots: [],
-          emptyReason: 'Nenhum instrutor com agenda pública habilitada está vinculado a esta modalidade.'
+          emptyReason: ClassScheduleService.explainEmptyPublicAvailability({
+            tenantId: tenant.id,
+            serviceRow: srv,
+            professionalId: reqProfId
+          })
         });
         return;
       }
@@ -676,6 +690,17 @@ export class PackageController {
         upcomingSlots,
         ...(wantDate && mergedSlots.length === 0
           ? { emptyReason: 'Não há horários ou vagas disponíveis para esta data. Experimente outro dia.' }
+          : {}),
+        ...(!wantDate && upcomingSlots.length === 0
+          ? {
+              emptyReason: ClassScheduleService.explainEmptyPublicAvailability({
+                tenantId: tenant.id,
+                serviceRow: srv,
+                professionalId: reqProfId,
+                startDate: upcomingStart,
+                daysAhead: 14
+              })
+            }
           : {})
       });
     } catch (err: any) {

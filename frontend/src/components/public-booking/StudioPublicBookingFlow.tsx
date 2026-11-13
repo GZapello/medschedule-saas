@@ -631,7 +631,28 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
 
           {objective === 'service' ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {services.map(s => {
+              {services.filter(
+                s =>
+                  s.service_kind !== 'group' ||
+                  (s.has_public_schedules !== false &&
+                    s.is_publicly_available !== false &&
+                    Array.isArray(s.weekly_schedule_summary) &&
+                    s.weekly_schedule_summary.length > 0)
+              ).length === 0 ? (
+                <div className="col-span-full p-5 rounded-2xl border border-dashed border-slate-200 bg-slate-50 text-center text-xs text-slate-600">
+                  Nenhuma aula com horários públicos ativos disponível para reserva online neste momento.
+                </div>
+              ) : (
+                services
+                  .filter(
+                    s =>
+                      s.service_kind !== 'group' ||
+                      (s.has_public_schedules !== false &&
+                        s.is_publicly_available !== false &&
+                        Array.isArray(s.weekly_schedule_summary) &&
+                        s.weekly_schedule_summary.length > 0)
+                  )
+                  .map(s => {
                 const chosen = selectedServiceId === s.id;
                 return (
                   <button
@@ -680,27 +701,27 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                         </span>
                       )}
                     </div>
+                    {Array.isArray(s.linked_professionals) && s.linked_professionals.length > 0 && (
+                      <p className="text-[11px] text-slate-500 truncate">
+                        Instrutores: <span className="font-semibold text-slate-700">{s.linked_professionals.map((lp: any) => lp.name).join(', ')}</span>
+                      </p>
+                    )}
                     {s.service_kind === 'group' && (
                       <div className="pt-1.5 mt-1 border-t border-slate-100 text-[11px]">
-                        {Array.isArray(s.weekly_schedule_summary) && s.weekly_schedule_summary.length > 0 ? (
-                          <div className="space-y-0.5 text-slate-600">
-                            <span className="font-bold text-teal-800 block">Grade semanal:</span>
-                            {s.weekly_schedule_summary.slice(0, 2).map((w: any, idx: number) => (
-                              <span key={idx} className="block truncate">
-                                • {w.weekdaysLabel} — {w.timeRange}
-                              </span>
-                            ))}
-                          </div>
-                        ) : (
-                          <span className="text-amber-700 font-medium">
-                            Grade de horários semanais em configuração
-                          </span>
-                        )}
+                        <div className="space-y-0.5 text-slate-600">
+                          <span className="font-bold text-teal-800 block">Grade semanal:</span>
+                          {s.weekly_schedule_summary.slice(0, 3).map((w: any, idx: number) => (
+                            <span key={idx} className="block truncate">
+                              • {w.weekdaysLabel} — {w.timeRange}{w.professionalName ? ` (${w.professionalName})` : ''}
+                            </span>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </button>
                 );
-              })}
+              })
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-3">

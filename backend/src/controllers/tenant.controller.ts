@@ -1522,35 +1522,69 @@ export class TenantController {
       const publicSchedulesByService = isStudioCompat
         ? ClassScheduleService.listByTenantGrouped(resolved.id, { includeInactive: false, publicOnly: true })
         : new Map();
-      const enrichedServices = (services as any[]).map(srv => {
-        const scheds = publicSchedulesByService.get(srv.id) || [];
-        const resolvedDomain = resolveServiceDomain({
-          establishmentProfile,
-          serviceDomain: srv.service_domain,
-          serviceKind: srv.service_kind,
-          clinicalModule: srv.clinical_module
-        });
-        if (!isStudioCompat) {
+      const allSchedulesByService = isStudioCompat
+        ? ClassScheduleService.listByTenantGrouped(resolved.id, { includeInactive: true, publicOnly: false })
+        : new Map();
+      const publicLinkedByService = new Map<string, Array<{ id: string; name: string; profession_name?: string }>>();
+      for (const pubProf of publicProfessionals) {
+        for (const pSrv of pubProf.services || []) {
+          const arr = publicLinkedByService.get(pSrv.id) || [];
+          if (!arr.some(x => x.id === pubProf.id)) {
+            arr.push({
+              id: pubProf.id,
+              name: pubProf.name,
+              profession_name: pubProf.profession_name
+            });
+            publicLinkedByService.set(pSrv.id, arr);
+          }
+        }
+      }
+
+      const enrichedServices = (services as any[])
+        .map(srv => {
+          const scheds = publicSchedulesByService.get(srv.id) || [];
+          const resolvedDomain = resolveServiceDomain({
+            establishmentProfile,
+            serviceDomain: srv.service_domain,
+            serviceKind: srv.service_kind,
+            clinicalModule: srv.clinical_module
+          });
+          if (!isStudioCompat) {
+            return {
+              ...srv,
+              service_kind: 'individual',
+              default_capacity: null,
+              service_domain: 'clinical',
+              class_schedules: [],
+              weekly_schedule_summary: []
+            };
+          }
+          const recCfg = parseServiceRecurrenceConfig(srv);
+          const isGroup = (srv.service_kind || 'individual') === 'group';
+          const allScheds = allSchedulesByService.get(srv.id) || [];
+          const diag = isGroup
+            ? ClassScheduleService.diagnoseServiceSchedules(resolved.id, srv.id, allScheds)
+            : null;
+          const isPubliclyAvailable = !isGroup || Boolean(diag && diag.publishableCount > 0 && scheds.length > 0);
+          const linkedProfs = publicLinkedByService.get(srv.id) || [];
           return {
             ...srv,
-            service_kind: 'individual',
-            default_capacity: null,
-            service_domain: 'clinical',
-            class_schedules: [],
-            weekly_schedule_summary: []
+            service_domain: resolvedDomain,
+            allow_recurrence: recCfg.allowRecurrence ? 1 : 0,
+            allowed_recurrence_frequencies: recCfg.allowedFrequencies,
+            default_recurrence_frequency: recCfg.defaultFrequency,
+            linked_professionals: linkedProfs,
+            linked_professional_ids: linkedProfs.map(lp => lp.id),
+            class_schedules: scheds,
+            weekly_schedule_summary: buildWeeklyScheduleSummary(scheds),
+            has_public_schedules: !isGroup || scheds.length > 0,
+            is_publicly_available: isPubliclyAvailable,
+            public_booking_unavailable_reason: !isPubliclyAvailable
+              ? (diag?.blockers?.[0] || 'Esta aula ainda não possui dias e horários publicados.')
+              : null
           };
-        }
-        const recCfg = parseServiceRecurrenceConfig(srv);
-        return {
-          ...srv,
-          service_domain: resolvedDomain,
-          allow_recurrence: recCfg.allowRecurrence ? 1 : 0,
-          allowed_recurrence_frequencies: recCfg.allowedFrequencies,
-          default_recurrence_frequency: recCfg.defaultFrequency,
-          class_schedules: scheds,
-          weekly_schedule_summary: buildWeeklyScheduleSummary(scheds)
-        };
-      });
+        })
+        .filter(srv => !isStudioCompat || srv.service_kind !== 'group' || srv.is_publicly_available);
       const rawPackages = isStudioCompat
         ? PackageService.listCatalogPackages(resolved.id, { publicOnly: true })
         : [];
@@ -1561,7 +1595,8 @@ export class TenantController {
           return {
             ...item,
             class_schedules: scheds,
-            weekly_schedule_summary: buildWeeklyScheduleSummary(scheds)
+            weekly_schedule_summary: buildWeeklyScheduleSummary(scheds),
+            has_public_schedules: scheds.length > 0
           };
         })
       }));

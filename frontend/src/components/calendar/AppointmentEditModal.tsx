@@ -178,10 +178,12 @@ export const AppointmentEditModal: React.FC<AppointmentEditModalProps> = ({
     };
   }, [isOpen, appointment?.id]);
 
-  // Filtra serviços pelo profissional selecionado
+  // Filtra serviços pelo profissional selecionado (responsável ou instrutor vinculado)
   const filteredServices = useMemo(() => {
     if (!professionalId) return services;
-    const match = services.filter(s => s.professional_id === professionalId);
+    const match = services.filter(
+      s => s.professional_id === professionalId || s.linked_professional_ids?.includes(professionalId)
+    );
     if (match.length > 0) return match;
     const unassigned = services.filter(s => !s.professional_id);
     return unassigned.length > 0 ? unassigned : services;

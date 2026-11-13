@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { X, Plus, Edit3, Loader2, Users } from 'lucide-react';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
@@ -6,6 +6,7 @@ import { useAuth } from '../../context/AuthContext';
 import { Professional, Room, Service } from '../../types';
 import { ClassScheduleSection, DraftClassScheduleInput } from './ClassScheduleSection';
 import { ServiceRecurrenceConfigPanel } from './ServiceRecurrenceConfigPanel';
+import { LinkedInstructorsSelector } from './LinkedInstructorsSelector';
 import {
   isMixedProfile,
   isStudioProfile,
@@ -45,6 +46,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
   const isPureStudio = isStudioProfile(establishmentProfile);
 
   const [professionalId, setProfessionalId] = useState<string>('');
+  const [linkedProfessionalIds, setLinkedProfessionalIds] = useState<string[]>([]);
   const [name, setName] = useState<string>('');
   const [price, setPrice] = useState<string>('150');
   const [durationMinutes, setDurationMinutes] = useState<number>(50);
@@ -98,7 +100,12 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
         );
         setDefaultFrequency(recCfg.defaultFrequency || 'weekly');
         setDescription(serviceToEdit.description || '');
-        setProfessionalId(serviceToEdit.professional_id || initialProfessionalId || professionals[0]?.id || '');
+        const editPrimaryId = serviceToEdit.professional_id || initialProfessionalId || professionals[0]?.id || '';
+        setProfessionalId(editPrimaryId);
+        const existingLinked = Array.isArray(serviceToEdit.linked_professional_ids) && serviceToEdit.linked_professional_ids.length > 0
+          ? serviceToEdit.linked_professional_ids
+          : (editPrimaryId ? [editPrimaryId] : []);
+        setLinkedProfessionalIds(Array.from(new Set([editPrimaryId, ...existingLinked].filter(Boolean))));
       } else {
         setName('');
         setPrice('150');
@@ -112,16 +119,35 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
         setAllowedFrequencies(['weekly']);
         setDefaultFrequency('weekly');
         setDescription('');
+        let defaultProf = '';
         if (initialProfessionalId && professionals.some(p => p.id === initialProfessionalId)) {
-          setProfessionalId(initialProfessionalId);
+          defaultProf = initialProfessionalId;
         } else if (professionals.length > 0) {
-          setProfessionalId(professionals[0].id);
-        } else {
-          setProfessionalId('');
+          defaultProf = professionals[0].id;
         }
+        setProfessionalId(defaultProf);
+        setLinkedProfessionalIds(defaultProf ? [defaultProf] : []);
       }
     }
   }, [isOpen, initialProfessionalId, professionals, serviceToEdit]);
+
+  const selectableScheduleProfessionals = useMemo(() => {
+    const activeIds = new Set([professionalId, ...linkedProfessionalIds].filter(Boolean));
+    const matched = professionals.filter(p => activeIds.has(p.id));
+    return matched.length > 0 ? matched : professionals;
+  }, [professionals, professionalId, linkedProfessionalIds]);
+
+  const lockedLinkedInstructorIds = useMemo(() => {
+    if (!isEditing || !serviceToEdit?.class_schedules) return [];
+    return Array.from(
+      new Set(
+        serviceToEdit.class_schedules
+          .filter(cs => Number(cs.active) !== 0)
+          .map(cs => cs.professional_id)
+          .filter(Boolean)
+      )
+    );
+  }, [isEditing, serviceToEdit]);
 
   if (!isOpen) return null;
 
@@ -148,8 +174,12 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
     try {
       setLoading(true);
       const effectiveKind = showStudioConfig ? serviceKind : 'individual';
+      const normalizedLinkedIds = showStudioConfig
+        ? Array.from(new Set([professionalId, ...linkedProfessionalIds].filter(Boolean)))
+        : [professionalId];
       const payload: any = {
         professionalId,
+        ...(showStudioConfig ? { linkedProfessionalIds: normalizedLinkedIds } : {}),
         name: name.trim(),
         price: numPrice,
         durationMinutes: Number(durationMinutes) || 50,
@@ -173,8 +203,25 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
         ? await ApiClient.put<any>(`/v1/services/${serviceToEdit.id}`, payload)
         : await ApiClient.post<any>('/v1/services', payload);
 
-      showToast(isEditing ? 'Serviço atualizado com sucesso!' : 'Serviço cadastrado com sucesso!', 'success');
-      onSuccess(res?.service || { id: serviceToEdit?.id, ...payload, ...res });
+      const savedData = res?.service || { id: serviceToEdit?.id, ...payload, ...res };
+      const activeScheduleCount = Array.isArray(savedData?.class_schedules)
+        ? savedData.class_schedules.filter((s: any) => Number(s.active) !== 0).length
+        : 0;
+
+      if (showStudioConfig && effectiveKind === 'group' && activeScheduleCount === 0) {
+        showToast(
+          isEditing
+            ? 'Aula salva como rascunho interno. Adicione dias e horários para disponibilizá-la no agendamento público.'
+            : 'Serviço salvo como rascunho interno! Adicione ao menos um horário na grade para liberar no agendamento online.',
+          'info'
+        );
+      } else {
+        showToast(isEditing ? 'Serviço atualizado com sucesso!' : 'Serviço cadastrado com sucesso!', 'success');
+      }
+      if (Array.isArray(res?.schedule_warnings) && res.schedule_warnings.length > 0) {
+        showToast(res.schedule_warnings[0], 'info');
+      }
+      onSuccess(savedData);
       onClose();
     } catch (err: any) {
       showToast(err.message || err.error || (isEditing ? 'Erro ao atualizar serviço' : 'Erro ao cadastrar serviço'), 'error');
@@ -184,9 +231,9 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
   };
 
   return (
-    <div className={`fixed inset-0 ${zIndex} bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto mobile-modal`}>
-      <div className="bg-white rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 my-auto text-xs max-h-[92vh] overflow-y-auto">
-        <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+    <div className={`fixed inset-0 ${zIndex} bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 mobile-modal`}>
+      <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 text-xs flex flex-col max-h-[92dvh] overflow-hidden">
+        <div className="shrink-0 flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-white">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center">
               {isEditing ? <Edit3 className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
@@ -196,7 +243,8 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
               <p className="text-[11px] text-slate-400">{isEditing ? 'Atualização rápida de atendimento' : 'Cadastro rápido de atendimento'}</p>
             </div>
           </div>
-          <button aria-label="Fechar"
+          <button
+            aria-label="Fechar"
             type="button"
             onClick={onClose}
             className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
@@ -205,14 +253,21 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-3.5">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3.5">
           <div>
             <label className="block font-semibold text-slate-700 mb-1">
               Profissional Responsável <span className="text-rose-500">*</span>
             </label>
             <select
               value={professionalId}
-              onChange={e => setProfessionalId(e.target.value)}
+              onChange={e => {
+                const nextPrimary = e.target.value;
+                setProfessionalId(nextPrimary);
+                if (nextPrimary) {
+                  setLinkedProfessionalIds(prev => Array.from(new Set([nextPrimary, ...prev])));
+                }
+              }}
               className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium"
               required
             >
@@ -223,6 +278,18 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
                 </option>
               ))}
             </select>
+
+            {showStudioConfig && (
+              <div className="mt-2">
+                <LinkedInstructorsSelector
+                  professionals={professionals}
+                  primaryProfessionalId={professionalId}
+                  selectedIds={linkedProfessionalIds}
+                  onChange={setLinkedProfessionalIds}
+                  lockedIds={lockedLinkedInstructorIds}
+                />
+              </div>
+            )}
           </div>
 
           <div>
@@ -367,6 +434,19 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
                   />
                 </div>
               )}
+              {serviceKind === 'group' && (
+                <ClassScheduleSection
+                  serviceId={isEditing ? serviceToEdit?.id : null}
+                  serviceModality={modality}
+                  durationMinutes={Number(durationMinutes) || 50}
+                  defaultCapacity={Number(defaultCapacity) || 10}
+                  defaultProfessionalId={professionalId}
+                  professionals={selectableScheduleProfessionals}
+                  rooms={rooms}
+                  draftSchedules={draftSchedules}
+                  onDraftSchedulesChange={setDraftSchedules}
+                />
+              )}
               <ServiceRecurrenceConfigPanel
                 allowRecurrence={allowRecurrence}
                 allowedFrequencies={allowedFrequencies}
@@ -392,20 +472,6 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
             </div>
           )}
 
-          {showStudioConfig && serviceKind === 'group' && (
-            <ClassScheduleSection
-              serviceId={isEditing ? serviceToEdit?.id : null}
-              serviceModality={modality}
-              durationMinutes={Number(durationMinutes) || 50}
-              defaultCapacity={Number(defaultCapacity) || 10}
-              defaultProfessionalId={professionalId}
-              professionals={professionals}
-              rooms={rooms}
-              draftSchedules={draftSchedules}
-              onDraftSchedulesChange={setDraftSchedules}
-            />
-          )}
-
           <div>
             <label className="block font-semibold text-slate-700 mb-1">Descrição (opcional)</label>
             <textarea
@@ -416,8 +482,9 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
               className="w-full border border-slate-200 rounded-xl p-2.5 text-xs resize-none"
             />
           </div>
+          </div>
 
-          <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+          <div className="shrink-0 flex justify-end gap-2 px-5 py-3.5 border-t border-slate-100 bg-white">
             <button
               type="button"
               onClick={onClose}

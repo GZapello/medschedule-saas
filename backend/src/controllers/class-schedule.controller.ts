@@ -22,10 +22,12 @@ export class ClassScheduleController {
       const schedules = ClassScheduleService.listForService(tenantId, serviceId, {
         includeInactive
       });
+      const diagnostics = ClassScheduleService.diagnoseServiceSchedules(tenantId, serviceId);
 
       return res.json({
         schedules,
-        weeklySummary: buildWeeklyScheduleSummary(schedules)
+        weeklySummary: buildWeeklyScheduleSummary(schedules),
+        diagnostics
       });
     } catch (err: any) {
       return res.status(err?.status || 500).json({
@@ -65,7 +67,8 @@ export class ClassScheduleController {
         created: result.created,
         warnings: result.warnings,
         schedules,
-        weeklySummary: buildWeeklyScheduleSummary(schedules)
+        weeklySummary: buildWeeklyScheduleSummary(schedules),
+        diagnostics: ClassScheduleService.diagnoseServiceSchedules(tenantId, serviceId, schedules)
       });
     } catch (err: any) {
       return res.status(err?.status || 500).json({
@@ -100,7 +103,8 @@ export class ClassScheduleController {
         schedule: result.schedule,
         warnings: result.warnings,
         schedules,
-        weeklySummary: buildWeeklyScheduleSummary(schedules)
+        weeklySummary: buildWeeklyScheduleSummary(schedules),
+        diagnostics: ClassScheduleService.diagnoseServiceSchedules(tenantId, serviceId, schedules)
       });
     } catch (err: any) {
       return res.status(err?.status || 500).json({
@@ -139,7 +143,8 @@ export class ClassScheduleController {
         schedule: result.schedule,
         warnings: result.warnings,
         schedules,
-        weeklySummary: buildWeeklyScheduleSummary(schedules)
+        weeklySummary: buildWeeklyScheduleSummary(schedules),
+        diagnostics: ClassScheduleService.diagnoseServiceSchedules(tenantId, serviceId, schedules)
       });
     } catch (err: any) {
       return res.status(err?.status || 500).json({
@@ -174,7 +179,8 @@ export class ClassScheduleController {
       return res.json({
         ...result,
         schedules,
-        weeklySummary: buildWeeklyScheduleSummary(schedules)
+        weeklySummary: buildWeeklyScheduleSummary(schedules),
+        diagnostics: ClassScheduleService.diagnoseServiceSchedules(tenantId, serviceId, schedules)
       });
     } catch (err: any) {
       return res.status(err?.status || 500).json({

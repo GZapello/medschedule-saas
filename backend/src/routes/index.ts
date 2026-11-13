@@ -364,7 +364,7 @@ api.delete('/v1/professionals/:id/service-commissions/:serviceId', requireTenant
 // Serviços e Salas
 api.get('/v1/services', requireTenant, ServiceController.list);
 api.post('/v1/services', requireTenant, requirePermissionOrRole('manage_services', 'clinic_admin'), ServiceController.create);
-api.put('/v1/services/:id', requireTenant, requireRole('clinic_admin'), ServiceController.update);
+api.put('/v1/services/:id', requireTenant, requirePermissionOrRole('manage_services', 'clinic_admin'), ServiceController.update);
 api.delete('/v1/services/:id', requireTenant, requireRole('clinic_admin'), ServiceController.delete);
 api.get('/v1/services/:serviceId/class-schedules', requireTenant, requireStudioEstablishment, ClassScheduleController.list);
 api.post('/v1/services/:serviceId/class-schedules', requireTenant, requireStudioEstablishment, requirePermissionOrRole('manage_services', 'clinic_admin'), ClassScheduleController.create);

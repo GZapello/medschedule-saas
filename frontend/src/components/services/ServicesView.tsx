@@ -24,6 +24,7 @@ import {
 import { PackageModal } from './PackageModal';
 import { ClassScheduleSection, DraftClassScheduleInput } from './ClassScheduleSection';
 import { ServiceRecurrenceConfigPanel } from './ServiceRecurrenceConfigPanel';
+import { LinkedInstructorsSelector } from './LinkedInstructorsSelector';
 import {
   isMixedProfile,
   isStudioProfile,
@@ -335,6 +336,7 @@ export const ServicesView: React.FC = () => {
   // Modal Novo Serviço
   const [showServiceModal, setShowServiceModal] = useState<boolean>(false);
   const [professionalId, setProfessionalId] = useState<string>('');
+  const [linkedProfessionalIds, setLinkedProfessionalIds] = useState<string[]>([]);
   const [clinicalModule, setClinicalModule] = useState<string>('');
   const [name, setName] = useState<string>('');
   const [specialtyId, setSpecialtyId] = useState<string>('');
@@ -357,6 +359,7 @@ export const ServicesView: React.FC = () => {
   // Modal Editar Serviço
   const [editingService, setEditingService] = useState<Service | null>(null);
   const [editProfessionalId, setEditProfessionalId] = useState<string>('');
+  const [editLinkedProfessionalIds, setEditLinkedProfessionalIds] = useState<string[]>([]);
   const [editClinicalModule, setEditClinicalModule] = useState<string>('');
   const [editName, setEditName] = useState<string>('');
   const [editSpecialtyId, setEditSpecialtyId] = useState<string>('');
@@ -461,6 +464,9 @@ export const ServicesView: React.FC = () => {
 
   const handleSelectProfessional = (newProfId: string) => {
     setProfessionalId(newProfId);
+    if (newProfId) {
+      setLinkedProfessionalIds(prev => Array.from(new Set([newProfId, ...prev])));
+    }
     const prof = professionals.find(p => p.id === newProfId);
     const mods = getModulesForProfessional(prof, authContext);
     
@@ -491,6 +497,9 @@ export const ServicesView: React.FC = () => {
 
   const handleSelectEditProfessional = (newProfId: string) => {
     setEditProfessionalId(newProfId);
+    if (newProfId) {
+      setEditLinkedProfessionalIds(prev => Array.from(new Set([newProfId, ...prev])));
+    }
     const prof = professionals.find(p => p.id === newProfId);
     const mods = getModulesForProfessional(prof, authContext);
     
@@ -532,8 +541,12 @@ export const ServicesView: React.FC = () => {
 
     try {
       const effectiveKind = showCreateStudioConfig ? serviceKind : 'individual';
-      await ApiClient.post('/v1/services', {
+      const normalizedCreateLinked = showCreateStudioConfig
+        ? Array.from(new Set([professionalId, ...linkedProfessionalIds].filter(Boolean)))
+        : [professionalId];
+      const createdRes = await ApiClient.post<any>('/v1/services', {
         professionalId,
+        ...(showCreateStudioConfig ? { linkedProfessionalIds: normalizedCreateLinked } : {}),
         clinicalModule: clinicalModule || null,
         name: name.trim(),
         specialtyId: specialtyId || null,
@@ -558,7 +571,20 @@ export const ServicesView: React.FC = () => {
         reminderUnit: reminderEnabled ? reminderUnit : 'DAYS'
       });
 
-      showToast('Serviço cadastrado com sucesso!', 'success');
+      const activeSchedsCount = Array.isArray(createdRes?.class_schedules)
+        ? createdRes.class_schedules.filter((cs: any) => Number(cs.active) !== 0).length
+        : 0;
+      if (showCreateStudioConfig && effectiveKind === 'group' && activeSchedsCount === 0) {
+        showToast(
+          'Aula salva como rascunho interno! Adicione pelo menos um dia e horário para disponibilizá-la no agendamento online.',
+          'info'
+        );
+      } else {
+        showToast('Serviço cadastrado com sucesso!', 'success');
+      }
+      if (Array.isArray(createdRes?.schedule_warnings) && createdRes.schedule_warnings.length > 0) {
+        showToast(createdRes.schedule_warnings[0], 'info');
+      }
       setShowServiceModal(false);
       setName('');
       setServiceDomain(isPureStudio ? 'studio' : 'clinical');
@@ -568,6 +594,7 @@ export const ServicesView: React.FC = () => {
       setAllowedFrequencies(['weekly']);
       setDefaultFrequency('weekly');
       setDraftClassSchedules([]);
+      setLinkedProfessionalIds(professionalId ? [professionalId] : []);
       setDescription('');
       setReminderEnabled(false);
       setReminderValue(30);
@@ -642,6 +669,10 @@ export const ServicesView: React.FC = () => {
     );
     setEditDefaultFrequency(recCfg.defaultFrequency || 'weekly');
     setEditDescription(s.description || '');
+    const existingEditLinked = Array.isArray(s.linked_professional_ids) && s.linked_professional_ids.length > 0
+      ? s.linked_professional_ids
+      : (profId ? [profId] : []);
+    setEditLinkedProfessionalIds(Array.from(new Set([profId, ...existingEditLinked].filter(Boolean))));
     setEditActive(s.active === 1);
     setEditReminderEnabled(Boolean(s.reminder_enabled));
     setEditReminderValue(s.reminder_value || 30);
@@ -663,8 +694,12 @@ export const ServicesView: React.FC = () => {
     try {
       setUpdating(true);
       const effectiveEditKind = showEditStudioConfig ? editServiceKind : 'individual';
-      await ApiClient.put(`/v1/services/${editingService.id}`, {
+      const normalizedEditLinked = showEditStudioConfig
+        ? Array.from(new Set([editProfessionalId, ...editLinkedProfessionalIds].filter(Boolean)))
+        : [editProfessionalId];
+      const updRes = await ApiClient.put<any>(`/v1/services/${editingService.id}`, {
         professionalId: editProfessionalId,
+        ...(showEditStudioConfig ? { linkedProfessionalIds: normalizedEditLinked } : {}),
         clinicalModule: editClinicalModule || null,
         name: editName.trim(),
         specialtyId: editSpecialtyId || null,
@@ -689,7 +724,17 @@ export const ServicesView: React.FC = () => {
         reminderUnit: editReminderEnabled ? editReminderUnit : 'DAYS'
       });
 
-      showToast('Serviço atualizado com sucesso!', 'success');
+      const updSchedulesCount = Array.isArray(updRes?.class_schedules)
+        ? updRes.class_schedules.filter((cs: any) => Number(cs.active) !== 0).length
+        : 0;
+      if (showEditStudioConfig && effectiveEditKind === 'group' && updSchedulesCount === 0) {
+        showToast(
+          'Aula atualizada como rascunho interno. Adicione dias e horários para disponibilizá-la no agendamento online.',
+          'info'
+        );
+      } else {
+        showToast('Serviço atualizado com sucesso!', 'success');
+      }
       setEditingService(null);
       fetchData();
     } catch (err: any) {
@@ -721,18 +766,20 @@ export const ServicesView: React.FC = () => {
     const profMap = new Map<string, Professional>();
     professionals.forEach(p => profMap.set(p.id, p));
 
-    // Se filtrou por um profissional específico
+    // Se filtrou por um profissional específico, inclui serviços em que ele é responsável OU instrutor vinculado
     if (selectedProfFilter !== 'all') {
       const prof = profMap.get(selectedProfFilter);
       return [{
         profId: selectedProfFilter,
         profName: prof?.name || 'Profissional',
         professionName: prof?.profession_name || '',
-        items: services.filter(s => s.professional_id === selectedProfFilter)
+        items: services.filter(
+          s => s.professional_id === selectedProfFilter || s.linked_professional_ids?.includes(selectedProfFilter)
+        )
       }];
     }
 
-    // Se 'Todos', agrupa em seções por profissional
+    // Se 'Todos', agrupa em seções pelo profissional responsável (sem duplicar o card do serviço compartilhado)
     const groups: Array<{
       profId: string | null;
       profName: string;
@@ -764,11 +811,39 @@ export const ServicesView: React.FC = () => {
     return groups;
   }, [services, professionals, selectedProfFilter]);
 
+  const selectableCreateScheduleProfessionals = useMemo(() => {
+    const activeIds = new Set([professionalId, ...linkedProfessionalIds].filter(Boolean));
+    const matched = professionals.filter(p => activeIds.has(p.id));
+    return matched.length > 0 ? matched : professionals;
+  }, [professionals, professionalId, linkedProfessionalIds]);
+
+  const selectableEditScheduleProfessionals = useMemo(() => {
+    const activeIds = new Set([editProfessionalId, ...editLinkedProfessionalIds].filter(Boolean));
+    const matched = professionals.filter(p => activeIds.has(p.id));
+    return matched.length > 0 ? matched : professionals;
+  }, [professionals, editProfessionalId, editLinkedProfessionalIds]);
+
+  const lockedEditInstructorIds = useMemo(() => {
+    if (!editingService?.class_schedules) return [];
+    return Array.from(
+      new Set(
+        editingService.class_schedules
+          .filter(cs => Number(cs.active) !== 0)
+          .map(cs => cs.professional_id)
+          .filter(Boolean)
+      )
+    );
+  }, [editingService]);
+
   const handleOpenCreateModalForProf = (profId?: string | null) => {
     const targetId = profId || (professionals.length > 0 ? professionals[0].id : '');
     if (targetId) {
       handleSelectProfessional(targetId);
+      setLinkedProfessionalIds([targetId]);
+    } else {
+      setLinkedProfessionalIds([]);
     }
+    setDraftClassSchedules([]);
     setShowServiceModal(true);
   };
 
@@ -846,7 +921,9 @@ export const ServicesView: React.FC = () => {
               </span>
             </button>
             {professionals.map(p => {
-              const count = services.filter(s => s.professional_id === p.id).length;
+              const count = services.filter(
+                s => s.professional_id === p.id || s.linked_professional_ids?.includes(p.id)
+              ).length;
               const isSelected = selectedProfFilter === p.id;
               return (
                 <button
@@ -963,21 +1040,58 @@ export const ServicesView: React.FC = () => {
                           {s.description && (
                             <p className="text-xs text-slate-500 mt-2 line-clamp-2">{s.description}</p>
                           )}
+                          {isStudioCompatible && Array.isArray(s.linked_professionals) && s.linked_professionals.length > 1 && (
+                            <div className="mt-2 flex flex-wrap items-center gap-1 text-[10px] text-slate-600">
+                              <span className="font-bold text-slate-700 inline-flex items-center gap-1">
+                                <Users className="w-3 h-3 text-teal-600" />
+                                Instrutores ({s.linked_professionals.length}):
+                              </span>
+                              <span>
+                                {s.linked_professionals.map(lp => lp.name).join(', ')}
+                              </span>
+                            </div>
+                          )}
                           {isStudioCompatible && s.service_kind === 'group' && (
-                            <div className="mt-2.5 p-2 rounded-xl bg-teal-50/70 border border-teal-100 text-[11px] space-y-0.5">
-                              <div className="font-bold text-teal-800 flex items-center gap-1">
-                                <Calendar className="w-3 h-3" />
-                                Grade semanal
+                            <div
+                              className={`mt-2.5 p-2 rounded-xl border text-[11px] space-y-0.5 ${
+                                !s.weekly_schedule_summary?.length || (s.schedule_diagnostics && s.schedule_diagnostics.publishableCount === 0)
+                                  ? 'bg-amber-50/70 border-amber-200'
+                                  : 'bg-teal-50/70 border-teal-100'
+                              }`}
+                            >
+                              <div
+                                className={`font-bold flex items-center justify-between gap-1 ${
+                                  !s.weekly_schedule_summary?.length || (s.schedule_diagnostics && s.schedule_diagnostics.publishableCount === 0)
+                                    ? 'text-amber-800'
+                                    : 'text-teal-800'
+                                }`}
+                              >
+                                <span className="flex items-center gap-1">
+                                  <Calendar className="w-3 h-3" />
+                                  Grade semanal
+                                </span>
+                                {(!s.weekly_schedule_summary?.length || (s.schedule_diagnostics && s.schedule_diagnostics.publishableCount === 0)) && (
+                                  <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">
+                                    Sem horários públicos
+                                  </span>
+                                )}
                               </div>
                               {Array.isArray(s.weekly_schedule_summary) && s.weekly_schedule_summary.length > 0 ? (
-                                s.weekly_schedule_summary.slice(0, 3).map((item, idx) => (
-                                  <p key={idx} className="text-slate-700 truncate" title={item.text}>
-                                    • {item.weekdaysLabel} — {item.timeRange}
-                                  </p>
-                                ))
+                                <>
+                                  {s.weekly_schedule_summary.slice(0, 3).map((item, idx) => (
+                                    <p key={idx} className="text-slate-700 truncate" title={item.text}>
+                                      • {item.weekdaysLabel} — {item.timeRange} ({item.professionalName})
+                                    </p>
+                                  ))}
+                                  {s.schedule_diagnostics && s.schedule_diagnostics.publishableCount === 0 && s.schedule_diagnostics.blockers[0] && (
+                                    <p className="text-[10px] text-amber-700 font-medium pt-0.5">
+                                      {s.schedule_diagnostics.blockers[0]}
+                                    </p>
+                                  )}
+                                </>
                               ) : (
-                                <p className="text-amber-700 font-medium">
-                                  Sem dias/horários configurados — edite para definir turmas.
+                                <p className="text-amber-800 font-medium">
+                                  Esta aula ainda não possui dias e horários cadastrados. Edite para adicionar à grade pública.
                                 </p>
                               )}
                             </div>
@@ -1216,6 +1330,17 @@ export const ServicesView: React.FC = () => {
                     </option>
                   ))}
                 </select>
+
+                {showCreateStudioConfig && (
+                  <div className="mt-2">
+                    <LinkedInstructorsSelector
+                      professionals={professionals}
+                      primaryProfessionalId={professionalId}
+                      selectedIds={linkedProfessionalIds}
+                      onChange={setLinkedProfessionalIds}
+                    />
+                  </div>
+                )}
               </div>
 
               <div>
@@ -1398,6 +1523,19 @@ export const ServicesView: React.FC = () => {
                       />
                     </div>
                   )}
+                  {serviceKind === 'group' && (
+                    <ClassScheduleSection
+                      serviceId={null}
+                      serviceModality={modality}
+                      durationMinutes={Number(durationMinutes) || 50}
+                      defaultCapacity={Number(defaultCapacity) || 10}
+                      defaultProfessionalId={professionalId}
+                      professionals={selectableCreateScheduleProfessionals}
+                      rooms={rooms}
+                      draftSchedules={draftClassSchedules}
+                      onDraftSchedulesChange={setDraftClassSchedules}
+                    />
+                  )}
                   <ServiceRecurrenceConfigPanel
                     allowRecurrence={allowRecurrence}
                     allowedFrequencies={allowedFrequencies}
@@ -1421,20 +1559,6 @@ export const ServicesView: React.FC = () => {
                     <span>Permitir agendamentos recorrentes neste serviço</span>
                   </label>
                 </div>
-              )}
-
-              {showCreateStudioConfig && serviceKind === 'group' && (
-                <ClassScheduleSection
-                  serviceId={null}
-                  serviceModality={modality}
-                  durationMinutes={Number(durationMinutes) || 50}
-                  defaultCapacity={Number(defaultCapacity) || 10}
-                  defaultProfessionalId={professionalId}
-                  professionals={professionals}
-                  rooms={rooms}
-                  draftSchedules={draftClassSchedules}
-                  onDraftSchedulesChange={setDraftClassSchedules}
-                />
               )}
 
               <div>
@@ -1597,6 +1721,18 @@ export const ServicesView: React.FC = () => {
                     </option>
                   ))}
                 </select>
+
+                {showEditStudioConfig && (
+                  <div className="mt-2">
+                    <LinkedInstructorsSelector
+                      professionals={professionals}
+                      primaryProfessionalId={editProfessionalId}
+                      selectedIds={editLinkedProfessionalIds}
+                      onChange={setEditLinkedProfessionalIds}
+                      lockedIds={lockedEditInstructorIds}
+                    />
+                  </div>
+                )}
               </div>
 
               <div>
@@ -1797,6 +1933,41 @@ export const ServicesView: React.FC = () => {
                       />
                     </div>
                   )}
+                  {editServiceKind === 'group' && editingService && (
+                    <ClassScheduleSection
+                      serviceId={editingService.id}
+                      serviceModality={editModality}
+                      durationMinutes={Number(editDurationMinutes) || 50}
+                      defaultCapacity={Number(editDefaultCapacity) || 10}
+                      defaultProfessionalId={editProfessionalId}
+                      professionals={selectableEditScheduleProfessionals}
+                      rooms={rooms}
+                      onSchedulesChanged={(nextSchedules, nextSummary, nextDiag) => {
+                        setEditingService(prev =>
+                          prev
+                            ? {
+                                ...prev,
+                                class_schedules: nextSchedules,
+                                weekly_schedule_summary: nextSummary,
+                                schedule_diagnostics: nextDiag ?? null
+                              }
+                            : prev
+                        );
+                        setServices(prev =>
+                          prev.map(item =>
+                            item.id === editingService.id
+                              ? {
+                                  ...item,
+                                  class_schedules: nextSchedules,
+                                  weekly_schedule_summary: nextSummary,
+                                  schedule_diagnostics: nextDiag ?? null
+                                }
+                              : item
+                          )
+                        );
+                      }}
+                    />
+                  )}
                   <ServiceRecurrenceConfigPanel
                     allowRecurrence={editAllowRecurrence}
                     allowedFrequencies={editAllowedFrequencies}
@@ -1820,27 +1991,6 @@ export const ServicesView: React.FC = () => {
                     <span>Permitir agendamentos recorrentes neste serviço</span>
                   </label>
                 </div>
-              )}
-
-              {showEditStudioConfig && editServiceKind === 'group' && editingService && (
-                <ClassScheduleSection
-                  serviceId={editingService.id}
-                  serviceModality={editModality}
-                  durationMinutes={Number(editDurationMinutes) || 50}
-                  defaultCapacity={Number(editDefaultCapacity) || 10}
-                  defaultProfessionalId={editProfessionalId}
-                  professionals={professionals}
-                  rooms={rooms}
-                  onSchedulesChanged={(nextSchedules, nextSummary) => {
-                    setServices(prev =>
-                      prev.map(item =>
-                        item.id === editingService.id
-                          ? { ...item, class_schedules: nextSchedules, weekly_schedule_summary: nextSummary }
-                          : item
-                      )
-                    );
-                  }}
-                />
               )}
 
               <div>

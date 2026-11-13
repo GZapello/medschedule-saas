@@ -223,8 +223,40 @@ export interface Service {
   allowed_recurrence_frequencies_json?: string | null;
   default_recurrence_frequency?: 'weekly' | 'biweekly' | 'monthly' | 'custom_weekdays' | null;
   modality_category?: string | null;
+  linked_professional_ids?: string[];
+  linked_professionals?: LinkedProfessionalItem[];
   class_schedules?: ClassScheduleItem[];
   weekly_schedule_summary?: WeeklyScheduleSummaryItem[];
+  schedule_diagnostics?: ServiceScheduleDiagnostics | null;
+}
+
+export interface LinkedProfessionalItem {
+  id: string;
+  name: string;
+  profession_name?: string | null;
+  active?: number;
+  public_booking_enabled?: number;
+  is_primary?: boolean;
+}
+
+export interface ServiceScheduleDiagnosticItem {
+  scheduleId: string;
+  dayOfWeek: number;
+  dayLabel: string;
+  timeRange: string;
+  professionalId: string;
+  professionalName: string;
+  publishable: boolean;
+  reasons: string[];
+}
+
+export interface ServiceScheduleDiagnostics {
+  totalCount: number;
+  activeCount: number;
+  publishableCount: number;
+  isPublicReady: boolean;
+  blockers: string[];
+  items: ServiceScheduleDiagnosticItem[];
 }
 
 export interface ClassScheduleItem {

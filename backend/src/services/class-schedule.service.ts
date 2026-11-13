@@ -56,6 +56,26 @@ export interface StudioClassSlotItem {
   unavailableReason?: string | null;
 }
 
+export interface ScheduleDiagnosticItem {
+  scheduleId: string;
+  dayOfWeek: number;
+  dayLabel: string;
+  timeRange: string;
+  professionalId: string;
+  professionalName: string;
+  publishable: boolean;
+  reasons: string[];
+}
+
+export interface ServiceScheduleDiagnostics {
+  totalCount: number;
+  activeCount: number;
+  publishableCount: number;
+  isPublicReady: boolean;
+  blockers: string[];
+  items: ScheduleDiagnosticItem[];
+}
+
 const WEEKDAY_PLURAL_LABELS = [
   'Domingos',
   'Segundas',
@@ -346,6 +366,108 @@ export class ClassScheduleService {
       map.set(row.service_id, list);
     }
     return map;
+  }
+
+  static diagnoseServiceSchedules(
+    tenantId: string,
+    serviceId: string,
+    prefetchedSchedules?: ClassScheduleRecord[]
+  ): ServiceScheduleDiagnostics {
+    const schedules = prefetchedSchedules ?? this.listForService(tenantId, serviceId, { includeInactive: true });
+    if (schedules.length === 0) {
+      return {
+        totalCount: 0,
+        activeCount: 0,
+        publishableCount: 0,
+        isPublicReady: false,
+        blockers: [
+          'Esta aula ainda não possui dias e horários cadastrados. Adicione pelo menos um horário para disponibilizá-la no agendamento online.'
+        ],
+        items: []
+      };
+    }
+
+    const profIds = [...new Set(schedules.map(s => s.professional_id).filter(Boolean))];
+    const profMap = new Map<string, { id: string; name: string; active: number; public_booking_enabled: number }>();
+    if (profIds.length > 0) {
+      const placeholders = profIds.map(() => '?').join(',');
+      const profRows = db
+        .prepare(`SELECT id, name, active, public_booking_enabled FROM professionals WHERE tenant_id = ? AND id IN (${placeholders})`)
+        .all(tenantId, ...profIds) as any[];
+      for (const p of profRows) {
+        profMap.set(p.id, p);
+      }
+    }
+
+    const todayStr = todayBrazilYmd();
+    const blockerSet = new Set<string>();
+    const items: ScheduleDiagnosticItem[] = [];
+    let activeCount = 0;
+    let publishableCount = 0;
+
+    for (const s of schedules) {
+      const isActive = Number(s.active) !== 0;
+      if (isActive) activeCount++;
+
+      const reasons: string[] = [];
+      const dayLabel = WEEKDAY_SINGULAR_LABELS[Number(s.day_of_week)] || `Dia ${s.day_of_week}`;
+      const timeRange = `${s.start_time.slice(0, 5)}–${s.end_time.slice(0, 5)}`;
+      const prof = profMap.get(s.professional_id);
+      const profName = prof?.name || s.professional_name || 'Instrutor';
+
+      if (!isActive) {
+        reasons.push('Horário pausado / inativo na grade semanal.');
+      }
+      if (!prof || Number(prof.active) !== 1) {
+        reasons.push(`Instrutor (${profName}) está inativo no estabelecimento.`);
+      } else if (Number(prof.public_booking_enabled) !== 1) {
+        reasons.push(`Instrutor (${profName}) está com o agendamento público desativado.`);
+      }
+
+      const startMin = parseHHMMToMinutes(s.start_time);
+      const endMin = parseHHMMToMinutes(s.end_time);
+      if (startMin >= 0 && endMin > startMin) {
+        const instrCheck = checkInstructorGeneralSchedule(tenantId, s.professional_id, Number(s.day_of_week), startMin, endMin);
+        if (!instrCheck.ok) {
+          reasons.push(`${dayLabel} ${timeRange}: fora da escala geral de atendimento de ${profName}.`);
+        }
+        const clinicCheck = checkClinicBusinessHours(tenantId, Number(s.day_of_week), startMin, endMin);
+        if (!clinicCheck.ok) {
+          reasons.push(`${dayLabel} ${timeRange}: fora do horário de funcionamento do estabelecimento.`);
+        }
+      }
+
+      if (s.effective_end_date && s.effective_end_date < todayStr) {
+        const [y, m, d] = s.effective_end_date.split('-');
+        reasons.push(`Vigência encerrada em ${d}/${m}/${y}.`);
+      }
+
+      const publishable = reasons.length === 0;
+      if (publishable) publishableCount++;
+      for (const r of reasons) {
+        blockerSet.add(r);
+      }
+
+      items.push({
+        scheduleId: s.id,
+        dayOfWeek: Number(s.day_of_week),
+        dayLabel,
+        timeRange,
+        professionalId: s.professional_id,
+        professionalName: profName,
+        publishable,
+        reasons
+      });
+    }
+
+    return {
+      totalCount: schedules.length,
+      activeCount,
+      publishableCount,
+      isPublicReady: publishableCount > 0,
+      blockers: [...blockerSet],
+      items
+    };
   }
 
   private static ensureInstructorLinkedToServiceTx(tenantId: string, professionalId: string, serviceRow: any): void {
@@ -1154,9 +1276,23 @@ export class ClassScheduleService {
     });
 
     if (allSchedules.length === 0) {
+      const rawSchedules = this.listForService(tenantId, serviceRow.id, {
+        includeInactive: true,
+        publicOnly: false
+      });
+      if (rawSchedules.length === 0) {
+        return {
+          slots: [],
+          emptyReason: 'Esta aula coletiva ainda não possui horários cadastrados na grade semanal.',
+          weeklySchedules: []
+        };
+      }
+      const diag = this.diagnoseServiceSchedules(tenantId, serviceRow.id, rawSchedules);
       return {
         slots: [],
-        emptyReason: 'Esta aula coletiva ainda não possui horários cadastrados na grade semanal.',
+        emptyReason:
+          diag.blockers[0] ||
+          'Os horários cadastrados na grade semanal desta aula não estão disponíveis para agendamento online no momento.',
         weeklySchedules: []
       };
     }
@@ -1173,9 +1309,25 @@ export class ClassScheduleService {
     });
 
     if (matching.length === 0) {
+      let emptyReason = 'Não há turma programada para este dia na grade semanal desta aula.';
+      if (params.professionalId && params.professionalId !== 'any') {
+        const hasProfSchedules = allSchedules.some(s => s.professional_id === params.professionalId);
+        if (!hasProfSchedules) {
+          emptyReason = 'O instrutor selecionado não possui turmas cadastradas para esta aula.';
+        }
+      } else if (allSchedules.some(s => Number(s.day_of_week) === dow && dateStr < s.effective_start_date)) {
+        const nextStart = allSchedules
+          .filter(s => Number(s.day_of_week) === dow && dateStr < s.effective_start_date)
+          .map(s => s.effective_start_date)
+          .sort()[0];
+        if (nextStart) {
+          const [y, m, d] = nextStart.split('-');
+          emptyReason = `Esta turma inicia a vigência somente a partir de ${d}/${m}/${y}.`;
+        }
+      }
       return {
         slots: [],
-        emptyReason: 'Não há turma programada para este dia na grade semanal desta aula.',
+        emptyReason,
         weeklySchedules: allSchedules
       };
     }
@@ -1344,6 +1496,91 @@ export class ClassScheduleService {
     }
 
     return upcoming;
+  }
+
+  /**
+   * Fornece motivo seguro e legível quando não há horários públicos disponíveis para um serviço nos próximos dias.
+   */
+  static explainEmptyPublicAvailability(params: {
+    tenantId: string;
+    serviceRow: any;
+    professionalId?: string;
+    startDate?: string;
+    daysAhead?: number;
+  }): string {
+    const startDate = params.startDate || todayBrazilYmd();
+    const maxScanDays = Math.min(45, Math.max(7, params.daysAhead || 21));
+
+    if (params.serviceRow.service_kind === 'group') {
+      const rawSchedules = this.listForService(params.tenantId, params.serviceRow.id, {
+        includeInactive: true,
+        publicOnly: false
+      });
+      if (rawSchedules.length === 0) {
+        return 'Esta aula coletiva ainda não possui horários cadastrados na grade semanal.';
+      }
+      const diag = this.diagnoseServiceSchedules(params.tenantId, params.serviceRow.id, rawSchedules);
+      if (diag.publishableCount === 0) {
+        return diag.blockers[0] || 'Os horários desta aula estão pausados ou aguardando liberação de escala do instrutor.';
+      }
+
+      const publicActive = this.listForService(params.tenantId, params.serviceRow.id, {
+        includeInactive: false,
+        publicOnly: true
+      });
+      if (params.professionalId && params.professionalId !== 'any') {
+        const filtered = publicActive.filter(s => s.professional_id === params.professionalId);
+        if (filtered.length === 0) {
+          return 'O instrutor selecionado não possui horários disponíveis no agendamento online para esta aula.';
+        }
+        const profBlockedItem = diag.items.find(
+          it => it.professionalId === params.professionalId && !it.publishable
+        );
+        if (profBlockedItem && profBlockedItem.reasons.length > 0) {
+          return profBlockedItem.reasons[0];
+        }
+      }
+
+      const endScanDate = addDaysYmd(startDate, maxScanDays);
+      const futureStarts = publicActive
+        .filter(s => s.effective_start_date > endScanDate)
+        .map(s => s.effective_start_date)
+        .sort();
+      if (futureStarts.length === publicActive.length && futureStarts[0]) {
+        const [y, m, d] = futureStarts[0].split('-');
+        return `As turmas desta aula iniciam vigência a partir de ${d}/${m}/${y}.`;
+      }
+
+      if (diag.blockers.length > 0) {
+        return diag.blockers[0];
+      }
+      return 'Todas as turmas programadas nos próximos dias estão bloqueadas ou fora da disponibilidade do instrutor.';
+    }
+
+    // Serviço individual
+    const profFilter = params.professionalId && params.professionalId !== 'any' ? params.professionalId : null;
+    const linkedProfs = db.prepare(`
+      SELECT DISTINCT p.id, p.name, p.active, p.public_booking_enabled
+      FROM professionals p
+      LEFT JOIN professional_services ps ON ps.professional_id = p.id AND ps.service_id = ?
+      JOIN services s ON s.id = ? AND s.tenant_id = p.tenant_id
+      WHERE p.tenant_id = ?
+        AND (s.professional_id = p.id OR ps.professional_id = p.id)
+        ${profFilter ? 'AND p.id = ?' : ''}
+    `).all(
+      ...(profFilter
+        ? [params.serviceRow.id, params.serviceRow.id, params.tenantId, profFilter]
+        : [params.serviceRow.id, params.serviceRow.id, params.tenantId])
+    ) as any[];
+
+    if (linkedProfs.length === 0) {
+      return 'Nenhum instrutor está vinculado a esta aula no momento.';
+    }
+    const eligibleProfs = linkedProfs.filter(p => Number(p.active) === 1 && Number(p.public_booking_enabled) === 1);
+    if (eligibleProfs.length === 0) {
+      return 'Os instrutores vinculados a esta aula estão inativos ou com o agendamento público desativado.';
+    }
+    return 'Não há horários disponíveis na escala dos instrutores vinculados para os próximos dias.';
   }
 
   /**

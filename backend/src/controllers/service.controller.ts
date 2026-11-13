@@ -14,6 +14,231 @@ import {
   ServiceDomain
 } from '../utils/establishment-context';
 
+export interface LinkedProfessionalSummary {
+  id: string;
+  name: string;
+  profession_name: string | null;
+  active: number;
+  public_booking_enabled: number;
+  is_primary: boolean;
+}
+
+function parseLinkedInstructorIds(body: any): string[] | undefined {
+  const raw = body?.linkedProfessionalIds !== undefined ? body.linkedProfessionalIds : body?.linked_professional_ids;
+  if (raw === undefined) return undefined;
+  if (!Array.isArray(raw)) {
+    throw Object.assign(new Error('Lista de instrutores vinculados inválida.'), { status: 400 });
+  }
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of raw) {
+    const id = String(item || '').trim();
+    if (id && !seen.has(id)) {
+      seen.add(id);
+      out.push(id);
+    }
+  }
+  return out;
+}
+
+function getLinkedProfessionalsMap(
+  tenantId: string,
+  primaryByService: Map<string, string | null>
+): Map<string, LinkedProfessionalSummary[]> {
+  const rows = db.prepare(`
+    SELECT DISTINCT
+      s.id as service_id,
+      p.id as id,
+      p.name as name,
+      COALESCE(pr.name, p.profession_name) as profession_name,
+      p.active as active,
+      p.public_booking_enabled as public_booking_enabled,
+      CASE WHEN s.professional_id = p.id THEN 1 ELSE 0 END as is_primary
+    FROM services s
+    JOIN professionals p
+      ON p.tenant_id = s.tenant_id
+     AND (
+       p.id = s.professional_id
+       OR EXISTS (
+         SELECT 1 FROM professional_services ps
+         WHERE ps.service_id = s.id AND ps.professional_id = p.id
+       )
+     )
+    LEFT JOIN professions pr ON pr.id = p.profession_id
+    WHERE s.tenant_id = ?
+    ORDER BY is_primary DESC, p.name ASC
+  `).all(tenantId) as Array<Omit<LinkedProfessionalSummary, 'is_primary'> & { service_id: string; is_primary: number }>;
+
+  const map = new Map<string, LinkedProfessionalSummary[]>();
+  for (const row of rows) {
+    const list = map.get(row.service_id) || [];
+    if (!list.some(x => x.id === row.id)) {
+      const primaryId = primaryByService.get(row.service_id) || null;
+      list.push({
+        id: row.id,
+        name: row.name,
+        profession_name: row.profession_name || null,
+        active: Number(row.active ?? 1),
+        public_booking_enabled: Number(row.public_booking_enabled ?? 1),
+        is_primary: primaryId ? row.id === primaryId : Boolean(row.is_primary)
+      });
+      map.set(row.service_id, list);
+    }
+  }
+  return map;
+}
+
+function validateAndSyncLinkedInstructorsTx(params: {
+  tenantId: string;
+  serviceId: string;
+  primaryProfId: string | null;
+  requestedIds: string[] | undefined;
+  isStudioCompat: boolean;
+  serviceDomain: ServiceDomain;
+  price: number | null;
+  durationMinutes: number | null;
+  isUpdate: boolean;
+}): void {
+  const {
+    tenantId,
+    serviceId,
+    primaryProfId,
+    requestedIds,
+    isStudioCompat,
+    serviceDomain,
+    price,
+    durationMinutes,
+    isUpdate
+  } = params;
+
+  const existingLinkedRows = db
+    .prepare(`
+      SELECT ps.professional_id
+      FROM professional_services ps
+      JOIN professionals p ON p.id = ps.professional_id AND p.tenant_id = ?
+      WHERE ps.service_id = ?
+    `)
+    .all(tenantId, serviceId) as Array<{ professional_id: string }>;
+  const existingSet = new Set(existingLinkedRows.map(r => r.professional_id));
+
+  let desiredIds: string[] | null = null;
+  if (requestedIds !== undefined) {
+    if (!isStudioCompat || serviceDomain === 'clinical') {
+      const hasExtraBeyondPrimary = requestedIds.some(pid => pid !== primaryProfId);
+      if (hasExtraBeyondPrimary) {
+        throw Object.assign(
+          new Error('Vínculo de múltiplos instrutores está disponível apenas para serviços do segmento Studio.'),
+          { status: 400, code: 'MULTI_INSTRUCTOR_NOT_ALLOWED' }
+        );
+      }
+    }
+    desiredIds = Array.from(new Set([primaryProfId, ...requestedIds].filter(Boolean) as string[]));
+  } else if (!isUpdate && primaryProfId) {
+    desiredIds = [primaryProfId];
+  } else if (isUpdate && primaryProfId) {
+    // Se não enviou linkedProfessionalIds explicitamente no PUT, garante o responsável na tabela sem remover extras existentes
+    db.prepare(`
+      INSERT INTO professional_services (id, professional_id, service_id, custom_price, custom_duration)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(professional_id, service_id) DO UPDATE SET
+        custom_price = excluded.custom_price,
+        custom_duration = excluded.custom_duration
+    `).run('ps-' + uuidv4().slice(0, 8), primaryProfId, serviceId, price, durationMinutes);
+    return;
+  }
+
+  if (!desiredIds) return;
+
+  for (const pid of desiredIds) {
+    const profRow = db
+      .prepare('SELECT id, name, active FROM professionals WHERE id = ? AND tenant_id = ?')
+      .get(pid, tenantId) as { id: string; name: string; active: number } | undefined;
+    if (!profRow) {
+      throw Object.assign(
+        new Error('Instrutor selecionado não pertence a este estabelecimento.'),
+        { status: 400, code: 'CROSS_TENANT_OR_MISSING_INSTRUCTOR' }
+      );
+    }
+    if (!existingSet.has(pid) && Number(profRow.active) !== 1) {
+      throw Object.assign(
+        new Error(`O instrutor "${profRow.name}" está inativo e não pode ser vinculado ao serviço.`),
+        { status: 400, code: 'INACTIVE_INSTRUCTOR' }
+      );
+    }
+  }
+
+  if (isUpdate) {
+    const removedIds = Array.from(existingSet).filter(eid => !desiredIds!.includes(eid));
+    const nowLocalIso = new Intl.DateTimeFormat('sv-SE', {
+      timeZone: 'America/Sao_Paulo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    }).format(new Date()).replace(' ', 'T');
+
+    for (const remId of removedIds) {
+      const activeScheduleCount = (
+        db
+          .prepare('SELECT COUNT(*) as c FROM class_schedules WHERE tenant_id = ? AND service_id = ? AND professional_id = ? AND active = 1')
+          .get(tenantId, serviceId, remId) as { c: number }
+      ).c;
+      if (activeScheduleCount > 0) {
+        const remProf = db.prepare('SELECT name FROM professionals WHERE id = ?').get(remId) as { name?: string } | undefined;
+        throw Object.assign(
+          new Error(
+            `Não é possível desvincular ${remProf?.name || 'este instrutor'} porque ele possui ${activeScheduleCount} horário(s) ativo(s) na grade semanal desta aula. Altere ou pause o horário primeiro.`
+          ),
+          { status: 409, code: 'INSTRUCTOR_HAS_ACTIVE_SCHEDULES' }
+        );
+      }
+
+      const futureApptCount = (
+        db
+          .prepare(`
+            SELECT COUNT(*) as c FROM appointments
+            WHERE tenant_id = ? AND service_id = ? AND professional_id = ?
+              AND status NOT IN ('cancelled', 'no_show', 'completed')
+              AND REPLACE(start_time, ' ', 'T') >= ?
+          `)
+          .get(tenantId, serviceId, remId, nowLocalIso) as { c: number }
+      ).c;
+      if (futureApptCount > 0) {
+        const remProf = db.prepare('SELECT name FROM professionals WHERE id = ?').get(remId) as { name?: string } | undefined;
+        throw Object.assign(
+          new Error(
+            `Não é possível desvincular ${remProf?.name || 'este instrutor'} porque há ${futureApptCount} aula(s) futura(s) agendada(s) com ele neste serviço.`
+          ),
+          { status: 409, code: 'INSTRUCTOR_HAS_FUTURE_BOOKINGS' }
+        );
+      }
+
+      db.prepare('DELETE FROM professional_services WHERE service_id = ? AND professional_id = ?').run(serviceId, remId);
+    }
+  }
+
+  for (const pid of desiredIds) {
+    db.prepare(`
+      INSERT INTO professional_services (id, professional_id, service_id, custom_price, custom_duration)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(professional_id, service_id) DO UPDATE SET
+        custom_price = CASE WHEN ? = 1 THEN excluded.custom_price ELSE professional_services.custom_price END,
+        custom_duration = CASE WHEN ? = 1 THEN excluded.custom_duration ELSE professional_services.custom_duration END
+    `).run(
+      'ps-' + uuidv4().slice(0, 8),
+      pid,
+      serviceId,
+      price,
+      durationMinutes,
+      pid === primaryProfId ? 1 : 0,
+      pid === primaryProfId ? 1 : 0
+    );
+  }
+}
+
 export class ServiceController {
   static list(req: Request, res: Response): void {
     try {
@@ -71,6 +296,11 @@ export class ServiceController {
       const schedulesByService = isStudioCompat
         ? ClassScheduleService.listByTenantGrouped(tenantId, { includeInactive: true })
         : new Map();
+      const primaryByService = new Map<string, string | null>(services.map(s => [s.id, s.professional_id || null]));
+      const linkedByService = isStudioCompat
+        ? getLinkedProfessionalsMap(tenantId, primaryByService)
+        : new Map<string, LinkedProfessionalSummary[]>();
+
       const enriched = services.map(srv => {
         const resolvedDomain = resolveServiceDomain({
           establishmentProfile,
@@ -86,20 +316,33 @@ export class ServiceController {
             service_domain: 'clinical',
             allowed_recurrence_frequencies: undefined,
             default_recurrence_frequency: null,
+            linked_professional_ids: srv.professional_id ? [srv.professional_id] : [],
+            linked_professionals: [],
             class_schedules: [],
-            weekly_schedule_summary: []
+            weekly_schedule_summary: [],
+            schedule_diagnostics: null
           };
         }
         const schedules = schedulesByService.get(srv.id) || [];
         const recConfig = parseServiceRecurrenceConfig(srv);
+        const linkedProfs = linkedByService.get(srv.id) || [];
+        const linkedProfIds = linkedProfs.length > 0
+          ? linkedProfs.map(lp => lp.id)
+          : (srv.professional_id ? [srv.professional_id] : []);
+        const scheduleDiagnostics = (srv.service_kind || 'individual') === 'group'
+          ? ClassScheduleService.diagnoseServiceSchedules(tenantId, srv.id, schedules)
+          : null;
         return {
           ...srv,
           service_domain: resolvedDomain,
           allow_recurrence: recConfig.allowRecurrence ? 1 : 0,
           allowed_recurrence_frequencies: recConfig.allowedFrequencies,
           default_recurrence_frequency: recConfig.defaultFrequency,
+          linked_professional_ids: linkedProfIds,
+          linked_professionals: linkedProfs,
           class_schedules: schedules,
-          weekly_schedule_summary: buildWeeklyScheduleSummary(schedules)
+          weekly_schedule_summary: buildWeeklyScheduleSummary(schedules),
+          schedule_diagnostics: scheduleDiagnostics
         };
       });
       res.json(enriched);
@@ -137,6 +380,7 @@ export class ServiceController {
       const rawRequestedDomain = serviceDomain ?? service_domain;
       const rawAllowedFreqs = allowedRecurrenceFrequencies !== undefined ? allowedRecurrenceFrequencies : allowed_recurrence_frequencies;
       const rawDefaultFreq = defaultRecurrenceFrequency !== undefined ? defaultRecurrenceFrequency : default_recurrence_frequency;
+      const requestedLinkedIds = parseLinkedInstructorIds(req.body);
 
       if (!isStudioCompat) {
         if (
@@ -145,10 +389,11 @@ export class ServiceController {
           rawClassSchedules.length > 0 ||
           String(rawRequestedDomain || '').trim().toLowerCase() === 'studio' ||
           (Array.isArray(rawAllowedFreqs) && rawAllowedFreqs.length > 0) ||
-          (rawDefaultFreq !== undefined && rawDefaultFreq !== null && String(rawDefaultFreq).trim() !== '')
+          (rawDefaultFreq !== undefined && rawDefaultFreq !== null && String(rawDefaultFreq).trim() !== '') ||
+          (requestedLinkedIds && requestedLinkedIds.some(pid => pid !== professionalId))
         ) {
           res.status(400).json({
-            error: 'Aulas coletivas, capacidade de turma e recorrência avançada de Studio não estão disponíveis para Clínicas / Consultórios tradicionais.'
+            error: 'Aulas coletivas, múltiplos instrutores, capacidade de turma e recorrência avançada de Studio não estão disponíveis para Clínicas / Consultórios tradicionais.'
           });
           return;
         }
@@ -285,14 +530,20 @@ export class ServiceController {
           recNorm.defaultFrequency
         );
 
-        try {
-          const normalizedCustomPrice = price !== undefined && price !== null && price !== '' ? Number(price) : null;
-          const normalizedCustomDuration = durationMinutes !== undefined && durationMinutes !== null && durationMinutes !== '' ? Number(durationMinutes) : null;
-          db.prepare(`
-            INSERT OR REPLACE INTO professional_services (id, professional_id, service_id, custom_price, custom_duration)
-            VALUES (?, ?, ?, ?, ?)
-          `).run('ps-' + uuidv4().slice(0, 8), professionalId, id, normalizedCustomPrice, normalizedCustomDuration);
-        } catch (_) {}
+        const normalizedCustomPrice = price !== undefined && price !== null && price !== '' ? Number(price) : null;
+        const normalizedCustomDuration = durationMinutes !== undefined && durationMinutes !== null && durationMinutes !== '' ? Number(durationMinutes) : null;
+
+        validateAndSyncLinkedInstructorsTx({
+          tenantId,
+          serviceId: id,
+          primaryProfId: professionalId,
+          requestedIds: requestedLinkedIds,
+          isStudioCompat,
+          serviceDomain: resolvedDomain,
+          price: normalizedCustomPrice,
+          durationMinutes: normalizedCustomDuration,
+          isUpdate: false
+        });
 
         if (resolvedKind === 'group' && rawClassSchedules.length > 0 && PackageService.isStudioCompatible(tenantId)) {
           for (const item of rawClassSchedules) {
@@ -303,7 +554,7 @@ export class ServiceController {
         }
       })();
 
-      logAudit(req, 'CREATE_SERVICE', 'services', id, { name, price, professionalId, professionalName: prof.name, clinicalModule: targetModule, serviceDomain: resolvedDomain });
+      logAudit(req, 'CREATE_SERVICE', 'services', id, { name, price, professionalId, professionalName: prof.name, clinicalModule: targetModule, serviceDomain: resolvedDomain, linkedCount: requestedLinkedIds?.length || 1 });
 
       const parsedCreatedRec = isStudioCompat
         ? parseServiceRecurrenceConfig({
@@ -311,6 +562,15 @@ export class ServiceController {
             allowed_recurrence_frequencies_json: recNorm.allowedJson,
             default_recurrence_frequency: recNorm.defaultFrequency
           })
+        : null;
+      const linkedCreatedProfs = isStudioCompat
+        ? (getLinkedProfessionalsMap(tenantId, new Map([[id, professionalId]])).get(id) || [])
+        : [];
+      const linkedCreatedIds = linkedCreatedProfs.length > 0
+        ? linkedCreatedProfs.map(lp => lp.id)
+        : [professionalId];
+      const createdDiagnostics = isStudioCompat && resolvedKind === 'group'
+        ? ClassScheduleService.diagnoseServiceSchedules(tenantId, id, createdSchedules)
         : null;
 
       res.status(201).json({
@@ -336,8 +596,11 @@ export class ServiceController {
         default_recurrence_frequency: parsedCreatedRec ? parsedCreatedRec.defaultFrequency : null,
         modality_category: resolvedModalityCategory,
         professional_name: prof.name,
+        linked_professional_ids: linkedCreatedIds,
+        linked_professionals: linkedCreatedProfs,
         class_schedules: createdSchedules,
         weekly_schedule_summary: buildWeeklyScheduleSummary(createdSchedules),
+        schedule_diagnostics: createdDiagnostics,
         schedule_warnings: scheduleWarnings,
         message: 'Serviço criado com sucesso'
       });
@@ -385,6 +648,8 @@ export class ServiceController {
       const rawRequestedDomain = serviceDomain ?? service_domain;
       const rawAllowedFreqs = allowedRecurrenceFrequencies !== undefined ? allowedRecurrenceFrequencies : allowed_recurrence_frequencies;
       const rawDefaultFreq = defaultRecurrenceFrequency !== undefined ? defaultRecurrenceFrequency : default_recurrence_frequency;
+      const requestedLinkedIds = parseLinkedInstructorIds(req.body);
+      const effectiveTargetProfForCheck = professionalId || existing.professional_id;
 
       if (!isStudioCompat) {
         if (
@@ -392,10 +657,11 @@ export class ServiceController {
           (rawCapacity !== undefined && rawCapacity !== null && rawCapacity !== '') ||
           String(rawRequestedDomain || '').trim().toLowerCase() === 'studio' ||
           (Array.isArray(rawAllowedFreqs) && rawAllowedFreqs.length > 0) ||
-          (rawDefaultFreq !== undefined && rawDefaultFreq !== null && String(rawDefaultFreq).trim() !== '')
+          (rawDefaultFreq !== undefined && rawDefaultFreq !== null && String(rawDefaultFreq).trim() !== '') ||
+          (requestedLinkedIds && requestedLinkedIds.some(pid => pid !== effectiveTargetProfForCheck))
         ) {
           res.status(400).json({
-            error: 'Aulas coletivas, capacidade de turma e recorrência avançada de Studio não estão disponíveis para Clínicas / Consultórios tradicionais.'
+            error: 'Aulas coletivas, múltiplos instrutores, capacidade de turma e recorrência avançada de Studio não estão disponíveis para Clínicas / Consultórios tradicionais.'
           });
           return;
         }
@@ -518,53 +784,54 @@ export class ServiceController {
         WHERE id = ? AND tenant_id = ?
       `);
 
-      updateStmt.run(
-        professionalId !== undefined ? 1 : 0, professionalId || null,
-        specialtyId !== undefined ? 1 : 0, specialtyId || null,
-        name !== undefined ? 1 : 0, name ? name.trim() : existing.name,
-        description !== undefined ? 1 : 0, description !== null ? description : null,
-        durationMinutes !== undefined ? 1 : 0, durationMinutes !== undefined ? Number(durationMinutes) : 50,
-        bufferMinutes !== undefined ? 1 : 0, bufferMinutes !== undefined ? Number(bufferMinutes) : 10,
-        price !== undefined ? 1 : 0, price !== undefined ? Number(price) : 0,
-        modality !== undefined ? 1 : 0, modality || 'both',
-        active !== undefined ? 1 : 0, active ? 1 : 0,
-        (minLeadTimeHours !== undefined && minLeadTimeHours !== null && minLeadTimeHours !== '' && !Number.isNaN(Number(minLeadTimeHours))) ? 1 : 0,
-        (minLeadTimeHours !== undefined && minLeadTimeHours !== null && minLeadTimeHours !== '' && !Number.isNaN(Number(minLeadTimeHours))) ? Math.max(0, Number(minLeadTimeHours)) : 2,
-        (maxAdvanceDays !== undefined && maxAdvanceDays !== null && maxAdvanceDays !== '' && !Number.isNaN(Number(maxAdvanceDays))) ? 1 : 0,
-        (maxAdvanceDays !== undefined && maxAdvanceDays !== null && maxAdvanceDays !== '' && !Number.isNaN(Number(maxAdvanceDays))) ? Math.max(1, Number(maxAdvanceDays)) : 60,
-        cancellationPolicy !== undefined ? 1 : 0, cancellationPolicy || null,
-        reminderEnabled !== undefined ? 1 : 0, reminderEnabled ? 1 : 0,
-        reminderValue !== undefined ? 1 : 0, reminderEnabled && reminderValue ? Number(reminderValue) : null,
-        reminderUnit !== undefined ? 1 : 0, reminderEnabled && reminderUnit ? String(reminderUnit).toUpperCase() : 'DAYS',
-        clinicalModule !== undefined ? 1 : 0, clinicalModule || null,
-        nextKind,
-        nextCapacity,
-        nextAllowRec,
-        nextModCat,
-        nextDomain,
-        nextAllowedJson,
-        nextDefaultFreq,
-        id,
-        tenantId
-      );
+      db.transaction(() => {
+        updateStmt.run(
+          professionalId !== undefined ? 1 : 0, professionalId || null,
+          specialtyId !== undefined ? 1 : 0, specialtyId || null,
+          name !== undefined ? 1 : 0, name ? name.trim() : existing.name,
+          description !== undefined ? 1 : 0, description !== null ? description : null,
+          durationMinutes !== undefined ? 1 : 0, durationMinutes !== undefined ? Number(durationMinutes) : 50,
+          bufferMinutes !== undefined ? 1 : 0, bufferMinutes !== undefined ? Number(bufferMinutes) : 10,
+          price !== undefined ? 1 : 0, price !== undefined ? Number(price) : 0,
+          modality !== undefined ? 1 : 0, modality || 'both',
+          active !== undefined ? 1 : 0, active ? 1 : 0,
+          (minLeadTimeHours !== undefined && minLeadTimeHours !== null && minLeadTimeHours !== '' && !Number.isNaN(Number(minLeadTimeHours))) ? 1 : 0,
+          (minLeadTimeHours !== undefined && minLeadTimeHours !== null && minLeadTimeHours !== '' && !Number.isNaN(Number(minLeadTimeHours))) ? Math.max(0, Number(minLeadTimeHours)) : 2,
+          (maxAdvanceDays !== undefined && maxAdvanceDays !== null && maxAdvanceDays !== '' && !Number.isNaN(Number(maxAdvanceDays))) ? 1 : 0,
+          (maxAdvanceDays !== undefined && maxAdvanceDays !== null && maxAdvanceDays !== '' && !Number.isNaN(Number(maxAdvanceDays))) ? Math.max(1, Number(maxAdvanceDays)) : 60,
+          cancellationPolicy !== undefined ? 1 : 0, cancellationPolicy || null,
+          reminderEnabled !== undefined ? 1 : 0, reminderEnabled ? 1 : 0,
+          reminderValue !== undefined ? 1 : 0, reminderEnabled && reminderValue ? Number(reminderValue) : null,
+          reminderUnit !== undefined ? 1 : 0, reminderEnabled && reminderUnit ? String(reminderUnit).toUpperCase() : 'DAYS',
+          clinicalModule !== undefined ? 1 : 0, clinicalModule || null,
+          nextKind,
+          nextCapacity,
+          nextAllowRec,
+          nextModCat,
+          nextDomain,
+          nextAllowedJson,
+          nextDefaultFreq,
+          id,
+          tenantId
+        );
 
-      if (targetProfId) {
-        try {
-          const existingPs = db.prepare('SELECT id, custom_price, custom_duration FROM professional_services WHERE professional_id = ? AND service_id = ?').get(targetProfId, id) as { id: string; custom_price: number | null; custom_duration: number | null } | undefined;
-          const nextCustomPrice = price !== undefined && price !== null && price !== '' ? Number(price) : (existingPs ? existingPs.custom_price : null);
-          const nextCustomDuration = durationMinutes !== undefined && durationMinutes !== null && durationMinutes !== '' ? Number(durationMinutes) : (existingPs ? existingPs.custom_duration : null);
-          if (existingPs) {
-            db.prepare('UPDATE professional_services SET custom_price = ?, custom_duration = ? WHERE id = ?').run(nextCustomPrice, nextCustomDuration, existingPs.id);
-          } else if (professionalId) {
-            db.prepare(`
-              INSERT INTO professional_services (id, professional_id, service_id, custom_price, custom_duration)
-              VALUES (?, ?, ?, ?, ?)
-            `).run('ps-' + uuidv4().slice(0, 8), professionalId, id, nextCustomPrice, nextCustomDuration);
-          }
-        } catch (_) {}
-      }
+        const nextCustomPrice = price !== undefined && price !== null && price !== '' ? Number(price) : null;
+        const nextCustomDuration = durationMinutes !== undefined && durationMinutes !== null && durationMinutes !== '' ? Number(durationMinutes) : null;
 
-      logAudit(req, 'UPDATE_SERVICE', 'services', id, { name: name || existing.name, professionalId });
+        validateAndSyncLinkedInstructorsTx({
+          tenantId,
+          serviceId: String(id),
+          primaryProfId: targetProfId || null,
+          requestedIds: requestedLinkedIds,
+          isStudioCompat,
+          serviceDomain: nextDomain,
+          price: nextCustomPrice,
+          durationMinutes: nextCustomDuration,
+          isUpdate: true
+        });
+      })();
+
+      logAudit(req, 'UPDATE_SERVICE', 'services', id, { name: name || existing.name, professionalId, linkedCount: requestedLinkedIds?.length });
       const updatedService = db.prepare(`
         SELECT s.*, COALESCE(s.service_kind, 'individual') as service_kind, COALESCE(s.allow_recurrence, 1) as allow_recurrence,
                p.name as professional_name
@@ -577,6 +844,15 @@ export class ServiceController {
         : [];
       const parsedUpdRec = isStudioCompat && updatedService
         ? parseServiceRecurrenceConfig(updatedService)
+        : null;
+      const linkedUpdProfs = isStudioCompat && updatedService
+        ? (getLinkedProfessionalsMap(tenantId, new Map([[String(id), updatedService.professional_id || null]])).get(String(id)) || [])
+        : [];
+      const linkedUpdIds = linkedUpdProfs.length > 0
+        ? linkedUpdProfs.map(lp => lp.id)
+        : (updatedService?.professional_id ? [updatedService.professional_id] : []);
+      const updatedDiagnostics = isStudioCompat && updatedService && (updatedService.service_kind || 'individual') === 'group'
+        ? ClassScheduleService.diagnoseServiceSchedules(tenantId, String(id), updatedSchedules)
         : null;
       const enrichedUpdated = updatedService
         ? {
@@ -592,14 +868,17 @@ export class ServiceController {
             allow_recurrence: parsedUpdRec ? (parsedUpdRec.allowRecurrence ? 1 : 0) : (updatedService.allow_recurrence ?? 1),
             allowed_recurrence_frequencies: parsedUpdRec ? parsedUpdRec.allowedFrequencies : undefined,
             default_recurrence_frequency: parsedUpdRec ? parsedUpdRec.defaultFrequency : null,
+            linked_professional_ids: linkedUpdIds,
+            linked_professionals: linkedUpdProfs,
             class_schedules: updatedSchedules,
-            weekly_schedule_summary: buildWeeklyScheduleSummary(updatedSchedules)
+            weekly_schedule_summary: buildWeeklyScheduleSummary(updatedSchedules),
+            schedule_diagnostics: updatedDiagnostics
           }
         : updatedService;
       res.json({ success: true, message: 'Serviço atualizado com sucesso', service: enrichedUpdated, ...(enrichedUpdated || {}) });
     } catch (err: any) {
       console.error('[ServiceController.update] Erro:', err);
-      res.status(500).json({ error: 'Erro ao atualizar serviço' });
+      res.status(err?.status || 500).json({ error: err?.message || 'Erro ao atualizar serviço', ...(err?.code ? { code: err.code } : {}) });
     }
   }
 

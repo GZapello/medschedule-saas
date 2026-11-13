@@ -18,6 +18,7 @@ import {
   ClassScheduleItem,
   Professional,
   Room,
+  ServiceScheduleDiagnostics,
   WeeklyScheduleSummaryItem
 } from '../../types';
 
@@ -44,7 +45,11 @@ interface ClassScheduleSectionProps {
   rooms: Room[];
   draftSchedules?: DraftClassScheduleInput[];
   onDraftSchedulesChange?: React.Dispatch<React.SetStateAction<DraftClassScheduleInput[]>>;
-  onSchedulesChanged?: (schedules: ClassScheduleItem[], weeklySummary: WeeklyScheduleSummaryItem[]) => void;
+  onSchedulesChanged?: (
+    schedules: ClassScheduleItem[],
+    weeklySummary: WeeklyScheduleSummaryItem[],
+    diagnostics?: ServiceScheduleDiagnostics | null
+  ) => void;
 }
 
 const WEEKDAYS = [
@@ -102,6 +107,7 @@ export const ClassScheduleSection: React.FC<ClassScheduleSectionProps> = ({
 
   const [schedules, setSchedules] = useState<ClassScheduleItem[]>([]);
   const [weeklySummary, setWeeklySummary] = useState<WeeklyScheduleSummaryItem[]>([]);
+  const [diagnostics, setDiagnostics] = useState<ServiceScheduleDiagnostics | null>(null);
   const [loadingList, setLoadingList] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
   const [warnings, setWarnings] = useState<string[]>([]);
@@ -129,12 +135,15 @@ export const ClassScheduleSection: React.FC<ClassScheduleSectionProps> = ({
       const res = await ApiClient.get<{
         schedules: ClassScheduleItem[];
         weeklySummary: WeeklyScheduleSummaryItem[];
+        diagnostics?: ServiceScheduleDiagnostics | null;
       }>(`/v1/services/${serviceId}/class-schedules?includeInactive=1`);
       const nextList = Array.isArray(res?.schedules) ? res.schedules : [];
       const nextSummary = Array.isArray(res?.weeklySummary) ? res.weeklySummary : [];
+      const nextDiag = res?.diagnostics ?? null;
       setSchedules(nextList);
       setWeeklySummary(nextSummary);
-      onSchedulesChanged?.(nextList, nextSummary);
+      setDiagnostics(nextDiag);
+      onSchedulesChanged?.(nextList, nextSummary, nextDiag);
     } catch (err: any) {
       showToast(err?.message || 'Erro ao carregar a grade semanal da turma.', 'error');
     } finally {
@@ -148,6 +157,7 @@ export const ClassScheduleSection: React.FC<ClassScheduleSectionProps> = ({
     } else {
       setSchedules([]);
       setWeeklySummary([]);
+      setDiagnostics(null);
     }
     setWarnings([]);
     setShowForm(false);
@@ -169,7 +179,7 @@ export const ClassScheduleSection: React.FC<ClassScheduleSectionProps> = ({
   }, [serviceModality]);
 
   useEffect(() => {
-    if (!profId && (defaultProfessionalId || professionals[0]?.id)) {
+    if ((!profId || !professionals.some(p => p.id === profId)) && (defaultProfessionalId || professionals[0]?.id)) {
       setProfId(defaultProfessionalId || professionals[0]?.id || '');
     }
   }, [defaultProfessionalId, professionals]);
@@ -180,12 +190,37 @@ export const ClassScheduleSection: React.FC<ClassScheduleSectionProps> = ({
     setStartTime('08:00');
     setEndTime(addMinutesToClock('08:00', durationMinutes));
     setEndTimeTouched(false);
-    setProfId(defaultProfessionalId || professionals[0]?.id || '');
+    setProfId(
+      professionals.some(p => p.id === defaultProfessionalId)
+        ? defaultProfessionalId
+        : (professionals[0]?.id || defaultProfessionalId || '')
+    );
     setRoomId('');
     setCapacity(Math.max(1, defaultCapacity || 10));
     setModality(defaultConcreteModality(serviceModality));
     setEffectiveStartDate(getTodayIso());
     setEffectiveEndDate('');
+    setShowForm(true);
+  };
+
+  const openEditDraftForm = (draft: DraftClassScheduleInput) => {
+    setEditingScheduleId(draft.tempId);
+    setSelectedDays([...draft.weekdays]);
+    setStartTime(draft.startTime.slice(0, 5));
+    setEndTime(draft.endTime.slice(0, 5));
+    setEndTimeTouched(true);
+    setProfId(draft.professionalId);
+    setRoomId(draft.roomId || '');
+    setCapacity(Number(draft.capacity) || Math.max(1, defaultCapacity || 1));
+    setModality(
+      serviceModality === 'both'
+        ? draft.modality === 'online'
+          ? 'online'
+          : 'presential'
+        : defaultConcreteModality(serviceModality)
+    );
+    setEffectiveStartDate(draft.effectiveStartDate || getTodayIso());
+    setEffectiveEndDate(draft.effectiveEndDate || '');
     setShowForm(true);
   };
 
@@ -211,7 +246,7 @@ export const ClassScheduleSection: React.FC<ClassScheduleSectionProps> = ({
   };
 
   const toggleDay = (dow: number) => {
-    if (editingScheduleId) {
+    if (isPersisted && editingScheduleId) {
       setSelectedDays([dow]);
       return;
     }
@@ -273,6 +308,7 @@ export const ClassScheduleSection: React.FC<ClassScheduleSectionProps> = ({
           warnings?: string[];
           schedules: ClassScheduleItem[];
           weeklySummary: WeeklyScheduleSummaryItem[];
+          diagnostics?: ServiceScheduleDiagnostics | null;
         }>(`/v1/services/${serviceId}/class-schedules/${editingScheduleId}`, {
           dayOfWeek: selectedDays[0],
           startTime,
@@ -286,8 +322,9 @@ export const ClassScheduleSection: React.FC<ClassScheduleSectionProps> = ({
         });
         setSchedules(res.schedules || []);
         setWeeklySummary(res.weeklySummary || []);
+        setDiagnostics(res.diagnostics ?? null);
         setWarnings(res.warnings || []);
-        onSchedulesChanged?.(res.schedules || [], res.weeklySummary || []);
+        onSchedulesChanged?.(res.schedules || [], res.weeklySummary || [], res.diagnostics ?? null);
         showToast('Horário atualizado na grade semanal!', 'success');
       } else {
         const res = await ApiClient.post<{
@@ -295,6 +332,7 @@ export const ClassScheduleSection: React.FC<ClassScheduleSectionProps> = ({
           warnings?: string[];
           schedules: ClassScheduleItem[];
           weeklySummary: WeeklyScheduleSummaryItem[];
+          diagnostics?: ServiceScheduleDiagnostics | null;
         }>(`/v1/services/${serviceId}/class-schedules`, {
           weekdays: selectedDays,
           startTime,
@@ -308,8 +346,9 @@ export const ClassScheduleSection: React.FC<ClassScheduleSectionProps> = ({
         });
         setSchedules(res.schedules || []);
         setWeeklySummary(res.weeklySummary || []);
+        setDiagnostics(res.diagnostics ?? null);
         setWarnings(res.warnings || []);
-        onSchedulesChanged?.(res.schedules || [], res.weeklySummary || []);
+        onSchedulesChanged?.(res.schedules || [], res.weeklySummary || [], res.diagnostics ?? null);
         showToast('Horário adicionado à grade semanal!', 'success');
       }
       setShowForm(false);
@@ -328,14 +367,16 @@ export const ClassScheduleSection: React.FC<ClassScheduleSectionProps> = ({
       const res = await ApiClient.patch<{
         schedules: ClassScheduleItem[];
         weeklySummary: WeeklyScheduleSummaryItem[];
+        diagnostics?: ServiceScheduleDiagnostics | null;
         warnings?: string[];
       }>(`/v1/services/${serviceId}/class-schedules/${item.id}/status`, {
         active: nextActive
       });
       setSchedules(res.schedules || []);
       setWeeklySummary(res.weeklySummary || []);
+      setDiagnostics(res.diagnostics ?? null);
       setWarnings(res.warnings || []);
-      onSchedulesChanged?.(res.schedules || [], res.weeklySummary || []);
+      onSchedulesChanged?.(res.schedules || [], res.weeklySummary || [], res.diagnostics ?? null);
       showToast(nextActive === 1 ? 'Horário reativado!' : 'Horário desativado!', 'success');
     } catch (err: any) {
       showToast(err?.message || 'Erro ao alterar status do horário.', 'error');
@@ -350,10 +391,12 @@ export const ClassScheduleSection: React.FC<ClassScheduleSectionProps> = ({
         message: string;
         schedules: ClassScheduleItem[];
         weeklySummary: WeeklyScheduleSummaryItem[];
+        diagnostics?: ServiceScheduleDiagnostics | null;
       }>(`/v1/services/${serviceId}/class-schedules/${item.id}`);
       setSchedules(res.schedules || []);
       setWeeklySummary(res.weeklySummary || []);
-      onSchedulesChanged?.(res.schedules || [], res.weeklySummary || []);
+      setDiagnostics(res.diagnostics ?? null);
+      onSchedulesChanged?.(res.schedules || [], res.weeklySummary || [], res.diagnostics ?? null);
       showToast(res.message || 'Horário removido da grade.', 'success');
     } catch (err: any) {
       showToast(err?.message || 'Erro ao remover horário da grade.', 'error');
@@ -378,6 +421,43 @@ export const ClassScheduleSection: React.FC<ClassScheduleSectionProps> = ({
     });
   }, [schedules]);
 
+  const draftWarnings = useMemo(() => {
+    if (isPersisted || draftSchedules.length === 0) return [];
+    const list: string[] = [];
+    for (const d of draftSchedules) {
+      const p = professionals.find(pr => pr.id === d.professionalId);
+      if (!p) continue;
+      if (p.public_booking_enabled === 0) {
+        list.push(`${p.name} está com o agendamento público desativado.`);
+      }
+      if (Array.isArray(p.schedules) && p.schedules.length > 0) {
+        for (const dow of d.weekdays) {
+          const dayInfo = WEEKDAYS.find(w => w.value === dow);
+          const matchingShift = p.schedules.some(
+            sh => sh.is_active !== 0 && sh.day_of_week === dow && d.startTime >= sh.start_time.slice(0, 5) && d.endTime <= sh.end_time.slice(0, 5)
+          );
+          if (!matchingShift) {
+            list.push(`${dayInfo?.plural || `Dia ${dow}`} (${d.startTime}–${d.endTime}): fora da escala geral cadastrada para ${p.name}.`);
+          }
+        }
+      }
+    }
+    return Array.from(new Set(list));
+  }, [isPersisted, draftSchedules, professionals]);
+
+  const activePersistedCount = useMemo(
+    () => sortedSchedules.filter(s => Number(s.active) !== 0).length,
+    [sortedSchedules]
+  );
+
+  const diagnosticByScheduleId = useMemo(() => {
+    const map = new Map<string, { publishable: boolean; reasons: string[] }>();
+    for (const it of diagnostics?.items || []) {
+      map.set(it.scheduleId, { publishable: it.publishable, reasons: it.reasons || [] });
+    }
+    return map;
+  }, [diagnostics]);
+
   return (
     <div className="p-3.5 rounded-2xl border border-teal-200 bg-teal-50/40 space-y-3 text-xs">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -396,11 +476,47 @@ export const ClassScheduleSection: React.FC<ClassScheduleSectionProps> = ({
             onClick={openAddForm}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-[11px] shadow-xs transition-colors cursor-pointer"
           >
-            <Plus className="w-3.5 h-3.5" />
-            Adicionar horário
+            + Adicionar dia e horário
           </button>
         )}
       </div>
+
+      {/* Diagnóstico de publicação pública (quando há horários mas nenhum ou algum está bloqueado) */}
+      {isPersisted && !loadingList && diagnostics && diagnostics.totalCount > 0 && diagnostics.blockers.length > 0 && (
+        <div
+          className={`p-2.5 rounded-xl border space-y-1 ${
+            diagnostics.publishableCount === 0
+              ? 'bg-amber-50 border-amber-300 text-amber-900'
+              : 'bg-amber-50/60 border-amber-200 text-amber-800'
+          }`}
+        >
+          <p className="font-bold text-[11px] flex items-center gap-1">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+            {diagnostics.publishableCount === 0
+              ? 'Turma ainda indisponível no agendamento online:'
+              : 'Alguns horários da grade exigem atenção para publicação online:'}
+          </p>
+          {diagnostics.blockers.map((b, idx) => (
+            <p key={idx} className="text-[11px]">
+              • {b}
+            </p>
+          ))}
+        </div>
+      )}
+
+      {!isPersisted && draftWarnings.length > 0 && (
+        <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 space-y-1">
+          <p className="font-bold text-[11px] flex items-center gap-1">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+            Observações para disponibilidade pública:
+          </p>
+          {draftWarnings.map((w, idx) => (
+            <p key={idx} className="text-[11px]">
+              • {w}
+            </p>
+          ))}
+        </div>
+      )}
 
       {/* Resumo consolidado da Grade Semanal */}
       {(isPersisted ? weeklySummary.length > 0 : draftSummaryLines.length > 0) && (
@@ -544,7 +660,7 @@ export const ClassScheduleSection: React.FC<ClassScheduleSectionProps> = ({
                 <option value="">Selecione...</option>
                 {professionals.map(p => (
                   <option key={p.id} value={p.id}>
-                    {p.name}
+                    {p.name}{p.public_booking_enabled === 0 ? ' (Ag. público desativado)' : ''}
                   </option>
                 ))}
               </select>
@@ -611,14 +727,22 @@ export const ClassScheduleSection: React.FC<ClassScheduleSectionProps> = ({
             Carregando horários configurados...
           </div>
         ) : sortedSchedules.length === 0 ? (
-          <div className="p-3 rounded-xl border border-dashed border-amber-300 bg-amber-50/70 text-amber-800 text-[11px]">
-            Nenhum horário semanal cadastrado ainda. Adicione ao menos um dia/horário para que a turma apareça no agendamento público do Studio.
+          <div className="p-3 rounded-xl border border-dashed border-amber-300 bg-amber-50/70 text-amber-800 text-[11px] font-medium flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
+            <span>Esta aula ainda não possui dias e horários cadastrados. Adicione pelo menos um horário para disponibilizá-la no agendamento online.</span>
           </div>
         ) : (
           <div className="space-y-2">
+            {activePersistedCount === 0 && (
+              <div className="p-3 rounded-xl border border-dashed border-amber-300 bg-amber-50/70 text-amber-800 text-[11px] font-medium flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
+                <span>Esta aula ainda não possui dias e horários cadastrados. Adicione pelo menos um horário para disponibilizá-la no agendamento online.</span>
+              </div>
+            )}
             {sortedSchedules.map(item => {
               const dayInfo = WEEKDAYS.find(w => w.value === item.day_of_week);
               const isInactive = Number(item.active) === 0;
+              const itemDiag = diagnosticByScheduleId.get(item.id);
               return (
                 <div
                   key={item.id}
@@ -640,9 +764,17 @@ export const ClassScheduleSection: React.FC<ClassScheduleSectionProps> = ({
                       <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-semibold text-[10px]">
                         {modalityLabel(item.modality)}
                       </span>
-                      {isInactive && (
+                      {isInactive ? (
                         <span className="px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 font-bold text-[10px]">
                           Inativo
+                        </span>
+                      ) : itemDiag && !itemDiag.publishable ? (
+                        <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-bold text-[10px]">
+                          Indisponível online
+                        </span>
+                      ) : (
+                        <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 font-bold text-[10px]">
+                          Público ativo
                         </span>
                       )}
                     </div>
@@ -664,6 +796,9 @@ export const ClassScheduleSection: React.FC<ClassScheduleSectionProps> = ({
                         </span>
                       )}
                     </div>
+                    {!isInactive && itemDiag && !itemDiag.publishable && itemDiag.reasons.length > 0 && (
+                      <p className="text-[10px] text-amber-700 font-medium">{itemDiag.reasons[0]}</p>
+                    )}
                   </div>
                   <div className="flex items-center gap-1 shrink-0 self-end sm:self-center">
                     <button
@@ -702,8 +837,9 @@ export const ClassScheduleSection: React.FC<ClassScheduleSectionProps> = ({
         )
       ) : (
         draftSchedules.length === 0 ? (
-          <div className="p-2.5 rounded-xl border border-dashed border-teal-200 bg-white/70 text-slate-600 text-[11px]">
-            Adicione os dias e horários em que esta aula ocorre semanalmente (você também pode ajustar depois na edição do serviço).
+          <div className="p-3 rounded-xl border border-dashed border-amber-300 bg-amber-50/70 text-amber-800 text-[11px] font-medium flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
+            <span>Esta aula ainda não possui dias e horários cadastrados. Adicione pelo menos um horário para disponibilizá-la no agendamento online.</span>
           </div>
         ) : (
           <div className="space-y-2">
@@ -724,14 +860,24 @@ export const ClassScheduleSection: React.FC<ClassScheduleSectionProps> = ({
                       {profName} • {d.capacity} vagas{roomName ? ` • ${roomName}` : ''}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => onDraftSchedulesChange?.(prev => prev.filter(p => p.tempId !== d.tempId))}
-                    className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg cursor-pointer"
-                    title="Remover horário"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => openEditDraftForm(d)}
+                      className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg cursor-pointer"
+                      title="Editar horário"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onDraftSchedulesChange?.(prev => prev.filter(p => p.tempId !== d.tempId))}
+                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
+                      title="Remover horário"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               );
             })}
