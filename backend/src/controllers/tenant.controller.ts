@@ -21,6 +21,7 @@ import { resolveProfessionModule, resolveCanonicalProfession } from '../utils/pr
 import { REGISTRATION_PROFESSIONS } from '../types/professions';
 import { createDefaultSchedules } from '../utils/schedule-defaults';
 import { findNextAvailableDate } from '../utils/slot-calculator';
+import { PackageService } from '../services/package.service';
 
 
 
@@ -1460,7 +1461,10 @@ export class TenantController {
       if (!resolved || resolved.public_booking_enabled !== 1) {
         res.status(404).json({ code: 'BOOKING_UNAVAILABLE', error: 'O agendamento online desta clínica está indisponível no momento.' }); return;
       }
-      const tenant = db.prepare('SELECT slug, name, trade_name, logo_url, city, state FROM tenants WHERE id = ?').get(resolved.id) as any;
+      const tenant = db.prepare(`
+        SELECT slug, name, trade_name, logo_url, city, state, COALESCE(establishment_profile, 'clinic') as establishment_profile
+        FROM tenants WHERE id = ?
+      `).get(resolved.id) as any;
       // Profissionais ativos da clínica
       const profStmt = db.prepare(`
         SELECT 
@@ -1476,7 +1480,10 @@ export class TenantController {
       const professionals = profStmt.all(resolved.id);
 
       const services = db.prepare(`
-        SELECT s.id, s.name, s.description, s.specialty_id, s.modality, spec.name as specialty_name
+        SELECT s.id, s.name, s.description, s.specialty_id, s.modality, s.price, s.duration_minutes,
+               s.professional_id, COALESCE(s.service_kind, 'individual') as service_kind,
+               s.default_capacity, COALESCE(s.allow_recurrence, 1) as allow_recurrence,
+               s.modality_category, spec.name as specialty_name
         FROM services s LEFT JOIN specialties spec ON spec.id = s.specialty_id
         WHERE s.tenant_id = ? AND s.active = 1 AND EXISTS (
           SELECT 1 FROM professionals p WHERE p.tenant_id = s.tenant_id AND p.active = 1 AND p.public_booking_enabled = 1
@@ -1506,10 +1513,14 @@ export class TenantController {
           next_available
         };
       });
+      const packages = PackageService.isStudioCompatible(resolved.id)
+        ? PackageService.listCatalogPackages(resolved.id, { publicOnly: true })
+        : [];
       res.json({
         tenant,
         professionals: publicProfessionals,
-        services
+        services,
+        packages
       });
     } catch (err: any) {
       if (respondBillingError(res, err)) return;

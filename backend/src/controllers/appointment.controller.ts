@@ -5,6 +5,7 @@ import {recordedAttendance,appointmentRecord,extractDatePart,extractTimePart,nor
 import { canAccessPatient } from '../services/patient-sharing.service';
 import { resolveBookingTenant, publicBookingProfessional, professionalBookingService, validBookingDate } from '../utils/public-booking';
 import { calculateAvailableSlots } from '../utils/slot-calculator';
+import { PackageService } from '../services/package.service';
 import { hasClinicalAccess } from './clinical.controller';
 import { isPrimaryClinicalModule, resolveClinicalModule } from '../utils/clinical-module';
 import { syncReceptionStatusFromClinical } from './checkin.controller';
@@ -431,11 +432,12 @@ export class AppointmentController {
         tenantSlug, patientId, professionalId, serviceId, roomId,
         startTime, endTime, modality, meeting_url, patientNotes, internalNotes,
         insuranceId, referredFromAppointmentId, referredByProfessionalId, referralReason,
+        packageContractId,
         // Dados se o paciente for novo (página de agendamento público)
         newPatientData
       } = req.body;
 
-      const ids = [professionalId, serviceId, patientId, roomId, insuranceId, referredFromAppointmentId, referredByProfessionalId];
+      const ids = [professionalId, serviceId, patientId, roomId, insuranceId, referredFromAppointmentId, referredByProfessionalId, packageContractId];
       if (ids.some(value => value !== undefined && value !== null && typeof value !== 'string') ||
           ['isCustomTime', 'is_custom_time', 'isRetroactive', 'is_retroactive'].some(key => req.body[key] !== undefined && typeof req.body[key] !== 'boolean')) {
         res.status(400).json({ code: 'INVALID_BOOKING_FIELDS', error: 'Revise os campos do agendamento e tente novamente.' }); return;
@@ -457,7 +459,7 @@ export class AppointmentController {
         if (!publicBookingProfessional(tenant.id, String(professionalId), individualSlug) || !professionalBookingService(tenant.id, String(professionalId), String(serviceId))) {
           res.status(404).json({ error: 'Atendimento indisponível.' }); return;
         }
-        if (patientId || roomId || internalNotes || insuranceId || referredFromAppointmentId || referredByProfessionalId || referralReason || rawDriveUrl !== undefined) {
+        if (patientId || roomId || internalNotes || insuranceId || referredFromAppointmentId || referredByProfessionalId || referralReason || packageContractId || rawDriveUrl !== undefined) {
           res.status(400).json({ error: 'Dados de agendamento inválidos.' }); return;
         }
         if (!newPatientData || typeof newPatientData.fullName !== 'string' || newPatientData.fullName.trim().length < 2 || newPatientData.fullName.length > 150 || typeof newPatientData.phone !== 'string' || !/^\d{10,13}$/.test(newPatientData.phone.replace(/\D/g, '')) || (newPatientData.email && (typeof newPatientData.email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newPatientData.email) || newPatientData.email.length > 254)) || (newPatientData.isChild && (typeof newPatientData.guardianName !== 'string' || !newPatientData.guardianName.trim())) || String(patientNotes || '').length > 1000 || String(newPatientData.notes || '').length > 1000) {
@@ -747,8 +749,11 @@ export class AppointmentController {
         serviceRow.professional_id === professionalId ||
         Boolean(db.prepare('SELECT 1 FROM professional_services WHERE professional_id = ? AND service_id = ?').get(professionalId, serviceId));
 
+      const isPackageCovered = Boolean(!isPublic && packageContractId);
+
       const shouldUpdateServicePrice =
         !isPublic &&
+        !isPackageCovered &&
         Boolean(req.user) &&
         suppliedPrice !== undefined &&
         hasValidProfessionalServiceLink &&
@@ -784,7 +789,7 @@ export class AppointmentController {
           };
         }
 
-        // Insere agendamento com os novos campos de convênio, encaminhamento e turma
+        // Insere agendamento com os novos campos de convênio, encaminhamento, turma e pacote
         const insertAppt = db.prepare(`
           INSERT INTO appointments (
             id, tenant_id, appointment_number, patient_id, professional_id, service_id,
@@ -792,9 +797,10 @@ export class AppointmentController {
             insurance_id, referred_from_appointment_id, referred_by_professional_id, referral_reason,
             clinical_module, profession_id,
             series_id, occurrence_id, service_kind, attendance_status,
+            package_contract_id, is_package_covered,
             created_by
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
 
         insertAppt.run(
@@ -825,8 +831,25 @@ export class AppointmentController {
           groupMeta?.occurrenceId || null,
           isGroupService ? 'group' : 'individual',
           'pending',
+          isPackageCovered ? String(packageContractId) : null,
+          isPackageCovered ? 1 : 0,
           req.user ? req.user.userId : 'online_booking'
         );
+
+        if (isPackageCovered && packageContractId) {
+          const resv = PackageService.reservePackageRightTx({
+            tenantId,
+            contractId: String(packageContractId),
+            studentId: resolvedPatientId,
+            serviceId,
+            appointmentId,
+            startTime: normalizedStartTime,
+            createdBy: req.user ? req.user.userId : 'system'
+          });
+          db.prepare(`
+            UPDATE appointments SET package_entitlement_id = ? WHERE id = ? AND tenant_id = ?
+          `).run(resv.entitlementId, appointmentId, tenantId);
+        }
 
         // Insere histórico inicial
         db.prepare(`
@@ -834,8 +857,9 @@ export class AppointmentController {
           VALUES (?, ?, NULL, ?, ?, ?)
         `).run(uuidv4(), appointmentId, initialStatus, req.user ? req.user.name : 'Cliente Online', isRetroactive ? 'Registro de atendimento já realizado' : 'Agendamento criado com sucesso');
 
-        // Snapshot: zero explicitamente combinado é isenção, nunca cobrança pendente.
-        if (agreedAmount > 0 || suppliedPrice !== undefined) {
+        // Snapshot: sessões cobertas por pacote NÃO geram cobrança avulsa por sessão.
+        // Zero explicitamente combinado sem pacote é isenção, nunca cobrança pendente.
+        if (!isPackageCovered && (agreedAmount > 0 || suppliedPrice !== undefined)) {
           db.prepare(`
             INSERT INTO payments (id, tenant_id, appointment_id, patient_id, amount, payment_method, status, notes, service_id, base_amount, professional_id)
             VALUES (?, ?, ?, ?, ?, 'pix', ?, 'Gerado automaticamente pelo agendamento', ?, ?, ?)
@@ -863,7 +887,7 @@ export class AppointmentController {
         persistAppointmentAndPrice();
       } catch (txErr: any) {
         if (txErr && typeof txErr.status === 'number' && txErr.code) {
-          res.status(txErr.status).json({ error: txErr.error || 'Conflito de horário', code: txErr.code });
+          res.status(txErr.status).json({ error: txErr.error || txErr.message || 'Conflito de horário', code: txErr.code });
           return;
         }
         throw txErr;
@@ -1200,6 +1224,12 @@ export class AppointmentController {
         if (status === 'cancelled') {
           NotificationService.cancelAppointmentReminders(target.id);
           if (tenantId) {
+            PackageService.releasePackageRightTx({
+              tenantId,
+              appointmentId: target.id,
+              reason: reason || 'Cancelamento de agendamento',
+              createdBy: req.user?.userId || 'system'
+            });
             if (target.occurrence_id) {
               const remainingSibling = db.prepare(`
                 SELECT id FROM appointments
@@ -2162,8 +2192,10 @@ export class AppointmentController {
         meeting_url,
         patientNotes,
         internalNotes,
-        recurrence
+        recurrence,
+        packageContractId
       } = req.body || {};
+      const isPackageCovered = Boolean(packageContractId && typeof packageContractId === 'string');
       const isCustomTime = Boolean(req.body?.isCustomTime || req.body?.is_custom_time);
       const rawDriveUrl = req.body?.google_drive_url !== undefined ? req.body.google_drive_url : req.body?.googleDriveUrl;
 
@@ -2323,7 +2355,7 @@ export class AppointmentController {
           dates[dates.length - 1],
           dates.length,
           defaultCapacity,
-          agreedAmount,
+          isPackageCovered ? 0 : agreedAmount,
           req.user?.userId || 'system'
         );
 
@@ -2388,8 +2420,9 @@ export class AppointmentController {
               id, tenant_id, appointment_number, patient_id, professional_id, service_id,
               room_id, start_time, end_time, status, modality, meeting_url, google_drive_url,
               patient_notes, internal_notes, insurance_id, clinical_module, profession_id,
-              series_id, occurrence_id, service_kind, attendance_status, created_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+              series_id, occurrence_id, service_kind, attendance_status,
+              package_contract_id, is_package_covered, created_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)
           `).run(
             apptId, tenantId, apptNumber, patientId, professionalId, serviceId,
             roomId || null, sIso, eIso, modality,
@@ -2398,15 +2431,32 @@ export class AppointmentController {
             patientNotes || null, internalNotes || null, insuranceId || null,
             initialClinicalModule, profRow.profession_id || null,
             seriesId, occurrenceId, isGroupService ? 'group' : 'individual',
+            isPackageCovered ? String(packageContractId) : null,
+            isPackageCovered ? 1 : 0,
             req.user?.userId || 'system'
           );
+
+          if (isPackageCovered && packageContractId) {
+            const resv = PackageService.reservePackageRightTx({
+              tenantId,
+              contractId: String(packageContractId),
+              studentId: patientId,
+              serviceId,
+              appointmentId: apptId,
+              startTime: sIso,
+              createdBy: req.user?.userId || 'system'
+            });
+            db.prepare(`
+              UPDATE appointments SET package_entitlement_id = ? WHERE id = ? AND tenant_id = ?
+            `).run(resv.entitlementId, apptId, tenantId);
+          }
 
           db.prepare(`
             INSERT INTO appointment_status_history (id, appointment_id, previous_status, new_status, changed_by, reason)
             VALUES (?, ?, NULL, 'scheduled', ?, 'Agendamento em série recorrente')
           `).run(uuidv4(), apptId, req.user ? req.user.name : 'Sistema');
 
-          if (agreedAmount > 0 || suppliedPrice !== undefined) {
+          if (!isPackageCovered && (agreedAmount > 0 || suppliedPrice !== undefined)) {
             db.prepare(`
               INSERT INTO payments (id, tenant_id, appointment_id, patient_id, amount, payment_method, status, notes, service_id, base_amount, professional_id)
               VALUES (?, ?, ?, ?, ?, 'pix', ?, 'Gerado automaticamente por agendamento recorrente', ?, ?, ?)
@@ -2428,7 +2478,7 @@ export class AppointmentController {
         runTx();
       } catch (txErr: any) {
         if (txErr && typeof txErr.status === 'number' && txErr.code) {
-          res.status(txErr.status).json({ error: txErr.error, code: txErr.code });
+          res.status(txErr.status).json({ error: txErr.error || txErr.message || 'Conflito de horário', code: txErr.code });
           return;
         }
         throw txErr;

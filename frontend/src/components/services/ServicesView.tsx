@@ -17,8 +17,10 @@ import {
   User,
   Users,
   Bell,
-  Layers
+  Layers,
+  Package
 } from 'lucide-react';
+import { PackageModal } from './PackageModal';
 
 export const CLINICAL_MODULE_LABELS: Record<string, string> = {
   ZemdaMed: 'Medicina (ZemdaMed)',
@@ -301,6 +303,10 @@ export const ServicesView: React.FC = () => {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
   const [professionals, setProfessionals] = useState<Professional[]>([]);
+  const [packages, setPackages] = useState<any[]>([]);
+  const [isStudioCompatible, setIsStudioCompatible] = useState<boolean>(false);
+  const [showPackageModal, setShowPackageModal] = useState<boolean>(false);
+  const [editingPackage, setEditingPackage] = useState<any | null>(null);
   const [selectedProfFilter, setSelectedProfFilter] = useState<string>('all');
   const [loading, setLoading] = useState<boolean>(true);
 
@@ -384,15 +390,21 @@ export const ServicesView: React.FC = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [srvs, rms, specs, profs] = await Promise.all([
+      const [srvs, rms, specs, profs, pkgRes] = await Promise.all([
         ApiClient.get<Service[]>('/v1/services'),
         ApiClient.get<Room[]>('/v1/rooms'),
         ApiClient.get<Specialty[]>('/v1/taxonomy/specialties'),
-        ApiClient.get<Professional[]>('/v1/professionals').catch(() => [])
+        ApiClient.get<Professional[]>('/v1/professionals').catch(() => []),
+        ApiClient.get<{ isStudioCompatible: boolean; packages: any[] }>('/v1/packages?includeInactive=1').catch(() => ({
+          isStudioCompatible: false,
+          packages: []
+        }))
       ]);
       setServices(srvs || []);
       setRooms(rms || []);
       setSpecialties(specs || []);
+      setIsStudioCompatible(Boolean(pkgRes?.isStudioCompatible));
+      setPackages(pkgRes?.packages || []);
       const profList = Array.isArray(profs) ? profs : [];
       setProfessionals(profList);
       if (profList.length > 0 && !professionalId) {
@@ -709,12 +721,47 @@ export const ServicesView: React.FC = () => {
               Cada profissional possui seus próprios serviços, valores, durações e modalidades de atendimento.
             </p>
           </div>
-          <button
-            onClick={() => handleOpenCreateModalForProf(selectedProfFilter !== 'all' ? selectedProfFilter : null)}
-            className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-all cursor-pointer"
-          >
-            <Plus className="w-4 h-4" /> Novo Serviço
-          </button>
+          {isStudioCompatible ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setServiceKind('individual');
+                  handleOpenCreateModalForProf(selectedProfFilter !== 'all' ? selectedProfFilter : null);
+                }}
+                className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" /> Serviço Individual
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setServiceKind('group');
+                  handleOpenCreateModalForProf(selectedProfFilter !== 'all' ? selectedProfFilter : null);
+                }}
+                className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-xl transition-all cursor-pointer"
+              >
+                <Users className="w-3.5 h-3.5" /> Aula Coletiva
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingPackage(null);
+                  setShowPackageModal(true);
+                }}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-all cursor-pointer"
+              >
+                <Package className="w-4 h-4" /> Criar Pacote de Serviços
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => handleOpenCreateModalForProf(selectedProfFilter !== 'all' ? selectedProfFilter : null)}
+              className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-all cursor-pointer"
+            >
+              <Plus className="w-4 h-4" /> Novo Serviço
+            </button>
+          )}
         </div>
 
         {/* Filtros e Seletores por Profissional */}
@@ -888,6 +935,137 @@ export const ServicesView: React.FC = () => {
           ))}
         </div>
       </div>
+
+      {/* Pacotes de Serviços (Studios / Mistos) */}
+      {isStudioCompatible && (
+        <div className="space-y-4">
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+                <Package className="w-5 h-5 text-indigo-600" />
+                Pacotes de Serviços e Planos
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Combine modalidades e instrutores distintos em mensalidades únicas ou pacotes fechados sem cobrar sessão individual.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setEditingPackage(null);
+                setShowPackageModal(true);
+              }}
+              className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-all cursor-pointer self-start sm:self-auto"
+            >
+              <Plus className="w-4 h-4" /> Novo Pacote
+            </button>
+          </div>
+
+          {packages.length === 0 ? (
+            <div className="bg-white p-6 rounded-2xl border border-dashed border-slate-300 text-center space-y-2 text-xs text-slate-500">
+              <p>Nenhum pacote cadastrado ainda neste Studio. Crie pacotes de Pilates, Dança, Zumba ou planos livres combinados.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {packages.map(pkg => (
+                <div
+                  key={pkg.id}
+                  className={`bg-white p-5 rounded-2xl border shadow-xs flex flex-col justify-between gap-4 transition-all ${
+                    pkg.active ? 'border-slate-200 hover:border-indigo-300' : 'border-slate-200 opacity-70 bg-slate-50'
+                  }`}
+                >
+                  <div className="space-y-2.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <h4 className="font-bold text-slate-900 text-base truncate">{pkg.name}</h4>
+                          {!pkg.active && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-600">
+                              Inativo
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap gap-1.5 mt-1">
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100">
+                            {pkg.billing_type === 'recurring_monthly' ? 'Mensalidade recorrente' : `Pagamento único (${pkg.installments_count || 1}x)`}
+                          </span>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-100">
+                            {pkg.credit_mode === 'shared_pool' ? `Livre • ${pkg.total_credits} aulas` : `Por serviço • ${pkg.total_credits} aulas`}
+                          </span>
+                        </div>
+                      </div>
+                      <span className="text-sm font-extrabold text-indigo-600 whitespace-nowrap">
+                        {Number(pkg.price || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      </span>
+                    </div>
+
+                    {pkg.description && <p className="text-xs text-slate-500 line-clamp-2">{pkg.description}</p>}
+
+                    <div className="space-y-1 pt-1">
+                      <div className="text-[10px] font-bold uppercase text-slate-400">Modalidades incluídas</div>
+                      <div className="space-y-1">
+                        {(pkg.items || []).map((it: any) => (
+                          <div key={it.id} className="text-xs flex items-center justify-between gap-2 bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-100">
+                            <div className="min-w-0">
+                              <span className="font-semibold text-slate-800 truncate block">{it.service_name}</span>
+                              {it.service_professional_name && (
+                                <span className="text-[10px] text-slate-500">Prof: {it.service_professional_name}</span>
+                              )}
+                            </div>
+                            <span className="text-[11px] font-bold text-indigo-700 shrink-0">
+                              {pkg.credit_mode === 'shared_pool'
+                                ? 'Pool livre'
+                                : `${it.included_credits} aula${Number(it.included_credits) === 1 ? '' : 's'}`}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+                    <span>
+                      Validade: <strong>{pkg.validity_days || 30}d</strong> • Falta:{' '}
+                      <strong>{pkg.absent_consumption_policy === 'refund' ? 'Restitui' : 'Consome'}</strong>
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingPackage(pkg);
+                          setShowPackageModal(true);
+                        }}
+                        className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg cursor-pointer"
+                        title="Editar Pacote"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      {Boolean(pkg.active) && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              await ApiClient.delete(`/v1/packages/${pkg.id}`);
+                              showToast('Pacote inativado no catálogo.', 'success');
+                              fetchData();
+                            } catch (err: any) {
+                              showToast(err?.message || 'Erro ao inativar pacote.', 'error');
+                            }
+                          }}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
+                          title="Inativar Pacote"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Salas Section */}
       <div className="space-y-4">
@@ -1570,6 +1748,18 @@ export const ServicesView: React.FC = () => {
           </div>
         </div>
       )}
+
+      <PackageModal
+        isOpen={showPackageModal}
+        onClose={() => {
+          setShowPackageModal(false);
+          setEditingPackage(null);
+        }}
+        onSuccess={fetchData}
+        services={services}
+        professionals={professionals}
+        editingPackage={editingPackage}
+      />
     </div>
   );
 };

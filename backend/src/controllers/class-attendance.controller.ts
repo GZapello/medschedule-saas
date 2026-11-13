@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { logAudit } from '../middlewares/audit.middleware';
+import { PackageService } from '../services/package.service';
 
 const VALID_ATTENDANCE_STATUSES = ['pending', 'present', 'absent', 'cancelled'] as const;
 type AttendanceStatus = typeof VALID_ATTENDANCE_STATUSES[number];
@@ -246,24 +247,33 @@ export class ClassAttendanceController {
       }
 
       const userId = req.user?.userId || 'system';
-      db.prepare(`
-        UPDATE appointments
-        SET attendance_status = ?,
-            attendance_marked_at = CASE WHEN ? = 'pending' THEN NULL ELSE datetime('now') END,
-            attendance_marked_by = CASE WHEN ? = 'pending' THEN NULL ELSE ? END,
-            attendance_notes = CASE WHEN ? IS NOT NULL THEN ? ELSE attendance_notes END,
-            updated_at = datetime('now')
-        WHERE id = ? AND tenant_id = ?
-      `).run(
-        attendanceStatus,
-        attendanceStatus,
-        attendanceStatus,
-        userId,
-        notes !== undefined ? 1 : null,
-        typeof notes === 'string' ? notes.trim() || null : null,
-        appointmentId,
-        tenantId
-      );
+      db.transaction(() => {
+        db.prepare(`
+          UPDATE appointments
+          SET attendance_status = ?,
+              attendance_marked_at = CASE WHEN ? = 'pending' THEN NULL ELSE datetime('now') END,
+              attendance_marked_by = CASE WHEN ? = 'pending' THEN NULL ELSE ? END,
+              attendance_notes = CASE WHEN ? IS NOT NULL THEN ? ELSE attendance_notes END,
+              updated_at = datetime('now')
+          WHERE id = ? AND tenant_id = ?
+        `).run(
+          attendanceStatus,
+          attendanceStatus,
+          attendanceStatus,
+          userId,
+          notes !== undefined ? 1 : null,
+          typeof notes === 'string' ? notes.trim() || null : null,
+          appointmentId,
+          tenantId
+        );
+
+        PackageService.handleAttendanceChangeTx({
+          tenantId,
+          appointmentId,
+          attendanceStatus,
+          createdBy: userId
+        });
+      })();
 
       logAudit(req, 'MARK_CLASS_ATTENDANCE', 'appointments', appointmentId, {
         occurrenceId: appt.occurrence_id || occurrenceId,

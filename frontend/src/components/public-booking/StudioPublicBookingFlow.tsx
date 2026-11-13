@@ -1,0 +1,1077 @@
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Calendar,
+  Clock,
+  Users,
+  Package,
+  UserRound,
+  CheckCircle2,
+  Repeat,
+  ArrowRight,
+  Sparkles,
+  AlertCircle
+} from 'lucide-react';
+import { ApiClient } from '../../api/client';
+import { calendarBooking } from '../../utils/publicBooking';
+import { bookingButton, bookingSecondary, bookingInput, BookingBackButton } from './PublicBookingShell';
+
+interface StudioPublicBookingFlowProps {
+  clinic: any;
+  tenantSlug?: string;
+  bookingSequence?: number;
+  services: any[];
+  professionals: any[];
+  packages: any[];
+  onSwitchClinical?: () => void;
+}
+
+interface SelectedPackageSlotItem {
+  key: string;
+  serviceId: string;
+  serviceName: string;
+  professionalId: string;
+  professionalName: string;
+  startTime: string;
+  endTime: string;
+  remainingSpots?: number | null;
+  capacity?: number | null;
+  recurrenceCount: number;
+}
+
+const todayIso = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+
+const addDays = (baseIso: string, days: number) => {
+  const [y, m, d] = baseIso.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+};
+
+const formatDateShort = (iso: string) => {
+  const [y, m, d] = iso.slice(0, 10).split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+  return new Intl.DateTimeFormat('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' }).format(dt);
+};
+
+const formatMoney = (v: number | string) =>
+  Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = ({
+  clinic,
+  tenantSlug,
+  bookingSequence,
+  services,
+  professionals,
+  packages,
+  onSwitchClinical
+}) => {
+  const [step, setStep] = useState<number>(1);
+  const [objective, setObjective] = useState<'service' | 'package'>('service');
+
+  // Service booking state
+  const [selectedServiceId, setSelectedServiceId] = useState<string>(services.length === 1 ? services[0].id : '');
+  const [selectedProfFilter, setSelectedProfFilter] = useState<string>('any');
+  const [selectedDate, setSelectedDate] = useState<string>(todayIso());
+  const [loadingSlots, setLoadingSlots] = useState<boolean>(false);
+  const [slots, setSlots] = useState<any[]>([]);
+  const [linkedProfessionals, setLinkedProfessionals] = useState<any[]>([]);
+  const [emptyReason, setEmptyReason] = useState<string>('');
+  const [selectedSlot, setSelectedSlot] = useState<any | null>(null);
+  const [useRecurrence, setUseRecurrence] = useState<boolean>(false);
+  const [recurrenceCount, setRecurrenceCount] = useState<number>(4);
+
+  // Package booking state
+  const [selectedPackageId, setSelectedPackageId] = useState<string>(packages.length === 1 ? packages[0].id : '');
+  const [activePkgServiceId, setActivePkgServiceId] = useState<string>('');
+  const [pkgProfFilter, setPkgProfFilter] = useState<string>('any');
+  const [pkgDate, setPkgDate] = useState<string>(todayIso());
+  const [pkgSlots, setPkgSlots] = useState<any[]>([]);
+  const [pkgLinkedProfs, setPkgLinkedProfs] = useState<any[]>([]);
+  const [pkgSlotsLoading, setPkgSlotsLoading] = useState<boolean>(false);
+  const [pkgEmptyReason, setPkgEmptyReason] = useState<string>('');
+  const [pkgSelectedItems, setPkgSelectedItems] = useState<SelectedPackageSlotItem[]>([]);
+  const [pkgItemRepeatCount, setPkgItemRepeatCount] = useState<number>(1);
+
+  // Student form & submit
+  const [studentForm, setStudentForm] = useState({
+    fullName: '',
+    phone: '',
+    whatsapp: '',
+    email: '',
+    notes: ''
+  });
+  const [submitting, setSubmitting] = useState<boolean>(false);
+  const [error, setError] = useState<string>('');
+  const [bookingResult, setBookingResult] = useState<any | null>(null);
+  const submitLock = useRef(false);
+
+  const selectedService = useMemo(
+    () => services.find(s => s.id === selectedServiceId) || null,
+    [services, selectedServiceId]
+  );
+  const selectedPackage = useMemo(
+    () => packages.find(p => p.id === selectedPackageId) || null,
+    [packages, selectedPackageId]
+  );
+
+  // Auto-seleciona primeiro serviço do pacote ao escolher pacote
+  useEffect(() => {
+    if (selectedPackage?.items?.length > 0) {
+      setActivePkgServiceId(prev =>
+        selectedPackage.items.some((i: any) => i.service_id === prev) ? prev : selectedPackage.items[0].service_id
+      );
+    } else {
+      setActivePkgServiceId('');
+    }
+    setPkgSelectedItems([]);
+  }, [selectedPackageId, selectedPackage]);
+
+  // Busca horários para Serviço avulso / Turma
+  useEffect(() => {
+    if (objective !== 'service' || step < 3 || step > 4 || !selectedServiceId || !selectedDate) return;
+    let cancelled = false;
+    setLoadingSlots(true);
+    setEmptyReason('');
+    const seqParam = bookingSequence ? `&bookingSequence=${bookingSequence}` : '';
+    const profParam = selectedProfFilter ? `&professionalId=${encodeURIComponent(selectedProfFilter)}` : '';
+    ApiClient.get<any>(
+      `/v1/public/studio/slots?tenantSlug=${encodeURIComponent(tenantSlug || clinic?.slug || '')}${seqParam}&serviceId=${encodeURIComponent(selectedServiceId)}&date=${selectedDate}${profParam}`
+    )
+      .then(res => {
+        if (cancelled) return;
+        const profs = res?.professionals || [];
+        setLinkedProfessionals(profs);
+        if (profs.length === 1 && selectedProfFilter === 'any') {
+          setSelectedProfFilter(profs[0].id);
+        }
+        setSlots(res?.slots || []);
+        setEmptyReason(res?.emptyReason || '');
+      })
+      .catch(err => {
+        if (!cancelled) {
+          setSlots([]);
+          setEmptyReason(err?.message || 'Não foi possível consultar horários.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingSlots(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [objective, step, selectedServiceId, selectedDate, selectedProfFilter, tenantSlug, clinic?.slug, bookingSequence]);
+
+  // Busca horários para modalidade dentro de Pacote
+  useEffect(() => {
+    if (objective !== 'package' || step !== 3 || !activePkgServiceId || !pkgDate) return;
+    let cancelled = false;
+    setPkgSlotsLoading(true);
+    setPkgEmptyReason('');
+    const seqParam = bookingSequence ? `&bookingSequence=${bookingSequence}` : '';
+    const profParam = pkgProfFilter ? `&professionalId=${encodeURIComponent(pkgProfFilter)}` : '';
+    ApiClient.get<any>(
+      `/v1/public/studio/slots?tenantSlug=${encodeURIComponent(tenantSlug || clinic?.slug || '')}${seqParam}&serviceId=${encodeURIComponent(activePkgServiceId)}&date=${pkgDate}${profParam}`
+    )
+      .then(res => {
+        if (cancelled) return;
+        const profs = res?.professionals || [];
+        setPkgLinkedProfs(profs);
+        if (profs.length === 1 && pkgProfFilter === 'any') {
+          setPkgProfFilter(profs[0].id);
+        }
+        setPkgSlots(res?.slots || []);
+        setPkgEmptyReason(res?.emptyReason || '');
+      })
+      .catch(err => {
+        if (!cancelled) {
+          setPkgSlots([]);
+          setPkgEmptyReason(err?.message || 'Não foi possível consultar horários.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setPkgSlotsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [objective, step, activePkgServiceId, pkgDate, pkgProfFilter, tenantSlug, clinic?.slug, bookingSequence]);
+
+  const upcomingDatePills = useMemo(() => {
+    const start = todayIso();
+    return Array.from({ length: 7 }, (_, i) => addDays(start, i));
+  }, []);
+
+  const addPackageSlotChoice = (slotObj: any) => {
+    const srv = services.find(s => s.id === activePkgServiceId);
+    if (!srv || !selectedPackage) return;
+
+    const repeat = Math.max(1, Math.min(12, pkgItemRepeatCount));
+    const currentTotalReserved = pkgSelectedItems.reduce((sum, item) => sum + item.recurrenceCount, 0);
+    const pkgMaxTotal = Number(selectedPackage.total_credits || 999);
+
+    if (currentTotalReserved + repeat > pkgMaxTotal) {
+      setError(`Esse pacote permite até ${pkgMaxTotal} aulas reservadas neste ciclo.`);
+      return;
+    }
+
+    if (selectedPackage.credit_mode === 'per_service') {
+      const pkgItem = (selectedPackage.items || []).find((i: any) => i.service_id === activePkgServiceId);
+      const itemMax = Number(pkgItem?.included_credits || 0);
+      const alreadyForSrv = pkgSelectedItems
+        .filter(it => it.serviceId === activePkgServiceId)
+        .reduce((sum, it) => sum + it.recurrenceCount, 0);
+      if (itemMax > 0 && alreadyForSrv + repeat > itemMax) {
+        setError(`A modalidade ${srv.name} possui até ${itemMax} aulas neste pacote.`);
+        return;
+      }
+    }
+
+    const key = `${activePkgServiceId}-${slotObj.professionalId}-${slotObj.startTime}`;
+    if (pkgSelectedItems.some(it => it.key === key)) {
+      setError('Este horário já está na lista de solicitação.');
+      return;
+    }
+    setError('');
+    setPkgSelectedItems(prev => [
+      ...prev,
+      {
+        key,
+        serviceId: activePkgServiceId,
+        serviceName: srv.name,
+        professionalId: pkgProfFilter === 'any' ? slotObj.professionalId : pkgProfFilter,
+        professionalName: slotObj.professionalName,
+        startTime: slotObj.startTime,
+        endTime: slotObj.endTime,
+        remainingSpots: slotObj.remainingSpots,
+        capacity: slotObj.capacity,
+        recurrenceCount: srv.allow_recurrence ? repeat : 1
+      }
+    ]);
+  };
+
+  const removePackageSlotChoice = (key: string) => {
+    setPkgSelectedItems(prev => prev.filter(it => it.key !== key));
+  };
+
+  const handleConfirmSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (submitLock.current) return;
+    setError('');
+
+    if (!studentForm.fullName.trim() || !studentForm.phone.trim()) {
+      setError('Informe seu nome completo e WhatsApp / telefone.');
+      return;
+    }
+
+    submitLock.current = true;
+    setSubmitting(true);
+
+    try {
+      const payload =
+        objective === 'package'
+          ? {
+              tenantSlug: tenantSlug || clinic?.slug,
+              bookingSequence,
+              mode: 'package',
+              packageId: selectedPackageId,
+              schedules: pkgSelectedItems.map(it => ({
+                serviceId: it.serviceId,
+                professionalId: it.professionalId,
+                startTime: it.startTime,
+                endTime: it.endTime,
+                ...(it.recurrenceCount > 1
+                  ? { recurrence: { frequency: 'weekly', maxOccurrences: it.recurrenceCount } }
+                  : {})
+              })),
+              student: {
+                fullName: studentForm.fullName.trim(),
+                phone: studentForm.phone.trim(),
+                whatsapp: studentForm.whatsapp.trim() || studentForm.phone.trim(),
+                email: studentForm.email.trim() || null,
+                notes: studentForm.notes.trim() || null
+              }
+            }
+          : {
+              tenantSlug: tenantSlug || clinic?.slug,
+              bookingSequence,
+              mode: 'service',
+              serviceId: selectedServiceId,
+              professionalId: selectedProfFilter === 'any' ? selectedSlot?.professionalId || 'any' : selectedProfFilter,
+              startTime: selectedSlot?.startTime,
+              endTime: selectedSlot?.endTime,
+              ...(useRecurrence && selectedService?.allow_recurrence
+                ? { recurrence: { frequency: 'weekly', maxOccurrences: recurrenceCount } }
+                : {}),
+              student: {
+                fullName: studentForm.fullName.trim(),
+                phone: studentForm.phone.trim(),
+                whatsapp: studentForm.whatsapp.trim() || studentForm.phone.trim(),
+                email: studentForm.email.trim() || null,
+                notes: studentForm.notes.trim() || null
+              }
+            };
+
+      const res = await ApiClient.post<any>('/v1/public/studio/bookings', payload);
+      setBookingResult(res);
+      setStep(6);
+    } catch (err: any) {
+      setError(err?.message || 'Não foi possível concluir a solicitação.');
+    } finally {
+      setSubmitting(false);
+      submitLock.current = false;
+    }
+  };
+
+  const downloadIcsFirst = () => {
+    const first = bookingResult?.appointments?.[0];
+    if (!first) return;
+    const blob = new Blob(
+      [
+        calendarBooking({
+          startTime: first.startTime,
+          endTime: first.endTime,
+          title: `${first.serviceName} — ${first.professionalName}`,
+          clinic: clinic?.trade_name || clinic?.name || 'Studio'
+        })
+      ],
+      { type: 'text/calendar;charset=utf-8' }
+    );
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `aula-studio-${first.startTime.slice(0, 10)}.ics`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const resetFlow = () => {
+    setBookingResult(null);
+    setSelectedSlot(null);
+    setPkgSelectedItems([]);
+    setError('');
+    setStep(1);
+  };
+
+  const stepLabels = [
+    { num: 1, label: 'Objetivo' },
+    { num: 2, label: objective === 'package' ? 'Pacotes' : 'Modalidade' },
+    { num: 3, label: 'Horários' },
+    { num: 4, label: 'Resumo' },
+    { num: 5, label: 'Seus dados' },
+    { num: 6, label: 'Solicitado' }
+  ];
+
+  return (
+    <div className="space-y-6">
+      {onSwitchClinical && step < 6 && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={onSwitchClinical}
+            className="text-xs font-semibold text-teal-700 hover:text-teal-900 underline underline-offset-2 cursor-pointer"
+          >
+            Trocar para Atendimentos Individuais (Clínica)
+          </button>
+        </div>
+      )}
+
+      {/* Indicador de etapas do Studio */}
+      <nav aria-label="Etapas do agendamento do Studio" className="grid grid-cols-3 sm:grid-cols-6 gap-2 text-[11px]">
+        {stepLabels.map(item => {
+          const active = step === item.num;
+          const done = step > item.num;
+          return (
+            <button
+              key={item.num}
+              type="button"
+              disabled={!done || step === 6}
+              onClick={() => done && step < 6 && setStep(item.num)}
+              className={`px-2.5 py-2 rounded-xl border text-center font-bold transition-all ${
+                active
+                  ? 'bg-teal-700 text-white border-teal-700 shadow-xs'
+                  : done
+                  ? 'bg-teal-50 text-teal-800 border-teal-200 cursor-pointer hover:bg-teal-100'
+                  : 'bg-slate-50 text-slate-400 border-slate-200'
+              }`}
+            >
+              {item.num}. {item.label}
+            </button>
+          );
+        })}
+      </nav>
+
+      {error && (
+        <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-xs text-rose-800 font-semibold flex items-start gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {/* ETAPA 1: OBJETIVO */}
+      {step === 1 && (
+        <div className="space-y-4">
+          <div className="text-center space-y-1">
+            <h2 className="text-xl font-bold text-slate-900">Como deseja agendar hoje?</h2>
+            <p className="text-xs text-slate-500">
+              Escolha entre agendar uma aula avulsa / turma ou conhecer os pacotes do Studio.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <button
+              type="button"
+              onClick={() => {
+                setObjective('service');
+                setError('');
+                setStep(2);
+              }}
+              className="p-5 rounded-2xl border-2 border-slate-200 hover:border-teal-600 bg-white text-left space-y-2.5 transition-all shadow-2xs cursor-pointer group"
+            >
+              <div className="w-11 h-11 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center group-hover:bg-teal-700 group-hover:text-white transition-colors">
+                <Calendar className="w-5 h-5" />
+              </div>
+              <div className="font-bold text-base text-slate-900">Agendar uma aula</div>
+              <p className="text-xs text-slate-500">
+                Veja modalidades, turmas coletivas com vagas em tempo real, instrutores e horários disponíveis.
+              </p>
+              <span className="inline-flex items-center gap-1 text-xs font-bold text-teal-700 pt-1">
+                Ver modalidades <ArrowRight className="w-3.5 h-3.5" />
+              </span>
+            </button>
+
+            <button
+              type="button"
+              disabled={packages.length === 0}
+              onClick={() => {
+                setObjective('package');
+                setError('');
+                setStep(2);
+              }}
+              className={`p-5 rounded-2xl border-2 text-left space-y-2.5 transition-all shadow-2xs ${
+                packages.length === 0
+                  ? 'border-slate-100 bg-slate-50 opacity-60 cursor-not-allowed'
+                  : 'border-slate-200 hover:border-indigo-600 bg-white cursor-pointer group'
+              }`}
+            >
+              <div className="w-11 h-11 rounded-2xl bg-indigo-50 text-indigo-700 flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                <Package className="w-5 h-5" />
+              </div>
+              <div className="font-bold text-base text-slate-900">Conhecer os pacotes</div>
+              <p className="text-xs text-slate-500">
+                {packages.length > 0
+                  ? `Combine aulas e modalidades com mensalidade ou valor fechado (${packages.length} pacote${packages.length > 1 ? 's' : ''} disponíve${packages.length > 1 ? 'is' : 'l'}).`
+                  : 'Nenhum pacote público configurado neste Studio no momento.'}
+              </p>
+              {packages.length > 0 && (
+                <span className="inline-flex items-center gap-1 text-xs font-bold text-indigo-700 pt-1">
+                  Explorar pacotes <ArrowRight className="w-3.5 h-3.5" />
+                </span>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ETAPA 2: MODALIDADE (SERVIÇO) OU PACOTE */}
+      {step === 2 && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-2">
+            <BookingBackButton onClick={() => setStep(1)} />
+            <span className="text-xs font-semibold text-slate-500">
+              {objective === 'package' ? 'Escolha um pacote' : 'Escolha a modalidade ou aula'}
+            </span>
+          </div>
+
+          {objective === 'service' ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {services.map(s => {
+                const chosen = selectedServiceId === s.id;
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedServiceId(s.id);
+                      setSelectedSlot(null);
+                      setSelectedProfFilter('any');
+                      setError('');
+                      setStep(3);
+                    }}
+                    className={`p-4 rounded-2xl border text-left space-y-2 transition-all cursor-pointer ${
+                      chosen
+                        ? 'border-teal-600 bg-teal-50/40 ring-2 ring-teal-500/20'
+                        : 'border-slate-200 bg-white hover:border-teal-400'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="font-bold text-sm text-slate-900">{s.name}</span>
+                      {Number(s.price) > 0 && (
+                        <span className="text-xs font-extrabold text-teal-700 whitespace-nowrap">
+                          {formatMoney(s.price)}
+                        </span>
+                      )}
+                    </div>
+                    {s.description && <p className="text-xs text-slate-500 line-clamp-2">{s.description}</p>}
+                    <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                      <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 font-semibold">
+                        <Clock className="w-3 h-3 inline mr-1" />
+                        {s.duration_minutes || 50} min
+                      </span>
+                      {s.service_kind === 'group' && (
+                        <span className="px-2 py-0.5 rounded-full bg-teal-50 text-teal-800 border border-teal-200 font-bold">
+                          <Users className="w-3 h-3 inline mr-1" />
+                          Turma coletiva ({s.default_capacity || 1} vagas)
+                        </span>
+                      )}
+                      {Boolean(s.allow_recurrence) && (
+                        <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-semibold">
+                          Permite plano semanal
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-3">
+              {packages.map(pkg => (
+                <button
+                  key={pkg.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedPackageId(pkg.id);
+                    setError('');
+                    setStep(3);
+                  }}
+                  className={`p-4 sm:p-5 rounded-2xl border text-left space-y-3 transition-all cursor-pointer ${
+                    selectedPackageId === pkg.id
+                      ? 'border-indigo-600 bg-indigo-50/30 ring-2 ring-indigo-500/20'
+                      : 'border-slate-200 bg-white hover:border-indigo-400'
+                  }`}
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <h3 className="font-bold text-base text-slate-900">{pkg.name}</h3>
+                      <div className="flex flex-wrap gap-1.5 mt-1">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                          {pkg.billing_type === 'recurring_monthly'
+                            ? 'Mensalidade recorrente'
+                            : `Pagamento único (${pkg.installments_count || 1}x)`}
+                        </span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-50 text-teal-800 border border-teal-200">
+                          {pkg.credit_mode === 'shared_pool'
+                            ? `Livre • ${pkg.total_credits} aulas no período`
+                            : `Total de ${pkg.total_credits} aulas incluídas`}
+                        </span>
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                          Validade: {pkg.validity_days || 30} dias
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-lg font-extrabold text-indigo-700">{formatMoney(pkg.price)}</div>
+                      {pkg.billing_type === 'recurring_monthly' && (
+                        <div className="text-[10px] text-slate-500">por mês</div>
+                      )}
+                    </div>
+                  </div>
+                  {pkg.description && <p className="text-xs text-slate-600">{pkg.description}</p>}
+                  <div className="flex flex-wrap gap-2">
+                    {(pkg.items || []).map((it: any) => (
+                      <span
+                        key={it.id}
+                        className="text-[11px] px-2.5 py-1 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 font-semibold"
+                      >
+                        {it.service_name}
+                        {pkg.credit_mode === 'per_service' ? ` (${it.included_credits}x)` : ''}
+                        {it.service_professional_name ? ` • Prof. ${it.service_professional_name}` : ''}
+                      </span>
+                    ))}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ETAPA 3: DIAS, HORÁRIOS, VAGAS & INSTRUTOR */}
+      {step === 3 && objective === 'service' && selectedService && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-2">
+            <BookingBackButton onClick={() => setStep(2)} />
+            <span className="text-xs font-bold text-slate-700">{selectedService.name}</span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Instrutor</label>
+              <select
+                value={selectedProfFilter}
+                onChange={e => {
+                  setSelectedProfFilter(e.target.value);
+                  setSelectedSlot(null);
+                }}
+                className={bookingInput}
+              >
+                <option value="any">Qualquer instrutor disponível</option>
+                {linkedProfessionals.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Data</label>
+              <input
+                type="date"
+                min={todayIso()}
+                value={selectedDate}
+                onChange={e => {
+                  setSelectedDate(e.target.value);
+                  setSelectedSlot(null);
+                }}
+                className={bookingInput}
+              />
+            </div>
+          </div>
+
+          <div className="flex gap-1.5 overflow-x-auto pb-1">
+            {upcomingDatePills.map(d => (
+              <button
+                key={d}
+                type="button"
+                onClick={() => {
+                  setSelectedDate(d);
+                  setSelectedSlot(null);
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 border cursor-pointer ${
+                  selectedDate === d
+                    ? 'bg-teal-700 text-white border-teal-700'
+                    : 'bg-white text-slate-700 border-slate-200 hover:border-teal-400'
+                }`}
+              >
+                {formatDateShort(d)}
+              </button>
+            ))}
+          </div>
+
+          {loadingSlots ? (
+            <div className="p-6 text-center text-xs text-slate-400">Buscando horários e vagas...</div>
+          ) : slots.length === 0 ? (
+            <div className="p-5 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-800 text-center">
+              {emptyReason || 'Sem horários disponíveis nesta data. Selecione outro dia.'}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+              {slots.map((s, idx) => {
+                const isChosen = selectedSlot?.startTime === s.startTime && selectedSlot?.professionalId === s.professionalId;
+                return (
+                  <button
+                    key={`${s.professionalId}-${s.startTime}-${idx}`}
+                    type="button"
+                    onClick={() => setSelectedSlot(s)}
+                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
+                      isChosen
+                        ? 'bg-teal-700 text-white border-teal-700 shadow-sm'
+                        : 'bg-white text-slate-800 border-slate-200 hover:border-teal-500'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-extrabold">{s.time}</span>
+                      {s.serviceKind === 'group' && s.remainingSpots !== null && (
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            isChosen ? 'bg-teal-800 text-teal-100' : 'bg-teal-50 text-teal-800 border border-teal-200'
+                          }`}
+                        >
+                          {s.remainingSpots} vaga{s.remainingSpots === 1 ? '' : 's'}
+                        </span>
+                      )}
+                    </div>
+                    <div className={`text-[11px] mt-1 truncate ${isChosen ? 'text-teal-100' : 'text-slate-500'}`}>
+                      Prof. {s.professionalName}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Recorrência semanal finita */}
+          {selectedSlot && Boolean(selectedService.allow_recurrence) && (
+            <div className="p-4 rounded-2xl bg-indigo-50/50 border border-indigo-200 space-y-2.5 text-xs">
+              <label className="flex items-center gap-2 cursor-pointer font-bold text-indigo-950">
+                <input
+                  type="checkbox"
+                  checked={useRecurrence}
+                  onChange={e => setUseRecurrence(e.target.checked)}
+                  className="w-4 h-4 text-indigo-600 rounded"
+                />
+                <Repeat className="w-4 h-4 text-indigo-600" />
+                Repetir este horário toda semana (plano finito)
+              </label>
+              {useRecurrence && (
+                <div className="flex flex-wrap items-center gap-2 pl-6">
+                  <span className="text-slate-600">Quantidade de semanas:</span>
+                  <select
+                    value={recurrenceCount}
+                    onChange={e => setRecurrenceCount(Number(e.target.value) || 4)}
+                    className="border border-indigo-200 rounded-lg px-2.5 py-1 bg-white font-bold"
+                  >
+                    {[2, 3, 4, 6, 8, 12].map(n => (
+                      <option key={n} value={n}>{n} aulas semanais</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="flex justify-end pt-2">
+            <button
+              type="button"
+              disabled={!selectedSlot}
+              onClick={() => setStep(4)}
+              className={bookingButton}
+            >
+              Continuar <ArrowRight className="w-4 h-4 inline ml-1" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ETAPA 3 (MODO PACOTE): SELECIONAR HORÁRIOS POR MODALIDADE */}
+      {step === 3 && objective === 'package' && selectedPackage && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <BookingBackButton onClick={() => setStep(2)} />
+            <span className="text-xs font-bold text-indigo-800">{selectedPackage.name}</span>
+          </div>
+
+          <div className="p-3.5 rounded-2xl bg-indigo-50/60 border border-indigo-200 text-xs text-indigo-950 space-y-2">
+            <div className="font-bold">Selecione a modalidade abaixo para escolher seus horários (opcional ou completo):</div>
+            <div className="flex flex-wrap gap-2">
+              {(selectedPackage.items || []).map((it: any) => {
+                const countChosen = pkgSelectedItems
+                  .filter(x => x.serviceId === it.service_id)
+                  .reduce((sum, x) => sum + x.recurrenceCount, 0);
+                return (
+                  <button
+                    key={it.id}
+                    type="button"
+                    onClick={() => {
+                      setActivePkgServiceId(it.service_id);
+                      setPkgProfFilter('any');
+                    }}
+                    className={`px-3 py-1.5 rounded-xl font-bold border transition-all cursor-pointer ${
+                      activePkgServiceId === it.service_id
+                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        : 'bg-white text-slate-700 border-slate-200 hover:border-indigo-400'
+                    }`}
+                  >
+                    {it.service_name}
+                    {countChosen > 0 ? ` (${countChosen} escolh.)` : ''}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {activePkgServiceId && (
+            <div className="space-y-3 border border-slate-200 rounded-2xl p-4 bg-white">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">Instrutor</label>
+                  <select
+                    value={pkgProfFilter}
+                    onChange={e => setPkgProfFilter(e.target.value)}
+                    className={bookingInput}
+                  >
+                    <option value="any">Qualquer disponível</option>
+                    {pkgLinkedProfs.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">Data da aula</label>
+                  <input
+                    type="date"
+                    min={todayIso()}
+                    value={pkgDate}
+                    onChange={e => setPkgDate(e.target.value)}
+                    className={bookingInput}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">Repetir por semanas</label>
+                  <select
+                    value={pkgItemRepeatCount}
+                    onChange={e => setPkgItemRepeatCount(Number(e.target.value) || 1)}
+                    className={bookingInput}
+                  >
+                    <option value={1}>Somente esta data (1 aula)</option>
+                    <option value={2}>2 semanas seguidas</option>
+                    <option value={4}>4 semanas seguidas</option>
+                  </select>
+                </div>
+              </div>
+
+              {pkgSlotsLoading ? (
+                <div className="py-4 text-center text-xs text-slate-400">Consultando horários...</div>
+              ) : pkgSlots.length === 0 ? (
+                <div className="p-3 rounded-xl bg-amber-50 text-xs text-amber-800 text-center">
+                  {pkgEmptyReason || 'Sem horários livres para esta modalidade nesta data.'}
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {pkgSlots.map((s, idx) => (
+                    <button
+                      key={`${s.professionalId}-${s.startTime}-${idx}`}
+                      type="button"
+                      onClick={() => addPackageSlotChoice(s)}
+                      className="p-2.5 rounded-xl border border-slate-200 hover:border-indigo-500 hover:bg-indigo-50/40 text-left transition-all cursor-pointer"
+                    >
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="font-extrabold text-xs text-slate-900">+ {s.time}</span>
+                        {s.serviceKind === 'group' && s.remainingSpots !== null && (
+                          <span className="text-[10px] font-bold text-teal-700 bg-teal-50 px-1.5 rounded">
+                            {s.remainingSpots} v.
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[10px] text-slate-500 truncate">Prof. {s.professionalName}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Lista de horários escolhidos no pacote */}
+          {pkgSelectedItems.length > 0 && (
+            <div className="space-y-2">
+              <div className="text-xs font-bold text-slate-700">Horários selecionados para reserva inicial:</div>
+              <div className="space-y-1.5">
+                {pkgSelectedItems.map(it => (
+                  <div
+                    key={it.key}
+                    className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs"
+                  >
+                    <div className="min-w-0">
+                      <span className="font-bold text-slate-900">{it.serviceName}</span> •{' '}
+                      <span>{formatDateShort(it.startTime)} às {it.startTime.slice(11, 16)}</span> •{' '}
+                      <span className="text-slate-600">Prof. {it.professionalName}</span>
+                      {it.recurrenceCount > 1 && (
+                        <span className="ml-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800">
+                          {it.recurrenceCount}x semanal
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removePackageSlotChoice(it.key)}
+                      className="text-rose-600 hover:underline font-bold text-[11px] shrink-0 cursor-pointer"
+                    >
+                      Remover
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-end pt-2">
+            <button type="button" onClick={() => setStep(4)} className={bookingButton}>
+              Revisar solicitação <ArrowRight className="w-4 h-4 inline ml-1" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ETAPA 4: CONFIRMAÇÃO DE RESUMO + INSTRUTOR */}
+      {step === 4 && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <BookingBackButton onClick={() => setStep(3)} />
+            <span className="text-xs font-semibold text-slate-500">Confira antes de informar seus dados</span>
+          </div>
+
+          <div className="p-4 sm:p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3 text-xs">
+            <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-teal-600" />
+              Resumo da Solicitação
+            </h3>
+
+            {objective === 'package' && selectedPackage ? (
+              <div className="space-y-2">
+                <div className="flex justify-between font-bold text-sm text-slate-900">
+                  <span>{selectedPackage.name}</span>
+                  <span className="text-indigo-700">{formatMoney(selectedPackage.price)}</span>
+                </div>
+                <p className="text-slate-600">
+                  Cobrança:{' '}
+                  <strong>
+                    {selectedPackage.billing_type === 'recurring_monthly'
+                      ? 'Mensalidade recorrente'
+                      : `Pagamento único (${selectedPackage.installments_count || 1}x)`}
+                  </strong>{' '}
+                  • Pagamento pendente de acerto/confirmação no Studio.
+                </p>
+                {pkgSelectedItems.length > 0 ? (
+                  <ul className="list-disc pl-4 space-y-1 text-slate-700">
+                    {pkgSelectedItems.map(it => (
+                      <li key={it.key}>
+                        <strong>{it.serviceName}</strong> — {formatDateShort(it.startTime)} às {it.startTime.slice(11, 16)} (Prof.{' '}
+                        {it.professionalName}
+                        {it.recurrenceCount > 1 ? `, ${it.recurrenceCount} semanas` : ''})
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-slate-500">Sem horários pré-reservados agora — você poderá agendar após confirmação.</p>
+                )}
+              </div>
+            ) : selectedService && selectedSlot ? (
+              <div className="space-y-2">
+                <div className="flex justify-between font-bold text-sm text-slate-900">
+                  <span>{selectedService.name}</span>
+                  <span className="text-teal-700">{formatMoney(selectedService.price)}</span>
+                </div>
+                <p className="text-slate-700">
+                  <strong>Instrutor:</strong> {selectedSlot.professionalName}
+                </p>
+                <p className="text-slate-700">
+                  <strong>Data e hora:</strong> {formatDateShort(selectedSlot.startTime)} às {selectedSlot.time}
+                  {useRecurrence ? ` (série semanal de ${recurrenceCount} aulas)` : ''}
+                </p>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="flex justify-end">
+            <button type="button" onClick={() => setStep(5)} className={bookingButton}>
+              Informar meus dados <ArrowRight className="w-4 h-4 inline ml-1" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ETAPA 5: DADOS DO ALUNO (SEM BUSCA ABERTA) */}
+      {step === 5 && (
+        <form onSubmit={handleConfirmSubmit} className="space-y-4">
+          <div className="flex items-center justify-between">
+            <BookingBackButton onClick={() => setStep(4)} />
+            <span className="text-xs font-semibold text-slate-500">Seus dados para contato e reserva</span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+            <div className="sm:col-span-2">
+              <label className="block font-bold text-slate-700 mb-1">Nome completo *</label>
+              <input
+                type="text"
+                required
+                value={studentForm.fullName}
+                onChange={e => setStudentForm({ ...studentForm, fullName: e.target.value })}
+                placeholder="Digite seu nome completo"
+                className={bookingInput}
+              />
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">WhatsApp / Telefone *</label>
+              <input
+                type="tel"
+                required
+                value={studentForm.phone}
+                onChange={e => setStudentForm({ ...studentForm, phone: e.target.value })}
+                placeholder="(11) 99999-9999"
+                className={bookingInput}
+              />
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">E-mail (opcional)</label>
+              <input
+                type="email"
+                value={studentForm.email}
+                onChange={e => setStudentForm({ ...studentForm, email: e.target.value })}
+                placeholder="voce@email.com"
+                className={bookingInput}
+              />
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="block font-bold text-slate-700 mb-1">Observações (opcional)</label>
+              <textarea
+                rows={2}
+                value={studentForm.notes}
+                onChange={e => setStudentForm({ ...studentForm, notes: e.target.value })}
+                placeholder="Objetivo, preferência ou observação para o instrutor..."
+                className={bookingInput}
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-2">
+            <button type="submit" disabled={submitting} className={bookingButton}>
+              {submitting ? 'Enviando solicitação...' : objective === 'package' ? 'Solicitar pacote e horários' : 'Confirmar agendamento'}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {/* ETAPA 6: CONFIRMAÇÃO REAL (NUNCA EXIBE PAGAMENTO CONFIRMADO FALSO) */}
+      {step === 6 && bookingResult && (
+        <div className="p-6 rounded-3xl bg-emerald-50/70 border border-emerald-200 text-center space-y-4">
+          <div className="w-14 h-14 rounded-full bg-emerald-600 text-white flex items-center justify-center mx-auto shadow-sm">
+            <CheckCircle2 className="w-8 h-8" />
+          </div>
+          <div className="space-y-1">
+            <h3 className="text-lg font-extrabold text-slate-900">
+              {bookingResult.mode === 'package' ? 'Solicitação de Pacote Registrada!' : 'Horário Reservado!'}
+            </h3>
+            <p className="text-xs text-slate-600 max-w-md mx-auto">{bookingResult.message}</p>
+          </div>
+
+          {bookingResult.paymentPending && (
+            <div className="inline-block px-3.5 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold">
+              Status financeiro: Pagamento pendente no estabelecimento
+            </div>
+          )}
+
+          {Array.isArray(bookingResult.appointments) && bookingResult.appointments.length > 0 && (
+            <div className="text-left max-w-md mx-auto bg-white p-4 rounded-2xl border border-emerald-100 space-y-2 text-xs">
+              <div className="font-bold text-slate-700 uppercase text-[10px]">Aulas reservadas</div>
+              {bookingResult.appointments.map((a: any) => (
+                <div key={a.id} className="flex items-center justify-between gap-2 border-b border-slate-100 last:border-0 pb-1.5">
+                  <div>
+                    <div className="font-bold text-slate-900">{a.serviceName}</div>
+                    <div className="text-slate-500">Prof. {a.professionalName}</div>
+                  </div>
+                  <div className="text-right font-semibold text-teal-800">
+                    {formatDateShort(a.startTime)} • {a.startTime.slice(11, 16)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex flex-wrap justify-center gap-2 pt-2">
+            {bookingResult.appointments?.length > 0 && (
+              <button type="button" onClick={downloadIcsFirst} className={bookingSecondary}>
+                Adicionar ao calendário (.ics)
+              </button>
+            )}
+            <button type="button" onClick={resetFlow} className={bookingButton}>
+              Fazer outra reserva
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

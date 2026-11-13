@@ -40,8 +40,10 @@ import {
   ChevronDown,
   ChevronUp,
   Lock,
-  Eye
+  Eye,
+  Package
 } from 'lucide-react';
+import { PatientPackagesTab } from './PatientPackagesTab';
 import { ZemdaBodyModal } from '../zemda-body/ZemdaBodyModal';
 import { PrintableDocumentModal } from '../clinical/PrintableDocumentModal';
 import { EditPatientModal } from './EditPatientModal';
@@ -78,8 +80,9 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
   const { showToast } = useToast();
 
   const [activeTab, setActiveTab] = useState<
-    'overview' | 'timeline' | 'allergies_meds' | 'records' | 'physiotherapy' | 'dentistry' | 'nutrition' | 'occupational_therapy' | 'speech_therapy' | 'anamnesis' | 'exams' | 'insurances' | 'consents'
+    'overview' | 'timeline' | 'packages' | 'allergies_meds' | 'records' | 'physiotherapy' | 'dentistry' | 'nutrition' | 'occupational_therapy' | 'speech_therapy' | 'anamnesis' | 'exams' | 'insurances' | 'consents'
   >(initialTab || 'overview');
+  const [showPackagesTab, setShowPackagesTab] = useState<boolean>(false);
 
   const tabScroll = useHorizontalTabScroll(activeTab);
   const { tabScrollProps } = tabScroll;
@@ -224,9 +227,14 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
   const loadPatientBase = async () => {
     try {
       setLoading(true);
-      const data = await ApiClient.get<any>(`/v1/patients/${patientId}`);
+      const [data, pkgCatalog, patPkgs] = await Promise.all([
+        ApiClient.get<any>(`/v1/patients/${patientId}`),
+        ApiClient.get<{ isStudioCompatible: boolean }>('/v1/packages').catch(() => ({ isStudioCompatible: false })),
+        ApiClient.get<{ contracts: any[] }>(`/v1/patients/${patientId}/packages`).catch(() => ({ contracts: [] }))
+      ]);
       setPatientData(data);
       setAllergiesStatus(data.patient?.allergies_status || 'not_informed');
+      setShowPackagesTab(Boolean(pkgCatalog?.isStudioCompatible || (patPkgs?.contracts && patPkgs.contracts.length > 0)));
     } catch (err: any) {
       showToast('Erro ao carregar perfil do paciente', 'error');
     } finally {
@@ -658,6 +666,9 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
               {[
                 { id: 'overview', label: 'Visão Geral', icon: User },
                 { id: 'timeline', label: 'Linha do Tempo 360°', icon: Clock },
+                ...(showPackagesTab
+                  ? [{ id: 'packages', label: 'Pacotes', icon: Package }]
+                  : []),
                 { id: 'allergies_meds', label: 'Alergias & Remédios', icon: AlertTriangle },
                 { id: 'records', label: 'Prontuário & Evolução', icon: FileText },
                 ...(isPhysiotherapist
@@ -921,6 +932,14 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
                 </div>
               )}
             </div>
+          )}
+
+          {/* TAB: PACOTES DO ALUNO */}
+          {activeTab === 'packages' && (
+            <PatientPackagesTab
+              patientId={patientId}
+              patientName={patientData?.patient?.full_name || patientData?.patient?.name}
+            />
           )}
 
           {/* TAB 3: ALERGIAS & MEDICAMENTOS */}

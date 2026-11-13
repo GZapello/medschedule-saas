@@ -74,6 +74,7 @@ import { MedicalController } from '../controllers/medical.controller';
 import { SandboxController } from '../controllers/sandbox.controller';
 import { EsteticController } from '../controllers/estetic.controller';
 import { ServiceReminderController } from '../controllers/service-reminder.controller';
+import { PackageController } from '../controllers/package.controller';
 
 import { authMiddleware, onboardingGate, whatsappUpdateAuthMiddleware } from '../middlewares/auth.middleware';
 import { tenantMiddleware, requireTenant } from '../middlewares/tenant.middleware';
@@ -135,6 +136,10 @@ api.get('/v1/capabilities/medical-tree', CapabilityController.getMedicalTree);
 api.get('/v1/public/tenants/:slug', TenantController.getPublicProfile);
 api.get('/v1/public/slots/available', SlotController.getAvailableSlots);
 api.post('/v1/public/appointments', AppointmentController.create);
+
+// Agendamento Público Específico de Studios / Estabelecimentos Mistos
+api.get('/v1/public/studio/slots', PackageController.getPublicStudioSlots);
+api.post('/v1/public/studio/bookings', PackageController.createPublicStudioBooking);
 
 // Página Pública do Profissional & Agendamento Direto (/agendar/:clinicSlug/:professionalSlug ou /agendar/:slug)
 api.get('/v1/public/professionals/:clinicSlug/:professionalSlug', ProfessionalController.getPublicProfile);
@@ -361,6 +366,18 @@ api.put('/v1/services/:id', requireTenant, requireRole('clinic_admin'), ServiceC
 api.delete('/v1/services/:id', requireTenant, requireRole('clinic_admin'), ServiceController.delete);
 api.get('/v1/rooms', requireTenant, ServiceController.listRooms);
 api.post('/v1/rooms', requireTenant, requirePermissionOrRole('manage_services', 'clinic_admin'), ServiceController.createRoom);
+
+// Pacotes de Serviços (Studios / Estabelecimentos Mistos)
+api.get('/v1/packages', requireTenant, PackageController.listCatalog);
+api.post('/v1/packages', requireTenant, requirePermissionOrRole('manage_services', 'clinic_admin'), PackageController.createPackage);
+api.put('/v1/packages/:id', requireTenant, requirePermissionOrRole('manage_services', 'clinic_admin'), PackageController.updatePackage);
+api.delete('/v1/packages/:id', requireTenant, requirePermissionOrRole('manage_services', 'clinic_admin'), PackageController.deactivatePackage);
+
+api.get('/v1/package-contracts', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), PackageController.listContracts);
+api.post('/v1/package-contracts', requireTenant, requireRole('clinic_admin', 'receptionist'), PackageController.createContract);
+api.get('/v1/package-contracts/:id', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), PackageController.getContract);
+api.patch('/v1/package-contracts/:id/status', requireTenant, requireRole('clinic_admin', 'receptionist'), PackageController.updateContractStatus);
+api.get('/v1/patients/:patientId/packages', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), PackageController.listStudentContracts);
 
 // Lembretes de Contato / Retorno por Serviço
 api.get('/v1/service-reminders', requireTenant, ServiceReminderController.list);

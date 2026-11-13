@@ -16,9 +16,12 @@ import {
   CalendarCheck,
   CalendarX2,
   MapPin,
-  Video
+  Video,
+  Package,
+  Dumbbell
 } from 'lucide-react';
 import { ApiClient } from '../../api/client';
+import { StudioPublicBookingFlow } from './StudioPublicBookingFlow';
 import { AvailableSlot } from '../../types';
 import { bookingAreas, calendarBooking } from '../../utils/publicBooking';
 import {
@@ -125,6 +128,8 @@ export const PublicBookingView: React.FC<Props> = ({
   const [clinic, setClinic] = useState<any>(null);
   const [professionals, setProfessionals] = useState<any[]>([]);
   const [services, setServices] = useState<any[]>([]);
+  const [packages, setPackages] = useState<any[]>([]);
+  const [mixedFlowChoice, setMixedFlowChoice] = useState<'choose' | 'studio' | 'clinical'>('choose');
   const [area, setArea] = useState('');
   const [professional, setProfessional] = useState<any>(null);
   const [serviceId, setServiceId] = useState('');
@@ -216,6 +221,8 @@ export const PublicBookingView: React.FC<Props> = ({
         if (!active) return;
         setClinic(data.tenant);
         setServices(data.services || []);
+        setPackages(data.packages || []);
+        setMixedFlowChoice('choose');
         if (individual) {
           const p = {
             ...data.professional,
@@ -566,8 +573,84 @@ export const PublicBookingView: React.FC<Props> = ({
             Tentar novamente
           </button>
         </BookingEmptyState>
+      ) : !individual && clinic?.establishment_profile === 'studio' ? (
+        <StudioPublicBookingFlow
+          clinic={clinic}
+          tenantSlug={tenantSlug}
+          bookingSequence={bookingSequence}
+          services={services}
+          professionals={professionals}
+          packages={packages}
+        />
+      ) : !individual && clinic?.establishment_profile === 'mixed' && mixedFlowChoice === 'choose' ? (
+        <div className="space-y-5">
+          <div className="text-center space-y-1">
+            <h2 className="text-xl font-bold text-slate-900">Como você gostaria de agendar?</h2>
+            <p className="text-xs text-slate-500">
+              Este estabelecimento oferece aulas e pacotes de Studio além de atendimentos clínicos individuais.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <button
+              type="button"
+              onClick={() => setMixedFlowChoice('studio')}
+              className="p-5 rounded-2xl border-2 border-slate-200 hover:border-teal-600 bg-white text-left space-y-2.5 transition-all cursor-pointer group shadow-2xs"
+            >
+              <div className="w-11 h-11 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center group-hover:bg-teal-700 group-hover:text-white transition-colors">
+                <Dumbbell className="w-5 h-5" />
+              </div>
+              <div className="text-base font-bold text-slate-900 flex items-center gap-2">
+                Aulas e Pacotes
+              </div>
+              <p className="text-xs text-slate-500">
+                Turmas coletivas, horários por modalidade, planos e pacotes combinados do Studio.
+              </p>
+              <span className="inline-flex items-center gap-1 text-xs font-bold text-teal-700">
+                Acessar agenda do Studio <ArrowRight className="w-3.5 h-3.5" />
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setMixedFlowChoice('clinical')}
+              className="p-5 rounded-2xl border-2 border-slate-200 hover:border-indigo-600 bg-white text-left space-y-2.5 transition-all cursor-pointer group shadow-2xs"
+            >
+              <div className="w-11 h-11 rounded-2xl bg-indigo-50 text-indigo-700 flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                <Stethoscope className="w-5 h-5" />
+              </div>
+              <div className="text-base font-bold text-slate-900">Atendimentos Individuais</div>
+              <p className="text-xs text-slate-500">
+                Consultas e atendimentos clínicos organizados por especialidade e profissional.
+              </p>
+              <span className="inline-flex items-center gap-1 text-xs font-bold text-indigo-700">
+                Acessar agenda clínica <ArrowRight className="w-3.5 h-3.5" />
+              </span>
+            </button>
+          </div>
+        </div>
+      ) : !individual && clinic?.establishment_profile === 'mixed' && mixedFlowChoice === 'studio' ? (
+        <StudioPublicBookingFlow
+          clinic={clinic}
+          tenantSlug={tenantSlug}
+          bookingSequence={bookingSequence}
+          services={services}
+          professionals={professionals}
+          packages={packages}
+          onSwitchClinical={() => setMixedFlowChoice('clinical')}
+        />
       ) : (
         <>
+          {!individual && clinic?.establishment_profile === 'mixed' && mixedFlowChoice === 'clinical' && (
+            <div className="mb-3 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setMixedFlowChoice('studio')}
+                className="text-xs font-semibold text-teal-700 hover:text-teal-900 underline underline-offset-2 cursor-pointer"
+              >
+                Alternar para Aulas e Pacotes (Studio)
+              </button>
+            </div>
+          )}
           <BookingStepIndicator
             step={step}
             individual={individual}

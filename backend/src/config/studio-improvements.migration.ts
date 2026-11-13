@@ -45,6 +45,14 @@ export function migrateStudioImprovements(rawDb: DatabaseSync): void {
   addColIfMissing('payments', 'recurring_plan_id', 'TEXT');
   addColIfMissing('payments', 'competence_month', 'TEXT');
   addColIfMissing('payments', 'professional_id', 'TEXT');
+  addColIfMissing('payments', 'package_contract_id', 'TEXT');
+  addColIfMissing('payments', 'installment_number', 'INTEGER');
+  addColIfMissing('payments', 'total_installments', 'INTEGER');
+
+  // 4b. Referência de pacote em appointments (nunca cria cobrança individual quando is_package_covered = 1)
+  addColIfMissing('appointments', 'package_contract_id', 'TEXT');
+  addColIfMissing('appointments', 'package_entitlement_id', 'TEXT');
+  addColIfMissing('appointments', 'is_package_covered', 'INTEGER NOT NULL DEFAULT 0');
 
   // 5. Snapshot de detalhamento na folha de pagamento
   addColIfMissing('professional_payrolls', 'commission_breakdown_json', 'TEXT');
@@ -183,11 +191,129 @@ export function migrateStudioImprovements(rawDb: DatabaseSync): void {
 
     CREATE INDEX IF NOT EXISTS idx_appts_occurrence ON appointments(tenant_id, occurrence_id, status);
     CREATE INDEX IF NOT EXISTS idx_appts_series ON appointments(tenant_id, series_id, start_time);
+    CREATE INDEX IF NOT EXISTS idx_appts_package ON appointments(tenant_id, package_contract_id, status);
     CREATE INDEX IF NOT EXISTS idx_payments_due_status ON payments(tenant_id, status, due_date);
+    CREATE INDEX IF NOT EXISTS idx_payments_package_contract ON payments(tenant_id, package_contract_id, status);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_recurring_competence
       ON payments(tenant_id, recurring_plan_id, competence_month)
       WHERE recurring_plan_id IS NOT NULL;
+
+    -- 7b. Pacotes Multisserviços para Studios, Direitos e Auditoria de Consumo
+    CREATE TABLE IF NOT EXISTS service_packages (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT,
+      billing_type TEXT NOT NULL DEFAULT 'recurring_monthly' CHECK(billing_type IN ('one_time', 'recurring_monthly')),
+      price REAL NOT NULL DEFAULT 0,
+      credit_mode TEXT NOT NULL DEFAULT 'per_service' CHECK(credit_mode IN ('per_service', 'shared_pool')),
+      total_credits INTEGER,
+      weekly_limit INTEGER,
+      validity_days INTEGER,
+      installments_count INTEGER NOT NULL DEFAULT 1,
+      due_day INTEGER NOT NULL DEFAULT 10,
+      absent_consumption_policy TEXT NOT NULL DEFAULT 'consume' CHECK(absent_consumption_policy IN ('consume', 'refund')),
+      cancellation_hours_limit INTEGER NOT NULL DEFAULT 12,
+      allow_public_booking INTEGER NOT NULL DEFAULT 1,
+      active INTEGER NOT NULL DEFAULT 1,
+      created_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_service_packages_tenant ON service_packages(tenant_id, active, allow_public_booking);
+
+    CREATE TABLE IF NOT EXISTS service_package_items (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      package_id TEXT NOT NULL,
+      service_id TEXT NOT NULL,
+      included_credits INTEGER,
+      weekly_frequency INTEGER,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(package_id, service_id),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (package_id) REFERENCES service_packages(id) ON DELETE CASCADE,
+      FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_pkg_items_pkg ON service_package_items(package_id, tenant_id);
+
+    CREATE TABLE IF NOT EXISTS student_package_contracts (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      package_id TEXT,
+      student_id TEXT NOT NULL,
+      recurring_plan_id TEXT,
+      package_name_snapshot TEXT NOT NULL,
+      description_snapshot TEXT,
+      billing_type_snapshot TEXT NOT NULL DEFAULT 'recurring_monthly',
+      credit_mode_snapshot TEXT NOT NULL DEFAULT 'per_service',
+      contracted_price REAL NOT NULL DEFAULT 0,
+      installments_count INTEGER NOT NULL DEFAULT 1,
+      total_credits_snapshot INTEGER,
+      weekly_limit_snapshot INTEGER,
+      validity_days_snapshot INTEGER,
+      due_day_snapshot INTEGER NOT NULL DEFAULT 10,
+      absent_consumption_policy_snapshot TEXT NOT NULL DEFAULT 'consume',
+      cancellation_hours_limit_snapshot INTEGER NOT NULL DEFAULT 12,
+      start_date TEXT NOT NULL,
+      end_date TEXT,
+      contract_status TEXT NOT NULL DEFAULT 'requested' CHECK(contract_status IN ('requested', 'confirmed', 'active', 'suspended', 'expired', 'cancelled')),
+      payment_status TEXT NOT NULL DEFAULT 'pending' CHECK(payment_status IN ('pending', 'partial', 'paid', 'exempt')),
+      origin TEXT NOT NULL DEFAULT 'admin',
+      notes TEXT,
+      confirmed_by TEXT,
+      confirmed_at TEXT,
+      created_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (package_id) REFERENCES service_packages(id) ON DELETE SET NULL,
+      FOREIGN KEY (student_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_contracts_tenant_student ON student_package_contracts(tenant_id, student_id, contract_status);
+
+    CREATE TABLE IF NOT EXISTS student_package_entitlements (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      contract_id TEXT NOT NULL,
+      service_id TEXT,
+      service_name_snapshot TEXT NOT NULL,
+      allowed_service_ids_json TEXT,
+      weekly_frequency_snapshot INTEGER,
+      credits_total INTEGER NOT NULL DEFAULT 0,
+      credits_reserved INTEGER NOT NULL DEFAULT 0,
+      credits_used INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (contract_id) REFERENCES student_package_contracts(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_entitlements_contract ON student_package_entitlements(contract_id, tenant_id, service_id);
+
+    CREATE TABLE IF NOT EXISTS package_usage_ledger (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      contract_id TEXT NOT NULL,
+      entitlement_id TEXT NOT NULL,
+      appointment_id TEXT,
+      action TEXT NOT NULL CHECK(action IN ('reserve', 'consume', 'release', 'consume_absence', 'refund_absence')),
+      delta_reserved INTEGER NOT NULL DEFAULT 0,
+      delta_used INTEGER NOT NULL DEFAULT 0,
+      notes TEXT,
+      created_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (contract_id) REFERENCES student_package_contracts(id) ON DELETE CASCADE,
+      FOREIGN KEY (entitlement_id) REFERENCES student_package_entitlements(id) ON DELETE CASCADE
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_pkg_ledger_appt_action
+      ON package_usage_ledger(contract_id, appointment_id, action)
+      WHERE appointment_id IS NOT NULL;
   `);
+
+  addColIfMissing('recurring_billing_plans', 'package_contract_id', 'TEXT');
 
   // 7. Profissão canônica "Instrutor" + modalidades (preservando prof-instrutor-pilates / pilates_instructor)
   try {

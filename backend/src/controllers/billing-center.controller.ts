@@ -3,6 +3,7 @@ import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '../middlewares/audit.middleware';
 import { getUserPermissions } from '../middlewares/rbac.middleware';
+import { PackageService } from '../services/package.service';
 
 function getClinicTodayIso(): string {
   // Usa fuso padrão America/Sao_Paulo (-03:00) de forma determinística
@@ -91,7 +92,7 @@ export class BillingCenterController {
       }
 
       const todayIso = getClinicTodayIso();
-      const dueSoonCutoff = addDaysIso(todayIso, 3);
+      const dueSoonCutoff = addDaysIso(todayIso, 7);
       const currentMonth = todayIso.slice(0, 7);
 
       const startDate = req.query.startDate ? String(req.query.startDate).slice(0, 10) : `${currentMonth}-01`;
@@ -201,7 +202,7 @@ export class BillingCenterController {
       }
 
       const todayIso = getClinicTodayIso();
-      const dueSoonCutoff = addDaysIso(todayIso, 3);
+      const dueSoonCutoff = addDaysIso(todayIso, 7);
 
       const statusFilter = req.query.status ? String(req.query.status) : 'all';
       const startDate = req.query.startDate ? String(req.query.startDate).slice(0, 10) : '';
@@ -228,6 +229,7 @@ export class BillingCenterController {
           pay.notes,
           pay.due_date,
           pay.recurring_plan_id,
+          pay.package_contract_id,
           pay.competence_month,
           pay.created_at,
           COALESCE(pay.due_date, substr(a.start_time, 1, 10), substr(pay.created_at, 1, 10)) as effective_due_date,
@@ -235,7 +237,10 @@ export class BillingCenterController {
           COALESCE(pay.professional_id, a.professional_id, rbp.professional_id) as effective_professional_id,
           pat.full_name as patient_name,
           pat.phone as patient_phone,
-          COALESCE(s.name, rbp.title, 'Cobrança avulsa') as service_name,
+          pat.whatsapp as patient_whatsapp,
+          COALESCE(NULLIF(TRIM(pat.whatsapp), ''), pat.phone) as patient_contact_phone,
+          spc.package_name_snapshot as package_name,
+          COALESCE(spc.package_name_snapshot, s.name, rbp.title, 'Cobrança avulsa') as service_name,
           COALESCE(s.modality_category, '') as modality_category,
           COALESCE(p.name, '') as professional_name,
           a.appointment_number,
@@ -247,6 +252,7 @@ export class BillingCenterController {
         JOIN patients pat ON pat.id = pay.patient_id
         LEFT JOIN appointments a ON a.id = pay.appointment_id AND a.tenant_id = pay.tenant_id
         LEFT JOIN recurring_billing_plans rbp ON rbp.id = pay.recurring_plan_id AND rbp.tenant_id = pay.tenant_id
+        LEFT JOIN student_package_contracts spc ON spc.id = pay.package_contract_id AND spc.tenant_id = pay.tenant_id
         LEFT JOIN services s ON s.id = COALESCE(pay.service_id, a.service_id, rbp.service_id)
         LEFT JOIN professionals p ON p.id = COALESCE(pay.professional_id, a.professional_id, rbp.professional_id)
         WHERE pay.tenant_id = ?
@@ -298,7 +304,7 @@ export class BillingCenterController {
           if (!modText.includes(modality)) return false;
         }
         if (search) {
-          const hay = `${item.patient_name || ''} ${item.service_name || ''} ${item.professional_name || ''} ${item.appointment_number || ''} ${item.competence_month || ''}`.toLowerCase();
+          const hay = `${item.patient_name || ''} ${item.service_name || ''} ${item.package_name || ''} ${item.professional_name || ''} ${item.appointment_number || ''} ${item.competence_month || ''}`.toLowerCase();
           if (!hay.includes(search)) return false;
         }
         return true;
@@ -367,6 +373,8 @@ export class BillingCenterController {
             notes = CASE WHEN ? IS NOT NULL AND TRIM(?) != '' THEN TRIM(?) ELSE notes END
         WHERE id = ? AND tenant_id = ?
       `).run(method, cashRegisterId, notes || null, notes || '', notes || '', paymentId, tenantId);
+
+      PackageService.activateContractOnPaymentSettled(tenantId, paymentId, req.user?.userId || 'system');
 
       logAudit(req, 'COLLECTION_MARK_PAID', 'payments', paymentId, { paymentMethod: method });
 

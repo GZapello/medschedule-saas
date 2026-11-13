@@ -70,6 +70,9 @@ export const CollectionsModal: React.FC<CollectionsModalProps> = ({
   const [modalityFilter, setModalityFilter] = useState<string>('');
   const [methodChoiceById, setMethodChoiceById] = useState<Record<string, string>>({});
   const [markingPaidId, setMarkingPaidId] = useState<string | null>(null);
+  const [editingPhonePatientId, setEditingPhonePatientId] = useState<string | null>(null);
+  const [phoneDraft, setPhoneDraft] = useState<string>('');
+  const [savingPhone, setSavingPhone] = useState<boolean>(false);
 
   // Recurring monthly plans
   const [plans, setPlans] = useState<any[]>([]);
@@ -181,14 +184,48 @@ export const CollectionsModal: React.FC<CollectionsModalProps> = ({
     }
   };
 
+  const resolveItemPhone = (item: any): string => {
+    if (isValidPhoneNumber(item.patient_whatsapp)) return item.patient_whatsapp;
+    if (isValidPhoneNumber(item.patient_phone)) return item.patient_phone;
+    if (isValidPhoneNumber(item.patient_contact_phone)) return item.patient_contact_phone;
+    return '';
+  };
+
+  const handleSaveMissingPhone = async (patientId: string) => {
+    if (!isValidPhoneNumber(phoneDraft)) {
+      showToast('Informe um WhatsApp/telefone brasileiro válido com DDD (10 ou 11 dígitos).', 'error');
+      return;
+    }
+    try {
+      setSavingPhone(true);
+      await ApiClient.put(`/v1/patients/${patientId}`, {
+        whatsapp: phoneDraft.trim(),
+        phone: phoneDraft.trim()
+      });
+      showToast('Contato atualizado com sucesso!', 'success');
+      setEditingPhonePatientId(null);
+      setPhoneDraft('');
+      await fetchCollectionsAndSummary();
+    } catch (err: any) {
+      showToast(err?.message || 'Erro ao salvar contato do aluno.', 'error');
+    } finally {
+      setSavingPhone(false);
+    }
+  };
+
   const handleManualWhatsAppCharge = (item: any) => {
+    const validPhone = resolveItemPhone(item);
+    if (!validPhone) {
+      showToast('Telefone inválido ou ausente para abrir WhatsApp manual', 'error');
+      return;
+    }
     const firstName = String(item.patient_name || clientTermLabel).trim().split(/\s+/)[0];
     const clinicName = (currentTenant?.trade_name || currentTenant?.name || 'nosso estabelecimento').trim();
-    const label = item.notes || item.service_name || 'mensalidade / atendimento';
+    const label = item.package_name || item.service_name || item.recurring_plan_title || item.notes || 'mensalidade / atendimento';
     const dueStr = formatBrDate(item.effective_due_date);
     const valStr = formatCurrency(item.amount);
     const msg = `Olá, ${firstName}! Tudo bem?\nAqui é da equipe ${clinicName}.\nPassando para lembrar sobre sua cobrança referente a ${label}, no valor de ${valStr}, com vencimento em ${dueStr}.\nQualquer dúvida, estamos à disposição!`;
-    const url = generateWhatsAppUrl(item.patient_phone, msg);
+    const url = generateWhatsAppUrl(validPhone, msg);
     if (url) {
       window.open(url, '_blank', 'noopener,noreferrer');
     } else {
@@ -405,7 +442,8 @@ export const CollectionsModal: React.FC<CollectionsModalProps> = ({
                   {collections.map((item: any) => {
                     const badge = STATUS_BADGE[item.derived_status] || STATUS_BADGE.pending;
                     const isOpenCharge = ['overdue', 'due_soon', 'pending'].includes(item.derived_status);
-                    const hasPhone = isValidPhoneNumber(item.patient_phone);
+                    const validContactPhone = resolveItemPhone(item);
+                    const hasPhone = Boolean(validContactPhone);
 
                     return (
                       <div
@@ -443,16 +481,65 @@ export const CollectionsModal: React.FC<CollectionsModalProps> = ({
                             {formatCurrency(item.amount)}
                           </div>
 
-                          {hasPhone && isOpenCharge && (
+                          {isOpenCharge && hasPhone && (
                             <button
                               type="button"
                               onClick={() => handleManualWhatsAppCharge(item)}
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold cursor-pointer"
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs text-xs font-bold cursor-pointer transition-colors"
                               title="Abrir conversa manual no WhatsApp com mensagem de cobrança"
                             >
                               <WhatsAppIcon className="w-3.5 h-3.5" />
-                              Cobrar
+                              Cobrar via WhatsApp
                             </button>
+                          )}
+
+                          {isOpenCharge && !hasPhone && (
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-slate-100 text-slate-500 border border-slate-200 text-[11px] font-semibold"
+                                title="Aluno sem telefone/WhatsApp válido cadastrado"
+                              >
+                                WhatsApp indisponível
+                              </span>
+                              {canManageCollections && editingPhonePatientId !== item.patient_id && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingPhonePatientId(item.patient_id);
+                                    setPhoneDraft(item.patient_whatsapp || item.patient_phone || '');
+                                  }}
+                                  className="px-2 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-[11px] font-bold cursor-pointer"
+                                >
+                                  Completar contato
+                                </button>
+                              )}
+                              {canManageCollections && editingPhonePatientId === item.patient_id && (
+                                <div className="flex items-center gap-1">
+                                  <input
+                                    type="tel"
+                                    value={phoneDraft}
+                                    onChange={e => setPhoneDraft(e.target.value)}
+                                    placeholder="(11) 99999-9999"
+                                    className="w-32 px-2 py-1 text-xs border border-amber-300 rounded-lg bg-white"
+                                  />
+                                  <button
+                                    type="button"
+                                    disabled={savingPhone}
+                                    onClick={() => handleSaveMissingPhone(item.patient_id)}
+                                    className="px-2 py-1 text-[11px] font-bold bg-indigo-600 text-white rounded-lg cursor-pointer disabled:opacity-50"
+                                  >
+                                    {savingPhone ? '...' : 'Salvar'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingPhonePatientId(null)}
+                                    className="px-1.5 py-1 text-[11px] text-slate-500 hover:text-slate-700 cursor-pointer"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           )}
 
                           {canManageCollections && isOpenCharge && (

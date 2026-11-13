@@ -4,7 +4,7 @@ import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
 import { Professional, Service, Patient, AvailableSlot } from '../../types';
-import { X, Calendar, Clock, User, Plus, CheckCircle2, Sparkles, Pencil, Users, Repeat } from 'lucide-react';
+import { X, Calendar, Clock, User, Plus, CheckCircle2, Sparkles, Pencil, Users, Repeat, Package } from 'lucide-react';
 import { isMeetingUrl } from '../../utils/teleconsultation';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
 import { QuickActionDropdown } from '../common/QuickActionDropdown';
@@ -98,6 +98,8 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
   const priceEdited = useRef(false);
   const [insuranceId, setInsuranceId] = useState<string>('');
   const [roomId, setRoomId] = useState<string>('');
+  const [patientPackages, setPatientPackages] = useState<any[]>([]);
+  const [packageContractId, setPackageContractId] = useState<string>('');
   const submissionPending = useRef(false);
   const [errorTitle, setErrorTitle] = useState('Não foi possível concluir');
   const slotRequest = useRef(0);
@@ -177,6 +179,8 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
       setIsNewInsuranceModalOpen(false);
       setIsNewRoomModalOpen(false);
       setIsRecurring(false);
+      setPatientPackages([]);
+      setPackageContractId('');
     }
   }, [isOpen]);
 
@@ -306,6 +310,60 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
     }
   }, [isOpen, serviceId, services]);
 
+  useEffect(() => {
+    if (!isOpen || !patientId) {
+      setPatientPackages([]);
+      setPackageContractId('');
+      return;
+    }
+    let cancelled = false;
+    ApiClient.get<{ contracts: any[] }>(`/v1/patients/${patientId}/packages`)
+      .then(res => {
+        if (!cancelled) setPatientPackages(res?.contracts || []);
+      })
+      .catch(() => {
+        if (!cancelled) setPatientPackages([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, patientId]);
+
+  const compatiblePackages = useMemo(() => {
+    if (!serviceId || patientPackages.length === 0) return [];
+    const targetDate = date || todayBrazilStr;
+    return patientPackages
+      .map(c => {
+        if (c.contract_status !== 'active') return null;
+        if (c.start_date && targetDate < c.start_date) return null;
+        if (c.end_date && targetDate > c.end_date) return null;
+        const ents = Array.isArray(c.entitlements) ? c.entitlements : [];
+        let matchedEnt = ents.find((e: any) => e.service_id === serviceId);
+        if (!matchedEnt && c.credit_mode_snapshot === 'shared_pool') {
+          matchedEnt = ents.find((e: any) => {
+            if (!e.allowed_service_ids_json) return false;
+            try {
+              const ids = JSON.parse(e.allowed_service_ids_json);
+              return Array.isArray(ids) && ids.includes(serviceId);
+            } catch {
+              return false;
+            }
+          });
+        }
+        if (!matchedEnt) return null;
+        const rem = Number(matchedEnt.credits_remaining ?? (matchedEnt.credits_total - matchedEnt.credits_reserved - matchedEnt.credits_used));
+        if (rem <= 0) return null;
+        return { ...c, matchedRemaining: rem };
+      })
+      .filter(Boolean) as any[];
+  }, [patientPackages, serviceId, date, todayBrazilStr]);
+
+  useEffect(() => {
+    if (packageContractId && !compatiblePackages.some(cp => cp.id === packageContractId)) {
+      setPackageContractId('');
+    }
+  }, [compatiblePackages, packageContractId]);
+
   // Consulta slots livres imediatamente ao alterar profissional, serviço, data ou sala
   useEffect(() => {
     const request = ++slotRequest.current;
@@ -423,7 +481,8 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
       return;
     }
 
-    const normalizedPrice = parseAppointmentPrice(appointmentPrice);
+    const isCoveredByPackage = Boolean(packageContractId && compatiblePackages.some(cp => cp.id === packageContractId));
+    const normalizedPrice = isCoveredByPackage ? 0 : parseAppointmentPrice(appointmentPrice);
     if (normalizedPrice === null) {
       showToast('Informe um valor da consulta válido, com até duas casas decimais e maior ou igual a zero.', 'error');
       return;
@@ -511,6 +570,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
           professionalId,
           serviceId,
           appointmentPrice: normalizedPrice,
+          packageContractId: isCoveredByPackage ? packageContractId : undefined,
           roomId: roomId || null,
           insuranceId: insuranceId || null,
           startTime: startIso,
@@ -538,6 +598,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
         professionalId,
         serviceId,
         appointmentPrice: normalizedPrice,
+        packageContractId: isCoveredByPackage ? packageContractId : undefined,
         roomId: roomId || null,
         insuranceId: insuranceId || null,
         startTime: startIso,
@@ -767,6 +828,35 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
               )}
             </div>
           </div>
+
+          {compatiblePackages.length > 0 && (
+            <div className="p-3 rounded-2xl bg-indigo-50/70 border border-indigo-200 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <label className="font-bold text-indigo-950 flex items-center gap-1.5 text-xs">
+                  <Package className="w-4 h-4 text-indigo-600" />
+                  Usar Pacote Contratado do Aluno
+                </label>
+                {packageContractId && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    Coberto pelo pacote • R$ 0,00 avulso
+                  </span>
+                )}
+              </div>
+              <select
+                value={packageContractId}
+                onChange={e => setPackageContractId(e.target.value)}
+                className="w-full border border-indigo-200 rounded-xl px-3 py-2 text-xs bg-white font-semibold text-slate-800"
+              >
+                <option value="">Não usar pacote (cobrança avulsa do serviço)</option>
+                {compatiblePackages.map(cp => (
+                  <option key={cp.id} value={cp.id}>
+                    {cp.package_name_snapshot} — {cp.matchedRemaining} aula(s) restante(s)
+                    {cp.end_date ? ` • até ${cp.end_date}` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 relative z-20">
             <div className="min-w-0">
