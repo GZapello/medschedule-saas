@@ -75,21 +75,25 @@ export function isUserPersonalTrainer(userId: string, tenantId: string): boolean
       pId === 'prof-personal-trainer' ||
       pId === 'prof-educacao-fisica' ||
       pId === 'personal_trainer' ||
+      pId === 'prof-instrutor' ||
+      pId === 'prof-instrutor-pilates' ||
+      pId === 'pilates_instructor' ||
       rType === 'CREF' ||
       pName.includes('personal') ||
       pName.includes('educação física') ||
       pName.includes('educacao fisica') ||
+      pName === 'instrutor' ||
+      pName.startsWith('instrutor ') ||
+      pName.startsWith('instrutor(a)') ||
       pSlug.includes('personal') ||
       pSlug.includes('educa') ||
-      pAreas.includes('personal') ||
-      pAreas.includes('musculação') ||
-      pAreas.includes('musculacao') ||
-      pAreas.includes('treinamento')
+      pSlug === 'instrutor' ||
+      pSlug === 'instrutor-pilates'
     ) {
       return true;
     }
 
-    if (pId && !pId.includes('personal') && !pId.includes('educa')) {
+    if (pId && !pId.includes('personal') && !pId.includes('educa') && !pId.includes('instrutor') && !pId.includes('pilates')) {
       return false;
     }
   }

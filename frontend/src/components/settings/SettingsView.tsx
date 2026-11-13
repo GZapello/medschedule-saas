@@ -289,6 +289,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, init
   const logoDirtyRef = useRef<boolean>(false);
   const lastTenantIdRef = useRef<string | null>(null);
   const [clientTermLabel, setClientTermLabel] = useState<string>('Paciente');
+  const [establishmentProfile, setEstablishmentProfile] = useState<'clinic' | 'studio' | 'mixed'>('clinic');
   const [primaryColor, setPrimaryColor] = useState<string>('#4f46e5');
   const [loadingClinic, setLoadingClinic] = useState<boolean>(false);
 
@@ -572,6 +573,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, init
         setLogoPreview((currentTenant as any).logo_url || null);
       }
       setClientTermLabel(currentTenant.client_term_label || 'Paciente');
+      setEstablishmentProfile((currentTenant.establishment_profile as 'clinic' | 'studio' | 'mixed') || 'clinic');
       setPrimaryColor(currentTenant.primary_color || '#4f46e5');
 
       if ((currentTenant as any).business_hours_json) {
@@ -634,6 +636,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, init
         zipCode,
         logoUrl,
         clientTermLabel,
+        establishmentProfile,
         primaryColor,
         businessHoursJson: JSON.stringify(businessHours)
       });
@@ -1914,6 +1917,40 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, init
                 <strong className="block text-blue-900 mb-0.5">Aviso sobre Emissão de NFS-e e Faturamento Asaas:</strong>
                 A Inscrição Municipal e o CNPJ/CPF são necessários para emissão automática de Notas Fiscais de Serviço (NFS-e) e para ativação do faturamento com emissão de cobranças automáticas no Asaas. Você pode preenchê-los agora ou quando for ativar o faturamento da clínica.
               </div>
+            </div>
+          </div>
+
+          {/* Tipo de Estabelecimento */}
+          <div className="pt-4 border-t border-slate-100 space-y-2.5 text-xs">
+            <div>
+              <h4 className="font-bold text-slate-800 text-sm">Tipo de Estabelecimento</h4>
+              <p className="text-slate-500 text-[11px] mt-0.5">
+                Define como o Zemda prioriza a apresentação de recursos de clínicas de saúde ou studios (Pilates, dança, academia e modalidades). Não altera nem apaga dados existentes.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              {[
+                { id: 'clinic', title: 'Clínica / Consultório', desc: 'Fluxo clínico tradicional com prontuários, exames e atendimentos.' },
+                { id: 'studio', title: 'Studio / Academia', desc: 'Prioriza turmas, aulas coletivas, frequência, modalidades e mensalidades.' },
+                { id: 'mixed', title: 'Estabelecimento Misto', desc: 'Combina atendimentos clínicos e aulas/turmas na mesma unidade.' }
+              ].map(opt => {
+                const selected = establishmentProfile === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setEstablishmentProfile(opt.id as 'clinic' | 'studio' | 'mixed')}
+                    className={`text-left p-3 rounded-2xl border transition-all cursor-pointer ${
+                      selected
+                        ? 'border-indigo-600 bg-indigo-50/70 ring-1 ring-indigo-500'
+                        : 'border-slate-200 bg-slate-50/70 hover:bg-white'
+                    }`}
+                  >
+                    <div className="font-bold text-slate-900 text-xs">{opt.title}</div>
+                    <div className="text-[11px] text-slate-500 mt-1 leading-relaxed">{opt.desc}</div>
+                  </button>
+                );
+              })}
             </div>
           </div>
 

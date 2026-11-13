@@ -58,6 +58,9 @@ import { FileController } from '../controllers/file.controller';
 import { ClinicalReassessmentController } from '../controllers/clinical-reassessment.controller';
 import { ClinicalGoalsController } from '../controllers/clinical-goals.controller';
 import { DigitalCertificateController } from '../controllers/digital-certificate.controller';
+import { ClassAttendanceController } from '../controllers/class-attendance.controller';
+import { SidebarPreferencesController } from '../controllers/sidebar-preferences.controller';
+import { BillingCenterController } from '../controllers/billing-center.controller';
 import { CheckInController } from '../controllers/checkin.controller';
 import { PreConsultationController } from '../controllers/pre-consultation.controller';
 import { PsychopedagogyController } from '../controllers/psychopedagogy.controller';
@@ -208,6 +211,9 @@ api.use(subscriptionGate);
 
 // Perfil autenticado & Aceite Legal (Acesso pessoal para qualquer usuário do sistema)
 api.get('/v1/auth/me', AuthController.me);
+api.get('/v1/auth/sidebar-preferences', requireTenant, SidebarPreferencesController.get);
+api.put('/v1/auth/sidebar-preferences', requireTenant, SidebarPreferencesController.update);
+api.delete('/v1/auth/sidebar-preferences', requireTenant, SidebarPreferencesController.reset);
 api.get('/v1/auth/memberships', MembershipController.list);
 api.post('/v1/auth/active-clinic', MembershipController.remember);
 api.get('/v1/auth/invites/:token', AuthController.validateInvite);
@@ -344,6 +350,9 @@ api.put('/v1/professionals/:id', requireTenant, requireRole('clinic_admin', 'pro
 api.put('/v1/professionals/:id/schedules', requireTenant, requireRole('clinic_admin'), ProfessionalController.updateSchedules);
 api.post('/v1/professionals/blocks', requireTenant, requireRole('clinic_admin'), ProfessionalController.createBlockedTime);
 api.delete('/v1/professionals/blocks/:blockId', requireTenant, requireRole('clinic_admin'), ProfessionalController.deleteBlockedTime);
+api.get('/v1/professionals/:id/service-commissions', requireTenant, requireRole('clinic_admin', 'professional'), PayrollController.getServiceCommissions);
+api.put('/v1/professionals/:id/service-commissions', requireTenant, requireRole('clinic_admin'), PayrollController.upsertServiceCommissions);
+api.delete('/v1/professionals/:id/service-commissions/:serviceId', requireTenant, requireRole('clinic_admin'), PayrollController.deleteServiceCommission);
 
 // Serviços e Salas
 api.get('/v1/services', requireTenant, ServiceController.list);
@@ -366,6 +375,7 @@ api.put('/v1/patients/:id', requireTenant, requireRole('clinic_admin', 'receptio
 
 // Agenda & Agendamentos
 api.get('/v1/appointments', requireTenant, AppointmentController.list);
+api.post('/v1/appointments/recurring', requireTenant, AppointmentController.createRecurring);
 api.get('/v1/appointments/:id', requireTenant, AppointmentController.getById);
 api.post('/v1/appointments', requireTenant, AppointmentController.create);
 api.put('/v1/appointments/:id', requireTenant, AppointmentController.update);
@@ -375,6 +385,11 @@ api.put('/v1/appointments/:id/reschedule', requireTenant, AppointmentController.
 api.post('/v1/appointments/:id/whatsapp-reminder', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), AppointmentController.sendWhatsAppReminder);
 api.get('/v1/appointments/:id/communications', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), AppointmentController.getCommunications);
 api.get('/v1/whatsapp/status', requireTenant, InfobipController.getClientStatus);
+
+// Turmas, Ocorrências & Lista de Chamada / Frequência
+api.get('/v1/classes/occurrences', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), ClassAttendanceController.listOccurrences);
+api.get('/v1/classes/occurrences/:id/roster', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), ClassAttendanceController.getRoster);
+api.put('/v1/classes/occurrences/:occurrenceId/attendance/:appointmentId', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), ClassAttendanceController.markAttendance);
 
 // Check-In de Pacientes & Fluxo de Recepção com Avisos aos Profissionais (Seção 2)
 api.get('/v1/checkin/settings', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), CheckInController.getSettings);
@@ -855,8 +870,9 @@ api.get('/v1/personal/periodizations', requireTenant, requireRole('clinic_admin'
 api.post('/v1/personal/periodizations', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.createPeriodization);
 api.put('/v1/personal/periodizations/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), PersonalController.updatePeriodization);
 
-// Assistente IA ZemdaPersonal
+// Assistente IA ZemdaPersonal & Frequência/Relatórios do Studio
 api.post('/v1/personal/ai/assistant', requireTenant, requireRole('clinic_admin', 'professional'), PersonalAIController.askAssistant);
+api.get('/v1/personal/attendance-reports', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), ClassAttendanceController.getAttendanceReports);
 
 // Encaminhamentos entre Profissionais da Clínica (Item 6)
 api.post('/v1/referrals', requireTenant, requireRole('clinic_admin', 'professional'), ReferralController.create);
@@ -874,6 +890,15 @@ api.post('/v1/notifications/:id/retry', requireTenant, requireRole('clinic_admin
 api.get('/v1/payments', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), PaymentController.list);
 api.post('/v1/payments', requireTenant, requireRole('clinic_admin', 'receptionist'), PaymentController.create);
 api.put('/v1/payments/:id/status', requireTenant, requireRole('clinic_admin', 'receptionist'), PaymentController.updateStatus);
+
+// Central de Cobranças & Mensalidades Recorrentes
+api.get('/v1/financial/collections/summary', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), BillingCenterController.getSummary);
+api.get('/v1/financial/collections', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), BillingCenterController.listCollections);
+api.post('/v1/financial/collections/:paymentId/mark-paid', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), BillingCenterController.markPaid);
+api.get('/v1/financial/recurring-plans', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), BillingCenterController.listRecurringPlans);
+api.post('/v1/financial/recurring-plans', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), BillingCenterController.createRecurringPlan);
+api.put('/v1/financial/recurring-plans/:id', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), BillingCenterController.updateRecurringPlan);
+api.post('/v1/financial/recurring-plans/generate', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), BillingCenterController.generateMonthlyBills);
 
 // Contas a Pagar & Compras de Fornecedores
 api.get('/v1/accounts-payable', requireTenant, requireRole('clinic_admin', 'receptionist'), AccountsPayableController.list);

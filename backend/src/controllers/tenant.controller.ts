@@ -1177,6 +1177,7 @@ export class TenantController {
           t.address, t.street, t.number, t.complement, t.neighborhood, t.city, t.state, t.zip_code, t.country,
           t.responsible_name, t.responsible_cpf, t.responsible_email, t.responsible_phone, t.responsible_role,
           t.logo_url, t.primary_color, t.client_term_label, t.status,
+          COALESCE(t.establishment_profile, 'clinic') as establishment_profile,
           t.business_hours_json,
           t.onboarding_completed, t.onboarding_step, t.manager_confirmed, t.created_at,
           p.name as plan_name, p.slug as plan_slug, p.features_json
@@ -1244,8 +1245,19 @@ export class TenantController {
         street, number, complement, neighborhood, city, state, zipCode, country,
         responsibleName, responsibleCpf, responsibleEmail, responsiblePhone, responsibleRole,
         logoUrl, logo_url, primaryColor, clientTermLabel, businessHoursJson, businessHours, settings,
-        managerProfession, managerPracticeAreas
+        managerProfession, managerPracticeAreas,
+        establishmentProfile, establishment_profile
       } = req.body;
+
+      const rawEstablishmentProfile = establishmentProfile !== undefined ? establishmentProfile : establishment_profile;
+      let validatedEstablishmentProfile: string | null = null;
+      if (rawEstablishmentProfile !== undefined && rawEstablishmentProfile !== null && rawEstablishmentProfile !== '') {
+        if (!['clinic', 'studio', 'mixed'].includes(String(rawEstablishmentProfile))) {
+          res.status(400).json({ error: 'Tipo de estabelecimento inválido. Permitidos: clinic, studio, mixed.' });
+          return;
+        }
+        validatedEstablishmentProfile = String(rawEstablishmentProfile);
+      }
 
       const incomingLogo = logo_url !== undefined ? logo_url : logoUrl;
       const shouldUpdateLogo = incomingLogo !== undefined ? 1 : 0;
@@ -1294,6 +1306,7 @@ export class TenantController {
           logo_url = CASE WHEN ? = 1 THEN ? ELSE logo_url END,
           primary_color = COALESCE(?, primary_color),
           client_term_label = COALESCE(?, client_term_label),
+          establishment_profile = COALESCE(?, establishment_profile),
           business_hours_json = COALESCE(?, business_hours_json),
           updated_at = datetime('now')
         WHERE id = ?
@@ -1335,6 +1348,7 @@ export class TenantController {
         normalizedLogo,
         primaryColor || null,
         clientTermLabel || null,
+        validatedEstablishmentProfile,
         rawBusinessHours,
         req.tenantId
       );
@@ -1418,6 +1432,7 @@ export class TenantController {
           t.address, t.street, t.number, t.complement, t.neighborhood, t.city, t.state, t.zip_code, t.country,
           t.responsible_name, t.responsible_cpf, t.responsible_email, t.responsible_phone, t.responsible_role,
           t.logo_url, t.primary_color, t.client_term_label, t.status,
+          COALESCE(t.establishment_profile, 'clinic') as establishment_profile,
           t.business_hours_json,
           t.onboarding_completed, t.onboarding_step, t.manager_confirmed, t.created_at,
           p.name as plan_name, p.slug as plan_slug, p.features_json

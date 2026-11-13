@@ -6,6 +6,11 @@ export interface AvailableSlot {
   endTime: string;        // '2026-09-10T09:50:00'
   durationMinutes: number;
   bufferMinutes: number;
+  serviceKind?: 'individual' | 'group';
+  capacity?: number | null;
+  enrolledCount?: number;
+  remainingSpots?: number | null;
+  occurrenceId?: string | null;
 }
 
 /**
@@ -86,7 +91,9 @@ export function calculateAvailableSlots(
   if (roomId && !db.prepare('SELECT 1 FROM rooms WHERE id = ? AND tenant_id = ? AND active = 1').get(roomId, tenantId)) return [];
   // 1. Busca dados do serviço
   const serviceStmt = db.prepare(`
-    SELECT COALESCE(ps.custom_duration, s.duration_minutes) AS duration_minutes, s.buffer_minutes, s.min_lead_time_hours, s.max_advance_days, s.active
+    SELECT COALESCE(ps.custom_duration, s.duration_minutes) AS duration_minutes,
+           s.buffer_minutes, s.min_lead_time_hours, s.max_advance_days, s.active,
+           COALESCE(s.service_kind, 'individual') AS service_kind, s.default_capacity
     FROM services s LEFT JOIN professional_services ps ON ps.service_id = s.id AND ps.professional_id = ?
     WHERE s.id = ? AND s.tenant_id = ? AND s.active = 1
   `);
@@ -95,9 +102,14 @@ export function calculateAvailableSlots(
     buffer_minutes: number;
     min_lead_time_hours: number;
     max_advance_days: number;
+    service_kind: string;
+    default_capacity: number | null;
   } | undefined;
 
   if (!service) return [];
+
+  const isGroupService = service.service_kind === 'group';
+  const defaultGroupCapacity = isGroupService ? Math.max(1, Number(service.default_capacity) || 1) : 1;
 
   const duration = service.duration_minutes || 50;
   // Preserva 0 se o serviço não tiver buffer cadastrado
@@ -180,7 +192,8 @@ export function calculateAvailableSlots(
   // 6. Busca agendamentos ativos neste dia (que não estejam cancelados)
   // Checa tanto consultas do profissional quanto da sala selecionada (se houver)
   const apptStmt = db.prepare(`
-    SELECT start_time, end_time, room_id
+    SELECT start_time, end_time, room_id, service_id, occurrence_id, patient_id,
+           COALESCE(service_kind, 'individual') as service_kind
     FROM appointments
     WHERE tenant_id = ?
       AND (professional_id = ? OR (? IS NOT NULL AND room_id = ?) OR (? IS NOT NULL AND patient_id = ?))
@@ -203,11 +216,49 @@ export function calculateAvailableSlots(
     `${dateStr}%`,
     `${dateStr}T23:59:59`,
     `${dateStr}T00:00:00`
-  ) as { start_time: string; end_time: string }[];
+  ) as {
+    start_time: string;
+    end_time: string;
+    room_id: string | null;
+    service_id: string | null;
+    occurrence_id: string | null;
+    patient_id: string | null;
+    service_kind: string;
+  }[];
+
+  // Mapa de ocorrências coletivas ativas do dia para este serviço/profissional (vagas sem expor dados dos outros alunos)
+  const groupOccurrencesByStart = new Map<string, { id: string; capacity: number; enrolledCount: number }>();
+  if (isGroupService) {
+    try {
+      const occRows = db.prepare(`
+        SELECT o.id, o.start_time, o.capacity,
+               (SELECT COUNT(*) FROM appointments a WHERE a.tenant_id = o.tenant_id AND a.occurrence_id = o.id AND a.status NOT IN ('cancelled')) as enrolled_count
+        FROM class_occurrences o
+        WHERE o.tenant_id = ?
+          AND o.professional_id = ?
+          AND o.service_id = ?
+          AND o.status != 'cancelled'
+          AND REPLACE(o.start_time, ' ', 'T') LIKE ?
+      `).all(tenantId, professionalId, serviceId, `${dateStr}%`) as any[];
+      for (const occ of occRows) {
+        const key = String(occ.start_time || '').trim().replace(' ', 'T').slice(0, 16);
+        groupOccurrencesByStart.set(key, {
+          id: occ.id,
+          capacity: Math.max(1, Number(occ.capacity) || defaultGroupCapacity),
+          enrolledCount: Number(occ.enrolled_count) || 0
+        });
+      }
+    } catch (_) {}
+  }
 
   const existingApptIntervals = rawAppts.map(appt => ({
     startMin: parseDateTimeToMinuteOfDay(appt.start_time, dateStr),
-    endMin: parseDateTimeToMinuteOfDay(appt.end_time, dateStr)
+    endMin: parseDateTimeToMinuteOfDay(appt.end_time, dateStr),
+    startKey: String(appt.start_time || '').trim().replace(' ', 'T').slice(0, 16),
+    serviceId: appt.service_id,
+    occurrenceId: appt.occurrence_id,
+    patientId: appt.patient_id,
+    serviceKind: appt.service_kind
   }));
 
   // 7. Busca bloqueios, férias e ausências pontuais neste dia
@@ -315,10 +366,24 @@ export function calculateAvailableSlots(
 
         // Checa conflito com agendamentos existentes, bloqueios e Google Agenda
         let maxConflictRecovery = -1;
+        const slotStartKey = slotStartIso.slice(0, 16);
+        const slotOcc = isGroupService ? groupOccurrencesByStart.get(slotStartKey) : undefined;
 
         for (const appt of existingApptIntervals) {
           if (current < appt.endMin && slotEndMin > appt.startMin) {
-            maxConflictRecovery = Math.max(maxConflictRecovery, appt.endMin + buffer);
+            const isSameNonFullGroupOccurrence = Boolean(
+              isGroupService &&
+              slotOcc &&
+              appt.serviceKind === 'group' &&
+              appt.serviceId === serviceId &&
+              appt.occurrenceId === slotOcc.id &&
+              appt.startKey === slotStartKey &&
+              slotOcc.enrolledCount < slotOcc.capacity &&
+              (!patientId || appt.patientId !== patientId)
+            );
+            if (!isSameNonFullGroupOccurrence) {
+              maxConflictRecovery = Math.max(maxConflictRecovery, appt.endMin + buffer);
+            }
           }
         }
 
@@ -352,13 +417,26 @@ export function calculateAvailableSlots(
 
         if (!seenTimes.has(slotStartIso)) {
           seenTimes.add(slotStartIso);
-          slots.push({
+          const slotItem: AvailableSlot = {
             time: minutesToTime(current),
             startTime: slotStartIso,
             endTime: slotEndIso,
             durationMinutes: duration,
             bufferMinutes: buffer
-          });
+          };
+          if (isGroupService) {
+            const occ = groupOccurrencesByStart.get(slotStartIso.slice(0, 16));
+            const cap = occ ? occ.capacity : defaultGroupCapacity;
+            const enrolled = occ ? occ.enrolledCount : 0;
+            slotItem.serviceKind = 'group';
+            slotItem.capacity = cap;
+            slotItem.enrolledCount = enrolled;
+            slotItem.remainingSpots = Math.max(0, cap - enrolled);
+            slotItem.occurrenceId = occ ? occ.id : null;
+          } else {
+            slotItem.serviceKind = 'individual';
+          }
+          slots.push(slotItem);
         }
 
         current += slotStep;

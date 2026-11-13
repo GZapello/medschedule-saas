@@ -1073,7 +1073,7 @@ function reconcileLegacyProfessionsAndCapabilities(rawDb: DatabaseSync): void {
     }
 
     const profs = rawDb.prepare(`
-      SELECT p.id as prof_id, p.user_id, p.tenant_id, p.profession_id, p.name as prof_name,
+      SELECT p.id as prof_id, p.user_id, p.tenant_id, p.profession_id, p.profession_name as prof_profession_name,
              u.profession_name as user_prof_name, u.profession_id as user_prof_id
       FROM professionals p
       LEFT JOIN users u ON u.id = p.user_id
@@ -1081,7 +1081,7 @@ function reconcileLegacyProfessionsAndCapabilities(rawDb: DatabaseSync): void {
 
     for (const p of profs) {
       const pId = p.profession_id || p.user_prof_id;
-      const pName = p.prof_name || p.user_prof_name || '';
+      const pName = p.prof_profession_name || p.user_prof_name || '';
       const resolution = resolveCanonicalProfession({ id: pId, name: pName });
 
       if (resolution.canonicalId && resolution.canonicalId !== p.profession_id) {

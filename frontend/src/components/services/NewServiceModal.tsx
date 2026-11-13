@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { X, Plus, Clock, Loader2 } from 'lucide-react';
+import { X, Plus, Edit3, Loader2, Users } from 'lucide-react';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
-import { Professional } from '../../types';
+import { Professional, Service } from '../../types';
 
 interface NewServiceModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: (created: { id: string; name: string; [key: string]: any }) => void;
+  onSuccess: (saved: { id: string; name: string; [key: string]: any }) => void;
   initialProfessionalId?: string;
   professionals?: Professional[];
+  serviceToEdit?: Service | null;
   zIndex?: string;
 }
 
@@ -19,9 +20,11 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
   onSuccess,
   initialProfessionalId,
   professionals = [],
+  serviceToEdit = null,
   zIndex = 'z-[60]'
 }) => {
   const { showToast } = useToast();
+  const isEditing = Boolean(serviceToEdit?.id);
 
   const [professionalId, setProfessionalId] = useState<string>('');
   const [name, setName] = useState<string>('');
@@ -29,26 +32,45 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
   const [durationMinutes, setDurationMinutes] = useState<number>(50);
   const [bufferMinutes, setBufferMinutes] = useState<number>(0);
   const [modality, setModality] = useState<'both' | 'presential' | 'online' | 'home'>('both');
+  const [serviceKind, setServiceKind] = useState<'individual' | 'group'>('individual');
+  const [defaultCapacity, setDefaultCapacity] = useState<number>(10);
+  const [allowRecurrence, setAllowRecurrence] = useState<boolean>(true);
   const [description, setDescription] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
 
   useEffect(() => {
     if (isOpen) {
-      setName('');
-      setPrice('150');
-      setDurationMinutes(50);
-      setBufferMinutes(0);
-      setModality('both');
-      setDescription('');
-      if (initialProfessionalId && professionals.some(p => p.id === initialProfessionalId)) {
-        setProfessionalId(initialProfessionalId);
-      } else if (professionals.length > 0) {
-        setProfessionalId(professionals[0].id);
+      if (serviceToEdit) {
+        setName(serviceToEdit.name || '');
+        setPrice(String(serviceToEdit.price ?? '150'));
+        setDurationMinutes(Number(serviceToEdit.duration_minutes) || 50);
+        setBufferMinutes(Number(serviceToEdit.buffer_minutes) || 0);
+        setModality((serviceToEdit.modality as any) || 'both');
+        setServiceKind(serviceToEdit.service_kind === 'group' ? 'group' : 'individual');
+        setDefaultCapacity(Number(serviceToEdit.default_capacity) || 10);
+        setAllowRecurrence(serviceToEdit.allow_recurrence !== 0);
+        setDescription(serviceToEdit.description || '');
+        setProfessionalId(serviceToEdit.professional_id || initialProfessionalId || professionals[0]?.id || '');
       } else {
-        setProfessionalId('');
+        setName('');
+        setPrice('150');
+        setDurationMinutes(50);
+        setBufferMinutes(0);
+        setModality('both');
+        setServiceKind('individual');
+        setDefaultCapacity(10);
+        setAllowRecurrence(true);
+        setDescription('');
+        if (initialProfessionalId && professionals.some(p => p.id === initialProfessionalId)) {
+          setProfessionalId(initialProfessionalId);
+        } else if (professionals.length > 0) {
+          setProfessionalId(professionals[0].id);
+        } else {
+          setProfessionalId('');
+        }
       }
     }
-  }, [isOpen, initialProfessionalId, professionals]);
+  }, [isOpen, initialProfessionalId, professionals, serviceToEdit]);
 
   if (!isOpen) return null;
 
@@ -67,24 +89,35 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
       showToast('Informe um valor válido para o serviço', 'error');
       return;
     }
+    if (serviceKind === 'group' && (!Number.isInteger(Number(defaultCapacity)) || Number(defaultCapacity) < 1)) {
+      showToast('Informe um número inteiro positivo de vagas para a turma', 'error');
+      return;
+    }
 
     try {
       setLoading(true);
-      const res = await ApiClient.post<any>('/v1/services', {
+      const payload = {
         professionalId,
         name: name.trim(),
         price: numPrice,
         durationMinutes: Number(durationMinutes) || 50,
         bufferMinutes: Number(bufferMinutes) || 0,
         modality,
+        serviceKind,
+        defaultCapacity: serviceKind === 'group' ? Number(defaultCapacity) : null,
+        allowRecurrence,
         description: description.trim() || null
-      });
+      };
 
-      showToast('Serviço cadastrado com sucesso!', 'success');
-      onSuccess(res);
+      const res = isEditing && serviceToEdit
+        ? await ApiClient.put<any>(`/v1/services/${serviceToEdit.id}`, payload)
+        : await ApiClient.post<any>('/v1/services', payload);
+
+      showToast(isEditing ? 'Serviço atualizado com sucesso!' : 'Serviço cadastrado com sucesso!', 'success');
+      onSuccess(res?.service || { id: serviceToEdit?.id, ...payload, ...res });
       onClose();
     } catch (err: any) {
-      showToast(err.message || err.error || 'Erro ao cadastrar serviço', 'error');
+      showToast(err.message || err.error || (isEditing ? 'Erro ao atualizar serviço' : 'Erro ao cadastrar serviço'), 'error');
     } finally {
       setLoading(false);
     }
@@ -92,15 +125,15 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
 
   return (
     <div className={`fixed inset-0 ${zIndex} bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto mobile-modal`}>
-      <div className="bg-white rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 my-auto text-xs">
+      <div className="bg-white rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 my-auto text-xs max-h-[92vh] overflow-y-auto">
         <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center">
-              <Plus className="w-4 h-4" />
+              {isEditing ? <Edit3 className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
             </div>
             <div>
-              <h3 className="text-base font-bold text-slate-900">Novo Serviço</h3>
-              <p className="text-[11px] text-slate-400">Cadastro rápido de atendimento</p>
+              <h3 className="text-base font-bold text-slate-900">{isEditing ? 'Editar Serviço' : 'Novo Serviço'}</h3>
+              <p className="text-[11px] text-slate-400">{isEditing ? 'Atualização rápida de atendimento' : 'Cadastro rápido de atendimento'}</p>
             </div>
           </div>
           <button aria-label="Fechar"
@@ -192,6 +225,63 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
               <option value="online">Apenas Online</option>
               <option value="home">Domiciliar</option>
             </select>
+          </div>
+
+          <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-2.5">
+            <div className="font-bold text-slate-800 flex items-center gap-1.5">
+              <Users className="w-3.5 h-3.5 text-teal-600" />
+              Configurações de Agendamento
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setServiceKind('individual')}
+                className={`px-3 py-2 rounded-xl border text-left font-semibold transition-all cursor-pointer ${
+                  serviceKind === 'individual'
+                    ? 'border-teal-600 bg-teal-50 text-teal-800'
+                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                Individual
+              </button>
+              <button
+                type="button"
+                onClick={() => setServiceKind('group')}
+                className={`px-3 py-2 rounded-xl border text-left font-semibold transition-all cursor-pointer ${
+                  serviceKind === 'group'
+                    ? 'border-teal-600 bg-teal-50 text-teal-800'
+                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                Aula coletiva / Turma
+              </button>
+            </div>
+            {serviceKind === 'group' && (
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Vagas por aula/turma <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={500}
+                  step={1}
+                  value={defaultCapacity}
+                  onChange={e => setDefaultCapacity(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white"
+                  required
+                />
+              </div>
+            )}
+            <label className="flex items-center gap-2 text-[11px] font-medium text-slate-700 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={allowRecurrence}
+                onChange={e => setAllowRecurrence(e.target.checked)}
+                className="w-3.5 h-3.5 rounded text-teal-600 border-slate-300"
+              />
+              <span>Permitir repetição/recorrência na agenda</span>
+            </label>
           </div>
 
           <div>

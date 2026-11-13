@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
 import {
   LayoutDashboard,
   Calendar,
@@ -26,6 +28,10 @@ import {
   GraduationCap,
   Stethoscope,
   Sparkles,
+  SlidersHorizontal,
+  RotateCcw,
+  Eye,
+  EyeOff,
   X
 } from 'lucide-react';
 
@@ -56,6 +62,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onClose
 }) => {
   const {
+    currentUser,
+    currentTenant,
     isSuperAdmin,
     isClinicAdmin,
     isProfessional,
@@ -253,7 +261,79 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
   ];
 
+  const { showToast } = useToast();
+  const [hiddenItemIds, setHiddenItemIds] = useState<string[]>([]);
+  const [isCustomizeOpen, setIsCustomizeOpen] = useState<boolean>(false);
+  const [savingCustomize, setSavingCustomize] = useState<boolean>(false);
+
   const effectiveCategories = isSuperAdmin ? superAdminCategories : categories;
+
+  useEffect(() => {
+    setHiddenItemIds([]);
+    setIsCustomizeOpen(false);
+    if (!currentUser?.id || isSuperAdmin) return;
+    let cancelled = false;
+    ApiClient.get<{ hiddenItems?: string[] }>('/v1/auth/sidebar-preferences')
+      .then(res => {
+        if (!cancelled && Array.isArray(res?.hiddenItems)) {
+          setHiddenItemIds(res.hiddenItems);
+        }
+      })
+      .catch(() => {
+        // Silencioso: mantém menu padrão caso falhe
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser?.id, currentTenant?.id, isSuperAdmin]);
+
+  const authorizedItems = useMemo(
+    () =>
+      effectiveCategories.flatMap(cat =>
+        cat.items.filter(
+          item => item.visible && !['sidebar-customize', 'settings', 'help', 'logout'].includes(item.id)
+        )
+      ),
+    [effectiveCategories]
+  );
+
+  const handleToggleSidebarItem = async (itemId: string) => {
+    if (['sidebar-customize', 'settings', 'help', 'logout'].includes(itemId)) return;
+    const nextHidden = hiddenItemIds.includes(itemId)
+      ? hiddenItemIds.filter(id => id !== itemId)
+      : [...hiddenItemIds, itemId];
+    const previous = hiddenItemIds;
+    setHiddenItemIds(nextHidden);
+    setSavingCustomize(true);
+    try {
+      const res = await ApiClient.put<{ hiddenItems?: string[] }>('/v1/auth/sidebar-preferences', {
+        hiddenItems: nextHidden
+      });
+      if (Array.isArray(res?.hiddenItems)) {
+        setHiddenItemIds(res.hiddenItems);
+      }
+    } catch (err: any) {
+      setHiddenItemIds(previous);
+      showToast(err?.message || 'Erro ao salvar preferência do menu', 'error');
+    } finally {
+      setSavingCustomize(false);
+    }
+  };
+
+  const handleResetSidebarPreferences = async () => {
+    const previous = hiddenItemIds;
+    setHiddenItemIds([]);
+    setSavingCustomize(true);
+    try {
+      await ApiClient.delete('/v1/auth/sidebar-preferences');
+      showToast('Menu padrão restaurado para esta unidade!', 'success');
+    } catch (err: any) {
+      setHiddenItemIds(previous);
+      showToast(err?.message || 'Erro ao restaurar menu padrão', 'error');
+    } finally {
+      setSavingCustomize(false);
+    }
+  };
 
   // Identifica qual categoria contém a view ativa inicialmente
   const getInitialOpenCategories = () => {
@@ -311,7 +391,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       )}
 
       <aside
-        data-tour-routes={effectiveCategories.flatMap(category => category.items.filter(item => item.visible).map(item => item.id)).join(" ")}
+        data-tour-routes={effectiveCategories.flatMap(category => category.items.filter(item => item.visible && !hiddenItemIds.includes(item.id)).map(item => item.id)).join(" ")}
         className={`fixed top-0 bottom-0 left-0 z-50 w-64 max-w-[85vw] bg-white text-slate-700 flex flex-col transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:z-auto border-r border-slate-200/80 ${
           isOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'
         }`}
@@ -337,7 +417,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Accordion Categories Container */}
         <div className="flex-1 overflow-y-auto py-3 px-3 space-y-2 scrollbar-thin scrollbar-thumb-slate-200">
           {effectiveCategories.map(category => {
-            const visibleItems = category.items.filter(item => item.visible);
+            const visibleItems = category.items.filter(item => item.visible && !hiddenItemIds.includes(item.id));
             if (visibleItems.length === 0) return null;
 
             const isExpanded = !!openCategories[category.id];
@@ -412,12 +492,110 @@ export const Sidebar: React.FC<SidebarProps> = ({
           })}
         </div>
 
-        {/* Footer info */}
-        <div className="p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-slate-100 text-[11px] text-slate-400 bg-slate-50/40 flex items-center justify-between">
-          <span>Ambiente Seguro • LGPD</span>
-
+        {/* Footer info & Personalizar menu */}
+        <div className="p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-slate-100 text-[11px] text-slate-400 bg-slate-50/40 flex items-center justify-between gap-2">
+          <span className="truncate">Ambiente Seguro • LGPD</span>
+          {!isSuperAdmin && (
+            <button
+              type="button"
+              onClick={() => setIsCustomizeOpen(prev => !prev)}
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold text-slate-600 hover:text-teal-700 hover:bg-slate-200/70 transition-colors cursor-pointer shrink-0"
+              title="Exibir ou ocultar botões do menu nesta unidade"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              <span>Personalizar menu</span>
+            </button>
+          )}
         </div>
       </aside>
+
+      {/* Painel compacto para personalização do menu por usuário/estabelecimento */}
+      {isCustomizeOpen && !isSuperAdmin && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center lg:items-end lg:justify-start p-3 lg:p-5"
+          onClick={() => setIsCustomizeOpen(false)}
+        >
+          <div
+            className="bg-white w-full max-w-sm rounded-2xl border border-slate-200 shadow-2xl overflow-hidden lg:ml-64"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
+              <div>
+                <h4 className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5">
+                  <SlidersHorizontal className="w-3.5 h-3.5 text-teal-600" />
+                  Personalizar menu lateral
+                </h4>
+                <p className="text-[11px] text-slate-500 mt-0.5 truncate max-w-[260px]">
+                  {currentTenant?.trade_name || currentTenant?.name || 'Esta unidade'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCustomizeOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
+                aria-label="Fechar"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-3 max-h-[60vh] overflow-y-auto space-y-1.5">
+              {authorizedItems.length === 0 ? (
+                <p className="text-xs text-slate-400 text-center py-4">Nenhum item personalizável disponível.</p>
+              ) : (
+                authorizedItems.map(item => {
+                  const isHidden = hiddenItemIds.includes(item.id);
+                  const ItemIcon = item.icon;
+                  return (
+                    <div
+                      key={item.id}
+                      className={`flex items-center justify-between gap-2 px-3 py-2 rounded-xl border text-xs ${
+                        isHidden ? 'bg-slate-50 border-slate-200/80 text-slate-400' : 'bg-white border-slate-200 text-slate-800'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <ItemIcon className={`w-3.5 h-3.5 shrink-0 ${isHidden ? 'text-slate-300' : 'text-teal-600'}`} />
+                        <span className={`truncate font-semibold ${isHidden ? 'line-through' : ''}`}>{item.label}</span>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={savingCustomize}
+                        onClick={() => handleToggleSidebarItem(item.id)}
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors cursor-pointer shrink-0 ${
+                          isHidden
+                            ? 'bg-slate-200/80 text-slate-600 hover:bg-slate-300/70'
+                            : 'bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-200'
+                        }`}
+                      >
+                        {isHidden ? <><EyeOff className="w-3 h-3" /> Oculto</> : <><Eye className="w-3 h-3" /> Exibir</>}
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="px-4 py-2.5 border-t border-slate-100 bg-slate-50/70 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                disabled={savingCustomize || hiddenItemIds.length === 0}
+                onClick={handleResetSidebarPreferences}
+                className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-600 hover:text-teal-700 disabled:opacity-40 cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                Restaurar menu padrão
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsCustomizeOpen(false)}
+                className="px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold cursor-pointer"
+              >
+                Concluir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };

@@ -4,7 +4,7 @@ import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
 import { Professional, Service, Patient, AvailableSlot } from '../../types';
-import { X, Calendar, Clock, User, Plus, CheckCircle2, Sparkles } from 'lucide-react';
+import { X, Calendar, Clock, User, Plus, CheckCircle2, Sparkles, Pencil, Users, Repeat } from 'lucide-react';
 import { isMeetingUrl } from '../../utils/teleconsultation';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
 import { QuickActionDropdown } from '../common/QuickActionDropdown';
@@ -70,8 +70,17 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
   };
 
   const [isNewServiceModalOpen, setIsNewServiceModalOpen] = useState(false);
+  const [serviceToEdit, setServiceToEdit] = useState<Service | null>(null);
+  const [slotRefreshKey, setSlotRefreshKey] = useState(0);
   const [isNewInsuranceModalOpen, setIsNewInsuranceModalOpen] = useState(false);
   const [isNewRoomModalOpen, setIsNewRoomModalOpen] = useState(false);
+
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [recurrenceFrequency, setRecurrenceFrequency] = useState<'weekly' | 'biweekly' | 'monthly' | 'custom_weekdays'>('weekly');
+  const [recurrenceWeekdays, setRecurrenceWeekdays] = useState<number[]>([]);
+  const [recurrenceEndMode, setRecurrenceEndMode] = useState<'count' | 'date'>('count');
+  const [recurrenceCount, setRecurrenceCount] = useState<number>(4);
+  const [recurrenceEndDate, setRecurrenceEndDate] = useState<string>('');
 
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [services, setServices] = useState<Service[]>([]);
@@ -146,6 +155,13 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
       setIsCustomTime(false);
       setIsRetroactive(false);
       setCustomTime(initialPrefill?.time || '18:30');
+      setServiceToEdit(null);
+      setIsRecurring(false);
+      setRecurrenceFrequency('weekly');
+      setRecurrenceWeekdays([]);
+      setRecurrenceEndMode('count');
+      setRecurrenceCount(4);
+      setRecurrenceEndDate('');
     } else {
       setShowServiceOnboarding(false);
       setPatientId('');
@@ -157,8 +173,10 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
       setIsRetroactive(false);
       setCustomTime('18:30');
       setIsNewServiceModalOpen(false);
+      setServiceToEdit(null);
       setIsNewInsuranceModalOpen(false);
       setIsNewRoomModalOpen(false);
+      setIsRecurring(false);
     }
   }, [isOpen]);
 
@@ -175,15 +193,22 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
     setIsNewPatientModalOpen(true);
   };
 
-  const handleServiceCreated = async (created: any) => {
+  const handleServiceCreated = async (savedService: any) => {
     setIsNewServiceModalOpen(false);
+    setServiceToEdit(null);
     setShowServiceOnboarding(false);
     try {
       const srvs = await ApiClient.get<Service[]>('/v1/services');
       setServices(srvs || []);
-      if (created?.id) {
-        setServiceId(created.id);
+      if (savedService?.id) {
+        if (savedService.id === serviceId) {
+          priceEdited.current = false;
+          setAppointmentPrice(formatAppointmentPrice(Number(savedService.price || 0)));
+        } else {
+          setServiceId(savedService.id);
+        }
       }
+      setSlotRefreshKey(prev => prev + 1);
     } catch (e) {
       console.warn('Erro ao atualizar serviços:', e);
     }
@@ -322,7 +347,20 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
       setEmptySlotsReason(null);
     }
     return () => { ++slotRequest.current; };
-  }, [isOpen, professionalId, serviceId, date, roomId, patientId, initialPrefill]);
+  }, [isOpen, professionalId, serviceId, date, roomId, patientId, initialPrefill, slotRefreshKey]);
+
+  const selectedServiceObj = useMemo(
+    () => services.find(s => s.id === serviceId) || null,
+    [services, serviceId]
+  );
+
+  const canEditSelectedService = isClinicAdmin && Boolean(selectedServiceObj);
+
+  useEffect(() => {
+    if (selectedServiceObj?.allow_recurrence === 0 && isRecurring) {
+      setIsRecurring(false);
+    }
+  }, [selectedServiceObj?.allow_recurrence]);
 
   const activeServiceDuration = useMemo(() => {
     const selectedService = services.find(s => s.id === serviceId);
@@ -453,6 +491,48 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
       submissionPending.current = true;
       setLoading(true);
       setConflictError(null);
+
+      if (isRecurring && !isRetroactive) {
+        if (recurrenceEndMode === 'date' && (!recurrenceEndDate || recurrenceEndDate < date)) {
+          showToast('Informe uma data final válida para encerrar a recorrência.', 'error');
+          return;
+        }
+        if (recurrenceEndMode === 'count' && (!Number.isInteger(recurrenceCount) || recurrenceCount < 2 || recurrenceCount > 104)) {
+          showToast('Informe entre 2 e 104 ocorrências para a recorrência.', 'error');
+          return;
+        }
+        if (recurrenceFrequency === 'custom_weekdays' && recurrenceWeekdays.length === 0) {
+          showToast('Selecione ao menos um dia da semana para a recorrência personalizada.', 'error');
+          return;
+        }
+
+        const recurringRes = await ApiClient.post<any>('/v1/appointments/recurring', {
+          patientId,
+          professionalId,
+          serviceId,
+          appointmentPrice: normalizedPrice,
+          roomId: roomId || null,
+          insuranceId: insuranceId || null,
+          startTime: startIso,
+          endTime: endIso,
+          modality,
+          meeting_url: modality === 'online' ? meetingUrl.trim() || null : null,
+          internalNotes: notes || null,
+          isCustomTime: isCustomTime ? true : undefined,
+          recurrence: {
+            frequency: recurrenceFrequency,
+            weekdays: recurrenceFrequency === 'custom_weekdays' ? recurrenceWeekdays : undefined,
+            endDate: recurrenceEndMode === 'date' ? recurrenceEndDate : undefined,
+            maxOccurrences: recurrenceEndMode === 'count' ? recurrenceCount : undefined
+          }
+        });
+
+        showToast(recurringRes?.message || 'Agendamentos recorrentes criados com sucesso!', 'success');
+        onSuccess(recurringRes);
+        onClose();
+        return;
+      }
+
       const createdAppt = await ApiClient.post<any>('/v1/appointments', {
         patientId,
         professionalId,
@@ -560,7 +640,32 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
               </select>
             </div>
             <div ref={serviceFieldRef} className="min-w-0 relative">
-              <label className="block font-semibold text-slate-700 mb-0.5">Serviço *</label>
+              <div className="flex items-center justify-between gap-2 mb-0.5">
+                <label className="block font-semibold text-slate-700">Serviço *</label>
+                <div className="flex items-center gap-1.5">
+                  {selectedServiceObj?.service_kind === 'group' && (
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-bold">
+                      <Users className="w-2.5 h-2.5" />
+                      Turma · {selectedServiceObj.default_capacity || 1} vagas
+                    </span>
+                  )}
+                  {canEditSelectedService && (
+                    <button
+                      type="button"
+                      title="Editar este serviço"
+                      aria-label="Editar este serviço"
+                      onClick={() => {
+                        setServiceToEdit(selectedServiceObj);
+                        setIsNewServiceModalOpen(true);
+                      }}
+                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold text-slate-600 hover:text-indigo-700 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-200 transition-colors cursor-pointer"
+                    >
+                      <Pencil className="w-3 h-3" />
+                      Editar
+                    </button>
+                  )}
+                </div>
+              </div>
               {services.length === 0 ? (
                 <>
                   <div
@@ -637,7 +742,10 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                   placeholder={filteredServices.length === 0 ? "Nenhum serviço disponível" : "Selecione um serviço..."}
                   emptyMessage="Nenhum serviço disponível para este profissional"
                   actionLabel="+ Adicionar novo serviço"
-                  onAction={() => setIsNewServiceModalOpen(true)}
+                  onAction={() => {
+                    setServiceToEdit(null);
+                    setIsNewServiceModalOpen(true);
+                  }}
                   showAction={canManageServices}
                   rightContent={
                     <div className="flex items-center gap-1 w-24 border-l border-slate-200 pl-2">
@@ -972,21 +1080,155 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                   </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 max-h-32 overflow-y-auto p-0.5">
-                  {availableSlots.map(slot => (
-                    <button
-                      key={slot.time}
-                      type="button"
-                      onClick={() => setSelectedSlot(slot)}
-                      className={`py-1.5 px-1 rounded-xl text-center font-bold text-xs transition-all cursor-pointer ${
-                        selectedSlot?.time === slot.time
-                          ? 'bg-indigo-600 text-white shadow-xs'
-                          : 'bg-slate-50 border border-slate-200 text-slate-700 hover:border-indigo-400'
-                      }`}
-                    >
-                      {slot.time}
-                    </button>
-                  ))}
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 max-h-36 overflow-y-auto p-0.5">
+                  {availableSlots.map(slot => {
+                    const isGroupSlot = slot.serviceKind === 'group';
+                    const spotsLeft = slot.remainingSpots ?? slot.capacity ?? 0;
+                    const slotDisabled = isGroupSlot && spotsLeft <= 0;
+                    return (
+                      <button
+                        key={slot.time}
+                        type="button"
+                        disabled={slotDisabled}
+                        onClick={() => setSelectedSlot(slot)}
+                        className={`py-1.5 px-1 rounded-xl text-center font-bold text-xs transition-all cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed ${
+                          selectedSlot?.time === slot.time
+                            ? 'bg-indigo-600 text-white shadow-xs'
+                            : 'bg-slate-50 border border-slate-200 text-slate-700 hover:border-indigo-400'
+                        }`}
+                      >
+                        <span>{slot.time}</span>
+                        {isGroupSlot && (
+                          <span
+                            className={`block text-[10px] font-semibold leading-tight mt-0.5 ${
+                              selectedSlot?.time === slot.time
+                                ? 'text-indigo-100'
+                                : spotsLeft <= 2
+                                  ? 'text-amber-600'
+                                  : 'text-emerald-700'
+                            }`}
+                          >
+                            {spotsLeft}/{slot.capacity || 1} vagas
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {!isRetroactive && selectedServiceObj?.allow_recurrence !== 0 && (
+            <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <label className="inline-flex items-center gap-2 font-semibold text-slate-700 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={isRecurring}
+                    onChange={e => {
+                      const next = e.target.checked;
+                      setIsRecurring(next);
+                      if (next && date && recurrenceWeekdays.length === 0) {
+                        const [yy, mm, dd] = date.split('-').map(Number);
+                        const wd = new Date(Date.UTC(yy, (mm || 1) - 1, dd || 1)).getUTCDay();
+                        setRecurrenceWeekdays([wd]);
+                      }
+                    }}
+                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <Repeat className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Agendamento recorrente (série com limite definido)</span>
+                </label>
+              </div>
+
+              {isRecurring && (
+                <div className="pt-2 border-t border-slate-200/80 space-y-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-0.5 text-[11px]">Frequência</label>
+                      <select
+                        value={recurrenceFrequency}
+                        onChange={e => setRecurrenceFrequency(e.target.value as any)}
+                        className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white"
+                      >
+                        <option value="weekly">Semanal</option>
+                        <option value="biweekly">Quinzenal</option>
+                        <option value="monthly">Mensal</option>
+                        <option value="custom_weekdays">Dias específicos da semana</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-0.5 text-[11px]">Encerrar série por</label>
+                      <div className="flex gap-1.5">
+                        <select
+                          value={recurrenceEndMode}
+                          onChange={e => setRecurrenceEndMode(e.target.value as 'count' | 'date')}
+                          className="border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white flex-1"
+                        >
+                          <option value="count">Nº de sessões/aulas</option>
+                          <option value="date">Data limite</option>
+                        </select>
+                        {recurrenceEndMode === 'count' ? (
+                          <input
+                            type="number"
+                            min={2}
+                            max={104}
+                            value={recurrenceCount}
+                            onChange={e => setRecurrenceCount(Math.max(2, Math.min(104, Number(e.target.value) || 2)))}
+                            className="w-20 border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white text-center font-semibold"
+                            aria-label="Quantidade de ocorrências"
+                          />
+                        ) : (
+                          <input
+                            type="date"
+                            min={date || todayBrazilStr}
+                            value={recurrenceEndDate}
+                            onChange={e => setRecurrenceEndDate(e.target.value)}
+                            className="flex-1 border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white"
+                            aria-label="Data limite da série"
+                          />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {recurrenceFrequency === 'custom_weekdays' && (
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1 text-[11px]">Dias da semana</label>
+                      <div className="flex flex-wrap gap-1">
+                        {[
+                          { idx: 0, label: 'Dom' },
+                          { idx: 1, label: 'Seg' },
+                          { idx: 2, label: 'Ter' },
+                          { idx: 3, label: 'Qua' },
+                          { idx: 4, label: 'Qui' },
+                          { idx: 5, label: 'Sex' },
+                          { idx: 6, label: 'Sáb' }
+                        ].map(day => {
+                          const checked = recurrenceWeekdays.includes(day.idx);
+                          return (
+                            <button
+                              key={day.idx}
+                              type="button"
+                              onClick={() => {
+                                setRecurrenceWeekdays(prev =>
+                                  checked ? prev.filter(d => d !== day.idx) : [...prev, day.idx].sort((a, b) => a - b)
+                                );
+                              }}
+                              className={`px-2 py-1 rounded-md text-[11px] font-semibold border cursor-pointer transition-colors ${
+                                checked
+                                  ? 'bg-indigo-600 text-white border-indigo-600'
+                                  : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'
+                              }`}
+                            >
+                              {day.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1055,13 +1297,17 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
         }}
       />
 
-      {/* Modal de Cadastro Rápido de Serviço */}
+      {/* Modal de Cadastro / Edição Rápida de Serviço */}
       <NewServiceModal
         isOpen={isNewServiceModalOpen}
+        serviceToEdit={serviceToEdit}
         initialProfessionalId={professionalId}
         professionals={professionals}
         zIndex="z-[60]"
-        onClose={() => setIsNewServiceModalOpen(false)}
+        onClose={() => {
+          setIsNewServiceModalOpen(false);
+          setServiceToEdit(null);
+        }}
         onSuccess={handleServiceCreated}
       />
 

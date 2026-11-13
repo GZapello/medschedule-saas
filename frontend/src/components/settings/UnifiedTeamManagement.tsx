@@ -61,6 +61,7 @@ interface BlockedTime {
 const AVAILABLE_PERMISSIONS = [
   { id: 'manage_subscription', label: 'Gerenciar assinatura e plano da clínica', group: 'admin' },
   { id: 'view_schedule', label: 'Visualizar agenda da clínica', group: 'agenda' },
+  { id: 'view_all_schedules', label: 'Visualizar agendas de todos os profissionais', group: 'agenda' },
   { id: 'create_appointment', label: 'Criar agendamentos', group: 'agenda' },
   { id: 'edit_appointment', label: 'Editar e remarcar agendamentos', group: 'agenda' },
   { id: 'cancel_appointment', label: 'Cancelar agendamentos', group: 'agenda' },
@@ -177,6 +178,18 @@ const getCouncilForProfession = (profNameOrId?: string): string => {
   return 'Conselho';
 };
 
+const DEFAULT_INSTRUCTOR_MODALITIES = [
+  'Pilates',
+  'Dança',
+  'Zumba',
+  'Yoga',
+  'Alongamento',
+  'Ginástica',
+  'Ritmos',
+  'Treinamento funcional',
+  'Outras modalidades'
+];
+
 export const UnifiedTeamManagement: React.FC = () => {
   const { isClinicAdmin, reloadSession, currentTenant } = useAuth();
   const { showToast } = useToast();
@@ -207,6 +220,7 @@ export const UnifiedTeamManagement: React.FC = () => {
   const [sheetRegistrationNumber, setSheetRegistrationNumber] = useState<string>('');
   const [sheetBio, setSheetBio] = useState<string>('');
   const [sheetPracticeAreas, setSheetPracticeAreas] = useState<string>('');
+  const [customModalityInput, setCustomModalityInput] = useState<string>('');
   const [sheetBufferMinutes, setSheetBufferMinutes] = useState<number>(10);
   const [sheetSlug, setSheetSlug] = useState<string>('');
   const [sheetPublicBookingEnabled, setSheetPublicBookingEnabled] = useState<boolean>(true);
@@ -231,6 +245,19 @@ export const UnifiedTeamManagement: React.FC = () => {
   const [sheetCommissionPercentage, setSheetCommissionPercentage] = useState<number>(50);
   const [sheetFixedSalary, setSheetFixedSalary] = useState<number>(0);
   const [sheetPaymentDay, setSheetPaymentDay] = useState<number>(5);
+  const [serviceCommissions, setServiceCommissions] = useState<Array<{
+    service_id: string;
+    service_name: string;
+    price: number;
+    service_kind?: string;
+    default_capacity?: number;
+    rule_id: string | null;
+    commission_type: 'percentage' | 'fixed' | null;
+    commission_value: number | null;
+    group_payout_basis: 'per_class' | 'per_present_student';
+    rule_active: number | boolean;
+  }>>([]);
+  const [loadingServiceCommissions, setLoadingServiceCommissions] = useState<boolean>(false);
   const [savingFinancial, setSavingFinancial] = useState<boolean>(false);
 
   // Modal de Convite
@@ -391,10 +418,14 @@ export const UnifiedTeamManagement: React.FC = () => {
     setSheetFixedSalary(prof?.fixed_salary ?? 0);
     setSheetPaymentDay(prof?.payment_day ?? 5);
 
-    // Carrega dados detalhados da escala se possuir registro de profissional
+    // Carrega dados detalhados da escala e comissões por serviço se possuir registro de profissional
     if (member.professionalId) {
+      setLoadingServiceCommissions(true);
       try {
-        const details = await ApiClient.get<any>(`/v1/professionals/${member.professionalId}`);
+        const [details, svcCommData] = await Promise.all([
+          ApiClient.get<any>(`/v1/professionals/${member.professionalId}`),
+          ApiClient.get<any>(`/v1/professionals/${member.professionalId}/service-commissions`).catch(() => ({ services: [] }))
+        ]);
         if (details.schedules) {
           setSheetShifts(details.schedules.map((s: any) => ({
             ...s,
@@ -405,13 +436,24 @@ export const UnifiedTeamManagement: React.FC = () => {
           setSheetShifts([]);
         }
         setSheetBlockedTimes(details.blockedTimes || []);
+        setServiceCommissions((svcCommData?.services || []).map((s: any) => ({
+          ...s,
+          commission_type: s.commission_type || 'percentage',
+          commission_value: s.commission_value ?? prof?.commission_percentage ?? 50,
+          group_payout_basis: s.group_payout_basis || 'per_present_student',
+          rule_active: Boolean(s.rule_id && Number(s.rule_active) !== 0)
+        })));
       } catch (e) {
         setSheetShifts(member.schedules || []);
         setSheetBlockedTimes(member.blockedTimes || []);
+        setServiceCommissions([]);
+      } finally {
+        setLoadingServiceCommissions(false);
       }
     } else {
       setSheetShifts([]);
       setSheetBlockedTimes([]);
+      setServiceCommissions([]);
     }
   };
 
@@ -545,7 +587,16 @@ export const UnifiedTeamManagement: React.FC = () => {
         fixedSalary: sheetFixedSalary,
         paymentDay: sheetPaymentDay
       });
-      showToast('Configurações financeiras do profissional salvas com sucesso!', 'success');
+      await ApiClient.put(`/v1/professionals/${selectedMember.professionalId}/service-commissions`, {
+        rules: serviceCommissions.map(rule => ({
+          serviceId: rule.service_id,
+          active: Boolean(rule.rule_active),
+          commissionType: rule.commission_type === 'fixed' ? 'fixed' : 'percentage',
+          commissionValue: Number(rule.commission_value ?? 0),
+          groupPayoutBasis: rule.group_payout_basis === 'per_class' ? 'per_class' : 'per_present_student'
+        }))
+      });
+      showToast('Configurações financeiras e comissões por serviço salvas com sucesso!', 'success');
       await fetchData();
     } catch (err: any) {
       showToast(err.message || 'Erro ao salvar financeiro', 'error');
@@ -1132,6 +1183,83 @@ export const UnifiedTeamManagement: React.FC = () => {
                         className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 focus:bg-white"
                       />
                     </div>
+                    <div className="sm:col-span-2">
+                      <label className="block font-semibold text-slate-700 mb-1">
+                        Especialidades / Modalidades de Atuação
+                      </label>
+                      {(() => {
+                        const selectedList = sheetPracticeAreas
+                          .split(/[,;\n]+/)
+                          .map(s => s.trim())
+                          .filter(Boolean);
+                        const isInstrutor = ['prof-instrutor', 'prof-instrutor-pilates', 'pilates_instructor'].includes((sheetProfessionId || '').toLowerCase()) ||
+                          (selectedMember?.professionName || '').toLowerCase().startsWith('instrutor');
+                        const suggested = isInstrutor ? DEFAULT_INSTRUCTOR_MODALITIES : [];
+                        const allChips = Array.from(new Set([...suggested, ...selectedList]));
+                        const toggleModality = (mod: string) => {
+                          const exists = selectedList.some(item => item.toLowerCase() === mod.toLowerCase());
+                          const next = exists
+                            ? selectedList.filter(item => item.toLowerCase() !== mod.toLowerCase())
+                            : [...selectedList, mod];
+                          setSheetPracticeAreas(next.join(', '));
+                        };
+                        const addCustomModality = () => {
+                          const trimmed = customModalityInput.trim();
+                          if (!trimmed) return;
+                          if (!selectedList.some(item => item.toLowerCase() === trimmed.toLowerCase())) {
+                            setSheetPracticeAreas([...selectedList, trimmed].join(', '));
+                          }
+                          setCustomModalityInput('');
+                        };
+                        return (
+                          <div className="space-y-2">
+                            {allChips.length > 0 && (
+                              <div className="flex flex-wrap gap-1.5">
+                                {allChips.map(mod => {
+                                  const active = selectedList.some(item => item.toLowerCase() === mod.toLowerCase());
+                                  return (
+                                    <button
+                                      key={mod}
+                                      type="button"
+                                      onClick={() => toggleModality(mod)}
+                                      className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all cursor-pointer ${
+                                        active
+                                          ? 'bg-indigo-600 text-white border-indigo-600'
+                                          : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'
+                                      }`}
+                                    >
+                                      {active ? `✓ ${mod}` : `+ ${mod}`}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                value={customModalityInput}
+                                onChange={e => setCustomModalityInput(e.target.value)}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    addCustomModality();
+                                  }
+                                }}
+                                placeholder={isInstrutor ? 'Adicionar modalidade personalizada (ex: Ballet, Pole Dance...)' : 'Adicionar especialidade ou modalidade...'}
+                                className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 focus:bg-white"
+                              />
+                              <button
+                                type="button"
+                                onClick={addCustomModality}
+                                className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs cursor-pointer shrink-0"
+                              >
+                                Adicionar
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
                   </div>
 
                   {/* Agendamento Online Público */}
@@ -1679,6 +1807,126 @@ export const UnifiedTeamManagement: React.FC = () => {
                             ))}
                           </select>
                         </div>
+                      </div>
+
+                      <div className="pt-3 border-t border-slate-200 space-y-3">
+                        <div>
+                          <h5 className="font-bold text-slate-800 text-xs">
+                            Comissões por Serviço / Modalidade (Opcional)
+                          </h5>
+                          <p className="text-[11px] text-slate-500 mt-0.5">
+                            Quando ativada para um serviço, a regra abaixo substitui a comissão geral do profissional. Salário fixo permanece independente.
+                          </p>
+                        </div>
+
+                        {loadingServiceCommissions ? (
+                          <p className="text-[11px] text-slate-400">Carregando serviços do estabelecimento...</p>
+                        ) : serviceCommissions.length === 0 ? (
+                          <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-500">
+                            Nenhum serviço ativo cadastrado no momento.
+                          </div>
+                        ) : (
+                          <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                            {serviceCommissions.map((svc, idx) => {
+                              const active = Boolean(svc.rule_active);
+                              const isGroup = svc.service_kind === 'group';
+                              return (
+                                <div
+                                  key={svc.service_id}
+                                  className={`p-3 rounded-xl border transition-all ${
+                                    active
+                                      ? 'bg-indigo-50/40 border-indigo-200'
+                                      : 'bg-slate-50/60 border-slate-200'
+                                  }`}
+                                >
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                      <input
+                                        type="checkbox"
+                                        checked={active}
+                                        onChange={e => {
+                                          const checked = e.target.checked;
+                                          setServiceCommissions(prev => prev.map((item, i) => i === idx ? { ...item, rule_active: checked } : item));
+                                        }}
+                                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                      />
+                                      <span className="font-semibold text-xs text-slate-800">{svc.service_name}</span>
+                                      <span className="text-[11px] text-slate-500">
+                                        (R$ {Number(svc.price || 0).toFixed(2).replace('.', ',')})
+                                      </span>
+                                      {isGroup && (
+                                        <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-teal-100 text-teal-800">
+                                          Turma
+                                        </span>
+                                      )}
+                                    </label>
+                                    {!active && (
+                                      <span className="text-[10px] font-medium text-slate-500">
+                                        {sheetRemunerationType === 'salary'
+                                          ? 'Regra geral: apenas salário fixo'
+                                          : `Padrão geral: ${sheetCommissionPercentage}%`}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {active && (
+                                    <div className="mt-2.5 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                      <div>
+                                        <label className="block text-[10px] font-semibold text-slate-600 mb-0.5">Tipo de regra</label>
+                                        <select
+                                          value={svc.commission_type || 'percentage'}
+                                          onChange={e => {
+                                            const val = e.target.value as 'percentage' | 'fixed';
+                                            setServiceCommissions(prev => prev.map((item, i) => i === idx ? { ...item, commission_type: val } : item));
+                                          }}
+                                          className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white"
+                                        >
+                                          <option value="percentage">Percentual (%)</option>
+                                          <option value="fixed">Valor fixo (R$)</option>
+                                        </select>
+                                      </div>
+
+                                      <div>
+                                        <label className="block text-[10px] font-semibold text-slate-600 mb-0.5">
+                                          {svc.commission_type === 'fixed' ? 'Valor (R$)' : 'Percentual (%)'}
+                                        </label>
+                                        <input
+                                          type="number"
+                                          min={0}
+                                          max={svc.commission_type === 'fixed' ? undefined : 100}
+                                          step="0.01"
+                                          value={svc.commission_value ?? 0}
+                                          onChange={e => {
+                                            const num = Number(e.target.value);
+                                            setServiceCommissions(prev => prev.map((item, i) => i === idx ? { ...item, commission_value: Number.isNaN(num) ? 0 : num } : item));
+                                          }}
+                                          className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white"
+                                        />
+                                      </div>
+
+                                      {isGroup && (
+                                        <div>
+                                          <label className="block text-[10px] font-semibold text-slate-600 mb-0.5">Base na turma</label>
+                                          <select
+                                            value={svc.group_payout_basis || 'per_present_student'}
+                                            onChange={e => {
+                                              const val = e.target.value as 'per_class' | 'per_present_student';
+                                              setServiceCommissions(prev => prev.map((item, i) => i === idx ? { ...item, group_payout_basis: val } : item));
+                                            }}
+                                            className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white"
+                                          >
+                                            <option value="per_present_student">Por aluno presente</option>
+                                            <option value="per_class">Por aula / ocorrência</option>
+                                          </select>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex justify-end pt-2">

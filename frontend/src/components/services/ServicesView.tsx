@@ -232,10 +232,10 @@ export const getCompatibleSpecialties = (
       return pid === 'prof-dentista';
     });
   } else if (targetModule === 'ZemdaFisio') {
-    // Especialidades de Fisioterapia e Pilates
+    // Especialidades de Fisioterapia e Instrutor (Pilates e modalidades)
     filtered = allSpecialties.filter(s => {
       const pid = (s.profession_id || '').toLowerCase();
-      return pid === 'prof-fisioterapeuta' || pid === 'prof-instrutor-pilates';
+      return pid === 'prof-fisioterapeuta' || pid === 'prof-instrutor' || pid === 'prof-instrutor-pilates' || pid === 'pilates_instructor';
     });
   } else if (targetModule === 'ZemdaNutri') {
     filtered = allSpecialties.filter(s => {
@@ -320,6 +320,9 @@ export const ServicesView: React.FC = () => {
   const [bufferMinutes, setBufferMinutes] = useState<number>(10);
   const [price, setPrice] = useState<string>('180.00');
   const [modality, setModality] = useState<'both' | 'presential' | 'online' | 'home'>('both');
+  const [serviceKind, setServiceKind] = useState<'individual' | 'group'>('individual');
+  const [defaultCapacity, setDefaultCapacity] = useState<number>(10);
+  const [allowRecurrence, setAllowRecurrence] = useState<boolean>(true);
   const [description, setDescription] = useState<string>('');
   const [reminderEnabled, setReminderEnabled] = useState<boolean>(false);
   const [reminderValue, setReminderValue] = useState<number>(30);
@@ -335,6 +338,9 @@ export const ServicesView: React.FC = () => {
   const [editBufferMinutes, setEditBufferMinutes] = useState<number>(10);
   const [editPrice, setEditPrice] = useState<string>('180.00');
   const [editModality, setEditModality] = useState<'both' | 'presential' | 'online' | 'home'>('both');
+  const [editServiceKind, setEditServiceKind] = useState<'individual' | 'group'>('individual');
+  const [editDefaultCapacity, setEditDefaultCapacity] = useState<number>(10);
+  const [editAllowRecurrence, setEditAllowRecurrence] = useState<boolean>(true);
   const [editDescription, setEditDescription] = useState<string>('');
   const [editReminderEnabled, setEditReminderEnabled] = useState<boolean>(false);
   const [editReminderValue, setEditReminderValue] = useState<number>(30);
@@ -495,6 +501,9 @@ export const ServicesView: React.FC = () => {
         bufferMinutes: Number(bufferMinutes),
         price: Number(price),
         modality,
+        serviceKind,
+        defaultCapacity: serviceKind === 'group' ? Number(defaultCapacity) : null,
+        allowRecurrence,
         description: description || null,
         reminderEnabled,
         reminderValue: reminderEnabled ? Number(reminderValue) : null,
@@ -504,6 +513,9 @@ export const ServicesView: React.FC = () => {
       showToast('Serviço cadastrado com sucesso!', 'success');
       setShowServiceModal(false);
       setName('');
+      setServiceKind('individual');
+      setDefaultCapacity(10);
+      setAllowRecurrence(true);
       setDescription('');
       setReminderEnabled(false);
       setReminderValue(30);
@@ -560,6 +572,9 @@ export const ServicesView: React.FC = () => {
     setEditBufferMinutes(s.buffer_minutes || 10);
     setEditPrice(s.price !== undefined && s.price !== null ? String(s.price) : '0.00');
     setEditModality(s.modality || 'both');
+    setEditServiceKind(s.service_kind === 'group' ? 'group' : 'individual');
+    setEditDefaultCapacity(Number(s.default_capacity) || 10);
+    setEditAllowRecurrence(s.allow_recurrence !== 0);
     setEditDescription(s.description || '');
     setEditActive(s.active === 1);
     setEditReminderEnabled(Boolean(s.reminder_enabled));
@@ -590,6 +605,9 @@ export const ServicesView: React.FC = () => {
         bufferMinutes: Number(editBufferMinutes),
         price: Number(editPrice),
         modality: editModality,
+        serviceKind: editServiceKind,
+        defaultCapacity: editServiceKind === 'group' ? Number(editDefaultCapacity) : null,
+        allowRecurrence: editAllowRecurrence,
         description: editDescription || null,
         active: editActive ? 1 : 0,
         reminderEnabled: editReminderEnabled,
@@ -805,6 +823,11 @@ export const ServicesView: React.FC = () => {
                                   <span className="text-[10px] font-semibold px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-full inline-flex items-center gap-1">
                                     <Layers className="w-3 h-3 text-blue-600" />
                                     {CLINICAL_MODULE_LABELS[s.clinical_module] || s.clinical_module}
+                                  </span>
+                                )}
+                                {s.service_kind === 'group' && (
+                                  <span className="text-[10px] font-bold px-2 py-0.5 bg-teal-50 text-teal-700 border border-teal-200 rounded-full inline-block">
+                                    Turma • {s.default_capacity || 1} vagas
                                   </span>
                                 )}
                                 {s.specialty_name && (
@@ -1039,6 +1062,57 @@ export const ServicesView: React.FC = () => {
                   <option value="online">Apenas Online</option>
                   <option value="home">Domiciliar</option>
                 </select>
+              </div>
+
+              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-2.5">
+                <div className="font-bold text-slate-800 text-xs">Configurações de Agendamento</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setServiceKind('individual')}
+                    className={`px-3 py-2 rounded-xl border text-left font-semibold cursor-pointer transition-all ${
+                      serviceKind === 'individual'
+                        ? 'border-indigo-600 bg-indigo-50 text-indigo-800'
+                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    Individual
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setServiceKind('group')}
+                    className={`px-3 py-2 rounded-xl border text-left font-semibold cursor-pointer transition-all ${
+                      serviceKind === 'group'
+                        ? 'border-indigo-600 bg-indigo-50 text-indigo-800'
+                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    Aula coletiva / Turma
+                  </button>
+                </div>
+                {serviceKind === 'group' && (
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Vagas por aula/turma *</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="500"
+                      step="1"
+                      value={defaultCapacity}
+                      onChange={e => setDefaultCapacity(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white"
+                    />
+                  </div>
+                )}
+                <label className="flex items-center gap-2 text-[11px] font-medium text-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={allowRecurrence}
+                    onChange={e => setAllowRecurrence(e.target.checked)}
+                    className="w-3.5 h-3.5 rounded text-indigo-600 border-slate-300"
+                  />
+                  <span>Permitir agendamentos recorrentes neste serviço</span>
+                </label>
               </div>
 
               <div>
@@ -1325,6 +1399,57 @@ export const ServicesView: React.FC = () => {
                     <option value="0">Inativo (Desativado)</option>
                   </select>
                 </div>
+              </div>
+
+              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-2.5">
+                <div className="font-bold text-slate-800 text-xs">Configurações de Agendamento</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditServiceKind('individual')}
+                    className={`px-3 py-2 rounded-xl border text-left font-semibold cursor-pointer transition-all ${
+                      editServiceKind === 'individual'
+                        ? 'border-indigo-600 bg-indigo-50 text-indigo-800'
+                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    Individual
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditServiceKind('group')}
+                    className={`px-3 py-2 rounded-xl border text-left font-semibold cursor-pointer transition-all ${
+                      editServiceKind === 'group'
+                        ? 'border-indigo-600 bg-indigo-50 text-indigo-800'
+                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    Aula coletiva / Turma
+                  </button>
+                </div>
+                {editServiceKind === 'group' && (
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Vagas por aula/turma *</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="500"
+                      step="1"
+                      value={editDefaultCapacity}
+                      onChange={e => setEditDefaultCapacity(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white"
+                    />
+                  </div>
+                )}
+                <label className="flex items-center gap-2 text-[11px] font-medium text-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editAllowRecurrence}
+                    onChange={e => setEditAllowRecurrence(e.target.checked)}
+                    className="w-3.5 h-3.5 rounded text-indigo-600 border-slate-300"
+                  />
+                  <span>Permitir agendamentos recorrentes neste serviço</span>
+                </label>
               </div>
 
               <div>

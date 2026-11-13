@@ -6,6 +6,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { Payment } from '../../types';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
+import { CollectionsModal } from './CollectionsModal';
 import {
   DollarSign,
   CheckCircle2,
@@ -42,6 +43,7 @@ export const FinancialView: React.FC<FinancialViewProps> = ({ initialTab = 'tran
   const [loading, setLoading] = useState<boolean>(true);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [methodFilter, setMethodFilter] = useState<string>('all');
+  const [showCollectionsModal, setShowCollectionsModal] = useState<boolean>(false);
 
   // Sub-abas Financeiro: Recebimentos vs Contas a Pagar vs Caixa
   const [financialTab, setFinancialTab] = useState<'transactions' | 'payables' | 'cash_register'>(initialTab);
@@ -450,6 +452,13 @@ export const FinancialView: React.FC<FinancialViewProps> = ({ initialTab = 'tran
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap w-full sm:w-auto">
+          <button
+            type="button"
+            onClick={() => setShowCollectionsModal(true)}
+            className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-bold text-teal-800 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-xl transition-all min-h-[40px] cursor-pointer"
+          >
+            <DollarSign className="w-4 h-4" /> Central de Cobranças & Mensalidades
+          </button>
           <button
             onClick={handleExportCsv}
             className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all min-h-[40px]"
@@ -1945,6 +1954,11 @@ export const FinancialView: React.FC<FinancialViewProps> = ({ initialTab = 'tran
           </div>
         </div>
       )}
+      <CollectionsModal
+        isOpen={showCollectionsModal}
+        onClose={() => setShowCollectionsModal(false)}
+        onUpdated={fetchPayments}
+      />
     </div>
   );
 };

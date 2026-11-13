@@ -43,7 +43,7 @@ export const PROFESSION_CATEGORIES: ProfessionCategory[] = [
       { id: 'social_work', label: 'Assistente Social', category: 'health_wellness', defaultDurationMinutes: 45, bufferMinutes: 10 },
       { id: 'esthetician', label: 'Esteticista', category: 'health_wellness', defaultDurationMinutes: 60, bufferMinutes: 10 },
       { id: 'doula', label: 'Doula / Consultora de Amamentação', category: 'health_wellness', defaultDurationMinutes: 60, bufferMinutes: 10 },
-      { id: 'pilates_instructor', label: 'Instrutor(a) de Pilates', category: 'health_wellness', defaultDurationMinutes: 50, bufferMinutes: 10 }
+      { id: 'prof-instrutor', label: 'Instrutor', category: 'health_wellness', defaultDurationMinutes: 50, bufferMinutes: 10 }
     ]
   }
 ];

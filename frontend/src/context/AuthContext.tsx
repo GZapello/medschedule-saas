@@ -456,8 +456,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       profId === 'prof-educacao-fisica' ||
       profId === 'prof-educador-fisico' ||
       profId === 'personal_trainer' ||
+      profId === 'prof-instrutor' ||
+      profId === 'prof-instrutor-pilates' ||
+      profId === 'pilates_instructor' ||
       profSlug === 'personal-trainer' ||
       profSlug === 'educacao-fisica' ||
+      profSlug === 'instrutor' ||
+      profSlug === 'instrutor-pilates' ||
       combinedProf.includes('personal') ||
       combinedProf.includes('educação física') ||
       combinedProf.includes('educacao fisica') ||
@@ -466,6 +471,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       combinedProf.includes('treinamento físico') ||
       combinedProf.includes('musculação') ||
       combinedProf.includes('musculacao') ||
+      profName === 'instrutor' ||
+      profName.startsWith('instrutor ') ||
+      profName.startsWith('instrutor(a)') ||
       regType === 'CREF'
     ) {
       activeModule = 'ZemdaPersonal';

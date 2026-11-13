@@ -43,6 +43,7 @@ import {
   PreConsultationAppointmentModal,
   PRE_CONSULTATION_BADGE_CONFIG
 } from '../pre-consultation/PreConsultationFormsModal';
+import { CollectionsModal } from '../financial/CollectionsModal';
 import { Users, BellRing, SlidersHorizontal, X } from 'lucide-react';
 
 interface DashboardViewProps {
@@ -79,6 +80,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [viewPatientId, setViewPatientId] = useState<string | null>(null);
   const [whatsappReminderAppt, setWhatsappReminderAppt] = useState<any | null>(null);
   const [editingAppt, setEditingAppt] = useState<any | null>(null);
+  const [collectionsSummary, setCollectionsSummary] = useState<any | null>(null);
+  const [showCollectionsModal, setShowCollectionsModal] = useState<boolean>(false);
   const [pendingWhatsAppNotice, setPendingWhatsAppNotice] = useState<any | null>(null);
   const [checkInQueueData, setCheckInQueueData] = useState<{
     hasReceptionTeam: boolean;
@@ -214,11 +217,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     try {
       setLoading(true);
       const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
-      const [data, queueRes] = await Promise.all([
+      const [data, queueRes, collRes] = await Promise.all([
         ApiClient.get<any>(`/v1/dashboard/metrics?date=${todayStr}`),
-        ApiClient.get<any>(`/v1/checkin/queue?date=${todayStr}`).catch(() => null)
+        ApiClient.get<any>(`/v1/checkin/queue?date=${todayStr}`).catch(() => null),
+        ApiClient.get<any>('/v1/financial/collections/summary').catch(() => null)
       ]);
       setMetrics(data);
+      setCollectionsSummary(collRes);
       const hasReception = Boolean(
         queueRes?.hasReceptionTeam ?? data?.checkin?.hasReceptionTeam
       );
@@ -607,6 +612,37 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       <TodayWorklist data={metrics?.worklist} onNavigate={onNavigate} onPatient={setViewPatientId} onUpdate={fetchMetrics} />
+
+      {collectionsSummary && collectionsSummary.scope !== 'restricted' && (
+        <div className="bg-white rounded-xl border border-slate-200 px-3.5 py-2.5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs">
+            <span className="font-extrabold text-slate-800 flex items-center gap-1.5">
+              <DollarSign className="w-4 h-4 text-teal-600" />
+              Cobranças & Recebimentos
+            </span>
+            <span className="text-rose-700 font-semibold">
+              Vencidas: <strong>{collectionsSummary.overdueCount || 0}</strong> ({formatCurrency(collectionsSummary.overdueAmount)})
+            </span>
+            <span className="text-amber-700 font-semibold">
+              Vencem em breve: <strong>{collectionsSummary.dueSoonCount || 0}</strong> ({formatCurrency(collectionsSummary.dueSoonAmount)})
+            </span>
+            <span className="text-slate-600 font-medium">
+              A receber: <strong>{collectionsSummary.pendingCount || 0}</strong> ({formatCurrency(collectionsSummary.pendingAmount)})
+            </span>
+            <span className="text-emerald-700 font-semibold">
+              Recebido no mês: {formatCurrency(collectionsSummary.paidPeriodAmount)}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowCollectionsModal(true)}
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-xs font-bold shrink-0 cursor-pointer transition-colors"
+          >
+            <span>Ver todas as cobranças</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Main Content Area: Today's Appointments & Monthly Chart */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-2.5 items-start">
@@ -1443,6 +1479,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           fetchMetrics();
           notifyAppointmentChange();
         }}
+      />
+      <CollectionsModal
+        isOpen={showCollectionsModal}
+        onClose={() => setShowCollectionsModal(false)}
+        onUpdated={fetchMetrics}
       />
     </div>
   );

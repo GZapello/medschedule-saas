@@ -63,6 +63,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
   const auth = useAuth();
   const { currentTenant, clientTermLabel } = auth;
   const canPerformClinicalAttendance = (auth.isProfessional || auth.isClinicAdmin) && !auth.isReceptionist;
+  const canViewAllSchedules = !auth.isProfessional || auth.hasPermission('view_all_schedules');
+  const [cancelScope, setCancelScope] = useState<'single' | 'this_and_following' | 'series'>('single');
   const { showToast } = useToast();
 
   const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>(() => (typeof window !== 'undefined' && window.innerWidth < 768 ? 'day' : 'week'));
@@ -652,12 +654,13 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
     setCurrentDate(new Date());
   };
 
-  const handleUpdateStatus = async (apptId: string, status: string, reason?: string, category?: string) => {
+  const handleUpdateStatus = async (apptId: string, status: string, reason?: string, category?: string, scope: 'single' | 'this_and_following' | 'series' = 'single') => {
     try {
       await ApiClient.put(`/v1/appointments/${apptId}/status`, {
         status,
         reason: reason || null,
-        cancellationReasonCategory: category || null
+        cancellationReasonCategory: category || null,
+        scope
       });
       setAppointments(prev => prev.map(a => a.id === apptId ? { ...a, status: status as any } : a));
       showToast(`Status atualizado para ${status}`, 'success');
@@ -1036,8 +1039,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
             onChange={e => setSelectedProf(e.target.value)}
             className="w-full sm:w-auto flex-1 sm:flex-initial text-xs font-medium border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 min-h-[38px]"
           >
-            <option value="all">Todos os Profissionais</option>
-            {professionals.map(p => (
+            {canViewAllSchedules && <option value="all">Todos os Profissionais</option>}
+            {(canViewAllSchedules
+              ? professionals
+              : professionals.filter(p => !userProfessionalId || p.id === userProfessionalId)
+            ).map(p => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>
@@ -1172,11 +1178,18 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                               appt.status
                             )}`}
                           >
-                            <div className="font-bold truncate leading-tight">{appt.patient_name}</div>
+                            <div className="font-bold truncate leading-tight flex items-center justify-between gap-1">
+                              <span className="truncate">{appt.patient_name}</span>
+                              {appt.service_kind === 'group' && (
+                                <span className="shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-800 border border-indigo-200">
+                                  Turma {appt.occurrence_enrolled_count ?? 1}/{appt.occurrence_capacity ?? 1}
+                                </span>
+                              )}
+                            </div>
                             {appt.modality === 'online' && <span className="text-[10px] inline-flex items-center gap-1"><Video className="w-3 h-3" /> Online</span>}
                             <div className="text-[10px] opacity-90 truncate leading-tight mt-0.5">
                               {appt.service_name}
-                              {(() => {
+                              {!appt.is_colleague_schedule && (() => {
                                 const amt = appt.display_amount !== null && appt.display_amount !== undefined
                                   ? appt.display_amount
                                   : (appt.payment_amount !== null && appt.payment_amount !== undefined
@@ -1474,6 +1487,16 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                     <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full notranslate ${getStatusColor(selectedAppt.status)}`} translate="no">
                       <span>{getStatusLabel(selectedAppt.status)}</span>
                     </span>
+                    {selectedAppt.service_kind === 'group' && (
+                      <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                        Turma {selectedAppt.occurrence_enrolled_count ?? 1}/{selectedAppt.occurrence_capacity ?? 1}
+                      </span>
+                    )}
+                    {Boolean(selectedAppt.is_colleague_schedule || (auth.isProfessional && userProfessionalId && selectedAppt.professional_id !== userProfessionalId)) && (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-300">
+                        Somente visualização
+                      </span>
+                    )}
                     {selectedAppt.google_sync_status === 'synced' && (
                       <span title="Sincronizado com Google Agenda" className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
                         <CalendarIcon className="w-3 h-3 text-emerald-600" />
@@ -1522,13 +1545,15 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                         </>
                       )}
                     </span>
-                    <button
-                      type="button"
-                      className="text-xs font-medium text-slate-500 hover:text-teal-700 underline underline-offset-2 cursor-pointer"
-                      onClick={() => setTeleAppt(selectedAppt)}
-                    >
-                      Editar modalidade
-                    </button>
+                    {!selectedAppt.is_colleague_schedule && !(auth.isProfessional && userProfessionalId && selectedAppt.professional_id !== userProfessionalId) && (
+                      <button
+                        type="button"
+                        className="text-xs font-medium text-slate-500 hover:text-teal-700 underline underline-offset-2 cursor-pointer"
+                        onClick={() => setTeleAppt(selectedAppt)}
+                      >
+                        Editar modalidade
+                      </button>
+                    )}
                   </div>
 
                   <h3 className="text-lg sm:text-xl font-bold text-slate-900 leading-snug truncate">
@@ -1620,7 +1645,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                           Valor da Consulta
                         </span>
                         <p className="text-xs sm:text-sm font-bold text-emerald-700 mt-0.5 truncate">
-                          {formattedAmount}
+                          {(selectedAppt.is_colleague_schedule || (auth.isProfessional && userProfessionalId && selectedAppt.professional_id !== userProfessionalId))
+                            ? 'Restrito'
+                            : formattedAmount}
                         </p>
                       </div>
 
@@ -1678,7 +1705,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
 
                 {/* FAIXA OPERACIONAL: STATUS DE RECEPÇÃO (CHECK-IN) & PRÉ-CONSULTA DIGITAL */}
                 <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
-                  {isReceptionFlowActive && (
+                  {isReceptionFlowActive && !selectedAppt.is_colleague_schedule && !(auth.isProfessional && userProfessionalId && selectedAppt.professional_id !== userProfessionalId) && (
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-[11px] font-bold text-slate-600">Fluxo Recepção:</span>
                       <select
@@ -2018,6 +2045,13 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                 )}
 
                 {/* 13-14. AÇÃO PRINCIPAL BASEADA NO STATUS + AÇÕES SECUNDÁRIAS */}
+                {Boolean(selectedAppt.is_colleague_schedule || (auth.isProfessional && userProfessionalId && selectedAppt.professional_id !== userProfessionalId)) ? (
+                  <div className="pt-2 border-t border-slate-100">
+                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600">
+                      Você está visualizando a agenda de outro profissional via permissão de visualização global. Edição, atendimento clínico e valores financeiros ficam restritos ao responsável.
+                    </div>
+                  </div>
+                ) : (
                 <div className="pt-2 border-t border-slate-100 space-y-2.5">
                   {canPerformClinicalAttendance && (
                     selectedAppt.status === 'completed' ? (
@@ -2168,6 +2202,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                               setCancellingAppt(selectedAppt);
                               setCancellationReason('');
                               setCancellationCategory('Desistência do paciente');
+                              setCancelScope('single');
                             }}
                             className="px-3 py-1.5 text-xs font-semibold bg-white text-rose-700 hover:bg-rose-50 border border-rose-200 rounded-xl transition-colors cursor-pointer"
                           >
@@ -2258,6 +2293,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                     </div>
                   )}
                 </div>
+                )}
               </div>
             ) : (
               /* Sub-view: Remarcar */
@@ -2389,6 +2425,34 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                 </select>
               </div>
 
+              {cancellingAppt.series_id && (
+                <div className="p-2.5 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-1.5">
+                  <label className="block font-bold text-indigo-950 text-[11px]">
+                    Aplicar cancelamento da série em:
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      { id: 'single' as const, label: 'Apenas este dia' },
+                      { id: 'this_and_following' as const, label: 'Este e os seguintes' },
+                      { id: 'series' as const, label: 'Toda a série' }
+                    ].map(opt => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setCancelScope(opt.id)}
+                        className={`px-2 py-1 rounded-lg text-[11px] font-semibold border cursor-pointer ${
+                          cancelScope === opt.id
+                            ? 'bg-rose-600 text-white border-rose-600'
+                            : 'bg-white text-slate-700 border-slate-200 hover:border-rose-300'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div>
                 <label className="block font-bold text-slate-700 mb-1">Justificativa Detalhada (Opcional)</label>
                 <textarea
@@ -2409,7 +2473,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                 Voltar
               </button>
               <button
-                onClick={() => handleUpdateStatus(cancellingAppt.id, 'cancelled', cancellationReason, cancellationCategory)}
+                onClick={() => handleUpdateStatus(cancellingAppt.id, 'cancelled', cancellationReason, cancellationCategory, cancellingAppt.series_id ? cancelScope : 'single')}
                 className="px-5 py-2 font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs cursor-pointer"
               >
                 Confirmar Cancelamento

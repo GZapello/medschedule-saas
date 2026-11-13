@@ -111,6 +111,12 @@ export const REGISTRATION_PROFESSION_ALIASES: Record<string, string> = {
   "personal-trainer": "prof-personal-trainer",
   "educacao-fisica": "prof-personal-trainer",
 
+  // Instrutor (aliases compatíveis com Pilates/modalidades)
+  "prof-instrutor-pilates": "prof-instrutor",
+  "pilates_instructor": "prof-instrutor",
+  "instrutor-pilates": "prof-instrutor",
+  "instrutor": "prof-instrutor",
+
   // Funções Administrativas mapeadas para fallback seguro caso enviadas como profissão
   "prof-administrador": "prof-outro-saude",
   "prof-gestor": "prof-outro-saude",
@@ -297,10 +303,10 @@ const OPTIONS: Omit<RegistrationProfessionOption, 'module' | 'modules' | 'access
     "boardLabel": "Certificação"
   },
   {
-    "id": "prof-instrutor-pilates",
-    "label": "Instrutor(a) de Pilates",
-    "canonicalName": "Instrutor de Pilates",
-    "slug": "instrutor-pilates",
+    "id": "prof-instrutor",
+    "label": "Instrutor",
+    "canonicalName": "Instrutor",
+    "slug": "instrutor",
     "boardLabel": "Certificação"
   },
   {

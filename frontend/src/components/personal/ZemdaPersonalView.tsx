@@ -42,6 +42,7 @@ import { PersonalExerciseLibraryModal } from './PersonalExerciseLibraryModal';
 import { PersonalWorkoutBuilder } from './PersonalWorkoutBuilder';
 import { PersonalAssessmentModal } from './PersonalAssessmentModal';
 import { PersonalAIAssistantModal } from './PersonalAIAssistantModal';
+import { PersonalAttendanceReportsTab } from './PersonalAttendanceReportsTab';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
 import { ProfessionalModuleHeader } from '../common/ProfessionalModuleHeader';
 import { useAuth } from '../../context/AuthContext';
@@ -222,7 +223,7 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
   };
 
   // Abas principais
-  const [currentTab, setCurrentTab] = useState<'dashboard' | 'students' | 'exercises' | 'templates' | 'calendar'>('dashboard');
+  const [currentTab, setCurrentTab] = useState<'dashboard' | 'students' | 'exercises' | 'templates' | 'attendance' | 'calendar'>('dashboard');
 
   const tabScroll = useHorizontalTabScroll(currentTab);
   const { tabScrollProps } = tabScroll;
@@ -736,6 +737,7 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
                 { id: 'dashboard', label: 'Painel de Treinamento', icon: LayoutDashboard },
                 { id: 'students', label: `Alunos & Prescrições (${students.length})`, icon: Users },
                 { id: 'templates', label: 'Modelos de Treino (Templates)', icon: Layers },
+                { id: 'attendance', label: 'Frequência & Relatórios', icon: ClipboardCheck },
               ].map(tab => {
                 const Icon = tab.icon;
                 const isActive = currentTab === tab.id && !selectedStudentId;
@@ -899,6 +901,11 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
                 </div>
               )}
             </div>
+          )}
+
+          {/* CONTEÚDO: FREQUÊNCIA & RELATÓRIOS */}
+          {currentTab === 'attendance' && (
+            <PersonalAttendanceReportsTab />
           )}
 
           {/* CONTEÚDO: MODELOS DE TREINO (TEMPLATES) */}

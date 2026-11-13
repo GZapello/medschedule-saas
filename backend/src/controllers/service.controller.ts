@@ -27,6 +27,10 @@ export class ServiceController {
           s.buffer_minutes,
           COALESCE(ps.custom_price, s.price) as price,
           s.modality, s.active,
+          COALESCE(s.service_kind, 'individual') as service_kind,
+          s.default_capacity,
+          COALESCE(s.allow_recurrence, 1) as allow_recurrence,
+          s.modality_category,
           s.min_lead_time_hours, s.max_advance_days, s.cancellation_policy,
           s.reminder_enabled, s.reminder_value, s.reminder_unit,
           s.clinical_module,
@@ -68,8 +72,24 @@ export class ServiceController {
       const {
         professionalId, specialtyId, name, description, durationMinutes, bufferMinutes,
         price, modality, minLeadTimeHours, maxAdvanceDays, cancellationPolicy,
-        reminderEnabled, reminderValue, reminderUnit, clinicalModule
+        reminderEnabled, reminderValue, reminderUnit, clinicalModule,
+        serviceKind, service_kind, defaultCapacity, default_capacity, allowRecurrence, allow_recurrence,
+        modalityCategory, modality_category
       } = req.body;
+
+      const resolvedKind = (serviceKind || service_kind || 'individual') === 'group' ? 'group' : 'individual';
+      const rawCapacity = defaultCapacity !== undefined ? defaultCapacity : default_capacity;
+      let resolvedCapacity: number | null = null;
+      if (resolvedKind === 'group') {
+        const capNum = Number(rawCapacity);
+        if (!Number.isInteger(capNum) || capNum < 1 || capNum > 500) {
+          res.status(400).json({ error: 'Para aulas coletivas/turmas, informe um número inteiro positivo de vagas.' });
+          return;
+        }
+        resolvedCapacity = capNum;
+      }
+      const resolvedAllowRecurrence = (allowRecurrence ?? allow_recurrence) === false || (allowRecurrence ?? allow_recurrence) === 0 ? 0 : 1;
+      const resolvedModalityCategory = (modalityCategory ?? modality_category ?? null) ? String(modalityCategory ?? modality_category).trim() : null;
 
       if (!name || !name.trim()) {
         res.status(400).json({ error: 'Nome do serviço é obrigatório' });
@@ -115,9 +135,10 @@ export class ServiceController {
         INSERT INTO services (
           id, tenant_id, professional_id, specialty_id, name, description, duration_minutes,
           buffer_minutes, price, modality, active, min_lead_time_hours, max_advance_days, cancellation_policy,
-          reminder_enabled, reminder_value, reminder_unit, clinical_module
+          reminder_enabled, reminder_value, reminder_unit, clinical_module,
+          service_kind, default_capacity, allow_recurrence, modality_category
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       insertStmt.run(
@@ -137,7 +158,11 @@ export class ServiceController {
         reminderEnabled ? 1 : 0,
         reminderEnabled && reminderValue ? Number(reminderValue) : null,
         reminderEnabled && reminderUnit ? String(reminderUnit).toUpperCase() : 'DAYS',
-        targetModule
+        targetModule,
+        resolvedKind,
+        resolvedCapacity,
+        resolvedAllowRecurrence,
+        resolvedModalityCategory
       );
 
       try {
@@ -165,6 +190,10 @@ export class ServiceController {
         modality: modality || 'both',
         active: 1,
         clinical_module: targetModule,
+        service_kind: resolvedKind,
+        default_capacity: resolvedCapacity,
+        allow_recurrence: resolvedAllowRecurrence,
+        modality_category: resolvedModalityCategory,
         professional_name: prof.name,
         message: 'Serviço criado com sucesso'
       });
@@ -183,7 +212,7 @@ export class ServiceController {
         return;
       }
 
-      const existing = db.prepare('SELECT id, name, professional_id, clinical_module FROM services WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
+      const existing = db.prepare('SELECT id, name, professional_id, clinical_module, service_kind, default_capacity, allow_recurrence, modality_category FROM services WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
       if (!existing) {
         res.status(404).json({ error: 'Serviço não encontrado' });
         return;
@@ -192,8 +221,31 @@ export class ServiceController {
       const {
         professionalId, specialtyId, name, description, durationMinutes, bufferMinutes,
         price, modality, active, minLeadTimeHours, maxAdvanceDays, cancellationPolicy,
-        reminderEnabled, reminderValue, reminderUnit, clinicalModule
+        reminderEnabled, reminderValue, reminderUnit, clinicalModule,
+        serviceKind, service_kind, defaultCapacity, default_capacity, allowRecurrence, allow_recurrence,
+        modalityCategory, modality_category
       } = req.body;
+
+      const rawKind = serviceKind !== undefined ? serviceKind : service_kind;
+      const nextKind = rawKind !== undefined ? (rawKind === 'group' ? 'group' : 'individual') : (existing.service_kind || 'individual');
+      const rawCapacity = defaultCapacity !== undefined ? defaultCapacity : default_capacity;
+      let nextCapacity: number | null = existing.default_capacity ?? null;
+      if (rawKind !== undefined || rawCapacity !== undefined) {
+        if (nextKind === 'group') {
+          const capNum = Number(rawCapacity !== undefined ? rawCapacity : existing.default_capacity);
+          if (!Number.isInteger(capNum) || capNum < 1 || capNum > 500) {
+            res.status(400).json({ error: 'Para aulas coletivas/turmas, informe um número inteiro positivo de vagas.' });
+            return;
+          }
+          nextCapacity = capNum;
+        } else {
+          nextCapacity = null;
+        }
+      }
+      const rawAllowRec = allowRecurrence !== undefined ? allowRecurrence : allow_recurrence;
+      const nextAllowRec = rawAllowRec !== undefined ? (rawAllowRec === false || rawAllowRec === 0 ? 0 : 1) : (existing.allow_recurrence ?? 1);
+      const rawModCat = modalityCategory !== undefined ? modalityCategory : modality_category;
+      const nextModCat = rawModCat !== undefined ? (rawModCat ? String(rawModCat).trim() : null) : existing.modality_category;
 
       if (professionalId) {
         const prof = db.prepare('SELECT id FROM professionals WHERE id = ? AND tenant_id = ?').get(professionalId, tenantId);
@@ -232,6 +284,10 @@ export class ServiceController {
           reminder_value = CASE WHEN ? = 1 THEN ? ELSE reminder_value END,
           reminder_unit = CASE WHEN ? = 1 THEN ? ELSE reminder_unit END,
           clinical_module = CASE WHEN ? = 1 THEN ? ELSE clinical_module END,
+          service_kind = ?,
+          default_capacity = ?,
+          allow_recurrence = ?,
+          modality_category = ?,
           updated_at = datetime('now')
         WHERE id = ? AND tenant_id = ?
       `);
@@ -255,6 +311,10 @@ export class ServiceController {
         reminderValue !== undefined ? 1 : 0, reminderEnabled && reminderValue ? Number(reminderValue) : null,
         reminderUnit !== undefined ? 1 : 0, reminderEnabled && reminderUnit ? String(reminderUnit).toUpperCase() : 'DAYS',
         clinicalModule !== undefined ? 1 : 0, clinicalModule || null,
+        nextKind,
+        nextCapacity,
+        nextAllowRec,
+        nextModCat,
         id,
         tenantId
       );
@@ -276,7 +336,14 @@ export class ServiceController {
       }
 
       logAudit(req, 'UPDATE_SERVICE', 'services', id, { name: name || existing.name, professionalId });
-      res.json({ success: true, message: 'Serviço atualizado com sucesso' });
+      const updatedService = db.prepare(`
+        SELECT s.*, COALESCE(s.service_kind, 'individual') as service_kind, COALESCE(s.allow_recurrence, 1) as allow_recurrence,
+               p.name as professional_name
+        FROM services s
+        LEFT JOIN professionals p ON p.id = s.professional_id
+        WHERE s.id = ? AND s.tenant_id = ?
+      `).get(id, tenantId);
+      res.json({ success: true, message: 'Serviço atualizado com sucesso', service: updatedService, ...(updatedService || {}) });
     } catch (err: any) {
       console.error('[ServiceController.update] Erro:', err);
       res.status(500).json({ error: 'Erro ao atualizar serviço' });

@@ -123,7 +123,7 @@ export const CLINICAL_MODULE_DISPLAY_NAMES: Record<string, string> = {
   ZemdaFono: 'Fonoaudiologia (ZemdaFono)',
   ZemdaTO: 'Terapia Ocupacional (ZemdaTO)',
   ZemdaPP: 'Psicopedagogia (ZemdaPP)',
-  ZemdaPersonal: 'Personal Trainer (ZemdaPersonal)',
+  ZemdaPersonal: 'Personal Trainer / Instrutor (ZemdaPersonal)',
   general: 'Geral'
 };
 

@@ -5,7 +5,7 @@ import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
 import { Professional, Service, AvailableSlot } from '../../types';
-import { X, Calendar, Clock, User, AlertCircle, Lock } from 'lucide-react';
+import { X, Calendar, Clock, User, AlertCircle, Lock, Repeat, Users } from 'lucide-react';
 import { isMeetingUrl } from '../../utils/teleconsultation';
 import { QuickActionDropdown } from '../common/QuickActionDropdown';
 import { NewServiceModal } from '../services/NewServiceModal';
@@ -85,6 +85,7 @@ export const AppointmentEditModal: React.FC<AppointmentEditModalProps> = ({
   const [isNewServiceModalOpen, setIsNewServiceModalOpen] = useState<boolean>(false);
   const [isNewInsuranceModalOpen, setIsNewInsuranceModalOpen] = useState<boolean>(false);
   const [isNewRoomModalOpen, setIsNewRoomModalOpen] = useState<boolean>(false);
+  const [editScope, setEditScope] = useState<'single' | 'this_and_following' | 'series'>('single');
 
   const currentStatus = fullAppt?.status || appointment?.status || 'scheduled';
   const isLockedStatus = currentStatus === 'completed' || currentStatus === 'cancelled';
@@ -139,6 +140,7 @@ export const AppointmentEditModal: React.FC<AppointmentEditModalProps> = ({
     setIsConfiguringTele(false);
     setInternalNotes(appointment.internal_notes || '');
     setConflictError(null);
+    setEditScope('single');
 
     let cancelled = false;
 
@@ -351,6 +353,7 @@ export const AppointmentEditModal: React.FC<AppointmentEditModalProps> = ({
         meeting_url: modality === 'online' ? (meetingUrl.trim() || null) : null,
         internalNotes: internalNotes.trim() || null,
         isCustomTime: isCustomTime ? true : undefined,
+        scope: (fullAppt?.series_id || appointment?.series_id) ? editScope : 'single',
         reason: 'Editado / remarcado pelo Painel'
       });
 
@@ -400,6 +403,12 @@ export const AppointmentEditModal: React.FC<AppointmentEditModalProps> = ({
               <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${statusBadge.cls}`}>
                 {statusBadge.label}
               </span>
+              {(fullAppt?.service_kind || appointment.service_kind) === 'group' && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                  <Users className="w-3 h-3" />
+                  Turma {(fullAppt?.occurrence_enrolled_count ?? appointment.occurrence_enrolled_count ?? 1)}/{(fullAppt?.occurrence_capacity ?? appointment.occurrence_capacity ?? 1)}
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-500 mt-1 flex items-center gap-1.5 truncate">
               <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
@@ -435,6 +444,35 @@ export const AppointmentEditModal: React.FC<AppointmentEditModalProps> = ({
               <span>
                 <strong>Atendimento em andamento:</strong> Profissional, serviço, data e horário agendado estão bloqueados. Você ainda pode ajustar sala, convênio, modalidade e observações internas.
               </span>
+            </div>
+          )}
+
+          {(fullAppt?.series_id || appointment.series_id) && !isLockedStatus && !isInProgress && (
+            <div className="p-3 bg-indigo-50/70 border border-indigo-200/80 rounded-xl space-y-2">
+              <div className="flex items-center gap-1.5 text-indigo-950 font-semibold">
+                <Repeat className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                <span>Atendimento em série recorrente — aplicar alteração em:</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  { id: 'single' as const, label: 'Apenas este horário' },
+                  { id: 'this_and_following' as const, label: 'Este e os seguintes' },
+                  { id: 'series' as const, label: 'Toda a série (pendentes)' }
+                ].map(opt => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setEditScope(opt.id)}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border cursor-pointer transition-colors ${
+                      editScope === opt.id
+                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        : 'bg-white text-slate-700 border-slate-200 hover:border-indigo-300'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 

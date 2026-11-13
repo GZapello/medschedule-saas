@@ -80,6 +80,7 @@ export interface Tenant {
   logo_url?: string;
   primary_color?: string;
   client_term_label?: string;
+  establishment_profile?: 'clinic' | 'studio' | 'mixed';
   status: 'active' | 'suspended' | 'trial' | 'pending' | 'blocked' | 'rejected';
   onboarding_status?: string;
   plan_name?: string;
@@ -214,6 +215,10 @@ export interface Service {
   reminder_value?: number | null;
   reminder_unit?: 'DAYS' | 'MONTHS' | 'YEARS';
   clinical_module?: string;
+  service_kind?: 'individual' | 'group';
+  default_capacity?: number | null;
+  allow_recurrence?: number;
+  modality_category?: string | null;
 }
 
 export interface ServiceReminder {
@@ -339,6 +344,14 @@ export interface Appointment {
   payment_amount?: number;
   payment_method?: string;
   display_amount?: number;
+  service_kind?: 'individual' | 'group';
+  occurrence_id?: string | null;
+  series_id?: string | null;
+  attendance_status?: 'pending' | 'present' | 'absent' | 'cancelled';
+  occurrence_capacity?: number | null;
+  occurrence_enrolled_count?: number | null;
+  is_colleague_schedule?: boolean;
+  can_edit_schedule?: boolean;
 }
 
 export interface ClinicalRecord {
@@ -409,6 +422,11 @@ export interface AvailableSlot {
   endTime: string;
   durationMinutes: number;
   bufferMinutes: number;
+  serviceKind?: 'individual' | 'group';
+  capacity?: number;
+  enrolledCount?: number;
+  remainingSpots?: number;
+  occurrenceId?: string | null;
 }
 
 // 1. Central de Chamados & Suporte

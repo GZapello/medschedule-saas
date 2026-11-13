@@ -1,3 +1,5 @@
+import { getUserPermissions } from '../middlewares/rbac.middleware';
+import { generateRecurrenceDates, resolveOrCreateGroupOccurrenceTx, GroupOccurrenceResolution } from '../services/class-group.service';
 import { bookingTime } from '../utils/booking-time';
 import {recordedAttendance,appointmentRecord,extractDatePart,extractTimePart,normalizeLocalDateTimeIso,getClinicLocalNowIso,addMinutesToLocalIso} from '../services/document-context.service';
 import { canAccessPatient } from '../services/patient-sharing.service';
@@ -192,6 +194,16 @@ export class AppointmentController {
           a.service_id, a.room_id, a.start_time, a.end_time, a.attendance_start_at, a.attendance_expected_end_at, a.attendance_end_at, a.status, a.modality, a.meeting_url, a.google_drive_url,
           a.patient_notes, a.internal_notes, a.cancellation_reason, a.created_at,
           a.clinical_module,
+          COALESCE(a.service_kind, COALESCE(s.service_kind, 'individual')) as service_kind,
+          a.occurrence_id,
+          a.series_id,
+          COALESCE(a.attendance_status, 'pending') as attendance_status,
+          co.capacity as occurrence_capacity,
+          CASE
+            WHEN COALESCE(a.service_kind, COALESCE(s.service_kind, 'individual')) = 'group' AND a.occurrence_id IS NOT NULL
+            THEN (SELECT COUNT(*) FROM appointments a2 WHERE a2.occurrence_id = a.occurrence_id AND a2.tenant_id = a.tenant_id AND a2.status != 'cancelled')
+            ELSE 1
+          END as occurrence_enrolled_count,
           COALESCE(a.reception_status, 'waiting_arrival') as reception_status,
           a.arrived_at, a.called_at, a.checked_out_at,
           COALESCE(a.pre_consultation_status, 'not_sent') as pre_consultation_status,
@@ -210,12 +222,6 @@ export class AppointmentController {
           (SELECT gel.last_verified_at FROM google_calendar_event_links gel WHERE gel.appointment_id = a.id LIMIT 1) as google_last_verified_at,
           (SELECT conn.calendar_name FROM google_calendar_event_links gel LEFT JOIN google_calendar_connections conn ON conn.id = gel.connection_id WHERE gel.appointment_id = a.id LIMIT 1) as google_calendar_name,
           (SELECT conn.google_account_email FROM google_calendar_event_links gel LEFT JOIN google_calendar_connections conn ON conn.id = gel.connection_id WHERE gel.appointment_id = a.id LIMIT 1) as google_account_email,
-          (SELECT gel.google_html_link FROM google_calendar_event_links gel WHERE gel.appointment_id = a.id LIMIT 1) as google_html_link,
-          (SELECT gel.last_error FROM google_calendar_event_links gel WHERE gel.appointment_id = a.id LIMIT 1) as google_last_error,
-          (SELECT gel.last_synced_at FROM google_calendar_event_links gel WHERE gel.appointment_id = a.id LIMIT 1) as google_last_synced_at,
-          (SELECT gel.last_verified_at FROM google_calendar_event_links gel WHERE gel.appointment_id = a.id LIMIT 1) as google_last_verified_at,
-          (SELECT conn.calendar_name FROM google_calendar_event_links gel LEFT JOIN google_calendar_connections conn ON conn.id = gel.connection_id WHERE gel.appointment_id = a.id LIMIT 1) as google_calendar_name,
-          (SELECT conn.google_account_email FROM google_calendar_event_links gel LEFT JOIN google_calendar_connections conn ON conn.id = gel.connection_id WHERE gel.appointment_id = a.id LIMIT 1) as google_account_email,
           (SELECT pay.amount FROM payments pay WHERE pay.appointment_id = a.id AND pay.tenant_id = a.tenant_id ORDER BY pay.created_at ASC LIMIT 1) as payment_amount,
           (SELECT pay.status FROM payments pay WHERE pay.appointment_id = a.id AND pay.tenant_id = a.tenant_id ORDER BY pay.created_at ASC LIMIT 1) as payment_status,
           (SELECT pay.payment_method FROM payments pay WHERE pay.appointment_id = a.id AND pay.tenant_id = a.tenant_id ORDER BY pay.created_at ASC LIMIT 1) as payment_method
@@ -224,14 +230,24 @@ export class AppointmentController {
         JOIN professionals p ON p.id = a.professional_id
         LEFT JOIN services s ON s.id = a.service_id
         LEFT JOIN rooms r ON r.id = a.room_id
+        LEFT JOIN class_occurrences co ON co.id = a.occurrence_id AND co.tenant_id = a.tenant_id
         WHERE a.tenant_id = ?
       `;
       const params: any[] = [tenantId];
 
-      // Se for profissional logado (sem ser admin), filtra apenas seus atendimentos
-      if (req.user && req.user.role === 'professional') {
+      const userPermissions = req.user && tenantId
+        ? getUserPermissions(req.user.userId, tenantId, req.user.role)
+        : [];
+      const isProfessionalRole = req.user?.role === 'professional';
+      const canViewAllSchedules = !isProfessionalRole || userPermissions.includes('view_all_schedules');
+      const ownProfessionalIds = isProfessionalRole && req.user?.userId && tenantId
+        ? (db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ? AND active = 1').all(req.user.userId, tenantId) as { id: string }[]).map(r => r.id)
+        : [];
+
+      // Se for profissional logado (sem permissão view_all_schedules), filtra apenas seus atendimentos
+      if (isProfessionalRole && !canViewAllSchedules) {
         query += ' AND a.professional_id IN (SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ? AND active = 1)';
-        params.push(req.user.userId, tenantId);
+        params.push(req.user!.userId, tenantId);
       } else if (professionalId) {
         query += ' AND a.professional_id = ?';
         params.push(professionalId);
@@ -260,12 +276,32 @@ export class AppointmentController {
       query += ' ORDER BY a.start_time ASC';
 
       const stmt = db.prepare(query);
-      const appointments = (stmt.all(...params) as any[]).map(row => ({
-        ...row,
-        display_amount: row.payment_amount !== null && row.payment_amount !== undefined
-          ? row.payment_amount
-          : (row.service_price !== null && row.service_price !== undefined ? row.service_price : null)
-      }));
+      const appointments = (stmt.all(...params) as any[]).map(row => {
+        const isColleagueView = isProfessionalRole && !ownProfessionalIds.includes(row.professional_id);
+        if (isColleagueView) {
+          return {
+            ...row,
+            internal_notes: null,
+            patient_notes: null,
+            patient_phone: null,
+            patient_email: null,
+            payment_amount: null,
+            payment_status: null,
+            payment_method: null,
+            display_amount: null,
+            is_colleague_schedule: true,
+            can_edit_schedule: false
+          };
+        }
+        return {
+          ...row,
+          display_amount: row.payment_amount !== null && row.payment_amount !== undefined
+            ? row.payment_amount
+            : (row.service_price !== null && row.service_price !== undefined ? row.service_price : null),
+          is_colleague_schedule: false,
+          can_edit_schedule: true
+        };
+      });
       res.json(appointments);
     } catch (err: any) {
       console.error('[AppointmentController.list] Erro:', err);
@@ -281,6 +317,13 @@ export class AppointmentController {
       const stmt = db.prepare(`
         SELECT 
           a.*,
+          COALESCE(a.service_kind, COALESCE(s.service_kind, 'individual')) as service_kind,
+          co.capacity as occurrence_capacity,
+          CASE
+            WHEN COALESCE(a.service_kind, COALESCE(s.service_kind, 'individual')) = 'group' AND a.occurrence_id IS NOT NULL
+            THEN (SELECT COUNT(*) FROM appointments a2 WHERE a2.occurrence_id = a.occurrence_id AND a2.tenant_id = a.tenant_id AND a2.status != 'cancelled')
+            ELSE 1
+          END as occurrence_enrolled_count,
           s.clinical_module as service_clinical_module,
           pat.full_name as patient_name, pat.phone as patient_phone, pat.email as patient_email,
           pat.birth_date as patient_birth_date, pat.cpf as patient_cpf, pat.is_child as patient_is_child,
@@ -298,9 +341,10 @@ export class AppointmentController {
         JOIN professionals p ON p.id = a.professional_id
         LEFT JOIN services s ON s.id = a.service_id
         LEFT JOIN rooms r ON r.id = a.room_id
+        LEFT JOIN class_occurrences co ON co.id = a.occurrence_id AND co.tenant_id = a.tenant_id
         WHERE a.id = ? AND a.tenant_id = ?
       `);
-      const appointment = stmt.get(id, tenantId);
+      const appointment = stmt.get(id, tenantId) as any;
 
       if (!appointment) {
         const otherTenantCheck = db.prepare('SELECT tenant_id FROM appointments WHERE id = ?').get(id) as { tenant_id: string } | undefined;
@@ -312,6 +356,28 @@ export class AppointmentController {
         return;
       }
 
+      if (req.user && req.user.role === 'professional' && tenantId) {
+        const ownProfIds = (db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ? AND active = 1').all(req.user.userId, tenantId) as { id: string }[]).map(r => r.id);
+        const isOwn = ownProfIds.includes(appointment.professional_id);
+        if (!isOwn) {
+          const perms = getUserPermissions(req.user.userId, tenantId, req.user.role);
+          if (!perms.includes('view_all_schedules')) {
+            res.status(403).json({ error: 'Acesso negado à agenda de outro profissional.' });
+            return;
+          }
+          appointment.internal_notes = null;
+          appointment.patient_notes = null;
+          appointment.patient_cpf = null;
+          appointment.patient_phone = null;
+          appointment.patient_email = null;
+          appointment.payment_amount = null;
+          appointment.payment_status = null;
+          appointment.payment_method = null;
+          appointment.is_colleague_schedule = true;
+          appointment.can_edit_schedule = false;
+        }
+      }
+
       // Histórico de status
       const historyStmt = db.prepare(`
         SELECT previous_status, new_status, changed_by, reason, created_at
@@ -319,12 +385,14 @@ export class AppointmentController {
         WHERE appointment_id = ?
         ORDER BY created_at ASC
       `);
-      const statusHistory = historyStmt.all(id);
+      const statusHistory = appointment.is_colleague_schedule ? [] : historyStmt.all(id);
 
       const attendance=recordedAttendance(appointment,appointmentRecord(tenantId!,appointment.patient_id,appointment.id));
-      const displayAmount = (appointment as any).payment_amount !== null && (appointment as any).payment_amount !== undefined
-        ? (appointment as any).payment_amount
-        : ((appointment as any).service_price !== null && (appointment as any).service_price !== undefined ? (appointment as any).service_price : null);
+      const displayAmount = appointment.is_colleague_schedule
+        ? null
+        : ((appointment as any).payment_amount !== null && (appointment as any).payment_amount !== undefined
+            ? (appointment as any).payment_amount
+            : ((appointment as any).service_price !== null && (appointment as any).service_price !== undefined ? (appointment as any).service_price : null));
       res.json({ appointment:{...appointment,display_amount:displayAmount,attendance_date:attendance.sessionDate,attendance_time:attendance.sessionTime,attendance_end_time:attendance.sessionEndTime ?? null}, statusHistory });
     } catch (err: any) {
       console.error('[AppointmentController.getById] Erro:', err);
@@ -420,8 +488,10 @@ export class AppointmentController {
       }
 
       if (!canOperate(tenantId)) { res.status(isPublic ? 404 : 402).json(isPublic ? {error:'Agendamento online indisponível.'} : {code:'SUBSCRIPTION_REQUIRED',error:'Agendamento indisponível. A clínica precisa regularizar sua assinatura.'}); return; }
-      const serviceRow = db.prepare('SELECT id, price, professional_id FROM services WHERE id = ? AND tenant_id = ?').get(serviceId, tenantId) as { id: string; price: number; professional_id: string | null } | undefined;
+      const serviceRow = db.prepare("SELECT id, price, professional_id, COALESCE(service_kind, 'individual') as service_kind, default_capacity, name FROM services WHERE id = ? AND tenant_id = ?").get(serviceId, tenantId) as { id: string; price: number; professional_id: string | null; service_kind: string; default_capacity: number | null; name: string } | undefined;
       if (!serviceRow) { res.status(400).json({ error: 'Serviço não pertence à clínica.' }); return; }
+      const isGroupService = serviceRow.service_kind === 'group';
+      const defaultGroupCapacity = isGroupService ? Math.max(1, Number(serviceRow.default_capacity) || 1) : 1;
       // Only the existing authenticated scheduling flow can set a custom price.
       if (isPublic && req.body.appointmentPrice !== undefined) {
         res.status(400).json({ error: 'Dados de agendamento inválidos.' }); return;
@@ -545,32 +615,34 @@ export class AppointmentController {
         }
       }
 
-      // 1. Verifica concorrência do PROFISSIONAL (Item 7)
-      const profConflict = db.prepare(`
-        SELECT a.id, a.start_time, a.end_time, p.name as professional_name, s.name as service_name
-        FROM appointments a
-        JOIN professionals p ON p.id = a.professional_id
-        LEFT JOIN services s ON s.id = a.service_id
-        WHERE a.tenant_id = ?
-          AND a.professional_id = ?
-          AND a.status NOT IN ('cancelled')
-          AND REPLACE(a.start_time, ' ', 'T') < ? AND REPLACE(a.end_time, ' ', 'T') > ?
-      `).get(tenantId, professionalId, normalizedEndTime, normalizedStartTime) as any;
+      // 1. Verifica concorrência do PROFISSIONAL (para individuais; para turmas, é validado atomicamente dentro da transação)
+      if (!isGroupService) {
+        const profConflict = db.prepare(`
+          SELECT a.id, a.start_time, a.end_time, p.name as professional_name, s.name as service_name
+          FROM appointments a
+          JOIN professionals p ON p.id = a.professional_id
+          LEFT JOIN services s ON s.id = a.service_id
+          WHERE a.tenant_id = ?
+            AND a.professional_id = ?
+            AND a.status NOT IN ('cancelled')
+            AND REPLACE(a.start_time, ' ', 'T') < ? AND REPLACE(a.end_time, ' ', 'T') > ?
+        `).get(tenantId, professionalId, normalizedEndTime, normalizedStartTime) as any;
 
-      if (profConflict) {
-        res.status(409).json({
-          error: 'Este horário não está mais disponível. Escolha outro horário.',
-          code: 'PROFESSIONAL_SLOT_OCCUPIED',
-          ...(isPublic ? {} : {
-            conflict: {
-              startTime: profConflict.start_time,
-              endTime: profConflict.end_time,
-              professionalName: profConflict.professional_name,
-              serviceName: profConflict.service_name
-            }
-          })
-        });
-        return;
+        if (profConflict) {
+          res.status(409).json({
+            error: 'Este horário não está mais disponível. Escolha outro horário.',
+            code: 'PROFESSIONAL_SLOT_OCCUPIED',
+            ...(isPublic ? {} : {
+              conflict: {
+                startTime: profConflict.start_time,
+                endTime: profConflict.end_time,
+                professionalName: profConflict.professional_name,
+                serviceName: profConflict.service_name
+              }
+            })
+          });
+          return;
+        }
       }
 
       // 2. Verifica concorrência do PACIENTE em toda a clínica (Regra do Item 9)
@@ -587,7 +659,7 @@ export class AppointmentController {
 
       if (patientConflict) {
         res.status(409).json({
-          error: 'Este paciente já possui um atendimento neste horário.',
+          error: isGroupService ? 'Este aluno já possui um atendimento ou aula neste horário.' : 'Este paciente já possui um atendimento neste horário.',
           code: 'PATIENT_APPOINTMENT_CONFLICT',
           ...(isPublic ? {} : { conflict: {
             startTime: patientConflict.start_time,
@@ -599,8 +671,8 @@ export class AppointmentController {
         return;
       }
 
-      // 3. Verifica concorrência da SALA física, se selecionada
-      if (roomId) {
+      // 3. Verifica concorrência da SALA física, se selecionada (para individuais; turmas compartilham a mesma sala)
+      if (roomId && !isGroupService) {
         const roomConflict = db.prepare(`
           SELECT a.id, a.start_time, a.end_time, r.name as room_name, p.name as professional_name
           FROM appointments a
@@ -690,17 +762,39 @@ export class AppointmentController {
         ? (normalizeLocalDateTimeIso(req.body.attendanceExpectedEndAt || req.body.attendance_expected_end_at || normalizedEndTime) || normalizedEndTime)
         : (normalizeLocalDateTimeIso(req.body.attendanceExpectedEndAt || req.body.attendance_expected_end_at) || null);
 
+      let groupMeta = null as (GroupOccurrenceResolution & { remainingSpots: number }) | null;
+
       const persistAppointmentAndPrice = db.transaction(() => {
-        // Insere agendamento com os novos campos de convênio e encaminhamento
+        if (isGroupService) {
+          const occ = resolveOrCreateGroupOccurrenceTx({
+            tenantId,
+            serviceId,
+            serviceName: serviceRow.name || 'Turma',
+            professionalId,
+            roomId: roomId || null,
+            startTime: normalizedStartTime,
+            endTime: normalizedEndTime,
+            defaultCapacity: defaultGroupCapacity,
+            modality: modality || 'presential',
+            patientId: resolvedPatientId
+          });
+          groupMeta = {
+            ...occ,
+            remainingSpots: Math.max(0, occ.capacity - (occ.enrolledBefore + 1))
+          };
+        }
+
+        // Insere agendamento com os novos campos de convênio, encaminhamento e turma
         const insertAppt = db.prepare(`
           INSERT INTO appointments (
             id, tenant_id, appointment_number, patient_id, professional_id, service_id,
             room_id, start_time, end_time, attendance_start_at, attendance_expected_end_at, status, modality, meeting_url, google_drive_url, patient_notes, internal_notes,
             insurance_id, referred_from_appointment_id, referred_by_professional_id, referral_reason,
             clinical_module, profession_id,
+            series_id, occurrence_id, service_kind, attendance_status,
             created_by
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
 
         insertAppt.run(
@@ -727,6 +821,10 @@ export class AppointmentController {
           referralReason || null,
           initialClinicalModule || (isRetroactive ? 'general' : null),
           resolvedProfessionId,
+          null,
+          groupMeta?.occurrenceId || null,
+          isGroupService ? 'group' : 'individual',
+          'pending',
           req.user ? req.user.userId : 'online_booking'
         );
 
@@ -735,15 +833,13 @@ export class AppointmentController {
           INSERT INTO appointment_status_history (id, appointment_id, previous_status, new_status, changed_by, reason)
           VALUES (?, ?, NULL, ?, ?, ?)
         `).run(uuidv4(), appointmentId, initialStatus, req.user ? req.user.name : 'Cliente Online', isRetroactive ? 'Registro de atendimento já realizado' : 'Agendamento criado com sucesso');
-        if (false) db.prepare(`
-        `).run(uuidv4(), appointmentId, req.user?.name || 'Cliente Online');
 
         // Snapshot: zero explicitamente combinado é isenção, nunca cobrança pendente.
         if (agreedAmount > 0 || suppliedPrice !== undefined) {
           db.prepare(`
-            INSERT INTO payments (id, tenant_id, appointment_id, patient_id, amount, payment_method, status, notes, service_id, base_amount)
-            VALUES (?, ?, ?, ?, ?, 'pix', ?, 'Gerado automaticamente pelo agendamento', ?, ?)
-          `).run('pay-' + uuidv4().slice(0, 8), tenantId, appointmentId, resolvedPatientId, agreedAmount, agreedAmount === 0 ? 'exempt' : 'pending', serviceId || null, agreedAmount);
+            INSERT INTO payments (id, tenant_id, appointment_id, patient_id, amount, payment_method, status, notes, service_id, base_amount, professional_id)
+            VALUES (?, ?, ?, ?, ?, 'pix', ?, 'Gerado automaticamente pelo agendamento', ?, ?, ?)
+          `).run('pay-' + uuidv4().slice(0, 8), tenantId, appointmentId, resolvedPatientId, agreedAmount, agreedAmount === 0 ? 'exempt' : 'pending', serviceId || null, agreedAmount, professionalId || null);
         }
 
         if (shouldUpdateServicePrice) {
@@ -763,7 +859,15 @@ export class AppointmentController {
         }
       });
 
-      persistAppointmentAndPrice();
+      try {
+        persistAppointmentAndPrice();
+      } catch (txErr: any) {
+        if (txErr && typeof txErr.status === 'number' && txErr.code) {
+          res.status(txErr.status).json({ error: txErr.error || 'Conflito de horário', code: txErr.code });
+          return;
+        }
+        throw txErr;
+      }
 
       if (shouldUpdateServicePrice) {
         logAudit(req, 'UPDATE_SERVICE_PRICE_FROM_APPOINTMENT', 'services', serviceId, {
@@ -818,8 +922,20 @@ export class AppointmentController {
       }
 
       // Registra vínculo prévio com status 'pending' se o profissional possuir conexão Google ativa
+      // Para turmas/aulas coletivas, cria apenas 1 evento no Google Calendar para a ocorrência inteira.
       const gcalConn = GoogleCalendarService.getConnectionForProfessional(tenantId, professionalId);
-      if (gcalConn && gcalConn.sync_enabled && gcalConn.sync_direction !== 'google_to_zemda') {
+      let shouldSyncGcal = Boolean(gcalConn && gcalConn.sync_enabled && gcalConn.sync_direction !== 'google_to_zemda');
+      if (shouldSyncGcal && isGroupService && groupMeta && !groupMeta.isFirstEnrollment) {
+        const existingGroupGcal = db.prepare(`
+          SELECT gel.id
+          FROM google_calendar_event_links gel
+          JOIN appointments a ON a.id = gel.appointment_id
+          WHERE a.occurrence_id = ? AND a.tenant_id = ? AND gel.sync_status IN ('pending', 'synced')
+          LIMIT 1
+        `).get(groupMeta.occurrenceId, tenantId);
+        if (existingGroupGcal) shouldSyncGcal = false;
+      }
+      if (gcalConn && shouldSyncGcal) {
         try {
           db.prepare(`
             INSERT INTO google_calendar_event_links (
@@ -832,12 +948,12 @@ export class AppointmentController {
               updated_at = datetime('now')
           `).run(uuidv4(), tenantId, appointmentId, gcalConn.id, gcalConn.calendar_id);
         } catch (_) {}
-      }
 
-      // Sincroniza de forma resiliente com o Google Calendar (sem travar a criação caso haja falha externa)
-      GoogleCalendarService.syncAppointmentCreated(appointmentId, tenantId).catch(err => {
-        console.warn('[AppointmentController] Falha assíncrona ao sincronizar criação com Google Calendar:', err?.message || err);
-      });
+        // Sincroniza de forma resiliente com o Google Calendar (sem travar a criação caso haja falha externa)
+        GoogleCalendarService.syncAppointmentCreated(appointmentId, tenantId).catch(err => {
+          console.warn('[AppointmentController] Falha assíncrona ao sincronizar criação com Google Calendar:', err?.message || err);
+        });
+      }
 
       let preConsultationData: any = null;
       const requestedPreConsultFormId = req.body.preConsultationFormId ? String(req.body.preConsultationFormId).trim() : '';
@@ -867,8 +983,12 @@ export class AppointmentController {
         attendance_expected_end_at: initialAttendanceExpectedEndAt,
         status: initialStatus,
         clinical_module: initialClinicalModule || (isRetroactive ? 'general' : null),
+        serviceKind: isGroupService ? 'group' : 'individual',
+        occurrenceId: groupMeta?.occurrenceId || null,
+        capacity: groupMeta ? groupMeta.capacity : 1,
+        remainingSpots: groupMeta ? groupMeta.remainingSpots : 0,
         isRetroactive,
-        google_sync_status: gcalConn ? 'pending' : null,
+        google_sync_status: shouldSyncGcal ? 'pending' : null,
         pre_consultation_status: preConsultationData ? 'pending' : 'not_sent',
         preConsultation: preConsultationData,
         message: isRetroactive ? 'Atendimento retroativo registrado com sucesso!' : 'Atendimento agendado com sucesso!'
@@ -883,7 +1003,9 @@ export class AppointmentController {
     try {
       const { id } = req.params;
       const tenantId = req.tenantId;
-      const { status, reason, cancellationReasonCategory, clinicalModule: requestedModule, professionId } = req.body;
+      const { status, reason, cancellationReasonCategory, clinicalModule: requestedModule, professionId, scope } = req.body;
+      const effectiveScope: 'single' | 'this_and_following' | 'series' =
+        scope === 'this_and_following' || scope === 'series' ? scope : 'single';
 
       const allowedStatuses = ['scheduled', 'confirmed', 'in_progress', 'completed', 'cancelled', 'no_show', 'rescheduled'];
       if (!allowedStatuses.includes(status)) {
@@ -894,11 +1016,13 @@ export class AppointmentController {
       const current = db.prepare(`
         SELECT a.id, a.patient_id, a.status, a.clinical_module, a.professional_id, a.profession_id, a.service_id,
                a.start_time, a.end_time, a.attendance_start_at, a.attendance_expected_end_at, a.attendance_end_at,
+               a.series_id, a.occurrence_id, COALESCE(a.service_kind, 'individual') as service_kind,
                s.duration_minutes
         FROM appointments a
         LEFT JOIN services s ON s.id = a.service_id AND s.tenant_id = a.tenant_id
         WHERE a.id = ? AND a.tenant_id = ?
       `).get(id, tenantId) as {
+        id: string;
         patient_id: string;
         status: string;
         clinical_module?: string;
@@ -910,11 +1034,22 @@ export class AppointmentController {
         attendance_start_at?: string | null;
         attendance_expected_end_at?: string | null;
         attendance_end_at?: string | null;
+        series_id?: string | null;
+        occurrence_id?: string | null;
+        service_kind?: string;
         duration_minutes?: number | null;
       } | undefined;
       if (!current) {
         res.status(404).json({ error: 'Agendamento não encontrado' });
         return;
+      }
+
+      if (req.user && req.user.role === 'professional' && tenantId) {
+        const ownProfIds = (db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ? AND active = 1').all(req.user.userId, tenantId) as { id: string }[]).map(r => r.id);
+        if (!ownProfIds.includes(String(current.professional_id || ''))) {
+          res.status(403).json({ error: 'Sem permissão para alterar o status do agendamento de outro profissional.' });
+          return;
+        }
       }
 
       if (status === 'in_progress' || status === 'completed') {
@@ -1020,44 +1155,102 @@ export class AppointmentController {
         return;
       }
 
-      const updateStmt = db.prepare(`UPDATE appointments SET status = ?, cancellation_reason = CASE WHEN ? = 'cancelled' THEN ? ELSE cancellation_reason END, cancellation_reason_category = CASE WHEN ? = 'cancelled' THEN ? ELSE cancellation_reason_category END, cancelled_by = CASE WHEN ? = 'cancelled' THEN ? ELSE cancelled_by END, cancelled_at = CASE WHEN ? = 'cancelled' THEN datetime('now') ELSE cancelled_at END, clinical_module = COALESCE(?, NULLIF(NULLIF(clinical_module, 'ZemdaBody'), 'Zemda360')), profession_id = COALESCE(?, profession_id), attendance_start_at = COALESCE(?, attendance_start_at), attendance_expected_end_at = COALESCE(?, attendance_expected_end_at), updated_at = datetime('now') WHERE id = ? AND tenant_id = ?`);
-      updateStmt.run(status, status, reason || null, status, cancellationReasonCategory || (status === 'cancelled' ? 'Outro' : null), status, status === 'cancelled' ? cancelledBy : null, status, clinicalModule || null, resolvedProfessionId || null, nextAttendanceStartAt, nextAttendanceExpectedEndAt, id, tenantId);
-      if (tenantId && (status === 'in_progress' || status === 'completed')) {
-        syncReceptionStatusFromClinical(tenantId, id as string, status);
-      }
-      // Registra histórico
-      db.prepare(`
-        INSERT INTO appointment_status_history (id, appointment_id, previous_status, new_status, changed_by, reason)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `).run(
-        uuidv4(),
-        id,
-        current.status,
-        status,
-        req.user ? req.user.name : 'Sistema',
-        reason ? (cancellationReasonCategory ? `[${cancellationReasonCategory}] ${reason}` : reason) : null
-      );
-
-      logAudit(req, 'UPDATE_APPOINTMENT_STATUS', 'appointments', id, { from: current.status, to: status, reason, cancellationReasonCategory });
-
-      if (status === 'cancelled') {
-        NotificationService.cancelAppointmentReminders(id as string);
-        if (tenantId) {
-          GoogleCalendarService.syncAppointmentCancelled(id as string, tenantId).catch(err => {
-            console.warn('[AppointmentController] Falha ao cancelar no Google Calendar:', err?.message || err);
-          });
+      const targetIds: Array<{ id: string; status: string; occurrence_id?: string | null }> = (() => {
+        if (effectiveScope !== 'single' && current.series_id && ['cancelled', 'confirmed', 'scheduled'].includes(status)) {
+          const rows = db.prepare(`
+            SELECT id, status, occurrence_id
+            FROM appointments
+            WHERE tenant_id = ?
+              AND series_id = ?
+              AND status NOT IN ('completed')
+              ${effectiveScope === 'this_and_following' ? 'AND REPLACE(start_time, \' \', \'T\') >= REPLACE(?, \' \', \'T\')' : ''}
+            ORDER BY start_time ASC
+          `).all(...(effectiveScope === 'this_and_following' ? [tenantId, current.series_id, current.start_time] : [tenantId, current.series_id])) as Array<{ id: string; status: string; occurrence_id?: string | null }>;
+          return rows.length > 0 ? rows : [{ id: String(id), status: current.status, occurrence_id: current.occurrence_id }];
         }
-      } else if (current.status === 'cancelled' && ['scheduled', 'confirmed'].includes(status)) {
-        if (tenantId) {
-          GoogleCalendarService.syncAppointmentCreated(id as string, tenantId).catch(err => {
-            console.warn('[AppointmentController] Falha ao reativar no Google Calendar:', err?.message || err);
-          });
+        return [{ id: String(id), status: current.status, occurrence_id: current.occurrence_id }];
+      })();
+
+      const updateStmt = db.prepare(`UPDATE appointments SET status = ?, attendance_status = CASE WHEN ? = 'cancelled' THEN 'cancelled' ELSE attendance_status END, cancellation_reason = CASE WHEN ? = 'cancelled' THEN ? ELSE cancellation_reason END, cancellation_reason_category = CASE WHEN ? = 'cancelled' THEN ? ELSE cancellation_reason_category END, cancelled_by = CASE WHEN ? = 'cancelled' THEN ? ELSE cancelled_by END, cancelled_at = CASE WHEN ? = 'cancelled' THEN datetime('now') ELSE cancelled_at END, clinical_module = COALESCE(?, NULLIF(NULLIF(clinical_module, 'ZemdaBody'), 'Zemda360')), profession_id = COALESCE(?, profession_id), attendance_start_at = COALESCE(?, attendance_start_at), attendance_expected_end_at = COALESCE(?, attendance_expected_end_at), updated_at = datetime('now') WHERE id = ? AND tenant_id = ?`);
+
+      for (const target of targetIds) {
+        updateStmt.run(
+          status, status, status, reason || null, status, cancellationReasonCategory || (status === 'cancelled' ? 'Outro' : null), status, status === 'cancelled' ? cancelledBy : null, status,
+          target.id === id ? (clinicalModule || null) : null,
+          target.id === id ? (resolvedProfessionId || null) : null,
+          target.id === id ? nextAttendanceStartAt : null,
+          target.id === id ? nextAttendanceExpectedEndAt : null,
+          target.id, tenantId
+        );
+        if (tenantId && target.id === id && (status === 'in_progress' || status === 'completed')) {
+          syncReceptionStatusFromClinical(tenantId, target.id, status);
+        }
+        db.prepare(`
+          INSERT INTO appointment_status_history (id, appointment_id, previous_status, new_status, changed_by, reason)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(
+          uuidv4(),
+          target.id,
+          target.status,
+          status,
+          req.user ? req.user.name : 'Sistema',
+          reason ? (cancellationReasonCategory ? `[${cancellationReasonCategory}] ${reason}` : reason) : null
+        );
+
+        if (status === 'cancelled') {
+          NotificationService.cancelAppointmentReminders(target.id);
+          if (tenantId) {
+            if (target.occurrence_id) {
+              const remainingSibling = db.prepare(`
+                SELECT id FROM appointments
+                WHERE tenant_id = ? AND occurrence_id = ? AND id != ? AND status != 'cancelled'
+                LIMIT 1
+              `).get(tenantId, target.occurrence_id, target.id) as { id: string } | undefined;
+              if (remainingSibling) {
+                // Reatribui o vínculo do Google Calendar para outro aluno ativo da turma em vez de apagar o evento coletivo
+                try {
+                  db.prepare(`UPDATE google_calendar_event_links SET appointment_id = ?, updated_at = datetime('now') WHERE appointment_id = ? AND tenant_id = ?`).run(remainingSibling.id, target.id, tenantId);
+                } catch (_) {}
+              } else {
+                try {
+                  db.prepare(`UPDATE class_occurrences SET status = 'cancelled', updated_at = datetime('now') WHERE id = ? AND tenant_id = ?`).run(target.occurrence_id, tenantId);
+                } catch (_) {}
+                GoogleCalendarService.syncAppointmentCancelled(target.id, tenantId).catch(err => {
+                  console.warn('[AppointmentController] Falha ao cancelar no Google Calendar:', err?.message || err);
+                });
+              }
+            } else {
+              GoogleCalendarService.syncAppointmentCancelled(target.id, tenantId).catch(err => {
+                console.warn('[AppointmentController] Falha ao cancelar no Google Calendar:', err?.message || err);
+              });
+            }
+          }
+        } else if (target.status === 'cancelled' && ['scheduled', 'confirmed'].includes(status)) {
+          if (target.occurrence_id && tenantId) {
+            try {
+              db.prepare(`UPDATE class_occurrences SET status = 'scheduled', updated_at = datetime('now') WHERE id = ? AND tenant_id = ?`).run(target.occurrence_id, tenantId);
+            } catch (_) {}
+          }
+          if (tenantId) {
+            GoogleCalendarService.syncAppointmentCreated(target.id, tenantId).catch(err => {
+              console.warn('[AppointmentController] Falha ao reativar no Google Calendar:', err?.message || err);
+            });
+          }
         }
       }
+
+      if (effectiveScope === 'series' && current.series_id && status === 'cancelled' && tenantId) {
+        try {
+          db.prepare(`UPDATE class_series SET status = 'cancelled', updated_at = datetime('now') WHERE id = ? AND tenant_id = ?`).run(current.series_id, tenantId);
+        } catch (_) {}
+      }
+
+      logAudit(req, 'UPDATE_APPOINTMENT_STATUS', 'appointments', id, { from: current.status, to: status, scope: effectiveScope, affectedCount: targetIds.length, reason, cancellationReasonCategory });
 
       res.json({
         message: `Status alterado para ${status}`,
         status,
+        affectedCount: targetIds.length,
         clinicalModule: clinicalModule || current.clinical_module || null,
         attendance_start_at: nextAttendanceStartAt,
         attendance_expected_end_at: nextAttendanceExpectedEndAt,
@@ -1091,6 +1284,14 @@ export class AppointmentController {
       if (!current) {
         res.status(404).json({ error: 'Agendamento não encontrado' });
         return;
+      }
+
+      if (req.user && req.user.role === 'professional' && tenantId) {
+        const ownProfIds = (db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ? AND active = 1').all(req.user.userId, tenantId) as { id: string }[]).map(r => r.id);
+        if (!ownProfIds.includes(String(current.professional_id || ''))) {
+          res.status(403).json({ error: 'Sem permissão para alterar o status do agendamento de outro profissional.' });
+          return;
+        }
       }
 
       const userRole = String(req.user?.role || '').toLowerCase();
@@ -1453,6 +1654,14 @@ export class AppointmentController {
         return;
       }
 
+      if (req.user && req.user.role === 'professional' && tenantId) {
+        const ownProfIds = (db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ? AND active = 1').all(req.user.userId, tenantId) as { id: string }[]).map(r => r.id);
+        if (!ownProfIds.includes(appt.professional_id)) {
+          res.status(403).json({ error: 'Sem permissão para editar agendamento de outro profissional.' });
+          return;
+        }
+      }
+
       if (appt.status === 'completed' || appt.status === 'cancelled') {
         res.status(400).json({ error: 'Não é permitido editar ou remarcar um atendimento concluído ou cancelado.' });
         return;
@@ -1503,6 +1712,10 @@ export class AppointmentController {
           }
         }
 
+        const scope: 'single' | 'this_and_following' | 'series' =
+          req.body.scope === 'this_and_following' || req.body.scope === 'series' ? req.body.scope : 'single';
+        const currentOccurrenceId = appt.occurrence_id || null;
+
         const profConflict = db.prepare(`
           SELECT a.id, a.start_time, a.end_time, p.name as professional_name, s.name as service_name
           FROM appointments a
@@ -1511,9 +1724,10 @@ export class AppointmentController {
           WHERE a.tenant_id = ?
             AND a.professional_id = ?
             AND a.id != ?
+            AND (a.occurrence_id IS NULL OR ? IS NULL OR a.occurrence_id != ?)
             AND a.status NOT IN ('cancelled')
             AND REPLACE(a.start_time, ' ', 'T') < ? AND REPLACE(a.end_time, ' ', 'T') > ?
-        `).get(tenantId, safeProfId, id, safeEnd, safeStart) as any;
+        `).get(tenantId, safeProfId, id, currentOccurrenceId, currentOccurrenceId, safeEnd, safeStart) as any;
 
         if (profConflict) {
           res.status(409).json({
@@ -1558,6 +1772,10 @@ export class AppointmentController {
         }
       }
 
+      const effectiveScope: 'single' | 'this_and_following' | 'series' =
+        req.body.scope === 'this_and_following' || req.body.scope === 'series' ? req.body.scope : 'single';
+      const currentOccurrenceId = appt.occurrence_id || null;
+
       if ((startChanged || endChanged || roomChanged) && safeRoomId) {
         const roomConflict = db.prepare(`
           SELECT a.id, a.start_time, a.end_time, r.name as room_name, p.name as professional_name
@@ -1567,9 +1785,10 @@ export class AppointmentController {
           WHERE a.tenant_id = ?
             AND a.room_id = ?
             AND a.id != ?
+            AND (a.occurrence_id IS NULL OR ? IS NULL OR a.occurrence_id != ?)
             AND a.status NOT IN ('cancelled')
             AND REPLACE(a.start_time, ' ', 'T') < ? AND REPLACE(a.end_time, ' ', 'T') > ?
-        `).get(tenantId, safeRoomId, id, safeEnd, safeStart) as any;
+        `).get(tenantId, safeRoomId, id, currentOccurrenceId, currentOccurrenceId, safeEnd, safeStart) as any;
 
         if (roomConflict) {
           res.status(409).json({
@@ -1584,7 +1803,7 @@ export class AppointmentController {
         ? 'rescheduled'
         : appt.status;
 
-      db.prepare(`
+      const updateApptStmt = db.prepare(`
         UPDATE appointments SET
           service_id = COALESCE(?, service_id),
           professional_id = COALESCE(?, professional_id),
@@ -1600,45 +1819,105 @@ export class AppointmentController {
           google_drive_url = CASE WHEN ? THEN ? ELSE google_drive_url END,
           updated_at = datetime('now')
         WHERE id = ? AND tenant_id = ?
-      `).run(
-        serviceId || null,
-        professionalId || null,
-        roomId !== undefined ? 1 : 0,
-        roomId || null,
-        insuranceId !== undefined ? 1 : 0,
-        insuranceId || null,
-        safeStart,
-        safeEnd,
-        nextStatus,
-        notes !== undefined ? notes : null,
-        internalNotes !== undefined ? 1 : 0,
-        typeof internalNotes === 'string' ? internalNotes.trim() || null : null,
-        modality || null,
-        meeting_url !== undefined ? 1 : 0,
-        typeof meeting_url === 'string' ? meeting_url.trim() || null : null,
-        rawDriveUrl !== undefined ? 1 : 0,
-        typeof rawDriveUrl === 'string' ? rawDriveUrl.trim() || null : null,
-        id,
-        tenantId
-      );
+      `);
 
-      if (startChanged) {
-        db.prepare(`
-          INSERT INTO appointment_status_history (id, appointment_id, previous_status, new_status, changed_by, reason)
-          VALUES (?, ?, ?, ?, ?, ?)
-        `).run(uuidv4(), id, appt.status, nextStatus, req.user ? req.user.name : 'Sistema', reason || 'Horário remarcado');
+      const targetSeriesRows: any[] = (() => {
+        if (effectiveScope !== 'single' && appt.series_id) {
+          return db.prepare(`
+            SELECT * FROM appointments
+            WHERE tenant_id = ?
+              AND series_id = ?
+              AND status NOT IN ('completed', 'cancelled', 'in_progress')
+              ${effectiveScope === 'this_and_following' ? 'AND REPLACE(start_time, \' \', \'T\') >= REPLACE(?, \' \', \'T\')' : ''}
+            ORDER BY start_time ASC
+          `).all(...(effectiveScope === 'this_and_following' ? [tenantId, appt.series_id, appt.start_time] : [tenantId, appt.series_id])) as any[];
+        }
+        return [appt];
+      })();
 
-        NotificationService.cancelAppointmentReminders(id as string);
-        NotificationService.scheduleAppointmentReminder(id as string);
+      const origStartClock = origStart.slice(11, 16);
+      const safeStartClock = safeStart.slice(11, 16);
+      const newDurationMs = new Date(`${safeEnd}:00`).getTime() - new Date(`${safeStart}:00`).getTime();
+      const origStartMs = new Date(`${origStart.slice(0, 16)}:00`).getTime();
+      const newStartMs = new Date(`${safeStart.slice(0, 16)}:00`).getTime();
+      const deltaMinutes = Number.isFinite(origStartMs) && Number.isFinite(newStartMs)
+        ? Math.round((newStartMs - origStartMs) / 60000)
+        : 0;
+
+      const updatedIds: string[] = [];
+      for (const row of targetSeriesRows) {
+        let targetStart = safeStart;
+        let targetEnd = safeEnd;
+        if (row.id !== appt.id) {
+          const rStart = String(row.start_time || '').trim().replace(' ', 'T');
+          const rEnd = String(row.end_time || '').trim().replace(' ', 'T');
+          if (startChanged || endChanged) {
+            // Mantém a data da ocorrência se só o horário mudou, ou aplica deslocamento se a data mudou
+            const dateShiftOnlySameClock = origStart.slice(0, 10) === safeStart.slice(0, 10);
+            if (dateShiftOnlySameClock && safeStartClock !== origStartClock && Number.isFinite(newDurationMs) && newDurationMs > 0) {
+              targetStart = `${rStart.slice(0, 10)}T${safeStartClock}`;
+              targetEnd = addMinutesToLocalIso(targetStart, Math.round(newDurationMs / 60000)).slice(0, 16);
+            } else if (deltaMinutes !== 0) {
+              targetStart = addMinutesToLocalIso(rStart, deltaMinutes).slice(0, 16);
+              const rowDur = Number.isFinite(newDurationMs) && newDurationMs > 0
+                ? Math.round(newDurationMs / 60000)
+                : Math.max(15, Math.round((new Date(`${rEnd.slice(0, 16)}:00`).getTime() - new Date(`${rStart.slice(0, 16)}:00`).getTime()) / 60000));
+              targetEnd = addMinutesToLocalIso(targetStart, rowDur).slice(0, 16);
+            } else {
+              targetStart = rStart;
+              targetEnd = rEnd;
+            }
+          } else {
+            targetStart = rStart;
+            targetEnd = rEnd;
+          }
+        }
+        const targetNextStatus = row.id === appt.id
+          ? nextStatus
+          : (startChanged && ['scheduled', 'confirmed', 'no_show', 'rescheduled'].includes(row.status) ? 'rescheduled' : row.status);
+
+        updateApptStmt.run(
+          serviceId || null,
+          professionalId || null,
+          roomId !== undefined ? 1 : 0,
+          roomId || null,
+          insuranceId !== undefined ? 1 : 0,
+          insuranceId || null,
+          targetStart,
+          targetEnd,
+          targetNextStatus,
+          notes !== undefined ? notes : null,
+          internalNotes !== undefined ? 1 : 0,
+          typeof internalNotes === 'string' ? internalNotes.trim() || null : null,
+          modality || null,
+          meeting_url !== undefined ? 1 : 0,
+          typeof meeting_url === 'string' ? meeting_url.trim() || null : null,
+          rawDriveUrl !== undefined ? 1 : 0,
+          typeof rawDriveUrl === 'string' ? rawDriveUrl.trim() || null : null,
+          row.id,
+          tenantId
+        );
+        updatedIds.push(row.id);
+
+        if (startChanged) {
+          db.prepare(`
+            INSERT INTO appointment_status_history (id, appointment_id, previous_status, new_status, changed_by, reason)
+            VALUES (?, ?, ?, ?, ?, ?)
+          `).run(uuidv4(), row.id, row.status, targetNextStatus, req.user ? req.user.name : 'Sistema', reason || 'Horário remarcado');
+
+          NotificationService.cancelAppointmentReminders(row.id);
+          NotificationService.scheduleAppointmentReminder(row.id);
+        }
+
+        if (tenantId) {
+          GoogleCalendarService.syncAppointmentUpdated(row.id, tenantId).catch(err => {
+            console.warn('[AppointmentController] Falha ao atualizar no Google Calendar:', err?.message || err);
+          });
+        }
       }
 
-      if (tenantId) {
-        GoogleCalendarService.syncAppointmentUpdated(id as string, tenantId).catch(err => {
-          console.warn('[AppointmentController] Falha ao atualizar no Google Calendar:', err?.message || err);
-        });
-      }
-      logAudit(req, 'UPDATE_APPOINTMENT', 'appointments', id, { serviceId, professionalId, roomId, insuranceId, newStart: safeStart, newEnd: safeEnd });
-      res.json({ message: startChanged ? 'Atendimento remarcado com sucesso' : 'Dados do atendimento atualizados com sucesso' });
+      logAudit(req, 'UPDATE_APPOINTMENT', 'appointments', id, { serviceId, professionalId, roomId, insuranceId, newStart: safeStart, newEnd: safeEnd, scope: effectiveScope, updatedCount: updatedIds.length });
+      res.json({ message: startChanged ? 'Atendimento remarcado com sucesso' : 'Dados do atendimento atualizados com sucesso', updatedCount: updatedIds.length });
     } catch (err: any) {
       console.error('[AppointmentController.update] Erro:', err);
       res.status(500).json({ error: 'Erro ao atualizar dados do atendimento' });
@@ -1852,6 +2131,346 @@ export class AppointmentController {
     } catch (err: any) {
       console.error('[AppointmentController.getCommunications] Erro:', err);
       res.status(500).json({ error: 'Erro ao buscar comunicações do agendamento' });
+    }
+  }
+
+  /**
+   * Cria série finita de agendamentos recorrentes (individuais ou em turma/aula coletiva)
+   * POST /v1/appointments/recurring
+   */
+  static createRecurring(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      if (!tenantId) {
+        res.status(401).json({ error: 'Tenant ID required' });
+        return;
+      }
+      if (!canOperate(tenantId)) {
+        res.status(402).json({ code: 'SUBSCRIPTION_REQUIRED', error: 'Agendamento indisponível. A clínica precisa regularizar sua assinatura.' });
+        return;
+      }
+
+      const {
+        patientId,
+        professionalId,
+        serviceId,
+        roomId,
+        insuranceId,
+        startTime,
+        endTime,
+        modality = 'presential',
+        meeting_url,
+        patientNotes,
+        internalNotes,
+        recurrence
+      } = req.body || {};
+      const isCustomTime = Boolean(req.body?.isCustomTime || req.body?.is_custom_time);
+      const rawDriveUrl = req.body?.google_drive_url !== undefined ? req.body.google_drive_url : req.body?.googleDriveUrl;
+
+      if (!patientId || !professionalId || !serviceId || !startTime || !endTime) {
+        res.status(400).json({ error: 'Campos obrigatórios: patientId, professionalId, serviceId, startTime e endTime.' });
+        return;
+      }
+      if (!validMeetingUrl(meeting_url) || !validMeetingUrl(rawDriveUrl) || !['presential', 'online', 'home'].includes(modality)) {
+        res.status(400).json({ error: 'Modalidade ou link HTTPS inválido.' });
+        return;
+      }
+      if (req.user?.role === 'professional') {
+        const ownProf = db.prepare('SELECT id FROM professionals WHERE id = ? AND user_id = ? AND tenant_id = ? AND active = 1').get(professionalId, req.user.userId, tenantId);
+        if (!ownProf) {
+          res.status(403).json({ error: 'Profissionais só podem criar séries recorrentes para sua própria agenda.' });
+          return;
+        }
+      }
+
+      const normalizedStart = bookingTime(startTime);
+      const normalizedEnd = bookingTime(endTime);
+      if (!normalizedStart || !normalizedEnd || normalizedEnd <= normalizedStart) {
+        res.status(400).json({ code: 'INVALID_BOOKING_TIME', error: 'Informe início e término válidos para o horário base.' });
+        return;
+      }
+
+      const serviceRow = db.prepare(`
+        SELECT id, name, price, duration_minutes, professional_id,
+               COALESCE(service_kind, 'individual') as service_kind,
+               default_capacity, COALESCE(allow_recurrence, 1) as allow_recurrence, clinical_module
+        FROM services WHERE id = ? AND tenant_id = ? AND active = 1
+      `).get(serviceId, tenantId) as any;
+      if (!serviceRow) {
+        res.status(404).json({ error: 'Serviço não encontrado ou inativo nesta clínica.' });
+        return;
+      }
+      if (Number(serviceRow.allow_recurrence) === 0) {
+        res.status(400).json({ code: 'RECURRENCE_NOT_ALLOWED', error: 'Este serviço não está configurado para permitir recorrência.' });
+        return;
+      }
+
+      const profRow = db.prepare('SELECT id, name, profession_id FROM professionals WHERE id = ? AND tenant_id = ? AND active = 1').get(professionalId, tenantId) as any;
+      if (!profRow) {
+        res.status(400).json({ error: 'Profissional ativo não encontrado nesta clínica.' });
+        return;
+      }
+      const patientRow = db.prepare('SELECT id, full_name FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId) as any;
+      if (!patientRow) {
+        res.status(400).json({ error: 'Aluno/paciente não encontrado nesta clínica.' });
+        return;
+      }
+      if (roomId && !db.prepare('SELECT 1 FROM rooms WHERE id = ? AND tenant_id = ? AND active = 1').get(roomId, tenantId)) {
+        res.status(400).json({ error: 'Sala selecionada inválida.' });
+        return;
+      }
+
+      const suppliedPrice = req.body?.appointmentPrice;
+      const rawPrice = suppliedPrice !== undefined ? Number(suppliedPrice) : Number(serviceRow.price ?? 0);
+      if (!Number.isFinite(rawPrice) || rawPrice < 0) {
+        res.status(400).json({ error: 'Valor inválido.' });
+        return;
+      }
+      const agreedAmount = Math.round(rawPrice * 100) / 100;
+
+      const freq = String(recurrence?.frequency || 'weekly');
+      if (!['weekly', 'biweekly', 'monthly', 'custom_weekdays'].includes(freq)) {
+        res.status(400).json({ error: 'Frequência de recorrência inválida.' });
+        return;
+      }
+      const endDate = recurrence?.endDate ? String(recurrence.endDate).slice(0, 10) : undefined;
+      const maxOccurrences = recurrence?.maxOccurrences !== undefined ? Number(recurrence.maxOccurrences) : undefined;
+      if (!endDate && (!maxOccurrences || maxOccurrences <= 0)) {
+        res.status(400).json({ code: 'RECURRENCE_BOUND_REQUIRED', error: 'Informe data de término ou quantidade máxima de ocorrências.' });
+        return;
+      }
+
+      const startDate = normalizedStart.slice(0, 10);
+      const startClock = normalizedStart.slice(11, 16);
+      const endClock = normalizedEnd.slice(11, 16);
+
+      const dates = generateRecurrenceDates({
+        startDate,
+        frequency: freq as any,
+        weekdays: Array.isArray(recurrence?.weekdays) ? recurrence.weekdays : undefined,
+        endDate,
+        maxOccurrences
+      });
+      if (dates.length === 0) {
+        res.status(400).json({ error: 'Nenhuma data válida encontrada para os critérios de recorrência informados.' });
+        return;
+      }
+
+      if (!isCustomTime) {
+        for (const d of dates) {
+          const sIso = `${d}T${startClock}`;
+          const eIso = `${d}T${endClock}`;
+          const hoursCheck = validateClinicBusinessHours(tenantId, sIso, eIso);
+          if (!hoursCheck.valid) {
+            res.status(400).json({ error: `Dia ${d}: ${hoursCheck.error}`, date: d });
+            return;
+          }
+          const scheduleCheck = validateProfessionalSchedule(tenantId, professionalId, sIso, eIso);
+          if (!scheduleCheck.valid) {
+            res.status(400).json({ error: `Dia ${d}: ${scheduleCheck.error}`, date: d });
+            return;
+          }
+        }
+      }
+
+      const isGroupService = serviceRow.service_kind === 'group';
+      const defaultCapacity = isGroupService ? Math.max(1, Number(serviceRow.default_capacity) || 1) : 1;
+      const seriesId = 'ser-' + uuidv4().slice(0, 8);
+
+      let initialClinicalModule: string | null = null;
+      if (serviceRow.clinical_module && isPrimaryClinicalModule(serviceRow.clinical_module)) {
+        initialClinicalModule = serviceRow.clinical_module;
+      } else {
+        const resolvedMod = resolveClinicalModule({ professional_id: professionalId, service_id: serviceId }, tenantId);
+        if (isPrimaryClinicalModule(resolvedMod)) initialClinicalModule = resolvedMod;
+      }
+
+      const countRow = db.prepare('SELECT COUNT(*) as c FROM appointments WHERE tenant_id = ?').get(tenantId) as { c: number };
+      let seq = (countRow?.c || 0) + 1;
+      const year = new Date().getFullYear();
+
+      const createdAppointments: any[] = [];
+
+      const calcDurationMinutes = (() => {
+        const [sh, sm] = startClock.split(':').map(Number);
+        const [eh, em] = endClock.split(':').map(Number);
+        const diff = (eh * 60 + em) - (sh * 60 + sm);
+        return diff > 0 ? diff : (Number(serviceRow.duration_minutes) || 50);
+      })();
+
+      const runTx = db.transaction(() => {
+        db.prepare(`
+          INSERT INTO class_series (
+            id, tenant_id, service_id, professional_id, room_id, patient_id, service_kind, title,
+            modality, frequency, weekdays_json, start_time_hhmm, duration_minutes, start_date, end_date,
+            max_occurrences, capacity, unit_price, status, created_by
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)
+        `).run(
+          seriesId,
+          tenantId,
+          serviceId,
+          professionalId,
+          roomId || null,
+          isGroupService ? null : patientId,
+          isGroupService ? 'group' : 'individual',
+          serviceRow.name || 'Série recorrente',
+          modality || 'presential',
+          freq,
+          JSON.stringify(Array.isArray(recurrence?.weekdays) ? recurrence.weekdays : []),
+          startClock,
+          calcDurationMinutes,
+          dates[0],
+          dates[dates.length - 1],
+          dates.length,
+          defaultCapacity,
+          agreedAmount,
+          req.user?.userId || 'system'
+        );
+
+        for (const d of dates) {
+          const sIso = `${d}T${startClock}`;
+          const eIso = `${d}T${endClock}`;
+
+          const patientConflict = db.prepare(`
+            SELECT a.id FROM appointments a
+            WHERE a.tenant_id = ? AND a.patient_id = ? AND a.status != 'cancelled'
+              AND REPLACE(a.start_time, ' ', 'T') < ? AND REPLACE(a.end_time, ' ', 'T') > ?
+          `).get(tenantId, patientId, eIso, sIso);
+          if (patientConflict) {
+            throw { status: 409, code: 'PATIENT_APPOINTMENT_CONFLICT', error: `O aluno/paciente já possui agendamento conflitante em ${d} (${startClock}).` };
+          }
+
+          let occurrenceId: string | null = null;
+          let isFirstEnrollment = true;
+          if (isGroupService) {
+            const occ = resolveOrCreateGroupOccurrenceTx({
+              tenantId,
+              serviceId,
+              serviceName: serviceRow.name || 'Turma',
+              professionalId,
+              roomId: roomId || null,
+              startTime: sIso,
+              endTime: eIso,
+              defaultCapacity,
+              modality: modality || 'presential',
+              seriesId,
+              patientId
+            });
+            occurrenceId = occ.occurrenceId;
+            isFirstEnrollment = occ.isFirstEnrollment;
+          } else {
+            const profConflict = db.prepare(`
+              SELECT a.id FROM appointments a
+              WHERE a.tenant_id = ? AND a.professional_id = ? AND a.status != 'cancelled'
+                AND REPLACE(a.start_time, ' ', 'T') < ? AND REPLACE(a.end_time, ' ', 'T') > ?
+            `).get(tenantId, professionalId, eIso, sIso);
+            if (profConflict) {
+              throw { status: 409, code: 'PROFESSIONAL_SLOT_OCCUPIED', error: `Horário indisponível para o profissional em ${d} (${startClock}).` };
+            }
+            if (roomId) {
+              const roomConflict = db.prepare(`
+                SELECT a.id FROM appointments a
+                WHERE a.tenant_id = ? AND a.room_id = ? AND a.status != 'cancelled'
+                  AND REPLACE(a.start_time, ' ', 'T') < ? AND REPLACE(a.end_time, ' ', 'T') > ?
+              `).get(tenantId, roomId, eIso, sIso);
+              if (roomConflict) {
+                throw { status: 409, code: 'ROOM_CONFLICT', error: `Sala ocupada em ${d} (${startClock}).` };
+              }
+            }
+          }
+
+          const apptId = 'apt-' + uuidv4().slice(0, 8);
+          const apptNumber = `AG-${year}-${seq.toString().padStart(4, '0')}`;
+          seq += 1;
+
+          db.prepare(`
+            INSERT INTO appointments (
+              id, tenant_id, appointment_number, patient_id, professional_id, service_id,
+              room_id, start_time, end_time, status, modality, meeting_url, google_drive_url,
+              patient_notes, internal_notes, insurance_id, clinical_module, profession_id,
+              series_id, occurrence_id, service_kind, attendance_status, created_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+          `).run(
+            apptId, tenantId, apptNumber, patientId, professionalId, serviceId,
+            roomId || null, sIso, eIso, modality,
+            typeof meeting_url === 'string' ? meeting_url.trim() || null : null,
+            typeof rawDriveUrl === 'string' ? rawDriveUrl.trim() || null : null,
+            patientNotes || null, internalNotes || null, insuranceId || null,
+            initialClinicalModule, profRow.profession_id || null,
+            seriesId, occurrenceId, isGroupService ? 'group' : 'individual',
+            req.user?.userId || 'system'
+          );
+
+          db.prepare(`
+            INSERT INTO appointment_status_history (id, appointment_id, previous_status, new_status, changed_by, reason)
+            VALUES (?, ?, NULL, 'scheduled', ?, 'Agendamento em série recorrente')
+          `).run(uuidv4(), apptId, req.user ? req.user.name : 'Sistema');
+
+          if (agreedAmount > 0 || suppliedPrice !== undefined) {
+            db.prepare(`
+              INSERT INTO payments (id, tenant_id, appointment_id, patient_id, amount, payment_method, status, notes, service_id, base_amount, professional_id)
+              VALUES (?, ?, ?, ?, ?, 'pix', ?, 'Gerado automaticamente por agendamento recorrente', ?, ?, ?)
+            `).run('pay-' + uuidv4().slice(0, 8), tenantId, apptId, patientId, agreedAmount, agreedAmount === 0 ? 'exempt' : 'pending', serviceId, agreedAmount, professionalId);
+          }
+
+          createdAppointments.push({
+            id: apptId,
+            appointmentNumber: apptNumber,
+            startTime: sIso,
+            endTime: eIso,
+            occurrenceId,
+            isFirstEnrollment
+          });
+        }
+      });
+
+      try {
+        runTx();
+      } catch (txErr: any) {
+        if (txErr && typeof txErr.status === 'number' && txErr.code) {
+          res.status(txErr.status).json({ error: txErr.error, code: txErr.code });
+          return;
+        }
+        throw txErr;
+      }
+
+      const gcalConn = GoogleCalendarService.getConnectionForProfessional(tenantId, professionalId);
+      for (const created of createdAppointments) {
+        NotificationService.scheduleAppointmentReminder(created.id);
+        if (gcalConn && gcalConn.sync_enabled && gcalConn.sync_direction !== 'google_to_zemda') {
+          let syncThis = true;
+          if (isGroupService && !created.isFirstEnrollment) {
+            const linked = db.prepare(`
+              SELECT gel.id FROM google_calendar_event_links gel
+              JOIN appointments a ON a.id = gel.appointment_id
+              WHERE a.occurrence_id = ? AND a.tenant_id = ? AND gel.sync_status IN ('pending', 'synced') LIMIT 1
+            `).get(created.occurrenceId, tenantId);
+            if (linked) syncThis = false;
+          }
+          if (syncThis) {
+            GoogleCalendarService.syncAppointmentCreated(created.id, tenantId).catch(() => {});
+          }
+        }
+      }
+
+      logAudit(req, 'CREATE_RECURRING_SERIES', 'class_series', seriesId, {
+        frequency: freq,
+        count: createdAppointments.length,
+        serviceId,
+        professionalId,
+        patientId
+      });
+
+      res.status(201).json({
+        seriesId,
+        createdCount: createdAppointments.length,
+        serviceKind: isGroupService ? 'group' : 'individual',
+        appointments: createdAppointments,
+        message: `${createdAppointments.length} horários agendados em série recorrente!`
+      });
+    } catch (err: any) {
+      console.error('[AppointmentController.createRecurring] Erro:', err);
+      res.status(500).json({ error: 'Erro ao criar agendamentos recorrentes' });
     }
   }
 }

@@ -261,6 +261,7 @@ export class AuthController {
             else if (pName.toLowerCase().includes('ocupacional')) deducedProfId = 'prof-terapeuta-ocupacional';
             else if (pName.toLowerCase().includes('fono')) deducedProfId = 'prof-fonoaudiologo';
             else if (pName.toLowerCase().includes('personal')) deducedProfId = 'prof-personal-trainer';
+            else if (pName.toLowerCase().includes('instrutor')) deducedProfId = 'prof-instrutor';
             else if (pName.toLowerCase().includes('estet')) deducedProfId = 'prof-esteticista';
 
             profDetails = {
@@ -466,6 +467,7 @@ export class AuthController {
           else if (pName.toLowerCase().includes('ocupacional')) deducedProfId = 'prof-terapeuta-ocupacional';
           else if (pName.toLowerCase().includes('fono')) deducedProfId = 'prof-fonoaudiologo';
           else if (pName.toLowerCase().includes('personal')) deducedProfId = 'prof-personal-trainer';
+          else if (pName.toLowerCase().includes('instrutor')) deducedProfId = 'prof-instrutor';
           else if (pName.toLowerCase().includes('estet')) deducedProfId = 'prof-esteticista';
 
           profDetails = {
@@ -692,6 +694,7 @@ export class AuthController {
             else if (pName.toLowerCase().includes('ocupacional')) deducedProfId = 'prof-terapeuta-ocupacional';
             else if (pName.toLowerCase().includes('fono')) deducedProfId = 'prof-fonoaudiologo';
             else if (pName.toLowerCase().includes('personal')) deducedProfId = 'prof-personal-trainer';
+            else if (pName.toLowerCase().includes('instrutor')) deducedProfId = 'prof-instrutor';
             else if (pName.toLowerCase().includes('estet')) deducedProfId = 'prof-esteticista';
 
             profDetails = {
@@ -2129,6 +2132,7 @@ export class AuthController {
           matchedCatalogProf = REGISTRATION_PROFESSIONS.find(
             p => (p.id === 'prof-dentista' && (professionIdInput === 'prof-dentista' || rawProfession.toLowerCase() === 'dentista')) ||
                  (p.id === 'prof-personal-trainer' && (professionIdInput === 'prof-personal-trainer' || rawProfession.toLowerCase() === 'personal trainer')) ||
+                 (p.id === 'prof-instrutor' && (professionIdInput === 'prof-instrutor' || professionIdInput === 'prof-instrutor-pilates' || professionIdInput === 'pilates_instructor' || rawProfession.toLowerCase().startsWith('instrutor'))) ||
                  (p.id === 'prof-outro-saude' && (professionIdInput === 'other_health' || rawProfession.toLowerCase() === 'outra profissão da saúde')) ||
                  p.label.toLowerCase() === rawProfession.toLowerCase()
           );

@@ -317,16 +317,27 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
     };
   }
 
-  if (pId === 'prof-instrutor-pilates' || combined.includes('pilates')) {
+  if (
+    pId === 'prof-instrutor' ||
+    pId === 'prof-instrutor-pilates' ||
+    pId === 'pilates_instructor' ||
+    pSlug === 'instrutor' ||
+    pSlug === 'instrutor-pilates' ||
+    (!hasExplicitId && (
+      pName === 'instrutor' ||
+      pName.startsWith('instrutor(a)') ||
+      pName.startsWith('instrutor de ')
+    ))
+  ) {
     return {
-      canonicalId: 'prof-instrutor-pilates',
-      canonicalName: 'Instrutor de Pilates',
-      commercialModule: null,
-      clinicalWorkspace: 'general',
+      canonicalId: 'prof-instrutor',
+      canonicalName: 'Instrutor',
+      commercialModule: 'ZemdaPersonal',
+      clinicalWorkspace: 'ZemdaPersonal',
       boardLabel: 'Certificação',
-      taxonomyCategory: 'HEALTH_SUPPORT',
+      taxonomyCategory: 'CANONICAL',
       isSpecificAlias: false,
-      flags: makeFlags(null)
+      flags: makeFlags('ZemdaPersonal')
     };
   }
 
@@ -907,13 +918,22 @@ export function cleanPracticeAreasForNewProfession(newProfessionId: string, curr
     ZemdaPP: ['psicopedag', 'aprendizagem', 'dificuldades escolares', 'pa-pp'],
     ZemdaFisio: ['fisio', 'reabilita', 'ortoped', 'ortopéd', 'traumato', 'pilates', 'cinesio', 'fisioterapia', 'pa-fisio'],
     ZemdaOdonto: ['odonto', 'dentis', 'clareamento', 'ortodontia', 'endodontia', 'implante', 'periodontia', 'prótese dentária', 'pa-odonto'],
-    ZemdaPersonal: ['personal', 'personal trainer', 'musculação', 'musculacao', 'treinamento', 'condicionamento físico', 'educação física', 'educacao fisica', 'pa-personal'],
+    ZemdaPersonal: [
+      'personal', 'personal trainer', 'musculação', 'musculacao', 'treinamento', 'treinamento funcional',
+      'condicionamento físico', 'educação física', 'educacao fisica', 'pa-personal',
+      'pilates', 'dança', 'danca', 'zumba', 'yoga', 'alongamento', 'ginástica', 'ginastica', 'ritmos', 'pa-inst'
+    ],
     ZemdaMed: ['médic', 'medic', 'clínica médica', 'prescrição', 'soap', 'cid', 'neurologia', 'psiquiatria', 'pediatria', 'cardiologia', 'dermatologia', 'oftalmologia', 'ginecologia', 'urologia', 'otorrino', 'geriatria', 'endocrino', 'pa-med'],
     ZemdaEstetic: ['estet', 'estétic', 'facial', 'corporal', 'capilar', 'botox', 'preenchimento', 'bioestimulador', 'harmonização', 'harmonizacao', 'pa-estetic', 'biomed', 'bioméd', 'pa-biomed']
   };
 
+  const targetWords = target ? (keywordsByModule[target] || []) : [];
   const filtered = rawAreas.filter(area => {
     const lower = area.toLowerCase();
+    // Se a área pertence explicitamente ao módulo de destino (ex.: Pilates em ZemdaFisio ou ZemdaPersonal), preserva
+    if (targetWords.some(w => lower.includes(w))) {
+      return true;
+    }
     // Se a área menciona uma palavra-chave de OUTRO módulo que não o target, descarta
     for (const [mod, words] of Object.entries(keywordsByModule) as [ZemdaModule, string[]][]) {
       if (mod !== target) {
