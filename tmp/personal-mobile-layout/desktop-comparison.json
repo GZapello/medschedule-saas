@@ -1,0 +1,82 @@
+[
+  {
+    "component": "assessment",
+    "width": 1366,
+    "difference": null
+  },
+  {
+    "component": "template",
+    "width": 1366,
+    "difference": null
+  },
+  {
+    "component": "workout",
+    "width": 1366,
+    "difference": null
+  },
+  {
+    "component": "library",
+    "width": 1366,
+    "difference": null
+  },
+  {
+    "component": "comparison",
+    "width": 1366,
+    "difference": null
+  },
+  {
+    "component": "profile",
+    "width": 1366,
+    "difference": null
+  },
+  {
+    "component": "view",
+    "width": 1366,
+    "difference": null
+  },
+  {
+    "component": "report",
+    "width": 1366,
+    "difference": null
+  },
+  {
+    "component": "assessment",
+    "width": 1920,
+    "difference": null
+  },
+  {
+    "component": "template",
+    "width": 1920,
+    "difference": null
+  },
+  {
+    "component": "workout",
+    "width": 1920,
+    "difference": null
+  },
+  {
+    "component": "library",
+    "width": 1920,
+    "difference": null
+  },
+  {
+    "component": "comparison",
+    "width": 1920,
+    "difference": null
+  },
+  {
+    "component": "profile",
+    "width": 1920,
+    "difference": null
+  },
+  {
+    "component": "view",
+    "width": 1920,
+    "difference": null
+  },
+  {
+    "component": "report",
+    "width": 1920,
+    "difference": null
+  }
+]

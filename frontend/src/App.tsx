@@ -16,6 +16,13 @@ import { lazyWithRetry } from './utils/lazyWithRetry';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
 import { ApiClient } from './api/client';
+import {
+  ActiveStudioSession,
+  clearActiveStudioSession,
+  isSidebarItemAllowedForProfile,
+  isStudioProfile,
+  readActiveStudioSession
+} from './utils/establishmentContext';
 const Navbar = lazyWithRetry(() => import('./components/common/Navbar').then(module => ({ default: module.Navbar })), 'Navbar');
 const Sidebar = lazyWithRetry(() => import('./components/common/Sidebar').then(module => ({ default: module.Sidebar })), 'Sidebar');
 const AuthPage = lazyWithRetry(() => import('./components/auth/AuthPage').then(module => ({ default: module.AuthPage })), 'AuthPage');
@@ -308,6 +315,7 @@ const AppContent: React.FC = () => {
   const initialRoute = useRef(getInitialRoute()).current;
   const [currentView, setCurrentView] = useState<string>(initialRoute.view);
   const [subRouteId, setSubRouteId] = useState<string | null>(initialRoute.subId || null);
+  const [activeStudioSession, setActiveStudioSession] = useState<ActiveStudioSession | null>(() => readActiveStudioSession());
   const [settingsSection, setSettingsSection] = useState<string>(getInitialSettingsSection);
   const [patientInitialTab, setPatientInitialTab] = useState<string | null>(() => {
     try {
@@ -612,13 +620,35 @@ const AppContent: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    const syncStudioSession = () => {
+      setActiveStudioSession(readActiveStudioSession());
+    };
+    window.addEventListener('zemda-studio-session-changed', syncStudioSession);
+    return () => {
+      window.removeEventListener('zemda-studio-session-changed', syncStudioSession);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!currentUser) return;
     if (currentUser.role === 'superadmin') {
       setCurrentView(prev => (prev === 'dashboard' ? 'superadmin' : prev));
     } else {
       if (!isSandboxSession) {
-        setCurrentView(prev => (['superadmin', 'superadmin-visits', 'taxonomy', 'audit', 'sandbox', 'laboratory'].includes(prev) ? 'dashboard' : prev));
+        setCurrentView(prev => {
+          if (['superadmin', 'superadmin-visits', 'taxonomy', 'audit', 'sandbox', 'laboratory'].includes(prev)) {
+            return 'dashboard';
+          }
+          if (!isSidebarItemAllowedForProfile(prev, currentTenant?.establishment_profile)) {
+            return 'dashboard';
+          }
+          return prev;
+        });
       }
+    }
+
+    if (activeStudioSession?.tenantId && currentTenant?.id && activeStudioSession.tenantId !== currentTenant.id) {
+      clearActiveStudioSession();
     }
 
     // Se o usuário já estiver autenticado e a URL for /login ou /cadastro, redireciona de imediato para a tela principal
@@ -1437,10 +1467,12 @@ const AppContent: React.FC = () => {
           {(currentView === 'zemda-body' || currentView === 'zemda360') && <ZemdaBodyRecordsView />}
 
           {currentView === 'zemda-personal' && (
-            (isPersonalTrainer || isZemdaPersonal || currentUser?.commercialModule === 'ZemdaPersonal' || hasCapability('TRAINING_PRESCRIBE') || hasCapability('PHYSICAL_ASSESSMENT') || isSuperAdmin) ? (
+            (isPersonalTrainer || isZemdaPersonal || currentUser?.commercialModule === 'ZemdaPersonal' || hasCapability('TRAINING_PRESCRIBE') || hasCapability('PHYSICAL_ASSESSMENT') || isSuperAdmin || ((isStudioProfile(currentTenant?.establishment_profile) || (currentTenant?.establishment_profile === 'mixed' && Boolean(activeStudioSession))) && (isClinicAdmin || isProfessional))) ? (
               <ZemdaPersonalView
                 initialStudentId={subRouteId}
                 onSelectStudent={(sId) => handleNavigateView('zemda-personal', sId)}
+                studioSession={activeStudioSession}
+                onClearStudioSession={() => clearActiveStudioSession()}
               />
             ) : (
               <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
@@ -1830,6 +1862,13 @@ const AppContent: React.FC = () => {
         initialPrefill={newApptPrefill}
         onSuccess={(createdAppt?: any) => {
           window.dispatchEvent(new CustomEvent('zemda-appointment-updated', { detail: createdAppt }));
+          if (createdAppt?.__studioRedirect) {
+            handleNavigateView(
+              'zemda-personal',
+              createdAppt.service_kind === 'group' || createdAppt.occurrence_id ? null : (createdAppt.patient_id || null)
+            );
+            return;
+          }
           setCurrentView('calendar');
         }}
       />

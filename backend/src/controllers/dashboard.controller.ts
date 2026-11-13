@@ -44,6 +44,11 @@ export class DashboardController {
           COALESCE(a.pre_consultation_status, 'not_sent') as pre_consultation_status,
           a.pre_consultation_submission_id, a.pre_consultation_form_id,
           a.internal_notes, a.patient_notes,
+          COALESCE(a.service_kind, COALESCE(s.service_kind, 'individual')) as service_kind,
+          a.occurrence_id,
+          a.series_id,
+          s.service_domain,
+          COALESCE(t.establishment_profile, 'clinic') as establishment_profile,
           s.clinical_module as service_clinical_module,
           pat.full_name as patient_name, pat.phone as patient_phone,
           p.name as professional_name,
@@ -59,6 +64,7 @@ export class DashboardController {
           (SELECT id FROM clinical_prescriptions WHERE appointment_id = a.id LIMIT 1) as prescription_id,
           (SELECT id FROM clinical_exam_requests WHERE appointment_id = a.id LIMIT 1) as exam_request_id
         FROM appointments a
+        LEFT JOIN tenants t ON t.id = a.tenant_id
         LEFT JOIN patients pat ON pat.id = a.patient_id
         LEFT JOIN professionals p ON p.id = a.professional_id
         LEFT JOIN services s ON s.id = a.service_id

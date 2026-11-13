@@ -1,0 +1,434 @@
+[
+  {
+    "mode": "assessment",
+    "scroll": 320,
+    "width": 320,
+    "errors": []
+  },
+  {
+    "mode": "template",
+    "scroll": 320,
+    "width": 320,
+    "errors": []
+  },
+  {
+    "mode": "workout",
+    "scroll": 320,
+    "width": 320,
+    "errors": []
+  },
+  {
+    "mode": "library",
+    "scroll": 320,
+    "width": 320,
+    "errors": []
+  },
+  {
+    "mode": "comparison",
+    "scroll": 320,
+    "width": 320,
+    "errors": []
+  },
+  {
+    "mode": "profile",
+    "scroll": 320,
+    "width": 320,
+    "errors": []
+  },
+  {
+    "mode": "view",
+    "scroll": 320,
+    "width": 320,
+    "errors": []
+  },
+  {
+    "mode": "report",
+    "scroll": 320,
+    "width": 320,
+    "errors": []
+  },
+  {
+    "mode": "assessment",
+    "scroll": 360,
+    "width": 360,
+    "errors": []
+  },
+  {
+    "mode": "template",
+    "scroll": 360,
+    "width": 360,
+    "errors": []
+  },
+  {
+    "mode": "workout",
+    "scroll": 360,
+    "width": 360,
+    "errors": []
+  },
+  {
+    "mode": "library",
+    "scroll": 360,
+    "width": 360,
+    "errors": []
+  },
+  {
+    "mode": "comparison",
+    "scroll": 360,
+    "width": 360,
+    "errors": []
+  },
+  {
+    "mode": "profile",
+    "scroll": 360,
+    "width": 360,
+    "errors": []
+  },
+  {
+    "mode": "view",
+    "scroll": 360,
+    "width": 360,
+    "errors": []
+  },
+  {
+    "mode": "report",
+    "scroll": 360,
+    "width": 360,
+    "errors": []
+  },
+  {
+    "mode": "assessment",
+    "scroll": 375,
+    "width": 375,
+    "errors": []
+  },
+  {
+    "mode": "template",
+    "scroll": 375,
+    "width": 375,
+    "errors": []
+  },
+  {
+    "mode": "workout",
+    "scroll": 375,
+    "width": 375,
+    "errors": []
+  },
+  {
+    "mode": "library",
+    "scroll": 375,
+    "width": 375,
+    "errors": []
+  },
+  {
+    "mode": "comparison",
+    "scroll": 375,
+    "width": 375,
+    "errors": []
+  },
+  {
+    "mode": "profile",
+    "scroll": 375,
+    "width": 375,
+    "errors": []
+  },
+  {
+    "mode": "view",
+    "scroll": 375,
+    "width": 375,
+    "errors": []
+  },
+  {
+    "mode": "report",
+    "scroll": 375,
+    "width": 375,
+    "errors": []
+  },
+  {
+    "mode": "assessment",
+    "scroll": 390,
+    "width": 390,
+    "errors": []
+  },
+  {
+    "mode": "template",
+    "scroll": 390,
+    "width": 390,
+    "errors": []
+  },
+  {
+    "mode": "workout",
+    "scroll": 390,
+    "width": 390,
+    "errors": []
+  },
+  {
+    "mode": "library",
+    "scroll": 390,
+    "width": 390,
+    "errors": []
+  },
+  {
+    "mode": "comparison",
+    "scroll": 390,
+    "width": 390,
+    "errors": []
+  },
+  {
+    "mode": "profile",
+    "scroll": 390,
+    "width": 390,
+    "errors": []
+  },
+  {
+    "mode": "view",
+    "scroll": 390,
+    "width": 390,
+    "errors": []
+  },
+  {
+    "mode": "report",
+    "scroll": 390,
+    "width": 390,
+    "errors": []
+  },
+  {
+    "mode": "assessment",
+    "scroll": 412,
+    "width": 412,
+    "errors": []
+  },
+  {
+    "mode": "template",
+    "scroll": 412,
+    "width": 412,
+    "errors": []
+  },
+  {
+    "mode": "workout",
+    "scroll": 412,
+    "width": 412,
+    "errors": []
+  },
+  {
+    "mode": "library",
+    "scroll": 412,
+    "width": 412,
+    "errors": []
+  },
+  {
+    "mode": "comparison",
+    "scroll": 412,
+    "width": 412,
+    "errors": []
+  },
+  {
+    "mode": "profile",
+    "scroll": 412,
+    "width": 412,
+    "errors": []
+  },
+  {
+    "mode": "view",
+    "scroll": 412,
+    "width": 412,
+    "errors": []
+  },
+  {
+    "mode": "report",
+    "scroll": 412,
+    "width": 412,
+    "errors": []
+  },
+  {
+    "mode": "assessment",
+    "scroll": 430,
+    "width": 430,
+    "errors": []
+  },
+  {
+    "mode": "template",
+    "scroll": 430,
+    "width": 430,
+    "errors": []
+  },
+  {
+    "mode": "workout",
+    "scroll": 430,
+    "width": 430,
+    "errors": []
+  },
+  {
+    "mode": "library",
+    "scroll": 430,
+    "width": 430,
+    "errors": []
+  },
+  {
+    "mode": "comparison",
+    "scroll": 430,
+    "width": 430,
+    "errors": []
+  },
+  {
+    "mode": "profile",
+    "scroll": 430,
+    "width": 430,
+    "errors": []
+  },
+  {
+    "mode": "view",
+    "scroll": 430,
+    "width": 430,
+    "errors": []
+  },
+  {
+    "mode": "report",
+    "scroll": 430,
+    "width": 430,
+    "errors": []
+  },
+  {
+    "mode": "assessment",
+    "scroll": 768,
+    "width": 768,
+    "errors": []
+  },
+  {
+    "mode": "template",
+    "scroll": 768,
+    "width": 768,
+    "errors": []
+  },
+  {
+    "mode": "workout",
+    "scroll": 768,
+    "width": 768,
+    "errors": []
+  },
+  {
+    "mode": "library",
+    "scroll": 768,
+    "width": 768,
+    "errors": []
+  },
+  {
+    "mode": "comparison",
+    "scroll": 768,
+    "width": 768,
+    "errors": []
+  },
+  {
+    "mode": "profile",
+    "scroll": 768,
+    "width": 768,
+    "errors": []
+  },
+  {
+    "mode": "view",
+    "scroll": 768,
+    "width": 768,
+    "errors": []
+  },
+  {
+    "mode": "report",
+    "scroll": 768,
+    "width": 768,
+    "errors": []
+  },
+  {
+    "mode": "assessment",
+    "scroll": 1366,
+    "width": 1366,
+    "errors": []
+  },
+  {
+    "mode": "template",
+    "scroll": 1366,
+    "width": 1366,
+    "errors": []
+  },
+  {
+    "mode": "workout",
+    "scroll": 1366,
+    "width": 1366,
+    "errors": []
+  },
+  {
+    "mode": "library",
+    "scroll": 1366,
+    "width": 1366,
+    "errors": []
+  },
+  {
+    "mode": "comparison",
+    "scroll": 1366,
+    "width": 1366,
+    "errors": []
+  },
+  {
+    "mode": "profile",
+    "scroll": 1366,
+    "width": 1366,
+    "errors": []
+  },
+  {
+    "mode": "view",
+    "scroll": 1366,
+    "width": 1366,
+    "errors": []
+  },
+  {
+    "mode": "report",
+    "scroll": 1366,
+    "width": 1366,
+    "errors": []
+  },
+  {
+    "mode": "assessment",
+    "scroll": 1920,
+    "width": 1920,
+    "errors": []
+  },
+  {
+    "mode": "template",
+    "scroll": 1920,
+    "width": 1920,
+    "errors": []
+  },
+  {
+    "mode": "workout",
+    "scroll": 1920,
+    "width": 1920,
+    "errors": []
+  },
+  {
+    "mode": "library",
+    "scroll": 1920,
+    "width": 1920,
+    "errors": []
+  },
+  {
+    "mode": "comparison",
+    "scroll": 1920,
+    "width": 1920,
+    "errors": []
+  },
+  {
+    "mode": "profile",
+    "scroll": 1920,
+    "width": 1920,
+    "errors": []
+  },
+  {
+    "mode": "view",
+    "scroll": 1920,
+    "width": 1920,
+    "errors": []
+  },
+  {
+    "mode": "report",
+    "scroll": 1920,
+    "width": 1920,
+    "errors": []
+  }
+]

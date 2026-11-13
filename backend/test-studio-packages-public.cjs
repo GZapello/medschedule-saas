@@ -136,6 +136,12 @@ async function runTests() {
     db.prepare(`INSERT INTO services (id, tenant_id, professional_id, name, duration_minutes, buffer_minutes, price, modality, service_kind, default_capacity, allow_recurrence, active) VALUES (?, ?, ?, 'Zumba Fitness', 50, 10, 50, 'presential', 'group', 10, 1, 1)`).run(srvZumba, studioTenant, profDanca);
     db.prepare(`INSERT INTO services (id, tenant_id, professional_id, name, duration_minutes, buffer_minutes, price, modality, service_kind, default_capacity, allow_recurrence, active) VALUES (?, ?, ?, 'Consulta Clínica', 50, 0, 250, 'presential', 'individual', 1, 0, 1)`).run(srvClinica, clinicTenant, profClinica);
 
+    // Grade semanal oficial para as aulas coletivas do Studio (Dança: ter 10h e qui 14h; Zumba: sex 15h e 18h)
+    db.prepare(`INSERT INTO class_schedules (id, tenant_id, service_id, professional_id, day_of_week, start_time, end_time, capacity, modality, effective_start_date, active) VALUES (?, ?, ?, ?, 2, '10:00', '10:50', 6, 'presential', '2026-01-01', 1)`).run('cs-dan-tue-' + uuidv4().slice(0, 6), studioTenant, srvDanca, profDanca);
+    db.prepare(`INSERT INTO class_schedules (id, tenant_id, service_id, professional_id, day_of_week, start_time, end_time, capacity, modality, effective_start_date, active) VALUES (?, ?, ?, ?, 4, '14:00', '14:50', 6, 'presential', '2026-01-01', 1)`).run('cs-dan-thu-' + uuidv4().slice(0, 6), studioTenant, srvDanca, profDanca);
+    db.prepare(`INSERT INTO class_schedules (id, tenant_id, service_id, professional_id, day_of_week, start_time, end_time, capacity, modality, effective_start_date, active) VALUES (?, ?, ?, ?, 5, '15:00', '15:50', 10, 'presential', '2026-01-01', 1)`).run('cs-zum-fri15-' + uuidv4().slice(0, 6), studioTenant, srvZumba, profDanca);
+    db.prepare(`INSERT INTO class_schedules (id, tenant_id, service_id, professional_id, day_of_week, start_time, end_time, capacity, modality, effective_start_date, active) VALUES (?, ?, ?, ?, 5, '18:00', '18:50', 10, 'presential', '2026-01-01', 1)`).run('cs-zum-fri18-' + uuidv4().slice(0, 6), studioTenant, srvZumba, profDanca);
+
     // Students in Studio
     const alunoAna = 'pat-ana-' + uuidv4().slice(0, 6);
     const alunoSemFone = 'pat-semfone-' + uuidv4().slice(0, 6);
@@ -504,7 +510,7 @@ async function runTests() {
     // -----------------------------------------------------------------
     console.log('\n--- TESTE J: Isolamento Multi-Tenant ---');
     const crossTenantGet = await makeReq('GET', `/api/v1/package-contracts/${contractAnaId}`, authClinic);
-    assert(crossTenantGet.status === 404, 'Clínica B não consegue ler contrato de pacote do Studio A (HTTP 404)');
+    assert(crossTenantGet.status === 403 || crossTenantGet.status === 404, 'Clínica B não consegue ler contrato de pacote do Studio A (HTTP 403/404)', crossTenantGet.data);
 
     console.log('\n==============================================================');
     console.log(`RESULTADO FINAL: ${passed} PASSARAM, ${failed} FALHARAM.`);

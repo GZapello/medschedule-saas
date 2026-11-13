@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { isSidebarItemAllowedForProfile, isStudioProfile } from '../../utils/establishmentContext';
 import {
   LayoutDashboard,
   Calendar,
@@ -205,7 +206,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           id: 'zemda-personal',
           label: 'ZemdaPersonal (Treinamento)',
           icon: Dumbbell,
-          visible: isEligibleClinical && (isPersonalTrainer || isZemdaPersonal || commercialModule === 'ZemdaPersonal')
+          visible: isEligibleClinical && (isPersonalTrainer || isZemdaPersonal || commercialModule === 'ZemdaPersonal' || isStudioProfile(currentTenant?.establishment_profile))
         },
         {
           id: 'pending-exams',
@@ -266,7 +267,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [isCustomizeOpen, setIsCustomizeOpen] = useState<boolean>(false);
   const [savingCustomize, setSavingCustomize] = useState<boolean>(false);
 
-  const effectiveCategories = isSuperAdmin ? superAdminCategories : categories;
+  const effectiveCategories = useMemo(
+    () =>
+      isSuperAdmin
+        ? superAdminCategories
+        : categories.map(cat => ({
+            ...cat,
+            items: cat.items.map(item => ({
+              ...item,
+              visible: item.visible && isSidebarItemAllowedForProfile(item.id, currentTenant?.establishment_profile)
+            }))
+          })),
+    [isSuperAdmin, superAdminCategories, categories, currentTenant?.establishment_profile]
+  );
 
   useEffect(() => {
     setHiddenItemIds([]);

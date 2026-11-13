@@ -1,5 +1,7 @@
 import { getUserPermissions } from '../middlewares/rbac.middleware';
 import { generateRecurrenceDates, resolveOrCreateGroupOccurrenceTx, GroupOccurrenceResolution } from '../services/class-group.service';
+import { resolveConcreteModality, sanitizeBookingErrorMessage } from '../utils/modality-resolver';
+import { getDayOfWeekFromYmd } from '../services/class-schedule.service';
 import { bookingTime } from '../utils/booking-time';
 import {recordedAttendance,appointmentRecord,extractDatePart,extractTimePart,normalizeLocalDateTimeIso,getClinicLocalNowIso,addMinutesToLocalIso} from '../services/document-context.service';
 import { canAccessPatient } from '../services/patient-sharing.service';
@@ -19,6 +21,10 @@ import { GoogleCalendarService } from '../services/google-calendar.service';
 import { NotificationService } from '../services/notification.service';
 import { WhatsAppService } from '../services/whatsapp.service';
 import { isValidPhoneNumber, normalizePhoneWithDDI, buildWhatsAppReminderMessage } from '../utils/phone.utils';
+import {
+  shouldUseStudioPersonalWorkflow,
+  validateServiceRecurrenceFrequency
+} from '../utils/establishment-context';
 
 function validMeetingUrl(value: unknown): boolean {
   if (value === undefined || value === null || value === '') return true;
@@ -210,6 +216,8 @@ export class AppointmentController {
           COALESCE(a.pre_consultation_status, 'not_sent') as pre_consultation_status,
           a.pre_consultation_submission_id, a.pre_consultation_form_id,
           s.clinical_module as service_clinical_module,
+          s.service_domain,
+          COALESCE(t.establishment_profile, 'clinic') as establishment_profile,
           pat.full_name as patient_name, pat.phone as patient_phone, pat.email as patient_email,
           pat.is_child as patient_is_child,
           p.name as professional_name, p.photo_url as professional_photo,
@@ -227,6 +235,7 @@ export class AppointmentController {
           (SELECT pay.status FROM payments pay WHERE pay.appointment_id = a.id AND pay.tenant_id = a.tenant_id ORDER BY pay.created_at ASC LIMIT 1) as payment_status,
           (SELECT pay.payment_method FROM payments pay WHERE pay.appointment_id = a.id AND pay.tenant_id = a.tenant_id ORDER BY pay.created_at ASC LIMIT 1) as payment_method
         FROM appointments a
+        LEFT JOIN tenants t ON t.id = a.tenant_id
         JOIN patients pat ON pat.id = a.patient_id
         JOIN professionals p ON p.id = a.professional_id
         LEFT JOIN services s ON s.id = a.service_id
@@ -326,6 +335,8 @@ export class AppointmentController {
             ELSE 1
           END as occurrence_enrolled_count,
           s.clinical_module as service_clinical_module,
+          s.service_domain,
+          COALESCE(t.establishment_profile, 'clinic') as establishment_profile,
           pat.full_name as patient_name, pat.phone as patient_phone, pat.email as patient_email,
           pat.birth_date as patient_birth_date, pat.cpf as patient_cpf, pat.is_child as patient_is_child,
           p.name as professional_name, p.registration_number, p.registration_type,
@@ -338,6 +349,7 @@ export class AppointmentController {
           (SELECT pay.amount FROM payments pay WHERE pay.appointment_id = a.id AND pay.tenant_id = a.tenant_id ORDER BY pay.created_at ASC LIMIT 1) as payment_amount,
           (SELECT pay.payment_method FROM payments pay WHERE pay.appointment_id = a.id AND pay.tenant_id = a.tenant_id ORDER BY pay.created_at ASC LIMIT 1) as payment_method
         FROM appointments a
+        LEFT JOIN tenants t ON t.id = a.tenant_id
         JOIN patients pat ON pat.id = a.patient_id
         JOIN professionals p ON p.id = a.professional_id
         LEFT JOIN services s ON s.id = a.service_id
@@ -490,7 +502,7 @@ export class AppointmentController {
       }
 
       if (!canOperate(tenantId)) { res.status(isPublic ? 404 : 402).json(isPublic ? {error:'Agendamento online indisponível.'} : {code:'SUBSCRIPTION_REQUIRED',error:'Agendamento indisponível. A clínica precisa regularizar sua assinatura.'}); return; }
-      const serviceRow = db.prepare("SELECT id, price, professional_id, COALESCE(service_kind, 'individual') as service_kind, default_capacity, name FROM services WHERE id = ? AND tenant_id = ?").get(serviceId, tenantId) as { id: string; price: number; professional_id: string | null; service_kind: string; default_capacity: number | null; name: string } | undefined;
+      const serviceRow = db.prepare("SELECT id, price, professional_id, modality, COALESCE(service_kind, 'individual') as service_kind, default_capacity, name FROM services WHERE id = ? AND tenant_id = ?").get(serviceId, tenantId) as { id: string; price: number; professional_id: string | null; modality?: string; service_kind: string; default_capacity: number | null; name: string } | undefined;
       if (!serviceRow) { res.status(400).json({ error: 'Serviço não pertence à clínica.' }); return; }
       const isGroupService = serviceRow.service_kind === 'group';
       const defaultGroupCapacity = isGroupService ? Math.max(1, Number(serviceRow.default_capacity) || 1) : 1;
@@ -521,8 +533,11 @@ export class AppointmentController {
         res.status(400).json({ code: 'INVALID_INSURANCE', error: 'Selecione um convênio ativo desta clínica ou atendimento particular.' }); return;
       }
       if (modality !== undefined && !['presential', 'online', 'home'].includes(modality)) {
-        res.status(400).json({ code: 'INVALID_MODALITY', error: 'Selecione uma modalidade válida.' }); return;
+        res.status(400).json({ code: 'INVALID_MODALITY', error: 'Não foi possível confirmar esta modalidade. Revise sua escolha e tente novamente.' }); return;
       }
+      const effectiveModality = (modality && ['presential', 'online', 'home'].includes(modality))
+        ? modality
+        : resolveConcreteModality({ serviceModality: serviceRow.modality, allowHome: true });
 
       // Resolve ou cria o paciente
       let resolvedPatientId = patientId;
@@ -768,6 +783,21 @@ export class AppointmentController {
         : (normalizeLocalDateTimeIso(req.body.attendanceExpectedEndAt || req.body.attendance_expected_end_at) || null);
 
       let groupMeta = null as (GroupOccurrenceResolution & { remainingSpots: number }) | null;
+      const matchedScheduleId = isGroupService
+        ? ((db.prepare(`
+            SELECT id FROM class_schedules
+            WHERE tenant_id = ? AND service_id = ? AND professional_id = ? AND day_of_week = ?
+              AND start_time = ? AND end_time = ? AND active = 1
+            LIMIT 1
+          `).get(
+            tenantId,
+            serviceId,
+            professionalId,
+            getDayOfWeekFromYmd(normalizedStartTime.slice(0, 10)),
+            normalizedStartTime.slice(11, 16),
+            normalizedEndTime.slice(11, 16)
+          ) as { id: string } | undefined)?.id || null)
+        : null;
 
       const persistAppointmentAndPrice = db.transaction(() => {
         if (isGroupService) {
@@ -777,10 +807,11 @@ export class AppointmentController {
             serviceName: serviceRow.name || 'Turma',
             professionalId,
             roomId: roomId || null,
+            classScheduleId: matchedScheduleId,
             startTime: normalizedStartTime,
             endTime: normalizedEndTime,
             defaultCapacity: defaultGroupCapacity,
-            modality: modality || 'presential',
+            modality: effectiveModality,
             patientId: resolvedPatientId
           });
           groupMeta = {
@@ -816,7 +847,7 @@ export class AppointmentController {
           initialAttendanceStartAt,
           initialAttendanceExpectedEndAt,
           initialStatus,
-          modality || 'presential',
+          effectiveModality,
           typeof meeting_url === 'string' ? meeting_url.trim() || null : null,
           typeof rawDriveUrl === 'string' ? rawDriveUrl.trim() || null : null,
           patientNotes || null,
@@ -1041,8 +1072,13 @@ export class AppointmentController {
         SELECT a.id, a.patient_id, a.status, a.clinical_module, a.professional_id, a.profession_id, a.service_id,
                a.start_time, a.end_time, a.attendance_start_at, a.attendance_expected_end_at, a.attendance_end_at,
                a.series_id, a.occurrence_id, COALESCE(a.service_kind, 'individual') as service_kind,
-               s.duration_minutes
+               s.duration_minutes,
+               s.service_kind as service_kind_srv,
+               s.service_domain,
+               s.clinical_module as service_clinical_module,
+               COALESCE(t.establishment_profile, 'clinic') as establishment_profile
         FROM appointments a
+        LEFT JOIN tenants t ON t.id = a.tenant_id
         LEFT JOIN services s ON s.id = a.service_id AND s.tenant_id = a.tenant_id
         WHERE a.id = ? AND a.tenant_id = ?
       `).get(id, tenantId) as {
@@ -1062,6 +1098,10 @@ export class AppointmentController {
         occurrence_id?: string | null;
         service_kind?: string;
         duration_minutes?: number | null;
+        service_kind_srv?: string;
+        service_domain?: string | null;
+        service_clinical_module?: string | null;
+        establishment_profile?: string;
       } | undefined;
       if (!current) {
         res.status(404).json({ error: 'Agendamento não encontrado' });
@@ -1153,15 +1193,26 @@ export class AppointmentController {
         resolvedProfessionId = (req.user as any).professionId;
       }
 
+      const isStudioWorkflow = shouldUseStudioPersonalWorkflow({
+        establishmentProfile: current.establishment_profile,
+        serviceDomain: current.service_domain,
+        serviceKind: current.service_kind_srv,
+        appointmentServiceKind: current.service_kind,
+        occurrenceId: current.occurrence_id,
+        appointmentClinicalModule: current.clinical_module,
+        serviceClinicalModule: current.service_clinical_module
+      });
+
       const cancelledBy = req.user ? `${req.user.name} (${req.user.role})` : 'Usuário';
-      if (status === 'completed' && current.status !== 'completed') {
+      if (status === 'completed' && current.status !== 'completed' && !isStudioWorkflow) {
         res.status(409).json({ error: 'Finalize pelo atendimento para salvar o prontuário e registrar o recebimento.' });
         return;
       }
 
-      // Cálculo/preservação do horário real ao iniciar atendimento (Itens 7 e 8)
+      // Cálculo/preservação do horário real ao iniciar ou finalizar sessão de Studio
       let nextAttendanceStartAt: string | null = current.attendance_start_at || null;
       let nextAttendanceExpectedEndAt: string | null = current.attendance_expected_end_at || null;
+      let nextAttendanceEndAt: string | null = current.attendance_end_at || null;
       if (status === 'in_progress') {
         const requestedStart = normalizeLocalDateTimeIso(req.body.attendanceStartAt || req.body.attendance_start_at);
         const requestedExpectedEnd = normalizeLocalDateTimeIso(req.body.attendanceExpectedEndAt || req.body.attendance_expected_end_at);
@@ -1174,9 +1225,13 @@ export class AppointmentController {
           nextAttendanceExpectedEndAt = requestedExpectedEnd || addMinutesToLocalIso(nextAttendanceStartAt, durationMin);
         }
       }
-      if (status === 'completed' && current.status !== 'completed') {
-        res.status(409).json({ error: 'Finalize pelo atendimento para salvar o prontuário e registrar o recebimento.' });
-        return;
+      if (status === 'completed' && isStudioWorkflow) {
+        if (!nextAttendanceStartAt) {
+          nextAttendanceStartAt = normalizeLocalDateTimeIso(current.start_time) || getClinicLocalNowIso();
+        }
+        if (!nextAttendanceEndAt) {
+          nextAttendanceEndAt = getClinicLocalNowIso();
+        }
       }
 
       const targetIds: Array<{ id: string; status: string; occurrence_id?: string | null }> = (() => {
@@ -1195,7 +1250,7 @@ export class AppointmentController {
         return [{ id: String(id), status: current.status, occurrence_id: current.occurrence_id }];
       })();
 
-      const updateStmt = db.prepare(`UPDATE appointments SET status = ?, attendance_status = CASE WHEN ? = 'cancelled' THEN 'cancelled' ELSE attendance_status END, cancellation_reason = CASE WHEN ? = 'cancelled' THEN ? ELSE cancellation_reason END, cancellation_reason_category = CASE WHEN ? = 'cancelled' THEN ? ELSE cancellation_reason_category END, cancelled_by = CASE WHEN ? = 'cancelled' THEN ? ELSE cancelled_by END, cancelled_at = CASE WHEN ? = 'cancelled' THEN datetime('now') ELSE cancelled_at END, clinical_module = COALESCE(?, NULLIF(NULLIF(clinical_module, 'ZemdaBody'), 'Zemda360')), profession_id = COALESCE(?, profession_id), attendance_start_at = COALESCE(?, attendance_start_at), attendance_expected_end_at = COALESCE(?, attendance_expected_end_at), updated_at = datetime('now') WHERE id = ? AND tenant_id = ?`);
+      const updateStmt = db.prepare(`UPDATE appointments SET status = ?, attendance_status = CASE WHEN ? = 'cancelled' THEN 'cancelled' ELSE attendance_status END, cancellation_reason = CASE WHEN ? = 'cancelled' THEN ? ELSE cancellation_reason END, cancellation_reason_category = CASE WHEN ? = 'cancelled' THEN ? ELSE cancellation_reason_category END, cancelled_by = CASE WHEN ? = 'cancelled' THEN ? ELSE cancelled_by END, cancelled_at = CASE WHEN ? = 'cancelled' THEN datetime('now') ELSE cancelled_at END, clinical_module = COALESCE(?, NULLIF(NULLIF(clinical_module, 'ZemdaBody'), 'Zemda360')), profession_id = COALESCE(?, profession_id), attendance_start_at = COALESCE(?, attendance_start_at), attendance_expected_end_at = COALESCE(?, attendance_expected_end_at), attendance_end_at = COALESCE(?, attendance_end_at), updated_at = datetime('now') WHERE id = ? AND tenant_id = ?`);
 
       for (const target of targetIds) {
         updateStmt.run(
@@ -1204,6 +1259,7 @@ export class AppointmentController {
           target.id === id ? (resolvedProfessionId || null) : null,
           target.id === id ? nextAttendanceStartAt : null,
           target.id === id ? nextAttendanceExpectedEndAt : null,
+          target.id === id ? nextAttendanceEndAt : null,
           target.id, tenantId
         );
         if (tenantId && target.id === id && (status === 'in_progress' || status === 'completed')) {
@@ -1284,7 +1340,7 @@ export class AppointmentController {
         clinicalModule: clinicalModule || current.clinical_module || null,
         attendance_start_at: nextAttendanceStartAt,
         attendance_expected_end_at: nextAttendanceExpectedEndAt,
-        attendance_end_at: current.attendance_end_at || null
+        attendance_end_at: nextAttendanceEndAt || current.attendance_end_at || null
       });
     } catch (err: any) {
       console.error('[AppointmentController.updateStatus] Erro:', err);
@@ -2203,8 +2259,13 @@ export class AppointmentController {
         res.status(400).json({ error: 'Campos obrigatórios: patientId, professionalId, serviceId, startTime e endTime.' });
         return;
       }
-      if (!validMeetingUrl(meeting_url) || !validMeetingUrl(rawDriveUrl) || !['presential', 'online', 'home'].includes(modality)) {
-        res.status(400).json({ error: 'Modalidade ou link HTTPS inválido.' });
+      const rawModality = req.body?.modality;
+      if (rawModality !== undefined && !['presential', 'online', 'home'].includes(rawModality)) {
+        res.status(400).json({ error: 'Não foi possível confirmar esta modalidade. Revise sua escolha e tente novamente.' });
+        return;
+      }
+      if (!validMeetingUrl(meeting_url) || !validMeetingUrl(rawDriveUrl)) {
+        res.status(400).json({ error: 'Link HTTPS inválido.' });
         return;
       }
       if (req.user?.role === 'professional') {
@@ -2223,19 +2284,27 @@ export class AppointmentController {
       }
 
       const serviceRow = db.prepare(`
-        SELECT id, name, price, duration_minutes, professional_id,
+        SELECT id, name, price, duration_minutes, professional_id, modality,
                COALESCE(service_kind, 'individual') as service_kind,
-               default_capacity, COALESCE(allow_recurrence, 1) as allow_recurrence, clinical_module
+               default_capacity, COALESCE(allow_recurrence, 1) as allow_recurrence,
+               allowed_recurrence_frequencies_json, default_recurrence_frequency,
+               service_domain, clinical_module
         FROM services WHERE id = ? AND tenant_id = ? AND active = 1
       `).get(serviceId, tenantId) as any;
       if (!serviceRow) {
         res.status(404).json({ error: 'Serviço não encontrado ou inativo nesta clínica.' });
         return;
       }
-      if (Number(serviceRow.allow_recurrence) === 0) {
-        res.status(400).json({ code: 'RECURRENCE_NOT_ALLOWED', error: 'Este serviço não está configurado para permitir recorrência.' });
+      const effectiveModality = rawModality !== undefined
+        ? String(rawModality)
+        : resolveConcreteModality({ serviceModality: serviceRow.modality, allowHome: true });
+
+      const recValidation = validateServiceRecurrenceFrequency(serviceRow, recurrence?.frequency);
+      if (!recValidation.valid) {
+        res.status(400).json({ code: recValidation.code, error: recValidation.error });
         return;
       }
+      const freq = recValidation.frequency;
 
       const profRow = db.prepare('SELECT id, name, profession_id FROM professionals WHERE id = ? AND tenant_id = ? AND active = 1').get(professionalId, tenantId) as any;
       if (!profRow) {
@@ -2259,12 +2328,6 @@ export class AppointmentController {
         return;
       }
       const agreedAmount = Math.round(rawPrice * 100) / 100;
-
-      const freq = String(recurrence?.frequency || 'weekly');
-      if (!['weekly', 'biweekly', 'monthly', 'custom_weekdays'].includes(freq)) {
-        res.status(400).json({ error: 'Frequência de recorrência inválida.' });
-        return;
-      }
       const endDate = recurrence?.endDate ? String(recurrence.endDate).slice(0, 10) : undefined;
       const maxOccurrences = recurrence?.maxOccurrences !== undefined ? Number(recurrence.maxOccurrences) : undefined;
       if (!endDate && (!maxOccurrences || maxOccurrences <= 0)) {
@@ -2346,7 +2409,7 @@ export class AppointmentController {
           isGroupService ? null : patientId,
           isGroupService ? 'group' : 'individual',
           serviceRow.name || 'Série recorrente',
-          modality || 'presential',
+          effectiveModality,
           freq,
           JSON.stringify(Array.isArray(recurrence?.weekdays) ? recurrence.weekdays : []),
           startClock,
@@ -2375,16 +2438,24 @@ export class AppointmentController {
           let occurrenceId: string | null = null;
           let isFirstEnrollment = true;
           if (isGroupService) {
+            const matchedSch = db.prepare(`
+              SELECT id FROM class_schedules
+              WHERE tenant_id = ? AND service_id = ? AND professional_id = ? AND day_of_week = ?
+                AND start_time = ? AND end_time = ? AND active = 1
+              LIMIT 1
+            `).get(tenantId, serviceId, professionalId, getDayOfWeekFromYmd(d), startClock.slice(0, 5), endClock.slice(0, 5)) as { id: string } | undefined;
+
             const occ = resolveOrCreateGroupOccurrenceTx({
               tenantId,
               serviceId,
               serviceName: serviceRow.name || 'Turma',
               professionalId,
               roomId: roomId || null,
+              classScheduleId: matchedSch?.id || null,
               startTime: sIso,
               endTime: eIso,
               defaultCapacity,
-              modality: modality || 'presential',
+              modality: effectiveModality,
               seriesId,
               patientId
             });
@@ -2425,7 +2496,7 @@ export class AppointmentController {
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)
           `).run(
             apptId, tenantId, apptNumber, patientId, professionalId, serviceId,
-            roomId || null, sIso, eIso, modality,
+            roomId || null, sIso, eIso, effectiveModality,
             typeof meeting_url === 'string' ? meeting_url.trim() || null : null,
             typeof rawDriveUrl === 'string' ? rawDriveUrl.trim() || null : null,
             patientNotes || null, internalNotes || null, insuranceId || null,
@@ -2520,7 +2591,11 @@ export class AppointmentController {
       });
     } catch (err: any) {
       console.error('[AppointmentController.createRecurring] Erro:', err);
-      res.status(500).json({ error: 'Erro ao criar agendamentos recorrentes' });
+      const safeError = sanitizeBookingErrorMessage(err, 'Erro ao criar agendamentos recorrentes');
+      res.status(err?.status || 500).json({
+        error: safeError,
+        ...(err?.code ? { code: err.code } : {})
+      });
     }
   }
 }

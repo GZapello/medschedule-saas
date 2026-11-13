@@ -1,0 +1,146 @@
+[
+  {
+    "mode": "assessment",
+    "scroll": 320,
+    "width": 320,
+    "errors": []
+  },
+  {
+    "mode": "template",
+    "scroll": 320,
+    "width": 320,
+    "errors": []
+  },
+  {
+    "mode": "workout",
+    "scroll": 320,
+    "width": 320,
+    "errors": []
+  },
+  {
+    "mode": "library",
+    "scroll": 320,
+    "width": 320,
+    "errors": []
+  },
+  {
+    "mode": "comparison",
+    "scroll": 320,
+    "width": 320,
+    "errors": []
+  },
+  {
+    "mode": "profile",
+    "scroll": 377,
+    "width": 320,
+    "errors": []
+  },
+  {
+    "mode": "view",
+    "scroll": 320,
+    "width": 320,
+    "errors": []
+  },
+  {
+    "mode": "report",
+    "scroll": 320,
+    "width": 320,
+    "errors": []
+  },
+  {
+    "mode": "assessment",
+    "scroll": 1366,
+    "width": 1366,
+    "errors": []
+  },
+  {
+    "mode": "template",
+    "scroll": 1366,
+    "width": 1366,
+    "errors": []
+  },
+  {
+    "mode": "workout",
+    "scroll": 1366,
+    "width": 1366,
+    "errors": []
+  },
+  {
+    "mode": "library",
+    "scroll": 1366,
+    "width": 1366,
+    "errors": []
+  },
+  {
+    "mode": "comparison",
+    "scroll": 1366,
+    "width": 1366,
+    "errors": []
+  },
+  {
+    "mode": "profile",
+    "scroll": 1366,
+    "width": 1366,
+    "errors": []
+  },
+  {
+    "mode": "view",
+    "scroll": 1366,
+    "width": 1366,
+    "errors": []
+  },
+  {
+    "mode": "report",
+    "scroll": 1366,
+    "width": 1366,
+    "errors": []
+  },
+  {
+    "mode": "assessment",
+    "scroll": 1920,
+    "width": 1920,
+    "errors": []
+  },
+  {
+    "mode": "template",
+    "scroll": 1920,
+    "width": 1920,
+    "errors": []
+  },
+  {
+    "mode": "workout",
+    "scroll": 1920,
+    "width": 1920,
+    "errors": []
+  },
+  {
+    "mode": "library",
+    "scroll": 1920,
+    "width": 1920,
+    "errors": []
+  },
+  {
+    "mode": "comparison",
+    "scroll": 1920,
+    "width": 1920,
+    "errors": []
+  },
+  {
+    "mode": "profile",
+    "scroll": 1920,
+    "width": 1920,
+    "errors": []
+  },
+  {
+    "mode": "view",
+    "scroll": 1920,
+    "width": 1920,
+    "errors": []
+  },
+  {
+    "mode": "report",
+    "scroll": 1920,
+    "width": 1920,
+    "errors": []
+  }
+]

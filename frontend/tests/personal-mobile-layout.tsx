@@ -1,0 +1,53 @@
+import React from 'react';
+import {createRoot} from 'react-dom/client';
+import {ToastProvider} from '../src/context/ToastContext';
+import {AuthProvider} from '../src/context/AuthContext';
+import {ApiClient} from '../src/api/client';
+import {PersonalAssessmentModal} from '../src/components/personal/PersonalAssessmentModal';
+import {PersonalTemplateBuilder} from '../src/components/personal/PersonalTemplateBuilder';
+import {PersonalWorkoutBuilder} from '../src/components/personal/PersonalWorkoutBuilder';
+import {PersonalExerciseLibraryModal} from '../src/components/personal/PersonalExerciseLibraryModal';
+import {PersonalAssessmentComparisonModal} from '../src/components/personal/PersonalAssessmentComparisonModal';
+import {PersonalStudentProfile} from '../src/components/personal/PersonalStudentProfile';
+import {PersonalPdfExportModal} from '../src/components/personal/PersonalPdfExportModal';
+import {ZemdaPersonalView} from '../src/components/personal/ZemdaPersonalView';
+const student:any={id:'fixture',name:'Mariana Aparecida de Albuquerque Silva',full_name:'Mariana Aparecida de Albuquerque Silva',birth_date:'1996-01-01',anthropometric_sex:'female',status:'active',created_at:'2026-01-01'};
+const ex:any={id:'fixture-exercise',name:'Agachamento com halteres e amplitude controlada',muscle_group:'Quadríceps',equipment:'Halteres',category:'strength',is_active:1,is_custom:1,sets:3,reps:'10 a 12',load:'15 kg',rest_seconds:60,tempo:'3010',technique:'Direta',photo_url:'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect width="80" height="80" fill="%23a7f3d0"/></svg>',video_url:'https://www.youtube.com/watch?v=dQw4w9WgXcQ'};
+if(new URLSearchParams(location.search).has('media'))ex.photo_url='/fixture-media.svg';
+const workout:any={id:'workout',patient_id:'fixture',title:'Fortalecimento completo de membros inferiores e estabilizadores',division:'A',structure_type:'ABC',exercises:[ex,{...ex,id:'second',name:'Elevação de quadril unilateral com apoio'}],notes:'Manter amplitude confortável e execução controlada durante toda a sequência.',created_at:'2026-01-01'};
+const template:any={id:'template',title:'Condicionamento físico e fortalecimento progressivo para iniciantes',structure_type:'ABC',description:'Modelo completo de fortalecimento com atenção ao controle de movimento, descanso entre séries e progressão individualizada.',workouts:[workout],created_at:'2026-01-01'};
+const history:any[]=[{id:'first',assessment_date:'2026-01-01',weight:70,height:165,bmi:25.7,body_fat_percentage:25},{id:'latest',assessment_date:'2026-10-01',weight:68,height:165,bmi:25,body_fat_percentage:23}];
+(window as any).__writes=[];
+ApiClient.get=async(url:string):Promise<any>=>{
+ if(url.endsWith('/report-data'))return {assessment:history[1],student,professional:{name:'Profissional de teste'},evolution_history:history};
+ if(url==='/v1/clinics/current')return {id:'test',name:'Clínica de teste'};
+ if(url==='/v1/auth/me')return {user:{id:'tester',name:'Teste',role:'clinic_admin'},tenant:{id:'test',name:'Clínica de teste'}};
+ if(url.includes('/compare/'))return {current_assessment:history[1],previous_assessment:history[0],metrics:[],photos:[],tav_comparison:{current:{value:null},previous:{value:null}}};
+ if(url.includes('/exercises'))return {exercises:[ex]};
+ if(url.includes('/templates'))return {templates:[template]};
+ if(url.includes('/workouts/'))return {workout,exercises:workout.exercises};
+ if(url.includes('/assessments'))return {assessments:history};
+ if(url.includes('/evolution'))return {history:[]};
+ if(url.includes('/photos'))return {photos:[]};
+ if(url.includes('/logs'))return {logs:[]};
+ if(url.includes('/records'))return {records:[]};
+ if(url.includes('/attendance'))return {};
+ if(url.includes('/students/fixture'))return {student,workouts:[workout]};
+ if(url.includes('/students')||url.includes('/patients'))return {students:[student],patients:[student]};
+ return {};
+};
+ApiClient.post=ApiClient.put=async(url:string,body:any):Promise<any>=>{
+ if(url.endsWith('/preview'))return {values:{},classifications:{}};
+ (window as any).__writes.push({url,body});return {id:'saved',success:true};
+};
+const noop=()=>{};
+const mode=new URLSearchParams(location.search).get('mode');
+function Fixture(){
+const [saved,setSaved]=React.useState<any>(null);
+const [savedTemplate,setSavedTemplate]=React.useState<any>(null);
+(window as any).__editTemplate=()=>setSavedTemplate({...((window as any).__writes.findLast((w:any)=>w.url==='/v1/personal/templates')?.body||{}),id:'saved-template'});
+(window as any).__reopen=()=>setSaved({...((window as any).__writes.findLast((w:any)=>w.url==='/v1/personal/assessments')?.body||{}),id:'reopened'});
+const content=mode==='report'?<PersonalPdfExportModal isOpen onClose={noop} student={student} workouts={[workout]} assessmentsList={history} latestAssessment={history[1]}/>:mode==='template'?<PersonalTemplateBuilder isOpen onClose={noop} onSaved={noop} templateToEdit={savedTemplate} initialTemplate={template}/>:mode==='workout'?<PersonalWorkoutBuilder isOpen onClose={noop} onSaved={noop} student={student} workoutToEdit={workout}/>:mode==='library'?<PersonalExerciseLibraryModal isOpen onClose={noop}/>:mode==='comparison'?<PersonalAssessmentComparisonModal isOpen onClose={noop} student={student} assessmentsList={history}/>:mode==='profile'?<PersonalStudentProfile studentId="fixture" onOpenNewWorkout={noop} onEditWorkout={noop} onOpenNewAssessment={noop} onOpenAIAssistant={noop}/>:mode==='view'?<ZemdaPersonalView/>:<PersonalAssessmentModal isOpen assessmentToEdit={saved} student={student} onClose={noop} onSaved={noop}/>;
+return <AuthProvider><ToastProvider>{content}</ToastProvider></AuthProvider>;
+}
+createRoot(document.getElementById('root')!).render(<Fixture/>);

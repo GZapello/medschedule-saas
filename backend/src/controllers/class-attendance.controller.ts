@@ -1,7 +1,11 @@
 import { Request, Response } from 'express';
+import { v4 as uuidv4 } from 'uuid';
 import { db } from '../config/database';
 import { logAudit } from '../middlewares/audit.middleware';
 import { PackageService } from '../services/package.service';
+import { syncReceptionStatusFromClinical } from './checkin.controller';
+import { getClinicLocalNowIso, normalizeLocalDateTimeIso } from '../services/document-context.service';
+import { shouldUseStudioPersonalWorkflow } from '../utils/establishment-context';
 
 const VALID_ATTENDANCE_STATUSES = ['pending', 'present', 'absent', 'cancelled'] as const;
 type AttendanceStatus = typeof VALID_ATTENDANCE_STATUSES[number];
@@ -531,6 +535,165 @@ export class ClassAttendanceController {
     } catch (err: any) {
       console.error('[ClassAttendanceController.getAttendanceReports] Erro:', err);
       res.status(500).json({ error: 'Erro ao gerar relatórios de frequência.' });
+    }
+  }
+
+  /**
+   * Conclui uma aula/ocorrência de Studio (individual ou coletiva) sem exigir prontuário/evolução clínica.
+   * POST /v1/classes/occurrences/:occurrenceId/finish
+   */
+  static finishOccurrence(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      const rawId = String(req.params.occurrenceId || '').trim();
+      const { attendanceOverrides, markPendingAsPresent = true } = req.body || {};
+
+      if (!tenantId || !req.user) {
+        res.status(401).json({ error: 'Autenticação necessária.' });
+        return;
+      }
+      if (!rawId) {
+        res.status(400).json({ error: 'Aula/ocorrência não informada.' });
+        return;
+      }
+
+      const isVirtualIndividual = rawId.startsWith('apt:');
+      const targetId = isVirtualIndividual ? rawId.slice(4) : rawId;
+
+      const rows = db.prepare(`
+        SELECT
+          a.id, a.patient_id, a.professional_id, a.status, a.start_time, a.end_time,
+          a.attendance_start_at, a.attendance_end_at, a.attendance_status, a.occurrence_id,
+          a.clinical_module, COALESCE(a.service_kind, 'individual') as service_kind,
+          s.service_kind as service_kind_srv, s.service_domain, s.clinical_module as service_clinical_module,
+          COALESCE(t.establishment_profile, 'clinic') as establishment_profile
+        FROM appointments a
+        LEFT JOIN tenants t ON t.id = a.tenant_id
+        LEFT JOIN services s ON s.id = a.service_id AND s.tenant_id = a.tenant_id
+        WHERE a.tenant_id = ?
+          AND a.status != 'cancelled'
+          AND ${isVirtualIndividual ? 'a.id = ?' : '(a.occurrence_id = ? OR a.id = ?)'}
+      `).all(...(isVirtualIndividual ? [tenantId, targetId] : [tenantId, targetId, targetId])) as any[];
+
+      if (rows.length === 0) {
+        res.status(404).json({ error: 'Aula/ocorrência não encontrada ou sem alunos ativos.' });
+        return;
+      }
+
+      const anyStudio = rows.some(r => shouldUseStudioPersonalWorkflow({
+        establishmentProfile: r.establishment_profile,
+        serviceDomain: r.service_domain,
+        serviceKind: r.service_kind_srv,
+        appointmentServiceKind: r.service_kind,
+        occurrenceId: r.occurrence_id,
+        appointmentClinicalModule: r.clinical_module,
+        serviceClinicalModule: r.service_clinical_module
+      }));
+
+      if (!anyStudio) {
+        res.status(409).json({
+          error: 'Atendimentos clínicos tradicionais devem ser concluídos pelo prontuário/evolução clínica.'
+        });
+        return;
+      }
+
+      if (req.user.role === 'professional') {
+        const ownProfIds = getOwnProfessionalIds(req.user.userId, tenantId);
+        const ownsClass = rows.some(r => ownProfIds.includes(r.professional_id));
+        if (!ownsClass) {
+          res.status(403).json({ error: 'Sem permissão para finalizar a aula de outro instrutor.' });
+          return;
+        }
+      }
+
+      const nowIso = getClinicLocalNowIso();
+      const userId = req.user.userId;
+      const actorName = req.user.name || req.user.email || 'Instrutor';
+      const overridesMap: Record<string, string> =
+        attendanceOverrides && typeof attendanceOverrides === 'object' ? attendanceOverrides : {};
+
+      const completedIds: string[] = [];
+      let realOccurrenceId: string | null = null;
+
+      db.transaction(() => {
+        for (const row of rows) {
+          if (row.occurrence_id) realOccurrenceId = row.occurrence_id;
+
+          let nextAttendance = String(row.attendance_status || 'pending');
+          const override = overridesMap[row.id];
+          if (override && VALID_ATTENDANCE_STATUSES.includes(override as AttendanceStatus)) {
+            nextAttendance = override;
+          } else if (nextAttendance === 'pending' && markPendingAsPresent) {
+            nextAttendance = 'present';
+          }
+
+          if (nextAttendance !== row.attendance_status && nextAttendance !== 'pending') {
+            db.prepare(`
+              UPDATE appointments
+              SET attendance_status = ?,
+                  attendance_marked_at = datetime('now'),
+                  attendance_marked_by = ?,
+                  updated_at = datetime('now')
+              WHERE id = ? AND tenant_id = ?
+            `).run(nextAttendance, userId, row.id, tenantId);
+
+            PackageService.handleAttendanceChangeTx({
+              tenantId,
+              appointmentId: row.id,
+              attendanceStatus: nextAttendance as AttendanceStatus,
+              createdBy: userId
+            });
+          }
+
+          const startStamp = row.attendance_start_at || normalizeLocalDateTimeIso(row.start_time) || nowIso;
+          const endStamp = row.attendance_end_at || nowIso;
+          if (row.status !== 'completed') {
+            db.prepare(`
+              UPDATE appointments
+              SET status = 'completed',
+                  attendance_start_at = COALESCE(attendance_start_at, ?),
+                  attendance_end_at = COALESCE(attendance_end_at, ?),
+                  updated_at = datetime('now')
+              WHERE id = ? AND tenant_id = ?
+            `).run(startStamp, endStamp, row.id, tenantId);
+
+            db.prepare(`
+              INSERT INTO appointment_status_history (id, appointment_id, previous_status, new_status, changed_by, reason)
+              VALUES (?, ?, ?, 'completed', ?, 'Aula de Studio finalizada no ZemdaPersonal')
+            `).run(uuidv4(), row.id, row.status, actorName);
+
+            syncReceptionStatusFromClinical(tenantId, row.id, 'completed');
+            completedIds.push(row.id);
+          }
+        }
+
+        if (realOccurrenceId) {
+          db.prepare(`
+            UPDATE class_occurrences
+            SET status = 'completed',
+                updated_at = datetime('now')
+            WHERE id = ? AND tenant_id = ?
+          `).run(realOccurrenceId, tenantId);
+        }
+      })();
+
+      logAudit(req, 'FINISH_STUDIO_CLASS', 'class_occurrences', realOccurrenceId || rawId, {
+        completedAppointments: completedIds.length,
+        totalStudents: rows.length
+      });
+
+      res.json({
+        message: rows.length > 1
+          ? `Aula coletiva finalizada com sucesso (${rows.length} aluno(s))!`
+          : 'Aula/sessão finalizada com sucesso!',
+        occurrenceId: realOccurrenceId || rawId,
+        completedCount: completedIds.length,
+        totalStudents: rows.length,
+        appointmentIds: completedIds
+      });
+    } catch (err: any) {
+      console.error('[ClassAttendanceController.finishOccurrence] Erro:', err);
+      res.status(500).json({ error: err?.message || 'Erro ao finalizar aula do Studio.' });
     }
   }
 }

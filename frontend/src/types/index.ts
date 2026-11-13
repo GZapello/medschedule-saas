@@ -216,9 +216,46 @@ export interface Service {
   reminder_unit?: 'DAYS' | 'MONTHS' | 'YEARS';
   clinical_module?: string;
   service_kind?: 'individual' | 'group';
+  service_domain?: 'clinical' | 'studio';
   default_capacity?: number | null;
   allow_recurrence?: number;
+  allowed_recurrence_frequencies?: ('weekly' | 'biweekly' | 'monthly' | 'custom_weekdays')[];
+  allowed_recurrence_frequencies_json?: string | null;
+  default_recurrence_frequency?: 'weekly' | 'biweekly' | 'monthly' | 'custom_weekdays' | null;
   modality_category?: string | null;
+  class_schedules?: ClassScheduleItem[];
+  weekly_schedule_summary?: WeeklyScheduleSummaryItem[];
+}
+
+export interface ClassScheduleItem {
+  id: string;
+  tenant_id: string;
+  service_id: string;
+  professional_id: string;
+  professional_name?: string;
+  professional_avatar?: string | null;
+  profession_name?: string | null;
+  room_id: string | null;
+  room_name?: string | null;
+  day_of_week: number;
+  start_time: string;
+  end_time: string;
+  capacity: number;
+  modality: 'presential' | 'online' | 'home';
+  effective_start_date: string;
+  effective_end_date: string | null;
+  active: number;
+  notes?: string | null;
+}
+
+export interface WeeklyScheduleSummaryItem {
+  weekdaysLabel: string;
+  timeRange: string;
+  professionalName: string;
+  capacity: number;
+  modality: 'presential' | 'online' | 'home';
+  roomName: string | null;
+  text: string;
 }
 
 export interface ServiceReminder {
@@ -340,6 +377,7 @@ export interface Appointment {
   cancellation_reason?: string;
   clinical_module?: string;
   service_clinical_module?: string;
+  service_domain?: 'clinical' | 'studio';
   payment_status?: 'paid' | 'pending' | 'partial' | 'cancelled';
   payment_amount?: number;
   payment_method?: string;

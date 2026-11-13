@@ -1,5 +1,6 @@
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
+import { resolveConcreteModality } from '../utils/modality-resolver';
 
 export type RecurrenceFrequency = 'weekly' | 'biweekly' | 'monthly' | 'custom_weekdays';
 
@@ -117,6 +118,7 @@ export function resolveOrCreateGroupOccurrenceTx(params: {
   modality: string;
   patientId: string;
   seriesId?: string | null;
+  classScheduleId?: string | null;
   explicitOccurrenceId?: string | null;
 }): GroupOccurrenceResolution {
   const {
@@ -131,10 +133,16 @@ export function resolveOrCreateGroupOccurrenceTx(params: {
     modality,
     patientId,
     seriesId,
+    classScheduleId,
     explicitOccurrenceId
   } = params;
 
   const cleanStart = startTime.slice(0, 16);
+  const concreteModality = resolveConcreteModality({
+    requestedModality: modality === 'both' ? undefined : modality,
+    serviceModality: modality || 'presential',
+    allowHome: true
+  });
 
   let existingOcc: any = null;
   if (explicitOccurrenceId) {
@@ -143,16 +151,34 @@ export function resolveOrCreateGroupOccurrenceTx(params: {
       WHERE id = ? AND tenant_id = ? AND status != 'cancelled'
     `).get(explicitOccurrenceId, tenantId);
   } else {
-    existingOcc = db.prepare(`
-      SELECT * FROM class_occurrences
-      WHERE tenant_id = ?
-        AND professional_id = ?
-        AND service_id = ?
-        AND REPLACE(substr(start_time, 1, 16), ' ', 'T') = ?
-        AND status != 'cancelled'
-      ORDER BY created_at ASC
-      LIMIT 1
-    `).get(tenantId, professionalId, serviceId, cleanStart);
+    if (classScheduleId) {
+      existingOcc = db.prepare(`
+        SELECT * FROM class_occurrences
+        WHERE tenant_id = ?
+          AND class_schedule_id = ?
+          AND REPLACE(substr(start_time, 1, 16), ' ', 'T') = ?
+          AND status != 'cancelled'
+        ORDER BY created_at ASC
+        LIMIT 1
+      `).get(tenantId, classScheduleId, cleanStart);
+    }
+    if (!existingOcc) {
+      existingOcc = db.prepare(`
+        SELECT * FROM class_occurrences
+        WHERE tenant_id = ?
+          AND professional_id = ?
+          AND service_id = ?
+          AND REPLACE(substr(start_time, 1, 16), ' ', 'T') = ?
+          AND status != 'cancelled'
+        ORDER BY created_at ASC
+        LIMIT 1
+      `).get(tenantId, professionalId, serviceId, cleanStart);
+    }
+  }
+
+  if (existingOcc && classScheduleId && !existingOcc.class_schedule_id) {
+    db.prepare(`UPDATE class_occurrences SET class_schedule_id = ?, updated_at = datetime('now') WHERE id = ? AND tenant_id = ?`)
+      .run(classScheduleId, existingOcc.id, tenantId);
   }
 
   if (existingOcc) {
@@ -265,18 +291,19 @@ export function resolveOrCreateGroupOccurrenceTx(params: {
   const capacity = Math.max(1, Number(defaultCapacity) || 1);
   db.prepare(`
     INSERT INTO class_occurrences (
-      id, tenant_id, series_id, service_id, professional_id, room_id,
+      id, tenant_id, series_id, class_schedule_id, service_id, professional_id, room_id,
       title, modality, start_time, end_time, capacity, status
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled')
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled')
   `).run(
     occId,
     tenantId,
     seriesId || null,
+    classScheduleId || null,
     serviceId,
     professionalId,
     roomId || null,
     serviceName,
-    modality || 'presential',
+    concreteModality,
     startTime,
     endTime,
     capacity

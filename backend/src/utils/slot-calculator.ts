@@ -93,7 +93,7 @@ export function calculateAvailableSlots(
   const serviceStmt = db.prepare(`
     SELECT COALESCE(ps.custom_duration, s.duration_minutes) AS duration_minutes,
            s.buffer_minutes, s.min_lead_time_hours, s.max_advance_days, s.active,
-           COALESCE(s.service_kind, 'individual') AS service_kind, s.default_capacity
+           s.modality, COALESCE(s.service_kind, 'individual') AS service_kind, s.default_capacity
     FROM services s LEFT JOIN professional_services ps ON ps.service_id = s.id AND ps.professional_id = ?
     WHERE s.id = ? AND s.tenant_id = ? AND s.active = 1
   `);
@@ -102,6 +102,7 @@ export function calculateAvailableSlots(
     buffer_minutes: number;
     min_lead_time_hours: number;
     max_advance_days: number;
+    modality?: string;
     service_kind: string;
     default_capacity: number | null;
   } | undefined;
@@ -110,6 +111,53 @@ export function calculateAvailableSlots(
 
   const isGroupService = service.service_kind === 'group';
   const defaultGroupCapacity = isGroupService ? Math.max(1, Number(service.default_capacity) || 1) : 1;
+
+  if (isGroupService) {
+    // Quando a aula coletiva possui grade semanal configurada (class_schedules), a disponibilidade segue exclusivamente a grade.
+    // Aulas coletivas legadas sem grade cadastrada preservam o cálculo pela escala do profissional.
+    const { ClassScheduleService } = require('../services/class-schedule.service') as typeof import('../services/class-schedule.service');
+    if (ClassScheduleService.hasAnySchedulesForService(tenantId, serviceId)) {
+      const extMap = new Map<string, Array<{ startMin: number; endMin: number }>>();
+      if (externalBusyIntervals && externalBusyIntervals.length > 0) {
+        extMap.set(professionalId, externalBusyIntervals);
+      }
+      const { slots: scheduledSlots } = ClassScheduleService.getScheduledSlotsForDate({
+        tenantId,
+        serviceRow: {
+          id: serviceId,
+          name: '',
+          duration_minutes: service.duration_minutes,
+          buffer_minutes: service.buffer_minutes,
+          min_lead_time_hours: service.min_lead_time_hours,
+          max_advance_days: service.max_advance_days,
+          modality: service.modality || 'presential',
+          service_kind: 'group',
+          default_capacity: service.default_capacity
+        },
+        dateStr,
+        professionalId,
+        externalBusyByProf: extMap,
+        patientId,
+        ignoreLeadTime: options?.ignoreLeadTime,
+        publicOnly: false,
+        mockNow
+      });
+      return scheduledSlots
+        .filter(s => !s.isFull)
+        .map(s => ({
+          time: s.time,
+          startTime: s.startTime,
+          endTime: s.endTime,
+          durationMinutes: s.durationMinutes,
+          bufferMinutes: s.bufferMinutes,
+          serviceKind: 'group',
+          capacity: s.capacity,
+          enrolledCount: s.enrolledCount,
+          remainingSpots: s.remainingSpots,
+          occurrenceId: s.occurrenceId
+        }));
+    }
+  }
 
   const duration = service.duration_minutes || 50;
   // Preserva 0 se o serviço não tiver buffer cadastrado

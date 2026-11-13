@@ -22,6 +22,8 @@ import { REGISTRATION_PROFESSIONS } from '../types/professions';
 import { createDefaultSchedules } from '../utils/schedule-defaults';
 import { findNextAvailableDate } from '../utils/slot-calculator';
 import { PackageService } from '../services/package.service';
+import { ClassScheduleService, buildWeeklyScheduleSummary } from '../services/class-schedule.service';
+import { parseServiceRecurrenceConfig, resolveServiceDomain } from '../utils/establishment-context';
 
 
 
@@ -1483,6 +1485,8 @@ export class TenantController {
         SELECT s.id, s.name, s.description, s.specialty_id, s.modality, s.price, s.duration_minutes,
                s.professional_id, COALESCE(s.service_kind, 'individual') as service_kind,
                s.default_capacity, COALESCE(s.allow_recurrence, 1) as allow_recurrence,
+               s.allowed_recurrence_frequencies_json, s.default_recurrence_frequency,
+               s.service_domain, s.clinical_module,
                s.modality_category, spec.name as specialty_name
         FROM services s LEFT JOIN specialties spec ON spec.id = s.specialty_id
         WHERE s.tenant_id = ? AND s.active = 1 AND EXISTS (
@@ -1513,13 +1517,58 @@ export class TenantController {
           next_available
         };
       });
-      const packages = PackageService.isStudioCompatible(resolved.id)
+      const isStudioCompat = PackageService.isStudioCompatible(resolved.id);
+      const establishmentProfile = tenant?.establishment_profile || 'clinic';
+      const publicSchedulesByService = isStudioCompat
+        ? ClassScheduleService.listByTenantGrouped(resolved.id, { includeInactive: false, publicOnly: true })
+        : new Map();
+      const enrichedServices = (services as any[]).map(srv => {
+        const scheds = publicSchedulesByService.get(srv.id) || [];
+        const resolvedDomain = resolveServiceDomain({
+          establishmentProfile,
+          serviceDomain: srv.service_domain,
+          serviceKind: srv.service_kind,
+          clinicalModule: srv.clinical_module
+        });
+        if (!isStudioCompat) {
+          return {
+            ...srv,
+            service_kind: 'individual',
+            default_capacity: null,
+            service_domain: 'clinical',
+            class_schedules: [],
+            weekly_schedule_summary: []
+          };
+        }
+        const recCfg = parseServiceRecurrenceConfig(srv);
+        return {
+          ...srv,
+          service_domain: resolvedDomain,
+          allow_recurrence: recCfg.allowRecurrence ? 1 : 0,
+          allowed_recurrence_frequencies: recCfg.allowedFrequencies,
+          default_recurrence_frequency: recCfg.defaultFrequency,
+          class_schedules: scheds,
+          weekly_schedule_summary: buildWeeklyScheduleSummary(scheds)
+        };
+      });
+      const rawPackages = isStudioCompat
         ? PackageService.listCatalogPackages(resolved.id, { publicOnly: true })
         : [];
+      const packages = rawPackages.map((pkg: any) => ({
+        ...pkg,
+        items: (pkg.items || []).map((item: any) => {
+          const scheds = publicSchedulesByService.get(item.service_id) || [];
+          return {
+            ...item,
+            class_schedules: scheds,
+            weekly_schedule_summary: buildWeeklyScheduleSummary(scheds)
+          };
+        })
+      }));
       res.json({
         tenant,
         professionals: publicProfessionals,
-        services,
+        services: enrichedServices,
         packages
       });
     } catch (err: any) {

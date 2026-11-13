@@ -8,11 +8,21 @@ import { canOperate } from '../services/billing.service';
 import { NotificationService } from '../services/notification.service';
 import { GoogleCalendarService } from '../services/google-calendar.service';
 import { generateRecurrenceDates, resolveOrCreateGroupOccurrenceTx } from '../services/class-group.service';
+import { ClassScheduleService, buildWeeklyScheduleSummary, todayBrazilYmd, addDaysYmd } from '../services/class-schedule.service';
+import {
+  getAllowedConcreteModalities,
+  resolveConcreteModality,
+  sanitizeBookingErrorMessage
+} from '../utils/modality-resolver';
 import { resolveBookingTenant, publicBookingProfessional, professionalBookingService, validBookingDate } from '../utils/public-booking';
 import { calculateAvailableSlots } from '../utils/slot-calculator';
 import { bookingTime } from '../utils/booking-time';
 import { validateBrazilianPhone, normalizePhoneWithDDI } from '../utils/phone.utils';
 import { isPrimaryClinicalModule, resolveClinicalModule } from '../utils/clinical-module';
+import {
+  parseServiceRecurrenceConfig,
+  validateServiceRecurrenceFrequency
+} from '../utils/establishment-context';
 
 function getOwnProfessionalIds(userId: string, tenantId: string): string[] {
   const rows = db.prepare(`
@@ -416,7 +426,7 @@ export class PackageController {
 
   static async getPublicStudioSlots(req: Request, res: Response): Promise<void> {
     try {
-      const { tenantSlug, bookingSequence, serviceId, date, professionalId } = req.query;
+      const { tenantSlug, bookingSequence, serviceId, date, professionalId, includeUpcoming, startDate } = req.query;
       const tenant = resolveBookingTenant(tenantSlug, bookingSequence);
       if (!tenant || tenant.public_booking_enabled !== 1) {
         res.status(404).json({ error: 'Agendamento online indisponível.' });
@@ -428,14 +438,21 @@ export class PackageController {
         return;
       }
 
-      if (!serviceId || !validBookingDate(date)) {
-        res.status(400).json({ error: 'Informe um serviço válido e data no formato YYYY-MM-DD.' });
+      if (!serviceId) {
+        res.status(400).json({ error: 'Informe um serviço válido.' });
+        return;
+      }
+
+      if (date !== undefined && String(date).trim() !== '' && !validBookingDate(date)) {
+        res.status(400).json({ error: 'Informe uma data válida no formato YYYY-MM-DD.' });
         return;
       }
 
       const srv = db.prepare(`
         SELECT id, name, COALESCE(service_kind, 'individual') as service_kind, default_capacity,
-               duration_minutes, price, COALESCE(allow_recurrence, 1) as allow_recurrence, modality_category
+               duration_minutes, price, COALESCE(allow_recurrence, 1) as allow_recurrence,
+               allowed_recurrence_frequencies_json, default_recurrence_frequency,
+               modality, modality_category
         FROM services
         WHERE id = ? AND tenant_id = ? AND active = 1
       `).get(String(serviceId), tenant.id) as any;
@@ -445,69 +462,221 @@ export class PackageController {
         return;
       }
 
+      const recCfg = parseServiceRecurrenceConfig(srv);
+
       const reqProfId = typeof professionalId === 'string' && professionalId.trim() ? professionalId.trim() : 'any';
       const professionals = getLinkedPublicProfessionals(tenant.id, srv.id, reqProfId);
+      const allLinkedProfs = getLinkedPublicProfessionals(tenant.id, srv.id, 'any');
+      const allowedModalities = getAllowedConcreteModalities(srv.modality, true);
+      const wantDate = typeof date === 'string' && date.trim() ? date.trim() : null;
+      const wantUpcoming = !wantDate || includeUpcoming === '1' || includeUpcoming === 'true';
+
+      if (srv.service_kind === 'group') {
+        const weeklySchedules = ClassScheduleService.listForService(tenant.id, srv.id, {
+          includeInactive: false,
+          publicOnly: true
+        });
+        const weeklySummary = buildWeeklyScheduleSummary(weeklySchedules);
+
+        // Coleta instrutores envolvidos na grade + vinculados
+        const profIdsSet = new Set<string>(professionals.map(p => p.id));
+        for (const ws of weeklySchedules) {
+          if (reqProfId === 'any' || ws.professional_id === reqProfId) {
+            profIdsSet.add(ws.professional_id);
+          }
+        }
+        const profIds = Array.from(profIdsSet);
+
+        const extBusyByProfDate = new Map<string, Array<{ startMin: number; endMin: number }>>();
+        const targetDateBusyByProf = new Map<string, Array<{ startMin: number; endMin: number }>>();
+        if (wantDate && profIds.length > 0) {
+          for (const pid of profIds) {
+            try {
+              const busy = await GoogleCalendarService.getBusyIntervals(tenant.id, pid, wantDate);
+              const mapped = busy.map(b => ({ startMin: b.startMin, endMin: b.endMin }));
+              targetDateBusyByProf.set(pid, mapped);
+              extBusyByProfDate.set(`${pid}|${wantDate}`, mapped);
+            } catch {
+              // Falha externa nunca derruba a grade pública
+            }
+          }
+        }
+
+        let dayResult: {
+          slots: any[];
+          emptyReason: string | null;
+          weeklySchedules: any[];
+        } = {
+          slots: [],
+          emptyReason: null,
+          weeklySchedules
+        };
+
+        if (wantDate) {
+          dayResult = ClassScheduleService.getScheduledSlotsForDate({
+            tenantId: tenant.id,
+            serviceRow: srv,
+            dateStr: wantDate,
+            professionalId: reqProfId,
+            externalBusyByProf: targetDateBusyByProf,
+            publicOnly: true
+          });
+        }
+
+        const upcomingStart =
+          typeof startDate === 'string' && validBookingDate(startDate) ? startDate : todayBrazilYmd();
+        const upcomingSlots = wantUpcoming
+          ? ClassScheduleService.getUpcomingOccurrencesForService({
+              tenantId: tenant.id,
+              serviceRow: srv,
+              professionalId: reqProfId,
+              startDate: upcomingStart,
+              daysAhead: 21,
+              limit: 24,
+              externalBusyByProfAndDate: extBusyByProfDate,
+              publicOnly: true
+            })
+          : [];
+
+        const totalAvailable = dayResult.slots.filter(s => !s.isFull).length;
+
+        res.json({
+          date: wantDate,
+          serviceId: srv.id,
+          serviceKind: 'group',
+          serviceModality: srv.modality || 'presential',
+          allowedModalities,
+          defaultCapacity: srv.default_capacity || 1,
+          allowRecurrence: recCfg.allowRecurrence,
+          allowedRecurrenceFrequencies: recCfg.allowedFrequencies,
+          defaultRecurrenceFrequency: recCfg.defaultFrequency,
+          professionals: allLinkedProfs,
+          weeklySchedules,
+          weeklySummary,
+          totalAvailable,
+          slots: dayResult.slots,
+          upcomingSlots,
+          ...(wantDate && dayResult.slots.length === 0 ? { emptyReason: dayResult.emptyReason } : {}),
+          ...(!wantDate && upcomingSlots.length === 0
+            ? {
+                emptyReason:
+                  weeklySchedules.length === 0
+                    ? 'Esta aula coletiva ainda não possui horários cadastrados na grade semanal.'
+                    : 'Não há turmas com vagas disponíveis nos próximos dias.'
+              }
+            : {})
+        });
+        return;
+      }
 
       if (professionals.length === 0) {
         res.json({
-          date: String(date),
+          date: wantDate,
           serviceId: srv.id,
+          serviceKind: srv.service_kind,
+          serviceModality: srv.modality || 'presential',
+          allowedModalities,
           professionals: [],
+          weeklySchedules: [],
+          weeklySummary: [],
+          totalAvailable: 0,
           slots: [],
+          upcomingSlots: [],
           emptyReason: 'Nenhum instrutor com agenda pública habilitada está vinculado a esta modalidade.'
         });
         return;
       }
 
+      const defaultModality = allowedModalities.includes('presential')
+        ? 'presential'
+        : allowedModalities[0] || 'presential';
+
       const mergedSlots: Array<any> = [];
-      for (const prof of professionals) {
-        let externalBusy: Array<{ startMin: number; endMin: number }> = [];
-        try {
-          const busy = await GoogleCalendarService.getBusyIntervals(tenant.id, prof.id, String(date));
-          externalBusy = busy.map(b => ({ startMin: b.startMin, endMin: b.endMin }));
-        } catch {
-          externalBusy = [];
+      if (wantDate) {
+        for (const prof of professionals) {
+          let externalBusy: Array<{ startMin: number; endMin: number }> = [];
+          try {
+            const busy = await GoogleCalendarService.getBusyIntervals(tenant.id, prof.id, wantDate);
+            externalBusy = busy.map(b => ({ startMin: b.startMin, endMin: b.endMin }));
+          } catch {
+            externalBusy = [];
+          }
+
+          const profSlots = calculateAvailableSlots(
+            tenant.id,
+            prof.id,
+            srv.id,
+            wantDate,
+            undefined,
+            undefined,
+            externalBusy
+          );
+
+          for (const s of profSlots) {
+            mergedSlots.push({
+              ...s,
+              date: wantDate,
+              classScheduleId: null,
+              endTimeClock: s.endTime.slice(11, 16),
+              professionalId: prof.id,
+              professionalName: prof.name,
+              professionalAvatar: prof.photo_url || null,
+              professionName: prof.profession_name || 'Instrutor',
+              modality: defaultModality,
+              serviceModality: srv.modality || 'presential',
+              allowedModalities,
+              serviceKind: 'individual',
+              capacity: 1,
+              enrolledCount: 0,
+              remainingSpots: 1,
+              isFull: false,
+              statusLabel: 'Disponível'
+            });
+          }
         }
 
-        const profSlots = calculateAvailableSlots(
-          tenant.id,
-          prof.id,
-          srv.id,
-          String(date),
-          undefined,
-          undefined,
-          externalBusy
-        );
-
-        for (const s of profSlots) {
-          mergedSlots.push({
-            ...s,
-            professionalId: prof.id,
-            professionalName: prof.name,
-            professionalAvatar: prof.photo_url || null,
-            professionName: prof.profession_name || 'Instrutor'
-          });
-        }
+        mergedSlots.sort((a, b) => {
+          if (a.time !== b.time) return a.time.localeCompare(b.time);
+          const remA = a.remainingSpots ?? 1;
+          const remB = b.remainingSpots ?? 1;
+          if (remB !== remA) return remB - remA;
+          return String(a.professionalName).localeCompare(String(b.professionalName));
+        });
       }
 
-      mergedSlots.sort((a, b) => {
-        if (a.time !== b.time) return a.time.localeCompare(b.time);
-        const remA = a.remainingSpots ?? 1;
-        const remB = b.remainingSpots ?? 1;
-        if (remB !== remA) return remB - remA;
-        return String(a.professionalName).localeCompare(String(b.professionalName));
-      });
+      const upcomingStart =
+        typeof startDate === 'string' && validBookingDate(startDate) ? startDate : todayBrazilYmd();
+      const upcomingSlots = wantUpcoming
+        ? ClassScheduleService.getUpcomingOccurrencesForService({
+            tenantId: tenant.id,
+            serviceRow: srv,
+            professionalId: reqProfId,
+            startDate: upcomingStart,
+            daysAhead: 14,
+            limit: 20,
+            publicOnly: true
+          })
+        : [];
 
       res.json({
-        date: String(date),
+        date: wantDate,
         serviceId: srv.id,
         serviceKind: srv.service_kind,
+        serviceModality: srv.modality || 'presential',
+        allowedModalities,
         defaultCapacity: srv.default_capacity || 1,
-        allowRecurrence: Boolean(srv.allow_recurrence),
-        professionals,
+        allowRecurrence: recCfg.allowRecurrence,
+        allowedRecurrenceFrequencies: recCfg.allowedFrequencies,
+        defaultRecurrenceFrequency: recCfg.defaultFrequency,
+        professionals: allLinkedProfs,
+        weeklySchedules: [],
+        weeklySummary: [],
         totalAvailable: mergedSlots.length,
         slots: mergedSlots,
-        ...(mergedSlots.length === 0 ? { emptyReason: 'Não há horários ou vagas disponíveis para esta data. Experimente outro dia.' } : {})
+        upcomingSlots,
+        ...(wantDate && mergedSlots.length === 0
+          ? { emptyReason: 'Não há horários ou vagas disponíveis para esta data. Experimente outro dia.' }
+          : {})
       });
     } catch (err: any) {
       console.error('[PackageController.getPublicStudioSlots] Erro:', err);
@@ -515,7 +684,7 @@ export class PackageController {
     }
   }
 
-  static createPublicStudioBooking(req: Request, res: Response): void {
+  static async createPublicStudioBooking(req: Request, res: Response): Promise<void> {
     try {
       const {
         tenantSlug,
@@ -523,6 +692,8 @@ export class PackageController {
         mode, // 'service' | 'package'
         serviceId,
         professionalId,
+        classScheduleId,
+        modality,
         startTime,
         endTime,
         recurrence,
@@ -593,22 +764,42 @@ export class PackageController {
         return newId;
       };
 
+      type ExpandedBookingItem = {
+        serviceRow: any;
+        preferredProfId: string;
+        classScheduleId: string | null;
+        requestedModality: unknown;
+        startIso: string;
+        endIso: string;
+      };
+
       const expandScheduleItem = (item: {
         serviceId: string;
         professionalId?: string;
+        classScheduleId?: string | null;
+        modality?: unknown;
         startTime: string;
         endTime?: string;
         recurrence?: { frequency?: string; weekdays?: number[]; maxOccurrences?: number; endDate?: string };
-      }): Array<{ serviceRow: any; preferredProfId: string; startIso: string; endIso: string }> => {
+      }): ExpandedBookingItem[] => {
         const srv = db.prepare(`
           SELECT id, name, price, duration_minutes, professional_id, COALESCE(service_kind, 'individual') as service_kind,
-                 default_capacity, COALESCE(allow_recurrence, 1) as allow_recurrence, modality, clinical_module
+                 default_capacity, COALESCE(allow_recurrence, 1) as allow_recurrence,
+                 allowed_recurrence_frequencies_json, default_recurrence_frequency,
+                 service_domain, modality, clinical_module
           FROM services WHERE id = ? AND tenant_id = ? AND active = 1
         `).get(item.serviceId, tenant.id) as any;
 
         if (!srv) {
           throw Object.assign(new Error('Serviço selecionado não está ativo neste estabelecimento.'), { status: 400 });
         }
+
+        // Valida preventivamente a escolha de modalidade se explícita no payload
+        resolveConcreteModality({
+          serviceModality: srv.modality,
+          requestedModality: item.modality,
+          allowHome: true
+        });
 
         const normStart = bookingTime(item.startTime);
         if (!normStart || !validBookingDate(normStart.slice(0, 10))) {
@@ -625,12 +816,11 @@ export class PackageController {
 
         let dates: string[] = [startDate];
         if (item.recurrence && (item.recurrence.maxOccurrences || item.recurrence.endDate)) {
-          if (!srv.allow_recurrence) {
-            throw Object.assign(new Error(`O serviço "${srv.name}" não permite recorrência automática pelo link público.`), { status: 400 });
+          const recValidation = validateServiceRecurrenceFrequency(srv, item.recurrence.frequency);
+          if (!recValidation.valid) {
+            throw Object.assign(new Error(recValidation.error), { status: 400, code: recValidation.code });
           }
-          const freq = ['weekly', 'biweekly', 'monthly', 'custom_weekdays'].includes(String(item.recurrence.frequency || 'weekly'))
-            ? String(item.recurrence.frequency || 'weekly')
-            : 'weekly';
+          const freq = recValidation.frequency;
           const cappedMax = item.recurrence.maxOccurrences ? Math.min(24, Math.max(1, Number(item.recurrence.maxOccurrences))) : undefined;
           dates = generateRecurrenceDates({
             startDate,
@@ -644,22 +834,95 @@ export class PackageController {
         return dates.map(d => ({
           serviceRow: srv,
           preferredProfId,
+          classScheduleId: item.classScheduleId ? String(item.classScheduleId).trim() : null,
+          requestedModality: item.modality,
           startIso: `${d}T${startClock}`,
           endIso: `${d}T${computedEndClock}`
         }));
       };
 
-      const resolveConcreteProfessionalForSlot = (srvId: string, preferredProfId: string, startIso: string, endIso: string): string => {
-        const candidates = getLinkedPublicProfessionals(tenant.id, srvId, preferredProfId);
-        const dateStr = startIso.slice(0, 10);
-        for (const prof of candidates) {
-          if (!publicBookingProfessional(tenant.id, prof.id) || !professionalBookingService(tenant.id, prof.id, srvId)) continue;
-          const slots = calculateAvailableSlots(tenant.id, prof.id, srvId, dateStr);
-          if (slots.some(s => s.startTime === startIso && s.endTime === endIso)) {
-            return prof.id;
+      const prefetchExternalBusy = async (items: ExpandedBookingItem[]): Promise<Map<string, Array<{ startMin: number; endMin: number }>>> => {
+        const busyMap = new Map<string, Array<{ startMin: number; endMin: number }>>();
+        const seenPairs = new Set<string>();
+        for (const item of items) {
+          const dateStr = item.startIso.slice(0, 10);
+          const profIds = new Set<string>();
+          for (const p of getLinkedPublicProfessionals(tenant.id, item.serviceRow.id, item.preferredProfId)) {
+            profIds.add(p.id);
+          }
+          if (item.serviceRow.service_kind === 'group') {
+            const scheds = ClassScheduleService.listForService(tenant.id, item.serviceRow.id, {
+              includeInactive: false,
+              publicOnly: true
+            });
+            for (const s of scheds) {
+              if (item.preferredProfId === 'any' || s.professional_id === item.preferredProfId) {
+                profIds.add(s.professional_id);
+              }
+            }
+          }
+          for (const pid of profIds) {
+            const key = `${pid}|${dateStr}`;
+            if (seenPairs.has(key)) continue;
+            seenPairs.add(key);
+            try {
+              const busy = await GoogleCalendarService.getBusyIntervals(tenant.id, pid, dateStr);
+              busyMap.set(key, busy.map(b => ({ startMin: b.startMin, endMin: b.endMin })));
+            } catch {
+              busyMap.set(key, []);
+            }
           }
         }
-        throw Object.assign(new Error(`Horário indisponível em ${dateStr} às ${startIso.slice(11, 16)}. Escolha outro horário ou data.`), {
+        return busyMap;
+      };
+
+      const resolvePublicSlotTx = (
+        item: ExpandedBookingItem,
+        studentId: string,
+        extBusyMap: Map<string, Array<{ startMin: number; endMin: number }>>
+      ): {
+        professionalId: string;
+        classScheduleId: string | null;
+        roomId: string | null;
+        capacity: number;
+        modality: 'presential' | 'online' | 'home';
+      } => {
+        if (item.serviceRow.service_kind === 'group') {
+          return ClassScheduleService.validatePublicGroupSlotTx({
+            tenantId: tenant.id,
+            serviceRow: item.serviceRow,
+            preferredProfId: item.preferredProfId,
+            classScheduleId: item.classScheduleId,
+            startIso: item.startIso,
+            endIso: item.endIso,
+            requestedModality: item.requestedModality,
+            externalBusyByProfAndDate: extBusyMap,
+            patientId: studentId
+          });
+        }
+
+        const concreteModality = resolveConcreteModality({
+          serviceModality: item.serviceRow.modality,
+          requestedModality: item.requestedModality,
+          allowHome: true
+        });
+        const candidates = getLinkedPublicProfessionals(tenant.id, item.serviceRow.id, item.preferredProfId);
+        const dateStr = item.startIso.slice(0, 10);
+        for (const prof of candidates) {
+          if (!publicBookingProfessional(tenant.id, prof.id) || !professionalBookingService(tenant.id, prof.id, item.serviceRow.id)) continue;
+          const extBusy = extBusyMap.get(`${prof.id}|${dateStr}`);
+          const slots = calculateAvailableSlots(tenant.id, prof.id, item.serviceRow.id, dateStr, undefined, undefined, extBusy);
+          if (slots.some(s => s.startTime === item.startIso && s.endTime === item.endIso)) {
+            return {
+              professionalId: prof.id,
+              classScheduleId: null,
+              roomId: null,
+              capacity: 1,
+              modality: concreteModality
+            };
+          }
+        }
+        throw Object.assign(new Error(`Horário indisponível em ${dateStr} às ${item.startIso.slice(11, 16)}. Escolha outro horário ou data.`), {
           status: 409,
           code: 'SLOT_UNAVAILABLE'
         });
@@ -680,10 +943,12 @@ export class PackageController {
         }
 
         const rawSchedules = Array.isArray(schedules) ? schedules : [];
-        const expandedSlots: Array<{ serviceRow: any; preferredProfId: string; startIso: string; endIso: string }> = [];
+        const expandedSlots: ExpandedBookingItem[] = [];
         for (const sch of rawSchedules) {
           expandedSlots.push(...expandScheduleItem(sch));
         }
+
+        const extBusyMap = await prefetchExternalBusy(expandedSlots);
 
         const result = db.transaction(() => {
           const resolvedStudentId = resolveOrCreatePublicStudentTx();
@@ -716,11 +981,14 @@ export class PackageController {
                 code: 'PATIENT_APPOINTMENT_CONFLICT'
               });
             }
-            const concreteProfId = resolveConcreteProfessionalForSlot(item.serviceRow.id, item.preferredProfId, item.startIso, item.endIso);
+
+            const resolvedSlot = resolvePublicSlotTx(item, resolvedStudentId, extBusyMap);
+            const concreteProfId = resolvedSlot.professionalId;
+            const concreteModality = resolvedSlot.modality;
             const profMeta = db.prepare(`SELECT name, profession_id FROM professionals WHERE id = ? AND tenant_id = ?`).get(concreteProfId, tenant.id) as any;
 
             const isGroup = item.serviceRow.service_kind === 'group';
-            const capacity = isGroup ? Math.max(1, Number(item.serviceRow.default_capacity) || 1) : 1;
+            const capacity = isGroup ? resolvedSlot.capacity : 1;
 
             let occurrenceId: string | null = null;
             if (isGroup) {
@@ -729,11 +997,12 @@ export class PackageController {
                 serviceId: item.serviceRow.id,
                 serviceName: item.serviceRow.name,
                 professionalId: concreteProfId,
-                roomId: null,
+                roomId: resolvedSlot.roomId,
+                classScheduleId: resolvedSlot.classScheduleId,
                 startTime: item.startIso,
                 endTime: item.endIso,
                 defaultCapacity: capacity,
-                modality: item.serviceRow.modality || 'presential',
+                modality: concreteModality,
                 patientId: resolvedStudentId
               });
               occurrenceId = occ.occurrenceId;
@@ -768,7 +1037,7 @@ export class PackageController {
               item.serviceRow.id,
               item.startIso,
               item.endIso,
-              item.serviceRow.modality || 'presential',
+              concreteModality,
               studentNotes,
               clinicalModule,
               profMeta?.profession_id || null,
@@ -805,6 +1074,7 @@ export class PackageController {
               serviceName: item.serviceRow.name,
               professionalId: concreteProfId,
               professionalName: profMeta?.name || 'Instrutor',
+              modality: concreteModality,
               startTime: item.startIso,
               endTime: item.endIso
             });
@@ -841,10 +1111,14 @@ export class PackageController {
       const expandedServiceSlots = expandScheduleItem({
         serviceId: String(serviceId),
         professionalId: professionalId ? String(professionalId) : 'any',
+        classScheduleId: classScheduleId ? String(classScheduleId) : null,
+        modality,
         startTime: String(startTime),
         endTime: endTime ? String(endTime) : undefined,
         recurrence
       });
+
+      const extBusyMap = await prefetchExternalBusy(expandedServiceSlots);
 
       const bookedResult = db.transaction(() => {
         const resolvedStudentId = resolveOrCreatePublicStudentTx();
@@ -852,43 +1126,7 @@ export class PackageController {
         let seq = (countRow?.c || 0) + 1;
         const year = new Date().getFullYear();
 
-        const seriesId = expandedServiceSlots.length > 1 ? 'ser-' + uuidv4().slice(0, 8) : null;
-        if (seriesId && expandedServiceSlots.length > 1) {
-          const first = expandedServiceSlots[0];
-          const last = expandedServiceSlots[expandedServiceSlots.length - 1];
-          const firstProf = resolveConcreteProfessionalForSlot(first.serviceRow.id, first.preferredProfId, first.startIso, first.endIso);
-          db.prepare(`
-            INSERT INTO class_series (
-              id, tenant_id, service_id, professional_id, patient_id, service_kind, title,
-              modality, frequency, weekdays_json, start_time_hhmm, duration_minutes, start_date, end_date,
-              max_occurrences, capacity, unit_price, status, created_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 'online_booking')
-          `).run(
-            seriesId,
-            tenant.id,
-            first.serviceRow.id,
-            firstProf,
-            resolvedStudentId,
-            first.serviceRow.service_kind === 'group' ? 'group' : 'individual',
-            first.serviceRow.name,
-            first.serviceRow.modality || 'presential',
-            String(recurrence?.frequency || 'weekly'),
-            JSON.stringify(Array.isArray(recurrence?.weekdays) ? recurrence.weekdays : []),
-            first.startIso.slice(11, 16),
-            Number(first.serviceRow.duration_minutes || 50),
-            first.startIso.slice(0, 10),
-            last.startIso.slice(0, 10),
-            expandedServiceSlots.length,
-            first.serviceRow.service_kind === 'group' ? Math.max(1, Number(first.serviceRow.default_capacity) || 1) : 1,
-            Number(first.serviceRow.price || 0)
-          );
-        }
-
-        const createdList: any[] = [];
-        for (const slotItem of expandedServiceSlots) {
-          const concreteProfId = resolveConcreteProfessionalForSlot(slotItem.serviceRow.id, slotItem.preferredProfId, slotItem.startIso, slotItem.endIso);
-          const profMeta = db.prepare(`SELECT name, profession_id FROM professionals WHERE id = ? AND tenant_id = ?`).get(concreteProfId, tenant.id) as any;
-
+        const resolvedSlots = expandedServiceSlots.map(slotItem => {
           const patientConflict = db.prepare(`
             SELECT id FROM appointments
             WHERE tenant_id = ? AND patient_id = ? AND status != 'cancelled'
@@ -900,9 +1138,51 @@ export class PackageController {
               code: 'PATIENT_APPOINTMENT_CONFLICT'
             });
           }
+          return {
+            slotItem,
+            resolvedSlot: resolvePublicSlotTx(slotItem, resolvedStudentId, extBusyMap)
+          };
+        });
+
+        const seriesId = resolvedSlots.length > 1 ? 'ser-' + uuidv4().slice(0, 8) : null;
+        if (seriesId && resolvedSlots.length > 1) {
+          const first = resolvedSlots[0];
+          const last = resolvedSlots[resolvedSlots.length - 1];
+          db.prepare(`
+            INSERT INTO class_series (
+              id, tenant_id, service_id, professional_id, patient_id, service_kind, title,
+              modality, frequency, weekdays_json, start_time_hhmm, duration_minutes, start_date, end_date,
+              max_occurrences, capacity, unit_price, status, created_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 'online_booking')
+          `).run(
+            seriesId,
+            tenant.id,
+            first.slotItem.serviceRow.id,
+            first.resolvedSlot.professionalId,
+            resolvedStudentId,
+            first.slotItem.serviceRow.service_kind === 'group' ? 'group' : 'individual',
+            first.slotItem.serviceRow.name,
+            first.resolvedSlot.modality,
+            String(recurrence?.frequency || 'weekly'),
+            JSON.stringify(Array.isArray(recurrence?.weekdays) ? recurrence.weekdays : []),
+            first.slotItem.startIso.slice(11, 16),
+            Number(first.slotItem.serviceRow.duration_minutes || 50),
+            first.slotItem.startIso.slice(0, 10),
+            last.slotItem.startIso.slice(0, 10),
+            resolvedSlots.length,
+            first.slotItem.serviceRow.service_kind === 'group' ? first.resolvedSlot.capacity : 1,
+            Number(first.slotItem.serviceRow.price || 0)
+          );
+        }
+
+        const createdList: any[] = [];
+        for (const { slotItem, resolvedSlot } of resolvedSlots) {
+          const concreteProfId = resolvedSlot.professionalId;
+          const concreteModality = resolvedSlot.modality;
+          const profMeta = db.prepare(`SELECT name, profession_id FROM professionals WHERE id = ? AND tenant_id = ?`).get(concreteProfId, tenant.id) as any;
 
           const isGroup = slotItem.serviceRow.service_kind === 'group';
-          const capacity = isGroup ? Math.max(1, Number(slotItem.serviceRow.default_capacity) || 1) : 1;
+          const capacity = isGroup ? resolvedSlot.capacity : 1;
           let occurrenceId: string | null = null;
           if (isGroup) {
             const occ = resolveOrCreateGroupOccurrenceTx({
@@ -910,11 +1190,12 @@ export class PackageController {
               serviceId: slotItem.serviceRow.id,
               serviceName: slotItem.serviceRow.name,
               professionalId: concreteProfId,
-              roomId: null,
+              roomId: resolvedSlot.roomId,
+              classScheduleId: resolvedSlot.classScheduleId,
               startTime: slotItem.startIso,
               endTime: slotItem.endIso,
               defaultCapacity: capacity,
-              modality: slotItem.serviceRow.modality || 'presential',
+              modality: concreteModality,
               seriesId,
               patientId: resolvedStudentId
             });
@@ -948,7 +1229,7 @@ export class PackageController {
             slotItem.serviceRow.id,
             slotItem.startIso,
             slotItem.endIso,
-            slotItem.serviceRow.modality || 'presential',
+            concreteModality,
             studentNotes,
             clinicalModule,
             profMeta?.profession_id || null,
@@ -989,6 +1270,7 @@ export class PackageController {
             serviceName: slotItem.serviceRow.name,
             professionalId: concreteProfId,
             professionalName: profMeta?.name || 'Instrutor',
+            modality: concreteModality,
             startTime: slotItem.startIso,
             endTime: slotItem.endIso,
             price: unitPrice
@@ -1012,8 +1294,12 @@ export class PackageController {
       });
     } catch (err: any) {
       console.error('[PackageController.createPublicStudioBooking] Erro:', err);
+      const safeMessage = sanitizeBookingErrorMessage(
+        err,
+        'Não foi possível concluir a reserva. Revise sua escolha e tente novamente.'
+      );
       res.status(err?.status || 500).json({
-        error: err?.error || err?.message || 'Erro ao concluir reserva no Studio.',
+        error: safeMessage,
         ...(err?.code ? { code: err.code } : {})
       });
     }

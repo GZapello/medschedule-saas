@@ -12,6 +12,15 @@ import { NewPatientModal } from '../patients/NewPatientModal';
 import { NewServiceModal } from '../services/NewServiceModal';
 import { NewInsuranceModal } from '../settings/NewInsuranceModal';
 import { NewRoomModal } from '../services/NewRoomModal';
+import {
+  buildActiveStudioSessionFromAppointment,
+  parseServiceRecurrenceConfig,
+  RECURRENCE_FREQUENCY_LABELS,
+  RecurrenceFrequency,
+  shouldRedirectAppointmentToZemdaPersonal,
+  supportsStudioFeatures,
+  writeActiveStudioSession
+} from '../../utils/establishmentContext';
 
 export function parseAppointmentPrice(input: string): number | null {
   const text = input.trim();
@@ -37,7 +46,8 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
   initialPrefill
 }) => {
   const { showToast } = useToast();
-  const { clientTermLabel, isProfessional, currentUser, isClinicAdmin, isReceptionist, hasPermission } = useAuth();
+  const { clientTermLabel, isProfessional, currentUser, currentTenant, isClinicAdmin, isReceptionist, hasPermission } = useAuth();
+  const isStudioCompatible = supportsStudioFeatures(currentTenant?.establishment_profile);
   const canPerformClinicalAttendance = (isProfessional || isClinicAdmin) && !isReceptionist;
   const canManageServices = isClinicAdmin || hasPermission('manage_services');
   const canManageRooms = isClinicAdmin || hasPermission('manage_services');
@@ -311,7 +321,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
   }, [isOpen, serviceId, services]);
 
   useEffect(() => {
-    if (!isOpen || !patientId) {
+    if (!isOpen || !patientId || !isStudioCompatible) {
       setPatientPackages([]);
       setPackageContractId('');
       return;
@@ -412,13 +422,26 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
     [services, serviceId]
   );
 
+  const serviceRecurrenceConfig = useMemo(
+    () => parseServiceRecurrenceConfig(selectedServiceObj),
+    [selectedServiceObj]
+  );
+
   const canEditSelectedService = isClinicAdmin && Boolean(selectedServiceObj);
 
   useEffect(() => {
-    if (selectedServiceObj?.allow_recurrence === 0 && isRecurring) {
-      setIsRecurring(false);
+    if (!serviceRecurrenceConfig.allowRecurrence || serviceRecurrenceConfig.allowedFrequencies.length === 0) {
+      if (isRecurring) setIsRecurring(false);
+      return;
     }
-  }, [selectedServiceObj?.allow_recurrence]);
+    const nextDefault =
+      serviceRecurrenceConfig.defaultFrequency ||
+      serviceRecurrenceConfig.allowedFrequencies[0] ||
+      'weekly';
+    setRecurrenceFrequency(prev =>
+      serviceRecurrenceConfig.allowedFrequencies.includes(prev) ? prev : nextDefault
+    );
+  }, [serviceId, serviceRecurrenceConfig]);
 
   const activeServiceDuration = useMemo(() => {
     const selectedService = services.find(s => s.id === serviceId);
@@ -611,6 +634,29 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
       });
 
       if (isRetroactive && canPerformClinicalAttendance) {
+        const enrichedCreatedAppt = {
+          ...createdAppt,
+          service_kind: selectedServiceObj?.service_kind || createdAppt?.service_kind,
+          service_domain: selectedServiceObj?.service_domain || createdAppt?.service_domain,
+          service_name: selectedServiceObj?.name || createdAppt?.service_name,
+          service_clinical_module: selectedServiceObj?.clinical_module || createdAppt?.service_clinical_module
+        };
+        const isStudioRetro = shouldRedirectAppointmentToZemdaPersonal({
+          establishmentProfile: currentTenant?.establishment_profile,
+          serviceDomain: enrichedCreatedAppt.service_domain,
+          serviceKind: enrichedCreatedAppt.service_kind,
+          occurrenceId: enrichedCreatedAppt.occurrence_id,
+          appointmentClinicalModule: enrichedCreatedAppt.clinical_module,
+          serviceClinicalModule: enrichedCreatedAppt.service_clinical_module
+        });
+        if (isStudioRetro) {
+          writeActiveStudioSession(buildActiveStudioSessionFromAppointment(enrichedCreatedAppt, currentTenant?.id));
+          enrichedCreatedAppt.__studioRedirect = true;
+          showToast('Sessão registrada! Abrindo ZemdaPersonal...', 'success');
+          onSuccess(enrichedCreatedAppt);
+          onClose();
+          return;
+        }
         try {
           sessionStorage.setItem('zemda_open_retroactive_appt', JSON.stringify(createdAppt));
         } catch (_) {}
@@ -1209,7 +1255,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
             </div>
           )}
 
-          {!isRetroactive && selectedServiceObj?.allow_recurrence !== 0 && (
+          {!isRetroactive && serviceRecurrenceConfig.allowRecurrence && serviceRecurrenceConfig.allowedFrequencies.length > 0 && (
             <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <label className="inline-flex items-center gap-2 font-semibold text-slate-700 cursor-pointer select-none">
@@ -1219,6 +1265,15 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                     onChange={e => {
                       const next = e.target.checked;
                       setIsRecurring(next);
+                      if (next) {
+                        const preferred =
+                          serviceRecurrenceConfig.defaultFrequency ||
+                          serviceRecurrenceConfig.allowedFrequencies[0] ||
+                          'weekly';
+                        if (!serviceRecurrenceConfig.allowedFrequencies.includes(recurrenceFrequency)) {
+                          setRecurrenceFrequency(preferred);
+                        }
+                      }
                       if (next && date && recurrenceWeekdays.length === 0) {
                         const [yy, mm, dd] = date.split('-').map(Number);
                         const wd = new Date(Date.UTC(yy, (mm || 1) - 1, dd || 1)).getUTCDay();
@@ -1238,14 +1293,19 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                     <div>
                       <label className="block font-semibold text-slate-700 mb-0.5 text-[11px]">Frequência</label>
                       <select
-                        value={recurrenceFrequency}
-                        onChange={e => setRecurrenceFrequency(e.target.value as any)}
+                        value={
+                          serviceRecurrenceConfig.allowedFrequencies.includes(recurrenceFrequency)
+                            ? recurrenceFrequency
+                            : (serviceRecurrenceConfig.defaultFrequency || serviceRecurrenceConfig.allowedFrequencies[0])
+                        }
+                        onChange={e => setRecurrenceFrequency(e.target.value as RecurrenceFrequency)}
                         className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white"
                       >
-                        <option value="weekly">Semanal</option>
-                        <option value="biweekly">Quinzenal</option>
-                        <option value="monthly">Mensal</option>
-                        <option value="custom_weekdays">Dias específicos da semana</option>
+                        {serviceRecurrenceConfig.allowedFrequencies.map(freq => (
+                          <option key={freq} value={freq}>
+                            {RECURRENCE_FREQUENCY_LABELS[freq]}
+                          </option>
+                        ))}
                       </select>
                     </div>
                     <div>

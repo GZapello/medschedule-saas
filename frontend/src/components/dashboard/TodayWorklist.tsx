@@ -7,6 +7,7 @@ import { ServiceReminder } from '../../types';
 import { UniversalWhatsAppModal } from '../common/UniversalWhatsAppModal';
 import { WhatsAppIcon } from '../common/WhatsAppReminderModal';
 import { buildServiceReminderWhatsAppMessage, isValidPhoneNumber, openManualWhatsApp } from '../../utils/phone.utils';
+import { isStudioProfile } from '../../utils/establishmentContext';
 
 export function TodayWorklist({ data, onNavigate, onPatient, onUpdate }: {
   data: any; onNavigate: (view: string) => void; onPatient: (id: string) => void; onUpdate?: () => void;
@@ -18,7 +19,7 @@ export function TodayWorklist({ data, onNavigate, onPatient, onUpdate }: {
   const [isSavingResolution, setIsSavingResolution] = useState<boolean>(false);
   const { currentTenant, isClinicAdmin, hasCapability, hasPermission } = useAuth();
   const { showToast } = useToast();
-  const canViewExams = isClinicAdmin || hasCapability('CORE_EXAMS_RECEIVED') || hasCapability('CORE_EXAM_REQUEST') || hasPermission('view_exams');
+  const canViewExams = !isStudioProfile(currentTenant?.establishment_profile) && (isClinicAdmin || hasCapability('CORE_EXAMS_RECEIVED') || hasCapability('CORE_EXAM_REQUEST') || hasPermission('view_exams'));
 
   const [localReminders, setLocalReminders] = useState<ServiceReminder[]>([]);
   const [postponingId, setPostponingId] = useState<string | null>(null);

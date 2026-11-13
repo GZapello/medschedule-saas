@@ -30,6 +30,9 @@ export function migrateStudioImprovements(rawDb: DatabaseSync): void {
   addColIfMissing('services', 'default_capacity', 'INTEGER');
   addColIfMissing('services', 'allow_recurrence', 'INTEGER NOT NULL DEFAULT 1');
   addColIfMissing('services', 'modality_category', 'TEXT');
+  addColIfMissing('services', 'service_domain', 'TEXT');
+  addColIfMissing('services', 'allowed_recurrence_frequencies_json', 'TEXT');
+  addColIfMissing('services', 'default_recurrence_frequency', 'TEXT');
 
   // 3. Vínculo de turma/ocorrência, recorrência e frequência individual em appointments
   addColIfMissing('appointments', 'series_id', 'TEXT');
@@ -311,9 +314,47 @@ export function migrateStudioImprovements(rawDb: DatabaseSync): void {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_pkg_ledger_appt_action
       ON package_usage_ledger(contract_id, appointment_id, action)
       WHERE appointment_id IS NOT NULL;
+
+    -- 8. Grade Semanal de Aulas Coletivas / Turmas (desacoplada da agenda individual de alunos)
+    CREATE TABLE IF NOT EXISTS class_schedules (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      service_id TEXT NOT NULL,
+      professional_id TEXT NOT NULL,
+      room_id TEXT,
+      day_of_week INTEGER NOT NULL CHECK(day_of_week BETWEEN 0 AND 6),
+      start_time TEXT NOT NULL,
+      end_time TEXT NOT NULL,
+      capacity INTEGER NOT NULL DEFAULT 1,
+      modality TEXT NOT NULL DEFAULT 'presential' CHECK(modality IN ('presential', 'online', 'home')),
+      effective_start_date TEXT NOT NULL,
+      effective_end_date TEXT,
+      active INTEGER NOT NULL DEFAULT 1,
+      notes TEXT,
+      created_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE,
+      FOREIGN KEY (professional_id) REFERENCES professionals(id) ON DELETE CASCADE,
+      FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE SET NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_class_schedules_lookup
+      ON class_schedules(tenant_id, service_id, active, day_of_week, start_time);
+    CREATE INDEX IF NOT EXISTS idx_class_schedules_prof
+      ON class_schedules(tenant_id, professional_id, active, day_of_week);
   `);
 
   addColIfMissing('recurring_billing_plans', 'package_contract_id', 'TEXT');
+  addColIfMissing('class_occurrences', 'class_schedule_id', 'TEXT');
+  try {
+    rawDb.exec(`
+      CREATE INDEX IF NOT EXISTS idx_class_occ_schedule
+        ON class_occurrences(tenant_id, class_schedule_id, start_time);
+    `);
+  } catch (e) {
+    console.warn('[StudioMigration] Aviso ao criar idx_class_occ_schedule:', e);
+  }
 
   // 7. Profissão canônica "Instrutor" + modalidades (preservando prof-instrutor-pilates / pilates_instructor)
   try {

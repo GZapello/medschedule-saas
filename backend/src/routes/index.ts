@@ -12,6 +12,7 @@ import { TaxonomyController } from '../controllers/taxonomy.controller';
 import { TenantController } from '../controllers/tenant.controller';
 import { ProfessionalController } from '../controllers/professional.controller';
 import { ServiceController } from '../controllers/service.controller';
+import { ClassScheduleController } from '../controllers/class-schedule.controller';
 import { PatientController } from '../controllers/patient.controller';
 import { AppointmentController } from '../controllers/appointment.controller';
 import { SlotController } from '../controllers/slot.controller';
@@ -80,6 +81,7 @@ import { authMiddleware, onboardingGate, whatsappUpdateAuthMiddleware } from '..
 import { tenantMiddleware, requireTenant } from '../middlewares/tenant.middleware';
 import { requireRole, requirePermissionOrRole } from '../middlewares/rbac.middleware';
 import { requireCapability } from '../middlewares/capability.middleware';
+import { requireStudioEstablishment } from '../utils/establishment-context';
 
 const api = Router();
 mountBillingRoutes(api);
@@ -364,20 +366,25 @@ api.get('/v1/services', requireTenant, ServiceController.list);
 api.post('/v1/services', requireTenant, requirePermissionOrRole('manage_services', 'clinic_admin'), ServiceController.create);
 api.put('/v1/services/:id', requireTenant, requireRole('clinic_admin'), ServiceController.update);
 api.delete('/v1/services/:id', requireTenant, requireRole('clinic_admin'), ServiceController.delete);
+api.get('/v1/services/:serviceId/class-schedules', requireTenant, requireStudioEstablishment, ClassScheduleController.list);
+api.post('/v1/services/:serviceId/class-schedules', requireTenant, requireStudioEstablishment, requirePermissionOrRole('manage_services', 'clinic_admin'), ClassScheduleController.create);
+api.put('/v1/services/:serviceId/class-schedules/:scheduleId', requireTenant, requireStudioEstablishment, requirePermissionOrRole('manage_services', 'clinic_admin'), ClassScheduleController.update);
+api.patch('/v1/services/:serviceId/class-schedules/:scheduleId/status', requireTenant, requireStudioEstablishment, requirePermissionOrRole('manage_services', 'clinic_admin'), ClassScheduleController.toggleStatus);
+api.delete('/v1/services/:serviceId/class-schedules/:scheduleId', requireTenant, requireStudioEstablishment, requirePermissionOrRole('manage_services', 'clinic_admin'), ClassScheduleController.remove);
 api.get('/v1/rooms', requireTenant, ServiceController.listRooms);
 api.post('/v1/rooms', requireTenant, requirePermissionOrRole('manage_services', 'clinic_admin'), ServiceController.createRoom);
 
 // Pacotes de Serviços (Studios / Estabelecimentos Mistos)
-api.get('/v1/packages', requireTenant, PackageController.listCatalog);
-api.post('/v1/packages', requireTenant, requirePermissionOrRole('manage_services', 'clinic_admin'), PackageController.createPackage);
-api.put('/v1/packages/:id', requireTenant, requirePermissionOrRole('manage_services', 'clinic_admin'), PackageController.updatePackage);
-api.delete('/v1/packages/:id', requireTenant, requirePermissionOrRole('manage_services', 'clinic_admin'), PackageController.deactivatePackage);
+api.get('/v1/packages', requireTenant, requireStudioEstablishment, PackageController.listCatalog);
+api.post('/v1/packages', requireTenant, requireStudioEstablishment, requirePermissionOrRole('manage_services', 'clinic_admin'), PackageController.createPackage);
+api.put('/v1/packages/:id', requireTenant, requireStudioEstablishment, requirePermissionOrRole('manage_services', 'clinic_admin'), PackageController.updatePackage);
+api.delete('/v1/packages/:id', requireTenant, requireStudioEstablishment, requirePermissionOrRole('manage_services', 'clinic_admin'), PackageController.deactivatePackage);
 
-api.get('/v1/package-contracts', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), PackageController.listContracts);
-api.post('/v1/package-contracts', requireTenant, requireRole('clinic_admin', 'receptionist'), PackageController.createContract);
-api.get('/v1/package-contracts/:id', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), PackageController.getContract);
-api.patch('/v1/package-contracts/:id/status', requireTenant, requireRole('clinic_admin', 'receptionist'), PackageController.updateContractStatus);
-api.get('/v1/patients/:patientId/packages', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), PackageController.listStudentContracts);
+api.get('/v1/package-contracts', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist', 'professional'), PackageController.listContracts);
+api.post('/v1/package-contracts', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist'), PackageController.createContract);
+api.get('/v1/package-contracts/:id', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist', 'professional'), PackageController.getContract);
+api.patch('/v1/package-contracts/:id/status', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist'), PackageController.updateContractStatus);
+api.get('/v1/patients/:patientId/packages', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist', 'professional'), PackageController.listStudentContracts);
 
 // Lembretes de Contato / Retorno por Serviço
 api.get('/v1/service-reminders', requireTenant, ServiceReminderController.list);
@@ -404,9 +411,10 @@ api.get('/v1/appointments/:id/communications', requireTenant, requireRole('clini
 api.get('/v1/whatsapp/status', requireTenant, InfobipController.getClientStatus);
 
 // Turmas, Ocorrências & Lista de Chamada / Frequência
-api.get('/v1/classes/occurrences', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), ClassAttendanceController.listOccurrences);
-api.get('/v1/classes/occurrences/:id/roster', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), ClassAttendanceController.getRoster);
-api.put('/v1/classes/occurrences/:occurrenceId/attendance/:appointmentId', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), ClassAttendanceController.markAttendance);
+api.get('/v1/classes/occurrences', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist', 'professional'), ClassAttendanceController.listOccurrences);
+api.get('/v1/classes/occurrences/:id/roster', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist', 'professional'), ClassAttendanceController.getRoster);
+api.put('/v1/classes/occurrences/:occurrenceId/attendance/:appointmentId', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist', 'professional'), ClassAttendanceController.markAttendance);
+api.post('/v1/classes/occurrences/:occurrenceId/finish', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'professional'), ClassAttendanceController.finishOccurrence);
 
 // Check-In de Pacientes & Fluxo de Recepção com Avisos aos Profissionais (Seção 2)
 api.get('/v1/checkin/settings', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), CheckInController.getSettings);
@@ -889,7 +897,7 @@ api.put('/v1/personal/periodizations/:id', requireTenant, requireRole('clinic_ad
 
 // Assistente IA ZemdaPersonal & Frequência/Relatórios do Studio
 api.post('/v1/personal/ai/assistant', requireTenant, requireRole('clinic_admin', 'professional'), PersonalAIController.askAssistant);
-api.get('/v1/personal/attendance-reports', requireTenant, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), ClassAttendanceController.getAttendanceReports);
+api.get('/v1/personal/attendance-reports', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'professional'), requireSharedPatientScope('ZemdaPersonal'), ClassAttendanceController.getAttendanceReports);
 
 // Encaminhamentos entre Profissionais da Clínica (Item 6)
 api.post('/v1/referrals', requireTenant, requireRole('clinic_admin', 'professional'), ReferralController.create);
@@ -909,13 +917,13 @@ api.post('/v1/payments', requireTenant, requireRole('clinic_admin', 'receptionis
 api.put('/v1/payments/:id/status', requireTenant, requireRole('clinic_admin', 'receptionist'), PaymentController.updateStatus);
 
 // Central de Cobranças & Mensalidades Recorrentes
-api.get('/v1/financial/collections/summary', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), BillingCenterController.getSummary);
-api.get('/v1/financial/collections', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), BillingCenterController.listCollections);
-api.post('/v1/financial/collections/:paymentId/mark-paid', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), BillingCenterController.markPaid);
-api.get('/v1/financial/recurring-plans', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), BillingCenterController.listRecurringPlans);
-api.post('/v1/financial/recurring-plans', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), BillingCenterController.createRecurringPlan);
-api.put('/v1/financial/recurring-plans/:id', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), BillingCenterController.updateRecurringPlan);
-api.post('/v1/financial/recurring-plans/generate', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), BillingCenterController.generateMonthlyBills);
+api.get('/v1/financial/collections/summary', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist', 'professional'), BillingCenterController.getSummary);
+api.get('/v1/financial/collections', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist', 'professional'), BillingCenterController.listCollections);
+api.post('/v1/financial/collections/:paymentId/mark-paid', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist', 'professional'), BillingCenterController.markPaid);
+api.get('/v1/financial/recurring-plans', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist', 'professional'), BillingCenterController.listRecurringPlans);
+api.post('/v1/financial/recurring-plans', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist', 'professional'), BillingCenterController.createRecurringPlan);
+api.put('/v1/financial/recurring-plans/:id', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist', 'professional'), BillingCenterController.updateRecurringPlan);
+api.post('/v1/financial/recurring-plans/generate', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist', 'professional'), BillingCenterController.generateMonthlyBills);
 
 // Contas a Pagar & Compras de Fornecedores
 api.get('/v1/accounts-payable', requireTenant, requireRole('clinic_admin', 'receptionist'), AccountsPayableController.list);

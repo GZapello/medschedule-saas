@@ -35,6 +35,7 @@ import {
 } from 'lucide-react';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
+import { ActiveStudioSession } from '../../utils/establishmentContext';
 import { Student, Workout, WorkoutTemplate } from './types';
 import { PersonalDashboard } from './PersonalDashboard';
 import { PersonalStudentProfile } from './PersonalStudentProfile';
@@ -171,6 +172,8 @@ interface ZemdaPersonalViewProps {
   onFinishConsultation?: () => void;
   onSelectStudent?: (studentId: string | null) => void;
   lockStudentContext?: boolean;
+  studioSession?: ActiveStudioSession | null;
+  onClearStudioSession?: () => void;
 }
 
 export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
@@ -178,7 +181,9 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
   initialAppointmentId,
   onFinishConsultation,
   onSelectStudent,
-  lockStudentContext = false
+  lockStudentContext = false,
+  studioSession = null,
+  onClearStudioSession
 }) => {
   const { showToast } = useToast();
   const { isZemda360, isZemdaBody } = useAuth();
@@ -207,8 +212,31 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
   const [openingFinish, setOpeningFinish] = useState(false);
   const [appointmentCompleted, setAppointmentCompleted] = useState(false);
   useEffect(() => { setFinishAppointment(null); setAppointmentCompleted(false); }, [initialAppointmentId, selectedStudentId]);
+  const finishStudioSessionDirectly = async () => {
+    if (!studioSession) return;
+    try {
+      setOpeningFinish(true);
+      const occKey = studioSession.occurrenceId || `apt:${studioSession.appointmentId}`;
+      await ApiClient.post(`/v1/classes/occurrences/${encodeURIComponent(occKey)}/finish`, {});
+      setAppointmentCompleted(true);
+      showToast('Sessão concluída com sucesso!', 'success');
+      window.dispatchEvent(new CustomEvent('zemda-appointment-updated'));
+      onClearStudioSession?.();
+      loadDashboard();
+      onFinishConsultation?.();
+    } catch (err: any) {
+      showToast(err?.message || 'Erro ao concluir sessão do Studio.', 'error');
+    } finally {
+      setOpeningFinish(false);
+    }
+  };
+
   const requestFinish = async () => {
     if (openingFinish || appointmentCompleted) return;
+    if (studioSession && (!selectedStudentId || studioSession.patientId === selectedStudentId)) {
+      await finishStudioSessionDirectly();
+      return;
+    }
     if (!selectedStudentId) { showToast('Selecione um aluno para finalizar o atendimento.', 'info'); return; }
     setOpeningFinish(true);
     try {
@@ -223,16 +251,28 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
   };
 
   // Abas principais
-  const [currentTab, setCurrentTab] = useState<'dashboard' | 'students' | 'exercises' | 'templates' | 'attendance' | 'calendar'>('dashboard');
+  const isGroupStudioSession = Boolean(
+    studioSession && (studioSession.serviceKind === 'group' || studioSession.occurrenceId)
+  );
+  const [currentTab, setCurrentTab] = useState<'dashboard' | 'students' | 'exercises' | 'templates' | 'attendance' | 'calendar'>(
+    isGroupStudioSession ? 'attendance' : 'dashboard'
+  );
 
   const tabScroll = useHorizontalTabScroll(currentTab);
   const { tabScrollProps } = tabScroll;
 
   useEffect(() => {
+    if (studioSession && (studioSession.serviceKind === 'group' || studioSession.occurrenceId)) {
+      setSelectedStudentId(null);
+      setCurrentTab('attendance');
+      return;
+    }
     if (initialStudentId !== undefined) {
       setSelectedStudentId(initialStudentId);
+    } else if (studioSession?.patientId) {
+      setSelectedStudentId(studioSession.patientId);
     }
-  }, [initialStudentId]);
+  }, [initialStudentId, studioSession?.appointmentId, studioSession?.occurrenceId, studioSession?.serviceKind, studioSession?.patientId]);
 
   const handleSelectStudent = (id: string | null) => {
     if ((lockStudentContext || initialAppointmentId) && id !== initialStudentId) {
@@ -769,6 +809,55 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
         </div>
       )}
 
+      {/* FAIXA COMPACTA DE SESSÃO ATIVA DE STUDIO */}
+      {studioSession && (
+        <div className="bg-emerald-50/95 border-b border-emerald-200 px-3.5 sm:px-6 py-2 shrink-0">
+          <div className="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-bold uppercase shrink-0">
+                Sessão em andamento
+              </span>
+              <span className="font-bold text-slate-900 truncate">
+                {studioSession.serviceName || 'Sessão / Aula Studio'}
+              </span>
+              {studioSession.serviceKind === 'group' || studioSession.occurrenceId ? (
+                <span className="text-[11px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full shrink-0">
+                  Turma Coletiva
+                </span>
+              ) : studioSession.patientName ? (
+                <span className="text-slate-600 truncate">
+                  • Aluno: <strong>{studioSession.patientName}</strong>
+                </span>
+              ) : null}
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {!appointmentCompleted && (
+                <button
+                  type="button"
+                  disabled={openingFinish}
+                  onClick={finishStudioSessionDirectly}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer disabled:opacity-60"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>{openingFinish ? 'Concluindo...' : 'Concluir Sessão / Aula'}</span>
+                </button>
+              )}
+              {onClearStudioSession && (
+                <button
+                  type="button"
+                  onClick={onClearStudioSession}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 font-semibold text-xs transition-colors cursor-pointer"
+                  title="Sair do contexto da sessão"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  <span>Fechar barra</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* CONTEÚDO PRINCIPAL */}
       <div className="flex-1 pt-3 pb-5 px-3.5 sm:px-6 overflow-y-auto">
         <div className="max-w-6xl mx-auto space-y-6">
@@ -905,7 +994,17 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
 
           {/* CONTEÚDO: FREQUÊNCIA & RELATÓRIOS */}
           {currentTab === 'attendance' && (
-            <PersonalAttendanceReportsTab />
+            <PersonalAttendanceReportsTab
+              initialOccurrenceId={
+                studioSession && (studioSession.serviceKind === 'group' || studioSession.occurrenceId)
+                  ? (studioSession.occurrenceId || `apt:${studioSession.appointmentId}`)
+                  : null
+              }
+              onOccurrenceFinished={() => {
+                onClearStudioSession?.();
+                loadDashboard();
+              }}
+            />
           )}
 
           {/* CONTEÚDO: MODELOS DE TREINO (TEMPLATES) */}

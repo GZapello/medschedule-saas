@@ -48,13 +48,18 @@ import {
   PreConsultationAppointmentModal,
   PRE_CONSULTATION_BADGE_CONFIG
 } from '../pre-consultation/PreConsultationFormsModal';
+import {
+  buildActiveStudioSessionFromAppointment,
+  shouldRedirectAppointmentToZemdaPersonal,
+  writeActiveStudioSession
+} from '../../utils/establishmentContext';
 
 interface CalendarViewProps {
   onOpenNewAppointment: (prefill?: { date?: string; time?: string; professionalId?: string }) => void;
   onNavigate?: (view: string, subId?: string | null) => void;
 }
 
-export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment }) => {
+export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment, onNavigate }) => {
   const mobile = useMobileLayout();
   const [consentPatientId, setConsentPatientId] = useState<string | null>(null);
   const [isPreConsultLibraryOpen, setIsPreConsultLibraryOpen] = useState<boolean>(false);
@@ -557,6 +562,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                 setCurrentDate(new Date(y, m - 1, d, 12, 0, 0));
               }
             }
+            if (isStudioSessionAppointment(targetAppt)) {
+              redirectAppointmentToZemdaPersonal(targetAppt);
+              return;
+            }
             const autoModule = getModuleForProfession(auth);
             const chosenModule = targetAppt.service_clinical_module || targetAppt.clinical_module || (autoModule && autoModule !== 'general' ? autoModule : 'general');
             setActiveConsultationModule(chosenModule);
@@ -742,17 +751,64 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
     }
   };
 
+  const isStudioSessionAppointment = (appt: any) =>
+    shouldRedirectAppointmentToZemdaPersonal({
+      establishmentProfile: currentTenant?.establishment_profile,
+      serviceDomain: appt?.service_domain,
+      serviceKind: appt?.service_kind,
+      occurrenceId: appt?.occurrence_id,
+      appointmentClinicalModule: appt?.clinical_module,
+      serviceClinicalModule: appt?.service_clinical_module
+    });
+
+  const redirectAppointmentToZemdaPersonal = (appt: any) => {
+    writeActiveStudioSession(buildActiveStudioSessionFromAppointment(appt, currentTenant?.id));
+    const subId = appt?.service_kind === 'group' || appt?.occurrence_id ? null : (appt?.patient_id || null);
+    if (onNavigate) {
+      onNavigate('zemda-personal', subId);
+    } else {
+      window.dispatchEvent(new CustomEvent('zemda-navigate', { detail: { view: 'zemda-personal', subId } }));
+    }
+  };
+
+  const handleFinishStudioSession = async (appt: any) => {
+    try {
+      const occKey = appt?.occurrence_id || `apt:${appt?.id}`;
+      await ApiClient.post(`/v1/classes/occurrences/${occKey}/finish`, {});
+      showToast('Sessão concluída com sucesso!', 'success');
+      setSelectedAppt(null);
+      fetchCalendarData();
+      notifyAppointmentChange();
+    } catch (err: any) {
+      showToast(err?.message || 'Erro ao concluir sessão do Studio', 'error');
+    }
+  };
+
   const executeStartConsultation = async (appointment: Appointment, selectedModule?: string) => {
     if (isStartingConsultation) return;
     setIsStartingConsultation(true);
     try {
+      const studioRedirect = isStudioSessionAppointment(appointment);
       const payload: any = { status: 'in_progress' };
-      if (selectedModule) {
+      if (!studioRedirect && selectedModule) {
         payload.clinicalModule = selectedModule;
       }
       const statusRes = await ApiClient.put<any>(`/v1/appointments/${appointment.id}/status`, payload);
       const nextRealStart = statusRes?.attendance_start_at || appointment.attendance_start_at || null;
       const nextExpectedEnd = statusRes?.attendance_expected_end_at || appointment.attendance_expected_end_at || null;
+
+      if (studioRedirect) {
+        setAppointments(prev => (prev || []).map(a => a.id === appointment.id ? { ...a, status: 'in_progress' as any, attendance_start_at: nextRealStart, attendance_expected_end_at: nextExpectedEnd } : a));
+        setSelectedAppt(null);
+        setSelectingModuleAppt(null);
+        setActiveConsultationAppt(null);
+        showToast('Sessão iniciada no ZemdaPersonal!', 'success');
+        fetchCalendarData();
+        notifyAppointmentChange();
+        redirectAppointmentToZemdaPersonal(appointment);
+        return;
+      }
+
       const chosenModule = selectedModule || (appointment as any).service_clinical_module || (appointment as any).clinical_module || 'general';
       setAppointments(prev => (prev || []).map(a => a.id === appointment.id ? { ...a, status: 'in_progress' as any, clinical_module: chosenModule, attendance_start_at: nextRealStart, attendance_expected_end_at: nextExpectedEnd } : a));
       setActiveConsultationModule(chosenModule);
@@ -778,6 +834,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
     if (!canPerformClinicalAttendance) return;
     if (['completed', 'cancelled', 'no_show'].includes(appointment.status)) {
       showToast('Abra o prontuário para consultar um atendimento encerrado.', 'info');
+      return;
+    }
+
+    if (isStudioSessionAppointment(appointment)) {
+      executeStartConsultation(appointment);
       return;
     }
 
@@ -2160,6 +2221,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                           <button
                             type="button"
                             onClick={() => {
+                              if (isStudioSessionAppointment(selectedAppt)) {
+                                handleFinishStudioSession(selectedAppt);
+                                return;
+                              }
                               setFinishingAppt(selectedAppt);
                               setSelectedAppt(null);
                             }}

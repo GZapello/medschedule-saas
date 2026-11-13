@@ -60,7 +60,15 @@ function getDefaultDates() {
   return { start, end };
 }
 
-export const PersonalAttendanceReportsTab: React.FC = () => {
+interface PersonalAttendanceReportsTabProps {
+  initialOccurrenceId?: string | null;
+  onOccurrenceFinished?: (occurrenceId: string) => void;
+}
+
+export const PersonalAttendanceReportsTab: React.FC<PersonalAttendanceReportsTabProps> = ({
+  initialOccurrenceId,
+  onOccurrenceFinished
+}) => {
   const { showToast } = useToast();
   const { isClinicAdmin } = useAuth();
   const defaults = getDefaultDates();
@@ -79,7 +87,8 @@ export const PersonalAttendanceReportsTab: React.FC = () => {
   const [occurrences, setOccurrences] = useState<OccurrenceSummary[]>([]);
   const [loadingOccurrences, setLoadingOccurrences] = useState(false);
 
-  const [selectedOccKey, setSelectedOccKey] = useState<string | null>(null);
+  const [selectedOccKey, setSelectedOccKey] = useState<string | null>(initialOccurrenceId || null);
+  const [finishingOccurrence, setFinishingOccurrence] = useState(false);
   const [rosterData, setRosterData] = useState<{
     occurrenceId: string;
     serviceName: string;
@@ -103,6 +112,13 @@ export const PersonalAttendanceReportsTab: React.FC = () => {
     }
   }, [isClinicAdmin]);
 
+  useEffect(() => {
+    if (initialOccurrenceId) {
+      setSubTab('roster');
+      setSelectedOccKey(initialOccurrenceId);
+    }
+  }, [initialOccurrenceId]);
+
   const loadOccurrences = useCallback(async () => {
     try {
       setLoadingOccurrences(true);
@@ -115,7 +131,9 @@ export const PersonalAttendanceReportsTab: React.FC = () => {
       const res = await ApiClient.get<{ occurrences: OccurrenceSummary[] }>(`/v1/classes/occurrences?${qs.toString()}`);
       const list = res?.occurrences || [];
       setOccurrences(list);
-      if (list.length > 0 && (!selectedOccKey || !list.some(o => o.occurrence_key === selectedOccKey))) {
+      if (initialOccurrenceId) {
+        setSelectedOccKey(prev => prev || initialOccurrenceId);
+      } else if (list.length > 0 && (!selectedOccKey || !list.some(o => o.occurrence_key === selectedOccKey))) {
         setSelectedOccKey(list[0].occurrence_key);
       } else if (list.length === 0) {
         setSelectedOccKey(null);
@@ -126,7 +144,7 @@ export const PersonalAttendanceReportsTab: React.FC = () => {
     } finally {
       setLoadingOccurrences(false);
     }
-  }, [startDate, endDate, serviceFilter, professionalFilter, kindFilter]);
+  }, [startDate, endDate, serviceFilter, professionalFilter, kindFilter, initialOccurrenceId]);
 
   const loadReports = useCallback(async () => {
     try {
@@ -454,11 +472,48 @@ export const PersonalAttendanceReportsTab: React.FC = () => {
                           Turma · {rosterData.roster.filter(r => r.appointment_status !== 'cancelled').length}/{rosterData.capacity} vagas
                         </span>
                       )}
+                      {rosterData.roster.some(r => r.appointment_status !== 'cancelled') &&
+                        rosterData.roster
+                          .filter(r => r.appointment_status !== 'cancelled')
+                          .every(r => r.appointment_status === 'completed') && (
+                          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            Aula Concluída
+                          </span>
+                        )}
                     </div>
                     <p className="text-xs text-slate-500 mt-0.5">
                       {formatDateTime(rosterData.startTime)} • Instrutor: <strong>{rosterData.professionalName}</strong>
                     </p>
                   </div>
+                  {rosterData.roster.some(r => !['completed', 'cancelled', 'no_show'].includes(r.appointment_status)) && (
+                    <button
+                      type="button"
+                      disabled={finishingOccurrence}
+                      onClick={async () => {
+                        const targetOcc = rosterData.occurrenceId || selectedOccKey;
+                        if (!targetOcc || finishingOccurrence) return;
+                        try {
+                          setFinishingOccurrence(true);
+                          await ApiClient.post(`/v1/classes/occurrences/${encodeURIComponent(targetOcc)}/finish`, {});
+                          showToast('Aula concluída com sucesso!', 'success');
+                          const refreshed = await ApiClient.get<any>(`/v1/classes/occurrences/${encodeURIComponent(selectedOccKey || targetOcc)}/roster`);
+                          setRosterData(refreshed);
+                          loadOccurrences();
+                          loadReports();
+                          window.dispatchEvent(new CustomEvent('zemda-appointment-updated'));
+                          onOccurrenceFinished?.(targetOcc);
+                        } catch (err: any) {
+                          showToast(err?.message || 'Erro ao concluir aula.', 'error');
+                        } finally {
+                          setFinishingOccurrence(false);
+                        }
+                      }}
+                      className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-colors cursor-pointer disabled:opacity-60 shrink-0"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>{finishingOccurrence ? 'Concluindo...' : 'Finalizar Aula'}</span>
+                    </button>
+                  )}
                 </div>
 
                 <div className="space-y-2.5">

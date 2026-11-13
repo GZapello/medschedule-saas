@@ -1,0 +1,44 @@
+[
+  {
+    "mode": "template",
+    "scroll": 320,
+    "width": 320,
+    "errors": []
+  },
+  {
+    "mode": "template",
+    "scroll": 360,
+    "width": 360,
+    "errors": []
+  },
+  {
+    "mode": "template",
+    "scroll": 375,
+    "width": 375,
+    "errors": []
+  },
+  {
+    "mode": "template",
+    "scroll": 390,
+    "width": 390,
+    "errors": []
+  },
+  {
+    "mode": "template",
+    "scroll": 412,
+    "width": 412,
+    "errors": []
+  },
+  {
+    "mode": "template",
+    "scroll": 430,
+    "width": 430,
+    "errors": []
+  },
+  {
+    "mode": "template",
+    "scroll": 768,
+    "width": 768,
+    "errors": []
+  }
+]

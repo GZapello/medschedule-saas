@@ -4,6 +4,15 @@ import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '../middlewares/audit.middleware';
 import { getAvailableModulesForProfessional, isPrimaryClinicalModule } from '../utils/clinical-module';
+import { ClassScheduleService, buildWeeklyScheduleSummary } from '../services/class-schedule.service';
+import { PackageService } from '../services/package.service';
+import {
+  getTenantEstablishmentProfile,
+  normalizeRecurrenceConfigForSave,
+  parseServiceRecurrenceConfig,
+  resolveServiceDomain,
+  ServiceDomain
+} from '../utils/establishment-context';
 
 export class ServiceController {
   static list(req: Request, res: Response): void {
@@ -30,6 +39,9 @@ export class ServiceController {
           COALESCE(s.service_kind, 'individual') as service_kind,
           s.default_capacity,
           COALESCE(s.allow_recurrence, 1) as allow_recurrence,
+          s.allowed_recurrence_frequencies_json,
+          s.default_recurrence_frequency,
+          s.service_domain,
           s.modality_category,
           s.min_lead_time_hours, s.max_advance_days, s.cancellation_policy,
           s.reminder_enabled, s.reminder_value, s.reminder_unit,
@@ -53,8 +65,44 @@ export class ServiceController {
 
       query += ` ORDER BY COALESCE(p.name, 'zzz') ASC, s.name ASC`;
       const stmt = db.prepare(query);
-      const services = stmt.all(...params);
-      res.json(services);
+      const services = stmt.all(...params) as any[];
+      const establishmentProfile = getTenantEstablishmentProfile(tenantId);
+      const isStudioCompat = establishmentProfile === 'studio' || establishmentProfile === 'mixed';
+      const schedulesByService = isStudioCompat
+        ? ClassScheduleService.listByTenantGrouped(tenantId, { includeInactive: true })
+        : new Map();
+      const enriched = services.map(srv => {
+        const resolvedDomain = resolveServiceDomain({
+          establishmentProfile,
+          serviceDomain: srv.service_domain,
+          serviceKind: srv.service_kind,
+          clinicalModule: srv.clinical_module
+        });
+        if (!isStudioCompat) {
+          return {
+            ...srv,
+            service_kind: 'individual',
+            default_capacity: null,
+            service_domain: 'clinical',
+            allowed_recurrence_frequencies: undefined,
+            default_recurrence_frequency: null,
+            class_schedules: [],
+            weekly_schedule_summary: []
+          };
+        }
+        const schedules = schedulesByService.get(srv.id) || [];
+        const recConfig = parseServiceRecurrenceConfig(srv);
+        return {
+          ...srv,
+          service_domain: resolvedDomain,
+          allow_recurrence: recConfig.allowRecurrence ? 1 : 0,
+          allowed_recurrence_frequencies: recConfig.allowedFrequencies,
+          default_recurrence_frequency: recConfig.defaultFrequency,
+          class_schedules: schedules,
+          weekly_schedule_summary: buildWeeklyScheduleSummary(schedules)
+        };
+      });
+      res.json(enriched);
     } catch (err: any) {
       console.error('[ServiceController.list] Erro:', err);
       res.status(err.status || 500).json({ error: err.status ? err.message : 'Erro ao listar serviços' });
@@ -74,11 +122,45 @@ export class ServiceController {
         price, modality, minLeadTimeHours, maxAdvanceDays, cancellationPolicy,
         reminderEnabled, reminderValue, reminderUnit, clinicalModule,
         serviceKind, service_kind, defaultCapacity, default_capacity, allowRecurrence, allow_recurrence,
-        modalityCategory, modality_category
+        modalityCategory, modality_category,
+        serviceDomain, service_domain,
+        allowedRecurrenceFrequencies, allowed_recurrence_frequencies,
+        defaultRecurrenceFrequency, default_recurrence_frequency
       } = req.body;
 
-      const resolvedKind = (serviceKind || service_kind || 'individual') === 'group' ? 'group' : 'individual';
+      const establishmentProfile = getTenantEstablishmentProfile(tenantId);
+      const isStudioCompat = establishmentProfile === 'studio' || establishmentProfile === 'mixed';
+      const rawClassSchedules = Array.isArray(req.body?.classSchedules) ? req.body.classSchedules : [];
+      const rawKind = serviceKind ?? service_kind;
+      const resolvedKind = (rawKind || 'individual') === 'group' ? 'group' : 'individual';
       const rawCapacity = defaultCapacity !== undefined ? defaultCapacity : default_capacity;
+      const rawRequestedDomain = serviceDomain ?? service_domain;
+      const rawAllowedFreqs = allowedRecurrenceFrequencies !== undefined ? allowedRecurrenceFrequencies : allowed_recurrence_frequencies;
+      const rawDefaultFreq = defaultRecurrenceFrequency !== undefined ? defaultRecurrenceFrequency : default_recurrence_frequency;
+
+      if (!isStudioCompat) {
+        if (
+          resolvedKind === 'group' ||
+          (rawCapacity !== undefined && rawCapacity !== null && rawCapacity !== '') ||
+          rawClassSchedules.length > 0 ||
+          String(rawRequestedDomain || '').trim().toLowerCase() === 'studio' ||
+          (Array.isArray(rawAllowedFreqs) && rawAllowedFreqs.length > 0) ||
+          (rawDefaultFreq !== undefined && rawDefaultFreq !== null && String(rawDefaultFreq).trim() !== '')
+        ) {
+          res.status(400).json({
+            error: 'Aulas coletivas, capacidade de turma e recorrência avançada de Studio não estão disponíveis para Clínicas / Consultórios tradicionais.'
+          });
+          return;
+        }
+      }
+
+      if (establishmentProfile === 'studio' && String(rawRequestedDomain || '').trim().toLowerCase() === 'clinical') {
+        res.status(400).json({
+          error: 'Estabelecimentos configurados exclusivamente como Studio não criam serviços clínicos tradicionais.'
+        });
+        return;
+      }
+
       let resolvedCapacity: number | null = null;
       if (resolvedKind === 'group') {
         const capNum = Number(rawCapacity);
@@ -88,8 +170,9 @@ export class ServiceController {
         }
         resolvedCapacity = capNum;
       }
-      const resolvedAllowRecurrence = (allowRecurrence ?? allow_recurrence) === false || (allowRecurrence ?? allow_recurrence) === 0 ? 0 : 1;
-      const resolvedModalityCategory = (modalityCategory ?? modality_category ?? null) ? String(modalityCategory ?? modality_category).trim() : null;
+      const resolvedModalityCategory = isStudioCompat && (modalityCategory ?? modality_category ?? null)
+        ? String(modalityCategory ?? modality_category).trim()
+        : null;
 
       if (!name || !name.trim()) {
         res.status(400).json({ error: 'Nome do serviço é obrigatório' });
@@ -123,6 +206,35 @@ export class ServiceController {
         targetModule = availableModules.length === 1 ? availableModules[0].code : (availableModules[0]?.code || null);
       }
 
+      const resolvedDomain: ServiceDomain = resolveServiceDomain({
+        establishmentProfile,
+        serviceDomain: rawRequestedDomain,
+        serviceKind: resolvedKind,
+        clinicalModule: targetModule
+      });
+
+      if (establishmentProfile === 'mixed' && resolvedDomain === 'clinical' && resolvedKind === 'group') {
+        res.status(400).json({ error: 'Serviços clínicos em estabelecimentos mistos devem ser individuais. Selecione o segmento Studio para criar aula coletiva / turma.' });
+        return;
+      }
+
+      const recNorm = isStudioCompat && (resolvedDomain === 'studio' || rawAllowedFreqs !== undefined)
+        ? normalizeRecurrenceConfigForSave({
+            allowRecurrence: allowRecurrence ?? allow_recurrence,
+            allowedRecurrenceFrequencies: rawAllowedFreqs,
+            defaultRecurrenceFrequency: rawDefaultFreq
+          })
+        : {
+            allowRecurrenceInt: ((allowRecurrence ?? allow_recurrence) === false || (allowRecurrence ?? allow_recurrence) === 0 ? 0 : 1) as 0 | 1,
+            allowedJson: null,
+            defaultFrequency: null
+          };
+
+      if ('error' in recNorm && recNorm.error) {
+        res.status(400).json({ error: recNorm.error });
+        return;
+      }
+
       const resolvedMinLeadTimeHours = (minLeadTimeHours !== undefined && minLeadTimeHours !== null && minLeadTimeHours !== '' && !Number.isNaN(Number(minLeadTimeHours)))
         ? Math.max(0, Number(minLeadTimeHours))
         : 2;
@@ -131,50 +243,76 @@ export class ServiceController {
         : 60;
 
       const id = 'srv-' + uuidv4().slice(0, 8);
-      const insertStmt = db.prepare(`
-        INSERT INTO services (
-          id, tenant_id, professional_id, specialty_id, name, description, duration_minutes,
-          buffer_minutes, price, modality, active, min_lead_time_hours, max_advance_days, cancellation_policy,
-          reminder_enabled, reminder_value, reminder_unit, clinical_module,
-          service_kind, default_capacity, allow_recurrence, modality_category
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
+      const scheduleWarnings: string[] = [];
+      let createdSchedules: any[] = [];
 
-      insertStmt.run(
-        id,
-        tenantId,
-        professionalId,
-        specialtyId || null,
-        name.trim(),
-        description || null,
-        durationMinutes !== undefined ? Number(durationMinutes) : 50,
-        bufferMinutes !== undefined ? Number(bufferMinutes) : 10,
-        price !== undefined ? Number(price) : 0.0,
-        modality || 'both',
-        resolvedMinLeadTimeHours,
-        resolvedMaxAdvanceDays,
-        cancellationPolicy || null,
-        reminderEnabled ? 1 : 0,
-        reminderEnabled && reminderValue ? Number(reminderValue) : null,
-        reminderEnabled && reminderUnit ? String(reminderUnit).toUpperCase() : 'DAYS',
-        targetModule,
-        resolvedKind,
-        resolvedCapacity,
-        resolvedAllowRecurrence,
-        resolvedModalityCategory
-      );
+      db.transaction(() => {
+        const insertStmt = db.prepare(`
+          INSERT INTO services (
+            id, tenant_id, professional_id, specialty_id, name, description, duration_minutes,
+            buffer_minutes, price, modality, active, min_lead_time_hours, max_advance_days, cancellation_policy,
+            reminder_enabled, reminder_value, reminder_unit, clinical_module,
+            service_kind, default_capacity, allow_recurrence, modality_category,
+            service_domain, allowed_recurrence_frequencies_json, default_recurrence_frequency
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
 
-      try {
-        const normalizedCustomPrice = price !== undefined && price !== null && price !== '' ? Number(price) : null;
-        const normalizedCustomDuration = durationMinutes !== undefined && durationMinutes !== null && durationMinutes !== '' ? Number(durationMinutes) : null;
-        db.prepare(`
-          INSERT OR REPLACE INTO professional_services (id, professional_id, service_id, custom_price, custom_duration)
-          VALUES (?, ?, ?, ?, ?)
-        `).run('ps-' + uuidv4().slice(0, 8), professionalId, id, normalizedCustomPrice, normalizedCustomDuration);
-      } catch (_) {}
+        insertStmt.run(
+          id,
+          tenantId,
+          professionalId,
+          specialtyId || null,
+          name.trim(),
+          description || null,
+          durationMinutes !== undefined ? Number(durationMinutes) : 50,
+          bufferMinutes !== undefined ? Number(bufferMinutes) : 10,
+          price !== undefined ? Number(price) : 0.0,
+          modality || 'both',
+          resolvedMinLeadTimeHours,
+          resolvedMaxAdvanceDays,
+          cancellationPolicy || null,
+          reminderEnabled ? 1 : 0,
+          reminderEnabled && reminderValue ? Number(reminderValue) : null,
+          reminderEnabled && reminderUnit ? String(reminderUnit).toUpperCase() : 'DAYS',
+          targetModule,
+          resolvedKind,
+          resolvedCapacity,
+          recNorm.allowRecurrenceInt,
+          resolvedModalityCategory,
+          resolvedDomain,
+          recNorm.allowedJson,
+          recNorm.defaultFrequency
+        );
 
-      logAudit(req, 'CREATE_SERVICE', 'services', id, { name, price, professionalId, professionalName: prof.name, clinicalModule: targetModule });
+        try {
+          const normalizedCustomPrice = price !== undefined && price !== null && price !== '' ? Number(price) : null;
+          const normalizedCustomDuration = durationMinutes !== undefined && durationMinutes !== null && durationMinutes !== '' ? Number(durationMinutes) : null;
+          db.prepare(`
+            INSERT OR REPLACE INTO professional_services (id, professional_id, service_id, custom_price, custom_duration)
+            VALUES (?, ?, ?, ?, ?)
+          `).run('ps-' + uuidv4().slice(0, 8), professionalId, id, normalizedCustomPrice, normalizedCustomDuration);
+        } catch (_) {}
+
+        if (resolvedKind === 'group' && rawClassSchedules.length > 0 && PackageService.isStudioCompatible(tenantId)) {
+          for (const item of rawClassSchedules) {
+            const out = ClassScheduleService.createSchedules(tenantId, id, item, req.user?.userId || '');
+            if (out.warnings?.length) scheduleWarnings.push(...out.warnings);
+          }
+          createdSchedules = ClassScheduleService.listForService(tenantId, id, { includeInactive: true });
+        }
+      })();
+
+      logAudit(req, 'CREATE_SERVICE', 'services', id, { name, price, professionalId, professionalName: prof.name, clinicalModule: targetModule, serviceDomain: resolvedDomain });
+
+      const parsedCreatedRec = isStudioCompat
+        ? parseServiceRecurrenceConfig({
+            allow_recurrence: recNorm.allowRecurrenceInt,
+            allowed_recurrence_frequencies_json: recNorm.allowedJson,
+            default_recurrence_frequency: recNorm.defaultFrequency
+          })
+        : null;
+
       res.status(201).json({
         id,
         tenant_id: tenantId,
@@ -192,14 +330,20 @@ export class ServiceController {
         clinical_module: targetModule,
         service_kind: resolvedKind,
         default_capacity: resolvedCapacity,
-        allow_recurrence: resolvedAllowRecurrence,
+        service_domain: resolvedDomain,
+        allow_recurrence: recNorm.allowRecurrenceInt,
+        allowed_recurrence_frequencies: parsedCreatedRec ? parsedCreatedRec.allowedFrequencies : undefined,
+        default_recurrence_frequency: parsedCreatedRec ? parsedCreatedRec.defaultFrequency : null,
         modality_category: resolvedModalityCategory,
         professional_name: prof.name,
+        class_schedules: createdSchedules,
+        weekly_schedule_summary: buildWeeklyScheduleSummary(createdSchedules),
+        schedule_warnings: scheduleWarnings,
         message: 'Serviço criado com sucesso'
       });
     } catch (err: any) {
       console.error('[ServiceController.create] Erro:', err);
-      res.status(500).json({ error: 'Erro ao criar serviço' });
+      res.status(err?.status || 500).json({ error: err?.message || 'Erro ao criar serviço', ...(err?.code ? { code: err.code } : {}) });
     }
   }
 
@@ -212,25 +356,63 @@ export class ServiceController {
         return;
       }
 
-      const existing = db.prepare('SELECT id, name, professional_id, clinical_module, service_kind, default_capacity, allow_recurrence, modality_category FROM services WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
+      const existing = db.prepare(`
+        SELECT id, name, professional_id, clinical_module, service_kind, default_capacity, allow_recurrence,
+               modality_category, service_domain, allowed_recurrence_frequencies_json, default_recurrence_frequency
+        FROM services WHERE id = ? AND tenant_id = ?
+      `).get(id, tenantId) as any;
       if (!existing) {
         res.status(404).json({ error: 'Serviço não encontrado' });
         return;
       }
+
+      const establishmentProfile = getTenantEstablishmentProfile(tenantId);
+      const isStudioCompat = establishmentProfile === 'studio' || establishmentProfile === 'mixed';
 
       const {
         professionalId, specialtyId, name, description, durationMinutes, bufferMinutes,
         price, modality, active, minLeadTimeHours, maxAdvanceDays, cancellationPolicy,
         reminderEnabled, reminderValue, reminderUnit, clinicalModule,
         serviceKind, service_kind, defaultCapacity, default_capacity, allowRecurrence, allow_recurrence,
-        modalityCategory, modality_category
+        modalityCategory, modality_category,
+        serviceDomain, service_domain,
+        allowedRecurrenceFrequencies, allowed_recurrence_frequencies,
+        defaultRecurrenceFrequency, default_recurrence_frequency
       } = req.body;
 
       const rawKind = serviceKind !== undefined ? serviceKind : service_kind;
-      const nextKind = rawKind !== undefined ? (rawKind === 'group' ? 'group' : 'individual') : (existing.service_kind || 'individual');
       const rawCapacity = defaultCapacity !== undefined ? defaultCapacity : default_capacity;
-      let nextCapacity: number | null = existing.default_capacity ?? null;
-      if (rawKind !== undefined || rawCapacity !== undefined) {
+      const rawRequestedDomain = serviceDomain ?? service_domain;
+      const rawAllowedFreqs = allowedRecurrenceFrequencies !== undefined ? allowedRecurrenceFrequencies : allowed_recurrence_frequencies;
+      const rawDefaultFreq = defaultRecurrenceFrequency !== undefined ? defaultRecurrenceFrequency : default_recurrence_frequency;
+
+      if (!isStudioCompat) {
+        if (
+          rawKind === 'group' ||
+          (rawCapacity !== undefined && rawCapacity !== null && rawCapacity !== '') ||
+          String(rawRequestedDomain || '').trim().toLowerCase() === 'studio' ||
+          (Array.isArray(rawAllowedFreqs) && rawAllowedFreqs.length > 0) ||
+          (rawDefaultFreq !== undefined && rawDefaultFreq !== null && String(rawDefaultFreq).trim() !== '')
+        ) {
+          res.status(400).json({
+            error: 'Aulas coletivas, capacidade de turma e recorrência avançada de Studio não estão disponíveis para Clínicas / Consultórios tradicionais.'
+          });
+          return;
+        }
+      }
+
+      if (establishmentProfile === 'studio' && String(rawRequestedDomain || '').trim().toLowerCase() === 'clinical') {
+        res.status(400).json({
+          error: 'Estabelecimentos configurados exclusivamente como Studio não criam serviços clínicos tradicionais.'
+        });
+        return;
+      }
+
+      const nextKind = !isStudioCompat
+        ? 'individual'
+        : (rawKind !== undefined ? (rawKind === 'group' ? 'group' : 'individual') : (existing.service_kind || 'individual'));
+      let nextCapacity: number | null = !isStudioCompat ? null : (existing.default_capacity ?? null);
+      if (isStudioCompat && (rawKind !== undefined || rawCapacity !== undefined)) {
         if (nextKind === 'group') {
           const capNum = Number(rawCapacity !== undefined ? rawCapacity : existing.default_capacity);
           if (!Number.isInteger(capNum) || capNum < 1 || capNum > 500) {
@@ -242,10 +424,12 @@ export class ServiceController {
           nextCapacity = null;
         }
       }
-      const rawAllowRec = allowRecurrence !== undefined ? allowRecurrence : allow_recurrence;
-      const nextAllowRec = rawAllowRec !== undefined ? (rawAllowRec === false || rawAllowRec === 0 ? 0 : 1) : (existing.allow_recurrence ?? 1);
-      const rawModCat = modalityCategory !== undefined ? modalityCategory : modality_category;
-      const nextModCat = rawModCat !== undefined ? (rawModCat ? String(rawModCat).trim() : null) : existing.modality_category;
+
+      const nextModCat = !isStudioCompat
+        ? existing.modality_category
+        : (modalityCategory !== undefined || modality_category !== undefined
+            ? ((modalityCategory ?? modality_category) ? String(modalityCategory ?? modality_category).trim() : null)
+            : existing.modality_category);
 
       if (professionalId) {
         const prof = db.prepare('SELECT id FROM professionals WHERE id = ? AND tenant_id = ?').get(professionalId, tenantId);
@@ -264,6 +448,45 @@ export class ServiceController {
           res.status(400).json({ error: `O módulo "${clinicalModule}" não é permitido para este profissional.` });
           return;
         }
+      }
+
+      const nextDomain: ServiceDomain = resolveServiceDomain({
+        establishmentProfile,
+        serviceDomain: rawRequestedDomain !== undefined ? rawRequestedDomain : existing.service_domain,
+        serviceKind: nextKind,
+        clinicalModule: clinicalModule !== undefined ? clinicalModule : existing.clinical_module
+      });
+
+      if (establishmentProfile === 'mixed' && nextDomain === 'clinical' && nextKind === 'group') {
+        res.status(400).json({ error: 'Serviços clínicos em estabelecimentos mistos devem ser individuais. Selecione o segmento Studio para criar aula coletiva / turma.' });
+        return;
+      }
+
+      const rawAllowRec = allowRecurrence !== undefined ? allowRecurrence : allow_recurrence;
+      let nextAllowRec: 0 | 1 = rawAllowRec !== undefined ? (rawAllowRec === false || rawAllowRec === 0 ? 0 : 1) : ((existing.allow_recurrence ?? 1) === 0 ? 0 : 1);
+      let nextAllowedJson: string | null = existing.allowed_recurrence_frequencies_json ?? null;
+      let nextDefaultFreq: string | null = existing.default_recurrence_frequency ?? null;
+
+      if (!isStudioCompat) {
+        nextAllowedJson = null;
+        nextDefaultFreq = null;
+      } else if (rawAllowRec !== undefined || rawAllowedFreqs !== undefined || rawDefaultFreq !== undefined) {
+        const recNorm = normalizeRecurrenceConfigForSave({
+          allowRecurrence: rawAllowRec !== undefined ? rawAllowRec : existing.allow_recurrence,
+          allowedRecurrenceFrequencies: rawAllowedFreqs !== undefined ? rawAllowedFreqs : (
+            typeof existing.allowed_recurrence_frequencies_json === 'string' && existing.allowed_recurrence_frequencies_json.trim()
+              ? (() => { try { return JSON.parse(existing.allowed_recurrence_frequencies_json); } catch { return undefined; } })()
+              : undefined
+          ),
+          defaultRecurrenceFrequency: rawDefaultFreq !== undefined ? rawDefaultFreq : existing.default_recurrence_frequency
+        });
+        if (recNorm.error) {
+          res.status(400).json({ error: recNorm.error });
+          return;
+        }
+        nextAllowRec = recNorm.allowRecurrenceInt;
+        nextAllowedJson = recNorm.allowedJson;
+        nextDefaultFreq = recNorm.defaultFrequency;
       }
 
       const updateStmt = db.prepare(`
@@ -288,6 +511,9 @@ export class ServiceController {
           default_capacity = ?,
           allow_recurrence = ?,
           modality_category = ?,
+          service_domain = ?,
+          allowed_recurrence_frequencies_json = ?,
+          default_recurrence_frequency = ?,
           updated_at = datetime('now')
         WHERE id = ? AND tenant_id = ?
       `);
@@ -315,6 +541,9 @@ export class ServiceController {
         nextCapacity,
         nextAllowRec,
         nextModCat,
+        nextDomain,
+        nextAllowedJson,
+        nextDefaultFreq,
         id,
         tenantId
       );
@@ -342,8 +571,32 @@ export class ServiceController {
         FROM services s
         LEFT JOIN professionals p ON p.id = s.professional_id
         WHERE s.id = ? AND s.tenant_id = ?
-      `).get(id, tenantId);
-      res.json({ success: true, message: 'Serviço atualizado com sucesso', service: updatedService, ...(updatedService || {}) });
+      `).get(id, tenantId) as any;
+      const updatedSchedules = isStudioCompat
+        ? ClassScheduleService.listForService(tenantId, String(id), { includeInactive: true })
+        : [];
+      const parsedUpdRec = isStudioCompat && updatedService
+        ? parseServiceRecurrenceConfig(updatedService)
+        : null;
+      const enrichedUpdated = updatedService
+        ? {
+            ...updatedService,
+            service_kind: isStudioCompat ? (updatedService.service_kind || 'individual') : 'individual',
+            default_capacity: isStudioCompat ? updatedService.default_capacity : null,
+            service_domain: resolveServiceDomain({
+              establishmentProfile,
+              serviceDomain: updatedService.service_domain,
+              serviceKind: updatedService.service_kind,
+              clinicalModule: updatedService.clinical_module
+            }),
+            allow_recurrence: parsedUpdRec ? (parsedUpdRec.allowRecurrence ? 1 : 0) : (updatedService.allow_recurrence ?? 1),
+            allowed_recurrence_frequencies: parsedUpdRec ? parsedUpdRec.allowedFrequencies : undefined,
+            default_recurrence_frequency: parsedUpdRec ? parsedUpdRec.defaultFrequency : null,
+            class_schedules: updatedSchedules,
+            weekly_schedule_summary: buildWeeklyScheduleSummary(updatedSchedules)
+          }
+        : updatedService;
+      res.json({ success: true, message: 'Serviço atualizado com sucesso', service: enrichedUpdated, ...(enrichedUpdated || {}) });
     } catch (err: any) {
       console.error('[ServiceController.update] Erro:', err);
       res.status(500).json({ error: 'Erro ao atualizar serviço' });

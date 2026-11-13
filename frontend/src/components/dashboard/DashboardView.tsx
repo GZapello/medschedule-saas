@@ -45,6 +45,12 @@ import {
 } from '../pre-consultation/PreConsultationFormsModal';
 import { CollectionsModal } from '../financial/CollectionsModal';
 import { Users, BellRing, SlidersHorizontal, X } from 'lucide-react';
+import {
+  supportsStudioFeatures,
+  shouldRedirectAppointmentToZemdaPersonal,
+  buildActiveStudioSessionFromAppointment,
+  writeActiveStudioSession
+} from '../../utils/establishmentContext';
 
 interface DashboardViewProps {
   onNavigate: (view: string, subId?: string | null) => void;
@@ -59,6 +65,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 }) => {
   const auth = useAuth();
   const { clientTermLabel } = auth;
+  const isStudioCompatible = supportsStudioFeatures(auth.currentTenant?.establishment_profile);
   const canPerformClinicalAttendance = (auth.isProfessional || auth.isClinicAdmin) && !auth.isReceptionist;
   const canCreatePatient = auth.isClinicAdmin || auth.hasPermission('create_patient') || auth.hasPermission('edit_patient');
   const canCreateAppointment = auth.isClinicAdmin || auth.hasPermission('create_appointment');
@@ -217,13 +224,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     try {
       setLoading(true);
       const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+      const studioAllowedNow = supportsStudioFeatures(auth.currentTenant?.establishment_profile);
       const [data, queueRes, collRes] = await Promise.all([
         ApiClient.get<any>(`/v1/dashboard/metrics?date=${todayStr}`),
         ApiClient.get<any>(`/v1/checkin/queue?date=${todayStr}`).catch(() => null),
-        ApiClient.get<any>('/v1/financial/collections/summary').catch(() => null)
+        studioAllowedNow
+          ? ApiClient.get<any>('/v1/financial/collections/summary').catch(() => null)
+          : Promise.resolve(null)
       ]);
       setMetrics(data);
-      setCollectionsSummary(collRes);
+      setCollectionsSummary(studioAllowedNow ? collRes : null);
       const hasReception = Boolean(
         queueRes?.hasReceptionTeam ?? data?.checkin?.hasReceptionTeam
       );
@@ -289,20 +299,40 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     };
     window.addEventListener('zemda-appointment-updated', handleRemoteUpdate);
     window.addEventListener('zemda-checkin-updated', handleRemoteUpdate);
-    return () => {
-      window.removeEventListener('zemda-appointment-updated', handleRemoteUpdate);
-      window.removeEventListener('zemda-checkin-updated', handleRemoteUpdate);
-    };
-  }, []);
+  }, [auth.currentTenant?.id, auth.currentTenant?.establishment_profile]);
+
+  const isStudioSessionAppointment = (appt: any) =>
+    shouldRedirectAppointmentToZemdaPersonal({
+      establishmentProfile: auth.currentTenant?.establishment_profile,
+      serviceDomain: appt?.service_domain,
+      serviceKind: appt?.service_kind,
+      occurrenceId: appt?.occurrence_id,
+      appointmentClinicalModule: appt?.clinical_module,
+      serviceClinicalModule: appt?.service_clinical_module
+    });
 
   const executeStartConsultation = async (appointmentId: string, selectedModule?: string) => {
     try {
+      const appt = metrics?.today?.appointments?.find((a: any) => a.id === appointmentId);
+      const studioRedirect = isStudioSessionAppointment(appt);
+
       const payload: any = { status: 'in_progress' };
-      if (selectedModule) {
+      if (!studioRedirect && selectedModule) {
         payload.clinicalModule = selectedModule;
       }
       await ApiClient.put(`/v1/appointments/${appointmentId}/status`, payload);
-      const appt = metrics?.today?.appointments?.find((a: any) => a.id === appointmentId);
+
+      if (studioRedirect && appt) {
+        writeActiveStudioSession(buildActiveStudioSessionFromAppointment(appt, auth.currentTenant?.id));
+        setSelectingModuleAppt(null);
+        setQuickConsultAppt(null);
+        showToast('Sessão iniciada no ZemdaPersonal!', 'success');
+        fetchMetrics();
+        notifyAppointmentChange();
+        onNavigate('zemda-personal', appt.service_kind === 'group' || appt.occurrence_id ? null : appt.patient_id);
+        return;
+      }
+
       const chosenModule = selectedModule || appt?.service_clinical_module || (appt?.clinical_module !== 'general' && appt?.clinical_module !== 'ZemdaBody' && appt?.clinical_module !== 'Zemda360' ? appt?.clinical_module : undefined) || 'general';
       setActiveConsultationModule(chosenModule);
       setQuickConsultAppt({
@@ -321,13 +351,27 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   const handleUpdateStatus = async (appointmentId: string, newStatus: string) => {
     try {
+      const appt = metrics?.today?.appointments?.find((a: any) => a.id === appointmentId);
+      const studioRedirect = isStudioSessionAppointment(appt);
+
       if (newStatus === 'completed') {
-        setQuickConsultAppt(metrics.today.appointments.find((a: any) => a.id === appointmentId));
+        if (studioRedirect && appt) {
+          const occKey = appt.occurrence_id || `apt:${appointmentId}`;
+          await ApiClient.post(`/v1/classes/occurrences/${occKey}/finish`, {});
+          showToast('Sessão concluída com sucesso!', 'success');
+          fetchMetrics();
+          notifyAppointmentChange();
+          return;
+        }
+        setQuickConsultAppt(appt);
         return;
       }
 
       if (newStatus === 'in_progress') {
-        const appt = metrics?.today?.appointments?.find((a: any) => a.id === appointmentId);
+        if (studioRedirect) {
+          await executeStartConsultation(appointmentId);
+          return;
+        }
         const autoModule = getModuleForProfession(auth);
         const serviceModule = appt?.service_clinical_module;
         const existingModule = appt?.clinical_module;
@@ -613,7 +657,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
       <TodayWorklist data={metrics?.worklist} onNavigate={onNavigate} onPatient={setViewPatientId} onUpdate={fetchMetrics} />
 
-      {collectionsSummary && collectionsSummary.scope !== 'restricted' && (
+      {isStudioCompatible && collectionsSummary && collectionsSummary.scope !== 'restricted' && (
         <div className="bg-white rounded-xl border border-slate-200 px-3.5 py-2.5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs">
             <span className="font-extrabold text-slate-800 flex items-center gap-1.5">
@@ -1480,11 +1524,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           notifyAppointmentChange();
         }}
       />
-      <CollectionsModal
-        isOpen={showCollectionsModal}
-        onClose={() => setShowCollectionsModal(false)}
-        onUpdated={fetchMetrics}
-      />
+      {isStudioCompatible && (
+        <CollectionsModal
+          isOpen={showCollectionsModal}
+          onClose={() => setShowCollectionsModal(false)}
+          onUpdated={fetchMetrics}
+        />
+      )}
     </div>
   );
 };
