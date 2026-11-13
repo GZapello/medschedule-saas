@@ -359,7 +359,7 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
   }
 
   return (
-    <div className="space-y-6">
+    <div data-personal-mobile="profile" className="space-y-6">
       {/* Botão de Retorno e Ações Superiores */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         {onBack ? (
@@ -849,7 +849,7 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
                         ) : null}
                       </div>
 
-                      <div className="text-xs text-slate-500 flex flex-wrap items-center gap-3">
+                      <div className="personal-history-metrics text-xs text-slate-500 flex flex-wrap items-center gap-3">
                         <span>Peso: <strong className="text-slate-700">{a.weight} kg</strong></span>
                         <span>IMC: <strong className="text-slate-700">{a.bmi ?? '—'}</strong></span>
                         <span>% Gordura: <strong className="text-amber-600 font-bold">{a.body_fat_percentage}%</strong></span>

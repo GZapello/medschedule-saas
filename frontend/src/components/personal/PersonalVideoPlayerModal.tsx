@@ -1,3 +1,4 @@
+import { usePersonalMobileViewport } from '../../hooks/usePersonalMobileViewport';
 import React from 'react';
 import { X, ExternalLink, Play, AlertCircle } from 'lucide-react';
 import { parseExternalVideoUrl } from './videoUtils';
@@ -15,13 +16,15 @@ export const PersonalVideoPlayerModal: React.FC<PersonalVideoPlayerModalProps> =
   videoUrl,
   exerciseName
 }) => {
+  const mobileViewportRef = usePersonalMobileViewport(isOpen);
+
   if (!isOpen || !videoUrl) return null;
 
   const parsed = parseExternalVideoUrl(videoUrl);
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fadeIn"
+      ref={mobileViewportRef} data-personal-mobile="video" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fadeIn"
       onClick={onClose}
       role="dialog"
       aria-modal="true"

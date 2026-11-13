@@ -1,3 +1,4 @@
+import { usePersonalMobileViewport } from '../../hooks/usePersonalMobileViewport';
 import { ResponsiveTable } from '../common/ResponsiveTable';
 import { fieldCapability } from '../../shared/clinical-assessments/policy';
 import {IndicatorDetails,assessmentIndicators,indicatorKey} from './PersonalAssessmentIndicator';
@@ -104,6 +105,8 @@ export const PersonalAssessmentComparisonModal: React.FC<PersonalAssessmentCompa
     }
   };
 
+  const mobileViewportRef = usePersonalMobileViewport(isOpen, allowedCapabilities === undefined);
+
   if (!isOpen) return null;
 
   // Determinar se o delta é positivo/desejado
@@ -206,7 +209,7 @@ export const PersonalAssessmentComparisonModal: React.FC<PersonalAssessmentCompa
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn mobile-modal">
+    <div ref={mobileViewportRef} data-personal-mobile={allowedCapabilities === undefined ? "comparison" : undefined} className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn mobile-modal">
       <div className="bg-white rounded-3xl max-w-5xl w-full max-h-[94vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
         {/* Header */}
         <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
@@ -232,6 +235,7 @@ export const PersonalAssessmentComparisonModal: React.FC<PersonalAssessmentCompa
           </button>
         </div>
 
+        <div className="personal-comparison-scroll">
         {/* Seletores de Avaliação Lado a Lado */}
         <div className="p-4 bg-slate-50 border-b border-slate-200 grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="bg-white p-3 rounded-2xl border border-slate-200">
@@ -596,6 +600,7 @@ export const PersonalAssessmentComparisonModal: React.FC<PersonalAssessmentCompa
           </div>}
         </div>
 
+        </div>
         {/* Footer */}
         <div className="p-4 border-t border-slate-100 flex items-center justify-end bg-slate-50">
           <button

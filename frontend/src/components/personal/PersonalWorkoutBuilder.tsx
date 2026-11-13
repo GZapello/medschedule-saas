@@ -1,3 +1,5 @@
+import { PersonalExerciseNameField } from './PersonalExerciseNameField';
+import { usePersonalMobileViewport } from '../../hooks/usePersonalMobileViewport';
 import React, { useState, useEffect } from 'react';
 import {
   X,
@@ -264,10 +266,12 @@ export const PersonalWorkoutBuilder: React.FC<PersonalWorkoutBuilderProps> = ({
     }
   };
 
+  const mobileViewportRef = usePersonalMobileViewport(isOpen);
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn mobile-modal">
+    <div ref={mobileViewportRef} data-personal-mobile="workout" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn mobile-modal">
       <div className="bg-white rounded-3xl max-w-5xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
         {/* Header */}
         <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
@@ -376,7 +380,7 @@ export const PersonalWorkoutBuilder: React.FC<PersonalWorkoutBuilderProps> = ({
 
           {/* Lista de Exercícios Prescritos */}
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="personal-exercise-heading flex items-center justify-between">
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
                 Exercícios & Parâmetros ({exercises.length})
               </h4>
@@ -420,7 +424,7 @@ export const PersonalWorkoutBuilder: React.FC<PersonalWorkoutBuilderProps> = ({
                     key={index}
                     className="p-4 bg-white rounded-2xl border border-slate-200 hover:border-emerald-200 shadow-sm transition-all space-y-3"
                   >
-                    <div className="flex items-center justify-between gap-3">
+                    <div className="personal-exercise-heading flex items-center justify-between gap-3">
                       <div className="flex items-center gap-3 flex-1">
                         <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-700 font-bold text-xs flex items-center justify-center">
                           {index + 1}
@@ -441,10 +445,9 @@ export const PersonalWorkoutBuilder: React.FC<PersonalWorkoutBuilderProps> = ({
                         </div>
 
                         <div className="flex-1 min-w-0 lg:min-w-[200px]">
-                          <input
-                            type="text"
+                          <PersonalExerciseNameField
                             value={ex.name}
-                            onChange={(e) => handleUpdateExercise(index, 'name', e.target.value)}
+                            onChange={(value) => handleUpdateExercise(index, 'name', value)}
                             placeholder="Nome do exercício"
                             className="w-full font-bold text-xs text-slate-800 bg-transparent border-b border-transparent focus:border-emerald-500 outline-none"
                           />
@@ -527,7 +530,7 @@ export const PersonalWorkoutBuilder: React.FC<PersonalWorkoutBuilderProps> = ({
                     </div>
 
                     {/* Parâmetros do Exercício: Séries, Repetições, Carga, Cadência, Descanso, RPE */}
-                    <div className="grid grid-cols-2 sm:grid-cols-6 gap-2.5 pt-2 border-t border-slate-100">
+                    <div className="personal-parameters grid grid-cols-2 sm:grid-cols-6 gap-2.5 pt-2 border-t border-slate-100">
                       <div>
                         <label className="block text-[10px] font-semibold text-slate-500 mb-1">Séries</label>
                         <input

@@ -1,3 +1,4 @@
+import { usePersonalMobileViewport } from '../../hooks/usePersonalMobileViewport';
 import { ExerciseAnimation } from './ExerciseAnimation';
 import { ExerciseCardThumbnail } from './ExerciseCardThumbnail';
 import React, { useState, useEffect, useRef } from 'react';
@@ -351,6 +352,8 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
     }
   };
 
+  const mobileViewportRef = usePersonalMobileViewport(isOpen);
+
   if (!isOpen) return null;
 
   // Cálculos de Paginação
@@ -363,7 +366,7 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
   const hasActiveFilters = Boolean(selectedMuscle || selectedEquipment || selectedCategory || search.trim());
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn mobile-modal">
+    <div ref={mobileViewportRef} data-personal-mobile="library" className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn mobile-modal">
       <div className="bg-white rounded-3xl max-w-6xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
         {/* Header */}
         <div className="p-5 sm:p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
@@ -399,6 +402,7 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
           </div>
         </div>
 
+        <div className="personal-library-scroll">
         {/* Filtros e Busca */}
         <div className="p-4 border-b border-slate-100 bg-white space-y-3">
           <div className="flex flex-wrap items-center gap-3">
@@ -820,6 +824,7 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
           )}
         </div>
 
+        </div>
         {/* Modal de Zoom do Exercício */}
         {zoomedExercise && (
           <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md animate-fadeIn mobile-modal">

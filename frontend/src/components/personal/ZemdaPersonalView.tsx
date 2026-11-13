@@ -903,7 +903,7 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
 
           {/* CONTEÚDO: MODELOS DE TREINO (TEMPLATES) */}
           {currentTab === 'templates' && (
-            <div className="space-y-6">
+            <div data-personal-mobile="templates" className="space-y-6">
               {/* Header do Módulo de Templates */}
               <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="space-y-1">
@@ -1384,7 +1384,7 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
       {/* MODAL: APLICAR MODELO A UM ALUNO */}
       {applyModalTemplate && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fadeIn"
+          data-personal-mobile="template-apply" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fadeIn"
           role="dialog"
           aria-modal="true"
         >
@@ -1505,7 +1505,7 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
       {/* MODAL: VISUALIZAR ESTRUTURA DO MODELO */}
       {previewTemplate && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fadeIn"
+          data-personal-mobile="template-preview" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fadeIn"
           role="dialog"
           aria-modal="true"
         >

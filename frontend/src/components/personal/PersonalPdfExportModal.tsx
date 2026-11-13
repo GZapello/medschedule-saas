@@ -153,7 +153,7 @@ export const PersonalPdfExportModal: React.FC<PersonalPdfExportModalProps> = ({
   const age=reportData?.assessment?.age_at_assessment ?? null;
 
   return (
-    <div className="personal-print-root fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-fadeIn mobile-modal">
+    <div data-personal-mobile="report" className="personal-print-root fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-fadeIn mobile-modal">
       <style>{`@media print {
         body * { visibility: hidden; }
         .personal-print-root, .personal-print-root * { visibility: visible; }

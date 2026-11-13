@@ -1,3 +1,4 @@
+import { usePersonalMobileViewport } from '../../hooks/usePersonalMobileViewport';
 import { fieldCapability, projectClinicalData } from '../../shared/clinical-assessments/policy';
 import {PersonalAssessmentIndicator,IndicatorDetails} from './PersonalAssessmentIndicator';
 import { PersonalTechnicalFields } from './PersonalTechnicalFields';
@@ -755,10 +756,13 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
     }
   };
 
+  const assessmentFormId = React.useId();
+  const mobileViewportRef = usePersonalMobileViewport(isOpen, allowedCapabilities === undefined);
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn mobile-modal">
+    <div ref={mobileViewportRef} data-personal-mobile={!shared ? "assessment" : undefined} className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn mobile-modal">
       <div className={`bg-white rounded-3xl ${postureOnly || activeTab === 'photos_notes' ? 'max-w-7xl' : 'max-w-5xl'} w-full max-h-[92dvh] h-[92dvh] sm:h-auto sm:max-h-[90dvh] flex flex-col min-h-0 shadow-2xl border border-slate-200 overflow-hidden`}>
         {/* Header */}
         <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between bg-slate-50/70 shrink-0">
@@ -768,7 +772,9 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
             </div>
             <div>
               <h3 className="text-lg font-bold text-slate-900 tracking-tight">
-                {postureOnly ? 'Avaliação Postural' : shared ? 'Avaliação Clínica' : 'Avaliação Física Completa & Composição Corporal'}
+                {!shared && !postureOnly && <span className="personal-mobile-title">Avaliação Física</span>}
+                <span className={!shared && !postureOnly ? "personal-desktop-title" : undefined}>
+                {postureOnly ? 'Avaliação Postural' : shared ? 'Avaliação Clínica' : 'Avaliação Física Completa & Composição Corporal'}</span>
               </h3>
               <p className="text-xs text-slate-600 mt-0.5">
                 {shared ? 'Recursos disponíveis para seu atendimento.' : postureOnly ? 'Fotos, marcações e observações por região.' : 'Antropometria, Composição, TAV, Dobras, Cardiovascular, Força 1RM e Fotos.'}
@@ -789,6 +795,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
           </div>
         </div>
 
+        <div className="personal-assessment-scroll">
         {/* Top Info Strip: Aluno e Data */}
         <div className="bg-slate-50/80 px-4 sm:px-6 py-3 border-b border-slate-200/80 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 text-xs items-center shrink-0">
           <div>
@@ -899,7 +906,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
           </div>
         )}
         {/* Formulário Principal */}
-        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+        <form id={assessmentFormId} onSubmit={handleSubmit} className="personal-assessment-form flex flex-col flex-1 min-h-0 overflow-hidden">
           <div className="p-4 sm:p-6 overflow-y-auto flex-1 min-h-0 space-y-6">
           {/* ========================================================
               ABA 1: ANTROPOMETRIA & PERÍMETROS COMPLETOS (COM D/E)
@@ -2000,6 +2007,8 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
           </div>}
           </div>
 
+          </form>
+        </div>
           {/* Footer com Botões Fixo */}
           <div className="px-4 sm:px-6 py-3 border-t border-slate-200 bg-slate-50/90 flex flex-col-reverse sm:flex-row items-center justify-between gap-3 shrink-0">
             <div className="text-xs text-slate-500 text-center sm:text-left">
@@ -2015,7 +2024,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                 Cancelar
               </button>
               <button
-                type="submit"
+                type="submit" form={assessmentFormId}
                 disabled={saving || postureBusy || photosUploading}
                 className="px-6 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-2 shadow-sm transition-colors"
               >
@@ -2024,7 +2033,6 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
               </button>
             </div>
           </div>
-        </form>
       </div>
     </div>
   );

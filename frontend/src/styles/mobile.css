@@ -258,3 +258,170 @@
   .clinical-comparison-modal > div > :first-child > :first-child { flex: 1; min-width: 0; }
   .clinical-comparison-modal > div > :nth-child(2) > div { flex-wrap: wrap; }
 }
+/* Personal workspaces: wrappers are layout-neutral on desktop and shared clinical views. */
+.personal-assessment-scroll,
+.personal-library-scroll,
+.personal-comparison-scroll { display: contents; }
+.personal-mobile-title { display: none; }
+
+@media screen and (max-width: 1023px) {
+  [data-personal-mobile] { min-width: 0; word-break: normal; overflow-wrap: break-word; }
+  [data-personal-mobile] :where(.flex > *, .grid > *) { min-width: 0; }
+  [data-personal-mobile] :where(button, input, select, textarea) { min-height: 44px; }
+  [data-personal-mobile] :where(input, select, textarea) { font-size: 16px; max-width: 100%; }
+  [data-personal-mobile] button { word-break: normal; overflow-wrap: normal; }
+  [data-personal-mobile] button > svg { flex-shrink: 0; }
+  [data-personal-mobile] :where(h3, h4, h5, p).truncate,
+  [data-personal-mobile] :where(.line-clamp-1, .line-clamp-2) {
+    display: block; -webkit-line-clamp: unset; white-space: normal; overflow: visible;
+  }
+  /* Full-height workspaces, with one scrollable body and a persistent close control. */
+  [data-personal-mobile].fixed {
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    height: 100dvh; align-items: stretch;
+  }
+  [data-personal-mobile].fixed > div:first-child {
+    width: 100%; max-width: 100%; height: 100%; max-height: 100%; min-height: 0;
+    border-radius: 0; overflow: hidden;
+  }
+  [data-personal-mobile].fixed > div:first-child > div:first-child {
+    flex: 0 0 auto; padding: .625rem .75rem; gap: .5rem; align-items: flex-start;
+  }
+  [data-personal-mobile].fixed > div:first-child > div:first-child > div:first-child {
+    flex: 1; min-width: 0; gap: .5rem;
+  }
+  [data-personal-mobile].fixed > div:first-child > div:first-child h3 { font-size: 1rem; line-height: 1.375; }
+  [data-personal-mobile].fixed > div:first-child > div:first-child .w-10 { flex-shrink: 0; }
+  [data-personal-mobile] button[aria-label^="Fechar"] { flex-shrink: 0; }
+  [data-personal-mobile="assessment"] .personal-mobile-title { display: inline; }
+  [data-personal-mobile="assessment"] .personal-desktop-title { display: none; }
+  [data-personal-mobile="assessment"] > div > div:first-child { flex-wrap: wrap; }
+  [data-personal-mobile="assessment"] > div > div:first-child > div:last-child {
+    flex: 0 0 100%; justify-content: space-between; gap: .5rem;
+  }
+  [data-personal-mobile="assessment"] > div > div:first-child > div:last-child > :first-child {
+    flex-shrink: 0; white-space: nowrap;
+  }
+  [data-personal-mobile="assessment"] .personal-assessment-scroll,
+  [data-personal-mobile="library"] .personal-library-scroll,
+  [data-personal-mobile="comparison"] .personal-comparison-scroll {
+    display: block; min-height: 0; flex: 1; overflow-y: auto; overscroll-behavior: contain;
+    scroll-padding-block: 1rem;
+  }
+  [data-personal-mobile="assessment"] .personal-assessment-form { display: block; overflow: visible; }
+  [data-personal-mobile="assessment"] .personal-assessment-form > div {
+    overflow: visible; padding: 1rem .75rem;
+  }
+  [data-personal-mobile="assessment"] .personal-assessment-scroll > div:first-child { padding: .75rem; gap: .75rem; }
+  [data-personal-mobile="assessment"] .personal-assessment-scroll > .bg-gradient-to-r {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: .75rem; align-items: start;
+  }
+  [data-personal-mobile="assessment"] .personal-assessment-scroll > .bg-gradient-to-r > .flex { flex-wrap: wrap; }
+  [data-personal-mobile="assessment"] .personal-assessment-scroll > .bg-gradient-to-r > .w-px { display: none; }
+  [data-personal-mobile="assessment"] > div > div:last-child,
+  [data-personal-mobile="template"] > div > div:last-of-type:not(.fixed) {
+    padding: .625rem .75rem; gap: .5rem; flex-shrink: 0;
+  }
+  [data-personal-mobile="assessment"] > div > div:last-child { flex-direction: column; }
+  [data-personal-mobile="assessment"] > div > div:last-child > div:last-child {
+    display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .5rem;
+  }
+  [data-personal-mobile="assessment"] > div > div:last-child button { padding: .5rem; }
+  [data-personal-mobile="template"] > div > .overflow-y-auto,
+  [data-personal-mobile="workout"] > div > form { min-height: 0; padding: .75rem; overscroll-behavior: contain; }
+  [data-personal-mobile="template"] > div > div:last-of-type:not(.fixed) { flex-wrap: wrap; }
+  [data-personal-mobile="template"] > div > div:last-of-type:not(.fixed) > div:last-child {
+    width: 100%; justify-content: flex-end;
+  }
+  [data-personal-mobile] .personal-exercise-heading,
+  [data-personal-mobile] .personal-action-row { flex-direction: column; align-items: stretch; gap: .75rem; }
+  [data-personal-mobile] .personal-exercise-heading > .flex { width: 100%; flex-wrap: wrap; }
+  [data-personal-mobile] .personal-exercise-heading > .flex:first-child { flex-wrap: nowrap; }
+  [data-personal-mobile] .personal-parameters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  [data-personal-mobile] .personal-parameters > * { grid-column: auto; }
+  [data-personal-mobile] .personal-parameters label { font-size: .75rem; }
+  [data-personal-mobile="template"] .overflow-x-auto { max-width: 100%; }
+  [data-personal-mobile="template"] .overflow-x-auto > * { flex-shrink: 0; }
+  [data-personal-mobile="workout"] form > div:last-child { flex-wrap: wrap; gap: .5rem; }
+  [data-personal-mobile="workout"] form > div:last-child button { flex: 1; padding-inline: .75rem; }
+  [data-personal-mobile="library"] > div > div:first-child { flex-wrap: wrap; }
+  [data-personal-mobile="library"] > div > div:first-child > div:last-child { width: 100%; justify-content: space-between; }
+  [data-personal-mobile="library"] .personal-library-scroll > div { padding: .75rem; overflow: visible; }
+  [data-personal-mobile="library"] .personal-library-scroll > div:first-child > div:first-child {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem;
+  }
+  [data-personal-mobile="library"] .personal-library-scroll form { grid-column: 1 / -1; }
+  [data-personal-mobile="library"] .personal-library-scroll .mobile-wrap {
+    flex-wrap: nowrap; overflow-x: auto; padding-bottom: .5rem;
+  }
+  [data-personal-mobile="library"] .personal-library-scroll .mobile-wrap > button { flex-shrink: 0; }
+  [data-personal-mobile="library"] .grid-cols-1 { grid-template-columns: minmax(0, 1fr); }
+  [data-personal-mobile="library"] .mobile-modal > div { padding: .75rem; }
+  [data-personal-mobile="library"] .mobile-modal > div > .flex { flex-wrap: wrap; gap: .5rem; }
+  [data-personal-mobile="comparison"] .personal-comparison-scroll > div { padding: .75rem; }
+  [data-personal-mobile="comparison"] .personal-comparison-scroll > .overflow-y-auto { overflow: visible; }
+  [data-personal-mobile="templates"] > .flex,
+  [data-personal-mobile="templates"] .group > .flex,
+  [data-personal-mobile="profile"] .flex.justify-between { flex-wrap: wrap; gap: .75rem; }
+  [data-personal-mobile="templates"] .group > .flex > .flex { flex-wrap: wrap; }
+  [data-personal-mobile="templates"] .grid-cols-1 { grid-template-columns: minmax(0, 1fr); }
+  [data-personal-mobile="templates"] .group { padding: 1rem; }
+  [data-personal-mobile="profile"] .personal-history-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+  [data-personal-mobile="profile"] .personal-history-metrics > span { display: flex; flex-direction: column; }
+  [data-personal-mobile="video"] .truncate { white-space: normal; overflow: visible; }
+  [data-personal-mobile="video"] > div > div:first-child .flex { flex-wrap: wrap; }
+}
+@media screen and (max-width: 374px) {
+  [data-personal-mobile="assessment"] .personal-assessment-form .grid { grid-template-columns: minmax(0, 1fr); }
+  [data-personal-mobile="assessment"] .personal-assessment-form .grid > * { grid-column: auto; }
+}
+@media screen and (max-width: 1023px) {
+  [data-personal-mobile].fixed { height: var(--personal-visible-height, 100dvh); top: var(--personal-visible-top, 0px); bottom: auto; }
+  [data-personal-mobile] .personal-exercise-name { white-space: normal; text-overflow: clip; resize: vertical; line-height: 1.4; }
+  [data-personal-mobile="template"] > div > div:first-child h3 { flex-wrap: wrap; }
+  [data-personal-mobile="template"] > div > div:first-child h3 > span { width: fit-content; }
+}
+@media screen and (max-width: 639px) {
+  [data-personal-mobile="library"] .personal-library-scroll > div:first-child > div:first-child { grid-template-columns: minmax(0, 1fr); }
+}
+@media screen and (max-width: 1023px) {
+  [data-personal-mobile="template-apply"] > div,
+  [data-personal-mobile="template-preview"] > div { display: flex; flex-direction: column; }
+  [data-personal-mobile="template-apply"] > div > div:nth-child(2),
+  [data-personal-mobile="template-preview"] > div > div:nth-child(2) { flex: 1; min-height: 0; overflow-y: auto; padding: .75rem; }
+  [data-personal-mobile="template-apply"] > div > div:last-child,
+  [data-personal-mobile="template-preview"] > div > div:last-child { flex-shrink: 0; flex-wrap: wrap; gap: .5rem; padding: .75rem; }
+}
+@media screen and (max-width: 1023px) {
+  [data-personal-mobile="report"] .personal-print-modal { height: 100%; max-height: 100%; border-radius: 0; overflow-y: auto; }
+  [data-personal-mobile="report"] .personal-print-modal > div:first-child { flex-wrap: wrap; gap: .75rem; padding: .75rem; }
+  [data-personal-mobile="report"] .personal-print-modal > div:first-child > div { width: 100%; min-width: 0; }
+  [data-personal-mobile="report"] .personal-print-modal > div:first-child > div:last-child { justify-content: space-between; }
+  [data-personal-mobile="report"] .personal-print-document { padding: .75rem; overflow: visible; }
+  [data-personal-mobile="report"] .personal-print-document > div { padding: .75rem; }
+  [data-personal-mobile="report"] .personal-print-modal > .print\:hidden { flex-shrink: 0; }
+}
+@media screen and (max-width: 1023px) {
+  [data-personal-mobile="report"] .personal-print-modal > .print\:hidden > .flex { flex-wrap: wrap; gap: .5rem; }
+  [data-personal-mobile="template-preview"] h3 { flex-wrap: wrap; }
+  [data-personal-mobile="template-preview"] .truncate { white-space: normal; overflow: visible; }
+}
+@media screen and (max-width: 1023px) {
+  [data-personal-mobile] .truncate:not(input):not(textarea) { white-space: normal; text-overflow: clip; overflow: visible; }
+  [data-personal-mobile="template-apply"] h4 + span { flex-shrink: 0; white-space: nowrap; margin-left: .5rem; }
+  [data-personal-mobile="library"] .mobile-modal > div > div:first-child { flex-wrap: nowrap; align-items: flex-start; }
+  [data-personal-mobile="library"] .mobile-modal > div > div:first-child > div:first-child { flex: 1; }
+  [data-personal-mobile="library"] .mobile-modal { height: var(--personal-visible-height, 100dvh); top: var(--personal-visible-top, 0px); bottom: auto; }
+  [data-personal-mobile="report"] .personal-print-modal > div:first-child { position: sticky; top: 0; z-index: 1; flex-shrink: 0; }
+}
+@media screen and (max-width: 1023px) {
+  /* Short confirmation/player dialogs fit their content instead of leaving a blank screen. */
+  :is([data-personal-mobile="video"], [data-personal-mobile="template-apply"]).fixed {
+    align-items: center;
+    padding: max(.75rem, env(safe-area-inset-top)) max(.75rem, env(safe-area-inset-right)) max(.75rem, env(safe-area-inset-bottom)) max(.75rem, env(safe-area-inset-left));
+  }
+  :is([data-personal-mobile="video"], [data-personal-mobile="template-apply"]).fixed > div:first-child {
+    height: auto; max-height: 100%; border-radius: 1rem;
+  }
+  [data-personal-mobile="video"].fixed > div:first-child { overflow-y: auto; }
+}

@@ -1,3 +1,5 @@
+import { PersonalExerciseNameField } from './PersonalExerciseNameField';
+import { usePersonalMobileViewport } from '../../hooks/usePersonalMobileViewport';
 import React, { useState, useEffect } from 'react';
 import {
   X,
@@ -137,6 +139,8 @@ export const PersonalTemplateBuilder: React.FC<PersonalTemplateBuilderProps> = (
       setActiveDivisionIndex(0);
     }
   }, [isOpen, templateToEdit, initialTemplate]);
+
+  const mobileViewportRef = usePersonalMobileViewport(isOpen);
 
   if (!isOpen) return null;
 
@@ -337,7 +341,7 @@ export const PersonalTemplateBuilder: React.FC<PersonalTemplateBuilderProps> = (
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/80 backdrop-blur-sm animate-fadeIn"
+      ref={mobileViewportRef} data-personal-mobile="template" className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/80 backdrop-blur-sm animate-fadeIn"
       role="dialog"
       aria-modal="true"
     >
@@ -528,7 +532,7 @@ export const PersonalTemplateBuilder: React.FC<PersonalTemplateBuilderProps> = (
 
             {/* Lista de Exercícios da Divisão Atual */}
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="personal-action-row flex items-center justify-between">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">
                   <Dumbbell className="w-4 h-4 text-emerald-500" />
                   <span>
@@ -578,7 +582,7 @@ export const PersonalTemplateBuilder: React.FC<PersonalTemplateBuilderProps> = (
                         key={index}
                         className="p-4 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 hover:border-emerald-300 dark:hover:border-emerald-600 shadow-xs transition-all space-y-3"
                       >
-                        <div className="flex items-center justify-between gap-3">
+                        <div className="personal-exercise-heading flex items-center justify-between gap-3">
                           <div className="flex items-center gap-3 flex-1 min-w-0">
                             <span className="w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs flex items-center justify-center shrink-0">
                               {index + 1}
@@ -605,10 +609,9 @@ export const PersonalTemplateBuilder: React.FC<PersonalTemplateBuilderProps> = (
                             </div>
 
                             <div className="flex-1 min-w-0">
-                              <input
-                                type="text"
+                              <PersonalExerciseNameField
                                 value={ex.name}
-                                onChange={(e) => handleUpdateExercise(index, 'name', e.target.value)}
+                                onChange={(value) => handleUpdateExercise(index, 'name', value)}
                                 placeholder="Nome do exercício"
                                 className="w-full font-bold text-xs text-slate-800 dark:text-slate-100 bg-transparent border-b border-transparent focus:border-emerald-500 outline-none truncate"
                               />
@@ -688,7 +691,7 @@ export const PersonalTemplateBuilder: React.FC<PersonalTemplateBuilderProps> = (
                         </div>
 
                         {/* Parâmetros Prescritos */}
-                        <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 pt-2 border-t border-slate-100 dark:border-slate-700 text-xs">
+                        <div className="personal-parameters grid grid-cols-2 sm:grid-cols-6 gap-2 pt-2 border-t border-slate-100 dark:border-slate-700 text-xs">
                           <div>
                             <label className="block text-[10px] font-bold uppercase text-slate-400 mb-0.5">
                               Séries
