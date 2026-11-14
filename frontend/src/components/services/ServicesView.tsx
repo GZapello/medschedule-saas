@@ -26,10 +26,12 @@ import { ClassScheduleSection, DraftClassScheduleInput } from './ClassScheduleSe
 import { ServiceRecurrenceConfigPanel } from './ServiceRecurrenceConfigPanel';
 import { LinkedInstructorsSelector } from './LinkedInstructorsSelector';
 import {
+  ALL_PLAN_DURATIONS,
   isMixedProfile,
   isStudioProfile,
   normalizeEstablishmentProfile,
   parseServiceRecurrenceConfig,
+  PlanDurationCode,
   RecurrenceFrequency,
   RecurrenceIntervalSpec,
   resolveServiceDomain,
@@ -354,6 +356,8 @@ export const ServicesView: React.FC = () => {
   const [defaultFrequency, setDefaultFrequency] = useState<RecurrenceFrequency>('weekly');
   const [customIntervals, setCustomIntervals] = useState<RecurrenceIntervalSpec[]>([]);
   const [defaultCustomInterval, setDefaultCustomInterval] = useState<RecurrenceIntervalSpec | null>(null);
+  const [allowedPlanDurations, setAllowedPlanDurations] = useState<Exclude<PlanDurationCode, 'legacy_frequency'>[]>([...ALL_PLAN_DURATIONS]);
+  const [defaultPlanDuration, setDefaultPlanDuration] = useState<Exclude<PlanDurationCode, 'legacy_frequency'>>('1_month');
   const [draftClassSchedules, setDraftClassSchedules] = useState<DraftClassScheduleInput[]>([]);
   const [hasPendingCreateScheduleForm, setHasPendingCreateScheduleForm] = useState<boolean>(false);
   const [description, setDescription] = useState<string>('');
@@ -380,6 +384,8 @@ export const ServicesView: React.FC = () => {
   const [editDefaultFrequency, setEditDefaultFrequency] = useState<RecurrenceFrequency>('weekly');
   const [editCustomIntervals, setEditCustomIntervals] = useState<RecurrenceIntervalSpec[]>([]);
   const [editDefaultCustomInterval, setEditDefaultCustomInterval] = useState<RecurrenceIntervalSpec | null>(null);
+  const [editAllowedPlanDurations, setEditAllowedPlanDurations] = useState<Exclude<PlanDurationCode, 'legacy_frequency'>[]>([...ALL_PLAN_DURATIONS]);
+  const [editDefaultPlanDuration, setEditDefaultPlanDuration] = useState<Exclude<PlanDurationCode, 'legacy_frequency'>>('1_month');
   const [editDraftClassSchedules, setEditDraftClassSchedules] = useState<DraftClassScheduleInput[]>([]);
   const [hasPendingEditScheduleForm, setHasPendingEditScheduleForm] = useState<boolean>(false);
 
@@ -596,7 +602,9 @@ export const ServicesView: React.FC = () => {
               allowedRecurrenceFrequencies: allowRecurrence ? allowedFrequencies : [],
               defaultRecurrenceFrequency: allowRecurrence ? defaultFrequency : null,
               customRecurrenceIntervals: allowRecurrence && allowedFrequencies.includes('custom_interval') ? customIntervals : [],
-              defaultRecurrenceInterval: allowRecurrence && allowedFrequencies.includes('custom_interval') ? defaultCustomInterval : null
+              defaultRecurrenceInterval: allowRecurrence && allowedFrequencies.includes('custom_interval') ? defaultCustomInterval : null,
+              allowedPlanDurations: allowRecurrence ? allowedPlanDurations : [],
+              defaultPlanDuration: allowRecurrence ? defaultPlanDuration : null
             }
           : {}),
         classSchedules: showCreateStudioConfig && effectiveKind === 'group' ? draftClassSchedules : undefined,
@@ -630,6 +638,8 @@ export const ServicesView: React.FC = () => {
       setDefaultFrequency('weekly');
       setCustomIntervals([]);
       setDefaultCustomInterval(null);
+      setAllowedPlanDurations([...ALL_PLAN_DURATIONS]);
+      setDefaultPlanDuration('1_month');
       setDraftClassSchedules([]);
       setLinkedProfessionalIds(professionalId ? [professionalId] : []);
       setDescription('');
@@ -707,6 +717,8 @@ export const ServicesView: React.FC = () => {
     setEditDefaultFrequency(recCfg.defaultFrequency || 'weekly');
     setEditCustomIntervals(recCfg.customIntervals || []);
     setEditDefaultCustomInterval(recCfg.defaultCustomInterval || null);
+    setEditAllowedPlanDurations(recCfg.allowedPlanDurations || [...ALL_PLAN_DURATIONS]);
+    setEditDefaultPlanDuration(recCfg.defaultPlanDuration || '1_month');
     setEditDraftClassSchedules([]);
     setHasPendingEditScheduleForm(false);
     setEditDescription(s.description || '');
@@ -767,7 +779,9 @@ export const ServicesView: React.FC = () => {
               allowedRecurrenceFrequencies: editAllowRecurrence ? editAllowedFrequencies : [],
               defaultRecurrenceFrequency: editAllowRecurrence ? editDefaultFrequency : null,
               customRecurrenceIntervals: editAllowRecurrence && editAllowedFrequencies.includes('custom_interval') ? editCustomIntervals : [],
-              defaultRecurrenceInterval: editAllowRecurrence && editAllowedFrequencies.includes('custom_interval') ? editDefaultCustomInterval : null
+              defaultRecurrenceInterval: editAllowRecurrence && editAllowedFrequencies.includes('custom_interval') ? editDefaultCustomInterval : null,
+              allowedPlanDurations: editAllowRecurrence ? editAllowedPlanDurations : [],
+              defaultPlanDuration: editAllowRecurrence ? editDefaultPlanDuration : null
             }
           : {}),
         ...(shouldSendEditDraftSchedules ? { classSchedules: editDraftClassSchedules } : {}),
@@ -1608,12 +1622,16 @@ export const ServicesView: React.FC = () => {
                     defaultFrequency={defaultFrequency}
                     customIntervals={customIntervals}
                     defaultCustomInterval={defaultCustomInterval}
+                    allowedPlanDurations={allowedPlanDurations}
+                    defaultPlanDuration={defaultPlanDuration}
                     onChange={next => {
                       setAllowRecurrence(next.allowRecurrence);
                       setAllowedFrequencies(next.allowedFrequencies);
                       setDefaultFrequency(next.defaultFrequency);
                       setCustomIntervals(next.customIntervals);
                       setDefaultCustomInterval(next.defaultCustomInterval);
+                      setAllowedPlanDurations(next.allowedPlanDurations);
+                      setDefaultPlanDuration(next.defaultPlanDuration);
                     }}
                   />
                 </div>
@@ -2047,12 +2065,16 @@ export const ServicesView: React.FC = () => {
                     defaultFrequency={editDefaultFrequency}
                     customIntervals={editCustomIntervals}
                     defaultCustomInterval={editDefaultCustomInterval}
+                    allowedPlanDurations={editAllowedPlanDurations}
+                    defaultPlanDuration={editDefaultPlanDuration}
                     onChange={next => {
                       setEditAllowRecurrence(next.allowRecurrence);
                       setEditAllowedFrequencies(next.allowedFrequencies);
                       setEditDefaultFrequency(next.defaultFrequency);
                       setEditCustomIntervals(next.customIntervals);
                       setEditDefaultCustomInterval(next.defaultCustomInterval);
+                      setEditAllowedPlanDurations(next.allowedPlanDurations);
+                      setEditDefaultPlanDuration(next.defaultPlanDuration);
                     }}
                   />
                 </div>

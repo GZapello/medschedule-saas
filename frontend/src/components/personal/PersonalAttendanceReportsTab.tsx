@@ -98,7 +98,16 @@ export const PersonalAttendanceReportsTab: React.FC<PersonalAttendanceReportsTab
     serviceKind: string;
     capacity: number;
     roster: RosterMember[];
+    participants?: Array<{
+      id?: string;
+      professional_id: string;
+      professional_name?: string | null;
+      role: 'primary' | 'co_instructor';
+      attendance_status: 'scheduled' | 'present' | 'absent';
+    }>;
   } | null>(null);
+  const [participantStatusMap, setParticipantStatusMap] = useState<Record<string, 'present' | 'absent'>>({});
+  const [savingParticipants, setSavingParticipants] = useState(false);
   const [loadingRoster, setLoadingRoster] = useState(false);
   const [updatingApptId, setUpdatingApptId] = useState<string | null>(null);
 
@@ -171,22 +180,67 @@ export const PersonalAttendanceReportsTab: React.FC<PersonalAttendanceReportsTab
   useEffect(() => {
     if (!selectedOccKey) {
       setRosterData(null);
+      setParticipantStatusMap({});
       return;
     }
     let cancelled = false;
     setLoadingRoster(true);
     ApiClient.get<any>(`/v1/classes/occurrences/${encodeURIComponent(selectedOccKey)}/roster`)
       .then(data => {
-        if (!cancelled) setRosterData(data);
+        if (!cancelled) {
+          setRosterData(data);
+          const nextMap: Record<string, 'present' | 'absent'> = {};
+          for (const p of data?.participants || []) {
+            nextMap[p.professional_id] = p.attendance_status === 'absent' ? 'absent' : 'present';
+          }
+          setParticipantStatusMap(nextMap);
+        }
       })
       .catch(() => {
-        if (!cancelled) setRosterData(null);
+        if (!cancelled) {
+          setRosterData(null);
+          setParticipantStatusMap({});
+        }
       })
       .finally(() => {
         if (!cancelled) setLoadingRoster(false);
       });
     return () => { cancelled = true; };
   }, [selectedOccKey]);
+
+  const buildParticipantStatusesPayload = () => {
+    if (!rosterData?.participants || rosterData.participants.length === 0) return undefined;
+    return rosterData.participants.map(p => ({
+      professionalId: p.professional_id,
+      role: p.role,
+      attendanceStatus: participantStatusMap[p.professional_id] || (p.attendance_status === 'absent' ? 'absent' : 'present')
+    }));
+  };
+
+  const handleSaveParticipants = async () => {
+    if (!rosterData) return;
+    const targetOcc = rosterData.occurrenceId || selectedOccKey;
+    const payload = buildParticipantStatusesPayload();
+    if (!targetOcc || !payload || payload.length === 0) return;
+    try {
+      setSavingParticipants(true);
+      await ApiClient.put(`/v1/classes/occurrences/${encodeURIComponent(targetOcc)}/participants`, {
+        participantStatuses: payload
+      });
+      const refreshed = await ApiClient.get<any>(`/v1/classes/occurrences/${encodeURIComponent(selectedOccKey || targetOcc)}/roster`);
+      setRosterData(refreshed);
+      const nextMap: Record<string, 'present' | 'absent'> = {};
+      for (const p of refreshed?.participants || []) {
+        nextMap[p.professional_id] = p.attendance_status === 'absent' ? 'absent' : 'present';
+      }
+      setParticipantStatusMap(nextMap);
+      showToast('Participação dos instrutores atualizada para apuração de comissão!', 'success');
+    } catch (err: any) {
+      showToast(err?.message || 'Erro ao atualizar instrutores participantes.', 'error');
+    } finally {
+      setSavingParticipants(false);
+    }
+  };
 
   const handleMarkAttendance = async (appointmentId: string, attendanceStatus: 'present' | 'absent' | 'cancelled' | 'pending') => {
     if (!rosterData) return;
@@ -494,10 +548,18 @@ export const PersonalAttendanceReportsTab: React.FC<PersonalAttendanceReportsTab
                         if (!targetOcc || finishingOccurrence) return;
                         try {
                           setFinishingOccurrence(true);
-                          await ApiClient.post(`/v1/classes/occurrences/${encodeURIComponent(targetOcc)}/finish`, {});
+                          const participantStatuses = buildParticipantStatusesPayload();
+                          await ApiClient.post(`/v1/classes/occurrences/${encodeURIComponent(targetOcc)}/finish`, {
+                            ...(participantStatuses ? { participantStatuses } : {})
+                          });
                           showToast('Aula concluída com sucesso!', 'success');
                           const refreshed = await ApiClient.get<any>(`/v1/classes/occurrences/${encodeURIComponent(selectedOccKey || targetOcc)}/roster`);
                           setRosterData(refreshed);
+                          const nextMap: Record<string, 'present' | 'absent'> = {};
+                          for (const p of refreshed?.participants || []) {
+                            nextMap[p.professional_id] = p.attendance_status === 'absent' ? 'absent' : 'present';
+                          }
+                          setParticipantStatusMap(nextMap);
                           loadOccurrences();
                           loadReports();
                           window.dispatchEvent(new CustomEvent('zemda-appointment-updated'));
@@ -515,6 +577,77 @@ export const PersonalAttendanceReportsTab: React.FC<PersonalAttendanceReportsTab
                     </button>
                   )}
                 </div>
+
+                {rosterData.participants && rosterData.participants.length > 0 && (
+                  <div className="mb-4 p-3 rounded-xl border border-indigo-200/80 bg-indigo-50/40 space-y-2.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="text-xs font-bold text-indigo-950 flex items-center gap-1.5">
+                          <Users className="w-3.5 h-3.5 text-indigo-600" />
+                          Profissionais que ministraram esta aula
+                        </p>
+                        <p className="text-[11px] text-indigo-700/80">
+                          Apenas instrutores confirmados como participantes recebem comissão na folha.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={savingParticipants}
+                        onClick={handleSaveParticipants}
+                        className="px-2.5 py-1 rounded-lg bg-white border border-indigo-200 text-indigo-700 hover:bg-indigo-100 text-[11px] font-bold transition-colors cursor-pointer disabled:opacity-50"
+                      >
+                        {savingParticipants ? 'Salvando...' : 'Salvar equipe'}
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {rosterData.participants.map(part => {
+                        const status = participantStatusMap[part.professional_id] || (part.attendance_status === 'absent' ? 'absent' : 'present');
+                        const isPresent = status === 'present';
+                        return (
+                          <label
+                            key={`${part.professional_id}-${part.role}`}
+                            className={`flex items-center justify-between gap-2 p-2.5 rounded-xl border text-xs cursor-pointer transition-colors ${
+                              isPresent
+                                ? 'bg-white border-emerald-200 text-slate-900'
+                                : 'bg-slate-50 border-slate-200 text-slate-500'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <input
+                                type="checkbox"
+                                checked={isPresent}
+                                onChange={e =>
+                                  setParticipantStatusMap(prev => ({
+                                    ...prev,
+                                    [part.professional_id]: e.target.checked ? 'present' : 'absent'
+                                  }))
+                                }
+                                className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                              />
+                              <div className="min-w-0">
+                                <p className="font-bold truncate">
+                                  {part.professional_name || 'Profissional'}
+                                </p>
+                                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                                  {part.role === 'primary' ? 'Titular' : 'Coinstrutor'}
+                                </p>
+                              </div>
+                            </div>
+                            <span
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${
+                                isPresent
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                  : 'bg-rose-50 text-rose-700 border-rose-200'
+                              }`}
+                            >
+                              {isPresent ? 'Participou' : 'Não participou'}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 <div className="space-y-2.5">
                   {rosterData.roster.map(member => {

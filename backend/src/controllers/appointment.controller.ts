@@ -23,9 +23,16 @@ import { NotificationService } from '../services/notification.service';
 import { WhatsAppService } from '../services/whatsapp.service';
 import { isValidPhoneNumber, normalizePhoneWithDDI, buildWhatsAppReminderMessage } from '../utils/phone.utils';
 import {
+  getTenantEstablishmentProfile,
+  resolveServiceDomain,
   shouldUseStudioPersonalWorkflow,
+  supportsStudioFeatures,
   validateServiceRecurrenceFrequency
 } from '../utils/establishment-context';
+import {
+  InstructorParticipationService,
+  normalizeUniqueIds
+} from '../services/instructor-participation.service';
 
 function validMeetingUrl(value: unknown): boolean {
   if (value === undefined || value === null || value === '') return true;
@@ -255,13 +262,30 @@ export class AppointmentController {
         ? (db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ? AND active = 1').all(req.user.userId, tenantId) as { id: string }[]).map(r => r.id)
         : [];
 
-      // Se for profissional logado (sem permissão view_all_schedules), filtra apenas seus atendimentos
+      // Se for profissional logado (sem permissão view_all_schedules), filtra seus atendimentos + aulas em que participa como coinstrutor
       if (isProfessionalRole && !canViewAllSchedules) {
-        query += ' AND a.professional_id IN (SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ? AND active = 1)';
-        params.push(req.user!.userId, tenantId);
+        query += ` AND (
+          a.professional_id IN (SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ? AND active = 1)
+          OR EXISTS (
+            SELECT 1 FROM session_instructor_participants sip
+            JOIN professionals pr_s ON pr_s.id = sip.professional_id AND pr_s.tenant_id = sip.tenant_id
+            WHERE sip.tenant_id = a.tenant_id
+              AND pr_s.user_id = ? AND pr_s.active = 1
+              AND (sip.occurrence_id = a.occurrence_id OR (sip.appointment_id = a.id AND sip.occurrence_id IS NULL))
+          )
+        )`;
+        params.push(req.user!.userId, tenantId, req.user!.userId);
       } else if (professionalId) {
-        query += ' AND a.professional_id = ?';
-        params.push(professionalId);
+        query += ` AND (
+          a.professional_id = ?
+          OR EXISTS (
+            SELECT 1 FROM session_instructor_participants sip
+            WHERE sip.tenant_id = a.tenant_id
+              AND sip.professional_id = ?
+              AND (sip.occurrence_id = a.occurrence_id OR (sip.appointment_id = a.id AND sip.occurrence_id IS NULL))
+          )
+        )`;
+        params.push(professionalId, professionalId);
       }
 
       if (patientId) {
@@ -372,7 +396,10 @@ export class AppointmentController {
 
       if (req.user && req.user.role === 'professional' && tenantId) {
         const ownProfIds = (db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ? AND active = 1').all(req.user.userId, tenantId) as { id: string }[]).map(r => r.id);
-        const isOwn = ownProfIds.includes(appointment.professional_id);
+        const isCoInstructor = appointment.occurrence_id
+          ? InstructorParticipationService.isProfessionalLinkedToOccurrence(tenantId, ownProfIds, appointment.occurrence_id)
+          : Boolean(ownProfIds.length > 0 && InstructorParticipationService.listParticipantsForAppointment(tenantId, appointment.id).some(p => ownProfIds.includes(p.professional_id)));
+        const isOwn = ownProfIds.includes(appointment.professional_id) || isCoInstructor;
         if (!isOwn) {
           const perms = getUserPermissions(req.user.userId, tenantId, req.user.role);
           if (!perms.includes('view_all_schedules')) {
@@ -407,7 +434,12 @@ export class AppointmentController {
         : ((appointment as any).payment_amount !== null && (appointment as any).payment_amount !== undefined
             ? (appointment as any).payment_amount
             : ((appointment as any).service_price !== null && (appointment as any).service_price !== undefined ? (appointment as any).service_price : null));
-      res.json({ appointment:{...appointment,display_amount:displayAmount,attendance_date:attendance.sessionDate,attendance_time:attendance.sessionTime,attendance_end_time:attendance.sessionEndTime ?? null}, statusHistory });
+      const instructorParticipants = tenantId && !appointment.is_colleague_schedule
+        ? (appointment.occurrence_id
+            ? InstructorParticipationService.listParticipantsForOccurrence(tenantId, appointment.occurrence_id)
+            : InstructorParticipationService.listParticipantsForAppointment(tenantId, appointment.id))
+        : [];
+      res.json({ appointment:{...appointment,instructor_participants:instructorParticipants,display_amount:displayAmount,attendance_date:attendance.sessionDate,attendance_time:attendance.sessionTime,attendance_end_time:attendance.sessionEndTime ?? null}, statusHistory });
     } catch (err: any) {
       console.error('[AppointmentController.getById] Erro:', err);
       res.status(500).json({ error: 'Erro ao buscar agendamento' });
@@ -800,6 +832,24 @@ export class AppointmentController {
           ) as { id: string } | undefined)?.id || null)
         : null;
 
+      const rawCoIds = !isPublic ? (req.body.coInstructorIds ?? req.body.co_instructor_ids) : undefined;
+      const requestedCoIds = Array.isArray(rawCoIds) ? normalizeUniqueIds(rawCoIds, professionalId) : [];
+      if (requestedCoIds.length > 0) {
+        const estProfileForTeam = getTenantEstablishmentProfile(tenantId);
+        const srvMetaForTeam = db.prepare(`SELECT service_domain, service_kind, clinical_module FROM services WHERE id = ? AND tenant_id = ?`).get(serviceId, tenantId) as any;
+        const srvDomainForTeam = resolveServiceDomain({
+          establishmentProfile: estProfileForTeam,
+          serviceDomain: srvMetaForTeam?.service_domain,
+          serviceKind: srvMetaForTeam?.service_kind,
+          clinicalModule: srvMetaForTeam?.clinical_module
+        });
+        if (!supportsStudioFeatures(estProfileForTeam) || srvDomainForTeam !== 'studio') {
+          res.status(400).json({ error: 'Equipe com coinstrutores está disponível apenas para serviços de Studio.' });
+          return;
+        }
+        InstructorParticipationService.validateTenantProfessionals(tenantId, requestedCoIds);
+      }
+
       const persistAppointmentAndPrice = db.transaction(() => {
         if (isGroupService) {
           const occ = resolveOrCreateGroupOccurrenceTx({
@@ -813,7 +863,8 @@ export class AppointmentController {
             endTime: normalizedEndTime,
             defaultCapacity: defaultGroupCapacity,
             modality: effectiveModality,
-            patientId: resolvedPatientId
+            patientId: resolvedPatientId,
+            coInstructorIds: Array.isArray(rawCoIds) ? requestedCoIds : undefined
           });
           groupMeta = {
             ...occ,
@@ -881,6 +932,19 @@ export class AppointmentController {
           db.prepare(`
             UPDATE appointments SET package_entitlement_id = ? WHERE id = ? AND tenant_id = ?
           `).run(resv.entitlementId, appointmentId, tenantId);
+        }
+
+        if (!isGroupService && requestedCoIds.length > 0) {
+          InstructorParticipationService.syncAppointmentParticipantsTx({
+            tenantId,
+            serviceId,
+            appointmentId,
+            occurrenceId: null,
+            primaryProfessionalId: professionalId,
+            coInstructorIds: requestedCoIds,
+            source: 'manual',
+            updatedBy: req.user?.userId || 'system'
+          });
         }
 
         // Insere histórico inicial
@@ -1059,9 +1123,12 @@ export class AppointmentController {
     try {
       const { id } = req.params;
       const tenantId = req.tenantId;
-      const { status, reason, cancellationReasonCategory, clinicalModule: requestedModule, professionId, scope } = req.body;
+      const { status, reason, cancellationReasonCategory, clinicalModule: requestedModule, professionId, scope, cancelScope } = req.body;
+      const rawScope = scope ?? cancelScope;
       const effectiveScope: 'single' | 'this_and_following' | 'series' =
-        scope === 'this_and_following' || scope === 'series' ? scope : 'single';
+        rawScope === 'this_and_following' || rawScope === 'future'
+          ? 'this_and_following'
+          : (rawScope === 'series' || rawScope === 'all' ? 'series' : 'single');
 
       const allowedStatuses = ['scheduled', 'confirmed', 'in_progress', 'completed', 'cancelled', 'no_show', 'rescheduled'];
       if (!allowedStatuses.includes(status)) {
@@ -1931,6 +1998,28 @@ export class AppointmentController {
         ? Math.round((newStartMs - origStartMs) / 60000)
         : 0;
 
+      const rawCoIds = req.body.coInstructorIds !== undefined ? req.body.coInstructorIds : req.body.co_instructor_ids;
+      const hasExplicitCoIds = Array.isArray(rawCoIds);
+      let validatedCoIds: string[] = [];
+      if (hasExplicitCoIds) {
+        validatedCoIds = normalizeUniqueIds(rawCoIds, safeProfId);
+        if (validatedCoIds.length > 0) {
+          const estProfileUpd = getTenantEstablishmentProfile(tenantId);
+          const srvForUpd = db.prepare(`SELECT service_domain, service_kind, clinical_module FROM services WHERE id = ? AND tenant_id = ?`).get(serviceId || appt.service_id, tenantId) as any;
+          const domainForUpd = resolveServiceDomain({
+            establishmentProfile: estProfileUpd,
+            serviceDomain: srvForUpd?.service_domain,
+            serviceKind: srvForUpd?.service_kind || appt.service_kind,
+            clinicalModule: srvForUpd?.clinical_module || appt.clinical_module
+          });
+          if (!supportsStudioFeatures(estProfileUpd) || domainForUpd !== 'studio') {
+            res.status(400).json({ error: 'Equipe com coinstrutores está disponível apenas para serviços de Studio.' });
+            return;
+          }
+          InstructorParticipationService.validateTenantProfessionals(tenantId, [safeProfId, ...validatedCoIds]);
+        }
+      }
+
       const updatedIds: string[] = [];
       for (const row of targetSeriesRows) {
         let targetStart = safeStart;
@@ -1985,6 +2074,20 @@ export class AppointmentController {
           tenantId
         );
         updatedIds.push(row.id);
+
+        if (hasExplicitCoIds) {
+          InstructorParticipationService.syncAppointmentParticipantsTx({
+            tenantId,
+            serviceId: serviceId || row.service_id || appt.service_id,
+            appointmentId: row.id,
+            occurrenceId: row.occurrence_id || null,
+            primaryProfessionalId: safeProfId,
+            coInstructorIds: validatedCoIds,
+            source: 'manual',
+            updatedBy: req.user?.userId || 'system',
+            replaceCoInstructors: true
+          });
+        }
 
         if (startChanged) {
           db.prepare(`
@@ -2284,6 +2387,9 @@ export class AppointmentController {
         tenantId,
         serviceId: String(serviceId),
         professionalId: professionalId ? String(professionalId) : 'any',
+        coInstructorIds: Array.isArray(req.body?.coInstructorIds ?? req.body?.co_instructor_ids)
+          ? (req.body.coInstructorIds ?? req.body.co_instructor_ids)
+          : undefined,
         classScheduleId: classScheduleId ? String(classScheduleId) : null,
         roomId: roomId ? String(roomId) : null,
         patientId: patientId ? String(patientId) : null,
@@ -2294,6 +2400,9 @@ export class AppointmentController {
         frequency: recurrence?.frequency ?? null,
         intervalValue: recurrence?.intervalValue ?? recurrence?.interval_value ?? null,
         intervalUnit: recurrence?.intervalUnit ?? recurrence?.interval_unit ?? null,
+        durationCode: recurrence?.durationCode ?? recurrence?.planDurationCode ?? null,
+        seriesMode: recurrence?.seriesMode ?? null,
+        scheduleEntries: Array.isArray(recurrence?.scheduleEntries) ? recurrence.scheduleEntries : undefined,
         weekdays: Array.isArray(recurrence?.weekdays) ? recurrence.weekdays : undefined,
         endDate: recurrence?.endDate ? String(recurrence.endDate).slice(0, 10) : undefined,
         maxOccurrences: recurrence?.maxOccurrences !== undefined ? Number(recurrence.maxOccurrences) : undefined,
@@ -2394,11 +2503,19 @@ export class AppointmentController {
         ? String(rawModality)
         : resolveConcreteModality({ serviceModality: serviceRow.modality, allowHome: true });
 
+      const recDurationCode = recurrence?.durationCode ?? recurrence?.planDurationCode ?? null;
+      const recSeriesMode = recurrence?.seriesMode ?? null;
+      const recScheduleEntries = Array.isArray(recurrence?.scheduleEntries) ? recurrence.scheduleEntries : null;
+
       const recValidation = validateServiceRecurrenceFrequency(
         serviceRow,
         recurrence?.frequency,
         recurrence?.intervalValue ?? recurrence?.interval_value,
-        recurrence?.intervalUnit ?? recurrence?.interval_unit
+        recurrence?.intervalUnit ?? recurrence?.interval_unit,
+        {
+          durationCode: recDurationCode,
+          seriesMode: recSeriesMode || (recScheduleEntries && recScheduleEntries.length > 0 ? 'schedule_plan' : undefined)
+        }
       );
       if (!recValidation.valid) {
         res.status(400).json({ code: recValidation.code, error: recValidation.error });
@@ -2407,6 +2524,24 @@ export class AppointmentController {
       const freq = recValidation.frequency;
       const intervalValue = recValidation.intervalValue;
       const intervalUnit = recValidation.intervalUnit;
+
+      const rawRecurringCoIds = req.body?.coInstructorIds !== undefined ? req.body.coInstructorIds : req.body?.co_instructor_ids;
+      const hasExplicitRecurringCoIds = Array.isArray(rawRecurringCoIds);
+      const requestedRecurringCoIds = hasExplicitRecurringCoIds ? normalizeUniqueIds(rawRecurringCoIds, professionalId) : [];
+      if (requestedRecurringCoIds.length > 0) {
+        const estProfileRec = getTenantEstablishmentProfile(tenantId);
+        const srvDomainRec = resolveServiceDomain({
+          establishmentProfile: estProfileRec,
+          serviceDomain: serviceRow.service_domain,
+          serviceKind: serviceRow.service_kind,
+          clinicalModule: serviceRow.clinical_module
+        });
+        if (!supportsStudioFeatures(estProfileRec) || srvDomainRec !== 'studio') {
+          res.status(400).json({ error: 'Equipe com coinstrutores está disponível apenas para serviços de Studio.' });
+          return;
+        }
+        InstructorParticipationService.validateTenantProfessionals(tenantId, requestedRecurringCoIds);
+      }
 
       const profRow = db.prepare('SELECT id, name, profession_id FROM professionals WHERE id = ? AND tenant_id = ? AND active = 1').get(professionalId, tenantId) as any;
       if (!profRow) {
@@ -2432,8 +2567,12 @@ export class AppointmentController {
       const agreedAmount = Math.round(rawPrice * 100) / 100;
       const endDate = recurrence?.endDate ? String(recurrence.endDate).slice(0, 10) : undefined;
       const maxOccurrences = recurrence?.maxOccurrences !== undefined ? Number(recurrence.maxOccurrences) : undefined;
-      if (!endDate && (!maxOccurrences || maxOccurrences <= 0)) {
-        res.status(400).json({ code: 'RECURRENCE_BOUND_REQUIRED', error: 'Informe data de término ou quantidade máxima de ocorrências.' });
+      const hasBoundedDuration = Boolean(
+        recValidation.durationCode &&
+        !['count', 'custom_date', 'legacy_frequency'].includes(recValidation.durationCode)
+      );
+      if (!endDate && !hasBoundedDuration && (!maxOccurrences || maxOccurrences <= 0)) {
+        res.status(400).json({ code: 'RECURRENCE_BOUND_REQUIRED', error: 'Informe a duração do plano, data de término ou quantidade máxima de ocorrências.' });
         return;
       }
 
@@ -2445,6 +2584,7 @@ export class AppointmentController {
         tenantId,
         serviceId: String(serviceId),
         professionalId: String(professionalId),
+        coInstructorIds: hasExplicitRecurringCoIds ? requestedRecurringCoIds : undefined,
         classScheduleId: classScheduleId ? String(classScheduleId) : null,
         roomId: roomId ? String(roomId) : null,
         patientId: String(patientId),
@@ -2455,6 +2595,9 @@ export class AppointmentController {
         frequency: freq,
         intervalValue,
         intervalUnit,
+        durationCode: recValidation.durationCode,
+        seriesMode: recValidation.seriesMode,
+        scheduleEntries: recScheduleEntries || undefined,
         weekdays: Array.isArray(recurrence?.weekdays) ? recurrence.weekdays : undefined,
         endDate,
         maxOccurrences,
@@ -2506,13 +2649,18 @@ export class AppointmentController {
       })();
 
       const runTx = db.transaction(() => {
+        const effWeekdays = Array.isArray(recurrence?.weekdays) && recurrence.weekdays.length > 0
+          ? recurrence.weekdays
+          : Array.from(new Set(evalResult.occurrences.map(o => o.dayOfWeek)));
+
         db.prepare(`
           INSERT INTO class_series (
             id, tenant_id, service_id, professional_id, room_id, patient_id, service_kind, title,
             modality, frequency, weekdays_json, interval_value, interval_unit,
+            series_mode, plan_duration_code, schedule_entries_json,
             start_time_hhmm, duration_minutes, start_date, end_date,
             max_occurrences, capacity, unit_price, status, created_by
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)
         `).run(
           seriesId,
           tenantId,
@@ -2524,9 +2672,12 @@ export class AppointmentController {
           serviceRow.name || 'Série recorrente',
           effectiveModality,
           freq,
-          JSON.stringify(Array.isArray(recurrence?.weekdays) ? recurrence.weekdays : []),
+          JSON.stringify(effWeekdays),
           intervalValue,
           intervalUnit,
+          evalResult.seriesMode,
+          evalResult.durationCode,
+          recScheduleEntries ? JSON.stringify(recScheduleEntries) : null,
           startClock,
           calcDurationMinutes,
           dates[0],
@@ -2537,11 +2688,27 @@ export class AppointmentController {
           req.user?.userId || 'system'
         );
 
+        const profProfessionCache = new Map<string, string | null>();
+        const getProfProfessionId = (pid: string): string | null => {
+          if (profProfessionCache.has(pid)) return profProfessionCache.get(pid) || null;
+          const rowP = db.prepare('SELECT profession_id FROM professionals WHERE id = ? AND tenant_id = ?').get(pid, tenantId) as { profession_id?: string | null } | undefined;
+          const val = rowP?.profession_id || null;
+          profProfessionCache.set(pid, val);
+          return val;
+        };
+
         for (const occEval of evalResult.occurrences) {
           const d = occEval.date;
-          const sIso = `${d}T${startClock}:00`;
-          const eIso = `${d}T${endClock}:00`;
+          const sIso = occEval.startTime.length === 16 ? `${occEval.startTime}:00` : occEval.startTime;
+          const eIso = occEval.endTime.length === 16 ? `${occEval.endTime}:00` : occEval.endTime;
+          const occStartClock = sIso.slice(11, 16);
+          const occEndClock = eIso.slice(11, 16);
+          const occProfId = occEval.professionalId || String(professionalId);
           const effRoomId = roomId || occEval.roomId || null;
+          const effOccModality = occEval.modality || effectiveModality;
+          const effCoIds = hasExplicitRecurringCoIds
+            ? normalizeUniqueIds(requestedRecurringCoIds, occProfId)
+            : normalizeUniqueIds(occEval.coInstructorIds || [], occProfId);
 
           const patientConflict = db.prepare(`
             SELECT a.id FROM appointments a
@@ -2549,7 +2716,7 @@ export class AppointmentController {
               AND REPLACE(a.start_time, ' ', 'T') < ? AND REPLACE(a.end_time, ' ', 'T') > ?
           `).get(tenantId, patientId, eIso, sIso);
           if (patientConflict) {
-            throw { status: 409, code: 'PATIENT_APPOINTMENT_CONFLICT', error: `O aluno/paciente já possui agendamento conflitante em ${d} (${startClock}).` };
+            throw { status: 409, code: 'PATIENT_APPOINTMENT_CONFLICT', error: `O aluno/paciente já possui agendamento conflitante em ${d} (${occStartClock}).` };
           }
 
           let occurrenceId: string | null = null;
@@ -2560,21 +2727,22 @@ export class AppointmentController {
               WHERE tenant_id = ? AND service_id = ? AND professional_id = ? AND day_of_week = ?
                 AND start_time = ? AND end_time = ? AND active = 1
               LIMIT 1
-            `).get(tenantId, serviceId, professionalId, getDayOfWeekFromYmd(d), startClock.slice(0, 5), endClock.slice(0, 5)) as { id: string } | undefined)?.id || null;
+            `).get(tenantId, serviceId, occProfId, getDayOfWeekFromYmd(d), occStartClock, occEndClock) as { id: string } | undefined)?.id || null;
 
             const occ = resolveOrCreateGroupOccurrenceTx({
               tenantId,
               serviceId,
               serviceName: serviceRow.name || 'Turma',
-              professionalId,
+              professionalId: occProfId,
               roomId: effRoomId,
               classScheduleId: matchedScheduleId,
               startTime: sIso,
               endTime: eIso,
               defaultCapacity: occEval.capacity || defaultCapacity,
-              modality: effectiveModality,
+              modality: effOccModality,
               seriesId,
-              patientId
+              patientId,
+              coInstructorIds: hasExplicitRecurringCoIds || effCoIds.length > 0 ? effCoIds : undefined
             });
             occurrenceId = occ.occurrenceId;
             isFirstEnrollment = occ.isFirstEnrollment;
@@ -2583,9 +2751,9 @@ export class AppointmentController {
               SELECT a.id FROM appointments a
               WHERE a.tenant_id = ? AND a.professional_id = ? AND a.status != 'cancelled'
                 AND REPLACE(a.start_time, ' ', 'T') < ? AND REPLACE(a.end_time, ' ', 'T') > ?
-            `).get(tenantId, professionalId, eIso, sIso);
+            `).get(tenantId, occProfId, eIso, sIso);
             if (profConflict) {
-              throw { status: 409, code: 'PROFESSIONAL_SLOT_OCCUPIED', error: `Horário indisponível para o profissional em ${d} (${startClock}).` };
+              throw { status: 409, code: 'PROFESSIONAL_SLOT_OCCUPIED', error: `Horário indisponível para o profissional em ${d} (${occStartClock}).` };
             }
             if (effRoomId) {
               const roomConflict = db.prepare(`
@@ -2594,7 +2762,7 @@ export class AppointmentController {
                   AND REPLACE(a.start_time, ' ', 'T') < ? AND REPLACE(a.end_time, ' ', 'T') > ?
               `).get(tenantId, effRoomId, eIso, sIso);
               if (roomConflict) {
-                throw { status: 409, code: 'ROOM_CONFLICT', error: `Sala ocupada em ${d} (${startClock}).` };
+                throw { status: 409, code: 'ROOM_CONFLICT', error: `Sala ocupada em ${d} (${occStartClock}).` };
               }
             }
           }
@@ -2612,17 +2780,30 @@ export class AppointmentController {
               package_contract_id, is_package_covered, created_by
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)
           `).run(
-            apptId, tenantId, apptNumber, patientId, professionalId, serviceId,
-            effRoomId, sIso, eIso, effectiveModality,
+            apptId, tenantId, apptNumber, patientId, occProfId, serviceId,
+            effRoomId, sIso, eIso, effOccModality,
             typeof meeting_url === 'string' ? meeting_url.trim() || null : null,
             typeof rawDriveUrl === 'string' ? rawDriveUrl.trim() || null : null,
             patientNotes || null, internalNotes || null, insuranceId || null,
-            initialClinicalModule, profRow.profession_id || null,
+            initialClinicalModule, getProfProfessionId(occProfId) || profRow.profession_id || null,
             seriesId, occurrenceId, isGroupService ? 'group' : 'individual',
             isPackageCovered ? String(packageContractId) : null,
             isPackageCovered ? 1 : 0,
             req.user?.userId || 'system'
           );
+
+          if (!isGroupService && effCoIds.length > 0) {
+            InstructorParticipationService.syncAppointmentParticipantsTx({
+              tenantId,
+              serviceId,
+              appointmentId: apptId,
+              occurrenceId: null,
+              primaryProfessionalId: occProfId,
+              coInstructorIds: effCoIds,
+              source: 'manual',
+              updatedBy: req.user?.userId || 'system'
+            });
+          }
 
           if (isPackageCovered && packageContractId) {
             const resv = PackageService.reservePackageRightTx({
@@ -2648,7 +2829,7 @@ export class AppointmentController {
             db.prepare(`
               INSERT INTO payments (id, tenant_id, appointment_id, patient_id, amount, payment_method, status, notes, service_id, base_amount, professional_id)
               VALUES (?, ?, ?, ?, ?, 'pix', ?, 'Gerado automaticamente por agendamento recorrente', ?, ?, ?)
-            `).run('pay-' + uuidv4().slice(0, 8), tenantId, apptId, patientId, agreedAmount, agreedAmount === 0 ? 'exempt' : 'pending', serviceId, agreedAmount, professionalId);
+            `).run('pay-' + uuidv4().slice(0, 8), tenantId, apptId, patientId, agreedAmount, agreedAmount === 0 ? 'exempt' : 'pending', serviceId, agreedAmount, occProfId);
           }
 
           createdAppointments.push({
@@ -2701,6 +2882,12 @@ export class AppointmentController {
 
       res.status(201).json({
         seriesId,
+        seriesMode: evalResult.seriesMode,
+        frequency: evalResult.frequency,
+        durationCode: evalResult.durationCode,
+        description: evalResult.description,
+        startDate: evalResult.startDate,
+        endDate: evalResult.endDate,
         createdCount: createdAppointments.length,
         serviceKind: isGroupService ? 'group' : 'individual',
         appointments: createdAppointments,

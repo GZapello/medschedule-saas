@@ -15,14 +15,19 @@ import { ApiClient } from '../../api/client';
 import { calendarBooking } from '../../utils/publicBooking';
 import { bookingButton, bookingSecondary, bookingInput, BookingBackButton } from './PublicBookingShell';
 import {
+  ALL_PLAN_DURATIONS,
   formatCustomIntervalLabel,
   formatRecurrenceDescription,
+  MAX_PUBLIC_RECURRENCE_OCCURRENCES,
   parseServiceRecurrenceConfig,
+  PLAN_DURATION_LABELS,
+  PlanDurationCode,
   RECURRENCE_FREQUENCY_LABELS,
   RECURRENCE_INTERVAL_BOUNDS,
   RecurrenceFrequency,
   RecurrenceIntervalSpec,
-  RecurrenceIntervalUnit
+  RecurrenceIntervalUnit,
+  resolvePlanDurationEndDate
 } from '../../utils/establishmentContext';
 import { RecurrencePreviewBox, RecurrencePreviewData } from '../common/RecurrencePreviewBox';
 
@@ -107,6 +112,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
   const [recurrenceIntervalUnit, setRecurrenceIntervalUnit] = useState<RecurrenceIntervalUnit>('days');
   const [recurrenceWeekdays, setRecurrenceWeekdays] = useState<number[]>([]);
   const [recurrenceEndMode, setRecurrenceEndMode] = useState<'count' | 'date'>('count');
+  const [recurrenceDurationCode, setRecurrenceDurationCode] = useState<Exclude<PlanDurationCode, 'legacy_frequency'>>('1_month');
   const [recurrenceCount, setRecurrenceCount] = useState<number>(4);
   const [recurrenceEndDate, setRecurrenceEndDate] = useState<string>('');
   const [recurrencePreview, setRecurrencePreview] = useState<RecurrencePreviewData | null>(null);
@@ -118,6 +124,8 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
     default_recurrence_frequency?: string | null;
     custom_recurrence_intervals?: RecurrenceIntervalSpec[] | null;
     default_recurrence_interval?: RecurrenceIntervalSpec | null;
+    allowed_plan_durations?: string[];
+    default_plan_duration?: string | null;
   } | null>(null);
 
   // Package booking state
@@ -166,7 +174,11 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
           custom_recurrence_intervals:
             slotRecurrenceMeta.custom_recurrence_intervals ?? selectedService?.custom_recurrence_intervals,
           default_recurrence_interval:
-            slotRecurrenceMeta.default_recurrence_interval ?? selectedService?.default_recurrence_interval
+            slotRecurrenceMeta.default_recurrence_interval ?? selectedService?.default_recurrence_interval,
+          allowed_plan_durations:
+            slotRecurrenceMeta.allowed_plan_durations ?? selectedService?.allowed_plan_durations,
+          default_plan_duration:
+            slotRecurrenceMeta.default_plan_duration ?? selectedService?.default_plan_duration
         }
       : selectedService;
     return parseServiceRecurrenceConfig(merged);
@@ -190,6 +202,12 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
       setRecurrenceIntervalValue(defCustom.intervalValue);
       setRecurrenceIntervalUnit(defCustom.intervalUnit);
     }
+    const allowedDurs = selectedServiceRecurrence.allowedPlanDurations || [...ALL_PLAN_DURATIONS];
+    setRecurrenceDurationCode(prev =>
+      allowedDurs.includes(prev)
+        ? prev
+        : (selectedServiceRecurrence.defaultPlanDuration || allowedDurs[0] || '1_month')
+    );
   }, [selectedServiceId, selectedServiceRecurrence]);
 
   useEffect(() => {
@@ -213,9 +231,18 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
       setRecurrencePreviewError('Selecione ao menos um dia da semana para consultar as datas.');
       return;
     }
-    if (recurrenceEndMode === 'date') {
-      const startDateIso = String(selectedSlot.startTime).slice(0, 10);
-      if (!recurrenceEndDate || recurrenceEndDate < startDateIso) {
+
+    const startDateIso = String(selectedSlot.startTime).slice(0, 10);
+    const effectiveEndMode: 'count' | 'date' = recurrenceDurationCode === 'count' ? 'count' : 'date';
+    const computedPlanEnd =
+      recurrenceDurationCode !== 'count' && recurrenceDurationCode !== 'custom_date'
+        ? resolvePlanDurationEndDate(startDateIso, recurrenceDurationCode)
+        : null;
+    const effectiveEndDateStr =
+      recurrenceDurationCode === 'custom_date' ? recurrenceEndDate : (computedPlanEnd || '');
+
+    if (effectiveEndMode === 'date') {
+      if (!effectiveEndDateStr || effectiveEndDateStr < startDateIso) {
         setRecurrencePreview(null);
         setRecurrencePreviewError('Informe uma data limite válida para consultar as datas.');
         return;
@@ -243,12 +270,14 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
         endTime: selectedSlot.endTime,
         recurrence: {
           frequency: activeFrequency,
+          durationCode: recurrenceDurationCode,
+          seriesMode: 'cadence_duration',
           ...(activeFrequency === 'custom_interval'
             ? { intervalValue: recurrenceIntervalValue, intervalUnit: recurrenceIntervalUnit }
             : {}),
           ...(activeFrequency === 'custom_weekdays' ? { weekdays: recurrenceWeekdays } : {}),
-          ...(recurrenceEndMode === 'date'
-            ? { endDate: recurrenceEndDate }
+          ...(effectiveEndMode === 'date'
+            ? { endDate: effectiveEndDateStr }
             : { maxOccurrences: recurrenceCount })
         }
       })
@@ -286,6 +315,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
     clinic?.slug,
     bookingSequence,
     recurrenceFrequency,
+    recurrenceDurationCode,
     recurrenceIntervalValue,
     recurrenceIntervalUnit,
     recurrenceWeekdays,
@@ -348,7 +378,11 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
           custom_recurrence_intervals: Array.isArray(res?.customRecurrenceIntervals)
             ? res.customRecurrenceIntervals
             : undefined,
-          default_recurrence_interval: res?.defaultRecurrenceInterval ?? null
+          default_recurrence_interval: res?.defaultRecurrenceInterval ?? null,
+          allowed_plan_durations: Array.isArray(res?.allowedPlanDurations)
+            ? res.allowedPlanDurations
+            : undefined,
+          default_plan_duration: res?.defaultPlanDuration ?? null
         });
         setEmptyReason(res?.emptyReason || '');
       })
@@ -585,17 +619,27 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                     const effectiveFreq = selectedServiceRecurrence.allowedFrequencies.includes(recurrenceFrequency)
                       ? recurrenceFrequency
                       : selectedServiceRecurrence.defaultFrequency || selectedServiceRecurrence.allowedFrequencies[0];
+                    const startDateIso = String(selectedSlot?.startTime || '').slice(0, 10);
+                    const effectiveEndMode: 'count' | 'date' = recurrenceDurationCode === 'count' ? 'count' : 'date';
+                    const computedPlanEnd =
+                      recurrenceDurationCode !== 'count' && recurrenceDurationCode !== 'custom_date'
+                        ? resolvePlanDurationEndDate(startDateIso, recurrenceDurationCode)
+                        : null;
+                    const effectiveEndDateStr =
+                      recurrenceDurationCode === 'custom_date' ? recurrenceEndDate : (computedPlanEnd || '');
                     return {
                       recurrence: {
                         frequency: effectiveFreq,
+                        durationCode: recurrenceDurationCode,
+                        seriesMode: 'cadence_duration',
                         ...(effectiveFreq === 'custom_interval'
                           ? { intervalValue: recurrenceIntervalValue, intervalUnit: recurrenceIntervalUnit }
                           : {}),
                         ...(effectiveFreq === 'custom_weekdays' && recurrenceWeekdays.length > 0
                           ? { weekdays: recurrenceWeekdays }
                           : {}),
-                        ...(recurrenceEndMode === 'date'
-                          ? { endDate: recurrenceEndDate }
+                        ...(effectiveEndMode === 'date' && effectiveEndDateStr
+                          ? { endDate: effectiveEndDateStr }
                           : { maxOccurrences: recurrenceCount })
                       }
                     };
@@ -1194,7 +1238,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
               {useRecurrence && (
                 <div className="space-y-2.5 pl-6">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-slate-600 font-semibold">Frequência:</span>
+                    <span className="text-slate-600 font-semibold">Frequência da aula:</span>
                     <select
                       value={
                         selectedServiceRecurrence.allowedFrequencies.includes(recurrenceFrequency)
@@ -1210,29 +1254,37 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                         </option>
                       ))}
                     </select>
-                    <span className="text-slate-600 font-semibold">Encerrar por:</span>
+                    <span className="text-slate-600 font-semibold">Duração do plano:</span>
                     <select
-                      value={recurrenceEndMode}
-                      onChange={e => setRecurrenceEndMode(e.target.value as 'count' | 'date')}
+                      value={recurrenceDurationCode}
+                      onChange={e => setRecurrenceDurationCode(e.target.value as any)}
                       className="border border-indigo-200 rounded-lg px-2 py-1 bg-white font-semibold"
                     >
-                      <option value="count">Quantidade</option>
-                      <option value="date">Data limite</option>
+                      {(selectedServiceRecurrence.allowedPlanDurations || ALL_PLAN_DURATIONS).map(dur => (
+                        <option key={dur} value={dur}>
+                          {PLAN_DURATION_LABELS[dur]}
+                        </option>
+                      ))}
                     </select>
-                    {recurrenceEndMode === 'count' ? (
+                    {recurrenceDurationCode === 'count' && (
                       <div className="inline-flex items-center gap-1.5">
                         <input
                           type="number"
                           min={2}
-                          max={24}
+                          max={MAX_PUBLIC_RECURRENCE_OCCURRENCES}
                           value={recurrenceCount}
-                          onChange={e => setRecurrenceCount(Math.max(2, Math.min(24, Number(e.target.value) || 2)))}
+                          onChange={e =>
+                            setRecurrenceCount(
+                              Math.max(2, Math.min(MAX_PUBLIC_RECURRENCE_OCCURRENCES, Number(e.target.value) || 2))
+                            )
+                          }
                           className="w-16 border border-indigo-200 rounded-lg px-2 py-1 bg-white text-center font-bold"
                           aria-label="Quantidade de aulas"
                         />
                         <span className="text-slate-600 font-semibold">aulas</span>
                       </div>
-                    ) : (
+                    )}
+                    {recurrenceDurationCode === 'custom_date' && (
                       <input
                         type="date"
                         min={selectedSlot?.startTime ? String(selectedSlot.startTime).slice(0, 10) : todayIso()}
@@ -1709,10 +1761,10 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                         intervalValue: recurrenceIntervalValue,
                         intervalUnit: recurrenceIntervalUnit,
                         weekdays: recurrenceWeekdays
-                      })} — ${
+                      })} • ${PLAN_DURATION_LABELS[recurrenceDurationCode] || 'Duração do plano'} — ${
                         recurrencePreview
                           ? `${recurrencePreview.totalCount} aulas`
-                          : recurrenceEndMode === 'date' && recurrenceEndDate
+                          : recurrenceDurationCode === 'custom_date' && recurrenceEndDate
                           ? `até ${formatDateShort(recurrenceEndDate)}`
                           : `${recurrenceCount} aulas`
                       })`

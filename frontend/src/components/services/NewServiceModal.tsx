@@ -8,10 +8,12 @@ import { ClassScheduleSection, DraftClassScheduleInput } from './ClassScheduleSe
 import { ServiceRecurrenceConfigPanel } from './ServiceRecurrenceConfigPanel';
 import { LinkedInstructorsSelector } from './LinkedInstructorsSelector';
 import {
+  ALL_PLAN_DURATIONS,
   isMixedProfile,
   isStudioProfile,
   normalizeEstablishmentProfile,
   parseServiceRecurrenceConfig,
+  PlanDurationCode,
   RecurrenceFrequency,
   RecurrenceIntervalSpec,
   resolveServiceDomain,
@@ -61,6 +63,8 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
   const [defaultFrequency, setDefaultFrequency] = useState<RecurrenceFrequency>('weekly');
   const [customIntervals, setCustomIntervals] = useState<RecurrenceIntervalSpec[]>([]);
   const [defaultCustomInterval, setDefaultCustomInterval] = useState<RecurrenceIntervalSpec | null>(null);
+  const [allowedPlanDurations, setAllowedPlanDurations] = useState<Exclude<PlanDurationCode, 'legacy_frequency'>[]>([...ALL_PLAN_DURATIONS]);
+  const [defaultPlanDuration, setDefaultPlanDuration] = useState<Exclude<PlanDurationCode, 'legacy_frequency'>>('1_month');
   const [description, setDescription] = useState<string>('');
   const [draftSchedules, setDraftSchedules] = useState<DraftClassScheduleInput[]>([]);
   const [hasPendingScheduleForm, setHasPendingScheduleForm] = useState<boolean>(false);
@@ -106,6 +110,8 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
         setDefaultFrequency(recCfg.defaultFrequency || 'weekly');
         setCustomIntervals(recCfg.customIntervals || []);
         setDefaultCustomInterval(recCfg.defaultCustomInterval || null);
+        setAllowedPlanDurations(recCfg.allowedPlanDurations || [...ALL_PLAN_DURATIONS]);
+        setDefaultPlanDuration(recCfg.defaultPlanDuration || '1_month');
         setDescription(serviceToEdit.description || '');
         const editPrimaryId = serviceToEdit.professional_id || initialProfessionalId || professionals[0]?.id || '';
         setProfessionalId(editPrimaryId);
@@ -127,6 +133,8 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
         setDefaultFrequency('weekly');
         setCustomIntervals([]);
         setDefaultCustomInterval(null);
+        setAllowedPlanDurations([...ALL_PLAN_DURATIONS]);
+        setDefaultPlanDuration('1_month');
         setDescription('');
         let defaultProf = '';
         if (initialProfessionalId && professionals.some(p => p.id === initialProfessionalId)) {
@@ -212,7 +220,9 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
               allowedRecurrenceFrequencies: allowRecurrence ? allowedFrequencies : [],
               defaultRecurrenceFrequency: allowRecurrence ? defaultFrequency : null,
               customRecurrenceIntervals: allowRecurrence && allowedFrequencies.includes('custom_interval') ? customIntervals : [],
-              defaultRecurrenceInterval: allowRecurrence && allowedFrequencies.includes('custom_interval') ? defaultCustomInterval : null
+              defaultRecurrenceInterval: allowRecurrence && allowedFrequencies.includes('custom_interval') ? defaultCustomInterval : null,
+              allowedPlanDurations: allowRecurrence ? allowedPlanDurations : [],
+              defaultPlanDuration: allowRecurrence ? defaultPlanDuration : null
             }
           : {}),
         classSchedules: shouldSendDraftSchedules ? draftSchedules : undefined,
@@ -474,12 +484,16 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
                 defaultFrequency={defaultFrequency}
                 customIntervals={customIntervals}
                 defaultCustomInterval={defaultCustomInterval}
+                allowedPlanDurations={allowedPlanDurations}
+                defaultPlanDuration={defaultPlanDuration}
                 onChange={next => {
                   setAllowRecurrence(next.allowRecurrence);
                   setAllowedFrequencies(next.allowedFrequencies);
                   setDefaultFrequency(next.defaultFrequency);
                   setCustomIntervals(next.customIntervals);
                   setDefaultCustomInterval(next.defaultCustomInterval);
+                  setAllowedPlanDurations(next.allowedPlanDurations);
+                  setDefaultPlanDuration(next.defaultPlanDuration);
                 }}
               />
             </div>

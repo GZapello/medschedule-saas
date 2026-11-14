@@ -54,6 +54,74 @@ export const RECURRENCE_UNIT_LABELS: Record<RecurrenceIntervalUnit, string> = {
   months: 'Mês(es)'
 };
 
+export const MAX_RECURRENCE_OCCURRENCES = 366;
+export const MAX_PUBLIC_RECURRENCE_OCCURRENCES = 260;
+
+export type PlanDurationCode =
+  | '1_month'
+  | '2_months'
+  | '3_months'
+  | '6_months'
+  | '12_months'
+  | '24_months'
+  | 'custom_date'
+  | 'count'
+  | 'legacy_frequency';
+
+export const ALL_PLAN_DURATIONS: Exclude<PlanDurationCode, 'legacy_frequency'>[] = [
+  '1_month',
+  '2_months',
+  '3_months',
+  '6_months',
+  '12_months',
+  '24_months',
+  'custom_date',
+  'count'
+];
+
+export const PLAN_DURATION_LABELS: Record<PlanDurationCode, string> = {
+  '1_month': 'Mensal (1 mês)',
+  '2_months': 'Bimestral (2 meses)',
+  '3_months': 'Trimestral (3 meses)',
+  '6_months': 'Semestral (6 meses)',
+  '12_months': 'Anual (12 meses)',
+  '24_months': 'Bienal (24 meses)',
+  custom_date: 'Data final personalizada',
+  count: 'Quantidade fixa de aulas',
+  legacy_frequency: 'Intervalo legado'
+};
+
+export const PLAN_DURATION_MONTHS: Partial<Record<PlanDurationCode, number>> = {
+  '1_month': 1,
+  '2_months': 2,
+  '3_months': 3,
+  '6_months': 6,
+  '12_months': 12,
+  '24_months': 24
+};
+
+export function isValidPlanDurationCode(value: unknown): value is PlanDurationCode {
+  const v = String(value || '').trim();
+  return (ALL_PLAN_DURATIONS as string[]).includes(v) || v === 'legacy_frequency';
+}
+
+export function resolvePlanDurationEndDate(startDateYmd: string, durationCode?: unknown): string | null {
+  const cleanStart = String(startDateYmd || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(cleanStart)) return null;
+  const months = PLAN_DURATION_MONTHS[String(durationCode || '').trim() as PlanDurationCode];
+  if (!months || months <= 0) return null;
+
+  const [y, m, d] = cleanStart.split('-').map(Number);
+  const targetTotalMonths = y * 12 + (m - 1) + months;
+  const targetYear = Math.floor(targetTotalMonths / 12);
+  const targetMonthZero = targetTotalMonths % 12;
+  const lastDayTargetMonth = new Date(Date.UTC(targetYear, targetMonthZero + 1, 0, 12, 0, 0)).getUTCDate();
+  const clampedDay = Math.min(d, lastDayTargetMonth);
+  const anniversary = new Date(Date.UTC(targetYear, targetMonthZero, clampedDay, 12, 0, 0));
+  anniversary.setUTCDate(anniversary.getUTCDate() - 1);
+  return anniversary.toISOString().slice(0, 10);
+}
+
 export function normalizeEstablishmentProfile(raw?: unknown): EstablishmentProfile {
   const val = String(raw || '').trim().toLowerCase();
   if (val === 'studio' || val === 'mixed') return val;
@@ -139,6 +207,8 @@ export interface ParsedServiceRecurrenceConfig {
   defaultFrequency: RecurrenceFrequency | null;
   customIntervals: RecurrenceIntervalSpec[];
   defaultCustomInterval: RecurrenceIntervalSpec | null;
+  allowedPlanDurations: Exclude<PlanDurationCode, 'legacy_frequency'>[];
+  defaultPlanDuration: Exclude<PlanDurationCode, 'legacy_frequency'>;
   hasExplicitConfig: boolean;
 }
 
@@ -241,7 +311,12 @@ export function parseServiceRecurrenceConfig(service?: {
   custom_recurrence_intervals_json?: string | null;
   default_recurrence_interval?: RecurrenceIntervalSpec | null;
   default_recurrence_interval_json?: string | null;
+  allowed_plan_durations?: string[] | null;
+  allowed_plan_durations_json?: string | null;
+  default_plan_duration?: string | null;
 } | null): ParsedServiceRecurrenceConfig {
+  const defaultDurations: Exclude<PlanDurationCode, 'legacy_frequency'>[] = [...ALL_PLAN_DURATIONS];
+
   if (!service) {
     return {
       allowRecurrence: true,
@@ -249,9 +324,41 @@ export function parseServiceRecurrenceConfig(service?: {
       defaultFrequency: 'weekly',
       customIntervals: [],
       defaultCustomInterval: null,
+      allowedPlanDurations: defaultDurations,
+      defaultPlanDuration: '1_month',
       hasExplicitConfig: false
     };
   }
+
+  let allowedPlanDurations: Exclude<PlanDurationCode, 'legacy_frequency'>[] = [...defaultDurations];
+  const rawDurations = Array.isArray(service.allowed_plan_durations)
+    ? service.allowed_plan_durations
+    : (() => {
+        if (typeof service.allowed_plan_durations_json === 'string' && service.allowed_plan_durations_json.trim()) {
+          try {
+            const p = JSON.parse(service.allowed_plan_durations_json);
+            return Array.isArray(p) ? p : null;
+          } catch {
+            return null;
+          }
+        }
+        return null;
+      })();
+
+  if (rawDurations && rawDurations.length > 0) {
+    const valid = Array.from(
+      new Set(rawDurations.map(v => String(v || '').trim()).filter(v => isValidPlanDurationCode(v) && v !== 'legacy_frequency'))
+    ) as Exclude<PlanDurationCode, 'legacy_frequency'>[];
+    if (valid.length > 0) allowedPlanDurations = valid;
+  }
+
+  const rawDefDur = String(service.default_plan_duration || '').trim();
+  const defaultPlanDuration: Exclude<PlanDurationCode, 'legacy_frequency'> =
+    isValidPlanDurationCode(rawDefDur) &&
+    rawDefDur !== 'legacy_frequency' &&
+    allowedPlanDurations.includes(rawDefDur as Exclude<PlanDurationCode, 'legacy_frequency'>)
+      ? (rawDefDur as Exclude<PlanDurationCode, 'legacy_frequency'>)
+      : (allowedPlanDurations.includes('1_month') ? '1_month' : allowedPlanDurations[0]);
 
   const allowFlag = Number(service.allow_recurrence ?? 1) !== 0;
   if (!allowFlag) {
@@ -261,6 +368,8 @@ export function parseServiceRecurrenceConfig(service?: {
       defaultFrequency: null,
       customIntervals: [],
       defaultCustomInterval: null,
+      allowedPlanDurations,
+      defaultPlanDuration,
       hasExplicitConfig: true
     };
   }
@@ -303,6 +412,8 @@ export function parseServiceRecurrenceConfig(service?: {
         defaultFrequency: null,
         customIntervals: [],
         defaultCustomInterval: null,
+        allowedPlanDurations,
+        defaultPlanDuration,
         hasExplicitConfig: true
       };
     }
@@ -315,6 +426,8 @@ export function parseServiceRecurrenceConfig(service?: {
       defaultFrequency,
       customIntervals: parsedList.includes('custom_interval') ? customIntervals : [],
       defaultCustomInterval: parsedList.includes('custom_interval') ? effectiveDefaultInterval : null,
+      allowedPlanDurations,
+      defaultPlanDuration,
       hasExplicitConfig: true
     };
   }
@@ -325,6 +438,8 @@ export function parseServiceRecurrenceConfig(service?: {
     defaultFrequency: isValidRecurrenceFrequency(rawDefault) ? rawDefault : 'weekly',
     customIntervals,
     defaultCustomInterval: effectiveDefaultInterval,
+    allowedPlanDurations,
+    defaultPlanDuration,
     hasExplicitConfig: false
   };
 }

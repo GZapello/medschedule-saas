@@ -2,13 +2,19 @@ import { db } from '../config/database';
 import {
   formatRecurrenceDescription,
   MAX_PUBLIC_RECURRENCE_OCCURRENCES,
+  MAX_RECURRENCE_OCCURRENCES,
+  PlanDurationCode,
   RecurrenceFrequency,
   RecurrenceIntervalUnit,
   validateServiceRecurrenceFrequency
 } from '../utils/establishment-context';
 import { ConcreteModality, resolveConcreteModality } from '../utils/modality-resolver';
 import { calculateAvailableSlots } from '../utils/slot-calculator';
-import { generateRecurrenceDates } from './class-group.service';
+import {
+  generateRecurrenceDates,
+  generateSchedulePlanOccurrences,
+  SchedulePlanEntryInput
+} from './class-group.service';
 import { ClassScheduleService, getDayOfWeekFromYmd } from './class-schedule.service';
 import { GoogleCalendarService } from './google-calendar.service';
 
@@ -18,6 +24,7 @@ export interface RecurrenceEvaluationInput {
   tenantId: string;
   serviceId: string;
   professionalId?: string | null;
+  coInstructorIds?: string[] | null;
   classScheduleId?: string | null;
   roomId?: string | null;
   patientId?: string | null;
@@ -28,6 +35,9 @@ export interface RecurrenceEvaluationInput {
   frequency?: string | null;
   intervalValue?: number | null;
   intervalUnit?: RecurrenceIntervalUnit | null;
+  durationCode?: PlanDurationCode | string | null;
+  seriesMode?: 'legacy' | 'schedule_plan' | null;
+  scheduleEntries?: SchedulePlanEntryInput[] | null;
   weekdays?: number[] | null;
   endDate?: string | null;
   maxOccurrences?: number | null;
@@ -61,6 +71,7 @@ export interface RecurrenceOccurrenceEvaluation {
   reasonMessage?: string;
   professionalId?: string;
   professionalName?: string;
+  coInstructorIds?: string[];
   classScheduleId?: string | null;
   roomId?: string | null;
   roomName?: string | null;
@@ -72,10 +83,14 @@ export interface RecurrenceOccurrenceEvaluation {
 
 export interface RecurrenceEvaluationResult {
   valid: boolean;
+  seriesMode: 'legacy' | 'schedule_plan';
   frequency: RecurrenceFrequency;
+  durationCode: PlanDurationCode | null;
   intervalValue: number | null;
   intervalUnit: RecurrenceIntervalUnit | null;
   description: string;
+  startDate: string;
+  endDate: string;
   serviceId: string;
   serviceName: string;
   serviceKind: 'individual' | 'group';
@@ -283,6 +298,7 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
            COALESCE(service_kind, 'individual') as service_kind,
            default_capacity, COALESCE(allow_recurrence, 1) as allow_recurrence,
            allowed_recurrence_frequencies_json, default_recurrence_frequency,
+           allowed_plan_durations_json, default_plan_duration,
            custom_recurrence_intervals_json, default_recurrence_interval_json,
            min_lead_time_hours, max_advance_days,
            service_domain, clinical_module
@@ -294,11 +310,16 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
     throw Object.assign(new Error('Serviço não encontrado ou inativo nesta clínica.'), { status: 404, code: 'SERVICE_NOT_FOUND' });
   }
 
+  const hasScheduleEntries = Array.isArray(input.scheduleEntries) && input.scheduleEntries.length > 0;
   const recValidation = validateServiceRecurrenceFrequency(
     serviceRow,
     input.frequency,
     input.intervalValue,
-    input.intervalUnit
+    input.intervalUnit,
+    {
+      durationCode: input.durationCode,
+      seriesMode: input.seriesMode || (hasScheduleEntries ? 'schedule_plan' : undefined)
+    }
   );
   if (!recValidation.valid) {
     throw Object.assign(new Error(recValidation.error), { status: 400, code: recValidation.code });
@@ -306,9 +327,11 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
 
   const endDateStr = input.endDate ? String(input.endDate).slice(0, 10) : undefined;
   const rawMax = input.maxOccurrences !== undefined && input.maxOccurrences !== null ? Number(input.maxOccurrences) : undefined;
+  const effDurationCode = recValidation.durationCode;
+  const hasBoundedPlanDuration = Boolean(effDurationCode && effDurationCode !== 'count' && effDurationCode !== 'custom_date' && effDurationCode !== 'legacy_frequency');
 
-  if (!endDateStr && (!rawMax || rawMax <= 0)) {
-    throw Object.assign(new Error('Informe data de término ou quantidade máxima de ocorrências.'), {
+  if (!endDateStr && !hasBoundedPlanDuration && (!rawMax || rawMax <= 0)) {
+    throw Object.assign(new Error('Informe a duração do plano, data de término ou quantidade máxima de ocorrências.'), {
       status: 400,
       code: 'RECURRENCE_BOUND_REQUIRED'
     });
@@ -321,24 +344,40 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
     );
   }
 
-  const dates = generateRecurrenceDates({
+  const startClockFull = normalizeClockHHMMSS(input.startClock);
+  const endClockFull = input.endClock ? normalizeClockHHMMSS(input.endClock) : computeClockOffsetEnd(startClockFull, Number(serviceRow.duration_minutes || 50));
+
+  const generatedPlan = generateSchedulePlanOccurrences({
     startDate: input.startDate,
     frequency: recValidation.frequency,
     intervalValue: recValidation.intervalValue,
     intervalUnit: recValidation.intervalUnit,
-    weekdays: Array.isArray(input.weekdays) ? input.weekdays : undefined,
+    durationCode: effDurationCode,
     endDate: endDateStr,
-    maxOccurrences: rawMax
+    maxOccurrences: rawMax,
+    weekdays: Array.isArray(input.weekdays) ? input.weekdays : undefined,
+    startClock: startClockFull,
+    endClock: endClockFull,
+    durationMinutes: Number(serviceRow.duration_minutes || 50),
+    classScheduleId: classScheduleId || null,
+    professionalId: input.professionalId && input.professionalId !== 'any' ? String(input.professionalId) : null,
+    coInstructorIds: Array.isArray(input.coInstructorIds) ? input.coInstructorIds : null,
+    roomId: roomId || null,
+    modality: input.modality || null,
+    scheduleEntries: hasScheduleEntries ? input.scheduleEntries : null,
+    maxCap: publicOnly ? MAX_PUBLIC_RECURRENCE_OCCURRENCES : MAX_RECURRENCE_OCCURRENCES
   });
 
-  if (publicOnly && dates.length > MAX_PUBLIC_RECURRENCE_OCCURRENCES) {
+  const plannedOccurrences = generatedPlan.occurrences;
+
+  if (publicOnly && plannedOccurrences.length > MAX_PUBLIC_RECURRENCE_OCCURRENCES) {
     throw Object.assign(
-      new Error(`No agendamento online, o período informado gera ${dates.length} ocorrências (máximo de ${MAX_PUBLIC_RECURRENCE_OCCURRENCES}).`),
+      new Error(`No agendamento online, o período informado gera ${plannedOccurrences.length} ocorrências (máximo de ${MAX_PUBLIC_RECURRENCE_OCCURRENCES}).`),
       { status: 400, code: 'RECURRENCE_LIMIT_EXCEEDED' }
     );
   }
 
-  if (dates.length === 0) {
+  if (plannedOccurrences.length === 0) {
     throw Object.assign(new Error('Nenhuma data válida encontrada para os critérios de recorrência informados.'), {
       status: 400,
       code: 'RECURRENCE_EMPTY_DATES'
@@ -364,7 +403,7 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
     isCustomTime
   });
 
-  if (preferredProfId !== 'any' && eligibleProfs.length === 0 && !isCustomTime) {
+  if (preferredProfId !== 'any' && eligibleProfs.length === 0 && !isCustomTime && !hasScheduleEntries) {
     throw Object.assign(new Error(`O instrutor/profissional selecionado não está vinculado ao serviço "${serviceRow.name}".`), {
       status: 400,
       code: 'INSTRUCTOR_NOT_LINKED_TO_SERVICE'
@@ -378,14 +417,7 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
     }
   }
 
-  const startClockFull = normalizeClockHHMMSS(input.startClock);
-  const startClockHHMM = startClockFull.slice(0, 5);
-  const endClockFull = input.endClock ? normalizeClockHHMMSS(input.endClock) : computeClockOffsetEnd(startClockFull, Number(serviceRow.duration_minutes || 50));
-  const endClockHHMM = endClockFull.slice(0, 5);
-  const startMin = parseClockMinutes(startClockFull);
-  const endMin = parseClockMinutes(endClockFull);
-
-  if (endClockFull <= startClockFull) {
+  if (endClockFull <= startClockFull && !hasScheduleEntries) {
     throw Object.assign(new Error('Informe início e término válidos para o horário base.'), { status: 400, code: 'INVALID_BOOKING_TIME' });
   }
 
@@ -403,14 +435,22 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
 
   const occurrences: RecurrenceOccurrenceEvaluation[] = [];
 
-  for (let idx = 0; idx < dates.length; idx++) {
-    const dateStr = dates[idx];
-    const dow = getDayOfWeekFromYmd(dateStr);
+  for (let idx = 0; idx < plannedOccurrences.length; idx++) {
+    const occPlan = plannedOccurrences[idx];
+    const dateStr = occPlan.date;
+    const dow = occPlan.dayOfWeek;
     const dayLabel = WEEKDAY_SHORT_LABELS[dow] || '';
-    const sIso = `${dateStr}T${startClockFull}`;
-    const eIso = `${dateStr}T${endClockFull}`;
+    const occStartClockFull = occPlan.startClock;
+    const occEndClockFull = occPlan.endClock;
+    const startClockHHMM = occStartClockFull.slice(0, 5);
+    const endClockHHMM = occEndClockFull.slice(0, 5);
+    const startMin = parseClockMinutes(occStartClockFull);
+    const endMin = parseClockMinutes(occEndClockFull);
     const cleanS = `${dateStr}T${startClockHHMM}:00`;
     const cleanE = `${dateStr}T${endClockHHMM}:00`;
+    const occScheduleId = occPlan.classScheduleId || classScheduleId || null;
+    const occPreferredProf = occPlan.professionalId || preferredProfId;
+    const occRoomId = occPlan.roomId || roomId || null;
     const ignoreLeadTime = idx > 0 ? true : ignoreFirstLeadTime;
     const ignoreAdvanceCap = idx > 0;
 
@@ -456,7 +496,7 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
         continue;
       }
 
-      const clinicHours = checkClinicBusinessHoursForDate(tenantId, dateStr, startClockFull, endClockFull);
+      const clinicHours = checkClinicBusinessHoursForDate(tenantId, dateStr, occStartClockFull, occEndClockFull);
       if (!clinicHours.valid) {
         occurrences.push({
           index: idx + 1,
@@ -476,10 +516,10 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
     // 3. Aula coletiva com grade semanal cadastrada (class_schedules)
     if (isGroupService && hasClassSchedules && !isCustomTime) {
       const candidates = allClassSchedules.filter(s => {
-        if (classScheduleId && s.id !== classScheduleId) return false;
+        if (occScheduleId && s.id !== occScheduleId) return false;
         if (Number(s.day_of_week) !== dow) return false;
         if (s.start_time.slice(0, 5) !== startClockHHMM || s.end_time.slice(0, 5) !== endClockHHMM) return false;
-        if (preferredProfId !== 'any' && s.professional_id !== preferredProfId) return false;
+        if (occPreferredProf !== 'any' && s.professional_id !== occPreferredProf) return false;
         if (dateStr < s.effective_start_date) return false;
         if (s.effective_end_date && dateStr > s.effective_end_date) return false;
         return true;
@@ -493,7 +533,7 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
         try {
           resolvedModality = resolveConcreteModality({
             serviceModality: serviceRow.modality,
-            requestedModality: input.modality,
+            requestedModality: occPlan.modality ?? input.modality,
             scheduleModality: sch.modality,
             allowHome: true
           });
@@ -517,6 +557,9 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
         });
 
         if (evalRes.bookable) {
+          const effCoIds = occPlan.coInstructorIds.length > 0
+            ? occPlan.coInstructorIds
+            : (Array.isArray(sch.co_instructor_ids) ? sch.co_instructor_ids : []);
           bookedSlot = {
             index: idx + 1,
             date: dateStr,
@@ -527,8 +570,9 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
             available: true,
             professionalId: sch.professional_id,
             professionalName: sch.professional_name || 'Instrutor',
+            coInstructorIds: effCoIds,
             classScheduleId: sch.id,
-            roomId: evalRes.slot.roomId,
+            roomId: occRoomId || evalRes.slot.roomId,
             roomName: evalRes.slot.roomName,
             capacity: evalRes.slot.capacity,
             remainingSpots: evalRes.slot.remainingSpots,
@@ -550,7 +594,7 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
           tenantId,
           serviceRow,
           dateStr,
-          professionalId: preferredProfId,
+          professionalId: occPreferredProf,
           patientId: patientId || undefined,
           ignoreLeadTime,
           ignoreAdvanceCap,
@@ -588,9 +632,14 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
     }
 
     // 4. Serviço individual (ou aula coletiva legada sem grade semanal / override administrativo)
-    const candidatesToTry = isCustomTime && preferredProfId !== 'any' && eligibleProfs.length === 0
-      ? [{ id: preferredProfId, name: 'Profissional', active: 1, public_booking_enabled: 1 }]
-      : eligibleProfs;
+    const occEligibles = occPreferredProf === 'any'
+      ? eligibleProfs
+      : (eligibleProfs.some(p => p.id === occPreferredProf)
+          ? eligibleProfs.filter(p => p.id === occPreferredProf)
+          : getEligibleProfessionalsForService({ tenantId, serviceRow, preferredProfId: occPreferredProf, publicOnly, isCustomTime }));
+    const candidatesToTry = isCustomTime && occPreferredProf !== 'any' && occEligibles.length === 0
+      ? [{ id: occPreferredProf, name: 'Profissional', active: 1, public_booking_enabled: 1 }]
+      : occEligibles;
 
     let matchedOk: RecurrenceOccurrenceEvaluation | null = null;
     let firstFailure: { code?: string; message?: string } | null = null;
@@ -675,7 +724,7 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
           continue;
         }
 
-        if (roomId) {
+        if (occRoomId) {
           const roomConflict = db.prepare(`
             SELECT a.id, r.name as room_name FROM appointments a
             LEFT JOIN rooms r ON r.id = a.room_id
@@ -684,7 +733,7 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
               AND a.status != 'cancelled'
               AND REPLACE(a.start_time, ' ', 'T') < ? AND REPLACE(a.end_time, ' ', 'T') > ?
             LIMIT 1
-          `).get(tenantId, roomId, occId, occId, cleanE, cleanS) as any;
+          `).get(tenantId, occRoomId, occId, occId, cleanE, cleanS) as any;
           if (roomConflict) {
             if (!firstFailure) firstFailure = { code: 'ROOM_CONFLICT', message: `Sala ocupada em ${dateStr} (${startClockHHMM}).` };
             continue;
@@ -701,8 +750,9 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
           available: true,
           professionalId: prof.id,
           professionalName: prof.name,
+          coInstructorIds: occPlan.coInstructorIds,
           classScheduleId: null,
-          roomId: roomId || occ?.room_id || null,
+          roomId: occRoomId || occ?.room_id || null,
           capacity: cap,
           remainingSpots: Math.max(0, cap - enrolled),
           modality: concreteServiceModality
@@ -722,13 +772,13 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
         continue;
       }
 
-      if (roomId) {
+      if (occRoomId) {
         const roomConflict = db.prepare(`
           SELECT a.id FROM appointments a
           WHERE a.tenant_id = ? AND a.room_id = ? AND a.status != 'cancelled'
             AND REPLACE(a.start_time, ' ', 'T') < ? AND REPLACE(a.end_time, ' ', 'T') > ?
           LIMIT 1
-        `).get(tenantId, roomId, cleanE, cleanS);
+        `).get(tenantId, occRoomId, cleanE, cleanS);
         if (roomConflict) {
           if (!firstFailure) firstFailure = { code: 'ROOM_CONFLICT', message: `Sala ocupada em ${dateStr} (${startClockHHMM}).` };
           continue;
@@ -745,8 +795,9 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
         available: true,
         professionalId: prof.id,
         professionalName: prof.name,
+        coInstructorIds: occPlan.coInstructorIds,
         classScheduleId: null,
-        roomId: roomId || null,
+        roomId: occRoomId || null,
         capacity: 1,
         remainingSpots: 1,
         modality: concreteServiceModality
@@ -805,18 +856,25 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
 
   const availableCount = occurrences.filter(o => o.available).length;
   const conflictCount = occurrences.length - availableCount;
+  const uniqueDays = Array.from(new Set(occurrences.map(o => o.dayOfWeek)));
 
   return {
     valid: occurrences.length > 0 && conflictCount === 0,
+    seriesMode: recValidation.seriesMode,
     frequency: recValidation.frequency,
+    durationCode: effDurationCode,
     intervalValue: recValidation.intervalValue,
     intervalUnit: recValidation.intervalUnit,
     description: formatRecurrenceDescription({
       frequency: recValidation.frequency,
       intervalValue: recValidation.intervalValue,
       intervalUnit: recValidation.intervalUnit,
-      weekdays: Array.isArray(input.weekdays) ? input.weekdays : undefined
+      weekdays: Array.isArray(input.weekdays) && input.weekdays.length > 0 ? input.weekdays : uniqueDays,
+      durationCode: effDurationCode,
+      endDate: occurrences[occurrences.length - 1]?.date || generatedPlan.resolvedEndDate || null
     }),
+    startDate: occurrences[0]?.date || input.startDate,
+    endDate: occurrences[occurrences.length - 1]?.date || generatedPlan.resolvedEndDate || input.startDate,
     serviceId: serviceRow.id,
     serviceName: serviceRow.name,
     serviceKind: isGroupService ? 'group' : 'individual',
@@ -833,9 +891,10 @@ export async function evaluateRecurrenceSeriesWithExternalBusy(
 ): Promise<RecurrenceEvaluationResult> {
   // First generate dates via dry run without external busy map if possible, or prefetch for generated dates
   const serviceRow = db.prepare(`
-    SELECT id, name, professional_id, COALESCE(service_kind, 'individual') as service_kind,
+    SELECT id, name, duration_minutes, professional_id, COALESCE(service_kind, 'individual') as service_kind,
            COALESCE(allow_recurrence, 1) as allow_recurrence,
            allowed_recurrence_frequencies_json, default_recurrence_frequency,
+           allowed_plan_durations_json, default_plan_duration,
            custom_recurrence_intervals_json, default_recurrence_interval_json
     FROM services
     WHERE id = ? AND tenant_id = ? AND active = 1
@@ -845,11 +904,16 @@ export async function evaluateRecurrenceSeriesWithExternalBusy(
     throw Object.assign(new Error('Serviço não encontrado ou inativo nesta clínica.'), { status: 404, code: 'SERVICE_NOT_FOUND' });
   }
 
+  const hasScheduleEntries = Array.isArray(input.scheduleEntries) && input.scheduleEntries.length > 0;
   const recValidation = validateServiceRecurrenceFrequency(
     serviceRow,
     input.frequency,
     input.intervalValue,
-    input.intervalUnit
+    input.intervalUnit,
+    {
+      durationCode: input.durationCode,
+      seriesMode: input.seriesMode || (hasScheduleEntries ? 'schedule_plan' : undefined)
+    }
   );
   if (!recValidation.valid) {
     throw Object.assign(new Error(recValidation.error), { status: 400, code: recValidation.code });
@@ -858,15 +922,27 @@ export async function evaluateRecurrenceSeriesWithExternalBusy(
   const endDateStr = input.endDate ? String(input.endDate).slice(0, 10) : undefined;
   const rawMax = input.maxOccurrences !== undefined && input.maxOccurrences !== null ? Number(input.maxOccurrences) : undefined;
 
-  const dates = generateRecurrenceDates({
+  const generatedPlan = generateSchedulePlanOccurrences({
     startDate: input.startDate,
     frequency: recValidation.frequency,
     intervalValue: recValidation.intervalValue,
     intervalUnit: recValidation.intervalUnit,
-    weekdays: Array.isArray(input.weekdays) ? input.weekdays : undefined,
+    durationCode: recValidation.durationCode,
     endDate: endDateStr,
-    maxOccurrences: rawMax
+    maxOccurrences: rawMax,
+    weekdays: Array.isArray(input.weekdays) ? input.weekdays : undefined,
+    startClock: input.startClock,
+    endClock: input.endClock || null,
+    durationMinutes: Number(serviceRow.duration_minutes || 50),
+    classScheduleId: input.classScheduleId || null,
+    professionalId: input.professionalId && input.professionalId !== 'any' ? String(input.professionalId) : null,
+    coInstructorIds: Array.isArray(input.coInstructorIds) ? input.coInstructorIds : null,
+    roomId: input.roomId || null,
+    modality: input.modality || null,
+    scheduleEntries: hasScheduleEntries ? input.scheduleEntries : null,
+    maxCap: input.publicOnly ? MAX_PUBLIC_RECURRENCE_OCCURRENCES : MAX_RECURRENCE_OCCURRENCES
   });
+  const dates = Array.from(new Set(generatedPlan.occurrences.map(o => o.date)));
 
   const extBusyMap = input.externalBusyByProfAndDate || new Map<string, Array<{ startMin: number; endMin: number }>>();
   const preferredProfId = input.professionalId && input.professionalId !== 'any' ? String(input.professionalId) : 'any';

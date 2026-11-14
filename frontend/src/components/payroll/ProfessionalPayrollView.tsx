@@ -18,7 +18,10 @@ import {
   User,
   Percent,
   Sliders,
-  AlertCircle
+  AlertCircle,
+  AlertTriangle,
+  Eye,
+  Users
 } from 'lucide-react';
 import { ProfessionalPayroll, Professional } from '../../types';
 
@@ -37,6 +40,8 @@ export const ProfessionalPayrollView: React.FC = () => {
   const [payrolls, setPayrolls] = useState<ProfessionalPayroll[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [calculating, setCalculating] = useState<boolean>(false);
+  const [calcSummary, setCalcSummary] = useState<any | null>(null);
+  const [calcWarnings, setCalcWarnings] = useState<any[]>([]);
 
   // Modais
   const [payingRecord, setPayingRecord] = useState<ProfessionalPayroll | null>(null);
@@ -47,6 +52,10 @@ export const ProfessionalPayrollView: React.FC = () => {
   const [adjustmentValue, setAdjustmentValue] = useState<number>(0);
   const [adjustmentNotes, setAdjustmentNotes] = useState<string>('');
   const [savingAdjust, setSavingAdjust] = useState<boolean>(false);
+
+  const [detailRecord, setDetailRecord] = useState<ProfessionalPayroll | null>(null);
+  const [detailItems, setDetailItems] = useState<any[]>([]);
+  const [loadingDetails, setLoadingDetails] = useState<boolean>(false);
 
   if (!isClinicAdmin) {
     return (
@@ -75,8 +84,28 @@ export const ProfessionalPayrollView: React.FC = () => {
   };
 
   useEffect(() => {
+    setCalcSummary(null);
+    setCalcWarnings([]);
     fetchPayrolls();
   }, [periodMonth]);
+
+  const handleOpenDetails = async (pay: ProfessionalPayroll) => {
+    setDetailRecord(pay);
+    const localFallback = (pay.items && pay.items.length > 0 ? pay.items : pay.commission_breakdown) || [];
+    setDetailItems(localFallback);
+    if (!pay.id) return;
+    try {
+      setLoadingDetails(true);
+      const res = await ApiClient.get<{ items?: any[] }>(`/v1/payroll/${pay.id}/items`);
+      if (Array.isArray(res?.items) && res.items.length > 0) {
+        setDetailItems(res.items);
+      }
+    } catch {
+      // Fallback para commission_breakdown já carregado
+    } finally {
+      setLoadingDetails(false);
+    }
+  };
 
   const handlePrevMonth = () => {
     const [y, m] = periodMonth.split('-').map(Number);
@@ -94,13 +123,26 @@ export const ProfessionalPayrollView: React.FC = () => {
   const handleCalculatePayroll = async () => {
     try {
       setCalculating(true);
-      const res = await ApiClient.post<{ results: any[] }>('/v1/payroll/calculate', {
+      const res = await ApiClient.post<{
+        results: any[];
+        summary?: any;
+        warnings?: any[];
+      }>('/v1/payroll/calculate', {
         periodMonth
       });
 
-      // Salva os cálculos apurados no banco preservando quitação e ajustes existentes
+      setCalcSummary(res.summary || null);
+      setCalcWarnings(Array.isArray(res.warnings) ? res.warnings : []);
+
+      // Salva os cálculos apurados no banco preservando folhas já pagas e ajustes existentes
+      let savedCount = 0;
+      let skippedLocked = 0;
       if (res.results && res.results.length > 0) {
         for (const r of res.results) {
+          if (r.isLocked || r.status === 'paid') {
+            skippedLocked++;
+            continue;
+          }
           await ApiClient.post('/v1/payroll', {
             professionalId: r.professionalId,
             periodMonth: r.periodMonth,
@@ -115,12 +157,16 @@ export const ProfessionalPayrollView: React.FC = () => {
             totalPayable: r.totalPayable,
             dueDate: r.dueDate,
             status: r.status || 'pending',
-            paidDate: r.paidDate || undefined
+            paidDate: r.paidDate || undefined,
+            commissionBreakdown: r.commissionBreakdown || [],
+            warnings: r.warnings || []
           });
+          savedCount++;
         }
       }
 
-      showToast(`Apuração concluída para ${res.results?.length || 0} profissionais!`, 'success');
+      const extraNote = skippedLocked > 0 ? ` (${skippedLocked} folha(s) já paga(s) preservada(s))` : '';
+      showToast(`Apuração concluída para ${res.results?.length || 0} profissionais (${savedCount} atualizada(s))${extraNote}!`, 'success');
       fetchPayrolls();
     } catch (err: any) {
       showToast(err.message || 'Erro ao calcular repasses', 'error');
@@ -268,10 +314,38 @@ export const ProfessionalPayrollView: React.FC = () => {
         </div>
 
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
-          <p className="text-xs font-semibold text-slate-500">Consultas Apuradas</p>
+          <p className="text-xs font-semibold text-slate-500">Consultas / Participações</p>
           <h3 className="text-xl font-black text-indigo-600 mt-1">{totalAppointments}</h3>
+          {calcSummary && (
+            <p className="text-[10px] text-slate-400 mt-0.5">
+              {calcSummary.uniqueItemsCount} ocorrência(s) única(s) • Base{' '}
+              {Number(calcSummary.uniqueProducedAmount || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+            </p>
+          )}
         </div>
       </div>
+
+      {/* Alertas de apuração (ex: soma das comissões > base financeira da aula) */}
+      {(calcWarnings.length > 0 || payrolls.some(p => (p.warnings?.length || 0) > 0)) && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 space-y-1.5 text-xs">
+          <div className="flex items-center gap-2 font-bold text-amber-900">
+            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>Alertas de Apuração de Comissão em Aulas com Múltiplos Instrutores</span>
+          </div>
+          <ul className="list-disc pl-5 text-amber-800 space-y-0.5">
+            {(calcWarnings.length > 0
+              ? calcWarnings
+              : payrolls.flatMap(p => p.warnings || [])
+            )
+              .slice(0, 6)
+              .map((w: any, idx: number) => (
+                <li key={idx}>
+                  {w.message || `Comissão somada (${w.totalCommission}) acima da base financeira (${w.grossBasisAmount}).`}
+                </li>
+              ))}
+          </ul>
+        </div>
+      )}
 
       {/* Tabela de Profissionais e Repasses */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
@@ -311,7 +385,18 @@ export const ProfessionalPayrollView: React.FC = () => {
                   return (
                     <tr key={pay.id} className="hover:bg-slate-50/50 transition-all">
                       <td className="p-4">
-                        <div className="font-bold text-slate-900">{pay.professional_name}</div>
+                        <div className="font-bold text-slate-900 flex items-center gap-1.5 flex-wrap">
+                          <span>{pay.professional_name}</span>
+                          {Array.isArray(pay.warnings) && pay.warnings.length > 0 && (
+                            <span
+                              className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200"
+                              title={pay.warnings.map((w: any) => w.message).join('; ')}
+                            >
+                              <AlertTriangle className="w-2.5 h-2.5" />
+                              Alerta
+                            </span>
+                          )}
+                        </div>
                         <div className="text-[10px] text-slate-400">{pay.specialty_name || 'Profissional'}</div>
                       </td>
 
@@ -346,17 +431,19 @@ export const ProfessionalPayrollView: React.FC = () => {
                           <span className={Number(pay.adjustments) < 0 ? 'text-rose-600 font-bold' : Number(pay.adjustments) > 0 ? 'text-emerald-600 font-bold' : 'text-slate-400'}>
                             {Number(pay.adjustments).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                           </span>
-                          <button
-                            onClick={() => {
-                              setAdjustingRecord(pay);
-                              setAdjustmentValue(Number(pay.adjustments) || 0);
-                              setAdjustmentNotes(pay.adjustment_notes || '');
-                            }}
-                            className="p-1 text-slate-400 hover:text-indigo-600 rounded"
-                            title="Ajustar Bônus / Desconto"
-                          >
-                            <Sliders className="w-3 h-3" />
-                          </button>
+                          {!isPaid && (
+                            <button
+                              onClick={() => {
+                                setAdjustingRecord(pay);
+                                setAdjustmentValue(Number(pay.adjustments) || 0);
+                                setAdjustmentNotes(pay.adjustment_notes || '');
+                              }}
+                              className="p-1 text-slate-400 hover:text-indigo-600 rounded"
+                              title="Ajustar Bônus / Desconto"
+                            >
+                              <Sliders className="w-3 h-3" />
+                            </button>
+                          )}
                         </div>
                       </td>
 
@@ -384,18 +471,29 @@ export const ProfessionalPayrollView: React.FC = () => {
                       </td>
 
                       <td className="p-4 text-right whitespace-nowrap">
-                        {!isPaid && (
+                        <div className="inline-flex items-center justify-end gap-1.5">
                           <button
-                            onClick={() => {
-                              setPayingRecord(pay);
-                              setPayDate(new Date().toISOString().split('T')[0]);
-                              setPayNotes('');
-                            }}
-                            className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-[11px] shadow-xs transition-all cursor-pointer"
+                            type="button"
+                            onClick={() => handleOpenDetails(pay)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-[11px] transition-all cursor-pointer"
+                            title="Detalhar participações, papéis e base de comissão"
                           >
-                            Marcar Pago
+                            <Eye className="w-3 h-3" />
+                            <span>Detalhar</span>
                           </button>
-                        )}
+                          {!isPaid && (
+                            <button
+                              onClick={() => {
+                                setPayingRecord(pay);
+                                setPayDate(new Date().toISOString().split('T')[0]);
+                                setPayNotes('');
+                              }}
+                              className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-[11px] shadow-xs transition-all cursor-pointer"
+                            >
+                              Marcar Pago
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -521,6 +619,150 @@ export const ProfessionalPayrollView: React.FC = () => {
                   {savingAdjust ? 'Salvando...' : 'Salvar Ajuste'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal Detalhamento de Comissões & Participações */}
+      {detailRecord && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 mobile-modal">
+          <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[88vh] flex flex-col p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200">
+            <div className="flex items-start justify-between pb-3 border-b border-slate-100 mb-4 gap-3">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                  <Users className="w-5 h-5 text-indigo-600" />
+                  Detalhamento de Comissões — {detailRecord.professional_name}
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Competência {detailRecord.period_month} • Comissão total:{' '}
+                  <strong>{Number(detailRecord.commission_amount || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong>{' '}
+                  • Faturamento atribuído:{' '}
+                  <strong>{Number(detailRecord.produced_amount || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDetailRecord(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {Array.isArray(detailRecord.warnings) && detailRecord.warnings.length > 0 && (
+              <div className="mb-3 p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 space-y-1">
+                <p className="font-bold flex items-center gap-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                  Alertas desta apuração
+                </p>
+                {detailRecord.warnings.map((w: any, i: number) => (
+                  <p key={i} className="text-[11px] text-amber-800">
+                    • {w.message}
+                  </p>
+                ))}
+              </div>
+            )}
+
+            <div className="flex-1 overflow-y-auto border border-slate-200 rounded-2xl">
+              {loadingDetails ? (
+                <div className="p-8 text-center text-xs text-slate-400">Carregando itens da folha...</div>
+              ) : detailItems.length === 0 ? (
+                <div className="p-8 text-center text-xs text-slate-500">
+                  Nenhum item detalhado registrado para este profissional no período (salário fixo ou folha legada).
+                </div>
+              ) : (
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase text-[10px]">
+                      <th className="p-3">Aula / Serviço</th>
+                      <th className="p-3">Papel</th>
+                      <th className="p-3">Origem / Base</th>
+                      <th className="p-3 text-right">Base Financeira</th>
+                      <th className="p-3">Regra</th>
+                      <th className="p-3 text-right">Comissão</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {detailItems.map((it: any, idx: number) => {
+                      const role = it.participant_role || it.participantRole || 'primary';
+                      const isPkg = Boolean(it.is_package_covered ?? it.isPackageCovered);
+                      const basisAmount = Number(it.gross_basis_amount ?? it.grossAmount ?? 0);
+                      const attributedRev = Number(it.attributed_revenue_amount ?? it.attributedRevenueAmount ?? basisAmount);
+                      const commAmt = Number(it.commission_amount ?? it.commissionAmount ?? 0);
+                      const commType = it.commission_type || it.commissionType || 'percentage';
+                      const commVal = Number(it.commission_rate ?? it.commissionValue ?? 0);
+                      const note = it.financial_basis_note || it.financialBasisNote || it.notes || '';
+                      const dt = it.occurrence_date || it.referenceDate || it.start_time || '';
+                      const ruleText =
+                        commType === 'percentage'
+                          ? `${commVal}%`
+                          : commType === 'fixed_per_class'
+                          ? `${commVal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}/aula`
+                          : commType === 'fixed_per_student'
+                          ? `${commVal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}/aluno (${it.students_count ?? it.studentsCount ?? 1})`
+                          : 'Fixo';
+
+                      return (
+                        <tr key={it.id || idx} className="hover:bg-slate-50/60">
+                          <td className="p-3">
+                            <p className="font-bold text-slate-900">{it.service_name || it.serviceName || 'Aula / Atendimento'}</p>
+                            {dt && (
+                              <p className="text-[10px] text-slate-400">
+                                {String(dt).slice(0, 10)}
+                              </p>
+                            )}
+                          </td>
+                          <td className="p-3">
+                            <span
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                role === 'co_instructor'
+                                  ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                                  : 'bg-teal-50 text-teal-700 border-teal-200'
+                              }`}
+                            >
+                              {role === 'co_instructor' ? 'Coinstrutor' : 'Titular'}
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            <span
+                              className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                                isPkg
+                                  ? 'bg-violet-50 text-violet-700 border-violet-200'
+                                  : 'bg-slate-100 text-slate-700 border-slate-200'
+                              }`}
+                            >
+                              {isPkg ? 'Pacote (crédito rateado)' : 'Avulso / Turma'}
+                            </span>
+                            {note && <p className="text-[10px] text-slate-400 mt-0.5">{note}</p>}
+                          </td>
+                          <td className="p-3 text-right">
+                            <div className="font-semibold text-slate-700">
+                              {basisAmount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            </div>
+                            {attributedRev === 0 && basisAmount > 0 && (
+                              <div className="text-[9px] text-slate-400">Receita já atribuída ao titular</div>
+                            )}
+                          </td>
+                          <td className="p-3 text-slate-700 font-medium">{ruleText}</td>
+                          <td className="p-3 text-right font-bold text-indigo-700">
+                            {commAmt.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            <div className="flex justify-end pt-4">
+              <button
+                type="button"
+                onClick={() => setDetailRecord(null)}
+                className="px-5 py-2 font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl text-xs cursor-pointer"
+              >
+                Fechar
+              </button>
             </div>
           </div>
         </div>

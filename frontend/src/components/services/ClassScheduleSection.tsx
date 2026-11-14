@@ -28,6 +28,7 @@ export interface DraftClassScheduleInput {
   startTime: string;
   endTime: string;
   professionalId: string;
+  coInstructorIds?: string[];
   roomId: string | null;
   capacity: number;
   modality: 'presential' | 'online' | 'home';
@@ -122,6 +123,7 @@ export const ClassScheduleSection: React.FC<ClassScheduleSectionProps> = ({
   const [endTime, setEndTime] = useState<string>(() => addMinutesToClock('08:00', durationMinutes));
   const [endTimeTouched, setEndTimeTouched] = useState<boolean>(false);
   const [profId, setProfId] = useState<string>(defaultProfessionalId || professionals[0]?.id || '');
+  const [coInstructorIds, setCoInstructorIds] = useState<string[]>([]);
   const [roomId, setRoomId] = useState<string>('');
   const [capacity, setCapacity] = useState<number>(Math.max(1, defaultCapacity || 10));
   const [modality, setModality] = useState<'presential' | 'online' | 'home'>(() =>
@@ -201,6 +203,7 @@ export const ClassScheduleSection: React.FC<ClassScheduleSectionProps> = ({
         ? defaultProfessionalId
         : (professionals[0]?.id || defaultProfessionalId || '')
     );
+    setCoInstructorIds([]);
     setRoomId('');
     setCapacity(Math.max(1, defaultCapacity || 10));
     setModality(defaultConcreteModality(serviceModality));
@@ -216,6 +219,7 @@ export const ClassScheduleSection: React.FC<ClassScheduleSectionProps> = ({
     setEndTime(draft.endTime.slice(0, 5));
     setEndTimeTouched(true);
     setProfId(draft.professionalId);
+    setCoInstructorIds((draft.coInstructorIds || []).filter(id => id !== draft.professionalId));
     setRoomId(draft.roomId || '');
     setCapacity(Number(draft.capacity) || Math.max(1, defaultCapacity || 1));
     setModality(
@@ -237,6 +241,7 @@ export const ClassScheduleSection: React.FC<ClassScheduleSectionProps> = ({
     setEndTime(item.end_time.slice(0, 5));
     setEndTimeTouched(true);
     setProfId(item.professional_id);
+    setCoInstructorIds((item.co_instructor_ids || []).filter(id => id !== item.professional_id));
     setRoomId(item.room_id || '');
     setCapacity(Number(item.capacity) || Math.max(1, defaultCapacity || 1));
     setModality(
@@ -281,6 +286,7 @@ export const ClassScheduleSection: React.FC<ClassScheduleSectionProps> = ({
 
     const resolvedModality =
       serviceModality === 'both' ? (modality === 'online' ? 'online' : 'presential') : defaultConcreteModality(serviceModality);
+    const normalizedCoIds = coInstructorIds.filter(id => id && id !== profId);
 
     if (!isPersisted) {
       const nextDraft: DraftClassScheduleInput = {
@@ -289,6 +295,7 @@ export const ClassScheduleSection: React.FC<ClassScheduleSectionProps> = ({
         startTime,
         endTime,
         professionalId: profId,
+        coInstructorIds: normalizedCoIds,
         roomId: roomId || null,
         capacity: Number(capacity),
         modality: resolvedModality,
@@ -320,6 +327,7 @@ export const ClassScheduleSection: React.FC<ClassScheduleSectionProps> = ({
           startTime,
           endTime,
           professionalId: profId,
+          coInstructorIds: normalizedCoIds,
           roomId: roomId || null,
           capacity: Number(capacity),
           modality: resolvedModality,
@@ -344,6 +352,7 @@ export const ClassScheduleSection: React.FC<ClassScheduleSectionProps> = ({
           startTime,
           endTime,
           professionalId: profId,
+          coInstructorIds: normalizedCoIds,
           roomId: roomId || null,
           capacity: Number(capacity),
           modality: resolvedModality,
@@ -660,7 +669,11 @@ export const ClassScheduleSection: React.FC<ClassScheduleSectionProps> = ({
               <label className="block font-semibold text-slate-700 mb-1 text-[11px]">Instrutor responsável *</label>
               <select
                 value={profId}
-                onChange={e => setProfId(e.target.value)}
+                onChange={e => {
+                  const nextProf = e.target.value;
+                  setProfId(nextProf);
+                  setCoInstructorIds(prev => prev.filter(id => id !== nextProf));
+                }}
                 className="w-full border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs bg-white"
               >
                 <option value="">Selecione...</option>
@@ -689,6 +702,48 @@ export const ClassScheduleSection: React.FC<ClassScheduleSectionProps> = ({
               </select>
             </div>
           </div>
+
+          {professionals.filter(p => p.id !== profId).length > 0 && (
+            <div className="p-2.5 rounded-xl border border-slate-200 bg-slate-50/70 space-y-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-semibold text-slate-700 text-[11px]">
+                  Equipe da aula (Coinstrutores — opcional)
+                </span>
+                <span className="text-[10px] text-slate-500">
+                  {coInstructorIds.length > 0 ? `${coInstructorIds.length} coinstrutor(es)` : 'Somente titular'}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {professionals
+                  .filter(p => p.id !== profId)
+                  .map(p => {
+                    const checked = coInstructorIds.includes(p.id);
+                    return (
+                      <label
+                        key={p.id}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-semibold cursor-pointer transition-colors ${
+                          checked
+                            ? 'bg-indigo-50 border-indigo-400 text-indigo-900'
+                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() =>
+                            setCoInstructorIds(prev =>
+                              prev.includes(p.id) ? prev.filter(id => id !== p.id) : [...prev, p.id]
+                            )
+                          }
+                          className="w-3.5 h-3.5 rounded text-indigo-600 border-slate-300"
+                        />
+                        <span>{p.name}</span>
+                      </label>
+                    );
+                  })}
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             <div>
@@ -786,6 +841,15 @@ export const ClassScheduleSection: React.FC<ClassScheduleSectionProps> = ({
                     </div>
                     <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
                       <span className="font-medium text-slate-700">{item.professional_name || 'Instrutor'}</span>
+                      {Array.isArray(item.co_instructors) &&
+                        item.co_instructors.filter(ci => ci.role === 'co_instructor').length > 0 && (
+                          <span className="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 font-semibold text-[10px]">
+                            + Co: {item.co_instructors
+                              .filter(ci => ci.role === 'co_instructor')
+                              .map(ci => ci.professionalName)
+                              .join(', ')}
+                          </span>
+                        )}
                       <span className="inline-flex items-center gap-1">
                         <Users className="w-3 h-3 text-slate-400" />
                         {item.capacity} vagas
@@ -863,7 +927,15 @@ export const ClassScheduleSection: React.FC<ClassScheduleSectionProps> = ({
                       {dayNames} • {d.startTime} às {d.endTime} ({modalityLabel(d.modality)})
                     </div>
                     <div className="text-slate-500">
-                      {profName} • {d.capacity} vagas{roomName ? ` • ${roomName}` : ''}
+                      {profName}
+                      {Array.isArray(d.coInstructorIds) && d.coInstructorIds.length > 0
+                        ? ` (+ ${d.coInstructorIds
+                            .map(cid => professionals.find(p => p.id === cid)?.name)
+                            .filter(Boolean)
+                            .join(', ')})`
+                        : ''}
+                      {' • '}
+                      {d.capacity} vagas{roomName ? ` • ${roomName}` : ''}
                     </div>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">

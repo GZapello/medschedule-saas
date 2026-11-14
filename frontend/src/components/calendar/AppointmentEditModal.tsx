@@ -11,6 +11,7 @@ import { QuickActionDropdown } from '../common/QuickActionDropdown';
 import { NewServiceModal } from '../services/NewServiceModal';
 import { NewInsuranceModal } from '../settings/NewInsuranceModal';
 import { NewRoomModal } from '../services/NewRoomModal';
+import { resolveServiceDomain, supportsStudioFeatures } from '../../utils/establishmentContext';
 
 interface AppointmentEditModalProps {
   isOpen: boolean;
@@ -51,7 +52,8 @@ export const AppointmentEditModal: React.FC<AppointmentEditModalProps> = ({
   onSuccess
 }) => {
   const { showToast } = useToast();
-  const { clientTermLabel, isClinicAdmin, hasPermission } = useAuth();
+  const { clientTermLabel, isClinicAdmin, hasPermission, currentTenant } = useAuth();
+  const isStudioCompatible = supportsStudioFeatures(currentTenant?.establishment_profile);
 
   const canManageServices = isClinicAdmin || hasPermission('manage_services');
   const canManageRooms = isClinicAdmin || hasPermission('manage_services');
@@ -86,6 +88,7 @@ export const AppointmentEditModal: React.FC<AppointmentEditModalProps> = ({
   const [isNewInsuranceModalOpen, setIsNewInsuranceModalOpen] = useState<boolean>(false);
   const [isNewRoomModalOpen, setIsNewRoomModalOpen] = useState<boolean>(false);
   const [editScope, setEditScope] = useState<'single' | 'this_and_following' | 'series'>('single');
+  const [coInstructorIds, setCoInstructorIds] = useState<string[]>([]);
 
   const currentStatus = fullAppt?.status || appointment?.status || 'scheduled';
   const isLockedStatus = currentStatus === 'completed' || currentStatus === 'cancelled';
@@ -141,6 +144,13 @@ export const AppointmentEditModal: React.FC<AppointmentEditModalProps> = ({
     setInternalNotes(appointment.internal_notes || '');
     setConflictError(null);
     setEditScope('single');
+    setCoInstructorIds(
+      Array.isArray(appointment.instructor_participants)
+        ? appointment.instructor_participants
+            .filter((p: any) => p.role === 'co_instructor' && p.professional_id !== appointment.professional_id)
+            .map((p: any) => p.professional_id)
+        : []
+    );
 
     let cancelled = false;
 
@@ -160,7 +170,8 @@ export const AppointmentEditModal: React.FC<AppointmentEditModalProps> = ({
       const detailed = detailRes?.appointment || detailRes;
       if (detailed && detailed.id) {
         setFullAppt(detailed);
-        setProfessionalId(detailed.professional_id || appointment.professional_id || '');
+        const effProf = detailed.professional_id || appointment.professional_id || '';
+        setProfessionalId(effProf);
         setServiceId(detailed.service_id || appointment.service_id || '');
         setInsuranceId(detailed.insurance_id || '');
         setRoomId(detailed.room_id || '');
@@ -170,6 +181,13 @@ export const AppointmentEditModal: React.FC<AppointmentEditModalProps> = ({
         setModality(detailed.modality === 'online' ? 'online' : 'presential');
         setMeetingUrl(detailed.meeting_url || '');
         setInternalNotes(detailed.internal_notes || '');
+        if (Array.isArray(detailed.instructor_participants)) {
+          setCoInstructorIds(
+            detailed.instructor_participants
+              .filter((p: any) => p.role === 'co_instructor' && p.professional_id !== effProf)
+              .map((p: any) => p.professional_id)
+          );
+        }
       }
     });
 
@@ -302,6 +320,23 @@ export const AppointmentEditModal: React.FC<AppointmentEditModalProps> = ({
 
   const statusBadge = getStatusLabel(currentStatus);
 
+  const selectedServiceObj = useMemo(
+    () => services.find(s => s.id === serviceId) || null,
+    [services, serviceId]
+  );
+
+  const isStudioTarget = useMemo(() => {
+    if (!isStudioCompatible) return false;
+    return (
+      resolveServiceDomain({
+        establishmentProfile: currentTenant?.establishment_profile,
+        serviceDomain: selectedServiceObj?.service_domain ?? fullAppt?.service_domain ?? appointment?.service_domain,
+        serviceKind: selectedServiceObj?.service_kind ?? fullAppt?.service_kind ?? appointment?.service_kind,
+        clinicalModule: selectedServiceObj?.clinical_module ?? fullAppt?.clinical_module ?? appointment?.clinical_module
+      }) === 'studio'
+    );
+  }, [isStudioCompatible, currentTenant?.establishment_profile, selectedServiceObj, fullAppt, appointment]);
+
   const handleSave = async () => {
     if (isLockedStatus) return;
 
@@ -323,7 +358,6 @@ export const AppointmentEditModal: React.FC<AppointmentEditModalProps> = ({
       return;
     }
 
-    const selectedServiceObj = services.find(s => s.id === serviceId);
     const durationMin =
       selectedServiceObj?.duration_minutes ||
       (selectedServiceObj as any)?.duration ||
@@ -355,6 +389,7 @@ export const AppointmentEditModal: React.FC<AppointmentEditModalProps> = ({
         meeting_url: modality === 'online' ? (meetingUrl.trim() || null) : null,
         internalNotes: internalNotes.trim() || null,
         isCustomTime: isCustomTime ? true : undefined,
+        ...(isStudioTarget ? { coInstructorIds: coInstructorIds.filter(id => id !== professionalId) } : {}),
         scope: (fullAppt?.series_id || appointment?.series_id) ? editScope : 'single',
         reason: 'Editado / remarcado pelo Painel'
       });
@@ -814,6 +849,47 @@ export const AppointmentEditModal: React.FC<AppointmentEditModalProps> = ({
                   })}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Coinstrutores (Studio) */}
+          {isStudioTarget && !isLockedStatus && professionals.filter(p => p.id !== professionalId && p.active !== 0).length > 0 && (
+            <div className="p-3 bg-indigo-50/50 border border-indigo-200/80 rounded-xl space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-xs font-bold text-indigo-900">
+                  Coinstrutores da aula/sessão (opcional)
+                </label>
+                {coInstructorIds.length > 0 && (
+                  <span className="text-[11px] font-semibold text-indigo-700">
+                    {coInstructorIds.length} selecionado(s)
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {professionals
+                  .filter(p => p.id !== professionalId && p.active !== 0)
+                  .map(p => {
+                    const checked = coInstructorIds.includes(p.id);
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() =>
+                          setCoInstructorIds(prev =>
+                            prev.includes(p.id) ? prev.filter(id => id !== p.id) : [...prev, p.id]
+                          )
+                        }
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors cursor-pointer ${
+                          checked
+                            ? 'bg-indigo-600 text-white border-indigo-600'
+                            : 'bg-white text-slate-700 border-slate-200 hover:border-indigo-300'
+                        }`}
+                      >
+                        {p.name}
+                      </button>
+                    );
+                  })}
+              </div>
             </div>
           )}
 

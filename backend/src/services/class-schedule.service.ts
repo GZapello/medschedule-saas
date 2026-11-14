@@ -2,6 +2,11 @@ import { v4 as uuidv4 } from 'uuid';
 import { db } from '../config/database';
 import { ConcreteModality, resolveConcreteModality } from '../utils/modality-resolver';
 import { calculateAvailableSlots } from '../utils/slot-calculator';
+import {
+  InstructorParticipationService,
+  normalizeUniqueIds,
+  ScheduleInstructorEntry
+} from './instructor-participation.service';
 
 export interface ClassScheduleRecord {
   id: string;
@@ -25,6 +30,8 @@ export interface ClassScheduleRecord {
   created_by?: string | null;
   created_at?: string;
   updated_at?: string;
+  co_instructor_ids?: string[];
+  co_instructors?: Array<{ professionalId: string; professionalName: string; role: 'primary' | 'co_instructor'; photoUrl?: string | null }>;
 }
 
 export interface StudioClassSlotItem {
@@ -42,6 +49,8 @@ export interface StudioClassSlotItem {
   professionalName: string;
   professionalAvatar: string | null;
   professionName: string;
+  coInstructorIds?: string[];
+  coInstructors?: Array<{ professionalId: string; professionalName: string; role: 'primary' | 'co_instructor'; photoUrl?: string | null }>;
   roomId: string | null;
   roomName: string | null;
   modality: ConcreteModality | null;
@@ -314,7 +323,7 @@ export class ClassScheduleService {
       extraWhere += ' AND p.active = 1 AND p.public_booking_enabled = 1';
     }
 
-    return db.prepare(`
+    const rows = db.prepare(`
       SELECT
         cs.*,
         p.name as professional_name,
@@ -329,6 +338,19 @@ export class ClassScheduleService {
       ${extraWhere}
       ORDER BY CASE WHEN cs.day_of_week = 0 THEN 7 ELSE cs.day_of_week END ASC, cs.start_time ASC
     `).all(tenantId, serviceId) as ClassScheduleRecord[];
+
+    const teamMap = InstructorParticipationService.getScheduleInstructorsMap(
+      tenantId,
+      rows.map(r => r.id)
+    );
+    return rows.map(r => {
+      const co = (teamMap.get(r.id) || []).filter(m => m.role === 'co_instructor' && m.professionalId !== r.professional_id);
+      return {
+        ...r,
+        co_instructor_ids: co.map(c => c.professionalId),
+        co_instructors: co
+      };
+    });
   }
 
   static listByTenantGrouped(
@@ -359,10 +381,21 @@ export class ClassScheduleService {
       ORDER BY CASE WHEN cs.day_of_week = 0 THEN 7 ELSE cs.day_of_week END ASC, cs.start_time ASC
     `).all(tenantId) as ClassScheduleRecord[];
 
+    const teamMap = InstructorParticipationService.getScheduleInstructorsMap(
+      tenantId,
+      rows.map(r => r.id)
+    );
+
     const map = new Map<string, ClassScheduleRecord[]>();
     for (const row of rows) {
+      const co = (teamMap.get(row.id) || []).filter(m => m.role === 'co_instructor' && m.professionalId !== row.professional_id);
+      const enriched: ClassScheduleRecord = {
+        ...row,
+        co_instructor_ids: co.map(c => c.professionalId),
+        co_instructors: co
+      };
       const list = map.get(row.service_id) || [];
-      list.push(row);
+      list.push(enriched);
       map.set(row.service_id, list);
     }
     return map;
@@ -553,6 +586,8 @@ export class ClassScheduleService {
       startTime: string;
       endTime?: string;
       professionalId?: string;
+      coInstructorIds?: unknown;
+      co_instructor_ids?: unknown;
       roomId?: string | null;
       capacity?: number;
       modality?: string;
@@ -647,11 +682,18 @@ export class ClassScheduleService {
       throw Object.assign(new Error('A data final da vigência deve ser igual ou posterior à data inicial.'), { status: 400 });
     }
 
+    const rawCoIds = payload.coInstructorIds !== undefined ? payload.coInstructorIds : payload.co_instructor_ids;
+    const coInstructorIds = normalizeUniqueIds(rawCoIds, profId);
+    InstructorParticipationService.validateTenantProfessionals(tenantId, [profId, ...coInstructorIds]);
+
     const warnings: string[] = [];
     const createdIds: string[] = [];
 
     db.transaction(() => {
       this.ensureInstructorLinkedToServiceTx(tenantId, profId, serviceRow);
+      for (const coId of coInstructorIds) {
+        this.ensureInstructorLinkedToServiceTx(tenantId, coId, serviceRow);
+      }
 
       for (const dow of days) {
         this.validateScheduleConflictTx({
@@ -694,6 +736,12 @@ export class ClassScheduleService {
           payload.notes ? String(payload.notes).trim() : null,
           userId
         );
+        InstructorParticipationService.syncScheduleInstructorsTx({
+          tenantId,
+          scheduleId: id,
+          primaryProfessionalId: profId,
+          coInstructorIds
+        });
         createdIds.push(id);
       }
     })();
@@ -714,6 +762,8 @@ export class ClassScheduleService {
       startTime?: string;
       endTime?: string;
       professionalId?: string;
+      coInstructorIds?: unknown;
+      co_instructor_ids?: unknown;
       roomId?: string | null;
       capacity?: number;
       modality?: string;
@@ -792,10 +842,20 @@ export class ClassScheduleService {
     }
 
     const nextActive = payload.active !== undefined ? (payload.active === false || payload.active === 0 ? 0 : 1) : existing.active;
+    const rawCoIds = payload.coInstructorIds !== undefined ? payload.coInstructorIds : payload.co_instructor_ids;
+    const hasExplicitCoIds = rawCoIds !== undefined;
+    const nextCoIds = hasExplicitCoIds
+      ? normalizeUniqueIds(rawCoIds, nextProfId)
+      : InstructorParticipationService.getScheduleCoInstructorIds(tenantId, scheduleId, nextProfId);
+    InstructorParticipationService.validateTenantProfessionals(tenantId, [nextProfId, ...nextCoIds]);
+
     const warnings: string[] = [];
 
     db.transaction(() => {
       this.ensureInstructorLinkedToServiceTx(tenantId, nextProfId, serviceRow);
+      for (const coId of nextCoIds) {
+        this.ensureInstructorLinkedToServiceTx(tenantId, coId, serviceRow);
+      }
 
       if (nextActive === 1) {
         this.validateScheduleConflictTx({
@@ -848,6 +908,15 @@ export class ClassScheduleService {
         serviceId,
         tenantId
       );
+
+      if (hasExplicitCoIds || nextProfId !== existing.professional_id) {
+        InstructorParticipationService.syncScheduleInstructorsTx({
+          tenantId,
+          scheduleId,
+          primaryProfessionalId: nextProfId,
+          coInstructorIds: nextCoIds
+        });
+      }
     })();
 
     const updated = this.listForService(tenantId, serviceId, { includeInactive: true }).find(s => s.id === scheduleId)!;
@@ -939,6 +1008,8 @@ export class ClassScheduleService {
       professionalName: schedule.professional_name || 'Instrutor',
       professionalAvatar: schedule.professional_avatar || null,
       professionName: schedule.profession_name || 'Instrutor',
+      coInstructorIds: schedule.co_instructor_ids || [],
+      coInstructors: schedule.co_instructors || [],
       roomId: schedule.room_id || null,
       roomName: schedule.room_name || null,
       modality: schedule.modality,
@@ -1604,6 +1675,7 @@ export class ClassScheduleService {
     ignoreAdvanceCap?: boolean;
   }): {
     professionalId: string;
+    coInstructorIds: string[];
     classScheduleId: string;
     roomId: string | null;
     capacity: number;
@@ -1673,6 +1745,7 @@ export class ClassScheduleService {
       if (evalRes.bookable) {
         return {
           professionalId: sch.professional_id,
+          coInstructorIds: Array.isArray((sch as any).co_instructor_ids) ? (sch as any).co_instructor_ids : [],
           classScheduleId: sch.id,
           roomId: evalRes.slot.roomId,
           capacity: evalRes.slot.capacity,

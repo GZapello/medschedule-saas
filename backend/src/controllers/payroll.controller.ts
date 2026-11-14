@@ -21,7 +21,7 @@ export class PayrollController {
           py.appointments_count, py.produced_amount, py.commission_percentage, py.commission_amount,
           py.fixed_salary, py.adjustments, py.adjustment_notes, py.total_payable,
           py.due_date, py.paid_date, py.status, py.notes, py.commission_breakdown_json,
-          py.created_at, py.updated_at,
+          py.warnings_json, py.created_at, py.updated_at,
           p.name as professional_name, p.photo_url as professional_photo,
           COALESCE(p.specialty_custom, spec.name, '') as specialty_name
         FROM professional_payrolls py
@@ -61,8 +61,41 @@ export class PayrollController {
 
       query += ' ORDER BY p.name ASC';
 
-      const payrolls = db.prepare(query).all(...params);
-      res.json(payrolls);
+      const payrolls = db.prepare(query).all(...params) as any[];
+      const payrollIds = payrolls.map(r => r.id).filter(Boolean);
+      const itemsByPayroll = new Map<string, any[]>();
+      if (payrollIds.length > 0) {
+        const ph = payrollIds.map(() => '?').join(', ');
+        const itemRows = db.prepare(`
+          SELECT * FROM payroll_items
+          WHERE tenant_id = ? AND payroll_id IN (${ph})
+          ORDER BY created_at ASC, id ASC
+        `).all(tenantId, ...payrollIds) as any[];
+        for (const ir of itemRows) {
+          const list = itemsByPayroll.get(ir.payroll_id) || [];
+          list.push(ir);
+          itemsByPayroll.set(ir.payroll_id, list);
+        }
+      }
+
+      const enrichedPayrolls = payrolls.map(r => {
+        let parsedBreakdown: any[] = [];
+        let parsedWarnings: any[] = [];
+        try {
+          if (r.commission_breakdown_json) parsedBreakdown = JSON.parse(r.commission_breakdown_json);
+        } catch (_) {}
+        try {
+          if (r.warnings_json) parsedWarnings = JSON.parse(r.warnings_json);
+        } catch (_) {}
+        return {
+          ...r,
+          commission_breakdown: parsedBreakdown,
+          warnings: parsedWarnings,
+          items: itemsByPayroll.get(r.id) || []
+        };
+      });
+
+      res.json(enrichedPayrolls);
     } catch (err: any) {
       console.error('[PayrollController.list] Erro:', err);
       res.status(500).json({ success: false, error: 'Erro ao listar pagamentos e comissões' });
@@ -97,6 +130,103 @@ export class PayrollController {
 
       const professionals = db.prepare(profQuery).all(...profParams) as any[];
       const results: any[] = [];
+      const contractUnitCache = new Map<string, { unitValue: number; note: string; isExemptOrCancelled: boolean }>();
+
+      const getPackageUnitBasis = (row: any) => {
+        const contractId = String(row.package_contract_id || '');
+        if (!contractId) {
+          return {
+            unitValue: 0,
+            note: 'Sessão coberta por pacote sem contrato vinculado (base R$ 0,00)',
+            isExemptOrCancelled: false
+          };
+        }
+        const cacheKey = `${contractId}:${periodMonth}`;
+        const cached = contractUnitCache.get(cacheKey);
+        if (cached) return cached;
+
+        const contractPrice = Number(row.pkg_contracted_price || 0);
+        const totalCredSnap = Number(row.pkg_total_credits || 0);
+        const entSumRow = db.prepare(`
+          SELECT COALESCE(SUM(credits_total), 0) as total
+          FROM student_package_entitlements
+          WHERE contract_id = ? AND tenant_id = ?
+        `).get(contractId, tenantId) as { total: number } | undefined;
+        const entTotal = Number(entSumRow?.total || 0);
+        const creditDenom = totalCredSnap > 0 ? totalCredSnap : entTotal;
+
+        let out: { unitValue: number; note: string; isExemptOrCancelled: boolean };
+        if (row.pkg_contract_status === 'cancelled' || row.pkg_payment_status === 'exempt') {
+          out = {
+            unitValue: 0,
+            note: 'Pacote isento/cancelado (base R$ 0,00)',
+            isExemptOrCancelled: true
+          };
+        } else if (creditDenom > 0) {
+          const unitValue = Math.max(0, Math.round((contractPrice / creditDenom) * 100) / 100);
+          out = {
+            unitValue,
+            note: `Pacote "${row.pkg_name || 'Contratado'}" (rateio ${creditDenom} créditos)`,
+            isExemptOrCancelled: false
+          };
+        } else {
+          const periodCountRow = db.prepare(`
+            SELECT COUNT(*) as cnt
+            FROM appointments
+            WHERE tenant_id = ? AND package_contract_id = ?
+              AND status NOT IN ('cancelled', 'no_show')
+              AND substr(start_time, 1, 7) = ?
+          `).get(tenantId, contractId, periodMonth) as { cnt: number } | undefined;
+          const periodDenom = Math.max(1, Number(periodCountRow?.cnt || 1));
+          const unitValue = Math.max(0, Math.round((contractPrice / periodDenom) * 100) / 100);
+          out = {
+            unitValue,
+            note: `Plano/Pacote "${row.pkg_name || 'Mensal'}" (rateio ${periodDenom} aula(s) no mês)`,
+            isExemptOrCancelled: false
+          };
+        }
+        contractUnitCache.set(cacheKey, out);
+        return out;
+      };
+
+      const resolveRuleForProf = (profRow: any, srvId: string | null, serviceRuleMap: Map<string, any>) => {
+        const remType = profRow.remuneration_type || 'commission';
+        const generalCommPct = Number(profRow.commission_percentage || 0);
+        const allowGeneralCommission = remType === 'commission' || remType === 'both';
+
+        const specific = srvId ? serviceRuleMap.get(srvId) : undefined;
+        if (specific) {
+          return {
+            source: 'service' as const,
+            type: specific.commission_type as 'percentage' | 'fixed',
+            value: Number(specific.commission_value || 0),
+            groupBasis: (specific.group_payout_basis || 'per_present_student') as 'per_class' | 'per_present_student'
+          };
+        }
+        if (allowGeneralCommission && generalCommPct > 0) {
+          return {
+            source: 'general' as const,
+            type: 'percentage' as const,
+            value: generalCommPct,
+            groupBasis: 'per_present_student' as const
+          };
+        }
+        return {
+          source: 'none' as const,
+          type: 'percentage' as const,
+          value: 0,
+          groupBasis: 'per_present_student' as const
+        };
+      };
+
+      // Cache de ocorrências já analisadas para detectar excesso de comissão > receita e unicidade de faturamento
+      const uniqueOccBasisMap = new Map<string, { grossBasisAmount: number; serviceName: string; startTime: string }>();
+      const occCommAccumulator = new Map<string, Array<{
+        professionalId: string;
+        professionalName: string;
+        role: 'primary' | 'co_instructor';
+        commissionAmount: number;
+      }>>();
 
       for (const p of professionals) {
         // Verifica se já existe registro para preservar histórico pago e ajustes existentes
@@ -109,8 +239,12 @@ export class PayrollController {
         // Regra mandatória: folha já paga/fechada permanece imutável
         if (existing && existing.status === 'paid') {
           let parsedBreakdown: any[] = [];
+          let parsedWarnings: any[] = [];
           try {
             if (existing.commission_breakdown_json) parsedBreakdown = JSON.parse(existing.commission_breakdown_json);
+          } catch (_) {}
+          try {
+            if (existing.warnings_json) parsedWarnings = JSON.parse(existing.warnings_json);
           } catch (_) {}
           results.push({
             id: existing.id,
@@ -130,7 +264,8 @@ export class PayrollController {
             paidDate: existing.paid_date,
             status: 'paid',
             isLocked: true,
-            commissionBreakdown: parsedBreakdown
+            commissionBreakdown: parsedBreakdown,
+            warnings: parsedWarnings
           });
           continue;
         }
@@ -149,14 +284,24 @@ export class PayrollController {
         }>;
         const serviceRuleMap = new Map(serviceRulesRows.map(r => [r.service_id, r]));
 
-        // Busca atendimentos do mês com status financeiro e presença reais (nunca trata apenas 'confirmed' como realizado/pago)
+        // Busca atendimentos/aulas do mês em que o profissional atuou como titular OU co-instrutor (excluindo ausências confirmadas)
         const apptRows = db.prepare(`
-          SELECT
-            a.id, a.service_id, a.occurrence_id, a.patient_id, a.start_time, a.status,
-            COALESCE(a.service_kind, COALESCE(s.service_kind, 'individual')) as service_kind,
+          SELECT DISTINCT
+            a.id, a.service_id, a.occurrence_id, a.patient_id, a.professional_id as primary_professional_id,
+            a.start_time, a.status,
+            COALESCE(a.is_package_covered, 0) as is_package_covered,
+            a.package_contract_id,
+            a.package_entitlement_id,
+            CASE WHEN a.occurrence_id IS NOT NULL OR COALESCE(s.service_kind, a.service_kind) = 'group' THEN 'group' ELSE 'individual' END as service_kind,
             COALESCE(a.attendance_status, 'pending') as attendance_status,
             COALESCE(s.name, 'Serviço') as service_name,
             COALESCE(ps.custom_price, s.price, 0) as list_price,
+            spc.contracted_price as pkg_contracted_price,
+            spc.total_credits_snapshot as pkg_total_credits,
+            spc.billing_type_snapshot as pkg_billing_type,
+            spc.contract_status as pkg_contract_status,
+            spc.payment_status as pkg_payment_status,
+            spc.package_name_snapshot as pkg_name,
             pay.payment_id as payment_id,
             CASE
               WHEN COALESCE(pay.paid_count, 0) > 0 THEN 'paid'
@@ -173,6 +318,7 @@ export class PayrollController {
           FROM appointments a
           LEFT JOIN services s ON s.id = a.service_id AND s.tenant_id = a.tenant_id
           LEFT JOIN professional_services ps ON ps.service_id = a.service_id AND ps.professional_id = a.professional_id
+          LEFT JOIN student_package_contracts spc ON spc.id = a.package_contract_id AND spc.tenant_id = a.tenant_id
           LEFT JOIN (
             SELECT
               appointment_id,
@@ -189,56 +335,138 @@ export class PayrollController {
             GROUP BY tenant_id, appointment_id
           ) pay ON pay.appointment_id = a.id AND pay.tenant_id = a.tenant_id
           WHERE a.tenant_id = ?
-            AND a.professional_id = ?
             AND a.status NOT IN ('cancelled', 'no_show')
             AND substr(a.start_time, 1, 7) = ?
+            AND (
+              (
+                a.professional_id = ?
+                AND NOT EXISTS (
+                  SELECT 1 FROM session_instructor_participants sip_abs
+                  WHERE sip_abs.tenant_id = a.tenant_id
+                    AND sip_abs.professional_id = ?
+                    AND sip_abs.attendance_status = 'absent'
+                    AND (
+                      (a.occurrence_id IS NOT NULL AND sip_abs.occurrence_id = a.occurrence_id)
+                      OR (a.occurrence_id IS NULL AND sip_abs.appointment_id = a.id)
+                    )
+                )
+              )
+              OR EXISTS (
+                SELECT 1 FROM session_instructor_participants sip_inc
+                WHERE sip_inc.tenant_id = a.tenant_id
+                  AND sip_inc.professional_id = ?
+                  AND sip_inc.attendance_status != 'absent'
+                  AND (
+                    (a.occurrence_id IS NOT NULL AND sip_inc.occurrence_id = a.occurrence_id)
+                    OR (a.occurrence_id IS NULL AND sip_inc.appointment_id = a.id)
+                  )
+              )
+            )
           ORDER BY a.start_time ASC
-        `).all(tenantId, p.id, periodMonth) as any[];
+        `).all(tenantId, periodMonth, p.id, p.id, p.id) as any[];
+
+        // Mapeia todos participantes não ausentes das ocorrências/sessões encontradas para evitar duplicidade de faturamento
+        const occIds = Array.from(new Set(apptRows.map(r => r.occurrence_id).filter(Boolean))) as string[];
+        const aptIdsNoOcc = Array.from(new Set(apptRows.filter(r => !r.occurrence_id).map(r => r.id))) as string[];
+
+        const activePartsByOcc = new Map<string, Array<{ professional_id: string; role: 'primary' | 'co_instructor' }>>();
+        if (occIds.length > 0) {
+          const ph = occIds.map(() => '?').join(', ');
+          const sipRows = db.prepare(`
+            SELECT occurrence_id, professional_id, role
+            FROM session_instructor_participants
+            WHERE tenant_id = ? AND occurrence_id IN (${ph}) AND attendance_status != 'absent'
+            ORDER BY CASE WHEN role = 'primary' THEN 0 ELSE 1 END, id ASC
+          `).all(tenantId, ...occIds) as any[];
+          for (const sr of sipRows) {
+            const list = activePartsByOcc.get(sr.occurrence_id) || [];
+            list.push({ professional_id: sr.professional_id, role: sr.role === 'primary' ? 'primary' : 'co_instructor' });
+            activePartsByOcc.set(sr.occurrence_id, list);
+          }
+        }
+
+        const activePartsByApt = new Map<string, Array<{ professional_id: string; role: 'primary' | 'co_instructor' }>>();
+        if (aptIdsNoOcc.length > 0) {
+          const ph = aptIdsNoOcc.map(() => '?').join(', ');
+          const sipRows = db.prepare(`
+            SELECT appointment_id, professional_id, role
+            FROM session_instructor_participants
+            WHERE tenant_id = ? AND appointment_id IN (${ph}) AND occurrence_id IS NULL AND attendance_status != 'absent'
+            ORDER BY CASE WHEN role = 'primary' THEN 0 ELSE 1 END, id ASC
+          `).all(tenantId, ...aptIdsNoOcc) as any[];
+          for (const sr of sipRows) {
+            const list = activePartsByApt.get(sr.appointment_id) || [];
+            list.push({ professional_id: sr.professional_id, role: sr.role === 'primary' ? 'primary' : 'co_instructor' });
+            activePartsByApt.set(sr.appointment_id, list);
+          }
+        }
+
+        const resolveParticipantMeta = (
+          keyType: 'occ' | 'apt',
+          refId: string,
+          fallbackPrimaryId: string
+        ): { role: 'primary' | 'co_instructor'; ownsRevenue: boolean } => {
+          const parts = keyType === 'occ' ? activePartsByOcc.get(refId) : activePartsByApt.get(refId);
+          if (!parts || parts.length === 0) {
+            return {
+              role: p.id === fallbackPrimaryId ? 'primary' : 'co_instructor',
+              ownsRevenue: p.id === fallbackPrimaryId
+            };
+          }
+          const mine = parts.find(x => x.professional_id === p.id);
+          const role: 'primary' | 'co_instructor' = mine ? mine.role : (p.id === fallbackPrimaryId ? 'primary' : 'co_instructor');
+          const primaryPart = parts.find(x => x.role === 'primary') || parts[0];
+          return {
+            role,
+            ownsRevenue: primaryPart.professional_id === p.id
+          };
+        };
 
         const remType = p.remuneration_type || 'commission';
         const generalCommPct = Number(p.commission_percentage || 0);
-        const allowGeneralCommission = remType === 'commission' || remType === 'both';
 
-        const computeNetAmount = (row: any): number => {
+        const computeFinancialRow = (row: any): { netAmount: number; isPackageCovered: boolean; isExempt: boolean; basisNote: string } => {
+          const isPkg = Boolean(Number(row.is_package_covered || 0) === 1 || row.package_contract_id);
+          if (isPkg) {
+            if (row.payment_id && (row.payment_status === 'cancelled' || row.payment_status === 'refunded' || row.payment_status === 'exempt')) {
+              return { netAmount: 0, isPackageCovered: true, isExempt: true, basisNote: 'Sessão isenta/cancelada em pacote' };
+            }
+            const pkgInfo = getPackageUnitBasis(row);
+            return {
+              netAmount: pkgInfo.unitValue,
+              isPackageCovered: true,
+              isExempt: pkgInfo.isExemptOrCancelled,
+              basisNote: pkgInfo.note
+            };
+          }
+
           if (row.payment_id) {
             if (row.payment_status === 'cancelled' || row.payment_status === 'refunded' || row.payment_status === 'exempt') {
-              return 0;
+              return { netAmount: 0, isPackageCovered: false, isExempt: true, basisNote: 'Atendimento isento' };
             }
-            return Math.max(0, Math.round(Number(row.payment_amount || 0) * 100) / 100);
+            return {
+              netAmount: Math.max(0, Math.round(Number(row.payment_amount || 0) * 100) / 100),
+              isPackageCovered: false,
+              isExempt: false,
+              basisNote: row.payment_status === 'paid' ? 'Pagamento liquidado' : 'Cobrança avulsa em aberto'
+            };
           }
-          return Math.max(0, Math.round(Number(row.list_price || 0) * 100) / 100);
-        };
 
-        const resolveRule = (srvId: string | null) => {
-          const specific = srvId ? serviceRuleMap.get(srvId) : undefined;
-          if (specific) {
-            return {
-              source: 'service' as const,
-              type: specific.commission_type,
-              value: Number(specific.commission_value || 0),
-              groupBasis: (specific.group_payout_basis || 'per_present_student') as 'per_class' | 'per_present_student'
-            };
-          }
-          if (allowGeneralCommission && generalCommPct > 0) {
-            return {
-              source: 'general' as const,
-              type: 'percentage' as const,
-              value: generalCommPct,
-              groupBasis: 'per_present_student' as const
-            };
-          }
           return {
-            source: 'none' as const,
-            type: 'percentage' as const,
-            value: 0,
-            groupBasis: 'per_present_student' as const
+            netAmount: Math.max(0, Math.round(Number(row.list_price || 0) * 100) / 100),
+            isPackageCovered: false,
+            isExempt: false,
+            basisNote: 'Tabela padrão do serviço'
           };
         };
+
+        const resolveRule = (srvId: string | null) => resolveRuleForProf(p, srvId, serviceRuleMap);
 
         let apptCount = 0;
         let produced = 0;
         let commAmount = 0;
         const breakdownItems: any[] = [];
+        const seenItemKeys = new Set<string>();
 
         // Separa individuais x turmas (agrupadas por occurrence_id)
         const individualRows: any[] = [];
@@ -257,26 +485,53 @@ export class PayrollController {
 
         // Processa atendimentos individuais elegíveis (realizados ou com presença confirmada ou já pagos)
         for (const row of individualRows) {
+          const itemKey = `apt:${row.id}`;
+          if (seenItemKeys.has(itemKey)) continue;
+
           const isRealizedOrAttended =
             row.status === 'completed' ||
             row.attendance_status === 'present' ||
             row.payment_status === 'paid';
           if (!isRealizedOrAttended) continue;
 
-          const netAmount = computeNetAmount(row);
+          seenItemKeys.add(itemKey);
+          const fin = computeFinancialRow(row);
           const rule = resolveRule(row.service_id);
+          const meta = resolveParticipantMeta('apt', row.id, row.primary_professional_id);
+
           let itemComm = 0;
           if (rule.source !== 'none') {
             if (rule.type === 'fixed') {
-              itemComm = row.payment_status === 'exempt' ? 0 : rule.value;
+              itemComm = fin.isExempt ? 0 : rule.value;
             } else {
-              itemComm = Math.round(((netAmount * rule.value) / 100) * 100) / 100;
+              itemComm = Math.round(((fin.netAmount * rule.value) / 100) * 100) / 100;
             }
           }
 
+          const finalBasisNote = meta.ownsRevenue
+            ? fin.basisNote
+            : `${fin.basisNote} • Base compartilhada (faturamento atribuído ao titular)`;
+
           apptCount += 1;
-          produced = Math.round((produced + netAmount) * 100) / 100;
+          if (meta.ownsRevenue) {
+            produced = Math.round((produced + fin.netAmount) * 100) / 100;
+          }
           commAmount = Math.round((commAmount + itemComm) * 100) / 100;
+
+          uniqueOccBasisMap.set(itemKey, {
+            grossBasisAmount: fin.netAmount,
+            serviceName: row.service_name,
+            startTime: row.start_time
+          });
+          const accList = occCommAccumulator.get(itemKey) || [];
+          accList.push({
+            professionalId: p.id,
+            professionalName: p.name,
+            role: meta.role,
+            commissionAmount: itemComm
+          });
+          occCommAccumulator.set(itemKey, accList);
+
           breakdownItems.push({
             appointmentId: row.id,
             occurrenceId: null,
@@ -285,17 +540,24 @@ export class PayrollController {
             serviceKind: 'individual',
             startTime: row.start_time,
             eligibleStudentsCount: 1,
-            grossBasisAmount: netAmount,
+            grossBasisAmount: fin.netAmount,
             ruleSource: rule.source,
             commissionType: rule.type,
             commissionRate: rule.value,
             groupPayoutBasis: null,
-            commissionAmount: itemComm
+            commissionAmount: itemComm,
+            participantRole: meta.role,
+            isPackageCovered: fin.isPackageCovered,
+            packageContractId: row.package_contract_id || null,
+            financialBasisNote: finalBasisNote
           });
         }
 
         // Processa aulas coletivas / turmas por ocorrência
         for (const [bucketKey, members] of groupBuckets.entries()) {
+          const itemKey = members[0].occurrence_id ? `occ:${members[0].occurrence_id}` : bucketKey;
+          if (seenItemKeys.has(itemKey)) continue;
+
           // Considera elegível apenas aluno presente (ou aula finalizada sem falta)
           const presentMembers = members.filter(m =>
             m.attendance_status === 'present' ||
@@ -303,25 +565,61 @@ export class PayrollController {
           );
           if (presentMembers.length === 0) continue;
 
+          seenItemKeys.add(itemKey);
           const sample = presentMembers[0];
           const rule = resolveRule(sample.service_id);
-          const totalNetBasis = presentMembers.reduce((sum, m) => Math.round((sum + computeNetAmount(m)) * 100) / 100, 0);
+          const finEntries = presentMembers.map(m => computeFinancialRow(m));
+          const totalNetBasis = finEntries.reduce((sum, f) => Math.round((sum + f.netAmount) * 100) / 100, 0);
+          const anyPackage = finEntries.some(f => f.isPackageCovered);
+          const anyPkgContract = presentMembers.find(m => m.package_contract_id)?.package_contract_id || null;
+          const allExempt = finEntries.every(f => f.isExempt);
+
+          const meta = sample.occurrence_id
+            ? resolveParticipantMeta('occ', sample.occurrence_id, sample.primary_professional_id)
+            : resolveParticipantMeta('apt', sample.id, sample.primary_professional_id);
 
           let occComm = 0;
           if (rule.source !== 'none') {
             if (rule.type === 'fixed') {
-              occComm = rule.groupBasis === 'per_class'
-                ? rule.value
-                : Math.round((rule.value * presentMembers.length) * 100) / 100;
+              if (allExempt) {
+                occComm = 0;
+              } else {
+                occComm = rule.groupBasis === 'per_class'
+                  ? rule.value
+                  : Math.round((rule.value * presentMembers.length) * 100) / 100;
+              }
             } else {
-              // Para percentual, ambos consideram o valor líquido faturado dos alunos elegíveis presentes
+              // Para percentual, ambos consideram o valor líquido faturado/rateado dos alunos elegíveis presentes
               occComm = Math.round(((totalNetBasis * rule.value) / 100) * 100) / 100;
             }
           }
 
+          const uniqueNotes = Array.from(new Set(finEntries.map(f => f.basisNote)));
+          const baseNote = uniqueNotes.join(' + ');
+          const finalBasisNote = meta.ownsRevenue
+            ? baseNote
+            : `${baseNote} • Cobertura em equipe (faturamento único atribuído ao titular)`;
+
           apptCount += 1; // 1 ocorrência de aula/turma
-          produced = Math.round((produced + totalNetBasis) * 100) / 100;
+          if (meta.ownsRevenue) {
+            produced = Math.round((produced + totalNetBasis) * 100) / 100;
+          }
           commAmount = Math.round((commAmount + occComm) * 100) / 100;
+
+          uniqueOccBasisMap.set(itemKey, {
+            grossBasisAmount: totalNetBasis,
+            serviceName: sample.service_name,
+            startTime: sample.start_time
+          });
+          const accList = occCommAccumulator.get(itemKey) || [];
+          accList.push({
+            professionalId: p.id,
+            professionalName: p.name,
+            role: meta.role,
+            commissionAmount: occComm
+          });
+          occCommAccumulator.set(itemKey, accList);
+
           breakdownItems.push({
             appointmentId: sample.id,
             occurrenceId: sample.occurrence_id || bucketKey,
@@ -335,7 +633,11 @@ export class PayrollController {
             commissionType: rule.type,
             commissionRate: rule.value,
             groupPayoutBasis: rule.groupBasis,
-            commissionAmount: occComm
+            commissionAmount: occComm,
+            participantRole: meta.role,
+            isPackageCovered: anyPackage,
+            packageContractId: anyPkgContract,
+            financialBasisNote: finalBasisNote
           });
         }
 
@@ -370,14 +672,61 @@ export class PayrollController {
           paidDate: currentPaidDate,
           status: currentStatus,
           isLocked: false,
-          commissionBreakdown: breakdownItems
+          commissionBreakdown: breakdownItems,
+          warnings: [] as any[]
         });
       }
+
+      // Auditoria de margem/excesso: verifica ocorrências/sessões onde soma de comissões supera a base financeira
+      const allWarnings: any[] = [];
+      for (const [itemKey, metaInfo] of uniqueOccBasisMap.entries()) {
+        const comms = occCommAccumulator.get(itemKey) || [];
+        if (comms.length === 0) continue;
+        const totalItemComm = Math.round(comms.reduce((s, c) => s + Number(c.commissionAmount || 0), 0) * 100) / 100;
+        if (totalItemComm > Number(metaInfo.grossBasisAmount || 0) + 0.01) {
+          const warn = {
+            code: 'COMMISSION_EXCEEDS_BASIS',
+            itemKey,
+            serviceName: metaInfo.serviceName,
+            startTime: metaInfo.startTime,
+            grossBasisAmount: Number(metaInfo.grossBasisAmount || 0),
+            totalCommissionAmount: totalItemComm,
+            excessAmount: Math.round((totalItemComm - Number(metaInfo.grossBasisAmount || 0)) * 100) / 100,
+            message: `Soma das comissões (R$ ${totalItemComm.toFixed(2)}) supera a base financeira da aula (R$ ${Number(metaInfo.grossBasisAmount || 0).toFixed(2)}) em "${metaInfo.serviceName}".`,
+            professionalIds: comms.map(c => c.professionalId)
+          };
+          allWarnings.push(warn);
+          for (const resItem of results) {
+            if (warn.professionalIds.includes(resItem.professionalId)) {
+              if (!Array.isArray(resItem.warnings)) resItem.warnings = [];
+              resItem.warnings.push(warn);
+            }
+          }
+        }
+      }
+
+      const uniqueProducedAmount = Math.round(
+        Array.from(uniqueOccBasisMap.values()).reduce((sum, v) => sum + Number(v.grossBasisAmount || 0), 0) * 100
+      ) / 100;
+      const totalCommissionAmount = Math.round(
+        results.reduce((sum, r) => sum + Number(r.commissionAmount || 0), 0) * 100
+      ) / 100;
+      const totalPayableAmount = Math.round(
+        results.reduce((sum, r) => sum + Number(r.totalPayable || 0), 0) * 100
+      ) / 100;
 
       res.json({
         success: true,
         periodMonth,
         calculatedCount: results.length,
+        summary: {
+          uniqueItemsCount: uniqueOccBasisMap.size,
+          uniqueProducedAmount,
+          totalCommissionAmount,
+          totalPayableAmount,
+          warningsCount: allWarnings.length
+        },
+        warnings: allWarnings,
         results
       });
     } catch (err: any) {
@@ -399,11 +748,19 @@ export class PayrollController {
         id, professionalId, periodMonth, remunerationType, appointmentsCount,
         producedAmount, commissionPercentage, commissionAmount, fixedSalary,
         adjustments, adjustmentNotes, totalPayable, dueDate, paidDate, status, notes,
-        commissionBreakdown
+        commissionBreakdown, warnings
       } = req.body;
 
       if (!professionalId || !periodMonth) {
         res.status(400).json({ error: 'Profissional e período (YYYY-MM) são obrigatórios' });
+        return;
+      }
+
+      const profOwner = db.prepare(`
+        SELECT id FROM professionals WHERE id = ? AND tenant_id = ?
+      `).get(professionalId, tenantId) as { id: string } | undefined;
+      if (!profOwner) {
+        res.status(404).json({ error: 'Profissional não encontrado neste estabelecimento.' });
         return;
       }
 
@@ -423,8 +780,20 @@ export class PayrollController {
         return;
       }
 
+      const dedupedBreakdown: any[] = [];
+      if (Array.isArray(commissionBreakdown)) {
+        const seen = new Set<string>();
+        for (const item of commissionBreakdown) {
+          const k = item?.occurrenceId ? `occ:${item.occurrenceId}` : (item?.appointmentId ? `apt:${item.appointmentId}` : `row:${dedupedBreakdown.length}`);
+          if (seen.has(k)) continue;
+          seen.add(k);
+          dedupedBreakdown.push(item);
+        }
+      }
+
       const targetId = existing ? existing.id : recordId;
-      const breakdownJson = Array.isArray(commissionBreakdown) ? JSON.stringify(commissionBreakdown) : null;
+      const breakdownJson = Array.isArray(commissionBreakdown) ? JSON.stringify(dedupedBreakdown) : null;
+      const warningsJson = Array.isArray(warnings) ? JSON.stringify(warnings) : null;
 
       const saveTx = db.transaction(() => {
         if (existing) {
@@ -444,6 +813,7 @@ export class PayrollController {
               status = ?,
               notes = ?,
               commission_breakdown_json = COALESCE(?, commission_breakdown_json),
+              warnings_json = COALESCE(?, warnings_json),
               updated_at = datetime('now')
             WHERE id = ? AND tenant_id = ?
           `).run(
@@ -461,6 +831,7 @@ export class PayrollController {
             status || 'pending',
             notes || null,
             breakdownJson,
+            warningsJson,
             targetId,
             tenantId
           );
@@ -470,9 +841,9 @@ export class PayrollController {
               id, tenant_id, professional_id, period_month, remuneration_type,
               appointments_count, produced_amount, commission_percentage, commission_amount,
               fixed_salary, adjustments, adjustment_notes, total_payable,
-              due_date, paid_date, status, notes, commission_breakdown_json, created_at, updated_at
+              due_date, paid_date, status, notes, commission_breakdown_json, warnings_json, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
           `).run(
             targetId,
             tenantId,
@@ -491,7 +862,8 @@ export class PayrollController {
             paidDate || null,
             status || 'pending',
             notes || null,
-            breakdownJson
+            breakdownJson,
+            warningsJson
           );
         }
 
@@ -501,10 +873,11 @@ export class PayrollController {
             INSERT INTO payroll_items (
               id, tenant_id, payroll_id, professional_id, service_id, appointment_id,
               occurrence_id, service_name_snapshot, service_kind_snapshot, eligible_students_count,
-              gross_basis_amount, rule_source, commission_type, commission_rate, group_payout_basis, commission_amount
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              gross_basis_amount, rule_source, commission_type, commission_rate, group_payout_basis, commission_amount,
+              participant_role, is_package_covered, package_contract_id, financial_basis_note
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `);
-          for (const item of commissionBreakdown) {
+          for (const item of dedupedBreakdown) {
             insItem.run(
               'pi-' + uuidv4().slice(0, 8),
               tenantId,
@@ -521,7 +894,11 @@ export class PayrollController {
               item.commissionType || 'percentage',
               Number(item.commissionRate || 0),
               item.groupPayoutBasis || null,
-              Number(item.commissionAmount || 0)
+              Number(item.commissionAmount || 0),
+              item.participantRole === 'co_instructor' ? 'co_instructor' : 'primary',
+              item.isPackageCovered ? 1 : 0,
+              item.packageContractId || null,
+              item.financialBasisNote || null
             );
           }
         }
@@ -535,6 +912,75 @@ export class PayrollController {
     } catch (err: any) {
       console.error('[PayrollController.save] Erro:', err);
       res.status(500).json({ success: false, error: 'Erro ao salvar pagamento' });
+    }
+  }
+
+  /**
+   * Lista itens detalhados e avisos de uma folha salva
+   * GET /v1/payroll/:id/items
+   */
+  static getItems(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      const { id } = req.params;
+      if (!tenantId || !id) {
+        res.status(400).json({ error: 'Estabelecimento e folha são obrigatórios.' });
+        return;
+      }
+
+      const payroll = db.prepare(`
+        SELECT py.*, p.name as professional_name
+        FROM professional_payrolls py
+        JOIN professionals p ON p.id = py.professional_id
+        WHERE py.id = ? AND py.tenant_id = ?
+      `).get(id, tenantId) as any;
+
+      if (!payroll) {
+        res.status(404).json({ error: 'Folha de pagamento não encontrada.' });
+        return;
+      }
+
+      if (req.user?.role === 'professional') {
+        const ownProf = db.prepare(`
+          SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?
+        `).get(req.user.userId, tenantId) as { id: string } | undefined;
+        if (!ownProf || ownProf.id !== payroll.professional_id) {
+          res.status(403).json({ error: 'Sem permissão para visualizar detalhes de outro profissional.' });
+          return;
+        }
+      } else if (req.user?.role !== 'clinic_admin' && req.user?.role !== 'superadmin') {
+        res.status(403).json({ error: 'Você não possui permissão para acessar esta área.' });
+        return;
+      }
+
+      const items = db.prepare(`
+        SELECT * FROM payroll_items
+        WHERE tenant_id = ? AND payroll_id = ?
+        ORDER BY created_at ASC, id ASC
+      `).all(tenantId, id) as any[];
+
+      let parsedBreakdown: any[] = [];
+      let parsedWarnings: any[] = [];
+      try {
+        if (payroll.commission_breakdown_json) parsedBreakdown = JSON.parse(payroll.commission_breakdown_json);
+      } catch (_) {}
+      try {
+        if (payroll.warnings_json) parsedWarnings = JSON.parse(payroll.warnings_json);
+      } catch (_) {}
+
+      res.json({
+        payrollId: payroll.id,
+        professionalId: payroll.professional_id,
+        professionalName: payroll.professional_name,
+        periodMonth: payroll.period_month,
+        status: payroll.status,
+        warnings: parsedWarnings,
+        items,
+        commissionBreakdown: parsedBreakdown
+      });
+    } catch (err: any) {
+      console.error('[PayrollController.getItems] Erro:', err);
+      res.status(500).json({ error: 'Erro ao carregar detalhes da folha.' });
     }
   }
 

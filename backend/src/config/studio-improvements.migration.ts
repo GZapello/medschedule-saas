@@ -350,14 +350,90 @@ export function migrateStudioImprovements(rawDb: DatabaseSync): void {
   addColIfMissing('recurring_billing_plans', 'package_contract_id', 'TEXT');
   addColIfMissing('class_series', 'interval_value', 'INTEGER');
   addColIfMissing('class_series', 'interval_unit', 'TEXT');
+  addColIfMissing('class_series', 'series_mode', `TEXT NOT NULL DEFAULT 'legacy'`);
+  addColIfMissing('class_series', 'plan_duration_code', 'TEXT');
+  addColIfMissing('class_series', 'schedule_entries_json', 'TEXT');
+  addColIfMissing('services', 'allowed_plan_durations_json', 'TEXT');
+  addColIfMissing('services', 'default_plan_duration', 'TEXT');
   addColIfMissing('class_occurrences', 'class_schedule_id', 'TEXT');
+  addColIfMissing('payroll_items', 'participant_role', `TEXT DEFAULT 'primary'`);
+  addColIfMissing('payroll_items', 'is_package_covered', 'INTEGER NOT NULL DEFAULT 0');
+  addColIfMissing('payroll_items', 'package_contract_id', 'TEXT');
+  addColIfMissing('payroll_items', 'financial_basis_note', 'TEXT');
+  addColIfMissing('professional_payrolls', 'warnings_json', 'TEXT');
   try {
     rawDb.exec(`
       CREATE INDEX IF NOT EXISTS idx_class_occ_schedule
         ON class_occurrences(tenant_id, class_schedule_id, start_time);
+
+      -- 8. Co-instrutores por horário fixo da grade semanal (Studio)
+      CREATE TABLE IF NOT EXISTS class_schedule_instructors (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        schedule_id TEXT NOT NULL,
+        professional_id TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'co_instructor' CHECK(role IN ('primary', 'co_instructor')),
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(schedule_id, professional_id),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (schedule_id) REFERENCES class_schedules(id) ON DELETE CASCADE,
+        FOREIGN KEY (professional_id) REFERENCES professionals(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_csi_tenant_schedule
+        ON class_schedule_instructors(tenant_id, schedule_id);
+      CREATE INDEX IF NOT EXISTS idx_csi_tenant_prof
+        ON class_schedule_instructors(tenant_id, professional_id);
+
+      -- 9. Participação real de instrutores por ocorrência de turma ou sessão individual de Studio
+      CREATE TABLE IF NOT EXISTS session_instructor_participants (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        service_id TEXT,
+        occurrence_id TEXT,
+        appointment_id TEXT,
+        professional_id TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'co_instructor' CHECK(role IN ('primary', 'co_instructor')),
+        attendance_status TEXT NOT NULL DEFAULT 'scheduled' CHECK(attendance_status IN ('scheduled', 'present', 'absent')),
+        source TEXT NOT NULL DEFAULT 'manual',
+        updated_by TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (professional_id) REFERENCES professionals(id) ON DELETE CASCADE
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_sip_occ_prof
+        ON session_instructor_participants(occurrence_id, professional_id)
+        WHERE occurrence_id IS NOT NULL;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_sip_apt_prof
+        ON session_instructor_participants(appointment_id, professional_id)
+        WHERE appointment_id IS NOT NULL AND occurrence_id IS NULL;
+      CREATE INDEX IF NOT EXISTS idx_sip_tenant_prof
+        ON session_instructor_participants(tenant_id, professional_id, attendance_status);
+      CREATE INDEX IF NOT EXISTS idx_sip_tenant_occ
+        ON session_instructor_participants(tenant_id, occurrence_id);
+      CREATE INDEX IF NOT EXISTS idx_sip_tenant_apt
+        ON session_instructor_participants(tenant_id, appointment_id);
+
+      -- 10. Auditoria explícita de alterações na equipe/presença de instrutores
+      CREATE TABLE IF NOT EXISTS session_participant_audit (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        occurrence_id TEXT,
+        appointment_id TEXT,
+        professional_id TEXT NOT NULL,
+        action TEXT NOT NULL,
+        previous_status TEXT,
+        new_status TEXT,
+        changed_by TEXT,
+        details_json TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_spa_tenant_occ
+        ON session_participant_audit(tenant_id, occurrence_id, created_at);
     `);
   } catch (e) {
-    console.warn('[StudioMigration] Aviso ao criar idx_class_occ_schedule:', e);
+    console.warn('[StudioMigration] Aviso ao criar tabelas de grade/instrutores/folha:', e);
   }
 
   // 7. Profissão canônica "Instrutor" + modalidades (preservando prof-instrutor-pilates / pilates_instructor)

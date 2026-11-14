@@ -7,7 +7,12 @@ import { canAccessPatient } from '../services/patient-sharing.service';
 import { canOperate } from '../services/billing.service';
 import { NotificationService } from '../services/notification.service';
 import { GoogleCalendarService } from '../services/google-calendar.service';
-import { generateRecurrenceDates, resolveOrCreateGroupOccurrenceTx } from '../services/class-group.service';
+import {
+  generateRecurrenceDates,
+  generateSchedulePlanOccurrences,
+  resolveOrCreateGroupOccurrenceTx,
+  SchedulePlanEntryInput
+} from '../services/class-group.service';
 import { ClassScheduleService, buildWeeklyScheduleSummary, todayBrazilYmd, addDaysYmd } from '../services/class-schedule.service';
 import { evaluateRecurrenceSeriesWithExternalBusy } from '../services/recurrence.service';
 import {
@@ -23,6 +28,7 @@ import { isPrimaryClinicalModule, resolveClinicalModule } from '../utils/clinica
 import {
   MAX_PUBLIC_RECURRENCE_OCCURRENCES,
   parseServiceRecurrenceConfig,
+  PlanDurationCode,
   RecurrenceFrequency,
   RecurrenceIntervalUnit,
   validateServiceRecurrenceFrequency
@@ -562,6 +568,8 @@ export class PackageController {
           allowRecurrence: recCfg.allowRecurrence,
           allowedRecurrenceFrequencies: recCfg.allowedFrequencies,
           defaultRecurrenceFrequency: recCfg.defaultFrequency,
+          allowedPlanDurations: recCfg.allowedPlanDurations,
+          defaultPlanDuration: recCfg.defaultPlanDuration,
           customRecurrenceIntervals: recCfg.customIntervals,
           defaultRecurrenceInterval: recCfg.defaultCustomInterval,
           professionals: allLinkedProfs,
@@ -689,6 +697,8 @@ export class PackageController {
         allowRecurrence: recCfg.allowRecurrence,
         allowedRecurrenceFrequencies: recCfg.allowedFrequencies,
         defaultRecurrenceFrequency: recCfg.defaultFrequency,
+        allowedPlanDurations: recCfg.allowedPlanDurations,
+        defaultPlanDuration: recCfg.defaultPlanDuration,
         customRecurrenceIntervals: recCfg.customIntervals,
         defaultRecurrenceInterval: recCfg.defaultCustomInterval,
         professionals: allLinkedProfs,
@@ -800,6 +810,9 @@ export class PackageController {
         frequency: recurrence?.frequency ?? null,
         intervalValue: recurrence?.intervalValue ?? recurrence?.interval_value ?? null,
         intervalUnit: recurrence?.intervalUnit ?? recurrence?.interval_unit ?? null,
+        durationCode: recurrence?.durationCode ?? recurrence?.planDurationCode ?? null,
+        seriesMode: recurrence?.seriesMode ?? null,
+        scheduleEntries: Array.isArray(recurrence?.scheduleEntries) ? recurrence.scheduleEntries : undefined,
         weekdays: Array.isArray(recurrence?.weekdays) ? recurrence.weekdays : undefined,
         endDate: recurrence?.endDate ? String(recurrence.endDate).slice(0, 10) : undefined,
         maxOccurrences: recurrence?.maxOccurrences !== undefined ? Number(recurrence.maxOccurrences) : undefined,
@@ -911,6 +924,9 @@ export class PackageController {
         endIso: string;
         isRecurrenceFollowUp: boolean;
         recurrenceMeta?: {
+          seriesMode: 'legacy' | 'schedule_plan';
+          durationCode: PlanDurationCode | null;
+          scheduleEntriesJson: string | null;
           frequency: RecurrenceFrequency;
           intervalValue: number | null;
           intervalUnit: RecurrenceIntervalUnit | null;
@@ -926,6 +942,10 @@ export class PackageController {
         startTime: string;
         endTime?: string;
         recurrence?: {
+          seriesMode?: 'legacy' | 'schedule_plan';
+          durationCode?: PlanDurationCode;
+          planDurationCode?: PlanDurationCode;
+          scheduleEntries?: SchedulePlanEntryInput[];
           frequency?: string;
           intervalValue?: number;
           interval_value?: number;
@@ -940,6 +960,7 @@ export class PackageController {
           SELECT id, name, price, duration_minutes, professional_id, COALESCE(service_kind, 'individual') as service_kind,
                  default_capacity, COALESCE(allow_recurrence, 1) as allow_recurrence,
                  allowed_recurrence_frequencies_json, default_recurrence_frequency,
+                 allowed_plan_durations_json, default_plan_duration,
                  custom_recurrence_intervals_json, default_recurrence_interval_json,
                  service_domain, modality, clinical_module
           FROM services WHERE id = ? AND tenant_id = ? AND active = 1
@@ -969,14 +990,26 @@ export class PackageController {
 
         const preferredProfId = item.professionalId && item.professionalId !== 'any' ? String(item.professionalId) : 'any';
 
-        let dates: string[] = [startDate];
-        let recMeta: ExpandedBookingItem['recurrenceMeta'] = null;
-        if (item.recurrence && (item.recurrence.maxOccurrences || item.recurrence.endDate)) {
+        const reqDurationCode = item.recurrence?.durationCode ?? item.recurrence?.planDurationCode ?? null;
+        const reqScheduleEntries = Array.isArray(item.recurrence?.scheduleEntries) ? item.recurrence!.scheduleEntries : [];
+        const hasRecurrenceBound = Boolean(
+          item.recurrence &&
+          (item.recurrence.maxOccurrences ||
+            item.recurrence.endDate ||
+            (reqDurationCode && !['count', 'custom_date', 'legacy_frequency'].includes(reqDurationCode)) ||
+            reqScheduleEntries.length > 0)
+        );
+
+        if (hasRecurrenceBound && item.recurrence) {
           const recValidation = validateServiceRecurrenceFrequency(
             srv,
             item.recurrence.frequency,
             item.recurrence.intervalValue ?? item.recurrence.interval_value,
-            item.recurrence.intervalUnit ?? item.recurrence.interval_unit
+            item.recurrence.intervalUnit ?? item.recurrence.interval_unit,
+            {
+              durationCode: reqDurationCode,
+              seriesMode: item.recurrence.seriesMode || (reqScheduleEntries.length > 0 ? 'schedule_plan' : undefined)
+            }
           );
           if (!recValidation.valid) {
             throw Object.assign(new Error(recValidation.error), { status: 400, code: recValidation.code });
@@ -991,39 +1024,66 @@ export class PackageController {
             );
           }
           const weekdaysList = Array.isArray(item.recurrence.weekdays) ? item.recurrence.weekdays : [];
-          dates = generateRecurrenceDates({
+          const planOut = generateSchedulePlanOccurrences({
             startDate,
             frequency: recValidation.frequency,
             intervalValue: recValidation.intervalValue,
             intervalUnit: recValidation.intervalUnit,
-            weekdays: weekdaysList.length > 0 ? weekdaysList : undefined,
+            durationCode: recValidation.durationCode,
             endDate: item.recurrence.endDate || undefined,
-            maxOccurrences: rawMax
+            maxOccurrences: rawMax,
+            weekdays: weekdaysList.length > 0 ? weekdaysList : undefined,
+            startClock,
+            endClock: computedEndClock,
+            durationMinutes: Number(srv.duration_minutes || 50),
+            classScheduleId: item.classScheduleId ? String(item.classScheduleId).trim() : null,
+            professionalId: preferredProfId !== 'any' ? preferredProfId : null,
+            modality: item.modality ? String(item.modality) : null,
+            scheduleEntries: reqScheduleEntries.length > 0 ? reqScheduleEntries : null,
+            maxCap: MAX_PUBLIC_RECURRENCE_OCCURRENCES
           });
-          if (dates.length > MAX_PUBLIC_RECURRENCE_OCCURRENCES) {
+
+          if (planOut.occurrences.length > MAX_PUBLIC_RECURRENCE_OCCURRENCES) {
             throw Object.assign(
               new Error(`O período informado excede o limite de ${MAX_PUBLIC_RECURRENCE_OCCURRENCES} ocorrências no agendamento online.`),
               { status: 400, code: 'RECURRENCE_LIMIT_EXCEEDED' }
             );
           }
-          recMeta = {
+
+          const recMeta: ExpandedBookingItem['recurrenceMeta'] = {
+            seriesMode: recValidation.seriesMode,
+            durationCode: recValidation.durationCode,
+            scheduleEntriesJson: reqScheduleEntries.length > 0 ? JSON.stringify(reqScheduleEntries) : null,
             frequency: recValidation.frequency,
             intervalValue: recValidation.intervalValue,
             intervalUnit: recValidation.intervalUnit,
-            weekdays: weekdaysList
+            weekdays: weekdaysList.length > 0
+              ? weekdaysList
+              : Array.from(new Set(planOut.occurrences.map(o => o.dayOfWeek)))
           };
+
+          return planOut.occurrences.map((occItem, idx) => ({
+            serviceRow: srv,
+            preferredProfId: occItem.professionalId || preferredProfId,
+            classScheduleId: occItem.classScheduleId || (item.classScheduleId ? String(item.classScheduleId).trim() : null),
+            requestedModality: occItem.modality || item.modality,
+            startIso: occItem.startIso,
+            endIso: occItem.endIso,
+            isRecurrenceFollowUp: idx > 0,
+            recurrenceMeta: recMeta
+          }));
         }
 
-        return dates.map((d, idx) => ({
+        return [{
           serviceRow: srv,
           preferredProfId,
           classScheduleId: item.classScheduleId ? String(item.classScheduleId).trim() : null,
           requestedModality: item.modality,
-          startIso: `${d}T${startClock}`,
-          endIso: `${d}T${computedEndClock}`,
-          isRecurrenceFollowUp: idx > 0,
-          recurrenceMeta: recMeta
-        }));
+          startIso: `${startDate}T${startClock}`,
+          endIso: `${startDate}T${computedEndClock}`,
+          isRecurrenceFollowUp: false,
+          recurrenceMeta: null
+        }];
       };
 
       const prefetchExternalBusy = async (items: ExpandedBookingItem[]): Promise<Map<string, Array<{ startMin: number; endMin: number }>>> => {
@@ -1067,6 +1127,7 @@ export class PackageController {
         extBusyMap: Map<string, Array<{ startMin: number; endMin: number }>>
       ): {
         professionalId: string;
+        coInstructorIds?: string[];
         classScheduleId: string | null;
         roomId: string | null;
         capacity: number;
@@ -1203,7 +1264,8 @@ export class PackageController {
                 endTime: item.endIso,
                 defaultCapacity: capacity,
                 modality: concreteModality,
-                patientId: resolvedStudentId
+                patientId: resolvedStudentId,
+                coInstructorIds: resolvedSlot.coInstructorIds
               });
               occurrenceId = occ.occurrenceId;
             }
@@ -1353,9 +1415,10 @@ export class PackageController {
             INSERT INTO class_series (
               id, tenant_id, service_id, professional_id, patient_id, service_kind, title,
               modality, frequency, weekdays_json, interval_value, interval_unit,
+              series_mode, plan_duration_code, schedule_entries_json,
               start_time_hhmm, duration_minutes, start_date, end_date,
               max_occurrences, capacity, unit_price, status, created_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 'online_booking')
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 'online_booking')
           `).run(
             seriesId,
             tenant.id,
@@ -1369,6 +1432,9 @@ export class PackageController {
             JSON.stringify(Array.isArray(seriesRecMeta?.weekdays) ? seriesRecMeta.weekdays : (Array.isArray(recurrence?.weekdays) ? recurrence.weekdays : [])),
             seriesRecMeta?.intervalValue ?? null,
             seriesRecMeta?.intervalUnit ?? null,
+            seriesRecMeta?.seriesMode || 'legacy',
+            seriesRecMeta?.durationCode || null,
+            seriesRecMeta?.scheduleEntriesJson || null,
             first.slotItem.startIso.slice(11, 16),
             Number(first.slotItem.serviceRow.duration_minutes || 50),
             first.slotItem.startIso.slice(0, 10),
@@ -1401,7 +1467,8 @@ export class PackageController {
               defaultCapacity: capacity,
               modality: concreteModality,
               seriesId,
-              patientId: resolvedStudentId
+              patientId: resolvedStudentId,
+              coInstructorIds: resolvedSlot.coInstructorIds
             });
             occurrenceId = occ.occurrenceId;
           }

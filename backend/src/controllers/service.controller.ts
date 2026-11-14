@@ -266,6 +266,8 @@ export class ServiceController {
           COALESCE(s.allow_recurrence, 1) as allow_recurrence,
           s.allowed_recurrence_frequencies_json,
           s.default_recurrence_frequency,
+          s.allowed_plan_durations_json,
+          s.default_plan_duration,
           s.custom_recurrence_intervals_json,
           s.default_recurrence_interval_json,
           s.service_domain,
@@ -342,6 +344,8 @@ export class ServiceController {
           allow_recurrence: recConfig.allowRecurrence ? 1 : 0,
           allowed_recurrence_frequencies: recConfig.allowedFrequencies,
           default_recurrence_frequency: recConfig.defaultFrequency,
+          allowed_plan_durations: recConfig.allowedPlanDurations,
+          default_plan_duration: recConfig.defaultPlanDuration,
           custom_recurrence_intervals: recConfig.customIntervals,
           default_recurrence_interval: recConfig.defaultCustomInterval,
           linked_professional_ids: linkedProfIds,
@@ -375,6 +379,8 @@ export class ServiceController {
         serviceDomain, service_domain,
         allowedRecurrenceFrequencies, allowed_recurrence_frequencies,
         defaultRecurrenceFrequency, default_recurrence_frequency,
+        allowedPlanDurations, allowed_plan_durations,
+        defaultPlanDuration, default_plan_duration,
         customRecurrenceIntervals, custom_recurrence_intervals,
         defaultRecurrenceInterval, default_recurrence_interval
       } = req.body;
@@ -390,6 +396,8 @@ export class ServiceController {
       const rawRequestedDomain = serviceDomain ?? service_domain;
       const rawAllowedFreqs = allowedRecurrenceFrequencies !== undefined ? allowedRecurrenceFrequencies : allowed_recurrence_frequencies;
       const rawDefaultFreq = defaultRecurrenceFrequency !== undefined ? defaultRecurrenceFrequency : default_recurrence_frequency;
+      const rawAllowedDurations = allowedPlanDurations !== undefined ? allowedPlanDurations : allowed_plan_durations;
+      const rawDefaultDuration = defaultPlanDuration !== undefined ? defaultPlanDuration : default_plan_duration;
       const rawCustomIntervals = customRecurrenceIntervals !== undefined ? customRecurrenceIntervals : custom_recurrence_intervals;
       const rawDefaultInterval = defaultRecurrenceInterval !== undefined ? defaultRecurrenceInterval : default_recurrence_interval;
       const requestedLinkedIds = parseLinkedInstructorIds(req.body);
@@ -477,11 +485,13 @@ export class ServiceController {
         return;
       }
 
-      const recNorm = isStudioCompat && (resolvedDomain === 'studio' || rawAllowedFreqs !== undefined || rawCustomIntervals !== undefined || rawDefaultInterval !== undefined)
+      const recNorm = isStudioCompat && (resolvedDomain === 'studio' || rawAllowedFreqs !== undefined || rawAllowedDurations !== undefined || rawDefaultDuration !== undefined || rawCustomIntervals !== undefined || rawDefaultInterval !== undefined)
         ? normalizeRecurrenceConfigForSave({
             allowRecurrence: allowRecurrence ?? allow_recurrence,
             allowedRecurrenceFrequencies: rawAllowedFreqs,
             defaultRecurrenceFrequency: rawDefaultFreq,
+            allowedPlanDurations: rawAllowedDurations,
+            defaultPlanDuration: rawDefaultDuration,
             customRecurrenceIntervals: rawCustomIntervals,
             defaultRecurrenceInterval: rawDefaultInterval
           })
@@ -489,6 +499,8 @@ export class ServiceController {
             allowRecurrenceInt: ((allowRecurrence ?? allow_recurrence) === false || (allowRecurrence ?? allow_recurrence) === 0 ? 0 : 1) as 0 | 1,
             allowedJson: null,
             defaultFrequency: null,
+            allowedPlanDurationsJson: null,
+            defaultPlanDuration: null,
             customIntervalsJson: null,
             defaultIntervalJson: null
           };
@@ -517,9 +529,10 @@ export class ServiceController {
             reminder_enabled, reminder_value, reminder_unit, clinical_module,
             service_kind, default_capacity, allow_recurrence, modality_category,
             service_domain, allowed_recurrence_frequencies_json, default_recurrence_frequency,
+            allowed_plan_durations_json, default_plan_duration,
             custom_recurrence_intervals_json, default_recurrence_interval_json
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
 
         insertStmt.run(
@@ -547,6 +560,8 @@ export class ServiceController {
           resolvedDomain,
           recNorm.allowedJson,
           recNorm.defaultFrequency,
+          recNorm.allowedPlanDurationsJson,
+          recNorm.defaultPlanDuration,
           recNorm.customIntervalsJson,
           recNorm.defaultIntervalJson
         );
@@ -582,6 +597,8 @@ export class ServiceController {
             allow_recurrence: recNorm.allowRecurrenceInt,
             allowed_recurrence_frequencies_json: recNorm.allowedJson,
             default_recurrence_frequency: recNorm.defaultFrequency,
+            allowed_plan_durations_json: recNorm.allowedPlanDurationsJson,
+            default_plan_duration: recNorm.defaultPlanDuration,
             custom_recurrence_intervals_json: recNorm.customIntervalsJson,
             default_recurrence_interval_json: recNorm.defaultIntervalJson
           })
@@ -617,6 +634,8 @@ export class ServiceController {
         allow_recurrence: recNorm.allowRecurrenceInt,
         allowed_recurrence_frequencies: parsedCreatedRec ? parsedCreatedRec.allowedFrequencies : undefined,
         default_recurrence_frequency: parsedCreatedRec ? parsedCreatedRec.defaultFrequency : null,
+        allowed_plan_durations: parsedCreatedRec ? parsedCreatedRec.allowedPlanDurations : undefined,
+        default_plan_duration: parsedCreatedRec ? parsedCreatedRec.defaultPlanDuration : null,
         custom_recurrence_intervals: parsedCreatedRec ? parsedCreatedRec.customIntervals : undefined,
         default_recurrence_interval: parsedCreatedRec ? parsedCreatedRec.defaultCustomInterval : null,
         modality_category: resolvedModalityCategory,
@@ -670,6 +689,8 @@ export class ServiceController {
         serviceDomain, service_domain,
         allowedRecurrenceFrequencies, allowed_recurrence_frequencies,
         defaultRecurrenceFrequency, default_recurrence_frequency,
+        allowedPlanDurations, allowed_plan_durations,
+        defaultPlanDuration, default_plan_duration,
         customRecurrenceIntervals, custom_recurrence_intervals,
         defaultRecurrenceInterval, default_recurrence_interval
       } = req.body;
@@ -679,6 +700,8 @@ export class ServiceController {
       const rawRequestedDomain = serviceDomain ?? service_domain;
       const rawAllowedFreqs = allowedRecurrenceFrequencies !== undefined ? allowedRecurrenceFrequencies : allowed_recurrence_frequencies;
       const rawDefaultFreq = defaultRecurrenceFrequency !== undefined ? defaultRecurrenceFrequency : default_recurrence_frequency;
+      const rawAllowedDurations = allowedPlanDurations !== undefined ? allowedPlanDurations : allowed_plan_durations;
+      const rawDefaultDuration = defaultPlanDuration !== undefined ? defaultPlanDuration : default_plan_duration;
       const rawCustomIntervals = customRecurrenceIntervals !== undefined ? customRecurrenceIntervals : custom_recurrence_intervals;
       const rawDefaultInterval = defaultRecurrenceInterval !== undefined ? defaultRecurrenceInterval : default_recurrence_interval;
       const requestedLinkedIds = parseLinkedInstructorIds(req.body);
@@ -767,18 +790,24 @@ export class ServiceController {
       let nextAllowRec: 0 | 1 = rawAllowRec !== undefined ? (rawAllowRec === false || rawAllowRec === 0 ? 0 : 1) : ((existing.allow_recurrence ?? 1) === 0 ? 0 : 1);
       let nextAllowedJson: string | null = existing.allowed_recurrence_frequencies_json ?? null;
       let nextDefaultFreq: string | null = existing.default_recurrence_frequency ?? null;
+      let nextAllowedDurationsJson: string | null = existing.allowed_plan_durations_json ?? null;
+      let nextDefaultDuration: string | null = existing.default_plan_duration ?? null;
       let nextCustomIntervalsJson: string | null = existing.custom_recurrence_intervals_json ?? null;
       let nextDefaultIntervalJson: string | null = existing.default_recurrence_interval_json ?? null;
 
       if (!isStudioCompat) {
         nextAllowedJson = null;
         nextDefaultFreq = null;
+        nextAllowedDurationsJson = null;
+        nextDefaultDuration = null;
         nextCustomIntervalsJson = null;
         nextDefaultIntervalJson = null;
       } else if (
         rawAllowRec !== undefined ||
         rawAllowedFreqs !== undefined ||
         rawDefaultFreq !== undefined ||
+        rawAllowedDurations !== undefined ||
+        rawDefaultDuration !== undefined ||
         rawCustomIntervals !== undefined ||
         rawDefaultInterval !== undefined
       ) {
@@ -790,6 +819,12 @@ export class ServiceController {
               : undefined
           ),
           defaultRecurrenceFrequency: rawDefaultFreq !== undefined ? rawDefaultFreq : existing.default_recurrence_frequency,
+          allowedPlanDurations: rawAllowedDurations !== undefined ? rawAllowedDurations : (
+            typeof existing.allowed_plan_durations_json === 'string' && existing.allowed_plan_durations_json.trim()
+              ? (() => { try { return JSON.parse(existing.allowed_plan_durations_json); } catch { return undefined; } })()
+              : undefined
+          ),
+          defaultPlanDuration: rawDefaultDuration !== undefined ? rawDefaultDuration : existing.default_plan_duration,
           customRecurrenceIntervals: rawCustomIntervals !== undefined ? rawCustomIntervals : existing.custom_recurrence_intervals_json,
           defaultRecurrenceInterval: rawDefaultInterval !== undefined ? rawDefaultInterval : existing.default_recurrence_interval_json
         });
@@ -800,6 +835,8 @@ export class ServiceController {
         nextAllowRec = recNorm.allowRecurrenceInt;
         nextAllowedJson = recNorm.allowedJson;
         nextDefaultFreq = recNorm.defaultFrequency;
+        nextAllowedDurationsJson = recNorm.allowedPlanDurationsJson;
+        nextDefaultDuration = recNorm.defaultPlanDuration;
         nextCustomIntervalsJson = recNorm.customIntervalsJson;
         nextDefaultIntervalJson = recNorm.defaultIntervalJson;
       }
@@ -829,6 +866,8 @@ export class ServiceController {
           service_domain = ?,
           allowed_recurrence_frequencies_json = ?,
           default_recurrence_frequency = ?,
+          allowed_plan_durations_json = ?,
+          default_plan_duration = ?,
           custom_recurrence_intervals_json = ?,
           default_recurrence_interval_json = ?,
           updated_at = datetime('now')
@@ -864,6 +903,8 @@ export class ServiceController {
           nextDomain,
           nextAllowedJson,
           nextDefaultFreq,
+          nextAllowedDurationsJson,
+          nextDefaultDuration,
           nextCustomIntervalsJson,
           nextDefaultIntervalJson,
           id,
@@ -930,6 +971,8 @@ export class ServiceController {
             allow_recurrence: parsedUpdRec ? (parsedUpdRec.allowRecurrence ? 1 : 0) : (updatedService.allow_recurrence ?? 1),
             allowed_recurrence_frequencies: parsedUpdRec ? parsedUpdRec.allowedFrequencies : undefined,
             default_recurrence_frequency: parsedUpdRec ? parsedUpdRec.defaultFrequency : null,
+            allowed_plan_durations: parsedUpdRec ? parsedUpdRec.allowedPlanDurations : undefined,
+            default_plan_duration: parsedUpdRec ? parsedUpdRec.defaultPlanDuration : null,
             custom_recurrence_intervals: parsedUpdRec ? parsedUpdRec.customIntervals : undefined,
             default_recurrence_interval: parsedUpdRec ? parsedUpdRec.defaultCustomInterval : null,
             linked_professional_ids: linkedUpdIds,

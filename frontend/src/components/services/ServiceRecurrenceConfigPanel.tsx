@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
-import { Plus, Repeat, X } from 'lucide-react';
+import { CalendarRange, Plus, Repeat, X } from 'lucide-react';
 import {
+  ALL_PLAN_DURATIONS,
   ALL_RECURRENCE_FREQUENCIES,
   dedupeCustomIntervals,
   formatCustomIntervalLabel,
+  PLAN_DURATION_LABELS,
+  PlanDurationCode,
   RECURRENCE_FREQUENCY_LABELS,
   RECURRENCE_INTERVAL_BOUNDS,
   RecurrenceFrequency,
@@ -11,18 +14,24 @@ import {
   RecurrenceIntervalUnit
 } from '../../utils/establishmentContext';
 
+type ConcretePlanDurationCode = Exclude<PlanDurationCode, 'legacy_frequency'>;
+
 interface ServiceRecurrenceConfigPanelProps {
   allowRecurrence: boolean;
   allowedFrequencies: RecurrenceFrequency[];
   defaultFrequency: RecurrenceFrequency;
   customIntervals?: RecurrenceIntervalSpec[];
   defaultCustomInterval?: RecurrenceIntervalSpec | null;
+  allowedPlanDurations?: ConcretePlanDurationCode[];
+  defaultPlanDuration?: ConcretePlanDurationCode;
   onChange: (next: {
     allowRecurrence: boolean;
     allowedFrequencies: RecurrenceFrequency[];
     defaultFrequency: RecurrenceFrequency;
     customIntervals: RecurrenceIntervalSpec[];
     defaultCustomInterval: RecurrenceIntervalSpec | null;
+    allowedPlanDurations: ConcretePlanDurationCode[];
+    defaultPlanDuration: ConcretePlanDurationCode;
   }) => void;
 }
 
@@ -31,16 +40,30 @@ const FALLBACK_CUSTOM_INTERVAL: RecurrenceIntervalSpec = {
   intervalUnit: 'days'
 };
 
+const STUDIO_CADENCE_FREQUENCIES: RecurrenceFrequency[] = [
+  'weekly',
+  'biweekly',
+  'custom_weekdays',
+  'custom_interval'
+];
+
 export const ServiceRecurrenceConfigPanel: React.FC<ServiceRecurrenceConfigPanelProps> = ({
   allowRecurrence,
   allowedFrequencies,
   defaultFrequency,
   customIntervals = [],
   defaultCustomInterval = null,
+  allowedPlanDurations = ALL_PLAN_DURATIONS,
+  defaultPlanDuration = '1_month',
   onChange
 }) => {
   const [draftValue, setDraftValue] = useState<number>(defaultCustomInterval?.intervalValue || customIntervals[0]?.intervalValue || 3);
   const [draftUnit, setDraftUnit] = useState<RecurrenceIntervalUnit>(defaultCustomInterval?.intervalUnit || customIntervals[0]?.intervalUnit || 'days');
+
+  const safeAllowedDurations: ConcretePlanDurationCode[] =
+    allowedPlanDurations && allowedPlanDurations.length > 0 ? allowedPlanDurations : [...ALL_PLAN_DURATIONS];
+  const safeDefaultDuration: ConcretePlanDurationCode =
+    safeAllowedDurations.includes(defaultPlanDuration) ? defaultPlanDuration : safeAllowedDurations[0];
 
   const emitChange = (next: {
     allowRecurrence: boolean;
@@ -48,6 +71,8 @@ export const ServiceRecurrenceConfigPanel: React.FC<ServiceRecurrenceConfigPanel
     defaultFrequency: RecurrenceFrequency;
     customIntervals?: RecurrenceIntervalSpec[];
     defaultCustomInterval?: RecurrenceIntervalSpec | null;
+    allowedPlanDurations?: ConcretePlanDurationCode[];
+    defaultPlanDuration?: ConcretePlanDurationCode;
   }) => {
     const hasCustom = next.allowedFrequencies.includes('custom_interval');
     const cleanIntervals = hasCustom
@@ -64,12 +89,41 @@ export const ServiceRecurrenceConfigPanel: React.FC<ServiceRecurrenceConfigPanel
           : cleanIntervals[0] || FALLBACK_CUSTOM_INTERVAL)
       : null;
 
+    const nextDurations =
+      next.allowedPlanDurations && next.allowedPlanDurations.length > 0
+        ? next.allowedPlanDurations
+        : safeAllowedDurations;
+    const nextDefDuration =
+      next.defaultPlanDuration && nextDurations.includes(next.defaultPlanDuration)
+        ? next.defaultPlanDuration
+        : (nextDurations.includes(safeDefaultDuration) ? safeDefaultDuration : nextDurations[0]);
+
     onChange({
       allowRecurrence: next.allowRecurrence,
       allowedFrequencies: next.allowedFrequencies,
       defaultFrequency: next.defaultFrequency,
       customIntervals: cleanIntervals,
-      defaultCustomInterval: effDefInterval
+      defaultCustomInterval: effDefInterval,
+      allowedPlanDurations: nextDurations,
+      defaultPlanDuration: nextDefDuration
+    });
+  };
+
+  const togglePlanDuration = (dur: ConcretePlanDurationCode) => {
+    const exists = safeAllowedDurations.includes(dur);
+    const nextList = exists
+      ? safeAllowedDurations.filter(d => d !== dur)
+      : ALL_PLAN_DURATIONS.filter(d => safeAllowedDurations.includes(d) || d === dur);
+    if (nextList.length === 0) return; // Mantém ao menos 1 vigência ativa quando recorrência está ligada
+    const nextDef = nextList.includes(safeDefaultDuration) ? safeDefaultDuration : nextList[0];
+    emitChange({
+      allowRecurrence,
+      allowedFrequencies,
+      defaultFrequency,
+      customIntervals,
+      defaultCustomInterval,
+      allowedPlanDurations: nextList,
+      defaultPlanDuration: nextDef
     });
   };
 
@@ -210,30 +264,57 @@ export const ServiceRecurrenceConfigPanel: React.FC<ServiceRecurrenceConfigPanel
       </div>
 
       {allowRecurrence && (
-        <div className="space-y-2.5">
-          <div className="text-[11px] text-slate-500">Frequências autorizadas no agendamento:</div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5">
-            {ALL_RECURRENCE_FREQUENCIES.map(freq => {
-              const checked = allowedFrequencies.includes(freq);
-              return (
-                <label
-                  key={freq}
-                  className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-[11px] font-semibold cursor-pointer transition-colors ${
-                    checked
-                      ? 'border-teal-500 bg-teal-50/70 text-teal-900'
-                      : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => toggleFrequency(freq)}
-                    className="w-3.5 h-3.5 rounded text-teal-600 border-slate-300"
-                  />
-                  <span>{RECURRENCE_FREQUENCY_LABELS[freq]}</span>
-                </label>
-              );
-            })}
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <div className="text-[11px] font-bold text-slate-700">1. Frequência das aulas (ritmo na semana/intervalo):</div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-1.5">
+              {STUDIO_CADENCE_FREQUENCIES.map(freq => {
+                const checked = allowedFrequencies.includes(freq);
+                return (
+                  <label
+                    key={freq}
+                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-[11px] font-semibold cursor-pointer transition-colors ${
+                      checked
+                        ? 'border-teal-500 bg-teal-50/70 text-teal-900'
+                        : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleFrequency(freq)}
+                      className="w-3.5 h-3.5 rounded text-teal-600 border-slate-300"
+                    />
+                    <span>{RECURRENCE_FREQUENCY_LABELS[freq]}</span>
+                  </label>
+                );
+              })}
+            </div>
+
+            {/* Opções de intervalo legado mantidas somente se já estiverem configuradas ou para compatibilidade */}
+            {ALL_RECURRENCE_FREQUENCIES.some(f => !STUDIO_CADENCE_FREQUENCIES.includes(f) && allowedFrequencies.includes(f)) && (
+              <div className="pt-1 space-y-1">
+                <div className="text-[10px] font-semibold text-amber-700">
+                  Intervalos entre sessões (compatibilidade legado):
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                  {ALL_RECURRENCE_FREQUENCIES.filter(f => !STUDIO_CADENCE_FREQUENCIES.includes(f) && allowedFrequencies.includes(f)).map(freq => (
+                    <label
+                      key={freq}
+                      className="flex items-center gap-2 px-2 py-1 rounded-lg border border-amber-300 bg-amber-50/60 text-amber-900 text-[10px] font-semibold cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked
+                        onChange={() => toggleFrequency(freq)}
+                        className="w-3 h-3 rounded text-amber-600 border-amber-300"
+                      />
+                      <span>{RECURRENCE_FREQUENCY_LABELS[freq]}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {customEnabled && (
@@ -391,6 +472,66 @@ export const ServiceRecurrenceConfigPanel: React.FC<ServiceRecurrenceConfigPanel
               )}
             </div>
           )}
+
+          {/* Durações / Vigências de plano permitidas (separadas da frequência das aulas) */}
+          <div className="pt-2 border-t border-slate-100 space-y-2">
+            <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700">
+              <CalendarRange className="w-3.5 h-3.5 text-teal-600" />
+              <span>2. Duração / Vigência do plano autorizada:</span>
+            </div>
+            <p className="text-[10px] text-slate-500">
+              Define por quanto tempo a série semanal continua sendo gerada (ex: Mensal, Trimestral, Semestral ou Anual).
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5">
+              {ALL_PLAN_DURATIONS.map(dur => {
+                const checked = safeAllowedDurations.includes(dur);
+                return (
+                  <label
+                    key={dur}
+                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-[11px] font-semibold cursor-pointer transition-colors ${
+                      checked
+                        ? 'border-indigo-500 bg-indigo-50/60 text-indigo-900'
+                        : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => togglePlanDuration(dur)}
+                      className="w-3.5 h-3.5 rounded text-indigo-600 border-slate-300"
+                    />
+                    <span>{PLAN_DURATION_LABELS[dur]}</span>
+                  </label>
+                );
+              })}
+            </div>
+            <div className="max-w-xs">
+              <label className="block font-semibold text-slate-700 mb-1 text-[11px]">
+                Duração padrão do plano
+              </label>
+              <select
+                value={safeDefaultDuration}
+                onChange={e =>
+                  emitChange({
+                    allowRecurrence: true,
+                    allowedFrequencies,
+                    defaultFrequency,
+                    customIntervals,
+                    defaultCustomInterval,
+                    allowedPlanDurations: safeAllowedDurations,
+                    defaultPlanDuration: e.target.value as ConcretePlanDurationCode
+                  })
+                }
+                className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-slate-50 font-semibold text-slate-800"
+              >
+                {safeAllowedDurations.map(dur => (
+                  <option key={dur} value={dur}>
+                    {PLAN_DURATION_LABELS[dur]}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
         </div>
       )}
     </div>

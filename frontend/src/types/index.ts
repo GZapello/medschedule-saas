@@ -246,6 +246,9 @@ export interface Service {
   custom_recurrence_intervals_json?: string | null;
   default_recurrence_interval?: { intervalValue: number; intervalUnit: 'days' | 'weeks' | 'months' } | null;
   default_recurrence_interval_json?: string | null;
+  allowed_plan_durations?: string[];
+  allowed_plan_durations_json?: string | null;
+  default_plan_duration?: string | null;
   modality_category?: string | null;
   linked_professional_ids?: string[];
   linked_professionals?: LinkedProfessionalItem[];
@@ -283,6 +286,37 @@ export interface ServiceScheduleDiagnostics {
   items: ServiceScheduleDiagnosticItem[];
 }
 
+export interface ScheduleInstructorMember {
+  professionalId: string;
+  professionalName: string;
+  role: 'primary' | 'co_instructor';
+  photoUrl?: string | null;
+}
+
+export interface SessionInstructorParticipant {
+  id: string;
+  tenant_id?: string;
+  service_id?: string | null;
+  occurrence_id?: string | null;
+  appointment_id?: string | null;
+  professional_id: string;
+  professional_name: string;
+  role: 'primary' | 'co_instructor';
+  attendance_status: 'scheduled' | 'present' | 'absent';
+  source?: string;
+}
+
+export interface SchedulePlanEntryInput {
+  classScheduleId?: string | null;
+  weekday: number;
+  startTime: string;
+  endTime: string;
+  professionalId?: string;
+  coInstructorIds?: string[];
+  roomId?: string | null;
+  modality?: 'presential' | 'online' | 'home';
+}
+
 export interface ClassScheduleItem {
   id: string;
   tenant_id: string;
@@ -291,6 +325,8 @@ export interface ClassScheduleItem {
   professional_name?: string;
   professional_avatar?: string | null;
   profession_name?: string | null;
+  co_instructor_ids?: string[];
+  co_instructors?: ScheduleInstructorMember[];
   room_id: string | null;
   room_name?: string | null;
   day_of_week: number;
@@ -683,6 +719,11 @@ export interface ProfessionalPayroll {
   paid_date?: string;
   status: 'pending' | 'paid' | 'delayed';
   notes?: string;
+  commission_breakdown?: any[];
+  commission_breakdown_json?: string | null;
+  warnings?: any[];
+  warnings_json?: string | null;
+  items?: any[];
   created_at: string;
   updated_at: string;
 }

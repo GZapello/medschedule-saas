@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { AlertTriangle, Calendar, CheckCircle2, Clock, Loader2 } from 'lucide-react';
 
 export interface RecurrenceAlternativeItem {
@@ -35,8 +35,12 @@ export interface RecurrenceOccurrencePreviewItem {
 export interface RecurrencePreviewData {
   valid: boolean;
   frequency: string;
+  durationCode?: string | null;
+  seriesMode?: string | null;
   intervalValue: number | null;
   intervalUnit: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
   description: string;
   totalCount: number;
   availableCount: number;
@@ -63,7 +67,18 @@ export const RecurrencePreviewBox: React.FC<RecurrencePreviewBoxProps> = ({
   error,
   accent = 'indigo'
 }) => {
+  const [showAll, setShowAll] = useState(false);
   const borderCls = accent === 'teal' ? 'border-teal-200 bg-teal-50/30' : 'border-slate-200 bg-white';
+  const totalOccs = preview?.occurrences?.length || 0;
+  const visibleOccurrences = React.useMemo(() => {
+    if (!preview?.occurrences) return [];
+    if (showAll || preview.occurrences.length <= 30) return preview.occurrences;
+    const conflicts = preview.occurrences.filter(o => !o.available);
+    const avail = preview.occurrences.filter(o => o.available).slice(0, 24);
+    const merged = [...conflicts, ...avail];
+    merged.sort((a, b) => a.index - b.index);
+    return merged;
+  }, [preview, showAll]);
 
   return (
     <div className={`rounded-xl border ${borderCls} p-2.5 space-y-2`}>
@@ -102,11 +117,26 @@ export const RecurrencePreviewBox: React.FC<RecurrencePreviewBoxProps> = ({
 
       {preview && preview.occurrences.length > 0 && (
         <>
-          <div className="text-[10px] text-slate-500 font-medium">
-            Regra ativa: <strong className="text-slate-700">{preview.description}</strong> ({preview.totalCount} {preview.totalCount === 1 ? 'data' : 'datas'})
+          <div className="text-[10px] text-slate-500 font-medium flex flex-wrap items-center justify-between gap-1">
+            <span>
+              Regra ativa: <strong className="text-slate-700">{preview.description}</strong> • {preview.totalCount}{' '}
+              {preview.totalCount === 1 ? 'aula' : 'aulas'}
+              {preview.startDate && preview.endDate
+                ? ` (${formatBrDate(preview.startDate)} até ${formatBrDate(preview.endDate)})`
+                : ''}
+            </span>
+            {totalOccs > 30 && (
+              <button
+                type="button"
+                onClick={() => setShowAll(prev => !prev)}
+                className="text-indigo-600 hover:underline font-bold cursor-pointer"
+              >
+                {showAll ? 'Recolher lista' : `Mostrar todas (${totalOccs})`}
+              </button>
+            )}
           </div>
           <div className="max-h-44 overflow-y-auto space-y-1 pr-0.5">
-            {preview.occurrences.map(occ => (
+            {visibleOccurrences.map(occ => (
               <div
                 key={`${occ.index}-${occ.date}`}
                 className={`rounded-lg border px-2 py-1.5 text-[11px] flex flex-col gap-1 ${

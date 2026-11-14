@@ -415,6 +415,8 @@ api.get('/v1/whatsapp/status', requireTenant, InfobipController.getClientStatus)
 // Turmas, Ocorrências & Lista de Chamada / Frequência
 api.get('/v1/classes/occurrences', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist', 'professional'), ClassAttendanceController.listOccurrences);
 api.get('/v1/classes/occurrences/:id/roster', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist', 'professional'), ClassAttendanceController.getRoster);
+api.get('/v1/classes/occurrences/:occurrenceId/participants', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist', 'professional'), ClassAttendanceController.getOccurrenceParticipants);
+api.put('/v1/classes/occurrences/:occurrenceId/participants', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'professional'), ClassAttendanceController.updateOccurrenceParticipants);
 api.put('/v1/classes/occurrences/:occurrenceId/attendance/:appointmentId', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist', 'professional'), ClassAttendanceController.markAttendance);
 api.post('/v1/classes/occurrences/:occurrenceId/finish', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'professional'), ClassAttendanceController.finishOccurrence);
 
@@ -1101,6 +1103,8 @@ api.delete(
 // Pagamentos, Comissões e Salário dos Profissionais (Exclusivo Gerenciador da Clínica e visualização do próprio profissional)
 api.get('/v1/payroll', requireTenant, requireRole('clinic_admin', 'professional'), PayrollController.list);
 api.get('/v1/payrolls', requireTenant, requireRole('clinic_admin', 'professional'), PayrollController.list);
+api.get('/v1/payroll/:id/items', requireTenant, requireRole('clinic_admin', 'professional'), PayrollController.getItems);
+api.get('/v1/payrolls/:id/items', requireTenant, requireRole('clinic_admin', 'professional'), PayrollController.getItems);
 api.post('/v1/payroll/calculate', requireTenant, requireRole('clinic_admin'), PayrollController.calculate);
 api.post('/v1/payrolls/calculate', requireTenant, requireRole('clinic_admin'), PayrollController.calculate);
 api.post('/v1/payroll', requireTenant, requireRole('clinic_admin'), PayrollController.save);

@@ -6,6 +6,7 @@ import { PackageService } from '../services/package.service';
 import { syncReceptionStatusFromClinical } from './checkin.controller';
 import { getClinicLocalNowIso, normalizeLocalDateTimeIso } from '../services/document-context.service';
 import { shouldUseStudioPersonalWorkflow } from '../utils/establishment-context';
+import { InstructorAttendanceStatus, InstructorParticipationService, InstructorRole } from '../services/instructor-participation.service';
 
 const VALID_ATTENDANCE_STATUSES = ['pending', 'present', 'absent', 'cancelled'] as const;
 type AttendanceStatus = typeof VALID_ATTENDANCE_STATUSES[number];
@@ -66,17 +67,35 @@ export class ClassAttendanceController {
 
       if (isProfessionalRole) {
         const placeholders = ownProfIds.map(() => '?').join(', ');
-        where += ` AND a.professional_id IN (${placeholders})`;
-        params.push(...ownProfIds);
+        where += ` AND (
+          a.professional_id IN (${placeholders})
+          OR EXISTS (
+            SELECT 1 FROM session_instructor_participants sip
+            WHERE sip.tenant_id = a.tenant_id
+              AND sip.professional_id IN (${placeholders})
+              AND ((a.occurrence_id IS NOT NULL AND sip.occurrence_id = a.occurrence_id)
+                OR (a.occurrence_id IS NULL AND sip.appointment_id = a.id))
+          )
+        )`;
+        params.push(...ownProfIds, ...ownProfIds);
       } else if (professionalId) {
-        where += ` AND a.professional_id = ?`;
-        params.push(professionalId);
+        where += ` AND (
+          a.professional_id = ?
+          OR EXISTS (
+            SELECT 1 FROM session_instructor_participants sip
+            WHERE sip.tenant_id = a.tenant_id
+              AND sip.professional_id = ?
+              AND ((a.occurrence_id IS NOT NULL AND sip.occurrence_id = a.occurrence_id)
+                OR (a.occurrence_id IS NULL AND sip.appointment_id = a.id))
+          )
+        )`;
+        params.push(professionalId, professionalId);
       }
 
       if (kind === 'group') {
-        where += ` AND COALESCE(a.service_kind, COALESCE(s.service_kind, 'individual')) = 'group'`;
+        where += ` AND (a.occurrence_id IS NOT NULL OR COALESCE(s.service_kind, a.service_kind) = 'group')`;
       } else if (kind === 'individual') {
-        where += ` AND COALESCE(a.service_kind, COALESCE(s.service_kind, 'individual')) = 'individual'`;
+        where += ` AND a.occurrence_id IS NULL AND COALESCE(s.service_kind, COALESCE(a.service_kind, 'individual')) = 'individual'`;
       }
 
       const rows = db.prepare(`
@@ -84,7 +103,7 @@ export class ClassAttendanceController {
           COALESCE(a.occurrence_id, 'apt:' || a.id) as occurrence_key,
           a.occurrence_id,
           a.series_id,
-          COALESCE(a.service_kind, COALESCE(s.service_kind, 'individual')) as service_kind,
+          CASE WHEN a.occurrence_id IS NOT NULL OR COALESCE(s.service_kind, a.service_kind) = 'group' THEN 'group' ELSE 'individual' END as service_kind,
           COALESCE(co.start_time, a.start_time) as start_time,
           COALESCE(co.end_time, a.end_time) as end_time,
           a.service_id,
@@ -94,7 +113,7 @@ export class ClassAttendanceController {
           COALESCE(p.name, 'Profissional') as professional_name,
           COALESCE(co.room_id, a.room_id) as room_id,
           r.name as room_name,
-          COALESCE(co.capacity, CASE WHEN COALESCE(a.service_kind, COALESCE(s.service_kind, 'individual')) = 'group' THEN COALESCE(s.default_capacity, 1) ELSE 1 END) as capacity,
+          COALESCE(co.capacity, CASE WHEN (a.occurrence_id IS NOT NULL OR COALESCE(s.service_kind, a.service_kind) = 'group') THEN COALESCE(s.default_capacity, 1) ELSE 1 END) as capacity,
           COUNT(a.id) as enrolled_count,
           SUM(CASE WHEN COALESCE(a.attendance_status, 'pending') = 'present' THEN 1 ELSE 0 END) as present_count,
           SUM(CASE WHEN COALESCE(a.attendance_status, 'pending') = 'absent' THEN 1 ELSE 0 END) as absent_count,
@@ -112,7 +131,65 @@ export class ClassAttendanceController {
         LIMIT 200
       `).all(...params) as any[];
 
-      res.json({ occurrences: rows });
+      const occIds = Array.from(new Set(rows.map(r => r.occurrence_id).filter(Boolean))) as string[];
+      const aptIds = Array.from(new Set(rows.filter(r => !r.occurrence_id && typeof r.occurrence_key === 'string' && r.occurrence_key.startsWith('apt:')).map(r => r.occurrence_key.slice(4))));
+
+      const participantsByOcc = new Map<string, any[]>();
+      if (occIds.length > 0) {
+        const ph = occIds.map(() => '?').join(', ');
+        const sipRows = db.prepare(`
+          SELECT sip.*, p.name as professional_name
+          FROM session_instructor_participants sip
+          JOIN professionals p ON p.id = sip.professional_id AND p.tenant_id = sip.tenant_id
+          WHERE sip.tenant_id = ? AND sip.occurrence_id IN (${ph})
+          ORDER BY CASE WHEN sip.role = 'primary' THEN 0 ELSE 1 END, p.name ASC
+        `).all(tenantId, ...occIds) as any[];
+        for (const r of sipRows) {
+          const list = participantsByOcc.get(r.occurrence_id) || [];
+          list.push(r);
+          participantsByOcc.set(r.occurrence_id, list);
+        }
+      }
+
+      const participantsByApt = new Map<string, any[]>();
+      if (aptIds.length > 0) {
+        const ph = aptIds.map(() => '?').join(', ');
+        const sipRows = db.prepare(`
+          SELECT sip.*, p.name as professional_name
+          FROM session_instructor_participants sip
+          JOIN professionals p ON p.id = sip.professional_id AND p.tenant_id = sip.tenant_id
+          WHERE sip.tenant_id = ? AND sip.appointment_id IN (${ph}) AND sip.occurrence_id IS NULL
+          ORDER BY CASE WHEN sip.role = 'primary' THEN 0 ELSE 1 END, p.name ASC
+        `).all(tenantId, ...aptIds) as any[];
+        for (const r of sipRows) {
+          const list = participantsByApt.get(r.appointment_id) || [];
+          list.push(r);
+          participantsByApt.set(r.appointment_id, list);
+        }
+      }
+
+      const enriched = rows.map(r => {
+        const aptId = !r.occurrence_id && typeof r.occurrence_key === 'string' && r.occurrence_key.startsWith('apt:')
+          ? r.occurrence_key.slice(4)
+          : null;
+        let participants = r.occurrence_id
+          ? (participantsByOcc.get(r.occurrence_id) || [])
+          : (aptId ? (participantsByApt.get(aptId) || []) : []);
+        if (participants.length === 0 && r.professional_id) {
+          participants = [{
+            professional_id: r.professional_id,
+            professional_name: r.professional_name,
+            role: 'primary',
+            attendance_status: 'scheduled'
+          }];
+        }
+        return {
+          ...r,
+          participants
+        };
+      });
+
+      res.json({ occurrences: enriched });
     } catch (err: any) {
       console.error('[ClassAttendanceController.listOccurrences] Erro:', err);
       res.status(500).json({ error: 'Erro ao listar aulas e ocorrências.' });
@@ -159,8 +236,9 @@ export class ClassAttendanceController {
           a.attendance_notes,
           a.occurrence_id,
           a.series_id,
-          COALESCE(a.service_kind, COALESCE(s.service_kind, 'individual')) as service_kind,
+          CASE WHEN a.occurrence_id IS NOT NULL OR COALESCE(s.service_kind, a.service_kind) = 'group' THEN 'group' ELSE 'individual' END as service_kind,
           COALESCE(co.capacity, COALESCE(s.default_capacity, 1)) as capacity,
+          co.class_schedule_id,
           pay.status as payment_status
         FROM appointments a
         JOIN patients pat ON pat.id = a.patient_id
@@ -178,11 +256,69 @@ export class ClassAttendanceController {
         return;
       }
 
+      const realOccId = rows[0].occurrence_id || null;
+      const singleAptId = realOccId ? null : rows[0].appointment_id;
+
       if (isProfessionalRole) {
-        const hasAccess = rows.some(r => ownProfIds.includes(r.professional_id));
+        let hasAccess = rows.some(r => ownProfIds.includes(r.professional_id));
+        if (!hasAccess && realOccId) {
+          hasAccess = InstructorParticipationService.isProfessionalLinkedToOccurrence(tenantId, ownProfIds, realOccId);
+        }
+        if (!hasAccess && singleAptId && ownProfIds.length > 0) {
+          const ph = ownProfIds.map(() => '?').join(', ');
+          const rowPart = db.prepare(`
+            SELECT 1 FROM session_instructor_participants
+            WHERE tenant_id = ? AND appointment_id = ? AND occurrence_id IS NULL AND professional_id IN (${ph})
+            LIMIT 1
+          `).get(tenantId, singleAptId, ...ownProfIds);
+          hasAccess = Boolean(rowPart);
+        }
         if (!hasAccess) {
           res.status(403).json({ error: 'Sem permissão para visualizar lista de chamada de outro profissional.' });
           return;
+        }
+      }
+
+      let participants = realOccId
+        ? InstructorParticipationService.listParticipantsForOccurrence(tenantId, realOccId)
+        : InstructorParticipationService.listParticipantsForAppointment(tenantId, singleAptId);
+
+      if (participants.length === 0 && rows[0].professional_id) {
+        participants = [{
+          id: 'fallback-primary',
+          tenant_id: tenantId,
+          service_id: rows[0].service_id || null,
+          occurrence_id: realOccId,
+          appointment_id: singleAptId,
+          professional_id: rows[0].professional_id,
+          professional_name: rows[0].professional_name || 'Instrutor',
+          role: 'primary',
+          attendance_status: 'scheduled',
+          source: 'fallback',
+          updated_by: null,
+          updated_at: ''
+        }];
+        if (rows[0].class_schedule_id) {
+          const schedMap = InstructorParticipationService.getScheduleInstructorsMap(tenantId, [rows[0].class_schedule_id]);
+          const schedTeam = schedMap.get(rows[0].class_schedule_id) || [];
+          for (const member of schedTeam) {
+            if (member.professionalId !== rows[0].professional_id) {
+              participants.push({
+                id: `fallback-${member.professionalId}`,
+                tenant_id: tenantId,
+                service_id: rows[0].service_id || null,
+                occurrence_id: realOccId,
+                appointment_id: singleAptId,
+                professional_id: member.professionalId,
+                professional_name: member.professionalName,
+                role: 'co_instructor',
+                attendance_status: 'scheduled',
+                source: 'class_schedule',
+                updated_by: null,
+                updated_at: ''
+              });
+            }
+          }
         }
       }
 
@@ -194,6 +330,7 @@ export class ClassAttendanceController {
         endTime: rows[0].end_time,
         serviceKind: rows[0].service_kind,
         capacity: rows[0].capacity,
+        participants,
         roster: rows
       });
     } catch (err: any) {
@@ -244,7 +381,20 @@ export class ClassAttendanceController {
 
       if (req.user?.role === 'professional') {
         const ownProfIds = getOwnProfessionalIds(req.user.userId, tenantId);
-        if (!ownProfIds.includes(appt.professional_id)) {
+        let hasAccess = ownProfIds.includes(appt.professional_id);
+        if (!hasAccess && appt.occurrence_id) {
+          hasAccess = InstructorParticipationService.isProfessionalLinkedToOccurrence(tenantId, ownProfIds, appt.occurrence_id);
+        }
+        if (!hasAccess && !appt.occurrence_id && ownProfIds.length > 0) {
+          const ph = ownProfIds.map(() => '?').join(', ');
+          const rowPart = db.prepare(`
+            SELECT 1 FROM session_instructor_participants
+            WHERE tenant_id = ? AND appointment_id = ? AND occurrence_id IS NULL AND professional_id IN (${ph})
+            LIMIT 1
+          `).get(tenantId, appt.id, ...ownProfIds);
+          hasAccess = Boolean(rowPart);
+        }
+        if (!hasAccess) {
           res.status(403).json({ error: 'Você só pode registrar presença nas suas próprias aulas.' });
           return;
         }
@@ -539,6 +689,259 @@ export class ClassAttendanceController {
   }
 
   /**
+   * Lista a equipe de instrutores (titular + coinstrutores) de uma ocorrência/sessão de Studio
+   * GET /v1/classes/occurrences/:occurrenceId/participants
+   */
+  static getOccurrenceParticipants(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      const rawId = String(req.params.occurrenceId || '').trim();
+      if (!tenantId || !rawId) {
+        res.status(400).json({ error: 'Identificação inválida.' });
+        return;
+      }
+
+      const isVirtualIndividual = rawId.startsWith('apt:');
+      const targetId = isVirtualIndividual ? rawId.slice(4) : rawId;
+
+      const aptRow = db.prepare(`
+        SELECT
+          a.id as appointment_id, a.service_id, a.professional_id, a.occurrence_id,
+          p.name as professional_name, co.class_schedule_id
+        FROM appointments a
+        LEFT JOIN professionals p ON p.id = a.professional_id
+        LEFT JOIN class_occurrences co ON co.id = a.occurrence_id AND co.tenant_id = a.tenant_id
+        WHERE a.tenant_id = ?
+          AND a.status != 'cancelled'
+          AND ${isVirtualIndividual ? 'a.id = ?' : '(a.occurrence_id = ? OR a.id = ?)'}
+        LIMIT 1
+      `).get(...(isVirtualIndividual ? [tenantId, targetId] : [tenantId, targetId, targetId])) as any;
+
+      const occRow = !aptRow && !isVirtualIndividual
+        ? db.prepare(`
+            SELECT co.id as occurrence_id, co.service_id, co.professional_id, co.class_schedule_id, p.name as professional_name
+            FROM class_occurrences co
+            LEFT JOIN professionals p ON p.id = co.professional_id
+            WHERE co.tenant_id = ? AND co.id = ?
+          `).get(tenantId, targetId) as any
+        : null;
+
+      const ref = aptRow || occRow;
+      if (!ref) {
+        res.status(404).json({ error: 'Aula/ocorrência não encontrada.' });
+        return;
+      }
+
+      const realOccId = ref.occurrence_id || null;
+      const singleAptId = realOccId ? null : ref.appointment_id;
+
+      if (req.user?.role === 'professional') {
+        const ownProfIds = getOwnProfessionalIds(req.user.userId, tenantId);
+        let hasAccess = ownProfIds.includes(ref.professional_id);
+        if (!hasAccess && realOccId) {
+          hasAccess = InstructorParticipationService.isProfessionalLinkedToOccurrence(tenantId, ownProfIds, realOccId);
+        }
+        if (!hasAccess && singleAptId && ownProfIds.length > 0) {
+          const ph = ownProfIds.map(() => '?').join(', ');
+          const rowPart = db.prepare(`
+            SELECT 1 FROM session_instructor_participants
+            WHERE tenant_id = ? AND appointment_id = ? AND occurrence_id IS NULL AND professional_id IN (${ph})
+            LIMIT 1
+          `).get(tenantId, singleAptId, ...ownProfIds);
+          hasAccess = Boolean(rowPart);
+        }
+        if (!hasAccess) {
+          res.status(403).json({ error: 'Sem permissão para visualizar instrutores desta aula.' });
+          return;
+        }
+      }
+
+      let participants = realOccId
+        ? InstructorParticipationService.listParticipantsForOccurrence(tenantId, realOccId)
+        : InstructorParticipationService.listParticipantsForAppointment(tenantId, singleAptId);
+
+      if (participants.length === 0 && ref.professional_id) {
+        participants = [{
+          id: 'fallback-primary',
+          tenant_id: tenantId,
+          service_id: ref.service_id || null,
+          occurrence_id: realOccId,
+          appointment_id: singleAptId,
+          professional_id: ref.professional_id,
+          professional_name: ref.professional_name || 'Instrutor',
+          role: 'primary',
+          attendance_status: 'scheduled',
+          source: 'fallback',
+          updated_by: null,
+          updated_at: ''
+        }];
+        if (ref.class_schedule_id) {
+          const schedMap = InstructorParticipationService.getScheduleInstructorsMap(tenantId, [ref.class_schedule_id]);
+          const schedTeam = schedMap.get(ref.class_schedule_id) || [];
+          for (const member of schedTeam) {
+            if (member.professionalId !== ref.professional_id) {
+              participants.push({
+                id: `fallback-${member.professionalId}`,
+                tenant_id: tenantId,
+                service_id: ref.service_id || null,
+                occurrence_id: realOccId,
+                appointment_id: singleAptId,
+                professional_id: member.professionalId,
+                professional_name: member.professionalName,
+                role: 'co_instructor',
+                attendance_status: 'scheduled',
+                source: 'class_schedule',
+                updated_by: null,
+                updated_at: ''
+              });
+            }
+          }
+        }
+      }
+
+      res.json({
+        occurrenceId: realOccId || `apt:${singleAptId}`,
+        serviceId: ref.service_id || null,
+        primaryProfessionalId: ref.professional_id || null,
+        participants
+      });
+    } catch (err: any) {
+      console.error('[ClassAttendanceController.getOccurrenceParticipants] Erro:', err);
+      res.status(500).json({ error: 'Erro ao listar instrutores participantes da aula.' });
+    }
+  }
+
+  /**
+   * Atualiza equipe/presença dos instrutores participantes de uma ocorrência/sessão de Studio
+   * PUT /v1/classes/occurrences/:occurrenceId/participants
+   */
+  static updateOccurrenceParticipants(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      const rawId = String(req.params.occurrenceId || '').trim();
+      const { participants, coInstructorIds } = req.body || {};
+
+      if (!tenantId || !req.user) {
+        res.status(401).json({ error: 'Autenticação necessária.' });
+        return;
+      }
+      if (!rawId) {
+        res.status(400).json({ error: 'Aula/ocorrência não informada.' });
+        return;
+      }
+
+      const isVirtualIndividual = rawId.startsWith('apt:');
+      const targetId = isVirtualIndividual ? rawId.slice(4) : rawId;
+
+      const aptRow = db.prepare(`
+        SELECT a.id as appointment_id, a.service_id, a.professional_id, a.occurrence_id
+        FROM appointments a
+        WHERE a.tenant_id = ?
+          AND a.status != 'cancelled'
+          AND ${isVirtualIndividual ? 'a.id = ?' : '(a.occurrence_id = ? OR a.id = ?)'}
+        LIMIT 1
+      `).get(...(isVirtualIndividual ? [tenantId, targetId] : [tenantId, targetId, targetId])) as any;
+
+      const occRow = !aptRow && !isVirtualIndividual
+        ? db.prepare(`
+            SELECT id as occurrence_id, service_id, professional_id
+            FROM class_occurrences
+            WHERE tenant_id = ? AND id = ?
+          `).get(tenantId, targetId) as any
+        : null;
+
+      const ref = aptRow || occRow;
+      if (!ref) {
+        res.status(404).json({ error: 'Aula/ocorrência não encontrada.' });
+        return;
+      }
+
+      const realOccId = ref.occurrence_id || null;
+      const singleAptId = realOccId ? null : ref.appointment_id;
+
+      if (req.user.role === 'professional') {
+        const ownProfIds = getOwnProfessionalIds(req.user.userId, tenantId);
+        let hasAccess = ownProfIds.includes(ref.professional_id);
+        if (!hasAccess && realOccId) {
+          hasAccess = InstructorParticipationService.isProfessionalLinkedToOccurrence(tenantId, ownProfIds, realOccId);
+        }
+        if (!hasAccess && singleAptId && ownProfIds.length > 0) {
+          const ph = ownProfIds.map(() => '?').join(', ');
+          const rowPart = db.prepare(`
+            SELECT 1 FROM session_instructor_participants
+            WHERE tenant_id = ? AND appointment_id = ? AND occurrence_id IS NULL AND professional_id IN (${ph})
+            LIMIT 1
+          `).get(tenantId, singleAptId, ...ownProfIds);
+          hasAccess = Boolean(rowPart);
+        }
+        if (!hasAccess) {
+          res.status(403).json({ error: 'Sem permissão para editar instrutores desta aula.' });
+          return;
+        }
+      }
+
+      const updatedBy = req.user.userId;
+      let saved: any[] = [];
+
+      db.transaction(() => {
+        if (Array.isArray(participants)) {
+          saved = InstructorParticipationService.confirmParticipantStatusesTx({
+            tenantId,
+            serviceId: ref.service_id,
+            occurrenceId: realOccId,
+            appointmentId: singleAptId,
+            primaryProfessionalId: ref.professional_id,
+            participants,
+            updatedBy,
+            source: 'manual_edit',
+            replaceMissingCoInstructors: req.user?.role === 'clinic_admin'
+          });
+        } else if (Array.isArray(coInstructorIds)) {
+          if (realOccId) {
+            saved = InstructorParticipationService.syncOccurrenceParticipantsTx({
+              tenantId,
+              serviceId: ref.service_id,
+              occurrenceId: realOccId,
+              primaryProfessionalId: ref.professional_id,
+              coInstructorIds,
+              source: 'manual_edit',
+              updatedBy,
+              preserveExistingAttendance: false
+            });
+          } else if (singleAptId) {
+            saved = InstructorParticipationService.syncAppointmentParticipantsTx({
+              tenantId,
+              serviceId: ref.service_id,
+              appointmentId: singleAptId,
+              primaryProfessionalId: ref.professional_id,
+              coInstructorIds,
+              source: 'manual_edit',
+              updatedBy,
+              replaceCoInstructors: true
+            });
+          }
+        } else {
+          const err: any = new Error('Informe participants ou coInstructorIds para atualizar a equipe da aula.');
+          err.status = 400;
+          throw err;
+        }
+      })();
+
+      logAudit(req, 'UPDATE_OCCURRENCE_PARTICIPANTS', realOccId ? 'class_occurrences' : 'appointments', realOccId || singleAptId, {
+        count: saved.length
+      });
+
+      res.json({
+        occurrenceId: realOccId || `apt:${singleAptId}`,
+        participants: saved
+      });
+    } catch (err: any) {
+      console.error('[ClassAttendanceController.updateOccurrenceParticipants] Erro:', err);
+      res.status(err?.status || 500).json({ error: err?.message || 'Erro ao atualizar instrutores da aula.' });
+    }
+  }
+
+  /**
    * Conclui uma aula/ocorrência de Studio (individual ou coletiva) sem exigir prontuário/evolução clínica.
    * POST /v1/classes/occurrences/:occurrenceId/finish
    */
@@ -546,7 +949,7 @@ export class ClassAttendanceController {
     try {
       const tenantId = req.tenantId;
       const rawId = String(req.params.occurrenceId || '').trim();
-      const { attendanceOverrides, markPendingAsPresent = true } = req.body || {};
+      const { attendanceOverrides, markPendingAsPresent = true, participantStatuses } = req.body || {};
 
       if (!tenantId || !req.user) {
         res.status(401).json({ error: 'Autenticação necessária.' });
@@ -562,14 +965,16 @@ export class ClassAttendanceController {
 
       const rows = db.prepare(`
         SELECT
-          a.id, a.patient_id, a.professional_id, a.status, a.start_time, a.end_time,
+          a.id, a.patient_id, a.professional_id, a.service_id, a.status, a.start_time, a.end_time,
           a.attendance_start_at, a.attendance_end_at, a.attendance_status, a.occurrence_id,
+          co.class_schedule_id,
           a.clinical_module, COALESCE(a.service_kind, 'individual') as service_kind,
           s.service_kind as service_kind_srv, s.service_domain, s.clinical_module as service_clinical_module,
           COALESCE(t.establishment_profile, 'clinic') as establishment_profile
         FROM appointments a
         LEFT JOIN tenants t ON t.id = a.tenant_id
         LEFT JOIN services s ON s.id = a.service_id AND s.tenant_id = a.tenant_id
+        LEFT JOIN class_occurrences co ON co.id = a.occurrence_id AND co.tenant_id = a.tenant_id
         WHERE a.tenant_id = ?
           AND a.status != 'cancelled'
           AND ${isVirtualIndividual ? 'a.id = ?' : '(a.occurrence_id = ? OR a.id = ?)'}
@@ -597,9 +1002,24 @@ export class ClassAttendanceController {
         return;
       }
 
+      const firstRealOccId = rows.find(r => r.occurrence_id)?.occurrence_id || null;
+      const singleAptId = firstRealOccId ? null : rows[0].id;
+
       if (req.user.role === 'professional') {
         const ownProfIds = getOwnProfessionalIds(req.user.userId, tenantId);
-        const ownsClass = rows.some(r => ownProfIds.includes(r.professional_id));
+        let ownsClass = rows.some(r => ownProfIds.includes(r.professional_id));
+        if (!ownsClass && firstRealOccId) {
+          ownsClass = InstructorParticipationService.isProfessionalLinkedToOccurrence(tenantId, ownProfIds, firstRealOccId);
+        }
+        if (!ownsClass && singleAptId && ownProfIds.length > 0) {
+          const ph = ownProfIds.map(() => '?').join(', ');
+          const partRow = db.prepare(`
+            SELECT 1 FROM session_instructor_participants
+            WHERE tenant_id = ? AND appointment_id = ? AND occurrence_id IS NULL AND professional_id IN (${ph})
+            LIMIT 1
+          `).get(tenantId, singleAptId, ...ownProfIds);
+          ownsClass = Boolean(partRow);
+        }
         if (!ownsClass) {
           res.status(403).json({ error: 'Sem permissão para finalizar a aula de outro instrutor.' });
           return;
@@ -613,7 +1033,8 @@ export class ClassAttendanceController {
         attendanceOverrides && typeof attendanceOverrides === 'object' ? attendanceOverrides : {};
 
       const completedIds: string[] = [];
-      let realOccurrenceId: string | null = null;
+      let realOccurrenceId: string | null = firstRealOccId;
+      let confirmedParticipants: any[] = [];
 
       db.transaction(() => {
         for (const row of rows) {
@@ -675,11 +1096,134 @@ export class ClassAttendanceController {
             WHERE id = ? AND tenant_id = ?
           `).run(realOccurrenceId, tenantId);
         }
+
+        // Confirmação dos instrutores participantes (impacta elegibilidade de comissão)
+        const targetOccId = realOccurrenceId;
+        const targetAptId = targetOccId ? null : rows[0].id;
+        const existingParticipants = targetOccId
+          ? InstructorParticipationService.listParticipantsForOccurrence(tenantId, targetOccId)
+          : InstructorParticipationService.listParticipantsForAppointment(tenantId, targetAptId);
+
+        const primaryProfId = rows[0].professional_id;
+        const scheduleId = rows[0].class_schedule_id || null;
+        const serviceId = rows[0].service_id || null;
+
+        if (Array.isArray(participantStatuses) && participantStatuses.length > 0) {
+          const explicitMap = new Map<string, { role?: InstructorRole; attendanceStatus: InstructorAttendanceStatus }>();
+          for (const item of participantStatuses) {
+            const pid = String(item?.professionalId || '').trim();
+            if (!pid) continue;
+            const st: InstructorAttendanceStatus =
+              item?.attendanceStatus === 'absent' || item?.attendanceStatus === 'scheduled' || item?.attendanceStatus === 'present'
+                ? item.attendanceStatus
+                : 'present';
+            const rl: InstructorRole | undefined =
+              item?.role === 'primary' || item?.role === 'co_instructor' ? item.role : undefined;
+            explicitMap.set(pid, { role: rl, attendanceStatus: st });
+          }
+
+          // Preserva e confirma automaticamente participantes já agendados que não foram sobrescritos
+          const mergedInputs: Array<{
+            professionalId: string;
+            role?: InstructorRole;
+            attendanceStatus: InstructorAttendanceStatus;
+          }> = [];
+          for (const ex of existingParticipants) {
+            const explicit = explicitMap.get(ex.professional_id);
+            if (explicit) {
+              mergedInputs.push({
+                professionalId: ex.professional_id,
+                role: explicit.role || ex.role,
+                attendanceStatus: explicit.attendanceStatus
+              });
+              explicitMap.delete(ex.professional_id);
+            } else {
+              mergedInputs.push({
+                professionalId: ex.professional_id,
+                role: ex.role,
+                attendanceStatus: ex.attendance_status === 'absent' ? 'absent' : 'present'
+              });
+            }
+          }
+          if (primaryProfId && !existingParticipants.some(e => e.professional_id === primaryProfId) && !explicitMap.has(primaryProfId)) {
+            mergedInputs.push({
+              professionalId: primaryProfId,
+              role: 'primary',
+              attendanceStatus: 'present'
+            });
+          }
+          for (const [pid, data] of explicitMap.entries()) {
+            mergedInputs.push({
+              professionalId: pid,
+              role: data.role || (pid === primaryProfId ? 'primary' : 'co_instructor'),
+              attendanceStatus: data.attendanceStatus
+            });
+          }
+
+          confirmedParticipants = InstructorParticipationService.confirmParticipantStatusesTx({
+            tenantId,
+            serviceId,
+            occurrenceId: targetOccId,
+            appointmentId: targetAptId,
+            primaryProfessionalId: primaryProfId,
+            participants: mergedInputs,
+            updatedBy: userId,
+            source: 'attendance_finish',
+            replaceMissingCoInstructors: false
+          });
+        } else {
+          // Sem override explícito: garante titular + equipe agendada confirmados como 'present'
+          let baseInputs: Array<{
+            professionalId: string;
+            role?: InstructorRole;
+            attendanceStatus: InstructorAttendanceStatus;
+          }> = [];
+
+          if (existingParticipants.length > 0) {
+            baseInputs = existingParticipants.map(ex => ({
+              professionalId: ex.professional_id,
+              role: ex.role,
+              attendanceStatus: ex.attendance_status === 'absent' ? 'absent' : 'present'
+            }));
+          } else if (primaryProfId) {
+            baseInputs.push({
+              professionalId: primaryProfId,
+              role: 'primary',
+              attendanceStatus: 'present'
+            });
+            if (scheduleId) {
+              const coIds = InstructorParticipationService.getScheduleCoInstructorIds(tenantId, scheduleId, primaryProfId);
+              for (const coId of coIds) {
+                baseInputs.push({
+                  professionalId: coId,
+                  role: 'co_instructor',
+                  attendanceStatus: 'present'
+                });
+              }
+            }
+          }
+
+          if (baseInputs.length > 0) {
+            confirmedParticipants = InstructorParticipationService.confirmParticipantStatusesTx({
+              tenantId,
+              serviceId,
+              occurrenceId: targetOccId,
+              appointmentId: targetAptId,
+              primaryProfessionalId: primaryProfId,
+              participants: baseInputs,
+              updatedBy: userId,
+              source: 'attendance_finish',
+              replaceMissingCoInstructors: false
+            });
+          }
+        }
       })();
 
       logAudit(req, 'FINISH_STUDIO_CLASS', 'class_occurrences', realOccurrenceId || rawId, {
         completedAppointments: completedIds.length,
-        totalStudents: rows.length
+        totalStudents: rows.length,
+        presentInstructors: confirmedParticipants.filter(p => p.attendance_status !== 'absent').length,
+        absentInstructors: confirmedParticipants.filter(p => p.attendance_status === 'absent').length
       });
 
       res.json({
@@ -689,11 +1233,12 @@ export class ClassAttendanceController {
         occurrenceId: realOccurrenceId || rawId,
         completedCount: completedIds.length,
         totalStudents: rows.length,
-        appointmentIds: completedIds
+        appointmentIds: completedIds,
+        participants: confirmedParticipants
       });
     } catch (err: any) {
       console.error('[ClassAttendanceController.finishOccurrence] Erro:', err);
-      res.status(500).json({ error: err?.message || 'Erro ao finalizar aula do Studio.' });
+      res.status(err?.status || 500).json({ error: err?.message || 'Erro ao finalizar aula do Studio.' });
     }
   }
 }

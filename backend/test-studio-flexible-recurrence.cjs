@@ -573,9 +573,9 @@ async function runTests() {
       startTime: `${nextTuesday}T10:00:00`,
       endTime: `${nextTuesday}T11:00:00`,
       modality: 'presential',
-      recurrence: { frequency: 'weekly', maxOccurrences: 200 }
+      recurrence: { frequency: 'weekly', maxOccurrences: 400 }
     });
-    assert(resExceedCap.status === 400 && resExceedCap.data.code === 'RECURRENCE_LIMIT_EXCEEDED', 'Rejeita série acima do limite de 104 ocorrências (HTTP 400)', resExceedCap.data);
+    assert(resExceedCap.status === 400 && resExceedCap.data.code === 'RECURRENCE_LIMIT_EXCEEDED', 'Rejeita série acima do limite de 366 ocorrências (HTTP 400)', resExceedCap.data);
 
     // Multi-tenant isolation: tentar usar serviço do Outro Studio pelo Studio principal
     const resOtherTenantSrv = await makeReq('POST', '/api/v1/services', authOther, {
@@ -706,7 +706,7 @@ async function runTests() {
       resPublicPreviewFull.data
     );
 
-    // Tentativa de exceder cap público (24 ocorrências)
+    // Tentativa de exceder cap público (260 ocorrências)
     const resPublicTooMany = await makeReq('POST', '/api/v1/public/studio/bookings', {}, {
       tenantSlug: 'studio-flex-move',
       mode: 'service',
@@ -715,12 +715,12 @@ async function runTests() {
       modality: 'presential',
       startTime: `${addDaysIso(nextTueWk4, 14)}T11:00:00`,
       endTime: `${addDaysIso(nextTueWk4, 14)}T12:00:00`,
-      recurrence: { frequency: 'weekly', maxOccurrences: 30 },
+      recurrence: { frequency: 'weekly', maxOccurrences: 270 },
       student: { fullName: 'Aluna Limite', phone: '11977776666' }
     });
     assert(
       resPublicTooMany.status === 400 && resPublicTooMany.data.code === 'RECURRENCE_LIMIT_EXCEEDED',
-      'Agendamento público bloqueia > 24 ocorrências na recorrência (HTTP 400 RECURRENCE_LIMIT_EXCEEDED)',
+      'Agendamento público bloqueia > 260 ocorrências na recorrência (HTTP 400 RECURRENCE_LIMIT_EXCEEDED)',
       resPublicTooMany.data
     );
 
