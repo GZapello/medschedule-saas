@@ -1,7 +1,6 @@
 import { GoogleCalendarSettings } from './GoogleCalendarSettings';
 import { ResponsiveTable } from '../common/ResponsiveTable';
 import { useAndroidSectionBack } from '../../hooks/useAndroidSectionBack';
-import { ClinicBookingSettings, ProfessionalBookingSettings } from '../public-booking/BookingLinkSettings';
 import { BillingView } from '../billing/BillingView';
 import React, { useState, useEffect, useRef } from 'react';
 import { ApiClient } from '../../api/client';
@@ -101,6 +100,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, init
       if (['account', 'profile', 'minha-conta'].includes(initialSection)) return 'account';
       if (['legal', 'privacidade'].includes(initialSection)) return 'legal';
       if (['integrations', 'integracoes', 'google-calendar'].includes(initialSection)) return 'integrations';
+      if (initialSection === 'my_booking') return 'hub';
     }
     return 'hub';
   });
@@ -121,6 +121,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, init
       else if (['account', 'profile', 'minha-conta'].includes(initialSection)) setActiveSection('account');
       else if (['legal', 'privacidade'].includes(initialSection)) setActiveSection('legal');
       else if (['integrations', 'integracoes', 'google-calendar'].includes(initialSection)) setActiveSection('integrations');
+      else if (initialSection === 'my_booking') {
+        setActiveSection('hub');
+        window.dispatchEvent(new CustomEvent('zemda-open-help-booking'));
+      }
       else if (initialSection === 'hub') setActiveSection('hub');
     }
   }, [initialSection]);
@@ -666,6 +670,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, init
             zip_code: zipCode,
             logo_url: logoUrl,
             client_term_label: clientTermLabel,
+            establishment_profile: establishmentProfile,
             primary_color: primaryColor
           }
         }));
@@ -856,15 +861,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, init
       tags: ['Registro', 'Bio', 'Especialidades']
     },
     {
-      id: 'my_booking',
-      title: 'Minha Página de Agendamento',
-      desc: 'Consulte seu link de agendamento online e copie para compartilhar com seus pacientes.',
-      icon: Calendar,
-      iconBg: 'bg-cyan-50',
-      iconColor: 'text-cyan-600',
-      tags: ['Link Público', 'Agendamento Online']
-    },
-        {
       id: 'legal',
       title: 'Segurança & Privacidade (LGPD)',
       desc: 'Termos de uso da plataforma, política de privacidade da LGPD e preferências de cookies.',
@@ -892,10 +888,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, init
   };
 
   const staffCardsWithExport = canExportData
-    ? [...staffCards.slice(0, 3), exportCard, ...staffCards.slice(3)]
+    ? [...staffCards.slice(0, 2), exportCard, ...staffCards.slice(2)]
     : staffCards;
   const effectiveStaffCards = canImportData
-    ? [...staffCardsWithExport.slice(0, 3), importCard, ...staffCardsWithExport.slice(3)]
+    ? [...staffCardsWithExport.slice(0, 2), importCard, ...staffCardsWithExport.slice(2)]
     : staffCardsWithExport;
 
   const cards = isClinicAdmin
@@ -1428,14 +1424,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, init
         </div>
       )}
 
-      {/* SEÇÃO: MINHA PÁGINA DE AGENDAMENTO (Não-Admin) */}
-      {activeSection === 'my_booking' && <ProfessionalBookingSettings />}
-
       {/* SEÇÃO: CLÍNICA & IDENTIDADE (Sub-abas: Dados, Modelos, Convênios) */}
       {activeSection === 'clinic' && (
         <div className="space-y-4">
-          <ClinicBookingSettings />
-          {isClinicAdmin && <ProfessionalBookingSettings />}
           <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-2xl text-xs font-bold flex-wrap">
             <button
               type="button"

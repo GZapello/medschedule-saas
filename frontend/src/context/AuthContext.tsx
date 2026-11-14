@@ -326,6 +326,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             state: e.detail.state !== undefined ? e.detail.state : prev.state,
             zip_code: e.detail.zip_code !== undefined ? e.detail.zip_code : prev.zip_code,
             logo_url: e.detail.logo_url !== undefined ? e.detail.logo_url : prev.logo_url,
+            establishment_profile: e.detail.establishment_profile !== undefined
+              ? e.detail.establishment_profile
+              : prev.establishment_profile,
           };
         });
       }

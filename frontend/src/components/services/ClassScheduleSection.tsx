@@ -45,6 +45,7 @@ interface ClassScheduleSectionProps {
   rooms: Room[];
   draftSchedules?: DraftClassScheduleInput[];
   onDraftSchedulesChange?: React.Dispatch<React.SetStateAction<DraftClassScheduleInput[]>>;
+  onFormOpenChange?: (isOpen: boolean) => void;
   onSchedulesChanged?: (
     schedules: ClassScheduleItem[],
     weeklySummary: WeeklyScheduleSummaryItem[],
@@ -100,6 +101,7 @@ export const ClassScheduleSection: React.FC<ClassScheduleSectionProps> = ({
   rooms,
   draftSchedules = [],
   onDraftSchedulesChange,
+  onFormOpenChange,
   onSchedulesChanged
 }) => {
   const { showToast } = useToast();
@@ -163,6 +165,10 @@ export const ClassScheduleSection: React.FC<ClassScheduleSectionProps> = ({
     setShowForm(false);
     setEditingScheduleId(null);
   }, [serviceId]);
+
+  useEffect(() => {
+    onFormOpenChange?.(showForm);
+  }, [showForm, onFormOpenChange]);
 
   useEffect(() => {
     if (!endTimeTouched && !editingScheduleId) {
@@ -476,7 +482,7 @@ export const ClassScheduleSection: React.FC<ClassScheduleSectionProps> = ({
             onClick={openAddForm}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-[11px] shadow-xs transition-colors cursor-pointer"
           >
-            + Adicionar dia e horário
+            + Adicionar Dia e Horário
           </button>
         )}
       </div>

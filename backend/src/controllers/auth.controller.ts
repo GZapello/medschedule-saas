@@ -38,6 +38,26 @@ function parseIsoDate(d: string | null | undefined): Date | null {
 }
 
 export class AuthController {
+  /** Busca os dados canônicos do estabelecimento ativo para login, sessão (/me) e troca de unidade. */
+  static getAuthTenantById(tenantId: string | null | undefined): any {
+    if (!tenantId) return null;
+    const row = db.prepare(`
+      SELECT
+        id, slug, name, corporate_name, trade_name, email, phone, logo_url,
+        primary_color, client_term_label, status, onboarding_status, banned_reason, registrations_blocked,
+        onboarding_completed, onboarding_step, manager_confirmed, manager_profession, manager_practice_areas,
+        public_booking_enabled, public_booking_slug, public_booking_sequence, business_hours_json,
+        COALESCE(establishment_profile, 'clinic') as establishment_profile
+      FROM tenants
+      WHERE id = ?
+    `).get(tenantId) as any;
+    if (!row) return null;
+    return {
+      ...row,
+      establishment_profile: row.establishment_profile || 'clinic'
+    };
+  }
+
   static async login(req: Request, res: Response): Promise<void> {
     try {
       const { email, password } = req.body;
@@ -152,17 +172,8 @@ export class AuthController {
       selectLoginClinic(user);
 
       // Busca dados do tenant se o usuário for vinculado a um
-      let tenantData: any = null;
+      const tenantData = AuthController.getAuthTenantById(user.tenant_id);
       if (user.tenant_id) {
-        const tenantStmt = db.prepare(`
-          SELECT
-            id, slug, name, corporate_name, trade_name, email, phone, logo_url,
-            primary_color, client_term_label, status, onboarding_status, banned_reason, registrations_blocked,
-            onboarding_completed, onboarding_step, manager_confirmed, manager_profession, manager_practice_areas
-          FROM tenants
-          WHERE id = ?
-        `);
-        tenantData = tenantStmt.get(user.tenant_id);
 
         if (tenantData) {
           if (tenantData.status === 'banned') {
@@ -419,7 +430,9 @@ export class AuthController {
 
   static buildUserAuthResponse(user: any, tenantData: any) {
     selectLoginClinic(user);
-    if (user.tenant_id && tenantData?.id !== user.tenant_id) tenantData = db.prepare('SELECT id,slug,name,corporate_name,trade_name,email,phone,logo_url,primary_color,client_term_label,status,onboarding_status,onboarding_completed,onboarding_step,manager_confirmed,manager_profession,manager_practice_areas FROM tenants WHERE id=?').get(user.tenant_id);
+    if (user.tenant_id && (!tenantData || tenantData.id !== user.tenant_id || !tenantData.establishment_profile)) {
+      tenantData = AuthController.getAuthTenantById(user.tenant_id);
+    }
     const token = generateToken({
       userId: user.id,
       tenantId: user.tenant_id,
@@ -641,18 +654,7 @@ export class AuthController {
 
       if (req.user.role !== 'superadmin') { user.tenant_id = req.tenantId; user.role = req.user.role; }
 
-      let tenantData: any = null;
-      if (user.tenant_id) {
-        const tenantStmt = db.prepare(`
-          SELECT
-            id, slug, name, corporate_name, trade_name, email, phone, logo_url,
-            primary_color, client_term_label, status, onboarding_status,
-            onboarding_completed, onboarding_step, manager_confirmed, manager_profession, manager_practice_areas
-          FROM tenants
-          WHERE id = ?
-        `);
-        tenantData = tenantStmt.get(user.tenant_id);
-      }
+      const tenantData = AuthController.getAuthTenantById(user.tenant_id);
 
       // Busca dados profissionais se for professional ou se o clinic_admin atuar como profissional
       let profDetails: any = null;
@@ -2012,18 +2014,8 @@ export class AuthController {
 
         selectLoginClinic(user);
         // Tenant
-        let tenantData: any = null;
-        if (user.tenant_id) {
-          tenantData = db.prepare(`
-            SELECT
-              id, slug, name, corporate_name, trade_name, email, phone, logo_url,
-              primary_color, client_term_label, status, onboarding_status, banned_reason, registrations_blocked,
-              onboarding_completed, onboarding_step, manager_confirmed, manager_profession, manager_practice_areas
-            FROM tenants
-            WHERE id = ?
-          `).get(user.tenant_id);
-
-          if (tenantData) {
+        const tenantData = AuthController.getAuthTenantById(user.tenant_id);
+        if (tenantData) {
             if (tenantData.status === 'banned') {
               res.status(403).json({
                 error: 'Esta clínica foi banida pelo Administrador do Sistema.',
@@ -2040,7 +2032,6 @@ export class AuthController {
               return;
             }
           }
-        }
 
         logAudit(req, 'USER_LOGIN_GOOGLE', 'users', user.id, { email: cleanEmail, role: user.role });
         try {

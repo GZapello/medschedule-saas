@@ -32,6 +32,7 @@ interface OnboardingContextType {
   // Modais de Controle
   isWelcomeModalOpen: boolean;
   isHelpOpen: boolean;
+  helpInitialSection: 'menu' | 'booking';
   isWhatsNewOpen: boolean;
   isModuleSelectorOpen: boolean;
 
@@ -51,6 +52,7 @@ interface OnboardingContextType {
   openWelcomeModal: () => void;
   closeWelcomeModal: () => void;
   openHelp: () => void;
+  openBookingHelp: () => void;
   closeHelp: () => void;
   openWhatsNew: () => void;
   closeWhatsNew: () => void;
@@ -95,6 +97,7 @@ export const OnboardingProvider: React.FC<{ children: ReactNode }> = ({ children
   const [tourAccess, setTourAccess] = useState('');
   const [isWelcomeModalOpen, setIsWelcomeModalOpen] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const [helpInitialSection, setHelpInitialSection] = useState<'menu' | 'booking'>('menu');
   const [isWhatsNewOpen, setIsWhatsNewOpen] = useState(false);
   const [isModuleSelectorOpen, setIsModuleSelectorOpen] = useState(false);
 
@@ -252,6 +255,16 @@ export const OnboardingProvider: React.FC<{ children: ReactNode }> = ({ children
   };
 
   useEffect(() => {
+    const handleOpenHelpBooking = () => {
+      closeTour();
+      setHelpInitialSection('booking');
+      setIsHelpOpen(true);
+    };
+    window.addEventListener('zemda-open-help-booking', handleOpenHelpBooking);
+    return () => window.removeEventListener('zemda-open-help-booking', handleOpenHelpBooking);
+  }, [closeTour]);
+
+  useEffect(() => {
     const escape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       if (isHelpOpen) setIsHelpOpen(false);
@@ -266,11 +279,13 @@ export const OnboardingProvider: React.FC<{ children: ReactNode }> = ({ children
   return <OnboardingContext.Provider value={{
     onboardingData, loading, isTourActive: isTourActive && !loading && tourAccess === accessSignature, currentTour, currentStepIndex,
     currentStep: currentTour?.steps[currentStepIndex] || null,
-    isWelcomeModalOpen: isWelcomeModalOpen && !loading, isHelpOpen, isWhatsNewOpen, isModuleSelectorOpen,
+    isWelcomeModalOpen: isWelcomeModalOpen && !loading, isHelpOpen, helpInitialSection, isWhatsNewOpen, isModuleSelectorOpen,
     startTour, resumeTour, closeTour, nextStep: () => moveStep(currentStepIndex + 1), prevStep: () => moveStep(currentStepIndex - 1),
     skipTour, finishTour, dismissPermanently, startModuleTour: startTour, resetTour,
     openWelcomeModal: () => setIsWelcomeModalOpen(true), closeWelcomeModal: closeTour,
-    openHelp: () => { closeTour(); setIsHelpOpen(true); }, closeHelp: () => setIsHelpOpen(false),
+    openHelp: () => { closeTour(); setHelpInitialSection('menu'); setIsHelpOpen(true); },
+    openBookingHelp: () => { closeTour(); setHelpInitialSection('booking'); setIsHelpOpen(true); },
+    closeHelp: () => { setIsHelpOpen(false); setHelpInitialSection('menu'); },
     openWhatsNew: () => setIsWhatsNewOpen(true), closeWhatsNew: () => setIsWhatsNewOpen(false),
     openModuleSelector: () => setIsModuleSelectorOpen(true), closeModuleSelector: () => setIsModuleSelectorOpen(false),
     availableModules, clinicalModule, isPureAdmin, isZemda360, isZemdaBody

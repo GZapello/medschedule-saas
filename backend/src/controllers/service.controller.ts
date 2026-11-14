@@ -373,7 +373,9 @@ export class ServiceController {
 
       const establishmentProfile = getTenantEstablishmentProfile(tenantId);
       const isStudioCompat = establishmentProfile === 'studio' || establishmentProfile === 'mixed';
-      const rawClassSchedules = Array.isArray(req.body?.classSchedules) ? req.body.classSchedules : [];
+      const rawClassSchedules = Array.isArray(req.body?.classSchedules)
+        ? req.body.classSchedules
+        : (Array.isArray(req.body?.class_schedules) ? req.body.class_schedules : []);
       const rawKind = serviceKind ?? service_kind;
       const resolvedKind = (rawKind || 'individual') === 'group' ? 'group' : 'individual';
       const rawCapacity = defaultCapacity !== undefined ? defaultCapacity : default_capacity;
@@ -631,6 +633,9 @@ export class ServiceController {
 
       const establishmentProfile = getTenantEstablishmentProfile(tenantId);
       const isStudioCompat = establishmentProfile === 'studio' || establishmentProfile === 'mixed';
+      const rawClassSchedules = Array.isArray(req.body?.classSchedules)
+        ? req.body.classSchedules
+        : (Array.isArray(req.body?.class_schedules) ? req.body.class_schedules : []);
 
       const {
         professionalId, specialtyId, name, description, durationMinutes, bufferMinutes,
@@ -784,6 +789,8 @@ export class ServiceController {
         WHERE id = ? AND tenant_id = ?
       `);
 
+      const scheduleWarnings: string[] = [];
+
       db.transaction(() => {
         updateStmt.run(
           professionalId !== undefined ? 1 : 0, professionalId || null,
@@ -829,6 +836,13 @@ export class ServiceController {
           durationMinutes: nextCustomDuration,
           isUpdate: true
         });
+
+        if (isStudioCompat && nextKind === 'group' && rawClassSchedules.length > 0 && PackageService.isStudioCompatible(tenantId)) {
+          for (const item of rawClassSchedules) {
+            const out = ClassScheduleService.createSchedules(tenantId, String(id), item, req.user?.userId || '');
+            if (out.warnings?.length) scheduleWarnings.push(...out.warnings);
+          }
+        }
       })();
 
       logAudit(req, 'UPDATE_SERVICE', 'services', id, { name: name || existing.name, professionalId, linkedCount: requestedLinkedIds?.length });
@@ -872,10 +886,11 @@ export class ServiceController {
             linked_professionals: linkedUpdProfs,
             class_schedules: updatedSchedules,
             weekly_schedule_summary: buildWeeklyScheduleSummary(updatedSchedules),
-            schedule_diagnostics: updatedDiagnostics
+            schedule_diagnostics: updatedDiagnostics,
+            schedule_warnings: scheduleWarnings
           }
         : updatedService;
-      res.json({ success: true, message: 'Serviço atualizado com sucesso', service: enrichedUpdated, ...(enrichedUpdated || {}) });
+      res.json({ success: true, message: 'Serviço atualizado com sucesso', service: enrichedUpdated, schedule_warnings: scheduleWarnings, ...(enrichedUpdated || {}) });
     } catch (err: any) {
       console.error('[ServiceController.update] Erro:', err);
       res.status(err?.status || 500).json({ error: err?.message || 'Erro ao atualizar serviço', ...(err?.code ? { code: err.code } : {}) });

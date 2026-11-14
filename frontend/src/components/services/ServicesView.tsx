@@ -322,6 +322,7 @@ export const ServicesView: React.FC = () => {
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [packages, setPackages] = useState<any[]>([]);
+  const [packagesError, setPackagesError] = useState<string | null>(null);
   const [showPackageModal, setShowPackageModal] = useState<boolean>(false);
   const [editingPackage, setEditingPackage] = useState<any | null>(null);
   const [selectedProfFilter, setSelectedProfFilter] = useState<string>('all');
@@ -351,6 +352,7 @@ export const ServicesView: React.FC = () => {
   const [allowedFrequencies, setAllowedFrequencies] = useState<RecurrenceFrequency[]>(['weekly']);
   const [defaultFrequency, setDefaultFrequency] = useState<RecurrenceFrequency>('weekly');
   const [draftClassSchedules, setDraftClassSchedules] = useState<DraftClassScheduleInput[]>([]);
+  const [hasPendingCreateScheduleForm, setHasPendingCreateScheduleForm] = useState<boolean>(false);
   const [description, setDescription] = useState<string>('');
   const [reminderEnabled, setReminderEnabled] = useState<boolean>(false);
   const [reminderValue, setReminderValue] = useState<number>(30);
@@ -373,6 +375,8 @@ export const ServicesView: React.FC = () => {
   const [editAllowRecurrence, setEditAllowRecurrence] = useState<boolean>(true);
   const [editAllowedFrequencies, setEditAllowedFrequencies] = useState<RecurrenceFrequency[]>(['weekly']);
   const [editDefaultFrequency, setEditDefaultFrequency] = useState<RecurrenceFrequency>('weekly');
+  const [editDraftClassSchedules, setEditDraftClassSchedules] = useState<DraftClassScheduleInput[]>([]);
+  const [hasPendingEditScheduleForm, setHasPendingEditScheduleForm] = useState<boolean>(false);
 
   const showCreateStudioConfig = isPureStudio || (isMixed && serviceDomain === 'studio');
   const showEditStudioConfig = isPureStudio || (isMixed && editServiceDomain === 'studio');
@@ -419,26 +423,38 @@ export const ServicesView: React.FC = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
+      setPackagesError(null);
+      let pkgFetchError: string | null = null;
       const [srvs, rms, specs, profs, pkgRes] = await Promise.all([
         ApiClient.get<Service[]>('/v1/services'),
         ApiClient.get<Room[]>('/v1/rooms'),
         ApiClient.get<Specialty[]>('/v1/taxonomy/specialties'),
         ApiClient.get<Professional[]>('/v1/professionals').catch(() => []),
         isStudioCompatible
-          ? ApiClient.get<{ isStudioCompatible: boolean; packages: any[] }>('/v1/packages?includeInactive=1').catch(() => ({
-              isStudioCompatible: false,
-              packages: []
-            }))
+          ? ApiClient.get<{ isStudioCompatible: boolean; packages: any[] }>('/v1/packages?includeInactive=1').catch((err: any) => {
+              pkgFetchError = err?.message || 'Não foi possível carregar os pacotes de serviços.';
+              return null;
+            })
           : Promise.resolve({ isStudioCompatible: false, packages: [] })
       ]);
       setServices(srvs || []);
       setRooms(rms || []);
       setSpecialties(specs || []);
-      setPackages(isStudioCompatible ? (pkgRes?.packages || []) : []);
+      if (isStudioCompatible) {
+        if (pkgFetchError) {
+          setPackagesError(pkgFetchError);
+          setPackages([]);
+        } else {
+          setPackages(pkgRes?.packages || []);
+        }
+      } else {
+        setPackages([]);
+      }
       const profList = Array.isArray(profs) ? profs : [];
       setProfessionals(profList);
-      if (profList.length > 0 && !professionalId) {
+      if (profList.length > 0 && (!professionalId || !profList.some(p => p.id === professionalId))) {
         setProfessionalId(profList[0].id);
+        setLinkedProfessionalIds([profList[0].id]);
         const mods = getModulesForProfessional(profList[0], authContext);
         if (mods.length > 0) {
           setClinicalModule(mods[0].code);
@@ -452,6 +468,13 @@ export const ServicesView: React.FC = () => {
   };
 
   useEffect(() => {
+    setServices([]);
+    setPackages([]);
+    setPackagesError(null);
+    setSelectedProfFilter('all');
+  }, [currentTenant?.id]);
+
+  useEffect(() => {
     fetchData();
     const handleAppointmentUpdated = () => {
       fetchData();
@@ -460,7 +483,7 @@ export const ServicesView: React.FC = () => {
     return () => {
       window.removeEventListener('zemda-appointment-updated', handleAppointmentUpdated);
     };
-  }, []);
+  }, [currentTenant?.id, establishmentProfile]);
 
   const handleSelectProfessional = (newProfId: string) => {
     setProfessionalId(newProfId);
@@ -536,6 +559,11 @@ export const ServicesView: React.FC = () => {
 
     if (!professionalId) {
       showToast('Selecione o profissional responsável pelo serviço', 'error');
+      return;
+    }
+
+    if (showCreateStudioConfig && serviceKind === 'group' && hasPendingCreateScheduleForm) {
+      showToast('Confirme ou cancele o horário aberto na grade semanal antes de salvar a aula.', 'error');
       return;
     }
 
@@ -668,6 +696,8 @@ export const ServicesView: React.FC = () => {
         : (recCfg.allowRecurrence ? ['weekly'] : [])
     );
     setEditDefaultFrequency(recCfg.defaultFrequency || 'weekly');
+    setEditDraftClassSchedules([]);
+    setHasPendingEditScheduleForm(false);
     setEditDescription(s.description || '');
     const existingEditLinked = Array.isArray(s.linked_professional_ids) && s.linked_professional_ids.length > 0
       ? s.linked_professional_ids
@@ -691,12 +721,22 @@ export const ServicesView: React.FC = () => {
       return;
     }
 
+    if (showEditStudioConfig && editServiceKind === 'group' && hasPendingEditScheduleForm) {
+      showToast('Confirme ou cancele o horário aberto na grade semanal antes de salvar.', 'error');
+      return;
+    }
+
     try {
       setUpdating(true);
       const effectiveEditKind = showEditStudioConfig ? editServiceKind : 'individual';
       const normalizedEditLinked = showEditStudioConfig
         ? Array.from(new Set([editProfessionalId, ...editLinkedProfessionalIds].filter(Boolean)))
         : [editProfessionalId];
+      const shouldSendEditDraftSchedules =
+        showEditStudioConfig &&
+        effectiveEditKind === 'group' &&
+        editingService.service_kind !== 'group' &&
+        editDraftClassSchedules.length > 0;
       const updRes = await ApiClient.put<any>(`/v1/services/${editingService.id}`, {
         professionalId: editProfessionalId,
         ...(showEditStudioConfig ? { linkedProfessionalIds: normalizedEditLinked } : {}),
@@ -717,6 +757,7 @@ export const ServicesView: React.FC = () => {
               defaultRecurrenceFrequency: editAllowRecurrence ? editDefaultFrequency : null
             }
           : {}),
+        ...(shouldSendEditDraftSchedules ? { classSchedules: editDraftClassSchedules } : {}),
         description: editDescription || null,
         active: editActive ? 1 : 0,
         reminderEnabled: editReminderEnabled,
@@ -835,7 +876,9 @@ export const ServicesView: React.FC = () => {
     );
   }, [editingService]);
 
-  const handleOpenCreateModalForProf = (profId?: string | null) => {
+  const handleOpenCreateModalForProf = (profId?: string | null, initialKind: 'individual' | 'group' = 'individual') => {
+    setServiceKind(initialKind);
+    setHasPendingCreateScheduleForm(false);
     const targetId = profId || (professionals.length > 0 ? professionals[0].id : '');
     if (targetId) {
       handleSelectProfessional(targetId);
@@ -863,8 +906,7 @@ export const ServicesView: React.FC = () => {
               <button
                 type="button"
                 onClick={() => {
-                  setServiceKind('individual');
-                  handleOpenCreateModalForProf(selectedProfFilter !== 'all' ? selectedProfFilter : null);
+                  handleOpenCreateModalForProf(selectedProfFilter !== 'all' ? selectedProfFilter : null, 'individual');
                 }}
                 className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all cursor-pointer"
               >
@@ -874,8 +916,7 @@ export const ServicesView: React.FC = () => {
                 type="button"
                 onClick={() => {
                   if (isMixed) setServiceDomain('studio');
-                  setServiceKind('group');
-                  handleOpenCreateModalForProf(selectedProfFilter !== 'all' ? selectedProfFilter : null);
+                  handleOpenCreateModalForProf(selectedProfFilter !== 'all' ? selectedProfFilter : null, 'group');
                 }}
                 className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-xl transition-all cursor-pointer"
               >
@@ -1157,7 +1198,18 @@ export const ServicesView: React.FC = () => {
             </button>
           </div>
 
-          {packages.length === 0 ? (
+          {packagesError ? (
+            <div className="bg-amber-50 p-5 rounded-2xl border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-900">
+              <span>{packagesError}</span>
+              <button
+                type="button"
+                onClick={() => fetchData()}
+                className="px-3 py-1.5 rounded-xl bg-white border border-amber-300 font-bold text-amber-900 hover:bg-amber-100 cursor-pointer self-start sm:self-auto"
+              >
+                Tentar novamente
+              </button>
+            </div>
+          ) : packages.length === 0 ? (
             <div className="bg-white p-6 rounded-2xl border border-dashed border-slate-300 text-center space-y-2 text-xs text-slate-500">
               <p>Nenhum pacote cadastrado ainda neste Studio. Crie pacotes de Pilates, Dança, Zumba ou planos livres combinados.</p>
             </div>
@@ -1534,6 +1586,7 @@ export const ServicesView: React.FC = () => {
                       rooms={rooms}
                       draftSchedules={draftClassSchedules}
                       onDraftSchedulesChange={setDraftClassSchedules}
+                      onFormOpenChange={setHasPendingCreateScheduleForm}
                     />
                   )}
                   <ServiceRecurrenceConfigPanel
@@ -1935,13 +1988,16 @@ export const ServicesView: React.FC = () => {
                   )}
                   {editServiceKind === 'group' && editingService && (
                     <ClassScheduleSection
-                      serviceId={editingService.id}
+                      serviceId={editingService.service_kind === 'group' ? editingService.id : null}
                       serviceModality={editModality}
                       durationMinutes={Number(editDurationMinutes) || 50}
                       defaultCapacity={Number(editDefaultCapacity) || 10}
                       defaultProfessionalId={editProfessionalId}
                       professionals={selectableEditScheduleProfessionals}
                       rooms={rooms}
+                      draftSchedules={editDraftClassSchedules}
+                      onDraftSchedulesChange={setEditDraftClassSchedules}
+                      onFormOpenChange={setHasPendingEditScheduleForm}
                       onSchedulesChanged={(nextSchedules, nextSummary, nextDiag) => {
                         setEditingService(prev =>
                           prev

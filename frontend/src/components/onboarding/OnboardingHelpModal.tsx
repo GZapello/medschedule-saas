@@ -21,6 +21,7 @@ import {
 export const OnboardingHelpModal: React.FC = () => {
   const {
     isHelpOpen,
+    helpInitialSection,
     loading,
     closeHelp,
     startTour,
@@ -43,8 +44,12 @@ export const OnboardingHelpModal: React.FC = () => {
       setSelectingModule(false);
       setShowingBookingLinks(false);
       setShowingCheckInConfig(false);
+    } else if (helpInitialSection === 'booking') {
+      setSelectingModule(false);
+      setShowingCheckInConfig(false);
+      setShowingBookingLinks(true);
     }
-  }, [isHelpOpen]);
+  }, [isHelpOpen, helpInitialSection]);
 
   if (!isHelpOpen) return null;
 
@@ -89,7 +94,7 @@ export const OnboardingHelpModal: React.FC = () => {
       aria-modal="true"
       aria-labelledby="help-modal-title"
     >
-      <div className={`bg-white rounded-3xl shadow-2xl border border-slate-100 ${showingBookingLinks ? 'max-w-lg' : 'max-w-md'} w-full max-h-[calc(100dvh-32px)] overflow-y-auto p-6 flex flex-col gap-4 animate-in zoom-in-95 duration-200 relative`}>
+      <div className={`bg-white rounded-3xl shadow-2xl border border-slate-100 ${showingBookingLinks ? 'max-w-xl' : 'max-w-md'} w-full max-h-[calc(100dvh-24px)] overflow-y-auto p-4 sm:p-6 flex flex-col gap-4 animate-in zoom-in-95 duration-200 relative min-w-0`}>
         {/* Header do Menu de Ajuda */}
         <div className="flex items-center justify-between pb-2 border-b border-slate-100">
           <div className="flex items-center gap-2.5">
@@ -119,7 +124,7 @@ export const OnboardingHelpModal: React.FC = () => {
             <div>
               <h2 id="help-modal-title" className="text-sm font-bold text-slate-900 leading-tight">
                 {showingBookingLinks
-                  ? 'Links de agendamento'
+                  ? 'Agendamento Online'
                   : showingCheckInConfig
                   ? 'Ativar Check-In'
                   : selectingModule
@@ -128,7 +133,7 @@ export const OnboardingHelpModal: React.FC = () => {
               </h2>
               <p className="text-[11px] text-slate-500">
                 {showingBookingLinks
-                  ? 'Acesse e compartilhe os links públicos com seus pacientes'
+                  ? 'Gerencie páginas públicas, links e orientações de uso por perfil'
                   : showingCheckInConfig
                   ? 'Configuração de chegada na recepção e avisos em tempo real'
                   : selectingModule
@@ -154,7 +159,12 @@ export const OnboardingHelpModal: React.FC = () => {
 
         {/* Exibição dos Links de Agendamento ou Configuração de Check-In */}
         {showingBookingLinks ? (
-          <BookingLinksContent />
+          <BookingLinksContent
+            onClose={() => {
+              setShowingBookingLinks(false);
+              closeHelp();
+            }}
+          />
         ) : showingCheckInConfig ? (
           <CheckInConfigPanel />
         ) : selectingModule ? (
@@ -281,7 +291,7 @@ export const OnboardingHelpModal: React.FC = () => {
               </button>
             )}
 
-            {/* 4. Links de agendamento */}
+            {/* 4. Agendamento Online */}
             <button
               type="button"
               disabled={loading}
@@ -294,10 +304,10 @@ export const OnboardingHelpModal: React.FC = () => {
                 </div>
                 <div>
                   <span className="text-xs font-bold text-slate-800 group-hover:text-teal-900 block">
-                    Links de agendamento
+                    Agendamento Online
                   </span>
                   <span className="text-[11px] text-slate-500">
-                    Acesse e compartilhe os links públicos de agendamento da clínica e dos profissionais.
+                    Ative, gerencie e compartilhe os links públicos do estabelecimento e dos profissionais.
                   </span>
                 </div>
               </div>

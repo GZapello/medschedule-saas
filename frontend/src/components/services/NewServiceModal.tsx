@@ -60,6 +60,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
   const [defaultFrequency, setDefaultFrequency] = useState<RecurrenceFrequency>('weekly');
   const [description, setDescription] = useState<string>('');
   const [draftSchedules, setDraftSchedules] = useState<DraftClassScheduleInput[]>([]);
+  const [hasPendingScheduleForm, setHasPendingScheduleForm] = useState<boolean>(false);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
 
@@ -76,6 +77,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setDraftSchedules([]);
+      setHasPendingScheduleForm(false);
       if (serviceToEdit) {
         const domain = resolveServiceDomain({
           establishmentProfile,
@@ -170,6 +172,10 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
       showToast('Informe um número inteiro positivo de vagas para a turma', 'error');
       return;
     }
+    if (showStudioConfig && serviceKind === 'group' && hasPendingScheduleForm) {
+      showToast('Confirme ou cancele o horário aberto na grade semanal antes de salvar a aula.', 'error');
+      return;
+    }
 
     try {
       setLoading(true);
@@ -177,6 +183,11 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
       const normalizedLinkedIds = showStudioConfig
         ? Array.from(new Set([professionalId, ...linkedProfessionalIds].filter(Boolean)))
         : [professionalId];
+      const shouldSendDraftSchedules =
+        showStudioConfig &&
+        effectiveKind === 'group' &&
+        (!isEditing || serviceToEdit?.service_kind !== 'group') &&
+        draftSchedules.length > 0;
       const payload: any = {
         professionalId,
         ...(showStudioConfig ? { linkedProfessionalIds: normalizedLinkedIds } : {}),
@@ -195,7 +206,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
               defaultRecurrenceFrequency: allowRecurrence ? defaultFrequency : null
             }
           : {}),
-        classSchedules: !isEditing && showStudioConfig && effectiveKind === 'group' ? draftSchedules : undefined,
+        classSchedules: shouldSendDraftSchedules ? draftSchedules : undefined,
         description: description.trim() || null
       };
 
@@ -436,7 +447,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
               )}
               {serviceKind === 'group' && (
                 <ClassScheduleSection
-                  serviceId={isEditing ? serviceToEdit?.id : null}
+                  serviceId={isEditing && serviceToEdit?.service_kind === 'group' ? serviceToEdit.id : null}
                   serviceModality={modality}
                   durationMinutes={Number(durationMinutes) || 50}
                   defaultCapacity={Number(defaultCapacity) || 10}
@@ -445,6 +456,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
                   rooms={rooms}
                   draftSchedules={draftSchedules}
                   onDraftSchedulesChange={setDraftSchedules}
+                  onFormOpenChange={setHasPendingScheduleForm}
                 />
               )}
               <ServiceRecurrenceConfigPanel

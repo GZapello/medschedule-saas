@@ -1,4 +1,3 @@
-import { BookingLinkCard } from '../public-booking/BookingLinkSettings';
 import React, { useState, useEffect, useRef } from 'react';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
@@ -16,12 +15,9 @@ import {
   Mail,
   Phone,
   Edit3,
-  Share2,
-  Link,
   Wallet,
   DollarSign,
-  AlertTriangle,
-  Copy
+  AlertTriangle
 } from 'lucide-react';
 import { formatDoctorName } from '../../utils/formatters';
 
@@ -72,19 +68,10 @@ export const ProfessionalsView: React.FC = () => {
   const [editBio, setEditBio] = useState<string>('');
   const [editPracticeAreas, setEditPracticeAreas] = useState<string>('');
   const [editBufferMinutes, setEditBufferMinutes] = useState<number>(10);
-  const [editSlug, setEditSlug] = useState<string>('');
-  const [editPublicBookingEnabled, setEditPublicBookingEnabled] = useState<boolean>(true);
   const [editRemunerationType, setEditRemunerationType] = useState<'commission' | 'salary' | 'both'>('commission');
   const [editCommissionPercentage, setEditCommissionPercentage] = useState<number>(0);
   const [editFixedSalary, setEditFixedSalary] = useState<number>(0);
   const [editPaymentDay, setEditPaymentDay] = useState<number>(5);
-
-  const handleCopyBookingLink = async (prof: Professional) => {
-    if (prof.public_booking_enabled !== 1 || !prof.slug || !currentTenant?.slug) { showToast('O link público deste profissional está indisponível.', 'info'); return; }
-    const url = `${window.location.origin}/agendar/${currentTenant.slug}/${prof.slug}`;
-    try { await navigator.clipboard.writeText(url); showToast('Link de agendamento copiado.', 'success'); }
-    catch { showToast('Não foi possível copiar o link.', 'error'); }
-  };
 
   // Modal Bloqueio de Horário
   const [showBlockModal, setShowBlockModal] = useState<boolean>(false);
@@ -135,8 +122,6 @@ export const ProfessionalsView: React.FC = () => {
         bio: editBio || null,
         practiceAreas: editPracticeAreas || null,
         bufferMinutes: Number(editBufferMinutes),
-        slug: editSlug.trim() || null,
-        ...(isClinicAdmin ? { publicBookingEnabled: editPublicBookingEnabled } : {}),
         remunerationType: editRemunerationType,
         commissionPercentage: Number(editCommissionPercentage),
         fixedSalary: Number(editFixedSalary),
@@ -203,7 +188,7 @@ export const ProfessionalsView: React.FC = () => {
         <div>
           <h2 className="text-xl font-bold text-slate-900 tracking-tight">Equipe de Profissionais</h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Cadastre os profissionais, defina especialidades, regras de remuneração, escala e links de agendamento online.
+            Cadastre os profissionais, defina especialidades, regras de remuneração e escala.
           </p>
         </div>
 
@@ -271,17 +256,7 @@ export const ProfessionalsView: React.FC = () => {
               </div>
             </div>
 
-            <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 text-xs text-slate-500">
-              <button
-                type="button"
-                onClick={() => handleCopyBookingLink(p)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold rounded-xl transition-all shadow-2xs cursor-pointer text-xs"
-                title="Copiar link público individual do profissional para agendamento"
-              >
-                <Share2 className="w-3.5 h-3.5" />
-                <span>Copiar link</span>
-              </button>
-
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2 text-xs text-slate-500">
               <button
                 type="button"
                 onClick={() => {
@@ -299,8 +274,6 @@ export const ProfessionalsView: React.FC = () => {
                   setEditBio(p.bio || '');
                   setEditPracticeAreas(p.practice_areas || '');
                   setEditBufferMinutes(p.buffer_minutes || 10);
-                  setEditSlug(p.slug || '');
-                  setEditPublicBookingEnabled(p.public_booking_enabled !== 0);
                   setEditRemunerationType(p.remuneration_type || 'commission');
                   setEditCommissionPercentage(p.commission_percentage || 0);
                   setEditFixedSalary(p.fixed_salary || 0);
@@ -555,8 +528,6 @@ export const ProfessionalsView: React.FC = () => {
                   </div>
                 )}
               </div>
-
-              <BookingLinkCard title={`Página individual — ${editName}`} enabled={editPublicBookingEnabled} url={editingProf?.slug && currentTenant?.slug ? `${window.location.origin}/agendar/${currentTenant.slug}/${editingProf.slug}` : null} onToggle={isClinicAdmin ? setEditPublicBookingEnabled : undefined} />
 
               <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-4 border-t border-slate-100">
                 <button
