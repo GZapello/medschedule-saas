@@ -4,6 +4,7 @@ import { Resend } from 'resend';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../config/database';
 import { buildZemdaEmailLayout, buildZemdaOtpBox } from './email-template.service';
+import { SandboxService } from './sandbox.service';
 
 export interface EmailVerificationRecord {
   id: string;
@@ -157,7 +158,7 @@ export class EmailService {
     }
 
     // 1.1 Proteção estrita de Sandbox / Modo Teste
-    if (email.endsWith('@zemda.test') || email.includes('sandbox')) {
+    if (SandboxService.isSandboxContext({ email })) {
       console.log('[SANDBOX MOCK] Envio real de e-mail suprimido no modo teste/sandbox.');
       return { success: true };
     }
@@ -534,6 +535,11 @@ export class EmailService {
     subject: string;
     html: string;
   }): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    const recipients = Array.isArray(options.to) ? options.to : [options.to];
+    if (recipients.some((r) => SandboxService.isSandboxContext({ email: r }))) {
+      console.log('[SANDBOX MOCK] sendEmailRaw suprimido para destinatário sandbox.');
+      return { success: true, messageId: 'sandbox-suppressed' };
+    }
     const resend = this.getResendClient();
     if (!resend) {
       console.warn('[EmailService.sendEmailRaw] Resend API key ausente, envio suprimido.');

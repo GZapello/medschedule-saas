@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { getEsteticAccess } from './estetic.controller';
 import { db } from '../config/database';
+import { SandboxService } from '../services/sandbox.service';
 import { v4 as uuidv4 } from 'uuid';
 import { hasClinicalAccess } from './clinical.controller';
 import { isSpeechTherapistOrClinicManager } from './speech-therapy.controller';
@@ -30,19 +31,13 @@ function normalizeModule(mod: string): string {
 export function validateModuleAccess(req: Request, moduleType: string, patientId: string): boolean {
   if (!req.user || !req.tenantId) return false;
 
-  const isSandboxTenant = req.tenantId.startsWith('sbx-tenant-');
-  const isSandboxSession = Boolean((req as any).isSandboxSession || req.headers['x-sandbox-session']);
-  let isAuthorizedSandbox = isSandboxTenant || isSandboxSession;
+  const isSandboxTenant = SandboxService.isSandboxTenant(req.tenantId);
+  const isSandboxSession = Boolean(req.isSandboxSession);
+  const isAuthorizedSandbox = isSandboxTenant && isSandboxSession;
 
-  if (!isAuthorizedSandbox && req.user.role === 'superadmin') {
-    const sbx = db.prepare('SELECT id FROM sandbox_test_sessions WHERE (sandbox_tenant_id = ? OR id = ?) AND admin_user_id = ?').get(req.tenantId, req.tenantId, req.user.userId);
-    if (sbx) isAuthorizedSandbox = true;
-  }
-
-  // SuperAdmin no ambiente Sandbox tem acesso para testes e simulação
+  // SuperAdmin fora do ambiente Sandbox não acessa rascunhos clínicos (sigilo LGPD)
   if (req.user.role === 'superadmin') {
     if (!isAuthorizedSandbox) {
-      // Em clínicas reais de produção, SuperAdmin é estritamente bloqueado de rascunhos clínicos (sigilo LGPD)
       return false;
     }
     const patient = db.prepare('SELECT id FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, req.tenantId);

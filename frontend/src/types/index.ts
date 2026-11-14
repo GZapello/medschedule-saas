@@ -53,6 +53,10 @@ export interface User {
   practiceAreaIds?: string[];
   selectedOptionalCapabilities?: string[];
   permissions?: string[];
+  isSandbox?: boolean;
+  sandboxSessionId?: string | null;
+  sandboxAccountType?: 'manager' | 'professional' | null;
+  sandboxPlanCode?: string | null;
 }
 
 export * from './capabilities';
@@ -92,6 +96,9 @@ export interface Tenant {
   manager_confirmed?: number;
   business_hours_json?: string;
   settings?: Record<string, string>;
+  is_sandbox?: number;
+  isSandbox?: boolean;
+  billing_required?: number;
 }
 
 export interface Category {

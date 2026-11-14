@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import { CodeChallengeMethod } from 'google-auth-library';
 import { db } from '../config/database';
 import { encryptRefreshToken, decryptRefreshToken, calendarEncryptionConfigured } from '../utils/google-calendar-crypto';
+import { SandboxService } from './sandbox.service';
 
 export class GoogleCalendarError extends Error {}
 
@@ -91,14 +92,41 @@ export class GoogleCalendarService {
     `).get(appointmentId, tenantId) as any;
     return row?.id || `${tenantId}:${appointmentId}`;
   }
-  static async syncAppointmentCreated(id: string, tenant: string) { return this.serialized(this.appointmentKey(tenant, id), () => this.syncAppointmentCreatedInternal(id, tenant)); }
-  static async syncAppointmentUpdated(id: string, tenant: string, force = false) { return this.serialized(this.appointmentKey(tenant, id), () => this.syncAppointmentUpdatedInternal(id, tenant, force)); }
-  static async syncAppointmentCancelled(id: string, tenant: string) { return this.serialized(this.appointmentKey(tenant, id), () => this.syncAppointmentCancelledInternal(id, tenant)); }
-  static async updateSettings(tenant: string, user: string, settings: Partial<GoogleCalendarSettings>) { return this.serialized(this.getConnection(tenant, user)?.id || `${tenant}:${user}`, () => this.updateSettingsInternal(tenant, user, settings)); }
+  static async syncAppointmentCreated(id: string, tenant: string) {
+    if (SandboxService.isSandboxTenant(tenant)) return;
+    return this.serialized(this.appointmentKey(tenant, id), () => this.syncAppointmentCreatedInternal(id, tenant));
+  }
+  static async syncAppointmentUpdated(id: string, tenant: string, force = false) {
+    if (SandboxService.isSandboxTenant(tenant)) return;
+    return this.serialized(this.appointmentKey(tenant, id), () => this.syncAppointmentUpdatedInternal(id, tenant, force));
+  }
+  static async syncAppointmentCancelled(id: string, tenant: string) {
+    if (SandboxService.isSandboxTenant(tenant)) return;
+    return this.serialized(this.appointmentKey(tenant, id), () => this.syncAppointmentCancelledInternal(id, tenant));
+  }
+  static async updateSettings(tenant: string, user: string, settings: Partial<GoogleCalendarSettings>) {
+    if (SandboxService.isSandboxContext({ tenantId: tenant, userId: user })) {
+      throw new GoogleCalendarError('Integração externa com Google Agenda indisponível no Ambiente de Teste.');
+    }
+    return this.serialized(this.getConnection(tenant, user)?.id || `${tenant}:${user}`, () => this.updateSettingsInternal(tenant, user, settings));
+  }
   static async disconnect(tenant: string, user: string) { return this.serialized(this.getConnection(tenant, user)?.id || `${tenant}:${user}`, () => this.disconnectInternal(tenant, user)); }
-  static async syncNow(tenant: string, user: string, professional?: string | null) { return this.serialized(this.getConnection(tenant, user)?.id || `${tenant}:${user}`, () => this.syncNowInternal(tenant, user, professional)); }
-  static async resolveDivergence(id: string, tenant: string, action: 'apply_google' | 'keep_zemda', user: string) { return this.serialized(this.appointmentKey(tenant, id), () => this.resolveDivergenceInternal(id, tenant, action, user)); }
-  static async verifyAppointmentSync(id: string, tenant: string) { return this.serialized(this.appointmentKey(tenant, id), () => this.verifyAppointmentSyncInternal(id, tenant)); }
+  static async syncNow(tenant: string, user: string, professional?: string | null) {
+    if (SandboxService.isSandboxContext({ tenantId: tenant, userId: user })) {
+      throw new GoogleCalendarError('Sincronização externa com Google Agenda indisponível no Ambiente de Teste.');
+    }
+    return this.serialized(this.getConnection(tenant, user)?.id || `${tenant}:${user}`, () => this.syncNowInternal(tenant, user, professional));
+  }
+  static async resolveDivergence(id: string, tenant: string, action: 'apply_google' | 'keep_zemda', user: string) {
+    if (SandboxService.isSandboxContext({ tenantId: tenant, userId: user })) {
+      throw new GoogleCalendarError('Sincronização externa com Google Agenda indisponível no Ambiente de Teste.');
+    }
+    return this.serialized(this.appointmentKey(tenant, id), () => this.resolveDivergenceInternal(id, tenant, action, user));
+  }
+  static async verifyAppointmentSync(id: string, tenant: string) {
+    if (SandboxService.isSandboxTenant(tenant)) return;
+    return this.serialized(this.appointmentKey(tenant, id), () => this.verifyAppointmentSyncInternal(id, tenant));
+  }
 
   static safeReturnUrl(value?: string): string {
     const origin = new URL(this.getRedirectUri()).origin;
@@ -200,6 +228,9 @@ export class GoogleCalendarService {
     professionalId: string | null,
     returnUrl?: string
   ): { url: string; state: string } {
+    if (SandboxService.isSandboxContext({ tenantId, userId })) {
+      throw new GoogleCalendarError('Conexão externa com Google Agenda bloqueada no Ambiente de Teste.');
+    }
     if (!this.isConfigured()) {
       throw new GoogleCalendarError('Google Agenda ainda não configurado pelo administrador.');
     }
@@ -260,6 +291,11 @@ export class GoogleCalendarService {
 
     if (!stateRow) {
       return { success: false, error: 'Sessão de autorização inválida ou expirada. Tente novamente.' };
+    }
+
+    if (SandboxService.isSandboxContext({ tenantId: stateRow.tenant_id, userId: stateRow.user_id })) {
+      db.prepare('DELETE FROM google_calendar_oauth_states WHERE id = ?').run(stateRow.id);
+      return { success: false, error: 'Conexão externa com Google Agenda indisponível no Ambiente de Teste.' };
     }
 
     // Exclui state usado imediatamente para prevenir replay

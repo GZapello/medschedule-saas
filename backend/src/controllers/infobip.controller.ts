@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { InfobipService } from '../services/infobip.service';
 import { WhatsAppService } from '../services/whatsapp.service';
+import { SandboxService } from '../services/sandbox.service';
 import { formatPhoneDisplay, cleanPhoneDigits, normalizePhoneWithDDI } from '../utils/phone.utils';
 
 function maskPhoneNumber(phone: string): string {
@@ -48,10 +49,10 @@ export class InfobipController {
    */
   public static async sendTest(req: Request, res: Response): Promise<void> {
     try {
-      if ((req as any).user?.role !== 'superadmin') {
+      if ((req as any).user?.role !== 'superadmin' || req.isSandboxSession || SandboxService.isSandboxTenant(req.tenantId)) {
         res.status(403).json({
           success: false,
-          error: 'Apenas superadministradores do SaaS possuem permissão para realizar testes de disparo.',
+          error: 'Apenas superadministradores do SaaS fora do sandbox possuem permissão para realizar testes de disparo reais.',
           code: 'FORBIDDEN'
         });
         return;

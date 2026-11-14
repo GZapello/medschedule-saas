@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { db } from '../config/database';
+import { SandboxService } from '../services/sandbox.service';
 import { v4 as uuidv4 } from 'uuid';
 import { CapabilityService } from '../services/capability.service';
 import { esteticRecords, esteticOverview } from './estetic-records';
@@ -13,7 +14,7 @@ export function getEsteticAccess(req: Request, targetArea?: string): { allowed: 
   }
 
   if (req.user.role === 'superadmin') {
-    const sandbox = req.tenantId.startsWith('sbx-tenant-') && db.prepare('SELECT id FROM sandbox_test_sessions WHERE sandbox_tenant_id = ? AND admin_user_id = ?').get(req.tenantId, req.user.userId);
+    const sandbox = Boolean(req.isSandboxSession) && SandboxService.isSandboxTenant(req.tenantId);
     return sandbox ? { allowed: true, allowedAreas: ['FACIAL', 'CORPORAL', 'CAPILAR', 'OUTRA'], isDentist: false } : { allowed: false, reason: 'Dados clínicos protegidos: utilize o sandbox de testes.', allowedAreas: [], isDentist: false };
   }
 

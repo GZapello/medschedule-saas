@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { pendingBillingManager } from '../services/billing.service';
+import { SandboxService } from '../services/sandbox.service';
 import { db } from '../config/database';
 import { verifyToken, TokenPayload } from '../utils/jwt';
 
@@ -9,6 +10,10 @@ declare global {
     interface Request {
       user?: TokenPayload;
       tenantId?: string;
+      isSandboxSession?: boolean;
+      sandboxSessionId?: string;
+      sandboxAccountType?: string;
+      sandboxPlanCode?: string;
     }
   }
 }
@@ -43,19 +48,56 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
     return;
   }
 
-  const account = db.prepare('SELECT id, role, status, tenant_id, session_version, onboarding_status FROM users WHERE id = ?').get(payload.userId) as any;
+  const account = db.prepare('SELECT id, role, status, tenant_id, session_version, onboarding_status, COALESCE(is_sandbox, 0) as is_sandbox FROM users WHERE id = ?').get(payload.userId) as any;
   const isOnboarding = Boolean(account && account.onboarding_status && account.onboarding_status !== 'active');
   if (!account || ['blocked','inactive','rejected'].includes(account.status) || (account.status !== 'active' && !pendingBillingManager(account) && !isOnboarding) || (account.role === 'superadmin') !== (payload.role === 'superadmin') ||
     (payload.userSessionVersion || 0) !== (account.session_version || 0)) {
     res.status(401).json({ error: 'Sessão inválida. Entre novamente.' }); return;
   }
+
+  // Isolamento e validação estrita de sessões do Laboratório Sandbox
+  if (account.is_sandbox === 1 || payload.isSandbox || payload.sandboxSessionId) {
+    if (!payload.isSandbox || !payload.sandboxSessionId || account.role === 'superadmin') {
+      res.status(401).json({ error: 'Sessão de sandbox inválida ou não autorizada.', code: 'SANDBOX_SESSION_INVALID' });
+      return;
+    }
+    const requested = req.headers['x-tenant-id'];
+    if (requested !== undefined && (typeof requested !== 'string' || !requested.trim())) {
+      res.status(403).json({ error: 'Clínica inválida' });
+      return;
+    }
+    const verifiedSandbox = SandboxService.validateSandboxSession(payload.sandboxSessionId, payload.userId, payload.tenantId);
+    if (!verifiedSandbox) {
+      res.status(401).json({ error: 'Sessão de sandbox encerrada ou expirada. Inicie uma nova simulação no Laboratório.', code: 'SANDBOX_SESSION_REVOKED' });
+      return;
+    }
+    if (requested && requested !== verifiedSandbox.session.sandbox_tenant_id) {
+      res.status(403).json({ error: 'Acesso cruzado bloqueado: sessão de teste restrita ao próprio sandbox.', code: 'SANDBOX_ISOLATION_DENIED' });
+      return;
+    }
+
+    payload.tenantId = verifiedSandbox.session.sandbox_tenant_id;
+    payload.role = verifiedSandbox.user.role;
+    req.user = payload;
+    req.tenantId = verifiedSandbox.session.sandbox_tenant_id;
+    req.isSandboxSession = true;
+    req.sandboxSessionId = verifiedSandbox.session.id;
+    req.sandboxAccountType = verifiedSandbox.session.account_mode || payload.sandboxAccountType || 'professional';
+    req.sandboxPlanCode = verifiedSandbox.session.plan_code || payload.sandboxPlanCode || 'ALL';
+    return next();
+  }
+
   if (payload.role !== 'superadmin') {
     const requested = req.headers['x-tenant-id'];
     if (requested !== undefined && (typeof requested !== 'string' || !requested.trim())) {
       res.status(403).json({error: 'Clínica inválida'}); return;
     }
     const selectedTenant = requested || payload.tenantId;
-    const tenant = db.prepare('SELECT status, session_version, onboarding_status FROM tenants WHERE id = ?').get(selectedTenant) as any;
+    const tenant = db.prepare('SELECT status, session_version, onboarding_status, COALESCE(is_sandbox, 0) as is_sandbox FROM tenants WHERE id = ?').get(selectedTenant) as any;
+    if (tenant && tenant.is_sandbox === 1) {
+      res.status(403).json({ error: 'Acesso direto de conta real ao ambiente sandbox bloqueado.', code: 'SANDBOX_ISOLATION_DENIED' });
+      return;
+    }
     // Idempotent compatibility backfill for legacy accounts provisioned after bootstrap.
     // Existing inactive/rejected memberships are never changed or recreated.
     if (selectedTenant === account.tenant_id && tenant && !db.prepare('SELECT 1 FROM clinic_users WHERE user_id=? LIMIT 1').get(account.id)) {

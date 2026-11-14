@@ -224,6 +224,9 @@ export class ApiClient {
           typeof window !== 'undefined') {
         window.dispatchEvent(new Event('zemda-billing-denied'));
       }
+      if (response.status === 401 && errorCode === 'SANDBOX_SESSION_REVOKED' && typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('zemda-sandbox-revoked'));
+      }
       const err: any = new Error(errorMsg);
       err.code = errorCode;
       err.field = errorField;

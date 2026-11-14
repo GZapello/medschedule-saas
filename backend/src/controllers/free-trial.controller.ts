@@ -142,6 +142,8 @@ export class FreeTrialController {
         LEFT JOIN users u_creator ON u_creator.id = ft.created_by
         LEFT JOIN tenants t ON t.id = ft.tenant_id
         LEFT JOIN users u_activated ON u_activated.id = ft.user_id
+        WHERE (ft.tenant_id IS NULL OR COALESCE(t.is_sandbox, 0) = 0)
+          AND (ft.user_id IS NULL OR COALESCE(u_activated.is_sandbox, 0) = 0)
         ORDER BY ft.created_at DESC
       `).all() as any[];
 

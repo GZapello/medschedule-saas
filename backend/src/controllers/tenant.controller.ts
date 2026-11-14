@@ -34,7 +34,9 @@ export class TenantController {
       const stmt = db.prepare(`
         SELECT id, name, trade_name, city, state, slug, logo_url, client_term_label
         FROM tenants
-        WHERE status = 'active' AND COALESCE(registrations_blocked, 0) = 0
+        WHERE status = 'active'
+          AND COALESCE(registrations_blocked, 0) = 0
+          AND COALESCE(is_sandbox, 0) = 0
         ORDER BY name ASC
       `);
       const clinics = stmt.all();
@@ -833,18 +835,18 @@ export class TenantController {
     }
   }
 
-  // 6. Métricas Globais do SaaS para o Dashboard do SuperAdmin
+  // 6. Métricas Globais do SaaS para o Dashboard do SuperAdmin (exclui estritamente ambientes sandbox)
   static adminMetrics(req: Request, res: Response): void {
     try {
-      const totalClinics = (db.prepare('SELECT COUNT(*) as c FROM tenants').get() as any).c;
-      const pendingClinics = (db.prepare("SELECT COUNT(*) as c FROM tenants WHERE status = 'pending'").get() as any).c;
-      const activeClinics = (db.prepare("SELECT COUNT(*) as c FROM tenants WHERE status = 'active'").get() as any).c;
-      const blockedClinics = (db.prepare("SELECT COUNT(*) as c FROM tenants WHERE status = 'blocked'").get() as any).c;
-      const bannedClinics = (db.prepare("SELECT COUNT(*) as c FROM tenants WHERE status = 'banned'").get() as any).c;
-      const totalUsers = (db.prepare('SELECT COUNT(*) as c FROM users').get() as any).c;
-      const totalProfessionals = (db.prepare('SELECT COUNT(*) as c FROM professionals WHERE active = 1').get() as any).c;
-      const totalAppointments = (db.prepare('SELECT COUNT(*) as c FROM appointments').get() as any).c;
-      const totalRevenueEstimate = (db.prepare("SELECT SUM(amount) as s FROM payments WHERE status = 'paid'").get() as any)?.s || 0;
+      const totalClinics = (db.prepare('SELECT COUNT(*) as c FROM tenants WHERE COALESCE(is_sandbox, 0) = 0').get() as any).c;
+      const pendingClinics = (db.prepare("SELECT COUNT(*) as c FROM tenants WHERE status = 'pending' AND COALESCE(is_sandbox, 0) = 0").get() as any).c;
+      const activeClinics = (db.prepare("SELECT COUNT(*) as c FROM tenants WHERE status = 'active' AND COALESCE(is_sandbox, 0) = 0").get() as any).c;
+      const blockedClinics = (db.prepare("SELECT COUNT(*) as c FROM tenants WHERE status = 'blocked' AND COALESCE(is_sandbox, 0) = 0").get() as any).c;
+      const bannedClinics = (db.prepare("SELECT COUNT(*) as c FROM tenants WHERE status = 'banned' AND COALESCE(is_sandbox, 0) = 0").get() as any).c;
+      const totalUsers = (db.prepare('SELECT COUNT(*) as c FROM users u LEFT JOIN tenants t ON t.id = u.tenant_id WHERE COALESCE(u.is_sandbox, 0) = 0 AND COALESCE(t.is_sandbox, 0) = 0').get() as any).c;
+      const totalProfessionals = (db.prepare('SELECT COUNT(*) as c FROM professionals p JOIN tenants t ON t.id = p.tenant_id WHERE p.active = 1 AND COALESCE(p.is_sandbox, 0) = 0 AND COALESCE(t.is_sandbox, 0) = 0').get() as any).c;
+      const totalAppointments = (db.prepare('SELECT COUNT(*) as c FROM appointments a JOIN tenants t ON t.id = a.tenant_id WHERE COALESCE(t.is_sandbox, 0) = 0').get() as any).c;
+      const totalRevenueEstimate = (db.prepare("SELECT SUM(p.amount) as s FROM payments p JOIN tenants t ON t.id = p.tenant_id WHERE p.status = 'paid' AND COALESCE(t.is_sandbox, 0) = 0").get() as any)?.s || 0;
 
       // Total de valores pendentes / em aberto agregados dos registros reais de cobrança (SaaS / Asaas e Plataforma)
       // Considera status de cobrança/assinaturas realmente pendentes conforme Asaas/Zemda.
@@ -853,10 +855,12 @@ export class TenantController {
       let pendingSubscriptionAmount = 0;
       try {
         const subRow = db.prepare(`
-          SELECT COALESCE(SUM(amount), 0) as s 
-          FROM subscription_payments 
-          WHERE UPPER(status) IN ('PENDING', 'OVERDUE')
-            AND UPPER(status) NOT IN ('CONFIRMED', 'RECEIVED', 'REFUNDED', 'CANCELED', 'CANCELLED', 'DELETED')
+          SELECT COALESCE(SUM(sp.amount), 0) as s 
+          FROM subscription_payments sp
+          JOIN tenants t ON t.id = sp.clinic_id
+          WHERE UPPER(sp.status) IN ('PENDING', 'OVERDUE')
+            AND UPPER(sp.status) NOT IN ('CONFIRMED', 'RECEIVED', 'REFUNDED', 'CANCELED', 'CANCELLED', 'DELETED')
+            AND COALESCE(t.is_sandbox, 0) = 0
         `).get() as any;
         pendingSubscriptionAmount = Number(subRow?.s || 0);
       } catch (_) {}
@@ -864,10 +868,12 @@ export class TenantController {
       let pendingPaymentsAmount = 0;
       try {
         const payRow = db.prepare(`
-          SELECT COALESCE(SUM(amount), 0) as s 
-          FROM payments 
-          WHERE status IN ('pending', 'partial')
-            AND status NOT IN ('paid', 'refunded', 'cancelled')
+          SELECT COALESCE(SUM(p.amount), 0) as s 
+          FROM payments p
+          JOIN tenants t ON t.id = p.tenant_id
+          WHERE p.status IN ('pending', 'partial')
+            AND p.status NOT IN ('paid', 'refunded', 'cancelled')
+            AND COALESCE(t.is_sandbox, 0) = 0
         `).get() as any;
         pendingPaymentsAmount = Number(payRow?.s || 0);
       } catch (_) {}
@@ -1128,7 +1134,7 @@ export class TenantController {
         LEFT JOIN plans p ON p.id = t.plan_id
         LEFT JOIN subscriptions s ON s.clinic_id=t.id AND s.is_current=1
         LEFT JOIN plans sp ON sp.id=s.plan_id
-        WHERE 1=1
+        WHERE COALESCE(t.is_sandbox, 0) = 0
       `;
       const params: any[] = [];
 
@@ -1238,6 +1244,10 @@ export class TenantController {
 
       if (req.body.publicBookingEnabled !== undefined) {
         if (req.user?.role !== 'clinic_admin') { res.status(403).json({ error: 'Somente o administrador pode configurar agendamento online.' }); return; }
+        if (req.isSandboxSession || db.prepare('SELECT is_sandbox FROM tenants WHERE id = ?').get(req.tenantId)?.is_sandbox === 1) {
+          res.status(403).json({ error: 'Agendamento público comercial permanece desabilitado no Laboratório Sandbox.' });
+          return;
+        }
         if (typeof req.body.publicBookingEnabled !== 'boolean') { res.status(400).json({ error: 'Configuração de agendamento inválida.' }); return; }
         ensureClinicBookingIdentity(db, req.tenantId);
         db.prepare('UPDATE tenants SET public_booking_enabled = ?, updated_at = datetime(\'now\') WHERE id = ?').run(req.body.publicBookingEnabled ? 1 : 0, req.tenantId);

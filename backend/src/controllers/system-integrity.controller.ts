@@ -1,9 +1,10 @@
 import type { Request, Response } from 'express';
 import { SystemIntegrity } from '../services/system-integrity.service';
+import { SandboxService } from '../services/sandbox.service';
 
 export class SystemIntegrityController {
   static get(req: Request, res: Response) {
-    if (req.user?.role !== 'superadmin' || (req as any).isSandboxSession || req.headers['x-sandbox-session'] || req.tenantId?.startsWith('sbx-')) {
+    if (req.user?.role !== 'superadmin' || req.isSandboxSession || SandboxService.isSandboxTenant(req.tenantId)) {
       res.status(403).json({ error: 'Acesso exclusivo ao SuperAdmin fora do Sandbox.' }); return;
     }
     const rawPage = Number(req.query.page || 1);

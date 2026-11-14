@@ -21,6 +21,10 @@ export interface TokenPayload {
   email: string;
   name: string;
   scope?: 'whatsapp_update_only' | undefined;
+  isSandbox?: boolean;
+  sandboxSessionId?: string;
+  sandboxAccountType?: 'manager' | 'professional';
+  sandboxPlanCode?: string;
 }
 
 export function generateToken(payload: TokenPayload): string {

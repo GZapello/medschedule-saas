@@ -1175,8 +1175,11 @@ api.post('/v1/medical/finish-consultation', requireTenant, requireSharedPatientS
 // ==========================================
 // LABORATÓRIO ZEMDA (SUPERADMIN SANDBOX)
 // ==========================================
+api.get('/v1/sandbox/status', requireRole('superadmin'), SandboxController.getStatus);
+api.get('/v1/sandbox/legacy-report', requireRole('superadmin'), SandboxController.getLegacyReport);
 api.post('/v1/sandbox/create-session', requireRole('superadmin'), SandboxController.createSession);
-api.post('/v1/sandbox/reset', SandboxController.resetSandbox);
+api.post('/v1/sandbox/exit', SandboxController.exitSession);
+api.post('/v1/sandbox/reset', requireRole('superadmin', 'clinic_admin'), SandboxController.resetSandbox);
 // ==========================================
 // ZEMDAESTETIC — ESTÉTICA FACIAL, CORPORAL & CAPILAR
 // ==========================================

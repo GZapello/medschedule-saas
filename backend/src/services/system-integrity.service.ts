@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { db } from '../config/database';
+import { SandboxService } from './sandbox.service';
 
 const startedAt = new Date().toISOString();
 let lastCleanup = 0;
@@ -19,6 +20,7 @@ function initialize() {
 
 export const SystemIntegrity = {
   observe(req: Request, res: Response) {
+    if (req.isSandboxSession || SandboxService.isSandboxTenant(req.tenantId)) return;
     // Only Express route templates are retained, never URLs, request/response bodies,
     // error messages, query strings, filenames, user identity or clinical payloads.
     const route = typeof req.route?.path === 'string' ? req.route.path : '/unmatched';

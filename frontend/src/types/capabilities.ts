@@ -176,12 +176,47 @@ export interface MedicalConsultation {
 }
 
 export interface SandboxSession {
+  environmentId?: string;
   sessionId: string;
+  mode?: 'manager' | 'professional';
+  establishmentProfile?: 'clinic' | 'studio' | 'mixed';
   sandboxTenantId: string;
   sandboxUserId: string;
-  professionId: string;
+  professionId?: string | null;
   practiceAreaIds: string[];
   planCode: string;
   token: string;
+  user?: any;
+  tenant?: any;
   capabilities: ComputedUserCapabilities;
+}
+
+export interface SandboxEnvironmentStatus {
+  provisioned: boolean;
+  status: 'unprovisioned' | 'ready' | 'in_use' | 'resetting' | 'error';
+  lastError?: string | null;
+  environment?: {
+    id: string;
+    name: string;
+    slug: string;
+    establishmentProfile: 'clinic' | 'studio' | 'mixed';
+    planCode: string;
+    managerUserId: string;
+    managerEmail: string;
+    professionalUserId: string;
+    professionalId: string;
+    professionalEmail: string;
+    lastResetAt?: string | null;
+    resetCount: number;
+  } | null;
+  activeSession?: {
+    id: string;
+    mode: 'manager' | 'professional';
+    establishmentProfile: 'clinic' | 'studio' | 'mixed';
+    professionId?: string | null;
+    planCode: string;
+    expiresAt: string;
+    lastUsedAt?: string | null;
+  } | null;
+  counts?: Record<string, number>;
 }

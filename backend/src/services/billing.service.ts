@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import { AsaasService, AsaasError } from './asaas.service';
 import { TrialNotificationService } from './trial-notification.service';
 import { AdminNotificationService } from './admin-notification.service';
+import { SandboxService } from './sandbox.service';
 
 export const SOLO_TRIAL_DAYS = 7;
 const BILLING_CYCLE = 'MONTHLY';
@@ -98,6 +99,9 @@ async function withOperation<T>(clinic: string, work:()=>Promise<T>):Promise<T> 
 }
 function clinicForBilling(clinic: string): any {
   const t=db.prepare('SELECT * FROM tenants WHERE id=?').get(clinic);
+  if (t?.is_sandbox === 1 || SandboxService.isSandboxTenant(clinic)) {
+    throw new BillingError('SANDBOX_BILLING_BLOCKED', '[SANDBOX] Operações comerciais e de cobrança real estão bloqueadas no Ambiente de Teste.', 403);
+  }
   if (!t || !['active','pending'].includes(t.status)) throw new BillingError('CLINIC_BLOCKED','Esta clínica não está liberada para iniciar uma assinatura.',403);
   return t;
 }
@@ -119,8 +123,8 @@ function checkPlanSize(clinic: string, total: number) {
   if(count>total) throw new BillingError('PLAN_USER_LIMIT_REACHED',`Você possui ${count} usuários ativos. Desative ${count-total} usuários antes de reduzir os acessos.`);
 }
 async function customer(t: any): Promise<string> {
-  if (t?.id && String(t.id).startsWith('sbx-tenant-')) {
-    throw new BillingError('SANDBOX_PAYMENT_BLOCKED', '[SANDBOX] Operações financeiras com gateway real estão bloqueadas no modo teste.');
+  if (t?.is_sandbox === 1 || SandboxService.isSandboxTenant(t?.id)) {
+    throw new BillingError('SANDBOX_PAYMENT_BLOCKED', '[SANDBOX] Operações financeiras com gateway real estão bloqueadas no modo teste.', 403);
   }
   const environment=AsaasService.getEnvironment();
   let local=db.prepare('SELECT * FROM billing_customers WHERE clinic_id=? AND environment=?').get(t.id,environment);
@@ -181,6 +185,9 @@ export class BillingService {
       payments:db.prepare('SELECT id,amount,billing_type,status,due_date,confirmed_at,received_at,invoice_url FROM subscription_payments WHERE clinic_id=? ORDER BY due_date DESC LIMIT 100').all(clinic)};
   }
   static async checkout(clinic:string,code:unknown,user:string,requestedUsers?:unknown):Promise<{url:string}> {
+    if (SandboxService.isSandboxTenant(clinic)) {
+      throw new BillingError('SANDBOX_BILLING_BLOCKED', '[SANDBOX] Operações comerciais e de cobrança real estão bloqueadas no Ambiente de Teste.', 403);
+    }
     const plan=chosenPlan(code),total=contractUsers(plan,requestedUsers);
     let s=currentSubscription(clinic);
     AsaasService.config(); const app=AsaasService.appUrl();
@@ -265,6 +272,7 @@ export class BillingService {
   }
   static async cancel(clinic:string,user:string,reason:string) {
     return withOperation(clinic,async()=>{
+      clinicForBilling(clinic);
       const s=db.prepare('SELECT * FROM subscriptions WHERE clinic_id=? AND is_current=1').get(clinic);
       if(!s?.managed) throw new BillingError('SUBSCRIPTION_NOT_FOUND','Assinatura não encontrada.',404);
       if(s.gateway_environment!==AsaasService.getEnvironment()) throw new BillingError('ENVIRONMENT_MISMATCH','Ambiente incompatível.');
@@ -438,7 +446,7 @@ export class BillingService {
       JOIN users u ON u.id = th.user_id
       LEFT JOIN subscriptions s ON s.id = th.subscription_id
     `;
-    const where: string[] = [];
+    const where: string[] = ['COALESCE(t.is_sandbox, 0) = 0', 'COALESCE(u.is_sandbox, 0) = 0'];
     const params: any[] = [];
 
     if (query?.search && typeof query.search === 'string') {
@@ -476,10 +484,10 @@ export class BillingService {
     });
 
     const summary = {
-      total: db.prepare('SELECT COUNT(*) total FROM trial_history').get()?.total || 0,
-      active: db.prepare("SELECT COUNT(*) total FROM trial_history WHERE status = 'ACTIVE' AND datetime(ends_at) > datetime('now')").get()?.total || 0,
-      expired: db.prepare("SELECT COUNT(*) total FROM trial_history WHERE status = 'EXPIRED' OR (status = 'ACTIVE' AND datetime(ends_at) <= datetime('now'))").get()?.total || 0,
-      converted: db.prepare("SELECT COUNT(*) total FROM trial_history WHERE status = 'CONVERTED'").get()?.total || 0
+      total: db.prepare('SELECT COUNT(*) total FROM trial_history th JOIN tenants t ON t.id = th.tenant_id WHERE COALESCE(t.is_sandbox, 0) = 0').get()?.total || 0,
+      active: db.prepare("SELECT COUNT(*) total FROM trial_history th JOIN tenants t ON t.id = th.tenant_id WHERE COALESCE(t.is_sandbox, 0) = 0 AND th.status = 'ACTIVE' AND datetime(th.ends_at) > datetime('now')").get()?.total || 0,
+      expired: db.prepare("SELECT COUNT(*) total FROM trial_history th JOIN tenants t ON t.id = th.tenant_id WHERE COALESCE(t.is_sandbox, 0) = 0 AND (th.status = 'EXPIRED' OR (th.status = 'ACTIVE' AND datetime(th.ends_at) <= datetime('now')))").get()?.total || 0,
+      converted: db.prepare("SELECT COUNT(*) total FROM trial_history th JOIN tenants t ON t.id = th.tenant_id WHERE COALESCE(t.is_sandbox, 0) = 0 AND th.status = 'CONVERTED'").get()?.total || 0
     };
 
     return { trials: formattedRows, summary };

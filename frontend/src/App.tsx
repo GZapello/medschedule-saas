@@ -14,7 +14,7 @@ import { BillingView, BillingBanner, useBillingSummary } from './components/bill
 import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { lazyWithRetry } from './utils/lazyWithRetry';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { ToastProvider } from './context/ToastContext';
+import { ToastProvider, useToast } from './context/ToastContext';
 import { ApiClient } from './api/client';
 import {
   ActiveStudioSession,
@@ -284,9 +284,29 @@ const AppContent: React.FC = () => {
     isZemdaEstetic,
     hasCapability,
     isSandboxSession,
+    refreshTenant,
     exitSandboxSession,
     logout
   } = useAuth();
+  const { showToast } = useToast();
+  const [showSandboxResetModal, setShowSandboxResetModal] = useState(false);
+  const [isResettingSandbox, setIsResettingSandbox] = useState(false);
+
+  const handleConfirmBannerSandboxReset = async () => {
+    try {
+      setIsResettingSandbox(true);
+      await ApiClient.post('/v1/sandbox/reset', {});
+      setShowSandboxResetModal(false);
+      await refreshTenant();
+      await reloadSession();
+      showToast('Dados do Ambiente de Teste restaurados com sucesso!', 'success');
+      window.dispatchEvent(new CustomEvent('zemda-sandbox-reset'));
+    } catch (e: any) {
+      showToast(e?.message || 'Erro ao restaurar dados de teste do sandbox', 'error');
+    } finally {
+      setIsResettingSandbox(false);
+    }
+  };
 
   const { summary: billingSummary, loading: billingLoading, error: billingError, reload: reloadBilling } = useBillingSummary();
 
@@ -596,8 +616,8 @@ const AppContent: React.FC = () => {
       setCurrentView('superadmin');
       setSubRouteId(null);
       sessionStorage.setItem('activeView', 'superadmin');
-      if (window.location.pathname !== '/superadmin') {
-        window.history.pushState({ view: 'superadmin' }, '', '/superadmin');
+      if (window.location.pathname !== '/superadmin' || window.location.search !== '?section=laboratory') {
+        window.history.pushState({ view: 'superadmin' }, '', '/superadmin?section=laboratory');
       }
     };
 
@@ -1350,43 +1370,84 @@ const AppContent: React.FC = () => {
       {/* Floating Sandbox Simulation Banner */}
       {isSandboxSession && (
         <div className="bg-gradient-to-r from-purple-900 via-indigo-950 to-purple-950 text-white px-4 py-2 text-xs flex flex-wrap items-center justify-between gap-2 shadow-md border-b border-purple-500/30 sticky top-0 z-50">
-          <div className="flex items-center gap-2 font-bold">
+          <div className="flex flex-wrap items-center gap-2 font-bold">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span>🧪 AMBIENTE DE TESTE — Simulação Ativa:</span>
-            <span className="bg-purple-800/80 px-2 py-0.5 rounded-md border border-purple-400/40 text-purple-200">
-              {currentUser?.name || currentUser?.professionName || 'Profissional'}
+            <span>AMBIENTE DE TESTE</span>
+            <span className="bg-purple-800/80 px-2 py-0.5 rounded-md border border-purple-400/40 text-purple-100">
+              {currentUser?.sandboxAccountType === 'manager' || currentUser?.role === 'clinic_admin'
+                ? 'Gestor de Teste'
+                : `Profissional: ${currentUser?.professionName || currentUser?.name || 'Simulado'}`}
             </span>
-            <span className="hidden sm:inline text-purple-300 font-normal">
-              (Isolado: WhatsApp, Resend e Asaas bloqueados)
+            <span className="bg-white/10 px-2 py-0.5 rounded-md text-purple-200 text-[11px]">
+              {currentTenant?.establishment_profile === 'studio' ? 'Studio / Academia' : currentTenant?.establishment_profile === 'mixed' ? 'Misto' : 'Clínica'}
+              {currentUser?.sandboxPlanCode ? ` · Plano ${currentUser.sandboxPlanCode}` : ''}
+            </span>
+            <span className="hidden lg:inline text-purple-300 font-normal">
+              (Isolado: WhatsApp, E-mails, Google Agenda e Asaas bloqueados)
             </span>
           </div>
           <div className="flex items-center gap-2">
+            {isClinicAdmin && (
+              <button
+                type="button"
+                onClick={() => setShowSandboxResetModal(true)}
+                className="px-2.5 py-1 bg-white/10 hover:bg-white/20 rounded-lg text-[11px] font-bold transition-all cursor-pointer"
+                title="Limpa e restaura dados de teste simulados preservando a conta do Gestor"
+              >
+                Restaurar Dados
+              </button>
+            )}
             <button
-              onClick={async () => {
-                try {
-                  await ApiClient.post('/v1/sandbox/reset', { tenantId: currentUser?.tenantId });
-                  window.location.reload();
-                } catch (e: any) {
-                  alert(e.message || 'Erro ao resetar sandbox');
-                }
-              }}
-              className="px-2.5 py-1 bg-white/10 hover:bg-white/20 rounded-lg text-[11px] font-bold transition-all cursor-pointer"
-              title="Limpa e reseta dados de teste simulados neste ambiente"
-            >
-              Resetar Dados
-            </button>
-            <button
-              onClick={() => setCurrentView('superadmin')}
+              type="button"
+              onClick={() => void exitSandboxSession()}
               className="px-2.5 py-1 bg-purple-700 hover:bg-purple-600 rounded-lg text-[11px] font-bold transition-all cursor-pointer"
             >
-              Laboratório
+              Voltar ao Laboratório
             </button>
             <button
-              onClick={exitSandboxSession}
+              type="button"
+              onClick={() => void exitSandboxSession()}
               className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[11px] font-bold transition-all cursor-pointer"
             >
               Encerrar Simulação
             </button>
+          </div>
+        </div>
+      )}
+
+      {isSandboxSession && showSandboxResetModal && (
+        <div className="fixed inset-0 z-[120] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4 text-slate-900">
+            <div>
+              <h3 className="text-base font-black text-slate-900">Restaurar Dados de Teste?</h3>
+              <p className="text-xs text-slate-500 mt-0.5">Ação limitada exclusivamente ao Ambiente Sandbox</p>
+            </div>
+            <div className="text-xs text-slate-600 leading-relaxed bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2">
+              <p>
+                Todos os dados criados durante o teste neste ambiente (pacientes/alunos fictícios, agendamentos, atendimentos, prontuários, serviços, turmas, pacotes, estoque e cobranças simuladas) serão apagados e restaurados ao estado inicial.
+              </p>
+              <p className="font-bold text-emerald-700">
+                ✓ A conta do Gestor de Teste e o histórico real de clientes permanecerão intactos.
+              </p>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setShowSandboxResetModal(false)}
+                disabled={isResettingSandbox}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleConfirmBannerSandboxReset()}
+                disabled={isResettingSandbox}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black cursor-pointer disabled:opacity-50"
+              >
+                {isResettingSandbox ? 'Restaurando...' : 'Confirmar Restauração'}
+              </button>
+            </div>
           </div>
         </div>
       )}

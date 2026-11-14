@@ -25,7 +25,14 @@ export class WhatsAppService {
   public static async sendTextMessage(params: {
     recipientPhone: string;
     messageText: string;
+    tenantId?: string | null;
+    userId?: string | null;
+    isSandboxSession?: boolean;
   }): Promise<InfobipSendResult> {
-    return InfobipService.sendTextMessage(params.recipientPhone, params.messageText);
+    return InfobipService.sendTextMessage(params.recipientPhone, params.messageText, {
+      tenantId: params.tenantId,
+      userId: params.userId,
+      isSandboxSession: params.isSandboxSession
+    });
   }
 }

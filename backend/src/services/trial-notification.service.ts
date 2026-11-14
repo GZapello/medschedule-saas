@@ -2,6 +2,7 @@ import { Resend } from 'resend';
 import { randomUUID } from 'crypto';
 import { db } from '../config/database';
 import { buildZemdaEmailLayout } from './email-template.service';
+import { SandboxService } from './sandbox.service';
 
 export class TrialNotificationService {
   private static getResendClient(): Resend | null {
@@ -53,6 +54,7 @@ export class TrialNotificationService {
   }
 
   static async notifyTrialStarted(tenantId: string, email: string, name: string, trialEndsAt: string): Promise<void> {
+    if (SandboxService.isSandboxContext({ tenantId, email })) return;
     if (!this.shouldSend(tenantId, 'TRIAL_STARTED')) return;
     this.markSent(tenantId, 'TRIAL_STARTED');
 
@@ -83,6 +85,7 @@ export class TrialNotificationService {
   }
 
   static async notifyTrial3Days(tenantId: string, email: string, name: string, trialEndsAt: string): Promise<void> {
+    if (SandboxService.isSandboxContext({ tenantId, email })) return;
     if (!this.shouldSend(tenantId, 'TRIAL_3_DAYS')) return;
     this.markSent(tenantId, 'TRIAL_3_DAYS');
 
@@ -108,6 +111,7 @@ export class TrialNotificationService {
   }
 
   static async notifyTrial1Day(tenantId: string, email: string, name: string, trialEndsAt: string): Promise<void> {
+    if (SandboxService.isSandboxContext({ tenantId, email })) return;
     if (!this.shouldSend(tenantId, 'TRIAL_1_DAY')) return;
     this.markSent(tenantId, 'TRIAL_1_DAY');
 
@@ -136,6 +140,7 @@ export class TrialNotificationService {
   }
 
   static async notifyTrialExpired(tenantId: string, email: string, name: string): Promise<void> {
+    if (SandboxService.isSandboxContext({ tenantId, email })) return;
     if (!this.shouldSend(tenantId, 'TRIAL_EXPIRED')) return;
     this.markSent(tenantId, 'TRIAL_EXPIRED');
 
@@ -171,7 +176,11 @@ export class TrialNotificationService {
         SELECT s.id as sub_id, s.clinic_id, s.trial_ends_at, t.name as clinic_name, t.responsible_name, t.responsible_email, t.email
         FROM subscriptions s
         JOIN tenants t ON t.id = s.clinic_id
-        WHERE s.managed = 1 AND s.is_current = 1 AND s.status = 'TRIAL' AND s.trial_ends_at IS NOT NULL
+        WHERE s.managed = 1
+          AND s.is_current = 1
+          AND s.status = 'TRIAL'
+          AND s.trial_ends_at IS NOT NULL
+          AND COALESCE(t.is_sandbox, 0) = 0
       `).all() as any[];
 
       const now = Date.now();

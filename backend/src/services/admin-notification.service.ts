@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { db } from '../config/database';
 import { EmailService } from './email.service';
 import { buildZemdaEmailLayout } from './email-template.service';
+import { SandboxService } from './sandbox.service';
 
 export type AdminNotificationType = 'NEW_USER' | 'TRIAL_STARTED' | 'SUPPORT_TICKET_CREATED';
 
@@ -215,22 +216,7 @@ export class AdminNotificationService {
     email?: string | null;
     isSandboxSession?: boolean;
   }): boolean {
-    if (params.isSandboxSession) return true;
-    if (params.tenantId && (params.tenantId.startsWith('sbx-tenant-') || params.tenantId.toLowerCase().includes('sandbox'))) {
-      return true;
-    }
-    if (params.userId && (params.userId.startsWith('sbx-user-') || params.userId.toLowerCase().includes('sandbox'))) {
-      return true;
-    }
-    if (
-      params.email &&
-      (params.email.toLowerCase().endsWith('@zemda.test') ||
-        params.email.toLowerCase().includes('sandbox') ||
-        params.email.toLowerCase().includes('@test.invalid'))
-    ) {
-      return true;
-    }
-    return false;
+    return SandboxService.isSandboxContext(params);
   }
 
   /**

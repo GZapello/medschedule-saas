@@ -23,6 +23,7 @@ import { REGISTRATION_PROFESSIONS } from '../types/professions';
 import { REGISTRATION_PROFESSION_ALIASES } from '../types/registration-professions';
 import { ensureDefaultClinicService } from '../services/default-service.service';
 import { MedicalTreeService } from '../services/medical-tree.service';
+import { SandboxService } from '../services/sandbox.service';
 import { getDefaultPermissionsForRole, DEFAULT_RECEPTIONIST_PERMISSIONS, DEFAULT_PROFESSIONAL_PERMISSIONS } from '../utils/role-permissions';
 
 function parseIsoDate(d: string | null | undefined): Date | null {
@@ -47,12 +48,16 @@ export class AuthController {
         primary_color, client_term_label, status, onboarding_status, banned_reason, registrations_blocked,
         onboarding_completed, onboarding_step, manager_confirmed, manager_profession, manager_practice_areas,
         public_booking_enabled, public_booking_slug, public_booking_sequence, business_hours_json,
-        COALESCE(establishment_profile, 'clinic') as establishment_profile
+        COALESCE(establishment_profile, 'clinic') as establishment_profile,
+        COALESCE(is_sandbox, 0) as is_sandbox,
+        COALESCE(billing_required, 1) as billing_required
       FROM tenants
       WHERE id = ?
     `).get(tenantId) as any;
     if (!row) return null;
     return {
+      ...row,
+      isSandbox: row.is_sandbox === 1,
       ...row,
       establishment_profile: row.establishment_profile || 'clinic'
     };
@@ -71,7 +76,7 @@ export class AuthController {
 
       const userStmt = db.prepare(`
         SELECT id, tenant_id, name, email, password_hash, role, phone, avatar_url, status,
-               onboarding_status, email_verified,
+               onboarding_status, email_verified, COALESCE(is_sandbox, 0) as is_sandbox,
                terms_version_accepted, privacy_version_accepted, terms_accepted_at, privacy_accepted_at
         FROM users
         WHERE email = ?
@@ -88,6 +93,7 @@ export class AuthController {
         status: string;
         onboarding_status?: string | null;
         email_verified?: number | null;
+        is_sandbox?: number;
         terms_version_accepted?: string | null;
         privacy_version_accepted?: string | null;
         terms_accepted_at?: string | null;
@@ -97,6 +103,15 @@ export class AuthController {
       if (!user) {
         logAudit(req, 'LOGIN_FAILED', 'users', undefined, { email: attemptedEmail, reason: 'invalid_credentials' });
         res.status(401).json({ error: 'Credenciais inválidas' });
+        return;
+      }
+
+      if (user.is_sandbox === 1 || SandboxService.isSandboxUser(user.id)) {
+        logAudit(req, 'LOGIN_BLOCKED_SANDBOX_DIRECT', 'users', user.id, { email: attemptedEmail });
+        res.status(403).json({
+          error: 'Contas do Laboratório Sandbox só podem ser acessadas pelo SuperAdmin através do módulo Laboratório.',
+          code: 'SANDBOX_DIRECT_LOGIN_FORBIDDEN'
+        });
         return;
       }
 
@@ -417,7 +432,11 @@ export class AuthController {
           taxonomyCategory: professionResolution.taxonomyCategory || computedCaps?.taxonomyCategory || null,
           capabilities: computedCaps?.activeCapabilities || [],
           practiceAreaIds: computedCaps?.practiceAreaIds || [],
-          selectedOptionalCapabilities: computedCaps?.selectedOptionalCapabilities || []
+          selectedOptionalCapabilities: computedCaps?.selectedOptionalCapabilities || [],
+          isSandbox: Boolean(req.isSandboxSession || user.is_sandbox === 1 || tenantData?.isSandbox),
+          sandboxSessionId: req.sandboxSessionId || null,
+          sandboxAccountType: req.sandboxAccountType || null,
+          sandboxPlanCode: req.sandboxPlanCode || null
         },
         tenant: tenantData
       });
@@ -640,7 +659,7 @@ export class AuthController {
 
       const userStmt = db.prepare(`
         SELECT id, tenant_id, name, email, role, phone, avatar_url, status,
-               onboarding_status, email_verified,
+               onboarding_status, email_verified, COALESCE(is_sandbox, 0) as is_sandbox,
                terms_version_accepted, privacy_version_accepted, terms_accepted_at, privacy_accepted_at
         FROM users
         WHERE id = ?
@@ -841,7 +860,11 @@ export class AuthController {
           taxonomyCategory: professionResolution.taxonomyCategory || computedCaps?.taxonomyCategory || null,
           capabilities: computedCaps?.activeCapabilities || [],
           practiceAreaIds: computedCaps?.practiceAreaIds || [],
-          selectedOptionalCapabilities: computedCaps?.selectedOptionalCapabilities || []
+          selectedOptionalCapabilities: computedCaps?.selectedOptionalCapabilities || [],
+          isSandbox: Boolean(req.isSandboxSession || user.is_sandbox === 1 || tenantData?.isSandbox),
+          sandboxSessionId: req.sandboxSessionId || null,
+          sandboxAccountType: req.sandboxAccountType || null,
+          sandboxPlanCode: req.sandboxPlanCode || null
         },
         tenant: tenantData
       });
@@ -1948,6 +1971,16 @@ export class AuthController {
             });
             return;
           }
+        }
+
+        // Bloqueia login direto via Google para contas internas do sandbox
+        if (user.is_sandbox === 1 || SandboxService.isSandboxUser(user.id)) {
+          logAudit(req, 'LOGIN_BLOCKED_SANDBOX_DIRECT', 'users', user.id, { email: cleanEmail });
+          res.status(403).json({
+            error: 'Contas do Laboratório Sandbox só podem ser acessadas através do SuperAdmin.',
+            code: 'SANDBOX_DIRECT_LOGIN_FORBIDDEN'
+          });
+          return;
         }
 
         // Validação de status do usuário

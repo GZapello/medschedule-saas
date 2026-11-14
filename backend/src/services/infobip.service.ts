@@ -1,4 +1,5 @@
 import { normalizePhoneWithDDI, isValidPhoneNumber } from '../utils/phone.utils';
+import { SandboxService } from './sandbox.service';
 
 export interface InfobipStatus {
   provider: 'infobip';
@@ -107,12 +108,45 @@ export class InfobipService {
    *   Content-Type: application/json
    *   Accept: application/json
    */
-  public static async sendTextMessage(to: string, message: string): Promise<InfobipSendResult> {
+  public static async sendTextMessage(
+    to: string,
+    message: string,
+    context?: { tenantId?: string | null; userId?: string | null; isSandboxSession?: boolean }
+  ): Promise<InfobipSendResult> {
+    const rawTo = String(to || '').trim();
+    const normalizedPhone = rawTo ? normalizePhoneWithDDI(rawTo) : '';
+
+    // 1. Interceptação segura de Sandbox e Telefones Fictícios ANTES de credenciais/rede
+    if (
+      SandboxService.isSandboxContext({
+        tenantId: context?.tenantId,
+        userId: context?.userId,
+        isSandboxSession: context?.isSandboxSession
+      }) ||
+      normalizedPhone.includes('999990000') ||
+      normalizedPhone.includes('988881111') ||
+      normalizedPhone.includes('977772222') ||
+      rawTo.toLowerCase().includes('sandbox')
+    ) {
+      console.log('[SANDBOX MOCK] Disparo de WhatsApp suprimido no modo teste/sandbox para:', normalizedPhone || rawTo);
+      return {
+        success: true,
+        messageId: `mock-infobip-${Date.now()}`,
+        status: {
+          groupId: 1,
+          groupName: 'PENDING',
+          id: 7,
+          name: 'SANDBOX_MOCK',
+          description: 'Disparo mockado com sucesso no ambiente Sandbox/Teste'
+        }
+      };
+    }
+
     const apiKey = this.getApiKey();
     const baseUrl = this.getBaseUrl();
     const sender = this.getSender();
 
-    // 1. Validação de Credenciais no Ambiente
+    // 2. Validação de Credenciais no Ambiente
     if (!apiKey) {
       return {
         success: false,
@@ -134,8 +168,7 @@ export class InfobipService {
       };
     }
 
-    // 2. Validação e Normalização do Destinatário
-    const rawTo = String(to || '').trim();
+    // 3. Validação do Destinatário
     if (!rawTo) {
       return {
         success: false,
@@ -143,7 +176,6 @@ export class InfobipService {
       };
     }
 
-    const normalizedPhone = normalizePhoneWithDDI(rawTo);
     if (!isValidPhoneNumber(rawTo) || !normalizedPhone) {
       return {
         success: false,
@@ -151,33 +183,12 @@ export class InfobipService {
       };
     }
 
-    // 3. Validação do Conteúdo
+    // 4. Validação do Conteúdo
     const text = String(message || '').trim();
     if (!text) {
       return {
         success: false,
         error: 'Texto da mensagem não pode ser vazio.'
-      };
-    }
-
-    // 4. Interceptação segura de Sandbox e Telefones Fictícios
-    if (
-      normalizedPhone.includes('999990000') ||
-      normalizedPhone.includes('988881111') ||
-      normalizedPhone.includes('977772222') ||
-      rawTo.toLowerCase().includes('sandbox')
-    ) {
-      console.log('[SANDBOX MOCK] Disparo de WhatsApp suprimido no modo teste/sandbox para:', normalizedPhone);
-      return {
-        success: true,
-        messageId: `mock-infobip-${Date.now()}`,
-        status: {
-          groupId: 1,
-          groupName: 'PENDING',
-          id: 7,
-          name: 'SANDBOX_MOCK',
-          description: 'Disparo mockado com sucesso no ambiente Sandbox/Teste'
-        }
       };
     }
 

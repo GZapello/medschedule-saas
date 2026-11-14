@@ -334,7 +334,8 @@ export class CapabilityService {
              p.zemda_estetic_enabled as p_estetic,
              prof.name as prof_name, prof.slug as prof_slug,
              t.manager_profession as t_manager_prof, t.name as t_name,
-             t.trade_name as t_trade_name, t.description as t_description
+             t.trade_name as t_trade_name, t.description as t_description,
+             COALESCE(t.is_sandbox, 0) as t_is_sandbox
       FROM users u
       LEFT JOIN clinic_users cu ON cu.user_id = u.id AND cu.tenant_id = ?
       LEFT JOIN professionals p ON p.user_id = u.id AND p.tenant_id = ?
@@ -342,6 +343,21 @@ export class CapabilityService {
       LEFT JOIN tenants t ON t.id = ?
       WHERE u.id = ?
     `).get(tenantId, tenantId, tenantId, userId) as any;
+
+    let sandboxPlanCode: string | undefined = undefined;
+    if (userRow?.t_is_sandbox === 1) {
+      try {
+        const sbxSess = db.prepare(`
+          SELECT plan_code FROM sandbox_test_sessions
+          WHERE sandbox_tenant_id = ? AND (sandbox_user_id = ? OR sandbox_user_id IS NULL)
+            AND status = 'active' AND revoked_at IS NULL AND expires_at > datetime('now')
+          ORDER BY created_at DESC LIMIT 1
+        `).get(tenantId, userId) as { plan_code?: string } | undefined;
+        if (sbxSess?.plan_code) {
+          sandboxPlanCode = sbxSess.plan_code;
+        }
+      } catch {}
+    }
 
     // Global flags are legacy hints, never permissions for a different clinic.
     if (userRow && userRow.legacy_tenant_id !== tenantId) {
@@ -511,7 +527,8 @@ export class CapabilityService {
       medicalSpecialtyIds: medSpecIds,
       medicalPracticeAreaIds: medPaIds,
       selectedOptionalCapabilities: userSelectedOptionals,
-      tenantId
+      tenantId,
+      planCode: sandboxPlanCode
     });
   }
 

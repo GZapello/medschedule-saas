@@ -3,6 +3,7 @@ import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { NotificationService } from '../services/notification.service';
 import { logAudit } from '../middlewares/audit.middleware';
+import { SandboxService } from '../services/sandbox.service';
 
 export class NotificationController {
   // 1. Lista histórico e fila de lembretes da clínica
@@ -94,6 +95,32 @@ export class NotificationController {
       }
 
       const id = 'not-' + uuidv4().slice(0, 8);
+      const isSandbox = Boolean(req.isSandboxSession || SandboxService.isSandboxTenant(tenantId));
+      if (isSandbox) {
+        db.prepare(`
+          INSERT INTO notifications (
+            id, tenant_id, patient_id, professional_id, appointment_id,
+            type, channel, recipient, content, status, delivery_status, last_error, scheduled_for
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'cancelled', 'sandbox_suppressed', 'sandbox_suppressed', COALESCE(?, datetime('now')))
+        `).run(
+          id,
+          tenantId,
+          patientId || null,
+          professionalId || null,
+          appointmentId || null,
+          type || 'reminder_1h',
+          channel || 'whatsapp',
+          recipient,
+          content,
+          scheduledFor || null
+        );
+
+        logAudit(req, 'SCHEDULE_NOTIFICATION_SANDBOX_MOCK', 'notifications', id, { channel, recipient, suppressed: true });
+        res.status(201).json({ id, sandboxSuppressed: true, message: 'Notificação simulada no sandbox (envio externo suprimido)' });
+        return;
+      }
+
       db.prepare(`
         INSERT INTO notifications (
           id, tenant_id, patient_id, professional_id, appointment_id,

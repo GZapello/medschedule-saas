@@ -814,9 +814,13 @@ export class AdminVisitsController {
       const { tenantId } = req.body;
 
       if (tenantId) {
-        const tenant = db.prepare('SELECT id, name FROM tenants WHERE id = ?').get(tenantId);
+        const tenant = db.prepare('SELECT id, name, COALESCE(is_sandbox, 0) as is_sandbox FROM tenants WHERE id = ?').get(tenantId) as any;
         if (!tenant) {
           res.status(404).json({ error: 'Clínica não encontrada no Zemda' });
+          return;
+        }
+        if (tenant.is_sandbox === 1) {
+          res.status(403).json({ error: 'Ambientes do Laboratório Sandbox não podem ser vinculados a visitas comerciais.' });
           return;
         }
       }
@@ -854,7 +858,8 @@ export class AdminVisitsController {
       let sql = `
         SELECT id, name, corporate_name, trade_name, cnpj_cpf, email, city, state, status, created_at
         FROM tenants
-        WHERE LOWER(name) LIKE ? OR LOWER(COALESCE(trade_name, '')) LIKE ? OR LOWER(COALESCE(corporate_name, '')) LIKE ? OR LOWER(email) LIKE ?
+        WHERE COALESCE(is_sandbox, 0) = 0
+          AND (LOWER(name) LIKE ? OR LOWER(COALESCE(trade_name, '')) LIKE ? OR LOWER(COALESCE(corporate_name, '')) LIKE ? OR LOWER(email) LIKE ?
       `;
       const params = [pattern, pattern, pattern, pattern];
 
@@ -863,7 +868,7 @@ export class AdminVisitsController {
         params.push(cnpjPattern);
       }
 
-      sql += ' ORDER BY name ASC LIMIT 10';
+      sql += ') ORDER BY name ASC LIMIT 10';
 
       const results = db.prepare(sql).all(...params);
       res.json(results);

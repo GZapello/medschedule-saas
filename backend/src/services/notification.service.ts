@@ -1,5 +1,6 @@
 import { canOperate } from './billing.service';
 import { db } from '../config/database';
+import { SandboxService } from './sandbox.service';
 import { v4 as uuidv4 } from 'uuid';
 import { ErrorMonitor } from './error-monitor.service';
 
@@ -74,6 +75,11 @@ export class NotificationService {
       `).get(appointmentId) as any;
 
       if (!appt || !canOperate(appt.tenant_id) || ['cancelled', 'completed', 'no_show'].includes(appt.status)) {
+        return;
+      }
+
+      if (SandboxService.isSandboxTenant(appt.tenant_id)) {
+        console.log('[SANDBOX MOCK] Agendamento de lembrete externo suprimido para ambiente sandbox:', appt.tenant_id);
         return;
       }
 
@@ -183,6 +189,10 @@ export class NotificationService {
 
       for (const item of pendingList) {
         if (!canOperate(item.tenant_id)) continue;
+        if (SandboxService.isSandboxTenant(item.tenant_id)) {
+          db.prepare("UPDATE notifications SET status = 'cancelled', delivery_status = 'sandbox_suppressed', last_error = 'sandbox_suppressed' WHERE id = ?").run(item.id);
+          continue;
+        }
         try {
           if (!db.prepare("SELECT 1 FROM notifications n JOIN tenants t ON t.id = n.tenant_id WHERE n.id = ? AND n.status = 'pending' AND t.status = 'active'").get(item.id)) continue;
           // Marca temporariamente como processando

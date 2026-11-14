@@ -10,7 +10,7 @@ export function tenantMiddleware(req: Request, res: Response, next: NextFunction
     } else {
       // Fallback automático do SuperAdmin para a clínica ativa principal do sistema
       try {
-        const defaultTenant = db.prepare("SELECT id FROM tenants WHERE status = 'active' ORDER BY created_at ASC LIMIT 1").get() as { id: string } | undefined;
+        const defaultTenant = db.prepare("SELECT id FROM tenants WHERE status = 'active' AND COALESCE(is_sandbox, 0) = 0 ORDER BY created_at ASC LIMIT 1").get() as { id: string } | undefined;
         if (defaultTenant) {
           req.tenantId = defaultTenant.id;
         }

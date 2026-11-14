@@ -23,6 +23,7 @@ import { migrateSuperAdminVisits } from './superadmin-visits.migration';
 import { migrateProfessionalActivities } from './professional-activities.migration';
 import { migrateIntegratedImprovements } from './integrated-improvements-migration';
 import { migrateStudioImprovements } from './studio-improvements.migration';
+import { migrateSandbox } from './sandbox.migration';
 import { dbPath } from './db-path';
 import { backfillMissingDefaultSchedules } from '../utils/schedule-defaults';
 
@@ -4081,6 +4082,7 @@ function repairLegacyPhotoUrls(rawDb: any): void {
   try { migrateSuperAdminVisits(rawDb); } catch (e) { console.error('[Database] Erro ao migrar superadmin visits:', e); }
   try { migrateIntegratedImprovements(rawDb); } catch (e) { console.error('[Database] Erro ao migrar melhorias integradas:', e); }
   try { migrateStudioImprovements(rawDb); } catch (e) { console.error('[Database] Erro ao migrar melhorias studio:', e); }
+  try { migrateSandbox(rawDb); } catch (e) { console.error('[Database] Erro ao migrar sandbox:', e); }
 }
 
 // Inicialização automática e idempotente da base de dados e migrações no carregamento do módulo

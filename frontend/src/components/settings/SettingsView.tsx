@@ -54,7 +54,9 @@ import {
       Copy,
   Check,
   X,
-  RefreshCw
+  RefreshCw,
+  FlaskConical,
+  RotateCcw
 } from 'lucide-react';
 import { Professional, Profession } from '../../types';
 
@@ -84,8 +86,26 @@ export interface SettingsViewProps {
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, initialTab, onNavigateView }) => {
-  const { currentUser, currentTenant, isClinicAdmin, isReceptionist, isProfessional, refreshTenant, reloadSession, hasPermission } = useAuth();
+  const { currentUser, currentTenant, isClinicAdmin, isReceptionist, isProfessional, isSandboxSession, exitSandboxSession, refreshTenant, reloadSession, hasPermission } = useAuth();
   const { showToast } = useToast();
+  const [showSandboxResetModal, setShowSandboxResetModal] = useState(false);
+  const [isResettingSandbox, setIsResettingSandbox] = useState(false);
+
+  const handleConfirmSandboxReset = async () => {
+    try {
+      setIsResettingSandbox(true);
+      await ApiClient.post('/v1/sandbox/reset', {});
+      setShowSandboxResetModal(false);
+      await refreshTenant();
+      await reloadSession();
+      window.dispatchEvent(new CustomEvent('zemda-sandbox-reset'));
+      showToast('Dados de teste restaurados com sucesso! A conta do Gestor Sandbox foi preservada.', 'success');
+    } catch (err: any) {
+      showToast(err?.message || 'Erro ao restaurar dados de teste do ambiente sandbox', 'error');
+    } finally {
+      setIsResettingSandbox(false);
+    }
+  };
 
   const [activeSection, setActiveSection] = useState<string>(() => {
     if (initialSection) {
@@ -915,8 +935,26 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, init
   if (canAccessGoogleCalendar) {
     cards.push(googleCard);
   }
+  const sandboxLabCard = {
+    id: 'sandbox_lab',
+    title: 'Laboratório de Testes',
+    desc: 'Gerencie e restaure os dados simulados do seu Ambiente de Teste Sandbox preservando a conta do Gestor.',
+    icon: FlaskConical,
+    iconBg: 'bg-purple-50',
+    iconColor: 'text-purple-700',
+    tags: ['Sandbox', 'Reset Seguro', 'Dados de Teste']
+  };
+  if (isSandboxSession && isClinicAdmin) {
+    cards.push(sandboxLabCard);
+  }
   const getSectionTitle = (sec: string) => {
-    const found = [...adminCards, ...staffCards, importCard, ...(canAccessGoogleCalendar ? [googleCard] : [])].find(c => c.id === sec);
+    const found = [
+      ...adminCards,
+      ...staffCards,
+      importCard,
+      ...(canAccessGoogleCalendar ? [googleCard] : []),
+      ...(isSandboxSession && isClinicAdmin ? [sandboxLabCard] : [])
+    ].find(c => c.id === sec);
     return found ? found.title : 'Configurações';
   };
 
@@ -1059,6 +1097,114 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, init
           onNavigate={onNavigateView}
           initialScannerMode={initialTab === 'medical-record' ? 'document' : null}
         />
+      )}
+
+      {/* SEÇÃO: LABORATÓRIO DE TESTES (SANDBOX GESTOR) */}
+      {activeSection === 'sandbox_lab' && isSandboxSession && isClinicAdmin && (
+        <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-xs space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-100">
+            <div className="flex items-start gap-3.5">
+              <div className="w-11 h-11 rounded-2xl bg-purple-50 text-purple-700 flex items-center justify-center shrink-0">
+                <FlaskConical className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-slate-900">Laboratório de Testes</h3>
+                <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
+                  Ambiente isolado e reutilizável para validação completa como Gestor de Teste. Mensageria real, e-mails e cobranças comerciais permanecem bloqueados.
+                </p>
+              </div>
+            </div>
+            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-800 border border-purple-200 self-start sm:self-center">
+              Perfil: {currentTenant?.establishment_profile === 'studio' ? 'Studio / Academia' : currentTenant?.establishment_profile === 'mixed' ? 'Misto' : 'Clínica / Consultório'}
+            </span>
+          </div>
+
+          <div className="rounded-2xl border border-rose-200 bg-rose-50/60 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <h4 className="text-sm font-bold text-rose-950 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>Restauração Segura do Ambiente de Teste</span>
+              </h4>
+              <p className="text-xs text-rose-900/80 leading-relaxed max-w-2xl">
+                Apaga somente os dados simulados criados durante os seus testes (pacientes/alunos fictícios, agendamentos, atendimentos, prontuários, serviços, turmas, pacotes, estoque, cobranças simuladas e arquivos temporários) e restaura os dados iniciais sem excluir esta conta de Gestor Sandbox.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowSandboxResetModal(true)}
+              disabled={isResettingSandbox}
+              className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer flex items-center gap-2 shrink-0 disabled:opacity-50"
+            >
+              <RotateCcw className="w-4 h-4" />
+              <span>Restaurar Dados de Teste</span>
+            </button>
+          </div>
+
+          <div className="flex justify-end pt-2">
+            <button
+              type="button"
+              onClick={() => void exitSandboxSession()}
+              className="px-4 py-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold transition-all cursor-pointer"
+            >
+              Sair do Laboratório e Voltar ao SuperAdmin
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showSandboxResetModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900">Restaurar Dados de Teste?</h3>
+                  <p className="text-xs text-slate-500">Ação destrutiva limitada ao Ambiente Sandbox</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => !isResettingSandbox && setShowSandboxResetModal(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-2 text-xs text-slate-600 leading-relaxed bg-slate-50 border border-slate-200 rounded-2xl p-4">
+              <p>
+                Todos os registros fictícios criados durante os testes neste ambiente serão removidos e os dados iniciais simulados serão recarregados.
+              </p>
+              <p className="font-bold text-emerald-700">
+                ✓ A conta do Gestor Sandbox será preservada para que você continue testando imediatamente. Nenhum cliente real será afetado.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowSandboxResetModal(false)}
+                disabled={isResettingSandbox}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleConfirmSandboxReset()}
+                disabled={isResettingSandbox}
+                className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {isResettingSandbox ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
+                <span>{isResettingSandbox ? 'Restaurando...' : 'Confirmar Restauração'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {activeSection === 'export_clinical' && (
