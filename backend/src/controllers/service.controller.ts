@@ -9,6 +9,8 @@ import { PackageService } from '../services/package.service';
 import {
   getTenantEstablishmentProfile,
   normalizeRecurrenceConfigForSave,
+  normalizeServiceBillingForSave,
+  parseServiceBillingConfig,
   parseServiceRecurrenceConfig,
   resolveServiceDomain,
   ServiceDomain
@@ -270,6 +272,12 @@ export class ServiceController {
           s.default_plan_duration,
           s.custom_recurrence_intervals_json,
           s.default_recurrence_interval_json,
+          s.billing_mode,
+          s.periodic_price,
+          s.billing_cycle_months,
+          s.default_package_id,
+          s.default_billing_due_day,
+          pkg.name as default_package_name,
           s.service_domain,
           s.modality_category,
           s.min_lead_time_hours, s.max_advance_days, s.cancellation_policy,
@@ -282,6 +290,7 @@ export class ServiceController {
         LEFT JOIN professionals p ON p.id = s.professional_id
         LEFT JOIN professions prof ON prof.id = p.profession_id
         LEFT JOIN specialties spec ON spec.id = s.specialty_id
+        LEFT JOIN service_packages pkg ON pkg.id = s.default_package_id AND pkg.tenant_id = s.tenant_id
         LEFT JOIN professional_services ps ON ps.service_id = s.id AND ps.professional_id = COALESCE(?, s.professional_id)
         WHERE s.tenant_id = ?
       `;
@@ -318,6 +327,12 @@ export class ServiceController {
             service_kind: 'individual',
             default_capacity: null,
             service_domain: 'clinical',
+            billing_mode: 'per_session',
+            periodic_price: null,
+            billing_cycle_months: null,
+            default_package_id: null,
+            default_package_name: null,
+            default_billing_due_day: null,
             allowed_recurrence_frequencies: undefined,
             default_recurrence_frequency: null,
             custom_recurrence_intervals: undefined,
@@ -331,6 +346,9 @@ export class ServiceController {
         }
         const schedules = schedulesByService.get(srv.id) || [];
         const recConfig = parseServiceRecurrenceConfig(srv);
+        const billConfig = resolvedDomain === 'studio'
+          ? parseServiceBillingConfig(srv)
+          : { billingMode: 'per_session' as const, periodicPrice: null, billingCycleMonths: null, defaultPackageId: null, defaultBillingDueDay: null };
         const linkedProfs = linkedByService.get(srv.id) || [];
         const linkedProfIds = linkedProfs.length > 0
           ? linkedProfs.map(lp => lp.id)
@@ -341,6 +359,12 @@ export class ServiceController {
         return {
           ...srv,
           service_domain: resolvedDomain,
+          billing_mode: billConfig.billingMode,
+          periodic_price: billConfig.periodicPrice,
+          billing_cycle_months: billConfig.billingCycleMonths,
+          default_package_id: billConfig.defaultPackageId,
+          default_package_name: billConfig.billingMode === 'package' ? (srv.default_package_name || null) : null,
+          default_billing_due_day: billConfig.defaultBillingDueDay,
           allow_recurrence: recConfig.allowRecurrence ? 1 : 0,
           allowed_recurrence_frequencies: recConfig.allowedFrequencies,
           default_recurrence_frequency: recConfig.defaultFrequency,
@@ -382,7 +406,11 @@ export class ServiceController {
         allowedPlanDurations, allowed_plan_durations,
         defaultPlanDuration, default_plan_duration,
         customRecurrenceIntervals, custom_recurrence_intervals,
-        defaultRecurrenceInterval, default_recurrence_interval
+        defaultRecurrenceInterval, default_recurrence_interval,
+        billingMode, billing_mode,
+        periodicPrice, periodic_price,
+        defaultPackageId, default_package_id,
+        defaultBillingDueDay, default_billing_due_day
       } = req.body;
 
       const establishmentProfile = getTenantEstablishmentProfile(tenantId);
@@ -400,6 +428,10 @@ export class ServiceController {
       const rawDefaultDuration = defaultPlanDuration !== undefined ? defaultPlanDuration : default_plan_duration;
       const rawCustomIntervals = customRecurrenceIntervals !== undefined ? customRecurrenceIntervals : custom_recurrence_intervals;
       const rawDefaultInterval = defaultRecurrenceInterval !== undefined ? defaultRecurrenceInterval : default_recurrence_interval;
+      const rawBillingMode = billingMode !== undefined ? billingMode : billing_mode;
+      const rawPeriodicPrice = periodicPrice !== undefined ? periodicPrice : periodic_price;
+      const rawDefaultPkgId = defaultPackageId !== undefined ? defaultPackageId : default_package_id;
+      const rawDefaultDueDay = defaultBillingDueDay !== undefined ? defaultBillingDueDay : default_billing_due_day;
       const requestedLinkedIds = parseLinkedInstructorIds(req.body);
 
       if (!isStudioCompat) {
@@ -408,6 +440,9 @@ export class ServiceController {
           (rawCapacity !== undefined && rawCapacity !== null && rawCapacity !== '') ||
           rawClassSchedules.length > 0 ||
           String(rawRequestedDomain || '').trim().toLowerCase() === 'studio' ||
+          (rawBillingMode !== undefined && rawBillingMode !== null && String(rawBillingMode).trim().toLowerCase() !== '' && String(rawBillingMode).trim().toLowerCase() !== 'per_session') ||
+          (rawPeriodicPrice !== undefined && rawPeriodicPrice !== null && rawPeriodicPrice !== '') ||
+          (rawDefaultPkgId !== undefined && rawDefaultPkgId !== null && String(rawDefaultPkgId).trim() !== '') ||
           (Array.isArray(rawAllowedFreqs) && rawAllowedFreqs.length > 0) ||
           (rawDefaultFreq !== undefined && rawDefaultFreq !== null && String(rawDefaultFreq).trim() !== '') ||
           (Array.isArray(rawCustomIntervals) && rawCustomIntervals.length > 0) ||
@@ -415,7 +450,7 @@ export class ServiceController {
           (requestedLinkedIds && requestedLinkedIds.some(pid => pid !== professionalId))
         ) {
           res.status(400).json({
-            error: 'Aulas coletivas, múltiplos instrutores, capacidade de turma e recorrência avançada de Studio não estão disponíveis para Clínicas / Consultórios tradicionais.'
+            error: 'Aulas coletivas, cobrança periódica/por pacote, múltiplos instrutores, capacidade de turma e recorrência avançada de Studio não estão disponíveis para Clínicas / Consultórios tradicionais.'
           });
           return;
         }
@@ -510,6 +545,19 @@ export class ServiceController {
         return;
       }
 
+      const billNorm = normalizeServiceBillingForSave({
+        isStudioService: isStudioCompat && resolvedDomain === 'studio',
+        billingMode: rawBillingMode,
+        periodicPrice: rawPeriodicPrice,
+        defaultPackageId: rawDefaultPkgId,
+        defaultBillingDueDay: rawDefaultDueDay,
+        tenantId
+      });
+      if (billNorm.error) {
+        res.status(400).json({ error: billNorm.error });
+        return;
+      }
+
       const resolvedMinLeadTimeHours = (minLeadTimeHours !== undefined && minLeadTimeHours !== null && minLeadTimeHours !== '' && !Number.isNaN(Number(minLeadTimeHours)))
         ? Math.max(0, Number(minLeadTimeHours))
         : 2;
@@ -530,9 +578,10 @@ export class ServiceController {
             service_kind, default_capacity, allow_recurrence, modality_category,
             service_domain, allowed_recurrence_frequencies_json, default_recurrence_frequency,
             allowed_plan_durations_json, default_plan_duration,
-            custom_recurrence_intervals_json, default_recurrence_interval_json
+            custom_recurrence_intervals_json, default_recurrence_interval_json,
+            billing_mode, periodic_price, billing_cycle_months, default_package_id, default_billing_due_day
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
 
         insertStmt.run(
@@ -563,7 +612,12 @@ export class ServiceController {
           recNorm.allowedPlanDurationsJson,
           recNorm.defaultPlanDuration,
           recNorm.customIntervalsJson,
-          recNorm.defaultIntervalJson
+          recNorm.defaultIntervalJson,
+          billNorm.billingMode,
+          billNorm.periodicPrice,
+          billNorm.billingCycleMonths,
+          billNorm.defaultPackageId,
+          billNorm.defaultBillingDueDay
         );
 
         const normalizedCustomPrice = price !== undefined && price !== null && price !== '' ? Number(price) : null;
@@ -631,6 +685,11 @@ export class ServiceController {
         service_kind: resolvedKind,
         default_capacity: resolvedCapacity,
         service_domain: resolvedDomain,
+        billing_mode: billNorm.billingMode,
+        periodic_price: billNorm.periodicPrice,
+        billing_cycle_months: billNorm.billingCycleMonths,
+        default_package_id: billNorm.defaultPackageId,
+        default_billing_due_day: billNorm.defaultBillingDueDay,
         allow_recurrence: recNorm.allowRecurrenceInt,
         allowed_recurrence_frequencies: parsedCreatedRec ? parsedCreatedRec.allowedFrequencies : undefined,
         default_recurrence_frequency: parsedCreatedRec ? parsedCreatedRec.defaultFrequency : null,
@@ -666,7 +725,8 @@ export class ServiceController {
       const existing = db.prepare(`
         SELECT id, name, professional_id, clinical_module, service_kind, default_capacity, allow_recurrence,
                modality_category, service_domain, allowed_recurrence_frequencies_json, default_recurrence_frequency,
-               custom_recurrence_intervals_json, default_recurrence_interval_json
+               custom_recurrence_intervals_json, default_recurrence_interval_json,
+               billing_mode, periodic_price, billing_cycle_months, default_package_id, default_billing_due_day
         FROM services WHERE id = ? AND tenant_id = ?
       `).get(id, tenantId) as any;
       if (!existing) {
@@ -692,7 +752,11 @@ export class ServiceController {
         allowedPlanDurations, allowed_plan_durations,
         defaultPlanDuration, default_plan_duration,
         customRecurrenceIntervals, custom_recurrence_intervals,
-        defaultRecurrenceInterval, default_recurrence_interval
+        defaultRecurrenceInterval, default_recurrence_interval,
+        billingMode, billing_mode,
+        periodicPrice, periodic_price,
+        defaultPackageId, default_package_id,
+        defaultBillingDueDay, default_billing_due_day
       } = req.body;
 
       const rawKind = serviceKind !== undefined ? serviceKind : service_kind;
@@ -704,6 +768,10 @@ export class ServiceController {
       const rawDefaultDuration = defaultPlanDuration !== undefined ? defaultPlanDuration : default_plan_duration;
       const rawCustomIntervals = customRecurrenceIntervals !== undefined ? customRecurrenceIntervals : custom_recurrence_intervals;
       const rawDefaultInterval = defaultRecurrenceInterval !== undefined ? defaultRecurrenceInterval : default_recurrence_interval;
+      const rawBillingMode = billingMode !== undefined ? billingMode : billing_mode;
+      const rawPeriodicPrice = periodicPrice !== undefined ? periodicPrice : periodic_price;
+      const rawDefaultPkgId = defaultPackageId !== undefined ? defaultPackageId : default_package_id;
+      const rawDefaultDueDay = defaultBillingDueDay !== undefined ? defaultBillingDueDay : default_billing_due_day;
       const requestedLinkedIds = parseLinkedInstructorIds(req.body);
       const effectiveTargetProfForCheck = professionalId || existing.professional_id;
 
@@ -712,6 +780,9 @@ export class ServiceController {
           rawKind === 'group' ||
           (rawCapacity !== undefined && rawCapacity !== null && rawCapacity !== '') ||
           String(rawRequestedDomain || '').trim().toLowerCase() === 'studio' ||
+          (rawBillingMode !== undefined && rawBillingMode !== null && String(rawBillingMode).trim().toLowerCase() !== '' && String(rawBillingMode).trim().toLowerCase() !== 'per_session') ||
+          (rawPeriodicPrice !== undefined && rawPeriodicPrice !== null && rawPeriodicPrice !== '') ||
+          (rawDefaultPkgId !== undefined && rawDefaultPkgId !== null && String(rawDefaultPkgId).trim() !== '') ||
           (Array.isArray(rawAllowedFreqs) && rawAllowedFreqs.length > 0) ||
           (rawDefaultFreq !== undefined && rawDefaultFreq !== null && String(rawDefaultFreq).trim() !== '') ||
           (Array.isArray(rawCustomIntervals) && rawCustomIntervals.length > 0) ||
@@ -719,7 +790,7 @@ export class ServiceController {
           (requestedLinkedIds && requestedLinkedIds.some(pid => pid !== effectiveTargetProfForCheck))
         ) {
           res.status(400).json({
-            error: 'Aulas coletivas, múltiplos instrutores, capacidade de turma e recorrência avançada de Studio não estão disponíveis para Clínicas / Consultórios tradicionais.'
+            error: 'Aulas coletivas, cobrança periódica/por pacote, múltiplos instrutores, capacidade de turma e recorrência avançada de Studio não estão disponíveis para Clínicas / Consultórios tradicionais.'
           });
           return;
         }
@@ -841,6 +912,41 @@ export class ServiceController {
         nextDefaultIntervalJson = recNorm.defaultIntervalJson;
       }
 
+      const isNextStudioService = isStudioCompat && nextDomain === 'studio';
+      const hasBillingFieldUpdate =
+        rawBillingMode !== undefined ||
+        rawPeriodicPrice !== undefined ||
+        rawDefaultPkgId !== undefined ||
+        rawDefaultDueDay !== undefined ||
+        !isNextStudioService;
+
+      let nextBillingMode: string | null = existing.billing_mode || null;
+      let nextPeriodicPrice: number | null = existing.periodic_price ?? null;
+      let nextBillingCycleMonths: number | null = existing.billing_cycle_months ?? null;
+      let nextDefaultPkgId: string | null = existing.default_package_id || null;
+      let nextDefaultDueDay: number | null = existing.default_billing_due_day ?? null;
+
+      if (hasBillingFieldUpdate) {
+        const billNorm = normalizeServiceBillingForSave({
+          isStudioService: isNextStudioService,
+          billingMode: rawBillingMode !== undefined ? rawBillingMode : (isNextStudioService ? (existing.billing_mode || 'per_session') : 'per_session'),
+          periodicPrice: rawPeriodicPrice !== undefined ? rawPeriodicPrice : existing.periodic_price,
+          defaultPackageId: rawDefaultPkgId !== undefined ? rawDefaultPkgId : existing.default_package_id,
+          defaultBillingDueDay: rawDefaultDueDay !== undefined ? rawDefaultDueDay : existing.default_billing_due_day,
+          tenantId,
+          serviceId: String(id)
+        });
+        if (billNorm.error) {
+          res.status(400).json({ error: billNorm.error });
+          return;
+        }
+        nextBillingMode = billNorm.billingMode;
+        nextPeriodicPrice = billNorm.periodicPrice;
+        nextBillingCycleMonths = billNorm.billingCycleMonths;
+        nextDefaultPkgId = billNorm.defaultPackageId;
+        nextDefaultDueDay = billNorm.defaultBillingDueDay;
+      }
+
       const updateStmt = db.prepare(`
         UPDATE services SET
           professional_id = CASE WHEN ? = 1 THEN ? ELSE professional_id END,
@@ -870,6 +976,11 @@ export class ServiceController {
           default_plan_duration = ?,
           custom_recurrence_intervals_json = ?,
           default_recurrence_interval_json = ?,
+          billing_mode = ?,
+          periodic_price = ?,
+          billing_cycle_months = ?,
+          default_package_id = ?,
+          default_billing_due_day = ?,
           updated_at = datetime('now')
         WHERE id = ? AND tenant_id = ?
       `);
@@ -907,6 +1018,11 @@ export class ServiceController {
           nextDefaultDuration,
           nextCustomIntervalsJson,
           nextDefaultIntervalJson,
+          nextBillingMode,
+          nextPeriodicPrice,
+          nextBillingCycleMonths,
+          nextDefaultPkgId,
+          nextDefaultDueDay,
           id,
           tenantId
         );
@@ -968,6 +1084,11 @@ export class ServiceController {
               serviceKind: updatedService.service_kind,
               clinicalModule: updatedService.clinical_module
             }),
+            billing_mode: isStudioCompat && updatedService.service_domain === 'studio' ? (updatedService.billing_mode || 'per_session') : 'per_session',
+            periodic_price: isStudioCompat && updatedService.service_domain === 'studio' ? (updatedService.periodic_price ?? null) : null,
+            billing_cycle_months: isStudioCompat && updatedService.service_domain === 'studio' ? (updatedService.billing_cycle_months ?? null) : null,
+            default_package_id: isStudioCompat && updatedService.service_domain === 'studio' ? (updatedService.default_package_id || null) : null,
+            default_billing_due_day: isStudioCompat && updatedService.service_domain === 'studio' ? (updatedService.default_billing_due_day ?? null) : null,
             allow_recurrence: parsedUpdRec ? (parsedUpdRec.allowRecurrence ? 1 : 0) : (updatedService.allow_recurrence ?? 1),
             allowed_recurrence_frequencies: parsedUpdRec ? parsedUpdRec.allowedFrequencies : undefined,
             default_recurrence_frequency: parsedUpdRec ? parsedUpdRec.defaultFrequency : null,

@@ -280,8 +280,26 @@ export class ReceiptController {
       // 0. Idempotência absoluta: se já foi emitido recibo para este atendimento ou pagamento, retorna o existente sem duplicar numeração
       let resolvedPaymentId = paymentId || null;
       if (!resolvedPaymentId && appointmentId) {
+        const apptCoverage = db.prepare(`
+          SELECT id, is_package_covered, billing_coverage_type, recurring_plan_id, package_contract_id
+          FROM appointments WHERE id = ? AND tenant_id = ?
+        `).get(appointmentId, tenantId) as any;
         const apptPay = db.prepare("SELECT id FROM payments WHERE appointment_id = ? AND tenant_id = ? AND status NOT IN ('cancelled', 'refunded') ORDER BY created_at ASC LIMIT 1").get(appointmentId, tenantId) as any;
-        if (apptPay?.id) resolvedPaymentId = apptPay.id;
+        if (apptPay?.id) {
+          resolvedPaymentId = apptPay.id;
+        } else if (
+          apptCoverage &&
+          (Number(apptCoverage.is_package_covered || 0) === 1 ||
+           apptCoverage.billing_coverage_type === 'package' ||
+           apptCoverage.billing_coverage_type === 'periodic_plan' ||
+           Boolean(apptCoverage.recurring_plan_id))
+        ) {
+          res.status(409).json({
+            code: 'COVERED_SESSION_NO_SEPARATE_RECEIPT',
+            error: 'Esta aula está coberta por contrato periódico ou pacote de serviços. O recibo deve ser emitido a partir da cobrança do ciclo ou pacote, sem duplicar recibos por aula.'
+          });
+          return;
+        }
       }
 
       if (appointmentId || resolvedPaymentId) {

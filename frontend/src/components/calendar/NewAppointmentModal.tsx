@@ -4,7 +4,7 @@ import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
 import { Professional, Service, Patient, AvailableSlot } from '../../types';
-import { X, Calendar, Clock, User, Plus, CheckCircle2, Sparkles, Pencil, Users, Repeat, Package } from 'lucide-react';
+import { X, Calendar, Clock, User, Plus, CheckCircle2, Sparkles, Pencil, Users, Repeat, Package, CreditCard, Info } from 'lucide-react';
 import { isMeetingUrl } from '../../utils/teleconsultation';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
 import { QuickActionDropdown } from '../common/QuickActionDropdown';
@@ -15,9 +15,13 @@ import { NewRoomModal } from '../services/NewRoomModal';
 import {
   ALL_PLAN_DURATIONS,
   buildActiveStudioSessionFromAppointment,
+  formatCurrencyBRL,
   formatCustomIntervalLabel,
+  getCycleMonthsForBillingMode,
+  isPeriodicBillingMode,
   MAX_RECURRENCE_OCCURRENCES,
   parseServiceRecurrenceConfig,
+  PeriodicBillingFrequency,
   PLAN_DURATION_LABELS,
   PlanDurationCode,
   RECURRENCE_FREQUENCY_LABELS,
@@ -27,6 +31,7 @@ import {
   RecurrenceIntervalUnit,
   resolvePlanDurationEndDate,
   resolveServiceDomain,
+  SERVICE_BILLING_MODE_LABELS,
   shouldRedirectAppointmentToZemdaPersonal,
   supportsStudioFeatures,
   writeActiveStudioSession
@@ -129,6 +134,17 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
   const [roomId, setRoomId] = useState<string>('');
   const [patientPackages, setPatientPackages] = useState<any[]>([]);
   const [packageContractId, setPackageContractId] = useState<string>('');
+  const [activePeriodicPlans, setActivePeriodicPlans] = useState<any[]>([]);
+  const [billingChoice, setBillingChoice] = useState<'existing_plan' | 'enroll_periodic' | 'package' | 'drop_in'>('drop_in');
+  const [selectedBillingPlanId, setSelectedBillingPlanId] = useState<string>('');
+  const [enrollFrequency, setEnrollFrequency] = useState<PeriodicBillingFrequency>('monthly');
+  const [enrollAmount, setEnrollAmount] = useState<string>('');
+  const [enrollDueDay, setEnrollDueDay] = useState<number>(10);
+  const [enrollFirstDueDate, setEnrollFirstDueDate] = useState<string>('');
+  const [enrollPaymentMethod, setEnrollPaymentMethod] = useState<string>('pix');
+  const [enrollGenerateAllCycles, setEnrollGenerateAllCycles] = useState<boolean>(true);
+  const [enrollEndDate, setEnrollEndDate] = useState<string>('');
+  const [enrollPaidNow, setEnrollPaidNow] = useState<boolean>(false);
   const submissionPending = useRef(false);
   const [errorTitle, setErrorTitle] = useState('Não foi possível concluir');
   const slotRequest = useRef(0);
@@ -508,6 +524,105 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
   }, [serviceId, serviceRecurrenceConfig]);
 
   useEffect(() => {
+    if (!isOpen || !isStudioTarget || !patientId || !serviceId) {
+      setActivePeriodicPlans([]);
+      setSelectedBillingPlanId('');
+      return;
+    }
+    let cancelled = false;
+    const targetDate = date || todayBrazilStr;
+    ApiClient.get<{ activePeriodicPlans?: any[] }>(
+      `/v1/financial/student-coverage?patientId=${encodeURIComponent(patientId)}&serviceId=${encodeURIComponent(serviceId)}&date=${encodeURIComponent(targetDate)}`
+    )
+      .then(res => {
+        if (!cancelled) {
+          setActivePeriodicPlans(Array.isArray(res?.activePeriodicPlans) ? res.activePeriodicPlans : []);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setActivePeriodicPlans([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, isStudioTarget, patientId, serviceId, date, todayBrazilStr]);
+
+  useEffect(() => {
+    if (!selectedServiceObj) {
+      setBillingChoice('drop_in');
+      setSelectedBillingPlanId('');
+      return;
+    }
+    if (!isStudioTarget) {
+      setBillingChoice('drop_in');
+      setSelectedBillingPlanId('');
+      return;
+    }
+
+    const svcBillingMode = selectedServiceObj.billing_mode || 'per_session';
+    if (isPeriodicBillingMode(svcBillingMode)) {
+      setEnrollFrequency(svcBillingMode);
+      const basePeriodic = selectedServiceObj.periodic_price ?? selectedServiceObj.price ?? 0;
+      setEnrollAmount(Number(basePeriodic).toFixed(2));
+    } else {
+      setEnrollFrequency('monthly');
+      setEnrollAmount(Number(selectedServiceObj.price || 0).toFixed(2));
+    }
+    setEnrollDueDay(
+      selectedServiceObj.default_billing_due_day &&
+        selectedServiceObj.default_billing_due_day >= 1 &&
+        selectedServiceObj.default_billing_due_day <= 28
+        ? Number(selectedServiceObj.default_billing_due_day)
+        : 10
+    );
+    setEnrollFirstDueDate('');
+    setEnrollEndDate('');
+    setEnrollGenerateAllCycles(true);
+    setEnrollPaidNow(false);
+
+    if (activePeriodicPlans.length > 0) {
+      const preferredPlan = activePeriodicPlans.find(p => p.service_id === serviceId) || activePeriodicPlans[0];
+      setSelectedBillingPlanId(preferredPlan.id);
+      setBillingChoice('existing_plan');
+      if (packageContractId) setPackageContractId('');
+    } else if (svcBillingMode === 'package' && compatiblePackages.length > 0) {
+      const preferredPkg =
+        (selectedServiceObj.default_package_id && compatiblePackages.find(cp => cp.package_id === selectedServiceObj.default_package_id)) ||
+        compatiblePackages[0];
+      setPackageContractId(preferredPkg.id);
+      setSelectedBillingPlanId('');
+      setBillingChoice('package');
+    } else if (compatiblePackages.length > 0 && svcBillingMode !== 'per_session') {
+      setPackageContractId(compatiblePackages[0].id);
+      setSelectedBillingPlanId('');
+      setBillingChoice('package');
+    } else if (isPeriodicBillingMode(svcBillingMode) && !isRetroactive && patientId) {
+      setSelectedBillingPlanId('');
+      setBillingChoice('enroll_periodic');
+    } else {
+      setSelectedBillingPlanId('');
+      setBillingChoice('drop_in');
+    }
+  }, [serviceId, isStudioTarget, selectedServiceObj, activePeriodicPlans, compatiblePackages, isRetroactive, patientId]);
+
+  const selectedPeriodicPlanObj = useMemo(
+    () => activePeriodicPlans.find(p => p.id === selectedBillingPlanId) || null,
+    [activePeriodicPlans, selectedBillingPlanId]
+  );
+
+  const isCoveredByPackage = useMemo(
+    () => Boolean(packageContractId && compatiblePackages.some(cp => cp.id === packageContractId)),
+    [packageContractId, compatiblePackages]
+  );
+
+  const isCoveredByPeriodicPlan = useMemo(
+    () => Boolean(isStudioTarget && ((billingChoice === 'existing_plan' && selectedPeriodicPlanObj) || billingChoice === 'enroll_periodic')),
+    [isStudioTarget, billingChoice, selectedPeriodicPlanObj]
+  );
+
+  const isSessionFinanciallyCovered = isCoveredByPackage || isCoveredByPeriodicPlan;
+
+  useEffect(() => {
     const slotSchedId = (selectedSlot as any)?.classScheduleId;
     if (!isStudioTarget || !slotSchedId) return;
     setSelectedScheduleIds(prev => (prev.length === 0 ? [slotSchedId] : prev));
@@ -729,11 +844,41 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
       return;
     }
 
-    const isCoveredByPackage = Boolean(packageContractId && compatiblePackages.some(cp => cp.id === packageContractId));
-    const normalizedPrice = isCoveredByPackage ? 0 : parseAppointmentPrice(appointmentPrice);
+    const normalizedPrice = isSessionFinanciallyCovered ? 0 : parseAppointmentPrice(appointmentPrice);
     if (normalizedPrice === null) {
       showToast('Informe um valor da consulta válido, com até duas casas decimais e maior ou igual a zero.', 'error');
       return;
+    }
+
+    let enrollPayload: any = undefined;
+    if (isStudioTarget && billingChoice === 'enroll_periodic') {
+      const parsedPlanAmount = parseAppointmentPrice(enrollAmount);
+      if (parsedPlanAmount === null || parsedPlanAmount <= 0) {
+        showToast('Informe um valor por período válido e maior que zero para a contratação periódica.', 'error');
+        return;
+      }
+      if (!Number.isInteger(enrollDueDay) || enrollDueDay < 1 || enrollDueDay > 28) {
+        showToast('Dia de vencimento deve estar entre 1 e 28.', 'error');
+        return;
+      }
+      const computedEndForPlan =
+        isRecurring && isStudioTarget && recurrenceDurationCode !== 'count' && recurrenceDurationCode !== 'custom_date'
+          ? resolvePlanDurationEndDate(date, recurrenceDurationCode)
+          : isRecurring && isStudioTarget && recurrenceDurationCode === 'custom_date' && recurrenceEndDate
+            ? recurrenceEndDate
+            : (enrollEndDate || null);
+      enrollPayload = {
+        billingFrequency: enrollFrequency,
+        amount: parsedPlanAmount,
+        dueDay: enrollDueDay,
+        startDate: date || todayBrazilStr,
+        endDate: computedEndForPlan,
+        firstDueDate: enrollFirstDueDate || null,
+        paymentMethod: enrollPaymentMethod || 'pix',
+        generateInitialCycle: true,
+        generateAllContractCycles: Boolean(enrollGenerateAllCycles && computedEndForPlan),
+        initialPaymentStatus: enrollPaidNow ? 'paid' : 'pending'
+      };
     }
 
     const hasRecurringScheduleEntries = Boolean(
@@ -860,6 +1005,13 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
           serviceId,
           appointmentPrice: normalizedPrice,
           packageContractId: isCoveredByPackage ? packageContractId : undefined,
+          ...(isStudioTarget
+            ? {
+                billingChoice,
+                billingPlanId: billingChoice === 'existing_plan' && selectedBillingPlanId ? selectedBillingPlanId : undefined,
+                enrollBillingPlan: enrollPayload
+              }
+            : {}),
           roomId: roomId || null,
           insuranceId: insuranceId || null,
           startTime: startIso,
@@ -893,6 +1045,13 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
         serviceId,
         appointmentPrice: normalizedPrice,
         packageContractId: isCoveredByPackage ? packageContractId : undefined,
+        ...(isStudioTarget
+          ? {
+              billingChoice,
+              billingPlanId: billingChoice === 'existing_plan' && selectedBillingPlanId ? selectedBillingPlanId : undefined,
+              enrollBillingPlan: enrollPayload
+            }
+          : {}),
         roomId: roomId || null,
         insuranceId: insuranceId || null,
         startTime: startIso,
@@ -1130,7 +1289,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                     <div className="flex items-center gap-1 w-24 border-l border-slate-200 pl-2">
                       <span aria-hidden="true" className="shrink-0 whitespace-nowrap text-slate-500">R$</span>
                       <input id="appointment-price" type="text" inputMode="decimal" required
-                        value={appointmentPrice} disabled={!serviceId}
+                        value={isSessionFinanciallyCovered ? '0,00' : appointmentPrice} disabled={!serviceId || isSessionFinanciallyCovered}
                         onChange={event => {
                           if (!/^[\d.,]*$/.test(event.target.value)) return;
                           priceEdited.current = true;
@@ -1138,8 +1297,9 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                         }}
                         onBlur={() => { const value = parseAppointmentPrice(appointmentPrice); if (value !== null) setAppointmentPrice(formatAppointmentPrice(value)); }}
                         aria-label="Valor da consulta *"
-                        aria-invalid={appointmentPrice !== '' && parseAppointmentPrice(appointmentPrice) === null}
-                        className="w-full min-w-0 !min-h-0 flex-1 !p-0 bg-transparent outline-none text-xs" />
+                        aria-invalid={!isSessionFinanciallyCovered && appointmentPrice !== '' && parseAppointmentPrice(appointmentPrice) === null}
+                        title={isSessionFinanciallyCovered ? 'Aula coberta por contratação periódica ou pacote' : undefined}
+                        className={`w-full min-w-0 !min-h-0 flex-1 !p-0 bg-transparent outline-none text-xs ${isSessionFinanciallyCovered ? 'text-emerald-700 font-semibold' : ''}`} />
                     </div>
                   }
                 />
@@ -1147,33 +1307,279 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
             </div>
           </div>
 
-          {compatiblePackages.length > 0 && (
-            <div className="p-3 rounded-2xl bg-indigo-50/70 border border-indigo-200 space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <label className="font-bold text-indigo-950 flex items-center gap-1.5 text-xs">
-                  <Package className="w-4 h-4 text-indigo-600" />
-                  Usar Pacote Contratado do Aluno
+          {isStudioTarget && patientId && serviceId ? (
+            <div className="p-3 rounded-2xl bg-emerald-50/70 border border-emerald-200 space-y-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <label className="font-bold text-emerald-950 flex items-center gap-1.5 text-xs">
+                  <CreditCard className="w-4 h-4 text-emerald-600" />
+                  Modalidade de Cobrança da Aula
                 </label>
-                {packageContractId && (
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-                    Coberto pelo pacote • R$ 0,00 avulso
+                {isSessionFinanciallyCovered && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-600 text-white">
+                    Coberta • R$ 0,00 avulso
                   </span>
                 )}
               </div>
-              <select
-                value={packageContractId}
-                onChange={e => setPackageContractId(e.target.value)}
-                className="w-full border border-indigo-200 rounded-xl px-3 py-2 text-xs bg-white font-semibold text-slate-800"
-              >
-                <option value="">Não usar pacote (cobrança avulsa do serviço)</option>
-                {compatiblePackages.map(cp => (
-                  <option key={cp.id} value={cp.id}>
-                    {cp.package_name_snapshot} — {cp.matchedRemaining} aula(s) restante(s)
-                    {cp.end_date ? ` • até ${cp.end_date}` : ''}
-                  </option>
-                ))}
-              </select>
+
+              <div className="flex flex-wrap gap-1.5">
+                {activePeriodicPlans.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPackageContractId('');
+                      if (!selectedBillingPlanId) setSelectedBillingPlanId(activePeriodicPlans[0].id);
+                      setBillingChoice('existing_plan');
+                    }}
+                    className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border cursor-pointer transition-colors ${
+                      billingChoice === 'existing_plan'
+                        ? 'bg-emerald-600 text-white border-emerald-600'
+                        : 'bg-white text-slate-700 border-slate-200 hover:border-emerald-300'
+                    }`}
+                  >
+                    Plano Ativo ({activePeriodicPlans.length})
+                  </button>
+                )}
+
+                {compatiblePackages.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedBillingPlanId('');
+                      if (!packageContractId) setPackageContractId(compatiblePackages[0].id);
+                      setBillingChoice('package');
+                    }}
+                    className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border cursor-pointer transition-colors ${
+                      billingChoice === 'package'
+                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        : 'bg-white text-slate-700 border-slate-200 hover:border-indigo-300'
+                    }`}
+                  >
+                    Pacote Contratado ({compatiblePackages.length})
+                  </button>
+                )}
+
+                {!isRetroactive && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPackageContractId('');
+                      setSelectedBillingPlanId('');
+                      setBillingChoice('enroll_periodic');
+                    }}
+                    className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border cursor-pointer transition-colors ${
+                      billingChoice === 'enroll_periodic'
+                        ? 'bg-emerald-600 text-white border-emerald-600'
+                        : 'bg-white text-slate-700 border-slate-200 hover:border-emerald-300'
+                    }`}
+                  >
+                    Nova Contratação Periódica
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPackageContractId('');
+                    setSelectedBillingPlanId('');
+                    setBillingChoice('drop_in');
+                  }}
+                  className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border cursor-pointer transition-colors ${
+                    billingChoice === 'drop_in'
+                      ? 'bg-slate-800 text-white border-slate-800'
+                      : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  Cobrança Avulsa por Aula
+                </button>
+              </div>
+
+              {billingChoice === 'existing_plan' && activePeriodicPlans.length > 0 && (
+                <div className="space-y-1.5">
+                  <select
+                    value={selectedBillingPlanId}
+                    onChange={e => {
+                      setSelectedBillingPlanId(e.target.value);
+                      setPackageContractId('');
+                    }}
+                    className="w-full border border-emerald-200 rounded-xl px-3 py-2 text-xs bg-white font-semibold text-slate-800"
+                  >
+                    {activePeriodicPlans.map(plan => (
+                      <option key={plan.id} value={plan.id}>
+                        {plan.title} — {formatCurrencyBRL(Number(plan.amount || 0))} (
+                        {SERVICE_BILLING_MODE_LABELS[(plan.billing_frequency || 'monthly') as keyof typeof SERVICE_BILLING_MODE_LABELS] || 'Mensal'}
+                        ) • Venc. dia {plan.due_day}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="flex items-start gap-1.5 text-[11px] text-emerald-900 bg-white/90 border border-emerald-200 rounded-lg px-2.5 py-1.5">
+                    <Info className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                    <span>
+                      Aula coberta pela contratação {selectedPeriodicPlanObj?.title ? `"${selectedPeriodicPlanObj.title}"` : 'periódica'}. Nenhuma cobrança avulsa será criada.
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {billingChoice === 'package' && compatiblePackages.length > 0 && (
+                <div className="space-y-1.5">
+                  <select
+                    value={packageContractId}
+                    onChange={e => setPackageContractId(e.target.value)}
+                    className="w-full border border-indigo-200 rounded-xl px-3 py-2 text-xs bg-white font-semibold text-slate-800"
+                  >
+                    {compatiblePackages.map(cp => (
+                      <option key={cp.id} value={cp.id}>
+                        {cp.package_name_snapshot} — {cp.matchedRemaining} aula(s) restante(s)
+                        {cp.end_date ? ` • até ${cp.end_date}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="flex items-start gap-1.5 text-[11px] text-indigo-900 bg-white/90 border border-indigo-200 rounded-lg px-2.5 py-1.5">
+                    <Info className="w-3.5 h-3.5 text-indigo-600 shrink-0 mt-0.5" />
+                    <span>
+                      Aula coberta pelo pacote contratado. Nenhuma cobrança avulsa será criada.
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {billingChoice === 'enroll_periodic' && !isRetroactive && (
+                <div className="space-y-2 pt-1 border-t border-emerald-200/70">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-0.5 text-[11px]">Periodicidade financeira</label>
+                      <select
+                        value={enrollFrequency}
+                        onChange={e => setEnrollFrequency(e.target.value as PeriodicBillingFrequency)}
+                        className="w-full border border-emerald-200 rounded-lg px-2 py-1.5 text-xs bg-white font-medium"
+                      >
+                        <option value="monthly">Mensal (1 mês)</option>
+                        <option value="quarterly">Trimestral (3 meses)</option>
+                        <option value="semiannual">Semestral (6 meses)</option>
+                        <option value="annual">Anual (12 meses)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-0.5 text-[11px]">Valor por período (R$)</label>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={enrollAmount}
+                        onChange={e => {
+                          if (/^[\d.,]*$/.test(e.target.value)) setEnrollAmount(e.target.value);
+                        }}
+                        placeholder="540.00"
+                        className="w-full border border-emerald-200 rounded-lg px-2.5 py-1.5 text-xs bg-white font-semibold"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-0.5 text-[11px]">Dia de vencimento</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={28}
+                        value={enrollDueDay}
+                        onChange={e => setEnrollDueDay(Math.min(28, Math.max(1, Number(e.target.value) || 10)))}
+                        className="w-full border border-emerald-200 rounded-lg px-2.5 py-1.5 text-xs bg-white"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-0.5 text-[11px]">1º vencimento (opcional)</label>
+                      <input
+                        type="date"
+                        value={enrollFirstDueDate}
+                        onChange={e => setEnrollFirstDueDate(e.target.value)}
+                        className="w-full border border-emerald-200 rounded-lg px-2 py-1.5 text-xs bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-0.5 text-[11px]">Forma de pagamento</label>
+                      <select
+                        value={enrollPaymentMethod}
+                        onChange={e => setEnrollPaymentMethod(e.target.value)}
+                        className="w-full border border-emerald-200 rounded-lg px-2 py-1.5 text-xs bg-white"
+                      >
+                        <option value="pix">PIX</option>
+                        <option value="credit_card">Cartão de Crédito</option>
+                        <option value="debit_card">Cartão de Débito</option>
+                        <option value="boleto">Boleto</option>
+                        <option value="cash">Dinheiro</option>
+                        <option value="transfer">Transferência</option>
+                      </select>
+                    </div>
+                    {!isRecurring && (
+                      <div>
+                        <label className="block font-semibold text-slate-700 mb-0.5 text-[11px]">Término vigência (opcional)</label>
+                        <input
+                          type="date"
+                          value={enrollEndDate}
+                          min={date || undefined}
+                          onChange={e => setEnrollEndDate(e.target.value)}
+                          className="w-full border border-emerald-200 rounded-lg px-2 py-1.5 text-xs bg-white"
+                        />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-700">
+                    <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={enrollGenerateAllCycles}
+                        onChange={e => setEnrollGenerateAllCycles(e.target.checked)}
+                        className="rounded border-slate-300 text-emerald-600"
+                      />
+                      <span>Gerar todas as competências do período contratado</span>
+                    </label>
+                    <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={enrollPaidNow}
+                        onChange={e => setEnrollPaidNow(e.target.checked)}
+                        className="rounded border-slate-300 text-emerald-600"
+                      />
+                      <span>1ª cobrança já recebida agora</span>
+                    </label>
+                  </div>
+                  <div className="flex items-start gap-1.5 text-[11px] text-emerald-900 bg-white/90 border border-emerald-200 rounded-lg px-2.5 py-1.5">
+                    <Info className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                    <span>
+                      Aula coberta pela contratação periódica ({SERVICE_BILLING_MODE_LABELS[enrollFrequency]} — a cada {getCycleMonthsForBillingMode(enrollFrequency)} {getCycleMonthsForBillingMode(enrollFrequency) === 1 ? 'mês' : 'meses'}). Nenhuma cobrança avulsa será criada.
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
+          ) : (
+            compatiblePackages.length > 0 && (
+              <div className="p-3 rounded-2xl bg-indigo-50/70 border border-indigo-200 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="font-bold text-indigo-950 flex items-center gap-1.5 text-xs">
+                    <Package className="w-4 h-4 text-indigo-600" />
+                    Usar Pacote Contratado do Aluno
+                  </label>
+                  {packageContractId && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                      Coberto pelo pacote • R$ 0,00 avulso
+                    </span>
+                  )}
+                </div>
+                <select
+                  value={packageContractId}
+                  onChange={e => setPackageContractId(e.target.value)}
+                  className="w-full border border-indigo-200 rounded-xl px-3 py-2 text-xs bg-white font-semibold text-slate-800"
+                >
+                  <option value="">Não usar pacote (cobrança avulsa do serviço)</option>
+                  {compatiblePackages.map(cp => (
+                    <option key={cp.id} value={cp.id}>
+                      {cp.package_name_snapshot} — {cp.matchedRemaining} aula(s) restante(s)
+                      {cp.end_date ? ` • até ${cp.end_date}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )
           )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 relative z-20">

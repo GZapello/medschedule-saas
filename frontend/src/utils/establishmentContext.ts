@@ -527,3 +527,88 @@ export function writeActiveStudioSession(session: ActiveStudioSession | null): v
 export function clearActiveStudioSession(): void {
   writeActiveStudioSession(null);
 }
+
+export type ServiceBillingMode =
+  | 'per_session'
+  | 'monthly'
+  | 'quarterly'
+  | 'semiannual'
+  | 'annual'
+  | 'package';
+
+export type PeriodicBillingFrequency = 'monthly' | 'quarterly' | 'semiannual' | 'annual';
+
+export const SERVICE_BILLING_MODE_OPTIONS: Array<{
+  value: ServiceBillingMode;
+  label: string;
+  cycleMonths: number | null;
+  shortPeriod: string;
+}> = [
+  { value: 'per_session', label: 'Por Atendimento / Aula', cycleMonths: null, shortPeriod: 'por aula' },
+  { value: 'monthly', label: 'Mensal', cycleMonths: 1, shortPeriod: 'a cada 1 mês' },
+  { value: 'quarterly', label: 'Trimestral', cycleMonths: 3, shortPeriod: 'a cada 3 meses' },
+  { value: 'semiannual', label: 'Semestral', cycleMonths: 6, shortPeriod: 'a cada 6 meses' },
+  { value: 'annual', label: 'Anual', cycleMonths: 12, shortPeriod: 'a cada 12 meses' },
+  { value: 'package', label: 'Utilizar Pacote de Serviços existente', cycleMonths: null, shortPeriod: 'via pacote' }
+];
+
+export const SERVICE_BILLING_MODE_LABELS: Record<ServiceBillingMode, string> = {
+  per_session: 'Por Atendimento / Aula',
+  monthly: 'Mensal',
+  quarterly: 'Trimestral',
+  semiannual: 'Semestral',
+  annual: 'Anual',
+  package: 'Pacote de Serviços'
+};
+
+export function isPeriodicBillingMode(mode?: unknown): mode is PeriodicBillingFrequency {
+  const m = String(mode || '').trim().toLowerCase();
+  return m === 'monthly' || m === 'quarterly' || m === 'semiannual' || m === 'annual';
+}
+
+export function getCycleMonthsForBillingMode(mode?: unknown): number {
+  const m = String(mode || '').trim().toLowerCase();
+  if (m === 'monthly') return 1;
+  if (m === 'quarterly') return 3;
+  if (m === 'semiannual') return 6;
+  if (m === 'annual') return 12;
+  return 1;
+}
+
+export function formatCurrencyBRL(value: number): string {
+  return Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+export function formatServiceBillingSummary(params: {
+  serviceName?: string;
+  billingMode?: unknown;
+  sessionPrice?: number;
+  periodicPrice?: number | null;
+  packageName?: string | null;
+}): string {
+  const name = String(params.serviceName || 'Serviço').trim() || 'Serviço';
+  const mode = String(params.billingMode || 'per_session').trim().toLowerCase() as ServiceBillingMode;
+  if (mode === 'monthly') {
+    const val = Number(params.periodicPrice ?? params.sessionPrice ?? 0);
+    return `${name} — ${formatCurrencyBRL(val)} por mês.`;
+  }
+  if (mode === 'quarterly') {
+    const val = Number(params.periodicPrice ?? 0);
+    return `${name} — ${formatCurrencyBRL(val)} a cada 3 meses.`;
+  }
+  if (mode === 'semiannual') {
+    const val = Number(params.periodicPrice ?? 0);
+    return `${name} — ${formatCurrencyBRL(val)} a cada 6 meses.`;
+  }
+  if (mode === 'annual') {
+    const val = Number(params.periodicPrice ?? 0);
+    return `${name} — ${formatCurrencyBRL(val)} a cada 12 meses.`;
+  }
+  if (mode === 'package') {
+    return params.packageName
+      ? `${name} — Cobertura via pacote "${params.packageName}".`
+      : `${name} — Utilizar Pacote de Serviços existente.`;
+  }
+  const unitVal = Number(params.sessionPrice ?? 0);
+  return `${name} — ${formatCurrencyBRL(unitVal)} por atendimento / aula.`;
+}

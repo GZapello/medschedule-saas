@@ -24,10 +24,13 @@ import {
 import { PackageModal } from './PackageModal';
 import { ClassScheduleSection, DraftClassScheduleInput } from './ClassScheduleSection';
 import { ServiceRecurrenceConfigPanel } from './ServiceRecurrenceConfigPanel';
+import { ServiceBillingConfigPanel } from './ServiceBillingConfigPanel';
 import { LinkedInstructorsSelector } from './LinkedInstructorsSelector';
 import {
   ALL_PLAN_DURATIONS,
+  formatCurrencyBRL,
   isMixedProfile,
+  isPeriodicBillingMode,
   isStudioProfile,
   normalizeEstablishmentProfile,
   parseServiceRecurrenceConfig,
@@ -35,6 +38,8 @@ import {
   RecurrenceFrequency,
   RecurrenceIntervalSpec,
   resolveServiceDomain,
+  SERVICE_BILLING_MODE_LABELS,
+  ServiceBillingMode,
   ServiceDomain,
   supportsStudioFeatures
 } from '../../utils/establishmentContext';
@@ -358,6 +363,10 @@ export const ServicesView: React.FC = () => {
   const [defaultCustomInterval, setDefaultCustomInterval] = useState<RecurrenceIntervalSpec | null>(null);
   const [allowedPlanDurations, setAllowedPlanDurations] = useState<Exclude<PlanDurationCode, 'legacy_frequency'>[]>([...ALL_PLAN_DURATIONS]);
   const [defaultPlanDuration, setDefaultPlanDuration] = useState<Exclude<PlanDurationCode, 'legacy_frequency'>>('1_month');
+  const [billingMode, setBillingMode] = useState<ServiceBillingMode>('per_session');
+  const [periodicPrice, setPeriodicPrice] = useState<string>('');
+  const [defaultPackageId, setDefaultPackageId] = useState<string>('');
+  const [defaultBillingDueDay, setDefaultBillingDueDay] = useState<string>('');
   const [draftClassSchedules, setDraftClassSchedules] = useState<DraftClassScheduleInput[]>([]);
   const [hasPendingCreateScheduleForm, setHasPendingCreateScheduleForm] = useState<boolean>(false);
   const [description, setDescription] = useState<string>('');
@@ -386,6 +395,10 @@ export const ServicesView: React.FC = () => {
   const [editDefaultCustomInterval, setEditDefaultCustomInterval] = useState<RecurrenceIntervalSpec | null>(null);
   const [editAllowedPlanDurations, setEditAllowedPlanDurations] = useState<Exclude<PlanDurationCode, 'legacy_frequency'>[]>([...ALL_PLAN_DURATIONS]);
   const [editDefaultPlanDuration, setEditDefaultPlanDuration] = useState<Exclude<PlanDurationCode, 'legacy_frequency'>>('1_month');
+  const [editBillingMode, setEditBillingMode] = useState<ServiceBillingMode>('per_session');
+  const [editPeriodicPrice, setEditPeriodicPrice] = useState<string>('');
+  const [editDefaultPackageId, setEditDefaultPackageId] = useState<string>('');
+  const [editDefaultBillingDueDay, setEditDefaultBillingDueDay] = useState<string>('');
   const [editDraftClassSchedules, setEditDraftClassSchedules] = useState<DraftClassScheduleInput[]>([]);
   const [hasPendingEditScheduleForm, setHasPendingEditScheduleForm] = useState<boolean>(false);
 
@@ -563,9 +576,25 @@ export const ServicesView: React.FC = () => {
   };
 
   const handleCreateService = async () => {
-    if (!name.trim() || !price) {
-      showToast('Nome e valor do serviço são obrigatórios', 'error');
+    if (!name.trim()) {
+      showToast('Nome do serviço é obrigatório', 'error');
       return;
+    }
+    const isPeriodicCreate = showCreateStudioConfig && isPeriodicBillingMode(billingMode);
+    if (!isPeriodicCreate && (!price || Number(price) < 0)) {
+      showToast('Informe o preço por atendimento / aula', 'error');
+      return;
+    }
+    if (isPeriodicCreate && (!periodicPrice.trim() || Number(periodicPrice) < 0)) {
+      showToast('Informe o valor por período de cobrança', 'error');
+      return;
+    }
+    if (isPeriodicCreate && defaultBillingDueDay.trim() !== '') {
+      const dueNum = Number(defaultBillingDueDay);
+      if (!Number.isInteger(dueNum) || dueNum < 1 || dueNum > 28) {
+        showToast('Dia de vencimento padrão deve estar entre 1 e 28', 'error');
+        return;
+      }
     }
 
     if (!professionalId) {
@@ -583,6 +612,7 @@ export const ServicesView: React.FC = () => {
       const normalizedCreateLinked = showCreateStudioConfig
         ? Array.from(new Set([professionalId, ...linkedProfessionalIds].filter(Boolean)))
         : [professionalId];
+      const normalizedCreatePrice = price.trim() !== '' ? Number(price) : 0;
       const createdRes = await ApiClient.post<any>('/v1/services', {
         professionalId,
         ...(showCreateStudioConfig ? { linkedProfessionalIds: normalizedCreateLinked } : {}),
@@ -591,7 +621,7 @@ export const ServicesView: React.FC = () => {
         specialtyId: specialtyId || null,
         durationMinutes: Number(durationMinutes),
         bufferMinutes: Number(bufferMinutes),
-        price: Number(price),
+        price: normalizedCreatePrice,
         modality,
         serviceKind: effectiveKind,
         defaultCapacity: effectiveKind === 'group' ? Number(defaultCapacity) : null,
@@ -604,7 +634,11 @@ export const ServicesView: React.FC = () => {
               customRecurrenceIntervals: allowRecurrence && allowedFrequencies.includes('custom_interval') ? customIntervals : [],
               defaultRecurrenceInterval: allowRecurrence && allowedFrequencies.includes('custom_interval') ? defaultCustomInterval : null,
               allowedPlanDurations: allowRecurrence ? allowedPlanDurations : [],
-              defaultPlanDuration: allowRecurrence ? defaultPlanDuration : null
+              defaultPlanDuration: allowRecurrence ? defaultPlanDuration : null,
+              billingMode,
+              periodicPrice: isPeriodicCreate ? Number(periodicPrice) : null,
+              defaultPackageId: billingMode === 'package' && defaultPackageId ? defaultPackageId : null,
+              defaultBillingDueDay: isPeriodicCreate && defaultBillingDueDay.trim() !== '' ? Number(defaultBillingDueDay) : null
             }
           : {}),
         classSchedules: showCreateStudioConfig && effectiveKind === 'group' ? draftClassSchedules : undefined,
@@ -640,6 +674,10 @@ export const ServicesView: React.FC = () => {
       setDefaultCustomInterval(null);
       setAllowedPlanDurations([...ALL_PLAN_DURATIONS]);
       setDefaultPlanDuration('1_month');
+      setBillingMode('per_session');
+      setPeriodicPrice('');
+      setDefaultPackageId('');
+      setDefaultBillingDueDay('');
       setDraftClassSchedules([]);
       setLinkedProfessionalIds(professionalId ? [professionalId] : []);
       setDescription('');
@@ -719,6 +757,11 @@ export const ServicesView: React.FC = () => {
     setEditDefaultCustomInterval(recCfg.defaultCustomInterval || null);
     setEditAllowedPlanDurations(recCfg.allowedPlanDurations || [...ALL_PLAN_DURATIONS]);
     setEditDefaultPlanDuration(recCfg.defaultPlanDuration || '1_month');
+    const initialBillingMode = (domain === 'studio' && s.billing_mode ? s.billing_mode : 'per_session') as ServiceBillingMode;
+    setEditBillingMode(initialBillingMode);
+    setEditPeriodicPrice(s.periodic_price !== undefined && s.periodic_price !== null ? String(s.periodic_price) : '');
+    setEditDefaultPackageId(s.default_package_id || '');
+    setEditDefaultBillingDueDay(s.default_billing_due_day !== undefined && s.default_billing_due_day !== null ? String(s.default_billing_due_day) : '');
     setEditDraftClassSchedules([]);
     setHasPendingEditScheduleForm(false);
     setEditDescription(s.description || '');
@@ -734,9 +777,25 @@ export const ServicesView: React.FC = () => {
 
   const handleUpdateService = async () => {
     if (!editingService) return;
-    if (!editName.trim() || !editPrice) {
-      showToast('Nome e valor do serviço são obrigatórios', 'error');
+    if (!editName.trim()) {
+      showToast('Nome do serviço é obrigatório', 'error');
       return;
+    }
+    const isPeriodicEdit = showEditStudioConfig && isPeriodicBillingMode(editBillingMode);
+    if (!isPeriodicEdit && (!editPrice || Number(editPrice) < 0)) {
+      showToast('Informe o preço por atendimento / aula', 'error');
+      return;
+    }
+    if (isPeriodicEdit && (!editPeriodicPrice.trim() || Number(editPeriodicPrice) < 0)) {
+      showToast('Informe o valor por período de cobrança', 'error');
+      return;
+    }
+    if (isPeriodicEdit && editDefaultBillingDueDay.trim() !== '') {
+      const dueNum = Number(editDefaultBillingDueDay);
+      if (!Number.isInteger(dueNum) || dueNum < 1 || dueNum > 28) {
+        showToast('Dia de vencimento padrão deve estar entre 1 e 28', 'error');
+        return;
+      }
     }
 
     if (!editProfessionalId) {
@@ -760,6 +819,7 @@ export const ServicesView: React.FC = () => {
         effectiveEditKind === 'group' &&
         editingService.service_kind !== 'group' &&
         editDraftClassSchedules.length > 0;
+      const normalizedEditPrice = editPrice.trim() !== '' ? Number(editPrice) : 0;
       const updRes = await ApiClient.put<any>(`/v1/services/${editingService.id}`, {
         professionalId: editProfessionalId,
         ...(showEditStudioConfig ? { linkedProfessionalIds: normalizedEditLinked } : {}),
@@ -768,7 +828,7 @@ export const ServicesView: React.FC = () => {
         specialtyId: editSpecialtyId || null,
         durationMinutes: Number(editDurationMinutes),
         bufferMinutes: Number(editBufferMinutes),
-        price: Number(editPrice),
+        price: normalizedEditPrice,
         modality: editModality,
         serviceKind: effectiveEditKind,
         defaultCapacity: effectiveEditKind === 'group' ? Number(editDefaultCapacity) : null,
@@ -781,7 +841,11 @@ export const ServicesView: React.FC = () => {
               customRecurrenceIntervals: editAllowRecurrence && editAllowedFrequencies.includes('custom_interval') ? editCustomIntervals : [],
               defaultRecurrenceInterval: editAllowRecurrence && editAllowedFrequencies.includes('custom_interval') ? editDefaultCustomInterval : null,
               allowedPlanDurations: editAllowRecurrence ? editAllowedPlanDurations : [],
-              defaultPlanDuration: editAllowRecurrence ? editDefaultPlanDuration : null
+              defaultPlanDuration: editAllowRecurrence ? editDefaultPlanDuration : null,
+              billingMode: editBillingMode,
+              periodicPrice: isPeriodicEdit ? Number(editPeriodicPrice) : null,
+              defaultPackageId: editBillingMode === 'package' && editDefaultPackageId ? editDefaultPackageId : null,
+              defaultBillingDueDay: isPeriodicEdit && editDefaultBillingDueDay.trim() !== '' ? Number(editDefaultBillingDueDay) : null
             }
           : {}),
         ...(shouldSendEditDraftSchedules ? { classSchedules: editDraftClassSchedules } : {}),
@@ -1101,9 +1165,20 @@ export const ServicesView: React.FC = () => {
                                 )}
                               </div>
                             </div>
-                            <span className="text-sm font-extrabold text-indigo-600 whitespace-nowrap">
-                              {Number(s.price).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                            </span>
+                            <div className="text-right">
+                              <span className="text-sm font-extrabold text-indigo-600 whitespace-nowrap block">
+                                {isStudioCompatible && isPeriodicBillingMode(s.billing_mode) && s.periodic_price !== null && s.periodic_price !== undefined
+                                  ? `${formatCurrencyBRL(Number(s.periodic_price))} / ${(SERVICE_BILLING_MODE_LABELS[s.billing_mode] || s.billing_mode).toLowerCase()}`
+                                  : isStudioCompatible && s.billing_mode === 'package'
+                                    ? 'Via Pacote'
+                                    : formatCurrencyBRL(Number(s.price))}
+                              </span>
+                              {isStudioCompatible && s.billing_mode && s.billing_mode !== 'per_session' && (
+                                <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded inline-block mt-0.5">
+                                  {SERVICE_BILLING_MODE_LABELS[s.billing_mode] || s.billing_mode}
+                                </span>
+                              )}
+                            </div>
                           </div>
                           {s.description && (
                             <p className="text-xs text-slate-500 mt-2 line-clamp-2">{s.description}</p>
@@ -1483,7 +1558,9 @@ export const ServicesView: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Preço (R$) *</label>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  {showCreateStudioConfig ? 'Preço por Atendimento / Aula (R$) *' : 'Preço (R$) *'}
+                </label>
                 <input
                   type="number"
                   step="0.01"
@@ -1632,6 +1709,21 @@ export const ServicesView: React.FC = () => {
                       setDefaultCustomInterval(next.defaultCustomInterval);
                       setAllowedPlanDurations(next.allowedPlanDurations);
                       setDefaultPlanDuration(next.defaultPlanDuration);
+                    }}
+                  />
+                  <ServiceBillingConfigPanel
+                    serviceName={name}
+                    billingMode={billingMode}
+                    sessionPrice={Number(price) || 0}
+                    periodicPrice={periodicPrice}
+                    defaultPackageId={defaultPackageId}
+                    defaultBillingDueDay={defaultBillingDueDay}
+                    availablePackages={packages}
+                    onChange={next => {
+                      setBillingMode(next.billingMode);
+                      setPeriodicPrice(next.periodicPrice);
+                      setDefaultPackageId(next.defaultPackageId);
+                      setDefaultBillingDueDay(next.defaultBillingDueDay);
                     }}
                   />
                 </div>
@@ -1889,7 +1981,9 @@ export const ServicesView: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Preço (R$) *</label>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  {showEditStudioConfig ? 'Preço por Atendimento / Aula (R$) *' : 'Preço (R$) *'}
+                </label>
                 <input
                   type="number"
                   step="0.01"
@@ -2075,6 +2169,21 @@ export const ServicesView: React.FC = () => {
                       setEditDefaultCustomInterval(next.defaultCustomInterval);
                       setEditAllowedPlanDurations(next.allowedPlanDurations);
                       setEditDefaultPlanDuration(next.defaultPlanDuration);
+                    }}
+                  />
+                  <ServiceBillingConfigPanel
+                    serviceName={editName}
+                    billingMode={editBillingMode}
+                    sessionPrice={Number(editPrice) || 0}
+                    periodicPrice={editPeriodicPrice}
+                    defaultPackageId={editDefaultPackageId}
+                    defaultBillingDueDay={editDefaultBillingDueDay}
+                    availablePackages={packages}
+                    onChange={next => {
+                      setEditBillingMode(next.billingMode);
+                      setEditPeriodicPrice(next.periodicPrice);
+                      setEditDefaultPackageId(next.defaultPackageId);
+                      setEditDefaultBillingDueDay(next.defaultBillingDueDay);
                     }}
                   />
                 </div>

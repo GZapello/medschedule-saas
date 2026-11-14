@@ -558,4 +558,48 @@ export function migrateStudioImprovements(rawDb: DatabaseSync): void {
   } catch (e) {
     console.warn('[StudioMigration] Aviso ao configurar catálogo Instrutor:', e);
   }
+
+  // 11. Modalidades de Cobrança por Serviço e Ciclos Periódicos no Zemda Studio
+  addColIfMissing('services', 'billing_mode', 'TEXT');
+  addColIfMissing('services', 'periodic_price', 'REAL');
+  addColIfMissing('services', 'billing_cycle_months', 'INTEGER');
+  addColIfMissing('services', 'default_package_id', 'TEXT');
+  addColIfMissing('services', 'default_billing_due_day', 'INTEGER');
+
+  addColIfMissing('recurring_billing_plans', 'billing_frequency', `TEXT NOT NULL DEFAULT 'monthly'`);
+  addColIfMissing('recurring_billing_plans', 'cycle_months', 'INTEGER NOT NULL DEFAULT 1');
+  addColIfMissing('recurring_billing_plans', 'covers_sessions', 'INTEGER NOT NULL DEFAULT 1');
+  addColIfMissing('recurring_billing_plans', 'last_generated_cycle_key', 'TEXT');
+  addColIfMissing('recurring_billing_plans', 'cancelled_at', 'TEXT');
+  addColIfMissing('recurring_billing_plans', 'paused_at', 'TEXT');
+  addColIfMissing('recurring_billing_plans', 'cancellation_reason', 'TEXT');
+
+  addColIfMissing('payments', 'billing_cycle_key', 'TEXT');
+  addColIfMissing('payments', 'billing_cycle_start', 'TEXT');
+  addColIfMissing('payments', 'billing_cycle_end', 'TEXT');
+  addColIfMissing('payments', 'billing_frequency', 'TEXT');
+
+  addColIfMissing('appointments', 'recurring_plan_id', 'TEXT');
+  addColIfMissing('appointments', 'billing_coverage_type', `TEXT NOT NULL DEFAULT 'none'`);
+
+  addColIfMissing('service_packages', 'billing_frequency', `TEXT NOT NULL DEFAULT 'monthly'`);
+  addColIfMissing('service_packages', 'cycle_months', 'INTEGER NOT NULL DEFAULT 1');
+  addColIfMissing('student_package_contracts', 'billing_frequency_snapshot', `TEXT NOT NULL DEFAULT 'monthly'`);
+  addColIfMissing('student_package_contracts', 'cycle_months_snapshot', 'INTEGER NOT NULL DEFAULT 1');
+
+  addColIfMissing('payroll_items', 'recurring_plan_id', 'TEXT');
+
+  try {
+    rawDb.exec(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_recurring_cycle_key
+        ON payments(tenant_id, recurring_plan_id, billing_cycle_key)
+        WHERE recurring_plan_id IS NOT NULL AND billing_cycle_key IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_appts_recurring_plan
+        ON appointments(tenant_id, recurring_plan_id, status);
+      CREATE INDEX IF NOT EXISTS idx_rec_billing_patient_service
+        ON recurring_billing_plans(tenant_id, patient_id, service_id, status);
+    `);
+  } catch (e) {
+    console.warn('[StudioMigration] Aviso ao criar índices de cobrança periódica:', e);
+  }
 }

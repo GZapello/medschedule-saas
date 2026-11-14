@@ -92,6 +92,7 @@ export const CollectionsModal: React.FC<CollectionsModalProps> = ({
   const [planProfessionalId, setPlanProfessionalId] = useState<string>('');
   const [planTitle, setPlanTitle] = useState<string>('Mensalidade');
   const [planAmount, setPlanAmount] = useState<string>('');
+  const [planFrequency, setPlanFrequency] = useState<'monthly' | 'quarterly' | 'semiannual' | 'annual'>('monthly');
   const [planDueDay, setPlanDueDay] = useState<number>(10);
   const [planPaymentMethod, setPlanPaymentMethod] = useState<string>('pix');
   const [planGenerateNow, setPlanGenerateNow] = useState<boolean>(true);
@@ -248,14 +249,16 @@ export const CollectionsModal: React.FC<CollectionsModalProps> = ({
         professionalId: planProfessionalId || undefined,
         title: planTitle.trim(),
         amount: numericAmount,
+        billingFrequency: planFrequency,
         dueDay: planDueDay,
         paymentMethod: planPaymentMethod,
         generateCurrentMonth: planGenerateNow
       });
-      showToast('Mensalidade recorrente cadastrada com sucesso!', 'success');
+      showToast('Plano periódico cadastrado com sucesso!', 'success');
       setShowNewPlanForm(false);
       setPlanPatientId('');
       setPlanAmount('');
+      setPlanFrequency('monthly');
       await Promise.all([fetchPlans(), fetchCollectionsAndSummary()]);
       onUpdated?.();
     } catch (err: any) {
@@ -657,17 +660,32 @@ export const CollectionsModal: React.FC<CollectionsModalProps> = ({
                       />
                     </div>
 
-                    <div>
-                      <label className="block text-[11px] font-semibold text-slate-700 mb-1">Valor Mensal (R$) *</label>
-                      <input
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        required
-                        value={planAmount}
-                        onChange={e => setPlanAmount(e.target.value)}
-                        className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white"
-                      />
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">Valor por Período (R$) *</label>
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          required
+                          value={planAmount}
+                          onChange={e => setPlanAmount(e.target.value)}
+                          className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">Periodicidade *</label>
+                        <select
+                          value={planFrequency}
+                          onChange={e => setPlanFrequency(e.target.value as any)}
+                          className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white"
+                        >
+                          <option value="monthly">Mensal</option>
+                          <option value="quarterly">Trimestral (3 meses)</option>
+                          <option value="semiannual">Semestral (6 meses)</option>
+                          <option value="annual">Anual (12 meses)</option>
+                        </select>
+                      </div>
                     </div>
 
                     <div>
@@ -781,6 +799,15 @@ export const CollectionsModal: React.FC<CollectionsModalProps> = ({
                           >
                             {plan.status === 'active' ? 'Ativo' : plan.status === 'paused' ? 'Pausado' : 'Encerrado'}
                           </span>
+                          <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                            {plan.billing_frequency === 'quarterly'
+                              ? 'Trimestral'
+                              : plan.billing_frequency === 'semiannual'
+                                ? 'Semestral'
+                                : plan.billing_frequency === 'annual'
+                                  ? 'Anual'
+                                  : 'Mensal'}
+                          </span>
                         </div>
                         <p className="text-xs text-slate-600 mt-0.5">
                           <span className="font-semibold">{plan.title}</span>
@@ -791,7 +818,7 @@ export const CollectionsModal: React.FC<CollectionsModalProps> = ({
 
                       <div className="flex items-center gap-3 shrink-0">
                         <span className="text-sm font-extrabold text-slate-900">{formatCurrency(plan.amount)}</span>
-                        {canManageCollections && plan.status !== 'ended' && (
+                        {canManageCollections && plan.status !== 'ended' && plan.status !== 'cancelled' && (
                           <button
                             type="button"
                             onClick={() => handleTogglePlanStatus(plan)}

@@ -6,10 +6,12 @@ import { useAuth } from '../../context/AuthContext';
 import { Professional, Room, Service } from '../../types';
 import { ClassScheduleSection, DraftClassScheduleInput } from './ClassScheduleSection';
 import { ServiceRecurrenceConfigPanel } from './ServiceRecurrenceConfigPanel';
+import { ServiceBillingConfigPanel, ServicePackageOption } from './ServiceBillingConfigPanel';
 import { LinkedInstructorsSelector } from './LinkedInstructorsSelector';
 import {
   ALL_PLAN_DURATIONS,
   isMixedProfile,
+  isPeriodicBillingMode,
   isStudioProfile,
   normalizeEstablishmentProfile,
   parseServiceRecurrenceConfig,
@@ -17,6 +19,7 @@ import {
   RecurrenceFrequency,
   RecurrenceIntervalSpec,
   resolveServiceDomain,
+  ServiceBillingMode,
   ServiceDomain,
   supportsStudioFeatures
 } from '../../utils/establishmentContext';
@@ -65,6 +68,11 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
   const [defaultCustomInterval, setDefaultCustomInterval] = useState<RecurrenceIntervalSpec | null>(null);
   const [allowedPlanDurations, setAllowedPlanDurations] = useState<Exclude<PlanDurationCode, 'legacy_frequency'>[]>([...ALL_PLAN_DURATIONS]);
   const [defaultPlanDuration, setDefaultPlanDuration] = useState<Exclude<PlanDurationCode, 'legacy_frequency'>>('1_month');
+  const [billingMode, setBillingMode] = useState<ServiceBillingMode>('per_session');
+  const [periodicPrice, setPeriodicPrice] = useState<string>('');
+  const [defaultPackageId, setDefaultPackageId] = useState<string>('');
+  const [defaultBillingDueDay, setDefaultBillingDueDay] = useState<string>('');
+  const [availablePackages, setAvailablePackages] = useState<ServicePackageOption[]>([]);
   const [description, setDescription] = useState<string>('');
   const [draftSchedules, setDraftSchedules] = useState<DraftClassScheduleInput[]>([]);
   const [hasPendingScheduleForm, setHasPendingScheduleForm] = useState<boolean>(false);
@@ -78,6 +86,9 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
       ApiClient.get<Room[]>('/v1/rooms')
         .then(res => setRooms(Array.isArray(res) ? res : []))
         .catch(() => setRooms([]));
+      ApiClient.get<{ packages: ServicePackageOption[] }>('/v1/packages')
+        .then(res => setAvailablePackages(Array.isArray(res?.packages) ? res.packages : []))
+        .catch(() => setAvailablePackages([]));
     }
   }, [isOpen, isStudioCompatible]);
 
@@ -112,6 +123,10 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
         setDefaultCustomInterval(recCfg.defaultCustomInterval || null);
         setAllowedPlanDurations(recCfg.allowedPlanDurations || [...ALL_PLAN_DURATIONS]);
         setDefaultPlanDuration(recCfg.defaultPlanDuration || '1_month');
+        setBillingMode(((domain === 'studio' && serviceToEdit.billing_mode) || 'per_session') as ServiceBillingMode);
+        setPeriodicPrice(serviceToEdit.periodic_price !== undefined && serviceToEdit.periodic_price !== null ? String(serviceToEdit.periodic_price) : '');
+        setDefaultPackageId(serviceToEdit.default_package_id || '');
+        setDefaultBillingDueDay(serviceToEdit.default_billing_due_day !== undefined && serviceToEdit.default_billing_due_day !== null ? String(serviceToEdit.default_billing_due_day) : '');
         setDescription(serviceToEdit.description || '');
         const editPrimaryId = serviceToEdit.professional_id || initialProfessionalId || professionals[0]?.id || '';
         setProfessionalId(editPrimaryId);
@@ -135,6 +150,10 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
         setDefaultCustomInterval(null);
         setAllowedPlanDurations([...ALL_PLAN_DURATIONS]);
         setDefaultPlanDuration('1_month');
+        setBillingMode('per_session');
+        setPeriodicPrice('');
+        setDefaultPackageId('');
+        setDefaultBillingDueDay('');
         setDescription('');
         let defaultProf = '';
         if (initialProfessionalId && professionals.some(p => p.id === initialProfessionalId)) {
@@ -178,10 +197,23 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
       showToast('Selecione o profissional responsável', 'error');
       return;
     }
-    const numPrice = parseFloat(String(price).replace(',', '.'));
+    const numPrice = String(price).trim() !== '' ? parseFloat(String(price).replace(',', '.')) : 0;
     if (isNaN(numPrice) || numPrice < 0) {
       showToast('Informe um valor válido para o serviço', 'error');
       return;
+    }
+    const isPeriodicSave = showStudioConfig && isPeriodicBillingMode(billingMode);
+    const numPeriodicPrice = parseFloat(String(periodicPrice).replace(',', '.'));
+    if (isPeriodicSave && (periodicPrice.trim() === '' || isNaN(numPeriodicPrice) || numPeriodicPrice < 0)) {
+      showToast('Informe um valor por período de cobrança válido', 'error');
+      return;
+    }
+    if (isPeriodicSave && defaultBillingDueDay.trim() !== '') {
+      const dueNum = Number(defaultBillingDueDay);
+      if (!Number.isInteger(dueNum) || dueNum < 1 || dueNum > 28) {
+        showToast('Dia de vencimento padrão deve estar entre 1 e 28', 'error');
+        return;
+      }
     }
     if (showStudioConfig && serviceKind === 'group' && (!Number.isInteger(Number(defaultCapacity)) || Number(defaultCapacity) < 1)) {
       showToast('Informe um número inteiro positivo de vagas para a turma', 'error');
@@ -222,7 +254,11 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
               customRecurrenceIntervals: allowRecurrence && allowedFrequencies.includes('custom_interval') ? customIntervals : [],
               defaultRecurrenceInterval: allowRecurrence && allowedFrequencies.includes('custom_interval') ? defaultCustomInterval : null,
               allowedPlanDurations: allowRecurrence ? allowedPlanDurations : [],
-              defaultPlanDuration: allowRecurrence ? defaultPlanDuration : null
+              defaultPlanDuration: allowRecurrence ? defaultPlanDuration : null,
+              billingMode,
+              periodicPrice: isPeriodicSave ? numPeriodicPrice : null,
+              defaultPackageId: billingMode === 'package' && defaultPackageId ? defaultPackageId : null,
+              defaultBillingDueDay: isPeriodicSave && defaultBillingDueDay.trim() !== '' ? Number(defaultBillingDueDay) : null
             }
           : {}),
         classSchedules: shouldSendDraftSchedules ? draftSchedules : undefined,
@@ -340,7 +376,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block font-semibold text-slate-700 mb-1">
-                Preço (R$) <span className="text-rose-500">*</span>
+                {showStudioConfig ? 'Preço por Atendimento / Aula (R$) *' : <>Preço (R$) <span className="text-rose-500">*</span></>}
               </label>
               <input
                 type="number"
@@ -494,6 +530,22 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
                   setDefaultCustomInterval(next.defaultCustomInterval);
                   setAllowedPlanDurations(next.allowedPlanDurations);
                   setDefaultPlanDuration(next.defaultPlanDuration);
+                }}
+              />
+              <ServiceBillingConfigPanel
+                compact
+                serviceName={name}
+                billingMode={billingMode}
+                sessionPrice={Number(price) || 0}
+                periodicPrice={periodicPrice}
+                defaultPackageId={defaultPackageId}
+                defaultBillingDueDay={defaultBillingDueDay}
+                availablePackages={availablePackages}
+                onChange={next => {
+                  setBillingMode(next.billingMode);
+                  setPeriodicPrice(next.periodicPrice);
+                  setDefaultPackageId(next.defaultPackageId);
+                  setDefaultBillingDueDay(next.defaultBillingDueDay);
                 }}
               />
             </div>

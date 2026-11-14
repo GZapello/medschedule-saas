@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '../middlewares/audit.middleware';
+import { BillingCycleService, FREQUENCY_PT_LABELS, normalizePeriodicFrequency } from '../services/billing-cycle.service';
 
 export class PayrollController {
   // Lista pagamentos / folha do mês para a equipe
@@ -189,6 +190,93 @@ export class PayrollController {
         return out;
       };
 
+      const periodicPlanUnitCache = new Map<string, { unitValue: number; note: string; isExemptOrCancelled: boolean }>();
+
+      const getPeriodicPlanUnitBasis = (row: any) => {
+        const planId = String(row.recurring_plan_id || '');
+        if (!planId) {
+          return {
+            unitValue: 0,
+            note: 'Sessão coberta sem contrato periódico vinculado (base R$ 0,00)',
+            isExemptOrCancelled: false
+          };
+        }
+        const sessionDate = String(row.start_time || '').slice(0, 10);
+        const planObj = {
+          id: planId,
+          start_date: row.rbp_start_date,
+          end_date: row.rbp_end_date,
+          billing_frequency: row.rbp_frequency,
+          billing_cycle: row.rbp_cycle,
+          cycle_months: row.rbp_cycle_months,
+          due_day: row.rbp_due_day,
+          amount: row.rbp_amount,
+          status: row.rbp_status,
+          title: row.rbp_title
+        };
+        const cycleWin = BillingCycleService.findCycleWindowForDate(planObj, sessionDate);
+        const cacheKey = `${planId}:${cycleWin ? cycleWin.billingCycleKey : periodMonth}`;
+        const cached = periodicPlanUnitCache.get(cacheKey);
+        if (cached) return cached;
+
+        const { frequency } = normalizePeriodicFrequency(row.rbp_frequency || row.rbp_cycle, row.rbp_cycle_months);
+        const freqLabel = FREQUENCY_PT_LABELS[frequency] || 'Periódico';
+
+        const cyclePayment = cycleWin
+          ? (db.prepare(`
+              SELECT amount, status
+              FROM payments
+              WHERE tenant_id = ? AND recurring_plan_id = ?
+                AND (billing_cycle_key = ? OR competence_month = ?)
+              ORDER BY created_at DESC LIMIT 1
+            `).get(tenantId, planId, cycleWin.billingCycleKey, cycleWin.competenceMonth) as any)
+          : null;
+
+        let out: { unitValue: number; note: string; isExemptOrCancelled: boolean };
+        if (cyclePayment && ['cancelled', 'refunded', 'exempt'].includes(String(cyclePayment.status))) {
+          out = {
+            unitValue: 0,
+            note: `Ciclo ${freqLabel} cancelado/estornado/isento (base R$ 0,00)`,
+            isExemptOrCancelled: true
+          };
+        } else if (row.rbp_status === 'cancelled' && !cyclePayment) {
+          out = {
+            unitValue: 0,
+            note: `Plano ${freqLabel} cancelado sem cobrança válida (base R$ 0,00)`,
+            isExemptOrCancelled: true
+          };
+        } else {
+          const cycleAmount = cyclePayment ? Number(cyclePayment.amount || 0) : Number(row.rbp_amount || 0);
+          const countRow = cycleWin
+            ? (db.prepare(`
+                SELECT COUNT(*) as cnt
+                FROM appointments
+                WHERE tenant_id = ? AND recurring_plan_id = ?
+                  AND status NOT IN ('cancelled', 'no_show')
+                  AND substr(start_time, 1, 10) >= ?
+                  AND substr(start_time, 1, 10) <= ?
+              `).get(tenantId, planId, cycleWin.cycleStart, cycleWin.cycleEnd) as { cnt: number } | undefined)
+            : (db.prepare(`
+                SELECT COUNT(*) as cnt
+                FROM appointments
+                WHERE tenant_id = ? AND recurring_plan_id = ?
+                  AND status NOT IN ('cancelled', 'no_show')
+                  AND substr(start_time, 1, 7) = ?
+              `).get(tenantId, planId, periodMonth) as { cnt: number } | undefined);
+
+          const denom = Math.max(1, Number(countRow?.cnt || 1));
+          const unitValue = Math.max(0, Math.round((cycleAmount / denom) * 100) / 100);
+          out = {
+            unitValue,
+            note: `Plano ${freqLabel} "${row.rbp_title || 'Contrato'}" (rateio R$ ${cycleAmount.toFixed(2)} / ${denom} aula(s) no ciclo)`,
+            isExemptOrCancelled: false
+          };
+        }
+
+        periodicPlanUnitCache.set(cacheKey, out);
+        return out;
+      };
+
       const resolveRuleForProf = (profRow: any, srvId: string | null, serviceRuleMap: Map<string, any>) => {
         const remType = profRow.remuneration_type || 'commission';
         const generalCommPct = Number(profRow.commission_percentage || 0);
@@ -292,6 +380,8 @@ export class PayrollController {
             COALESCE(a.is_package_covered, 0) as is_package_covered,
             a.package_contract_id,
             a.package_entitlement_id,
+            a.recurring_plan_id,
+            COALESCE(a.billing_coverage_type, 'none') as billing_coverage_type,
             CASE WHEN a.occurrence_id IS NOT NULL OR COALESCE(s.service_kind, a.service_kind) = 'group' THEN 'group' ELSE 'individual' END as service_kind,
             COALESCE(a.attendance_status, 'pending') as attendance_status,
             COALESCE(s.name, 'Serviço') as service_name,
@@ -302,6 +392,15 @@ export class PayrollController {
             spc.contract_status as pkg_contract_status,
             spc.payment_status as pkg_payment_status,
             spc.package_name_snapshot as pkg_name,
+            rbp.amount as rbp_amount,
+            rbp.billing_frequency as rbp_frequency,
+            rbp.billing_cycle as rbp_cycle,
+            rbp.cycle_months as rbp_cycle_months,
+            rbp.due_day as rbp_due_day,
+            rbp.start_date as rbp_start_date,
+            rbp.end_date as rbp_end_date,
+            rbp.status as rbp_status,
+            rbp.title as rbp_title,
             pay.payment_id as payment_id,
             CASE
               WHEN COALESCE(pay.paid_count, 0) > 0 THEN 'paid'
@@ -319,6 +418,7 @@ export class PayrollController {
           LEFT JOIN services s ON s.id = a.service_id AND s.tenant_id = a.tenant_id
           LEFT JOIN professional_services ps ON ps.service_id = a.service_id AND ps.professional_id = a.professional_id
           LEFT JOIN student_package_contracts spc ON spc.id = a.package_contract_id AND spc.tenant_id = a.tenant_id
+          LEFT JOIN recurring_billing_plans rbp ON rbp.id = a.recurring_plan_id AND rbp.tenant_id = a.tenant_id
           LEFT JOIN (
             SELECT
               appointment_id,
@@ -425,28 +525,42 @@ export class PayrollController {
         const remType = p.remuneration_type || 'commission';
         const generalCommPct = Number(p.commission_percentage || 0);
 
-        const computeFinancialRow = (row: any): { netAmount: number; isPackageCovered: boolean; isExempt: boolean; basisNote: string } => {
+        const computeFinancialRow = (row: any): { netAmount: number; isPackageCovered: boolean; isPeriodicCovered: boolean; isExempt: boolean; basisNote: string } => {
           const isPkg = Boolean(Number(row.is_package_covered || 0) === 1 || row.package_contract_id);
           if (isPkg) {
             if (row.payment_id && (row.payment_status === 'cancelled' || row.payment_status === 'refunded' || row.payment_status === 'exempt')) {
-              return { netAmount: 0, isPackageCovered: true, isExempt: true, basisNote: 'Sessão isenta/cancelada em pacote' };
+              return { netAmount: 0, isPackageCovered: true, isPeriodicCovered: false, isExempt: true, basisNote: 'Sessão isenta/cancelada em pacote' };
             }
             const pkgInfo = getPackageUnitBasis(row);
             return {
               netAmount: pkgInfo.unitValue,
               isPackageCovered: true,
+              isPeriodicCovered: false,
               isExempt: pkgInfo.isExemptOrCancelled,
               basisNote: pkgInfo.note
             };
           }
 
+          const isPeriodic = Boolean(row.recurring_plan_id || row.billing_coverage_type === 'periodic_plan');
+          if (isPeriodic) {
+            const perInfo = getPeriodicPlanUnitBasis(row);
+            return {
+              netAmount: perInfo.unitValue,
+              isPackageCovered: false,
+              isPeriodicCovered: true,
+              isExempt: perInfo.isExemptOrCancelled,
+              basisNote: perInfo.note
+            };
+          }
+
           if (row.payment_id) {
             if (row.payment_status === 'cancelled' || row.payment_status === 'refunded' || row.payment_status === 'exempt') {
-              return { netAmount: 0, isPackageCovered: false, isExempt: true, basisNote: 'Atendimento isento' };
+              return { netAmount: 0, isPackageCovered: false, isPeriodicCovered: false, isExempt: true, basisNote: 'Atendimento isento' };
             }
             return {
               netAmount: Math.max(0, Math.round(Number(row.payment_amount || 0) * 100) / 100),
               isPackageCovered: false,
+              isPeriodicCovered: false,
               isExempt: false,
               basisNote: row.payment_status === 'paid' ? 'Pagamento liquidado' : 'Cobrança avulsa em aberto'
             };
@@ -455,6 +569,7 @@ export class PayrollController {
           return {
             netAmount: Math.max(0, Math.round(Number(row.list_price || 0) * 100) / 100),
             isPackageCovered: false,
+            isPeriodicCovered: false,
             isExempt: false,
             basisNote: 'Tabela padrão do serviço'
           };
@@ -548,7 +663,9 @@ export class PayrollController {
             commissionAmount: itemComm,
             participantRole: meta.role,
             isPackageCovered: fin.isPackageCovered,
+            isPeriodicCovered: fin.isPeriodicCovered,
             packageContractId: row.package_contract_id || null,
+            recurringPlanId: row.recurring_plan_id || null,
             financialBasisNote: finalBasisNote
           });
         }
@@ -571,7 +688,9 @@ export class PayrollController {
           const finEntries = presentMembers.map(m => computeFinancialRow(m));
           const totalNetBasis = finEntries.reduce((sum, f) => Math.round((sum + f.netAmount) * 100) / 100, 0);
           const anyPackage = finEntries.some(f => f.isPackageCovered);
+          const anyPeriodic = finEntries.some(f => f.isPeriodicCovered);
           const anyPkgContract = presentMembers.find(m => m.package_contract_id)?.package_contract_id || null;
+          const anyPlanId = presentMembers.find(m => m.recurring_plan_id)?.recurring_plan_id || null;
           const allExempt = finEntries.every(f => f.isExempt);
 
           const meta = sample.occurrence_id
@@ -636,7 +755,9 @@ export class PayrollController {
             commissionAmount: occComm,
             participantRole: meta.role,
             isPackageCovered: anyPackage,
+            isPeriodicCovered: anyPeriodic,
             packageContractId: anyPkgContract,
+            recurringPlanId: anyPlanId,
             financialBasisNote: finalBasisNote
           });
         }
@@ -874,8 +995,8 @@ export class PayrollController {
               id, tenant_id, payroll_id, professional_id, service_id, appointment_id,
               occurrence_id, service_name_snapshot, service_kind_snapshot, eligible_students_count,
               gross_basis_amount, rule_source, commission_type, commission_rate, group_payout_basis, commission_amount,
-              participant_role, is_package_covered, package_contract_id, financial_basis_note
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              participant_role, is_package_covered, package_contract_id, recurring_plan_id, financial_basis_note
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `);
           for (const item of dedupedBreakdown) {
             insItem.run(
@@ -898,6 +1019,7 @@ export class PayrollController {
               item.participantRole === 'co_instructor' ? 'co_instructor' : 'primary',
               item.isPackageCovered ? 1 : 0,
               item.packageContractId || null,
+              item.recurringPlanId || null,
               item.financialBasisNote || null
             );
           }

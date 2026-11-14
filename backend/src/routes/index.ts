@@ -925,6 +925,7 @@ api.get('/v1/financial/collections/summary', requireTenant, requireStudioEstabli
 api.get('/v1/financial/collections', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist', 'professional'), BillingCenterController.listCollections);
 api.post('/v1/financial/collections/:paymentId/mark-paid', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist', 'professional'), BillingCenterController.markPaid);
 api.get('/v1/financial/recurring-plans', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist', 'professional'), BillingCenterController.listRecurringPlans);
+api.get('/v1/financial/student-coverage', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist', 'professional'), BillingCenterController.getStudentCoverage);
 api.post('/v1/financial/recurring-plans', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist', 'professional'), BillingCenterController.createRecurringPlan);
 api.put('/v1/financial/recurring-plans/:id', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist', 'professional'), BillingCenterController.updateRecurringPlan);
 api.post('/v1/financial/recurring-plans/generate', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist', 'professional'), BillingCenterController.generateMonthlyBills);

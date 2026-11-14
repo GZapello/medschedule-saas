@@ -4,6 +4,11 @@ import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '../middlewares/audit.middleware';
 import { getUserPermissions } from '../middlewares/rbac.middleware';
 import { PackageService } from '../services/package.service';
+import {
+  BillingCycleService,
+  FREQUENCY_PT_LABELS,
+  normalizePeriodicFrequency
+} from '../services/billing-cycle.service';
 
 function getClinicTodayIso(): string {
   // Usa fuso padrão America/Sao_Paulo (-03:00) de forma determinística
@@ -231,6 +236,10 @@ export class BillingCenterController {
           pay.recurring_plan_id,
           pay.package_contract_id,
           pay.competence_month,
+          pay.billing_cycle_key,
+          pay.billing_cycle_start,
+          pay.billing_cycle_end,
+          COALESCE(pay.billing_frequency, rbp.billing_frequency, rbp.billing_cycle) as billing_frequency,
           pay.created_at,
           COALESCE(pay.due_date, substr(a.start_time, 1, 10), substr(pay.created_at, 1, 10)) as effective_due_date,
           COALESCE(pay.service_id, a.service_id, rbp.service_id) as effective_service_id,
@@ -429,6 +438,15 @@ export class BillingCenterController {
         params.push(...scope.ownProfIds);
       }
 
+      if (req.query.patientId) {
+        sql += ` AND rbp.patient_id = ?`;
+        params.push(String(req.query.patientId));
+      }
+      if (req.query.serviceId) {
+        sql += ` AND (rbp.service_id = ? OR rbp.service_id IS NULL)`;
+        params.push(String(req.query.serviceId));
+      }
+
       sql += ` ORDER BY CASE WHEN rbp.status = 'active' THEN 0 ELSE 1 END, pat.full_name ASC`;
 
       const plans = db.prepare(sql).all(...params);
@@ -443,7 +461,54 @@ export class BillingCenterController {
   }
 
   /**
-   * Cria plano de mensalidade recorrente
+   * Consulta planos periódicos ativos e pacotes compatíveis de um aluno para cobertura de aula
+   * GET /v1/financial/student-coverage
+   */
+  static getStudentCoverage(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      const patientId = req.query.patientId ? String(req.query.patientId) : '';
+      const serviceId = req.query.serviceId ? String(req.query.serviceId) : '';
+      const targetDate = req.query.date ? String(req.query.date).slice(0, 10) : getClinicTodayIso();
+
+      if (!tenantId || !patientId) {
+        res.status(400).json({ error: 'Estabelecimento e aluno são obrigatórios.' });
+        return;
+      }
+
+      let sql = `
+        SELECT
+          rbp.*,
+          s.name as service_name,
+          p.name as professional_name
+        FROM recurring_billing_plans rbp
+        LEFT JOIN services s ON s.id = rbp.service_id
+        LEFT JOIN professionals p ON p.id = rbp.professional_id
+        WHERE rbp.tenant_id = ?
+          AND rbp.patient_id = ?
+          AND rbp.status = 'active'
+          AND COALESCE(rbp.covers_sessions, 1) = 1
+          AND rbp.package_contract_id IS NULL
+          AND rbp.start_date <= ?
+          AND (rbp.end_date IS NULL OR rbp.end_date = '' OR rbp.end_date >= ?)
+      `;
+      const params: any[] = [tenantId, patientId, targetDate, targetDate];
+      if (serviceId) {
+        sql += ` AND (rbp.service_id = ? OR rbp.service_id IS NULL)`;
+        params.push(serviceId);
+      }
+      sql += ` ORDER BY rbp.start_date DESC, rbp.created_at DESC`;
+
+      const plans = db.prepare(sql).all(...params);
+      res.json({ plans, activePeriodicPlans: plans });
+    } catch (err: any) {
+      console.error('[BillingCenterController.getStudentCoverage] Erro:', err);
+      res.status(500).json({ error: 'Erro ao consultar cobertura financeira do aluno.' });
+    }
+  }
+
+  /**
+   * Cria plano periódico de cobrança (mensal, trimestral, semestral ou anual)
    * POST /v1/financial/recurring-plans
    */
   static createRecurringPlan(req: Request, res: Response): void {
@@ -456,7 +521,7 @@ export class BillingCenterController {
 
       const scope = getBillingScope(req, tenantId);
       if (!scope.canManageCollections) {
-        res.status(403).json({ error: 'Sem permissão para criar mensalidades recorrentes.' });
+        res.status(403).json({ error: 'Sem permissão para criar planos periódicos de cobrança.' });
         return;
       }
 
@@ -467,11 +532,18 @@ export class BillingCenterController {
         title,
         amount,
         dueDay,
+        firstDueDate,
         paymentMethod,
         startDate,
         endDate,
         notes,
-        generateCurrentMonth
+        billingFrequency,
+        billingCycle,
+        coversSessions,
+        generateCurrentMonth,
+        generateInitialCycle,
+        generateAllContractCycles,
+        initialPaymentStatus
       } = req.body || {};
 
       if (!patientId || !title || !String(title).trim()) {
@@ -481,11 +553,11 @@ export class BillingCenterController {
 
       const numAmount = Number(amount);
       if (!Number.isFinite(numAmount) || numAmount <= 0) {
-        res.status(400).json({ error: 'Valor da mensalidade deve ser maior que zero.' });
+        res.status(400).json({ error: 'Valor do período de cobrança deve ser maior que zero.' });
         return;
       }
 
-      const parsedDueDay = Math.min(28, Math.max(1, Math.floor(Number(dueDay) || 5)));
+      const parsedDueDay = Math.min(28, Math.max(1, Math.floor(Number(dueDay) || 10)));
       const patientRow = db.prepare('SELECT id FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId);
       if (!patientRow) {
         res.status(404).json({ error: 'Aluno/paciente não encontrado neste estabelecimento.' });
@@ -501,83 +573,63 @@ export class BillingCenterController {
         return;
       }
 
-      const id = 'rbp-' + uuidv4().slice(0, 8);
+      const rawFreq = billingFrequency || billingCycle || 'monthly';
+      if (!['monthly', 'quarterly', 'semiannual', 'annual'].includes(String(rawFreq).toLowerCase())) {
+        res.status(400).json({ error: 'Periodicidade inválida. Utilize monthly, quarterly, semiannual ou annual.' });
+        return;
+      }
+      const { frequency } = normalizePeriodicFrequency(rawFreq);
+
       const effStartDate = startDate ? String(startDate).slice(0, 10) : getClinicTodayIso();
       const effEndDate = endDate ? String(endDate).slice(0, 10) : null;
       const roundedAmount = Math.round(numAmount * 100) / 100;
 
-      db.prepare(`
-        INSERT INTO recurring_billing_plans (
-          id, tenant_id, patient_id, service_id, professional_id,
-          title, amount, billing_cycle, due_day, payment_method,
-          start_date, end_date, status, notes, created_by, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'monthly', ?, ?, ?, ?, 'active', ?, ?, datetime('now'), datetime('now'))
-      `).run(
-        id,
-        tenantId,
-        patientId,
-        serviceId || null,
-        professionalId || null,
-        String(title).trim(),
-        roundedAmount,
-        parsedDueDay,
-        paymentMethod || 'pix',
-        effStartDate,
-        effEndDate,
-        notes ? String(notes).trim() : null,
-        req.user?.userId || 'system'
-      );
-
-      let generatedInitialPayment = false;
-      if (generateCurrentMonth) {
-        const compMonth = effStartDate.slice(0, 7);
-        const lastDay = getLastDayOfMonth(Number(compMonth.slice(0, 4)), Number(compMonth.slice(5, 7)));
-        const dueDate = `${compMonth}-${String(Math.min(parsedDueDay, lastDay)).padStart(2, '0')}`;
-        const payRes = db.prepare(`
-          INSERT OR IGNORE INTO payments (
-            id, tenant_id, appointment_id, patient_id, amount, payment_method, status, notes,
-            service_id, base_amount, due_date, recurring_plan_id, competence_month, professional_id
-          ) VALUES (?, ?, NULL, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)
-        `).run(
-          'pay-' + uuidv4().slice(0, 8),
+      const result = db.transaction(() => {
+        return BillingCycleService.createPeriodicPlanTx({
           tenantId,
           patientId,
-          roundedAmount,
-          paymentMethod || 'pix',
-          `Mensalidade ${String(title).trim()} (${compMonth})`,
-          serviceId || null,
-          roundedAmount,
-          dueDate,
-          id,
-          compMonth,
-          professionalId || null
-        );
-        generatedInitialPayment = payRes.changes > 0;
-        if (generatedInitialPayment) {
-          db.prepare('UPDATE recurring_billing_plans SET last_generated_month = ? WHERE id = ?').run(compMonth, id);
-        }
-      }
+          serviceId: serviceId || null,
+          professionalId: professionalId || null,
+          title: String(title).trim(),
+          amount: roundedAmount,
+          billingFrequency: frequency,
+          dueDay: parsedDueDay,
+          firstDueDate: firstDueDate ? String(firstDueDate).slice(0, 10) : null,
+          paymentMethod: paymentMethod || 'pix',
+          startDate: effStartDate,
+          endDate: effEndDate,
+          notes: notes ? String(notes).trim() : null,
+          coversSessions: coversSessions !== false && coversSessions !== 0,
+          generateInitialCycle: Boolean(generateCurrentMonth || generateInitialCycle),
+          generateAllContractCycles: Boolean(generateAllContractCycles),
+          initialPaymentStatus: initialPaymentStatus === 'paid' ? 'paid' : 'pending',
+          createdBy: req.user?.userId || 'system'
+        });
+      })();
 
-      logAudit(req, 'CREATE_RECURRING_BILLING_PLAN', 'recurring_billing_plans', id, {
+      logAudit(req, 'CREATE_RECURRING_BILLING_PLAN', 'recurring_billing_plans', result.plan.id, {
         patientId,
         amount: roundedAmount,
-        dueDay: parsedDueDay
+        dueDay: parsedDueDay,
+        billingFrequency: frequency,
+        generatedCount: result.generatedIds.length
       });
 
-      const created = db.prepare('SELECT * FROM recurring_billing_plans WHERE id = ?').get(id);
       res.status(201).json({
         success: true,
-        plan: created,
-        generatedInitialPayment
+        plan: result.plan,
+        generatedInitialPayment: result.generatedIds.length > 0,
+        generatedPaymentIds: result.generatedIds
       });
     } catch (err: any) {
       console.error('[BillingCenterController.createRecurringPlan] Erro:', err);
-      res.status(500).json({ error: 'Erro ao criar mensalidade recorrente.' });
+      res.status(500).json({ error: 'Erro ao criar plano periódico de cobrança.' });
     }
   }
 
   /**
-   * Atualiza ou pausa/cancela um plano de mensalidade recorrente
+   * Atualiza, pausa, reativa, renova ou cancela um plano periódico de cobrança
+   * (alterações de valor não alteram competências já faturadas/quitadas)
    * PUT /v1/financial/recurring-plans/:id
    */
   static updateRecurringPlan(req: Request, res: Response): void {
@@ -591,63 +643,126 @@ export class BillingCenterController {
 
       const scope = getBillingScope(req, tenantId);
       if (!scope.canManageCollections) {
-        res.status(403).json({ error: 'Sem permissão para alterar mensalidades recorrentes.' });
+        res.status(403).json({ error: 'Sem permissão para alterar planos periódicos.' });
         return;
       }
 
       const existing = db.prepare('SELECT * FROM recurring_billing_plans WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
       if (!existing) {
-        res.status(404).json({ error: 'Plano de mensalidade não encontrado.' });
+        res.status(404).json({ error: 'Plano periódico não encontrado.' });
         return;
       }
 
-      const { title, amount, dueDay, paymentMethod, status, endDate, notes, serviceId, professionalId } = req.body || {};
-      const nextStatus = ['active', 'paused', 'cancelled'].includes(status) ? status : existing.status;
+      const {
+        title,
+        amount,
+        dueDay,
+        paymentMethod,
+        status,
+        endDate,
+        notes,
+        serviceId,
+        professionalId,
+        billingFrequency,
+        billingCycle,
+        coversSessions,
+        cancellationReason,
+        cancelPendingCharges
+      } = req.body || {};
+
+      const normalizedReqStatus = status === 'ended' ? 'cancelled' : status;
+      const nextStatus = ['active', 'paused', 'cancelled'].includes(normalizedReqStatus) ? normalizedReqStatus : existing.status;
       const nextAmount = amount !== undefined ? Math.round(Number(amount) * 100) / 100 : existing.amount;
       if (!Number.isFinite(nextAmount) || nextAmount <= 0) {
         res.status(400).json({ error: 'Valor inválido.' });
         return;
       }
       const nextDueDay = dueDay !== undefined ? Math.min(28, Math.max(1, Math.floor(Number(dueDay)))) : existing.due_day;
+      const nextCovers = coversSessions !== undefined ? (coversSessions ? 1 : 0) : (existing.covers_sessions ?? 1);
 
-      db.prepare(`
-        UPDATE recurring_billing_plans
-        SET title = ?,
-            amount = ?,
-            due_day = ?,
-            payment_method = ?,
-            status = ?,
-            end_date = ?,
-            notes = ?,
-            service_id = ?,
-            professional_id = ?,
-            updated_at = datetime('now')
-        WHERE id = ? AND tenant_id = ?
-      `).run(
-        title !== undefined ? String(title).trim() : existing.title,
-        nextAmount,
-        nextDueDay,
-        paymentMethod !== undefined ? paymentMethod : existing.payment_method,
-        nextStatus,
-        endDate !== undefined ? (endDate ? String(endDate).slice(0, 10) : null) : existing.end_date,
-        notes !== undefined ? (notes ? String(notes).trim() : null) : existing.notes,
-        serviceId !== undefined ? (serviceId || null) : existing.service_id,
-        professionalId !== undefined ? (professionalId || null) : existing.professional_id,
-        id,
-        tenantId
-      );
+      let nextFrequency = existing.billing_frequency || existing.billing_cycle || 'monthly';
+      let nextCycleMonths = Number(existing.cycle_months || 1);
+      if (billingFrequency !== undefined || billingCycle !== undefined) {
+        const rawFreq = billingFrequency || billingCycle;
+        if (!['monthly', 'quarterly', 'semiannual', 'annual'].includes(String(rawFreq).toLowerCase())) {
+          res.status(400).json({ error: 'Periodicidade inválida.' });
+          return;
+        }
+        const norm = normalizePeriodicFrequency(rawFreq);
+        nextFrequency = norm.frequency;
+        nextCycleMonths = norm.cycleMonths;
+      }
 
-      logAudit(req, 'UPDATE_RECURRING_BILLING_PLAN', 'recurring_billing_plans', id, { status: nextStatus, amount: nextAmount });
+      db.transaction(() => {
+        db.prepare(`
+          UPDATE recurring_billing_plans
+          SET title = ?,
+              amount = ?,
+              billing_cycle = ?,
+              billing_frequency = ?,
+              cycle_months = ?,
+              covers_sessions = ?,
+              due_day = ?,
+              payment_method = ?,
+              status = ?,
+              end_date = ?,
+              notes = ?,
+              service_id = ?,
+              professional_id = ?,
+              cancelled_at = CASE WHEN ? = 'cancelled' THEN COALESCE(cancelled_at, datetime('now')) WHEN ? = 'active' THEN NULL ELSE cancelled_at END,
+              paused_at = CASE WHEN ? = 'paused' THEN COALESCE(paused_at, datetime('now')) WHEN ? = 'active' THEN NULL ELSE paused_at END,
+              cancellation_reason = CASE WHEN ? = 'cancelled' THEN COALESCE(?, cancellation_reason) ELSE cancellation_reason END,
+              updated_at = datetime('now')
+          WHERE id = ? AND tenant_id = ?
+        `).run(
+          title !== undefined ? String(title).trim() : existing.title,
+          nextAmount,
+          nextFrequency,
+          nextFrequency,
+          nextCycleMonths,
+          nextCovers,
+          nextDueDay,
+          paymentMethod !== undefined ? paymentMethod : existing.payment_method,
+          nextStatus,
+          endDate !== undefined ? (endDate ? String(endDate).slice(0, 10) : null) : existing.end_date,
+          notes !== undefined ? (notes ? String(notes).trim() : null) : existing.notes,
+          serviceId !== undefined ? (serviceId || null) : existing.service_id,
+          professionalId !== undefined ? (professionalId || null) : existing.professional_id,
+          nextStatus,
+          nextStatus,
+          nextStatus,
+          nextStatus,
+          nextStatus,
+          cancellationReason ? String(cancellationReason).trim() : null,
+          id,
+          tenantId
+        );
+
+        if (nextStatus === 'cancelled' && cancelPendingCharges) {
+          db.prepare(`
+            UPDATE payments
+            SET status = 'cancelled',
+                notes = TRIM(COALESCE(notes, '') || ' • Cancelado junto ao encerramento do plano')
+            WHERE tenant_id = ? AND recurring_plan_id = ? AND status IN ('pending')
+          `).run(tenantId, id);
+        }
+      })();
+
+      logAudit(req, 'UPDATE_RECURRING_BILLING_PLAN', 'recurring_billing_plans', id, {
+        status: nextStatus,
+        amount: nextAmount,
+        billingFrequency: nextFrequency
+      });
       const updated = db.prepare('SELECT * FROM recurring_billing_plans WHERE id = ? AND tenant_id = ?').get(id, tenantId);
       res.json({ success: true, plan: updated });
     } catch (err: any) {
       console.error('[BillingCenterController.updateRecurringPlan] Erro:', err);
-      res.status(500).json({ error: 'Erro ao atualizar mensalidade recorrente.' });
+      res.status(500).json({ error: 'Erro ao atualizar plano periódico.' });
     }
   }
 
   /**
-   * Gera cobranças mensais de forma idempotente para os planos ativos na competência YYYY-MM
+   * Gera cobranças por ciclos (mensal, trimestral, semestral, anual) de forma idempotente
    * POST /v1/financial/recurring-plans/generate
    */
   static generateMonthlyBills(req: Request, res: Response): void {
@@ -660,7 +775,7 @@ export class BillingCenterController {
 
       const scope = getBillingScope(req, tenantId);
       if (!scope.canManageCollections) {
-        res.status(403).json({ error: 'Sem permissão para gerar cobranças mensais.' });
+        res.status(403).json({ error: 'Sem permissão para gerar cobranças periódicas.' });
         return;
       }
 
@@ -674,6 +789,7 @@ export class BillingCenterController {
       }
 
       const targetPlanId = req.body?.planId ? String(req.body.planId) : '';
+      const generateAllContractCycles = Boolean(req.body?.generateAllContractCycles);
       const year = Number(competenceMonth.slice(0, 4));
       const month = Number(competenceMonth.slice(5, 7));
       const lastDay = getLastDayOfMonth(year, month);
@@ -684,10 +800,12 @@ export class BillingCenterController {
         SELECT * FROM recurring_billing_plans
         WHERE tenant_id = ?
           AND status = 'active'
-          AND start_date <= ?
-          AND (end_date IS NULL OR end_date = '' OR end_date >= ?)
       `;
-      const planParams: any[] = [tenantId, monthEnd, monthStart];
+      const planParams: any[] = [tenantId];
+      if (!generateAllContractCycles) {
+        planSql += ` AND start_date <= ? AND (end_date IS NULL OR end_date = '' OR end_date >= ?)`;
+        planParams.push(monthEnd, monthStart);
+      }
       if (targetPlanId) {
         planSql += ` AND id = ?`;
         planParams.push(targetPlanId);
@@ -699,44 +817,16 @@ export class BillingCenterController {
       const generatedIds: string[] = [];
 
       const runTx = db.transaction(() => {
-        const insStmt = db.prepare(`
-          INSERT OR IGNORE INTO payments (
-            id, tenant_id, appointment_id, patient_id, amount, payment_method, status, notes,
-            service_id, base_amount, due_date, recurring_plan_id, competence_month, professional_id
-          ) VALUES (?, ?, NULL, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)
-        `);
-        const updatePlanStmt = db.prepare(`
-          UPDATE recurring_billing_plans
-          SET last_generated_month = ?, updated_at = datetime('now')
-          WHERE id = ? AND tenant_id = ?
-        `);
-
         for (const plan of activePlans) {
-          const day = Math.min(Math.max(1, Number(plan.due_day || 5)), lastDay);
-          const dueDate = `${competenceMonth}-${String(day).padStart(2, '0')}`;
-          const payId = 'pay-' + uuidv4().slice(0, 8);
-          const result = insStmt.run(
-            payId,
+          const out = BillingCycleService.generateCyclesForPlanTx({
             tenantId,
-            plan.patient_id,
-            plan.amount,
-            plan.payment_method || 'pix',
-            `Mensalidade ${plan.title} (${competenceMonth})`,
-            plan.service_id || null,
-            plan.amount,
-            dueDate,
-            plan.id,
+            plan,
             competenceMonth,
-            plan.professional_id || null
-          );
-
-          if (result.changes > 0) {
-            generatedCount += 1;
-            generatedIds.push(payId);
-          } else {
-            skippedExistingCount += 1;
-          }
-          updatePlanStmt.run(competenceMonth, plan.id, tenantId);
+            generateAllContractCycles
+          });
+          generatedCount += out.generatedIds.length;
+          skippedExistingCount += out.skippedCount;
+          generatedIds.push(...out.generatedIds);
         }
       });
 
@@ -744,6 +834,7 @@ export class BillingCenterController {
 
       logAudit(req, 'GENERATE_RECURRING_BILLS', 'recurring_billing_plans', targetPlanId || competenceMonth, {
         competenceMonth,
+        generateAllContractCycles,
         generatedCount,
         skippedExistingCount
       });
@@ -756,12 +847,12 @@ export class BillingCenterController {
         skippedExistingCount,
         generatedIds,
         message: generatedCount > 0
-          ? `${generatedCount} mensalidade(s) gerada(s) para ${competenceMonth}.`
-          : `Nenhuma nova cobrança gerada para ${competenceMonth} (todas já existentes).`
+          ? `${generatedCount} cobrança(s) periódica(s) gerada(s).`
+          : `Nenhuma nova cobrança gerada para ${competenceMonth} (ciclos já faturados).`
       });
     } catch (err: any) {
       console.error('[BillingCenterController.generateMonthlyBills] Erro:', err);
-      res.status(500).json({ error: 'Erro ao gerar mensalidades da competência.' });
+      res.status(500).json({ error: 'Erro ao gerar cobranças periódicas da competência.' });
     }
   }
 }

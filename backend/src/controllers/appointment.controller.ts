@@ -9,6 +9,7 @@ import { canAccessPatient } from '../services/patient-sharing.service';
 import { resolveBookingTenant, publicBookingProfessional, professionalBookingService, validBookingDate } from '../utils/public-booking';
 import { calculateAvailableSlots } from '../utils/slot-calculator';
 import { PackageService } from '../services/package.service';
+import { BillingCycleService } from '../services/billing-cycle.service';
 import { hasClinicalAccess } from './clinical.controller';
 import { isPrimaryClinicalModule, resolveClinicalModule } from '../utils/clinical-module';
 import { syncReceptionStatusFromClinical } from './checkin.controller';
@@ -24,6 +25,7 @@ import { WhatsAppService } from '../services/whatsapp.service';
 import { isValidPhoneNumber, normalizePhoneWithDDI, buildWhatsAppReminderMessage } from '../utils/phone.utils';
 import {
   getTenantEstablishmentProfile,
+  resolvePlanDurationEndDate,
   resolveServiceDomain,
   shouldUseStudioPersonalWorkflow,
   supportsStudioFeatures,
@@ -478,11 +480,17 @@ export class AppointmentController {
         startTime, endTime, modality, meeting_url, patientNotes, internalNotes,
         insuranceId, referredFromAppointmentId, referredByProfessionalId, referralReason,
         packageContractId,
+        billingPlanId, billing_plan_id,
+        billingChoice, billing_choice,
+        enrollBillingPlan, periodicPlanConfig,
         // Dados se o paciente for novo (página de agendamento público)
         newPatientData
       } = req.body;
+      const reqBillingPlanId = billingPlanId ?? billing_plan_id;
+      const reqBillingChoice = billingChoice ?? billing_choice;
+      const reqEnrollBillingPlan = enrollBillingPlan ?? periodicPlanConfig;
 
-      const ids = [professionalId, serviceId, patientId, roomId, insuranceId, referredFromAppointmentId, referredByProfessionalId, packageContractId];
+      const ids = [professionalId, serviceId, patientId, roomId, insuranceId, referredFromAppointmentId, referredByProfessionalId, packageContractId, reqBillingPlanId];
       if (ids.some(value => value !== undefined && value !== null && typeof value !== 'string') ||
           ['isCustomTime', 'is_custom_time', 'isRetroactive', 'is_retroactive'].some(key => req.body[key] !== undefined && typeof req.body[key] !== 'boolean')) {
         res.status(400).json({ code: 'INVALID_BOOKING_FIELDS', error: 'Revise os campos do agendamento e tente novamente.' }); return;
@@ -504,7 +512,7 @@ export class AppointmentController {
         if (!publicBookingProfessional(tenant.id, String(professionalId), individualSlug) || !professionalBookingService(tenant.id, String(professionalId), String(serviceId))) {
           res.status(404).json({ error: 'Atendimento indisponível.' }); return;
         }
-        if (patientId || roomId || internalNotes || insuranceId || referredFromAppointmentId || referredByProfessionalId || referralReason || packageContractId || rawDriveUrl !== undefined) {
+        if (patientId || roomId || internalNotes || insuranceId || referredFromAppointmentId || referredByProfessionalId || referralReason || packageContractId || reqBillingPlanId || reqBillingChoice || reqEnrollBillingPlan || rawDriveUrl !== undefined) {
           res.status(400).json({ error: 'Dados de agendamento inválidos.' }); return;
         }
         if (!newPatientData || typeof newPatientData.fullName !== 'string' || newPatientData.fullName.trim().length < 2 || newPatientData.fullName.length > 150 || typeof newPatientData.phone !== 'string' || !/^\d{10,13}$/.test(newPatientData.phone.replace(/\D/g, '')) || (newPatientData.email && (typeof newPatientData.email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newPatientData.email) || newPatientData.email.length > 254)) || (newPatientData.isChild && (typeof newPatientData.guardianName !== 'string' || !newPatientData.guardianName.trim())) || String(patientNotes || '').length > 1000 || String(newPatientData.notes || '').length > 1000) {
@@ -535,7 +543,12 @@ export class AppointmentController {
       }
 
       if (!canOperate(tenantId)) { res.status(isPublic ? 404 : 402).json(isPublic ? {error:'Agendamento online indisponível.'} : {code:'SUBSCRIPTION_REQUIRED',error:'Agendamento indisponível. A clínica precisa regularizar sua assinatura.'}); return; }
-      const serviceRow = db.prepare("SELECT id, price, professional_id, modality, COALESCE(service_kind, 'individual') as service_kind, default_capacity, name FROM services WHERE id = ? AND tenant_id = ?").get(serviceId, tenantId) as { id: string; price: number; professional_id: string | null; modality?: string; service_kind: string; default_capacity: number | null; name: string } | undefined;
+      const serviceRow = db.prepare(`
+        SELECT id, price, professional_id, modality, COALESCE(service_kind, 'individual') as service_kind,
+               default_capacity, name, service_domain, clinical_module,
+               billing_mode, periodic_price, billing_cycle_months, default_package_id, default_billing_due_day
+        FROM services WHERE id = ? AND tenant_id = ?
+      `).get(serviceId, tenantId) as any;
       if (!serviceRow) { res.status(400).json({ error: 'Serviço não pertence à clínica.' }); return; }
       const isGroupService = serviceRow.service_kind === 'group';
       const defaultGroupCapacity = isGroupService ? Math.max(1, Number(serviceRow.default_capacity) || 1) : 1;
@@ -797,11 +810,35 @@ export class AppointmentController {
         serviceRow.professional_id === professionalId ||
         Boolean(db.prepare('SELECT 1 FROM professional_services WHERE professional_id = ? AND service_id = ?').get(professionalId, serviceId));
 
-      const isPackageCovered = Boolean(!isPublic && packageContractId);
+      const billingCov = BillingCycleService.prepareAppointmentBillingCoverage({
+        tenantId,
+        isPublic,
+        patientId: resolvedPatientId,
+        serviceId,
+        professionalId,
+        serviceRow,
+        sessionDates: [normalizedStartTime.slice(0, 10)],
+        packageContractId: packageContractId ? String(packageContractId) : null,
+        billingPlanId: reqBillingPlanId ? String(reqBillingPlanId) : null,
+        billingChoice: reqBillingChoice,
+        enrollBillingPlan: reqEnrollBillingPlan
+      });
+      if (billingCov.error) {
+        res.status(billingCov.status || 400).json({
+          ...(billingCov.code ? { code: billingCov.code } : {}),
+          error: billingCov.error
+        });
+        return;
+      }
+
+      const isPackageCovered = billingCov.isPackageCovered;
+      const isCoveredSession = billingCov.mode === 'package' || billingCov.mode === 'periodic_plan';
+      let resolvedBillingPlanId: string | null = billingCov.billingPlanId;
+      let generatedBillingPaymentIds: string[] = [];
 
       const shouldUpdateServicePrice =
         !isPublic &&
-        !isPackageCovered &&
+        !isCoveredSession &&
         Boolean(req.user) &&
         suppliedPrice !== undefined &&
         hasValidProfessionalServiceLink &&
@@ -851,6 +888,15 @@ export class AppointmentController {
       }
 
       const persistAppointmentAndPrice = db.transaction(() => {
+        if (billingCov.enrollPlanInput) {
+          const enrolled = BillingCycleService.createPeriodicPlanTx({
+            ...billingCov.enrollPlanInput,
+            createdBy: req.user?.userId || 'system'
+          });
+          resolvedBillingPlanId = enrolled.plan.id;
+          generatedBillingPaymentIds = enrolled.generatedIds;
+        }
+
         if (isGroupService) {
           const occ = resolveOrCreateGroupOccurrenceTx({
             tenantId,
@@ -872,7 +918,7 @@ export class AppointmentController {
           };
         }
 
-        // Insere agendamento com os novos campos de convênio, encaminhamento, turma e pacote
+        // Insere agendamento com os novos campos de convênio, encaminhamento, turma, pacote e plano periódico
         const insertAppt = db.prepare(`
           INSERT INTO appointments (
             id, tenant_id, appointment_number, patient_id, professional_id, service_id,
@@ -880,10 +926,10 @@ export class AppointmentController {
             insurance_id, referred_from_appointment_id, referred_by_professional_id, referral_reason,
             clinical_module, profession_id,
             series_id, occurrence_id, service_kind, attendance_status,
-            package_contract_id, is_package_covered,
+            package_contract_id, is_package_covered, recurring_plan_id, billing_coverage_type,
             created_by
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
 
         insertAppt.run(
@@ -916,6 +962,8 @@ export class AppointmentController {
           'pending',
           isPackageCovered ? String(packageContractId) : null,
           isPackageCovered ? 1 : 0,
+          resolvedBillingPlanId,
+          billingCov.mode,
           req.user ? req.user.userId : 'online_booking'
         );
 
@@ -953,9 +1001,9 @@ export class AppointmentController {
           VALUES (?, ?, NULL, ?, ?, ?)
         `).run(uuidv4(), appointmentId, initialStatus, req.user ? req.user.name : 'Cliente Online', isRetroactive ? 'Registro de atendimento já realizado' : 'Agendamento criado com sucesso');
 
-        // Snapshot: sessões cobertas por pacote NÃO geram cobrança avulsa por sessão.
-        // Zero explicitamente combinado sem pacote é isenção, nunca cobrança pendente.
-        if (!isPackageCovered && (agreedAmount > 0 || suppliedPrice !== undefined)) {
+        // Snapshot: sessões cobertas por pacote ou plano periódico NÃO geram cobrança avulsa por sessão.
+        // Zero explicitamente combinado sem cobertura é isenção, nunca cobrança pendente.
+        if (!isCoveredSession && (agreedAmount > 0 || suppliedPrice !== undefined)) {
           db.prepare(`
             INSERT INTO payments (id, tenant_id, appointment_id, patient_id, amount, payment_method, status, notes, service_id, base_amount, professional_id)
             VALUES (?, ?, ?, ?, ?, 'pix', ?, 'Gerado automaticamente pelo agendamento', ?, ?, ?)
@@ -1107,6 +1155,9 @@ export class AppointmentController {
         occurrenceId: groupMeta?.occurrenceId || null,
         capacity: groupMeta ? groupMeta.capacity : 1,
         remainingSpots: groupMeta ? groupMeta.remainingSpots : 0,
+        coverageType: billingCov.mode,
+        billingPlanId: resolvedBillingPlanId,
+        generatedBillingPaymentIds,
         isRetroactive,
         google_sync_status: shouldSyncGcal ? 'pending' : null,
         pre_consultation_status: preConsultationData ? 'pending' : 'not_sent',
@@ -2452,9 +2503,17 @@ export class AppointmentController {
         patientNotes,
         internalNotes,
         recurrence,
-        packageContractId
+        packageContractId,
+        billingPlanId,
+        billing_plan_id,
+        billingChoice,
+        billing_choice,
+        enrollBillingPlan,
+        periodicPlanConfig
       } = req.body || {};
-      const isPackageCovered = Boolean(packageContractId && typeof packageContractId === 'string');
+      const reqBillingPlanId = billingPlanId ?? billing_plan_id;
+      const reqBillingChoice = billingChoice ?? billing_choice;
+      const reqEnrollBillingPlan = enrollBillingPlan ?? periodicPlanConfig;
       const isCustomTime = Boolean(req.body?.isCustomTime || req.body?.is_custom_time);
       const rawDriveUrl = req.body?.google_drive_url !== undefined ? req.body.google_drive_url : req.body?.googleDriveUrl;
 
@@ -2492,7 +2551,8 @@ export class AppointmentController {
                default_capacity, COALESCE(allow_recurrence, 1) as allow_recurrence,
                allowed_recurrence_frequencies_json, default_recurrence_frequency,
                custom_recurrence_intervals_json, default_recurrence_interval_json,
-               service_domain, clinical_module
+               service_domain, clinical_module,
+               billing_mode, periodic_price, billing_cycle_months, default_package_id, default_billing_due_day
         FROM services WHERE id = ? AND tenant_id = ? AND active = 1
       `).get(serviceId, tenantId) as any;
       if (!serviceRow) {
@@ -2623,6 +2683,46 @@ export class AppointmentController {
 
       const dates = evalResult.occurrences.map(o => o.date);
 
+      const contractResolvedEnd =
+        (reqEnrollBillingPlan && reqEnrollBillingPlan.endDate ? String(reqEnrollBillingPlan.endDate).slice(0, 10) : null) ||
+        resolvePlanDurationEndDate(dates[0], recValidation.durationCode) ||
+        endDate ||
+        dates[dates.length - 1];
+
+      const normalizedEnrollPlan = reqEnrollBillingPlan && typeof reqEnrollBillingPlan === 'object'
+        ? {
+            ...reqEnrollBillingPlan,
+            startDate: reqEnrollBillingPlan.startDate || dates[0],
+            endDate: contractResolvedEnd
+          }
+        : undefined;
+
+      const billingCov = BillingCycleService.prepareAppointmentBillingCoverage({
+        tenantId,
+        isPublic: false,
+        patientId: String(patientId),
+        serviceId: String(serviceId),
+        professionalId: String(professionalId),
+        serviceRow,
+        sessionDates: dates,
+        packageContractId: packageContractId ? String(packageContractId) : null,
+        billingPlanId: reqBillingPlanId ? String(reqBillingPlanId) : null,
+        billingChoice: reqBillingChoice,
+        enrollBillingPlan: normalizedEnrollPlan
+      });
+      if (billingCov.error) {
+        res.status(billingCov.status || 400).json({
+          ...(billingCov.code ? { code: billingCov.code } : {}),
+          error: billingCov.error
+        });
+        return;
+      }
+
+      const isPackageCovered = billingCov.isPackageCovered;
+      const isCoveredSeries = billingCov.mode === 'package' || billingCov.mode === 'periodic_plan';
+      let resolvedBillingPlanId: string | null = billingCov.billingPlanId;
+      let generatedBillingPaymentIds: string[] = [];
+
       const isGroupService = serviceRow.service_kind === 'group';
       const defaultCapacity = isGroupService ? Math.max(1, Number(serviceRow.default_capacity) || 1) : 1;
       const seriesId = 'ser-' + uuidv4().slice(0, 8);
@@ -2649,6 +2749,15 @@ export class AppointmentController {
       })();
 
       const runTx = db.transaction(() => {
+        if (billingCov.enrollPlanInput) {
+          const enrolled = BillingCycleService.createPeriodicPlanTx({
+            ...billingCov.enrollPlanInput,
+            createdBy: req.user?.userId || 'system'
+          });
+          resolvedBillingPlanId = enrolled.plan.id;
+          generatedBillingPaymentIds = enrolled.generatedIds;
+        }
+
         const effWeekdays = Array.isArray(recurrence?.weekdays) && recurrence.weekdays.length > 0
           ? recurrence.weekdays
           : Array.from(new Set(evalResult.occurrences.map(o => o.dayOfWeek)));
@@ -2684,7 +2793,7 @@ export class AppointmentController {
           dates[dates.length - 1],
           dates.length,
           defaultCapacity,
-          isPackageCovered ? 0 : agreedAmount,
+          isCoveredSeries ? 0 : agreedAmount,
           req.user?.userId || 'system'
         );
 
@@ -2777,8 +2886,8 @@ export class AppointmentController {
               room_id, start_time, end_time, status, modality, meeting_url, google_drive_url,
               patient_notes, internal_notes, insurance_id, clinical_module, profession_id,
               series_id, occurrence_id, service_kind, attendance_status,
-              package_contract_id, is_package_covered, created_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)
+              package_contract_id, is_package_covered, recurring_plan_id, billing_coverage_type, created_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)
           `).run(
             apptId, tenantId, apptNumber, patientId, occProfId, serviceId,
             effRoomId, sIso, eIso, effOccModality,
@@ -2789,6 +2898,8 @@ export class AppointmentController {
             seriesId, occurrenceId, isGroupService ? 'group' : 'individual',
             isPackageCovered ? String(packageContractId) : null,
             isPackageCovered ? 1 : 0,
+            resolvedBillingPlanId,
+            billingCov.mode,
             req.user?.userId || 'system'
           );
 
@@ -2825,7 +2936,7 @@ export class AppointmentController {
             VALUES (?, ?, NULL, 'scheduled', ?, 'Agendamento em série recorrente')
           `).run(uuidv4(), apptId, req.user ? req.user.name : 'Sistema');
 
-          if (!isPackageCovered && (agreedAmount > 0 || suppliedPrice !== undefined)) {
+          if (!isCoveredSeries && (agreedAmount > 0 || suppliedPrice !== undefined)) {
             db.prepare(`
               INSERT INTO payments (id, tenant_id, appointment_id, patient_id, amount, payment_method, status, notes, service_id, base_amount, professional_id)
               VALUES (?, ?, ?, ?, ?, 'pix', ?, 'Gerado automaticamente por agendamento recorrente', ?, ?, ?)
@@ -2877,7 +2988,9 @@ export class AppointmentController {
         count: createdAppointments.length,
         serviceId,
         professionalId,
-        patientId
+        patientId,
+        coverageType: billingCov.mode,
+        billingPlanId: resolvedBillingPlanId
       });
 
       res.status(201).json({
@@ -2890,6 +3003,9 @@ export class AppointmentController {
         endDate: evalResult.endDate,
         createdCount: createdAppointments.length,
         serviceKind: isGroupService ? 'group' : 'individual',
+        coverageType: billingCov.mode,
+        billingPlanId: resolvedBillingPlanId,
+        generatedBillingPaymentIds,
         appointments: createdAppointments,
         message: `${createdAppointments.length} horários agendados em série recorrente!`
       });

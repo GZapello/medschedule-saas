@@ -1,3 +1,5 @@
+import type { ServiceBillingMode } from '../utils/establishmentContext';
+
 export type Role = 'superadmin' | 'clinic_admin' | 'professional' | 'receptionist' | 'patient';
 
 export type Terminology = 'patient' | 'client' | 'student';
@@ -250,6 +252,12 @@ export interface Service {
   allowed_plan_durations_json?: string | null;
   default_plan_duration?: string | null;
   modality_category?: string | null;
+  billing_mode?: ServiceBillingMode;
+  periodic_price?: number | null;
+  billing_cycle_months?: number | null;
+  default_package_id?: string | null;
+  default_package_name?: string | null;
+  default_billing_due_day?: number | null;
   linked_professional_ids?: string[];
   linked_professionals?: LinkedProfessionalItem[];
   class_schedules?: ClassScheduleItem[];

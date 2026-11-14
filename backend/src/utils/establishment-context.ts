@@ -909,3 +909,201 @@ export function requireStudioEstablishment(req: Request, res: Response, next: Ne
   }
   next();
 }
+
+export type ServiceBillingMode =
+  | 'per_session'
+  | 'monthly'
+  | 'quarterly'
+  | 'semiannual'
+  | 'annual'
+  | 'package';
+
+export type PeriodicBillingFrequency = 'monthly' | 'quarterly' | 'semiannual' | 'annual';
+
+export const ALL_SERVICE_BILLING_MODES: ServiceBillingMode[] = [
+  'per_session',
+  'monthly',
+  'quarterly',
+  'semiannual',
+  'annual',
+  'package'
+];
+
+export const SERVICE_BILLING_MODE_LABELS: Record<ServiceBillingMode, string> = {
+  per_session: 'Por Atendimento / Aula',
+  monthly: 'Mensal',
+  quarterly: 'Trimestral',
+  semiannual: 'Semestral',
+  annual: 'Anual',
+  package: 'Utilizar Pacote de Serviços existente'
+};
+
+export const PERIODIC_BILLING_CYCLE_MONTHS: Record<PeriodicBillingFrequency, number> = {
+  monthly: 1,
+  quarterly: 3,
+  semiannual: 6,
+  annual: 12
+};
+
+export function isValidServiceBillingMode(value: unknown): value is ServiceBillingMode {
+  return (ALL_SERVICE_BILLING_MODES as string[]).includes(String(value || '').trim().toLowerCase());
+}
+
+export function isPeriodicBillingMode(mode: unknown): mode is PeriodicBillingFrequency {
+  const m = String(mode || '').trim().toLowerCase();
+  return m === 'monthly' || m === 'quarterly' || m === 'semiannual' || m === 'annual';
+}
+
+export function getCycleMonthsForBillingFrequency(freq: unknown): number {
+  const f = String(freq || '').trim().toLowerCase() as PeriodicBillingFrequency;
+  return PERIODIC_BILLING_CYCLE_MONTHS[f] || 1;
+}
+
+export function parseServiceBillingConfig(row: any): {
+  billingMode: ServiceBillingMode;
+  periodicPrice: number | null;
+  billingCycleMonths: number | null;
+  defaultPackageId: string | null;
+  defaultBillingDueDay: number | null;
+} {
+  const rawMode = String(row?.billing_mode || 'per_session').trim().toLowerCase();
+  const billingMode: ServiceBillingMode = isValidServiceBillingMode(rawMode) ? rawMode : 'per_session';
+  const periodicPrice = isPeriodicBillingMode(billingMode) && row?.periodic_price !== null && row?.periodic_price !== undefined
+    ? Math.max(0, Math.round(Number(row.periodic_price) * 100) / 100)
+    : null;
+  const billingCycleMonths = isPeriodicBillingMode(billingMode)
+    ? (Number(row?.billing_cycle_months) || getCycleMonthsForBillingFrequency(billingMode))
+    : null;
+  const defaultPackageId = billingMode === 'package' && row?.default_package_id
+    ? String(row.default_package_id)
+    : null;
+  const defaultBillingDueDay = row?.default_billing_due_day !== null && row?.default_billing_due_day !== undefined
+    ? Math.min(28, Math.max(1, Math.floor(Number(row.default_billing_due_day))))
+    : null;
+  return { billingMode, periodicPrice, billingCycleMonths, defaultPackageId, defaultBillingDueDay };
+}
+
+export function normalizeServiceBillingForSave(input: {
+  isStudioService: boolean;
+  billingMode?: unknown;
+  periodicPrice?: unknown;
+  defaultPackageId?: unknown;
+  defaultBillingDueDay?: unknown;
+  tenantId: string;
+  serviceId?: string;
+}): {
+  billingMode: ServiceBillingMode;
+  periodicPrice: number | null;
+  billingCycleMonths: number | null;
+  defaultPackageId: string | null;
+  defaultBillingDueDay: number | null;
+  error?: string;
+} {
+  const rawMode = input.billingMode !== undefined && input.billingMode !== null && String(input.billingMode).trim() !== ''
+    ? String(input.billingMode).trim().toLowerCase()
+    : 'per_session';
+
+  if (!isValidServiceBillingMode(rawMode)) {
+    return {
+      billingMode: 'per_session',
+      periodicPrice: null,
+      billingCycleMonths: null,
+      defaultPackageId: null,
+      defaultBillingDueDay: null,
+      error: 'Modalidade de cobrança do serviço inválida.'
+    };
+  }
+
+  if (!input.isStudioService) {
+    if (rawMode !== 'per_session') {
+      return {
+        billingMode: 'per_session',
+        periodicPrice: null,
+        billingCycleMonths: null,
+        defaultPackageId: null,
+        defaultBillingDueDay: null,
+        error: 'Configuração de cobrança periódica ou por pacote está disponível apenas para serviços do domínio Studio.'
+      };
+    }
+    return {
+      billingMode: 'per_session',
+      periodicPrice: null,
+      billingCycleMonths: null,
+      defaultPackageId: null,
+      defaultBillingDueDay: null
+    };
+  }
+
+  const parsedDueDay =
+    input.defaultBillingDueDay !== undefined &&
+    input.defaultBillingDueDay !== null &&
+    String(input.defaultBillingDueDay).trim() !== ''
+      ? Math.floor(Number(input.defaultBillingDueDay))
+      : null;
+
+  if (parsedDueDay !== null && (!Number.isFinite(parsedDueDay) || parsedDueDay < 1 || parsedDueDay > 28)) {
+    return {
+      billingMode: 'per_session',
+      periodicPrice: null,
+      billingCycleMonths: null,
+      defaultPackageId: null,
+      defaultBillingDueDay: null,
+      error: 'O dia padrão de vencimento deve estar entre 1 e 28.'
+    };
+  }
+
+  if (isPeriodicBillingMode(rawMode)) {
+    const numPeriodic = Number(input.periodicPrice);
+    if (!Number.isFinite(numPeriodic) || numPeriodic <= 0) {
+      return {
+        billingMode: rawMode,
+        periodicPrice: null,
+        billingCycleMonths: getCycleMonthsForBillingFrequency(rawMode),
+        defaultPackageId: null,
+        defaultBillingDueDay: parsedDueDay,
+        error: 'Informe o valor por período de cobrança maior que zero para modalidades periódicas.'
+      };
+    }
+    return {
+      billingMode: rawMode,
+      periodicPrice: Math.round(numPeriodic * 100) / 100,
+      billingCycleMonths: getCycleMonthsForBillingFrequency(rawMode),
+      defaultPackageId: null,
+      defaultBillingDueDay: parsedDueDay
+    };
+  }
+
+  if (rawMode === 'package') {
+    const pkgId = input.defaultPackageId ? String(input.defaultPackageId).trim() : null;
+    if (pkgId) {
+      const pkgRow = db.prepare(`
+        SELECT id FROM service_packages WHERE id = ? AND tenant_id = ? AND active = 1
+      `).get(pkgId, input.tenantId) as { id: string } | undefined;
+      if (!pkgRow) {
+        return {
+          billingMode: 'package',
+          periodicPrice: null,
+          billingCycleMonths: null,
+          defaultPackageId: null,
+          defaultBillingDueDay: parsedDueDay,
+          error: 'Pacote de serviços selecionado não encontrado ou inativo neste estabelecimento.'
+        };
+      }
+    }
+    return {
+      billingMode: 'package',
+      periodicPrice: null,
+      billingCycleMonths: null,
+      defaultPackageId: pkgId || null,
+      defaultBillingDueDay: parsedDueDay
+    };
+  }
+
+  return {
+    billingMode: 'per_session',
+    periodicPrice: null,
+    billingCycleMonths: null,
+    defaultPackageId: null,
+    defaultBillingDueDay: parsedDueDay
+  };
+}

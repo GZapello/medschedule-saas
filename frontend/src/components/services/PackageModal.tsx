@@ -34,6 +34,7 @@ export const PackageModal: React.FC<PackageModalProps> = ({
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [billingType, setBillingType] = useState<'one_time' | 'recurring_monthly'>('recurring_monthly');
+  const [billingFrequency, setBillingFrequency] = useState<'monthly' | 'quarterly' | 'semiannual' | 'annual'>('monthly');
   const [price, setPrice] = useState('180.00');
   const [creditMode, setCreditMode] = useState<'per_service' | 'shared_pool'>('per_service');
   const [totalCredits, setTotalCredits] = useState<number>(8);
@@ -65,6 +66,11 @@ export const PackageModal: React.FC<PackageModalProps> = ({
       setName(editingPackage.name || '');
       setDescription(editingPackage.description || '');
       setBillingType(editingPackage.billing_type === 'one_time' ? 'one_time' : 'recurring_monthly');
+      setBillingFrequency(
+        ['quarterly', 'semiannual', 'annual'].includes(String(editingPackage.billing_frequency || '').toLowerCase())
+          ? (String(editingPackage.billing_frequency).toLowerCase() as any)
+          : 'monthly'
+      );
       setPrice(String(Number(editingPackage.price ?? 0).toFixed(2)));
       setCreditMode(editingPackage.credit_mode === 'shared_pool' ? 'shared_pool' : 'per_service');
       setTotalCredits(Number(editingPackage.total_credits || 8));
@@ -93,6 +99,7 @@ export const PackageModal: React.FC<PackageModalProps> = ({
       setName('');
       setDescription('');
       setBillingType('recurring_monthly');
+      setBillingFrequency('monthly');
       setPrice('180.00');
       setCreditMode('per_service');
       setTotalCredits(12);
@@ -168,6 +175,7 @@ export const PackageModal: React.FC<PackageModalProps> = ({
       name: name.trim(),
       description: description.trim() || null,
       billingType,
+      billingFrequency: billingType === 'recurring_monthly' ? billingFrequency : 'monthly',
       price: Math.round(parsedPrice * 100) / 100,
       creditMode,
       totalCredits: creditMode === 'shared_pool' ? Number(totalCredits) : perServiceComputedTotal,
@@ -270,10 +278,26 @@ export const PackageModal: React.FC<PackageModalProps> = ({
                   onChange={e => setBillingType(e.target.value as any)}
                   className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white font-medium"
                 >
-                  <option value="recurring_monthly">Mensalidade recorrente</option>
+                  <option value="recurring_monthly">Assinatura periódica (recorrente)</option>
                   <option value="one_time">Pagamento único (avulso / fechado)</option>
                 </select>
               </div>
+
+              {billingType === 'recurring_monthly' && (
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Periodicidade do Pacote *</label>
+                  <select
+                    value={billingFrequency}
+                    onChange={e => setBillingFrequency(e.target.value as any)}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white font-medium"
+                  >
+                    <option value="monthly">Mensal (a cada 1 mês)</option>
+                    <option value="quarterly">Trimestral (a cada 3 meses)</option>
+                    <option value="semiannual">Semestral (a cada 6 meses)</option>
+                    <option value="annual">Anual (a cada 12 meses)</option>
+                  </select>
+                </div>
+              )}
 
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Valor do Pacote (R$) *</label>

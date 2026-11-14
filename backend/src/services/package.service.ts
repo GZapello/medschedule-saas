@@ -1,5 +1,7 @@
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
+import { BillingCycleService, normalizePeriodicFrequency } from './billing-cycle.service';
+import { PeriodicBillingFrequency } from '../utils/establishment-context';
 
 export interface PackageItemInput {
   serviceId: string;
@@ -11,6 +13,7 @@ export interface CreatePackageInput {
   name: string;
   description?: string | null;
   billingType?: 'one_time' | 'recurring_monthly';
+  billingFrequency?: PeriodicBillingFrequency;
   price: number;
   creditMode?: 'per_service' | 'shared_pool';
   totalCredits?: number | null;
@@ -260,19 +263,22 @@ export class PackageService {
     const cancelHours = Math.max(0, Math.min(168, Math.floor(Number(input.cancellationHoursLimit ?? 12))));
     const allowPublic = input.allowPublicBooking === false || input.allowPublicBooking === 0 ? 0 : 1;
     const active = input.active === false || input.active === 0 ? 0 : 1;
+    const { frequency: billingFrequency, cycleMonths } = billingType === 'recurring_monthly'
+      ? normalizePeriodicFrequency(input.billingFrequency || 'monthly')
+      : { frequency: 'monthly' as PeriodicBillingFrequency, cycleMonths: 1 };
 
     const packageId = 'pkg-' + uuidv4().slice(0, 8);
     db.transaction(() => {
       db.prepare(`
         INSERT INTO service_packages (
-          id, tenant_id, name, description, billing_type, price, credit_mode,
+          id, tenant_id, name, description, billing_type, billing_frequency, cycle_months, price, credit_mode,
           total_credits, weekly_limit, validity_days, installments_count, due_day,
           absent_consumption_policy, cancellation_hours_limit, allow_public_booking, active,
           created_by, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
       `).run(
         packageId, tenantId, name, input.description ? String(input.description).trim() : null,
-        billingType, price, creditMode, totalCredits, weeklyLimit, validityDays, installmentsCount,
+        billingType, billingFrequency, cycleMonths, price, creditMode, totalCredits, weeklyLimit, validityDays, installmentsCount,
         dueDay, absentPolicy, cancelHours, allowPublic, active, createdBy
       );
 
@@ -354,12 +360,21 @@ export class PackageService {
         nextTotalCredits = Math.max(1, Math.floor(Number(input.totalCredits)));
       }
 
+      const { frequency: nextBillingFreq, cycleMonths: nextCycleMonths } = billingType === 'recurring_monthly'
+        ? normalizePeriodicFrequency(
+            input.billingFrequency !== undefined ? input.billingFrequency : (existing.billing_frequency || 'monthly'),
+            existing.cycle_months
+          )
+        : { frequency: 'monthly' as PeriodicBillingFrequency, cycleMonths: 1 };
+
       // Atualiza apenas a definição comercial futura; contratos e direitos já firmados preservam snapshot próprio.
       db.prepare(`
         UPDATE service_packages
         SET name = ?,
             description = ?,
             billing_type = ?,
+            billing_frequency = ?,
+            cycle_months = ?,
             price = ?,
             credit_mode = ?,
             total_credits = ?,
@@ -377,6 +392,8 @@ export class PackageService {
         name,
         input.description !== undefined ? (input.description ? String(input.description).trim() : null) : existing.description,
         billingType,
+        nextBillingFreq,
+        nextCycleMonths,
         price,
         creditMode,
         nextTotalCredits,
@@ -454,6 +471,10 @@ export class PackageService {
     const paymentMethod = input.paymentMethod || 'pix';
     const createdBy = input.createdBy || 'system';
     const shouldGenerateCharge = input.generateInitialCharge !== false && contractedPrice > 0;
+    const { frequency: pkgFreq, cycleMonths: pkgCycleMonths } = normalizePeriodicFrequency(
+      pkg.billing_frequency || 'monthly',
+      pkg.cycle_months
+    );
 
     if (pkg.billing_type === 'recurring_monthly') {
       recurringPlanId = 'rbp-' + uuidv4().slice(0, 8);
@@ -461,9 +482,9 @@ export class PackageService {
       db.prepare(`
         INSERT INTO recurring_billing_plans (
           id, tenant_id, patient_id, service_id, professional_id, package_contract_id,
-          title, amount, billing_cycle, due_day, payment_method,
-          start_date, end_date, status, notes, created_by, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'monthly', ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+          title, amount, billing_cycle, billing_frequency, cycle_months, covers_sessions,
+          due_day, payment_method, start_date, end_date, status, notes, created_by, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
       `).run(
         recurringPlanId,
         input.tenantId,
@@ -473,6 +494,9 @@ export class PackageService {
         contractId,
         `Pacote: ${pkg.name}`,
         contractedPrice,
+        pkgFreq,
+        pkgFreq,
+        pkgCycleMonths,
         dueDay,
         paymentMethod,
         startDate,
@@ -486,12 +510,12 @@ export class PackageService {
     db.prepare(`
       INSERT INTO student_package_contracts (
         id, tenant_id, package_id, student_id, recurring_plan_id,
-        package_name_snapshot, description_snapshot, billing_type_snapshot, credit_mode_snapshot,
-        contracted_price, installments_count, total_credits_snapshot, weekly_limit_snapshot,
+        package_name_snapshot, description_snapshot, billing_type_snapshot, billing_frequency_snapshot, cycle_months_snapshot,
+        credit_mode_snapshot, contracted_price, installments_count, total_credits_snapshot, weekly_limit_snapshot,
         validity_days_snapshot, due_day_snapshot, absent_consumption_policy_snapshot,
         cancellation_hours_limit_snapshot, start_date, end_date, contract_status,
         payment_status, origin, notes, confirmed_by, confirmed_at, created_by, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
     `).run(
       contractId,
       input.tenantId,
@@ -501,6 +525,8 @@ export class PackageService {
       pkg.name,
       pkg.description || null,
       pkg.billing_type,
+      pkgFreq,
+      pkgCycleMonths,
       pkg.credit_mode,
       contractedPrice,
       installmentsCount,
@@ -562,35 +588,14 @@ export class PackageService {
       const paidDate = isPaidNow ? new Date().toISOString() : null;
 
       if (pkg.billing_type === 'recurring_monthly' && recurringPlanId) {
-        const compMonth = startDate.slice(0, 7);
-        const dueDate = addMonthsClampIso(startDate, 0, dueDay);
-        const payId = 'pay-' + uuidv4().slice(0, 8);
-        const payRes = db.prepare(`
-          INSERT OR IGNORE INTO payments (
-            id, tenant_id, appointment_id, patient_id, amount, payment_method, status, payment_date, notes,
-            service_id, base_amount, due_date, recurring_plan_id, competence_month, professional_id, package_contract_id
-          ) VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(
-          payId,
-          input.tenantId,
-          input.studentId,
-          contractedPrice,
-          paymentMethod,
-          isPaidNow ? 'paid' : 'pending',
-          paidDate,
-          `Pacote ${pkg.name} (${compMonth})`,
-          pkgItems.length === 1 ? pkgItems[0].service_id : null,
-          contractedPrice,
-          dueDate,
-          recurringPlanId,
-          compMonth,
-          pkgItems.length === 1 ? (pkgItems[0].service_professional_id || null) : null,
-          contractId
-        );
-        if (payRes.changes > 0) {
-          generatedPaymentIds.push(payId);
-          db.prepare(`UPDATE recurring_billing_plans SET last_generated_month = ? WHERE id = ?`).run(compMonth, recurringPlanId);
-        }
+        const planRow = db.prepare(`SELECT * FROM recurring_billing_plans WHERE id = ?`).get(recurringPlanId);
+        const genRes = BillingCycleService.generateCyclesForPlanTx({
+          tenantId: input.tenantId,
+          plan: planRow,
+          competenceMonth: startDate.slice(0, 7),
+          initialPaymentStatus: isPaidNow ? 'paid' : 'pending'
+        });
+        generatedPaymentIds.push(...genRes.generatedIds);
       } else {
         // Pagamento único (à vista ou em N parcelas explícitas do pacote, jamais por sessão)
         const baseInstallment = Math.floor((contractedPrice / installmentsCount) * 100) / 100;
