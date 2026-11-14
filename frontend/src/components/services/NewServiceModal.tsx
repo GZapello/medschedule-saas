@@ -13,6 +13,7 @@ import {
   normalizeEstablishmentProfile,
   parseServiceRecurrenceConfig,
   RecurrenceFrequency,
+  RecurrenceIntervalSpec,
   resolveServiceDomain,
   ServiceDomain,
   supportsStudioFeatures
@@ -58,6 +59,8 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
   const [allowRecurrence, setAllowRecurrence] = useState<boolean>(true);
   const [allowedFrequencies, setAllowedFrequencies] = useState<RecurrenceFrequency[]>(['weekly']);
   const [defaultFrequency, setDefaultFrequency] = useState<RecurrenceFrequency>('weekly');
+  const [customIntervals, setCustomIntervals] = useState<RecurrenceIntervalSpec[]>([]);
+  const [defaultCustomInterval, setDefaultCustomInterval] = useState<RecurrenceIntervalSpec | null>(null);
   const [description, setDescription] = useState<string>('');
   const [draftSchedules, setDraftSchedules] = useState<DraftClassScheduleInput[]>([]);
   const [hasPendingScheduleForm, setHasPendingScheduleForm] = useState<boolean>(false);
@@ -101,6 +104,8 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
             : (recCfg.allowRecurrence ? ['weekly'] : [])
         );
         setDefaultFrequency(recCfg.defaultFrequency || 'weekly');
+        setCustomIntervals(recCfg.customIntervals || []);
+        setDefaultCustomInterval(recCfg.defaultCustomInterval || null);
         setDescription(serviceToEdit.description || '');
         const editPrimaryId = serviceToEdit.professional_id || initialProfessionalId || professionals[0]?.id || '';
         setProfessionalId(editPrimaryId);
@@ -120,6 +125,8 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
         setAllowRecurrence(true);
         setAllowedFrequencies(['weekly']);
         setDefaultFrequency('weekly');
+        setCustomIntervals([]);
+        setDefaultCustomInterval(null);
         setDescription('');
         let defaultProf = '';
         if (initialProfessionalId && professionals.some(p => p.id === initialProfessionalId)) {
@@ -203,7 +210,9 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
         ...(showStudioConfig
           ? {
               allowedRecurrenceFrequencies: allowRecurrence ? allowedFrequencies : [],
-              defaultRecurrenceFrequency: allowRecurrence ? defaultFrequency : null
+              defaultRecurrenceFrequency: allowRecurrence ? defaultFrequency : null,
+              customRecurrenceIntervals: allowRecurrence && allowedFrequencies.includes('custom_interval') ? customIntervals : [],
+              defaultRecurrenceInterval: allowRecurrence && allowedFrequencies.includes('custom_interval') ? defaultCustomInterval : null
             }
           : {}),
         classSchedules: shouldSendDraftSchedules ? draftSchedules : undefined,
@@ -463,10 +472,14 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
                 allowRecurrence={allowRecurrence}
                 allowedFrequencies={allowedFrequencies}
                 defaultFrequency={defaultFrequency}
+                customIntervals={customIntervals}
+                defaultCustomInterval={defaultCustomInterval}
                 onChange={next => {
                   setAllowRecurrence(next.allowRecurrence);
                   setAllowedFrequencies(next.allowedFrequencies);
                   setDefaultFrequency(next.defaultFrequency);
+                  setCustomIntervals(next.customIntervals);
+                  setDefaultCustomInterval(next.defaultCustomInterval);
                 }}
               />
             </div>

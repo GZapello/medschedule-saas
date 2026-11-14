@@ -33,6 +33,8 @@ export function migrateStudioImprovements(rawDb: DatabaseSync): void {
   addColIfMissing('services', 'service_domain', 'TEXT');
   addColIfMissing('services', 'allowed_recurrence_frequencies_json', 'TEXT');
   addColIfMissing('services', 'default_recurrence_frequency', 'TEXT');
+  addColIfMissing('services', 'custom_recurrence_intervals_json', 'TEXT');
+  addColIfMissing('services', 'default_recurrence_interval_json', 'TEXT');
 
   // 3. Vínculo de turma/ocorrência, recorrência e frequência individual em appointments
   addColIfMissing('appointments', 'series_id', 'TEXT');
@@ -346,6 +348,8 @@ export function migrateStudioImprovements(rawDb: DatabaseSync): void {
   `);
 
   addColIfMissing('recurring_billing_plans', 'package_contract_id', 'TEXT');
+  addColIfMissing('class_series', 'interval_value', 'INTEGER');
+  addColIfMissing('class_series', 'interval_unit', 'TEXT');
   addColIfMissing('class_occurrences', 'class_schedule_id', 'TEXT');
   try {
     rawDb.exec(`

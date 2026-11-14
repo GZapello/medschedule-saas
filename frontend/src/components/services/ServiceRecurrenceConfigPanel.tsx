@@ -1,28 +1,78 @@
-import React from 'react';
-import { Repeat } from 'lucide-react';
+import React, { useState } from 'react';
+import { Plus, Repeat, X } from 'lucide-react';
 import {
   ALL_RECURRENCE_FREQUENCIES,
+  dedupeCustomIntervals,
+  formatCustomIntervalLabel,
   RECURRENCE_FREQUENCY_LABELS,
-  RecurrenceFrequency
+  RECURRENCE_INTERVAL_BOUNDS,
+  RecurrenceFrequency,
+  RecurrenceIntervalSpec,
+  RecurrenceIntervalUnit
 } from '../../utils/establishmentContext';
 
 interface ServiceRecurrenceConfigPanelProps {
   allowRecurrence: boolean;
   allowedFrequencies: RecurrenceFrequency[];
   defaultFrequency: RecurrenceFrequency;
+  customIntervals?: RecurrenceIntervalSpec[];
+  defaultCustomInterval?: RecurrenceIntervalSpec | null;
   onChange: (next: {
     allowRecurrence: boolean;
     allowedFrequencies: RecurrenceFrequency[];
     defaultFrequency: RecurrenceFrequency;
+    customIntervals: RecurrenceIntervalSpec[];
+    defaultCustomInterval: RecurrenceIntervalSpec | null;
   }) => void;
 }
+
+const FALLBACK_CUSTOM_INTERVAL: RecurrenceIntervalSpec = {
+  intervalValue: 3,
+  intervalUnit: 'days'
+};
 
 export const ServiceRecurrenceConfigPanel: React.FC<ServiceRecurrenceConfigPanelProps> = ({
   allowRecurrence,
   allowedFrequencies,
   defaultFrequency,
+  customIntervals = [],
+  defaultCustomInterval = null,
   onChange
 }) => {
+  const [draftValue, setDraftValue] = useState<number>(defaultCustomInterval?.intervalValue || customIntervals[0]?.intervalValue || 3);
+  const [draftUnit, setDraftUnit] = useState<RecurrenceIntervalUnit>(defaultCustomInterval?.intervalUnit || customIntervals[0]?.intervalUnit || 'days');
+
+  const emitChange = (next: {
+    allowRecurrence: boolean;
+    allowedFrequencies: RecurrenceFrequency[];
+    defaultFrequency: RecurrenceFrequency;
+    customIntervals?: RecurrenceIntervalSpec[];
+    defaultCustomInterval?: RecurrenceIntervalSpec | null;
+  }) => {
+    const hasCustom = next.allowedFrequencies.includes('custom_interval');
+    const cleanIntervals = hasCustom
+      ? dedupeCustomIntervals(
+          next.customIntervals && next.customIntervals.length > 0
+            ? next.customIntervals
+            : (customIntervals.length > 0 ? customIntervals : [FALLBACK_CUSTOM_INTERVAL])
+        )
+      : [];
+    const effDefInterval = hasCustom
+      ? (next.defaultCustomInterval &&
+          cleanIntervals.some(c => c.intervalValue === next.defaultCustomInterval!.intervalValue && c.intervalUnit === next.defaultCustomInterval!.intervalUnit)
+          ? next.defaultCustomInterval
+          : cleanIntervals[0] || FALLBACK_CUSTOM_INTERVAL)
+      : null;
+
+    onChange({
+      allowRecurrence: next.allowRecurrence,
+      allowedFrequencies: next.allowedFrequencies,
+      defaultFrequency: next.defaultFrequency,
+      customIntervals: cleanIntervals,
+      defaultCustomInterval: effDefInterval
+    });
+  };
+
   const toggleFrequency = (freq: RecurrenceFrequency) => {
     const exists = allowedFrequencies.includes(freq);
     const nextAllowed = exists
@@ -30,21 +80,96 @@ export const ServiceRecurrenceConfigPanel: React.FC<ServiceRecurrenceConfigPanel
       : ALL_RECURRENCE_FREQUENCIES.filter(f => allowedFrequencies.includes(f) || f === freq);
 
     if (nextAllowed.length === 0) {
-      onChange({
+      emitChange({
         allowRecurrence: false,
         allowedFrequencies: [],
-        defaultFrequency: 'weekly'
+        defaultFrequency: 'weekly',
+        customIntervals: [],
+        defaultCustomInterval: null
       });
       return;
     }
 
     const nextDefault = nextAllowed.includes(defaultFrequency) ? defaultFrequency : nextAllowed[0];
-    onChange({
+    const nextCustomList = nextAllowed.includes('custom_interval')
+      ? (customIntervals.length > 0 ? customIntervals : [{ intervalValue: draftValue || 3, intervalUnit: draftUnit }])
+      : [];
+    emitChange({
       allowRecurrence: true,
       allowedFrequencies: nextAllowed,
-      defaultFrequency: nextDefault
+      defaultFrequency: nextDefault,
+      customIntervals: nextCustomList,
+      defaultCustomInterval: defaultCustomInterval || nextCustomList[0] || null
     });
   };
+
+  const clampDraftValue = (val: number, unit: RecurrenceIntervalUnit) => {
+    const b = RECURRENCE_INTERVAL_BOUNDS[unit];
+    if (!Number.isFinite(val)) return b.min;
+    return Math.max(b.min, Math.min(b.max, Math.round(val)));
+  };
+
+  const handleAddOrApplyCustomInterval = () => {
+    const spec: RecurrenceIntervalSpec = {
+      intervalValue: clampDraftValue(draftValue, draftUnit),
+      intervalUnit: draftUnit
+    };
+    const nextAllowed = allowedFrequencies.includes('custom_interval')
+      ? allowedFrequencies
+      : ALL_RECURRENCE_FREQUENCIES.filter(f => allowedFrequencies.includes(f) || f === 'custom_interval');
+    const nextList = dedupeCustomIntervals([...customIntervals, spec]);
+    emitChange({
+      allowRecurrence: true,
+      allowedFrequencies: nextAllowed,
+      defaultFrequency: nextAllowed.includes(defaultFrequency) ? defaultFrequency : 'custom_interval',
+      customIntervals: nextList,
+      defaultCustomInterval: defaultCustomInterval || spec
+    });
+  };
+
+  const handleRemoveCustomInterval = (spec: RecurrenceIntervalSpec) => {
+    const nextList = customIntervals.filter(
+      c => !(c.intervalValue === spec.intervalValue && c.intervalUnit === spec.intervalUnit)
+    );
+    if (nextList.length === 0) {
+      // Se remover o último intervalo salvo, desmarca custom_interval se houver outras opções, senão mantém fallback
+      const remainingFreqs: RecurrenceFrequency[] = allowedFrequencies.filter(f => f !== 'custom_interval');
+      if (remainingFreqs.length > 0) {
+        emitChange({
+          allowRecurrence: true,
+          allowedFrequencies: remainingFreqs,
+          defaultFrequency: remainingFreqs.includes(defaultFrequency) ? defaultFrequency : remainingFreqs[0],
+          customIntervals: [],
+          defaultCustomInterval: null
+        });
+      } else {
+        emitChange({
+          allowRecurrence: true,
+          allowedFrequencies: ['custom_interval'],
+          defaultFrequency: 'custom_interval',
+          customIntervals: [FALLBACK_CUSTOM_INTERVAL],
+          defaultCustomInterval: FALLBACK_CUSTOM_INTERVAL
+        });
+      }
+      return;
+    }
+    const nextDef =
+      defaultCustomInterval &&
+      defaultCustomInterval.intervalValue === spec.intervalValue &&
+      defaultCustomInterval.intervalUnit === spec.intervalUnit
+        ? nextList[0]
+        : defaultCustomInterval;
+    emitChange({
+      allowRecurrence: true,
+      allowedFrequencies,
+      defaultFrequency,
+      customIntervals: nextList,
+      defaultCustomInterval: nextDef
+    });
+  };
+
+  const customEnabled = allowRecurrence && allowedFrequencies.includes('custom_interval');
+  const activeUnitBounds = RECURRENCE_INTERVAL_BOUNDS[draftUnit];
 
   return (
     <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-2.5">
@@ -60,17 +185,21 @@ export const ServiceRecurrenceConfigPanel: React.FC<ServiceRecurrenceConfigPanel
             onChange={e => {
               const noRecurrence = e.target.checked;
               if (noRecurrence) {
-                onChange({
+                emitChange({
                   allowRecurrence: false,
                   allowedFrequencies: [],
-                  defaultFrequency: 'weekly'
+                  defaultFrequency: 'weekly',
+                  customIntervals: [],
+                  defaultCustomInterval: null
                 });
               } else {
                 const seeded = allowedFrequencies.length > 0 ? allowedFrequencies : ['weekly' as RecurrenceFrequency];
-                onChange({
+                emitChange({
                   allowRecurrence: true,
                   allowedFrequencies: seeded,
-                  defaultFrequency: seeded.includes(defaultFrequency) ? defaultFrequency : seeded[0]
+                  defaultFrequency: seeded.includes(defaultFrequency) ? defaultFrequency : seeded[0],
+                  customIntervals: customIntervals.length > 0 ? customIntervals : [FALLBACK_CUSTOM_INTERVAL],
+                  defaultCustomInterval: defaultCustomInterval || customIntervals[0] || FALLBACK_CUSTOM_INTERVAL
                 });
               }
             }}
@@ -81,9 +210,9 @@ export const ServiceRecurrenceConfigPanel: React.FC<ServiceRecurrenceConfigPanel
       </div>
 
       {allowRecurrence && (
-        <div className="space-y-2">
+        <div className="space-y-2.5">
           <div className="text-[11px] text-slate-500">Frequências autorizadas no agendamento:</div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5">
             {ALL_RECURRENCE_FREQUENCIES.map(freq => {
               const checked = allowedFrequencies.includes(freq);
               return (
@@ -107,28 +236,159 @@ export const ServiceRecurrenceConfigPanel: React.FC<ServiceRecurrenceConfigPanel
             })}
           </div>
 
+          {customEnabled && (
+            <div className="p-2.5 bg-teal-50/50 border border-teal-200 rounded-xl space-y-2">
+              <div className="text-[11px] font-bold text-teal-950">Intervalo personalizado sugerido</div>
+              <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                <span className="text-slate-600 font-medium">Repetir a cada</span>
+                <input
+                  type="number"
+                  min={activeUnitBounds.min}
+                  max={activeUnitBounds.max}
+                  value={draftValue}
+                  onChange={e => setDraftValue(clampDraftValue(Number(e.target.value) || activeUnitBounds.min, draftUnit))}
+                  className="w-16 border border-teal-300 rounded-lg px-2 py-1 text-center font-bold bg-white text-slate-800"
+                  aria-label="Quantidade do intervalo personalizado"
+                />
+                <select
+                  value={draftUnit}
+                  onChange={e => {
+                    const nextUnit = e.target.value as RecurrenceIntervalUnit;
+                    setDraftUnit(nextUnit);
+                    setDraftValue(prev => clampDraftValue(prev, nextUnit));
+                  }}
+                  className="border border-teal-300 rounded-lg px-2 py-1 font-semibold bg-white text-slate-800"
+                  aria-label="Unidade do intervalo personalizado"
+                >
+                  <option value="days">Dias (1–365)</option>
+                  <option value="weeks">Semanas (1–52)</option>
+                  <option value="months">Meses (1–24)</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={handleAddOrApplyCustomInterval}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-bold cursor-pointer"
+                >
+                  <Plus className="w-3 h-3" />
+                  Adicionar opção
+                </button>
+              </div>
+              {customIntervals.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 pt-0.5">
+                  {customIntervals.map(spec => {
+                    const key = `${spec.intervalValue}:${spec.intervalUnit}`;
+                    const isDef =
+                      defaultCustomInterval?.intervalValue === spec.intervalValue &&
+                      defaultCustomInterval?.intervalUnit === spec.intervalUnit;
+                    return (
+                      <span
+                        key={key}
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-bold ${
+                          isDef
+                            ? 'bg-teal-600 text-white border-teal-600'
+                            : 'bg-white text-teal-800 border-teal-300'
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() =>
+                            emitChange({
+                              allowRecurrence: true,
+                              allowedFrequencies,
+                              defaultFrequency: 'custom_interval',
+                              customIntervals,
+                              defaultCustomInterval: spec
+                            })
+                          }
+                          className="cursor-pointer"
+                          title="Definir como padrão personalizado"
+                        >
+                          {formatCustomIntervalLabel(spec)}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveCustomInterval(spec)}
+                          className="opacity-80 hover:opacity-100 cursor-pointer"
+                          aria-label={`Remover ${formatCustomIntervalLabel(spec)}`}
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+              <div className="text-[10px] text-teal-800/80">
+                Ao autorizar "Personalizada", o agendamento respeitará exclusivamente os dias e horários válidos do serviço e do instrutor.
+              </div>
+            </div>
+          )}
+
           {allowedFrequencies.length > 0 && (
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1 text-[11px]">
-                Frequência padrão
-              </label>
-              <select
-                value={allowedFrequencies.includes(defaultFrequency) ? defaultFrequency : allowedFrequencies[0]}
-                onChange={e =>
-                  onChange({
-                    allowRecurrence: true,
-                    allowedFrequencies,
-                    defaultFrequency: e.target.value as RecurrenceFrequency
-                  })
-                }
-                className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-slate-50 font-semibold text-slate-800"
-              >
-                {allowedFrequencies.map(freq => (
-                  <option key={freq} value={freq}>
-                    {RECURRENCE_FREQUENCY_LABELS[freq]}
-                  </option>
-                ))}
-              </select>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1 text-[11px]">
+                  Frequência padrão
+                </label>
+                <select
+                  value={allowedFrequencies.includes(defaultFrequency) ? defaultFrequency : allowedFrequencies[0]}
+                  onChange={e =>
+                    emitChange({
+                      allowRecurrence: true,
+                      allowedFrequencies,
+                      defaultFrequency: e.target.value as RecurrenceFrequency,
+                      customIntervals,
+                      defaultCustomInterval
+                    })
+                  }
+                  className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-slate-50 font-semibold text-slate-800"
+                >
+                  {allowedFrequencies.map(freq => (
+                    <option key={freq} value={freq}>
+                      {RECURRENCE_FREQUENCY_LABELS[freq]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {customEnabled && defaultFrequency === 'custom_interval' && customIntervals.length > 0 && (
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1 text-[11px]">
+                    Intervalo personalizado padrão
+                  </label>
+                  <select
+                    value={
+                      defaultCustomInterval
+                        ? `${defaultCustomInterval.intervalValue}:${defaultCustomInterval.intervalUnit}`
+                        : `${customIntervals[0].intervalValue}:${customIntervals[0].intervalUnit}`
+                    }
+                    onChange={e => {
+                      const [vStr, uStr] = e.target.value.split(':');
+                      const matched = customIntervals.find(
+                        c => c.intervalValue === Number(vStr) && c.intervalUnit === uStr
+                      );
+                      if (matched) {
+                        emitChange({
+                          allowRecurrence: true,
+                          allowedFrequencies,
+                          defaultFrequency: 'custom_interval',
+                          customIntervals,
+                          defaultCustomInterval: matched
+                        });
+                      }
+                    }}
+                    className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-slate-50 font-semibold text-slate-800"
+                  >
+                    {customIntervals.map(spec => {
+                      const key = `${spec.intervalValue}:${spec.intervalUnit}`;
+                      return (
+                        <option key={key} value={key}>
+                          {formatCustomIntervalLabel(spec)}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+              )}
             </div>
           )}
         </div>

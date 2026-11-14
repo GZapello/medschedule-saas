@@ -1,5 +1,6 @@
 import { getUserPermissions } from '../middlewares/rbac.middleware';
-import { generateRecurrenceDates, resolveOrCreateGroupOccurrenceTx, GroupOccurrenceResolution } from '../services/class-group.service';
+import { resolveOrCreateGroupOccurrenceTx, GroupOccurrenceResolution } from '../services/class-group.service';
+import { evaluateRecurrenceSeriesWithExternalBusy } from '../services/recurrence.service';
 import { resolveConcreteModality, sanitizeBookingErrorMessage } from '../utils/modality-resolver';
 import { getDayOfWeekFromYmd } from '../services/class-schedule.service';
 import { bookingTime } from '../utils/booking-time';
@@ -2221,10 +2222,102 @@ export class AppointmentController {
   }
 
   /**
+   * POST /v1/appointments/recurrence-preview
+   * Calcula datas previstas e valida disponibilidade real do serviço/profissional/grade.
+   */
+  static async previewRecurring(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.tenantId;
+      if (!tenantId) {
+        res.status(401).json({ error: 'Tenant ID required' });
+        return;
+      }
+
+      const {
+        patientId,
+        professionalId,
+        serviceId,
+        roomId,
+        classScheduleId,
+        startTime,
+        endTime,
+        startDate,
+        startClock,
+        endClock,
+        modality,
+        recurrence
+      } = req.body || {};
+      const isCustomTime = Boolean(req.body?.isCustomTime || req.body?.is_custom_time);
+
+      if (!serviceId) {
+        res.status(400).json({ error: 'Informe o serviço para simular a recorrência.' });
+        return;
+      }
+
+      let resolvedDate = startDate ? String(startDate).slice(0, 10) : '';
+      let resolvedStartClock = startClock ? String(startClock).slice(0, 8) : '';
+      let resolvedEndClock = endClock ? String(endClock).slice(0, 8) : undefined;
+
+      if (startTime) {
+        const normStart = bookingTime(String(startTime));
+        if (!normStart) {
+          res.status(400).json({ code: 'INVALID_BOOKING_TIME', error: 'Horário inicial inválido.' });
+          return;
+        }
+        resolvedDate = normStart.slice(0, 10);
+        resolvedStartClock = normStart.slice(11, 19);
+      }
+
+      if (endTime) {
+        const normEnd = bookingTime(String(endTime));
+        if (normEnd) {
+          resolvedEndClock = normEnd.slice(11, 19);
+        }
+      }
+
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(resolvedDate) || !/^\d{2}:\d{2}/.test(resolvedStartClock)) {
+        res.status(400).json({ code: 'INVALID_BOOKING_TIME', error: 'Informe data e horário inicial válidos para visualizar as datas.' });
+        return;
+      }
+
+      const preview = await evaluateRecurrenceSeriesWithExternalBusy({
+        tenantId,
+        serviceId: String(serviceId),
+        professionalId: professionalId ? String(professionalId) : 'any',
+        classScheduleId: classScheduleId ? String(classScheduleId) : null,
+        roomId: roomId ? String(roomId) : null,
+        patientId: patientId ? String(patientId) : null,
+        startDate: resolvedDate,
+        startClock: resolvedStartClock,
+        endClock: resolvedEndClock || null,
+        modality: modality ?? null,
+        frequency: recurrence?.frequency ?? null,
+        intervalValue: recurrence?.intervalValue ?? recurrence?.interval_value ?? null,
+        intervalUnit: recurrence?.intervalUnit ?? recurrence?.interval_unit ?? null,
+        weekdays: Array.isArray(recurrence?.weekdays) ? recurrence.weekdays : undefined,
+        endDate: recurrence?.endDate ? String(recurrence.endDate).slice(0, 10) : undefined,
+        maxOccurrences: recurrence?.maxOccurrences !== undefined ? Number(recurrence.maxOccurrences) : undefined,
+        publicOnly: false,
+        isCustomTime,
+        ignoreFirstLeadTime: true
+      });
+
+      res.json(preview);
+    } catch (err: any) {
+      console.error('[AppointmentController.previewRecurring] Erro:', err);
+      const safeError = sanitizeBookingErrorMessage(err, 'Erro ao simular datas da recorrência');
+      res.status(err?.status || 500).json({
+        error: safeError,
+        ...(err?.code ? { code: err.code } : {})
+      });
+    }
+  }
+
+  /**
    * Cria série finita de agendamentos recorrentes (individuais ou em turma/aula coletiva)
    * POST /v1/appointments/recurring
    */
-  static createRecurring(req: Request, res: Response): void {
+  static async createRecurring(req: Request, res: Response): Promise<void> {
     try {
       const tenantId = req.tenantId;
       if (!tenantId) {
@@ -2242,6 +2335,7 @@ export class AppointmentController {
         serviceId,
         roomId,
         insuranceId,
+        classScheduleId,
         startTime,
         endTime,
         modality = 'presential',
@@ -2288,6 +2382,7 @@ export class AppointmentController {
                COALESCE(service_kind, 'individual') as service_kind,
                default_capacity, COALESCE(allow_recurrence, 1) as allow_recurrence,
                allowed_recurrence_frequencies_json, default_recurrence_frequency,
+               custom_recurrence_intervals_json, default_recurrence_interval_json,
                service_domain, clinical_module
         FROM services WHERE id = ? AND tenant_id = ? AND active = 1
       `).get(serviceId, tenantId) as any;
@@ -2299,12 +2394,19 @@ export class AppointmentController {
         ? String(rawModality)
         : resolveConcreteModality({ serviceModality: serviceRow.modality, allowHome: true });
 
-      const recValidation = validateServiceRecurrenceFrequency(serviceRow, recurrence?.frequency);
+      const recValidation = validateServiceRecurrenceFrequency(
+        serviceRow,
+        recurrence?.frequency,
+        recurrence?.intervalValue ?? recurrence?.interval_value,
+        recurrence?.intervalUnit ?? recurrence?.interval_unit
+      );
       if (!recValidation.valid) {
         res.status(400).json({ code: recValidation.code, error: recValidation.error });
         return;
       }
       const freq = recValidation.frequency;
+      const intervalValue = recValidation.intervalValue;
+      const intervalUnit = recValidation.intervalUnit;
 
       const profRow = db.prepare('SELECT id, name, profession_id FROM professionals WHERE id = ? AND tenant_id = ? AND active = 1').get(professionalId, tenantId) as any;
       if (!profRow) {
@@ -2339,34 +2441,44 @@ export class AppointmentController {
       const startClock = normalizedStart.slice(11, 16);
       const endClock = normalizedEnd.slice(11, 16);
 
-      const dates = generateRecurrenceDates({
+      const evalResult = await evaluateRecurrenceSeriesWithExternalBusy({
+        tenantId,
+        serviceId: String(serviceId),
+        professionalId: String(professionalId),
+        classScheduleId: classScheduleId ? String(classScheduleId) : null,
+        roomId: roomId ? String(roomId) : null,
+        patientId: String(patientId),
         startDate,
-        frequency: freq as any,
+        startClock,
+        endClock,
+        modality: effectiveModality,
+        frequency: freq,
+        intervalValue,
+        intervalUnit,
         weekdays: Array.isArray(recurrence?.weekdays) ? recurrence.weekdays : undefined,
         endDate,
-        maxOccurrences
+        maxOccurrences,
+        publicOnly: false,
+        isCustomTime,
+        ignoreFirstLeadTime: true
       });
-      if (dates.length === 0) {
-        res.status(400).json({ error: 'Nenhuma data válida encontrada para os critérios de recorrência informados.' });
+
+      if (!evalResult.valid) {
+        const firstConflict = evalResult.occurrences.find(o => !o.available);
+        const msg = evalResult.conflictCount === 1
+          ? `Dia ${firstConflict?.date}: ${firstConflict?.reasonMessage}`
+          : `Foram encontrados ${evalResult.conflictCount} conflito(s) na série recorrente. Primeiro conflito em ${firstConflict?.date}: ${firstConflict?.reasonMessage}`;
+        res.status(409).json({
+          code: firstConflict?.reasonCode || 'RECURRENCE_CONFLICT',
+          error: msg,
+          date: firstConflict?.date,
+          conflicts: evalResult.occurrences.filter(o => !o.available),
+          preview: evalResult
+        });
         return;
       }
 
-      if (!isCustomTime) {
-        for (const d of dates) {
-          const sIso = `${d}T${startClock}`;
-          const eIso = `${d}T${endClock}`;
-          const hoursCheck = validateClinicBusinessHours(tenantId, sIso, eIso);
-          if (!hoursCheck.valid) {
-            res.status(400).json({ error: `Dia ${d}: ${hoursCheck.error}`, date: d });
-            return;
-          }
-          const scheduleCheck = validateProfessionalSchedule(tenantId, professionalId, sIso, eIso);
-          if (!scheduleCheck.valid) {
-            res.status(400).json({ error: `Dia ${d}: ${scheduleCheck.error}`, date: d });
-            return;
-          }
-        }
-      }
+      const dates = evalResult.occurrences.map(o => o.date);
 
       const isGroupService = serviceRow.service_kind === 'group';
       const defaultCapacity = isGroupService ? Math.max(1, Number(serviceRow.default_capacity) || 1) : 1;
@@ -2397,9 +2509,10 @@ export class AppointmentController {
         db.prepare(`
           INSERT INTO class_series (
             id, tenant_id, service_id, professional_id, room_id, patient_id, service_kind, title,
-            modality, frequency, weekdays_json, start_time_hhmm, duration_minutes, start_date, end_date,
+            modality, frequency, weekdays_json, interval_value, interval_unit,
+            start_time_hhmm, duration_minutes, start_date, end_date,
             max_occurrences, capacity, unit_price, status, created_by
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)
         `).run(
           seriesId,
           tenantId,
@@ -2412,6 +2525,8 @@ export class AppointmentController {
           effectiveModality,
           freq,
           JSON.stringify(Array.isArray(recurrence?.weekdays) ? recurrence.weekdays : []),
+          intervalValue,
+          intervalUnit,
           startClock,
           calcDurationMinutes,
           dates[0],
@@ -2422,9 +2537,11 @@ export class AppointmentController {
           req.user?.userId || 'system'
         );
 
-        for (const d of dates) {
-          const sIso = `${d}T${startClock}`;
-          const eIso = `${d}T${endClock}`;
+        for (const occEval of evalResult.occurrences) {
+          const d = occEval.date;
+          const sIso = `${d}T${startClock}:00`;
+          const eIso = `${d}T${endClock}:00`;
+          const effRoomId = roomId || occEval.roomId || null;
 
           const patientConflict = db.prepare(`
             SELECT a.id FROM appointments a
@@ -2438,23 +2555,23 @@ export class AppointmentController {
           let occurrenceId: string | null = null;
           let isFirstEnrollment = true;
           if (isGroupService) {
-            const matchedSch = db.prepare(`
+            const matchedScheduleId = occEval.classScheduleId || (db.prepare(`
               SELECT id FROM class_schedules
               WHERE tenant_id = ? AND service_id = ? AND professional_id = ? AND day_of_week = ?
                 AND start_time = ? AND end_time = ? AND active = 1
               LIMIT 1
-            `).get(tenantId, serviceId, professionalId, getDayOfWeekFromYmd(d), startClock.slice(0, 5), endClock.slice(0, 5)) as { id: string } | undefined;
+            `).get(tenantId, serviceId, professionalId, getDayOfWeekFromYmd(d), startClock.slice(0, 5), endClock.slice(0, 5)) as { id: string } | undefined)?.id || null;
 
             const occ = resolveOrCreateGroupOccurrenceTx({
               tenantId,
               serviceId,
               serviceName: serviceRow.name || 'Turma',
               professionalId,
-              roomId: roomId || null,
-              classScheduleId: matchedSch?.id || null,
+              roomId: effRoomId,
+              classScheduleId: matchedScheduleId,
               startTime: sIso,
               endTime: eIso,
-              defaultCapacity,
+              defaultCapacity: occEval.capacity || defaultCapacity,
               modality: effectiveModality,
               seriesId,
               patientId
@@ -2470,12 +2587,12 @@ export class AppointmentController {
             if (profConflict) {
               throw { status: 409, code: 'PROFESSIONAL_SLOT_OCCUPIED', error: `Horário indisponível para o profissional em ${d} (${startClock}).` };
             }
-            if (roomId) {
+            if (effRoomId) {
               const roomConflict = db.prepare(`
                 SELECT a.id FROM appointments a
                 WHERE a.tenant_id = ? AND a.room_id = ? AND a.status != 'cancelled'
                   AND REPLACE(a.start_time, ' ', 'T') < ? AND REPLACE(a.end_time, ' ', 'T') > ?
-              `).get(tenantId, roomId, eIso, sIso);
+              `).get(tenantId, effRoomId, eIso, sIso);
               if (roomConflict) {
                 throw { status: 409, code: 'ROOM_CONFLICT', error: `Sala ocupada em ${d} (${startClock}).` };
               }
@@ -2496,7 +2613,7 @@ export class AppointmentController {
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)
           `).run(
             apptId, tenantId, apptNumber, patientId, professionalId, serviceId,
-            roomId || null, sIso, eIso, effectiveModality,
+            effRoomId, sIso, eIso, effectiveModality,
             typeof meeting_url === 'string' ? meeting_url.trim() || null : null,
             typeof rawDriveUrl === 'string' ? rawDriveUrl.trim() || null : null,
             patientNotes || null, internalNotes || null, insuranceId || null,

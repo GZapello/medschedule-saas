@@ -1,18 +1,27 @@
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { resolveConcreteModality } from '../utils/modality-resolver';
+import {
+  RecurrenceFrequency,
+  RecurrenceIntervalUnit,
+  resolveIntervalSpecFromFrequency,
+  MAX_RECURRENCE_OCCURRENCES,
+  MAX_RECURRENCE_SPAN_DAYS
+} from '../utils/establishment-context';
 
-export type RecurrenceFrequency = 'weekly' | 'biweekly' | 'monthly' | 'custom_weekdays';
+export type { RecurrenceFrequency, RecurrenceIntervalUnit };
 
 export interface GenerateRecurrenceOptions {
   startDate: string; // YYYY-MM-DD
   frequency: RecurrenceFrequency;
+  intervalValue?: number | null;
+  intervalUnit?: RecurrenceIntervalUnit | null;
   weekdays?: number[]; // 0..6 (Domingo=0 .. Sábado=6)
   endDate?: string | null;
   maxOccurrences?: number | null;
 }
 
-const MAX_RECURRENCE_CAP = 104;
+const MAX_RECURRENCE_CAP = MAX_RECURRENCE_OCCURRENCES;
 
 function parseYmd(ymd: string): Date {
   const [y, m, d] = ymd.split('-').map(Number);
@@ -29,72 +38,148 @@ function formatYmd(date: Date): string {
 export function generateRecurrenceDates(opts: GenerateRecurrenceOptions): string[] {
   const startStr = String(opts.startDate || '').slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(startStr)) {
-    throw Object.assign(new Error('Data inicial inválida para recorrência.'), { status: 400 });
+    throw Object.assign(new Error('Data inicial inválida para recorrência.'), { status: 400, code: 'INVALID_RECURRENCE_DATE' });
   }
 
   const endStr = opts.endDate ? String(opts.endDate).slice(0, 10) : null;
   if (endStr && !/^\d{4}-\d{2}-\d{2}$/.test(endStr)) {
-    throw Object.assign(new Error('Data final inválida para recorrência.'), { status: 400 });
+    throw Object.assign(new Error('Data final inválida para recorrência.'), { status: 400, code: 'INVALID_RECURRENCE_DATE' });
   }
   if (endStr && endStr < startStr) {
-    throw Object.assign(new Error('A data final da recorrência deve ser igual ou posterior à data inicial.'), { status: 400 });
+    throw Object.assign(new Error('A data final da recorrência deve ser igual ou posterior à data inicial.'), { status: 400, code: 'INVALID_RECURRENCE_DATE' });
   }
 
   const rawMax = opts.maxOccurrences !== undefined && opts.maxOccurrences !== null ? Number(opts.maxOccurrences) : null;
   if (!endStr && (!rawMax || !Number.isInteger(rawMax) || rawMax < 1)) {
-    throw Object.assign(new Error('Informe a data final ou a quantidade de ocorrências para criar agendamentos recorrentes (recorrência infinita não é permitida).'), { status: 400 });
+    throw Object.assign(new Error('Informe a data final ou a quantidade de ocorrências para criar agendamentos recorrentes (recorrência infinita não é permitida).'), { status: 400, code: 'RECURRENCE_BOUND_REQUIRED' });
   }
   if (rawMax !== null && (!Number.isInteger(rawMax) || rawMax < 1)) {
-    throw Object.assign(new Error('A quantidade de ocorrências deve ser um número inteiro positivo.'), { status: 400 });
+    throw Object.assign(new Error('A quantidade de ocorrências deve ser um número inteiro positivo.'), { status: 400, code: 'RECURRENCE_LIMIT_EXCEEDED' });
+  }
+  if (rawMax !== null && rawMax > MAX_RECURRENCE_CAP) {
+    throw Object.assign(
+      new Error(`O limite máximo de ocorrências por série é ${MAX_RECURRENCE_CAP}.`),
+      { status: 400, code: 'RECURRENCE_LIMIT_EXCEEDED' }
+    );
   }
 
-  const maxCount = Math.min(rawMax || MAX_RECURRENCE_CAP, MAX_RECURRENCE_CAP);
   const startDate = parseYmd(startStr);
+  if (endStr) {
+    const endDateObj = parseYmd(endStr);
+    const diffDays = Math.round((endDateObj.getTime() - startDate.getTime()) / 86400000);
+    if (diffDays > MAX_RECURRENCE_SPAN_DAYS) {
+      throw Object.assign(
+        new Error('A data limite da recorrência não pode ultrapassar 5 anos a partir da data inicial.'),
+        { status: 400, code: 'RECURRENCE_HORIZON_EXCEEDED' }
+      );
+    }
+  }
+
+  const maxLimitMs = startDate.getTime() + MAX_RECURRENCE_SPAN_DAYS * 86400000;
+  const maxCount = Math.min(rawMax || MAX_RECURRENCE_CAP, MAX_RECURRENCE_CAP);
   const startWeekday = startDate.getUTCDay();
   const weekdays = Array.isArray(opts.weekdays) && opts.weekdays.length > 0
     ? Array.from(new Set(opts.weekdays.map(Number).filter(n => Number.isInteger(n) && n >= 0 && n <= 6))).sort((a, b) => a - b)
     : [startWeekday];
 
-  const dates: string[] = [];
-  const freq = opts.frequency || 'weekly';
+  const freq = (opts.frequency || 'weekly') as RecurrenceFrequency;
+  const resolvedSpec = resolveIntervalSpecFromFrequency(freq, opts.intervalValue, opts.intervalUnit);
+  if (!resolvedSpec.ok) {
+    throw Object.assign(new Error(resolvedSpec.error), { status: 400, code: resolvedSpec.code });
+  }
 
-  if (freq === 'monthly') {
-    const startDay = startDate.getUTCDate();
-    for (let monthOffset = 0; dates.length < maxCount && monthOffset < 36; monthOffset++) {
-      const y = startDate.getUTCFullYear();
-      const m = startDate.getUTCMonth() + monthOffset;
-      const candidate = new Date(Date.UTC(y, m, 1, 12, 0, 0));
-      const daysInMonth = new Date(Date.UTC(candidate.getUTCFullYear(), candidate.getUTCMonth() + 1, 0, 12, 0, 0)).getUTCDate();
-      candidate.setUTCDate(Math.min(startDay, daysInMonth));
+  const dates: string[] = [];
+
+  // Dias específicos da semana (freq === 'custom_weekdays') ou intervalo em semanas
+  if (freq === 'custom_weekdays' || resolvedSpec.spec?.intervalUnit === 'weeks') {
+    const weekStep = freq === 'custom_weekdays' ? 1 : (resolvedSpec.spec?.intervalValue || 1);
+    const startSunday = new Date(startDate.getTime());
+    startSunday.setUTCDate(startSunday.getUTCDate() - startWeekday);
+
+    for (let weekIndex = 0; dates.length < maxCount; weekIndex += weekStep) {
+      const firstDayOfBlock = new Date(startSunday.getTime());
+      firstDayOfBlock.setUTCDate(startSunday.getUTCDate() + weekIndex * 7);
+      if (firstDayOfBlock.getTime() > maxLimitMs) {
+        if (!endStr && rawMax && dates.length < rawMax) {
+          throw Object.assign(
+            new Error('A quantidade de ocorrências informada ultrapassa o horizonte máximo de 5 anos.'),
+            { status: 400, code: 'RECURRENCE_HORIZON_EXCEEDED' }
+          );
+        }
+        return dates;
+      }
+
+      for (const wd of weekdays) {
+        const candidate = new Date(startSunday.getTime());
+        candidate.setUTCDate(startSunday.getUTCDate() + weekIndex * 7 + wd);
+        const ymd = formatYmd(candidate);
+        if (ymd < startStr) continue;
+        if (endStr && ymd > endStr) {
+          return dates;
+        }
+        if (candidate.getTime() > maxLimitMs) {
+          if (!endStr && rawMax && dates.length < rawMax) {
+            throw Object.assign(
+              new Error('A quantidade de ocorrências informada ultrapassa o horizonte máximo de 5 anos.'),
+              { status: 400, code: 'RECURRENCE_HORIZON_EXCEEDED' }
+            );
+          }
+          return dates;
+        }
+        dates.push(ymd);
+        if (dates.length >= maxCount) {
+          return dates;
+        }
+      }
+    }
+    return dates;
+  }
+
+  if (resolvedSpec.spec?.intervalUnit === 'days') {
+    const dayStep = resolvedSpec.spec.intervalValue;
+    for (let idx = 0; dates.length < maxCount; idx++) {
+      const candidate = new Date(startDate.getTime());
+      candidate.setUTCDate(startDate.getUTCDate() + idx * dayStep);
+      if (candidate.getTime() > maxLimitMs) {
+        if (!endStr && rawMax && dates.length < rawMax) {
+          throw Object.assign(
+            new Error('A quantidade de ocorrências informada ultrapassa o horizonte máximo de 5 anos.'),
+            { status: 400, code: 'RECURRENCE_HORIZON_EXCEEDED' }
+          );
+        }
+        break;
+      }
       const ymd = formatYmd(candidate);
-      if (ymd < startStr) continue;
       if (endStr && ymd > endStr) break;
       dates.push(ymd);
     }
     return dates;
   }
 
-  const weekStep = freq === 'biweekly' ? 2 : 1;
-  // Semana ancorada no domingo da semana de startDate para aplicar intervalo semanal/quinzenal determinístico
-  const startSunday = new Date(startDate.getTime());
-  startSunday.setUTCDate(startSunday.getUTCDate() - startWeekday);
-
-  for (let weekIndex = 0; dates.length < maxCount && weekIndex < 160; weekIndex += weekStep) {
-    for (const wd of weekdays) {
-      const candidate = new Date(startSunday.getTime());
-      candidate.setUTCDate(startSunday.getUTCDate() + weekIndex * 7 + wd);
-      const ymd = formatYmd(candidate);
-      if (ymd < startStr) continue;
-      if (endStr && ymd > endStr) {
-        return dates;
+  // Meses (monthly, bimonthly, quarterly, semiannual, annual ou custom_interval em months)
+  const monthStep = resolvedSpec.spec?.intervalValue || 1;
+  const startDay = startDate.getUTCDate();
+  for (let idx = 0; dates.length < maxCount; idx++) {
+    const monthOffset = idx * monthStep;
+    const y = startDate.getUTCFullYear();
+    const m = startDate.getUTCMonth() + monthOffset;
+    const candidate = new Date(Date.UTC(y, m, 1, 12, 0, 0));
+    const daysInMonth = new Date(Date.UTC(candidate.getUTCFullYear(), candidate.getUTCMonth() + 1, 0, 12, 0, 0)).getUTCDate();
+    candidate.setUTCDate(Math.min(startDay, daysInMonth));
+    if (candidate.getTime() > maxLimitMs) {
+      if (!endStr && rawMax && dates.length < rawMax) {
+        throw Object.assign(
+          new Error('A quantidade de ocorrências informada ultrapassa o horizonte máximo de 5 anos.'),
+          { status: 400, code: 'RECURRENCE_HORIZON_EXCEEDED' }
+        );
       }
-      dates.push(ymd);
-      if (dates.length >= maxCount) {
-        return dates;
-      }
+      break;
     }
+    const ymd = formatYmd(candidate);
+    if (ymd < startStr) continue;
+    if (endStr && ymd > endStr) break;
+    dates.push(ymd);
   }
-
   return dates;
 }
 

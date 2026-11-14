@@ -141,6 +141,7 @@ api.post('/v1/public/appointments', AppointmentController.create);
 
 // Agendamento Público Específico de Studios / Estabelecimentos Mistos
 api.get('/v1/public/studio/slots', PackageController.getPublicStudioSlots);
+api.post('/v1/public/studio/recurrence-preview', PackageController.previewPublicStudioRecurrence);
 api.post('/v1/public/studio/bookings', PackageController.createPublicStudioBooking);
 
 // Página Pública do Profissional & Agendamento Direto (/agendar/:clinicSlug/:professionalSlug ou /agendar/:slug)
@@ -399,6 +400,7 @@ api.put('/v1/patients/:id', requireTenant, requireRole('clinic_admin', 'receptio
 
 // Agenda & Agendamentos
 api.get('/v1/appointments', requireTenant, AppointmentController.list);
+api.post('/v1/appointments/recurrence-preview', requireTenant, AppointmentController.previewRecurring);
 api.post('/v1/appointments/recurring', requireTenant, AppointmentController.createRecurring);
 api.get('/v1/appointments/:id', requireTenant, AppointmentController.getById);
 api.post('/v1/appointments', requireTenant, AppointmentController.create);

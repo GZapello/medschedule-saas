@@ -219,9 +219,33 @@ export interface Service {
   service_domain?: 'clinical' | 'studio';
   default_capacity?: number | null;
   allow_recurrence?: number;
-  allowed_recurrence_frequencies?: ('weekly' | 'biweekly' | 'monthly' | 'custom_weekdays')[];
+  allowed_recurrence_frequencies?: (
+    | 'weekly'
+    | 'biweekly'
+    | 'monthly'
+    | 'bimonthly'
+    | 'quarterly'
+    | 'semiannual'
+    | 'annual'
+    | 'custom_weekdays'
+    | 'custom_interval'
+  )[];
   allowed_recurrence_frequencies_json?: string | null;
-  default_recurrence_frequency?: 'weekly' | 'biweekly' | 'monthly' | 'custom_weekdays' | null;
+  default_recurrence_frequency?:
+    | 'weekly'
+    | 'biweekly'
+    | 'monthly'
+    | 'bimonthly'
+    | 'quarterly'
+    | 'semiannual'
+    | 'annual'
+    | 'custom_weekdays'
+    | 'custom_interval'
+    | null;
+  custom_recurrence_intervals?: { intervalValue: number; intervalUnit: 'days' | 'weeks' | 'months' }[];
+  custom_recurrence_intervals_json?: string | null;
+  default_recurrence_interval?: { intervalValue: number; intervalUnit: 'days' | 'weeks' | 'months' } | null;
+  default_recurrence_interval_json?: string | null;
   modality_category?: string | null;
   linked_professional_ids?: string[];
   linked_professionals?: LinkedProfessionalItem[];

@@ -1486,6 +1486,7 @@ export class TenantController {
                s.professional_id, COALESCE(s.service_kind, 'individual') as service_kind,
                s.default_capacity, COALESCE(s.allow_recurrence, 1) as allow_recurrence,
                s.allowed_recurrence_frequencies_json, s.default_recurrence_frequency,
+               s.custom_recurrence_intervals_json, s.default_recurrence_interval_json,
                s.service_domain, s.clinical_module,
                s.modality_category, spec.name as specialty_name
         FROM services s LEFT JOIN specialties spec ON spec.id = s.specialty_id
@@ -1573,6 +1574,8 @@ export class TenantController {
             allow_recurrence: recCfg.allowRecurrence ? 1 : 0,
             allowed_recurrence_frequencies: recCfg.allowedFrequencies,
             default_recurrence_frequency: recCfg.defaultFrequency,
+            custom_recurrence_intervals: recCfg.customIntervals,
+            default_recurrence_interval: recCfg.defaultCustomInterval,
             linked_professionals: linkedProfs,
             linked_professional_ids: linkedProfs.map(lp => lp.id),
             class_schedules: scheds,

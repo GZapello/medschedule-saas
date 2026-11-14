@@ -15,10 +15,16 @@ import { ApiClient } from '../../api/client';
 import { calendarBooking } from '../../utils/publicBooking';
 import { bookingButton, bookingSecondary, bookingInput, BookingBackButton } from './PublicBookingShell';
 import {
+  formatCustomIntervalLabel,
+  formatRecurrenceDescription,
   parseServiceRecurrenceConfig,
   RECURRENCE_FREQUENCY_LABELS,
-  RecurrenceFrequency
+  RECURRENCE_INTERVAL_BOUNDS,
+  RecurrenceFrequency,
+  RecurrenceIntervalSpec,
+  RecurrenceIntervalUnit
 } from '../../utils/establishmentContext';
+import { RecurrencePreviewBox, RecurrencePreviewData } from '../common/RecurrencePreviewBox';
 
 type ConcreteModality = 'presential' | 'online' | 'home';
 
@@ -97,12 +103,21 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
   const [selectedSlot, setSelectedSlot] = useState<any | null>(null);
   const [useRecurrence, setUseRecurrence] = useState<boolean>(false);
   const [recurrenceFrequency, setRecurrenceFrequency] = useState<RecurrenceFrequency>('weekly');
+  const [recurrenceIntervalValue, setRecurrenceIntervalValue] = useState<number>(3);
+  const [recurrenceIntervalUnit, setRecurrenceIntervalUnit] = useState<RecurrenceIntervalUnit>('days');
   const [recurrenceWeekdays, setRecurrenceWeekdays] = useState<number[]>([]);
+  const [recurrenceEndMode, setRecurrenceEndMode] = useState<'count' | 'date'>('count');
   const [recurrenceCount, setRecurrenceCount] = useState<number>(4);
+  const [recurrenceEndDate, setRecurrenceEndDate] = useState<string>('');
+  const [recurrencePreview, setRecurrencePreview] = useState<RecurrencePreviewData | null>(null);
+  const [loadingRecurrencePreview, setLoadingRecurrencePreview] = useState<boolean>(false);
+  const [recurrencePreviewError, setRecurrencePreviewError] = useState<string | null>(null);
   const [slotRecurrenceMeta, setSlotRecurrenceMeta] = useState<{
     allow_recurrence?: boolean | number;
     allowed_recurrence_frequencies?: string[];
     default_recurrence_frequency?: string | null;
+    custom_recurrence_intervals?: RecurrenceIntervalSpec[] | null;
+    default_recurrence_interval?: RecurrenceIntervalSpec | null;
   } | null>(null);
 
   // Package booking state
@@ -147,7 +162,11 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
           allowed_recurrence_frequencies:
             slotRecurrenceMeta.allowed_recurrence_frequencies ?? selectedService?.allowed_recurrence_frequencies,
           default_recurrence_frequency:
-            slotRecurrenceMeta.default_recurrence_frequency ?? selectedService?.default_recurrence_frequency
+            slotRecurrenceMeta.default_recurrence_frequency ?? selectedService?.default_recurrence_frequency,
+          custom_recurrence_intervals:
+            slotRecurrenceMeta.custom_recurrence_intervals ?? selectedService?.custom_recurrence_intervals,
+          default_recurrence_interval:
+            slotRecurrenceMeta.default_recurrence_interval ?? selectedService?.default_recurrence_interval
         }
       : selectedService;
     return parseServiceRecurrenceConfig(merged);
@@ -165,7 +184,115 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
     setRecurrenceFrequency(prev =>
       selectedServiceRecurrence.allowedFrequencies.includes(prev) ? prev : defFreq
     );
+    const defCustom =
+      selectedServiceRecurrence.defaultCustomInterval || selectedServiceRecurrence.customIntervals[0];
+    if (defCustom) {
+      setRecurrenceIntervalValue(defCustom.intervalValue);
+      setRecurrenceIntervalUnit(defCustom.intervalUnit);
+    }
   }, [selectedServiceId, selectedServiceRecurrence]);
+
+  useEffect(() => {
+    if (
+      objective !== 'service' ||
+      step !== 3 ||
+      !useRecurrence ||
+      !selectedServiceId ||
+      !selectedSlot?.startTime ||
+      !selectedSlot?.endTime ||
+      !selectedServiceRecurrence.allowRecurrence
+    ) {
+      setRecurrencePreview(null);
+      setRecurrencePreviewError(null);
+      setLoadingRecurrencePreview(false);
+      return;
+    }
+
+    if (recurrenceFrequency === 'custom_weekdays' && recurrenceWeekdays.length === 0) {
+      setRecurrencePreview(null);
+      setRecurrencePreviewError('Selecione ao menos um dia da semana para consultar as datas.');
+      return;
+    }
+    if (recurrenceEndMode === 'date') {
+      const startDateIso = String(selectedSlot.startTime).slice(0, 10);
+      if (!recurrenceEndDate || recurrenceEndDate < startDateIso) {
+        setRecurrencePreview(null);
+        setRecurrencePreviewError('Informe uma data limite válida para consultar as datas.');
+        return;
+      }
+    }
+
+    let cancelled = false;
+    setLoadingRecurrencePreview(true);
+    setRecurrencePreviewError(null);
+
+    const activeFrequency = selectedServiceRecurrence.allowedFrequencies.includes(recurrenceFrequency)
+      ? recurrenceFrequency
+      : selectedServiceRecurrence.defaultFrequency || selectedServiceRecurrence.allowedFrequencies[0];
+
+    const timer = window.setTimeout(() => {
+      ApiClient.post<RecurrencePreviewData>('/v1/public/studio/recurrence-preview', {
+        tenantSlug: tenantSlug || clinic?.slug,
+        bookingSequence,
+        serviceId: selectedServiceId,
+        professionalId:
+          selectedProfFilter === 'any' ? selectedSlot?.professionalId || 'any' : selectedProfFilter,
+        classScheduleId: selectedSlot?.classScheduleId || null,
+        modality: selectedModality,
+        startTime: selectedSlot.startTime,
+        endTime: selectedSlot.endTime,
+        recurrence: {
+          frequency: activeFrequency,
+          ...(activeFrequency === 'custom_interval'
+            ? { intervalValue: recurrenceIntervalValue, intervalUnit: recurrenceIntervalUnit }
+            : {}),
+          ...(activeFrequency === 'custom_weekdays' ? { weekdays: recurrenceWeekdays } : {}),
+          ...(recurrenceEndMode === 'date'
+            ? { endDate: recurrenceEndDate }
+            : { maxOccurrences: recurrenceCount })
+        }
+      })
+        .then(res => {
+          if (!cancelled) {
+            setRecurrencePreview(res);
+            setRecurrencePreviewError(null);
+          }
+        })
+        .catch((err: any) => {
+          if (!cancelled) {
+            setRecurrencePreview(null);
+            setRecurrencePreviewError(err?.message || 'Não foi possível validar as datas da recorrência.');
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setLoadingRecurrencePreview(false);
+        });
+    }, 280);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [
+    objective,
+    step,
+    useRecurrence,
+    selectedServiceId,
+    selectedSlot,
+    selectedProfFilter,
+    selectedModality,
+    selectedServiceRecurrence,
+    tenantSlug,
+    clinic?.slug,
+    bookingSequence,
+    recurrenceFrequency,
+    recurrenceIntervalValue,
+    recurrenceIntervalUnit,
+    recurrenceWeekdays,
+    recurrenceEndMode,
+    recurrenceCount,
+    recurrenceEndDate
+  ]);
 
   const selectedPackage = useMemo(
     () => packages.find(p => p.id === selectedPackageId) || null,
@@ -217,7 +344,11 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
           allowed_recurrence_frequencies: Array.isArray(res?.allowedRecurrenceFrequencies)
             ? res.allowedRecurrenceFrequencies
             : undefined,
-          default_recurrence_frequency: res?.defaultRecurrenceFrequency ?? null
+          default_recurrence_frequency: res?.defaultRecurrenceFrequency ?? null,
+          custom_recurrence_intervals: Array.isArray(res?.customRecurrenceIntervals)
+            ? res.customRecurrenceIntervals
+            : undefined,
+          default_recurrence_interval: res?.defaultRecurrenceInterval ?? null
         });
         setEmptyReason(res?.emptyReason || '');
       })
@@ -404,6 +535,10 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                 const srvItem = services.find(s => s.id === it.serviceId);
                 const pkgItemRec = parseServiceRecurrenceConfig(srvItem);
                 const pkgFreq = pkgItemRec.defaultFrequency || pkgItemRec.allowedFrequencies[0] || 'weekly';
+                const pkgCustomInterval =
+                  pkgFreq === 'custom_interval'
+                    ? pkgItemRec.defaultCustomInterval || pkgItemRec.customIntervals[0]
+                    : null;
                 return {
                   serviceId: it.serviceId,
                   professionalId: it.professionalId,
@@ -412,7 +547,18 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                   startTime: it.startTime,
                   endTime: it.endTime,
                   ...(it.recurrenceCount > 1 && pkgItemRec.allowRecurrence
-                    ? { recurrence: { frequency: pkgFreq, maxOccurrences: it.recurrenceCount } }
+                    ? {
+                        recurrence: {
+                          frequency: pkgFreq,
+                          ...(pkgCustomInterval
+                            ? {
+                                intervalValue: pkgCustomInterval.intervalValue,
+                                intervalUnit: pkgCustomInterval.intervalUnit
+                              }
+                            : {}),
+                          maxOccurrences: it.recurrenceCount
+                        }
+                      }
                     : {})
                 };
               }),
@@ -435,17 +581,25 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
               startTime: selectedSlot?.startTime,
               endTime: selectedSlot?.endTime,
               ...(useRecurrence && selectedServiceRecurrence.allowRecurrence && selectedServiceRecurrence.allowedFrequencies.length > 0
-                ? {
-                    recurrence: {
-                      frequency: selectedServiceRecurrence.allowedFrequencies.includes(recurrenceFrequency)
-                        ? recurrenceFrequency
-                        : (selectedServiceRecurrence.defaultFrequency || selectedServiceRecurrence.allowedFrequencies[0]),
-                      ...(recurrenceFrequency === 'custom_weekdays' && recurrenceWeekdays.length > 0
-                        ? { weekdays: recurrenceWeekdays }
-                        : {}),
-                      maxOccurrences: recurrenceCount
-                    }
-                  }
+                ? (() => {
+                    const effectiveFreq = selectedServiceRecurrence.allowedFrequencies.includes(recurrenceFrequency)
+                      ? recurrenceFrequency
+                      : selectedServiceRecurrence.defaultFrequency || selectedServiceRecurrence.allowedFrequencies[0];
+                    return {
+                      recurrence: {
+                        frequency: effectiveFreq,
+                        ...(effectiveFreq === 'custom_interval'
+                          ? { intervalValue: recurrenceIntervalValue, intervalUnit: recurrenceIntervalUnit }
+                          : {}),
+                        ...(effectiveFreq === 'custom_weekdays' && recurrenceWeekdays.length > 0
+                          ? { weekdays: recurrenceWeekdays }
+                          : {}),
+                        ...(recurrenceEndMode === 'date'
+                          ? { endDate: recurrenceEndDate }
+                          : { maxOccurrences: recurrenceCount })
+                      }
+                    };
+                  })()
                 : {}),
               student: {
                 fullName: studentForm.fullName.trim(),
@@ -1038,7 +1192,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                 Repetir este horário automaticamente (plano finito)
               </label>
               {useRecurrence && (
-                <div className="space-y-2 pl-6">
+                <div className="space-y-2.5 pl-6">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-slate-600 font-semibold">Frequência:</span>
                     <select
@@ -1056,17 +1210,105 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                         </option>
                       ))}
                     </select>
-                    <span className="text-slate-600 font-semibold">Quantidade:</span>
+                    <span className="text-slate-600 font-semibold">Encerrar por:</span>
                     <select
-                      value={recurrenceCount}
-                      onChange={e => setRecurrenceCount(Number(e.target.value) || 4)}
-                      className="border border-indigo-200 rounded-lg px-2.5 py-1 bg-white font-bold"
+                      value={recurrenceEndMode}
+                      onChange={e => setRecurrenceEndMode(e.target.value as 'count' | 'date')}
+                      className="border border-indigo-200 rounded-lg px-2 py-1 bg-white font-semibold"
                     >
-                      {[2, 3, 4, 6, 8, 12].map(n => (
-                        <option key={n} value={n}>{n} aulas/sessões</option>
-                      ))}
+                      <option value="count">Quantidade</option>
+                      <option value="date">Data limite</option>
                     </select>
+                    {recurrenceEndMode === 'count' ? (
+                      <div className="inline-flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          min={2}
+                          max={24}
+                          value={recurrenceCount}
+                          onChange={e => setRecurrenceCount(Math.max(2, Math.min(24, Number(e.target.value) || 2)))}
+                          className="w-16 border border-indigo-200 rounded-lg px-2 py-1 bg-white text-center font-bold"
+                          aria-label="Quantidade de aulas"
+                        />
+                        <span className="text-slate-600 font-semibold">aulas</span>
+                      </div>
+                    ) : (
+                      <input
+                        type="date"
+                        min={selectedSlot?.startTime ? String(selectedSlot.startTime).slice(0, 10) : todayIso()}
+                        value={recurrenceEndDate}
+                        onChange={e => setRecurrenceEndDate(e.target.value)}
+                        className="border border-indigo-200 rounded-lg px-2 py-1 bg-white font-semibold"
+                        aria-label="Data limite da recorrência"
+                      />
+                    )}
                   </div>
+                  {recurrenceFrequency === 'custom_interval' && (
+                    <div className="p-2.5 rounded-xl bg-white border border-indigo-200 space-y-2">
+                      {selectedServiceRecurrence.customIntervals.length > 0 && (
+                        <div>
+                          <span className="block text-[11px] font-semibold text-slate-500 mb-1">
+                            Intervalos autorizados para este serviço:
+                          </span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {selectedServiceRecurrence.customIntervals.map((spec, idx) => {
+                              const active =
+                                spec.intervalValue === recurrenceIntervalValue && spec.intervalUnit === recurrenceIntervalUnit;
+                              return (
+                                <button
+                                  key={`${spec.intervalValue}-${spec.intervalUnit}-${idx}`}
+                                  type="button"
+                                  onClick={() => {
+                                    setRecurrenceIntervalValue(spec.intervalValue);
+                                    setRecurrenceIntervalUnit(spec.intervalUnit);
+                                  }}
+                                  className={`px-2 py-1 rounded-md border text-[11px] font-bold cursor-pointer ${
+                                    active
+                                      ? 'bg-indigo-600 text-white border-indigo-600'
+                                      : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-indigo-300'
+                                  }`}
+                                >
+                                  {formatCustomIntervalLabel(spec)}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-slate-700 font-semibold">Repetir a cada</span>
+                        <input
+                          type="number"
+                          min={RECURRENCE_INTERVAL_BOUNDS[recurrenceIntervalUnit].min}
+                          max={RECURRENCE_INTERVAL_BOUNDS[recurrenceIntervalUnit].max}
+                          value={recurrenceIntervalValue}
+                          onChange={e => {
+                            const bounds = RECURRENCE_INTERVAL_BOUNDS[recurrenceIntervalUnit];
+                            setRecurrenceIntervalValue(
+                              Math.max(bounds.min, Math.min(bounds.max, Number(e.target.value) || bounds.min))
+                            );
+                          }}
+                          className="w-16 border border-indigo-200 rounded-lg px-2 py-1 bg-white text-center font-bold"
+                          aria-label="Quantidade do intervalo"
+                        />
+                        <select
+                          value={recurrenceIntervalUnit}
+                          onChange={e => {
+                            const nextUnit = e.target.value as RecurrenceIntervalUnit;
+                            const bounds = RECURRENCE_INTERVAL_BOUNDS[nextUnit];
+                            setRecurrenceIntervalUnit(nextUnit);
+                            setRecurrenceIntervalValue(prev => Math.max(bounds.min, Math.min(bounds.max, prev)));
+                          }}
+                          className="border border-indigo-200 rounded-lg px-2 py-1 bg-white font-bold"
+                          aria-label="Unidade do intervalo"
+                        >
+                          <option value="days">{recurrenceIntervalValue === 1 ? 'Dia' : 'Dias'}</option>
+                          <option value="weeks">{recurrenceIntervalValue === 1 ? 'Semana' : 'Semanas'}</option>
+                          <option value="months">{recurrenceIntervalValue === 1 ? 'Mês' : 'Meses'}</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
                   {recurrenceFrequency === 'custom_weekdays' && (
                     <div className="flex flex-wrap gap-1.5">
                       {[
@@ -1098,6 +1340,12 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                       })}
                     </div>
                   )}
+                  <RecurrencePreviewBox
+                    preview={recurrencePreview}
+                    loading={loadingRecurrencePreview}
+                    error={recurrencePreviewError}
+                    accent="teal"
+                  />
                 </div>
               )}
             </div>
@@ -1106,7 +1354,13 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
           <div className="flex justify-end pt-2">
             <button
               type="button"
-              disabled={!selectedSlot}
+              disabled={
+                !selectedSlot ||
+                (useRecurrence &&
+                  (loadingRecurrencePreview ||
+                    Boolean(recurrencePreviewError) ||
+                    Boolean(recurrencePreview && !recurrencePreview.valid)))
+              }
               onClick={() => setStep(4)}
               className={bookingButton}
             >
@@ -1331,11 +1585,24 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                         Prof. {it.professionalName} • {modalityLabel(it.modality)}
                         {it.roomName ? ` • ${it.roomName}` : ''}
                       </span>
-                      {it.recurrenceCount > 1 && (
-                        <span className="ml-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800">
-                          {it.recurrenceCount}x semanal
-                        </span>
-                      )}
+                      {it.recurrenceCount > 1 && (() => {
+                        const srvItem = services.find(s => s.id === it.serviceId);
+                        const pkgItemRec = parseServiceRecurrenceConfig(srvItem);
+                        const pkgFreq = pkgItemRec.defaultFrequency || pkgItemRec.allowedFrequencies[0] || 'weekly';
+                        const pkgCustom =
+                          pkgFreq === 'custom_interval'
+                            ? pkgItemRec.defaultCustomInterval || pkgItemRec.customIntervals[0]
+                            : null;
+                        return (
+                          <span className="ml-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800">
+                            {it.recurrenceCount}x ({formatRecurrenceDescription({
+                              frequency: pkgFreq,
+                              intervalValue: pkgCustom?.intervalValue,
+                              intervalUnit: pkgCustom?.intervalUnit
+                            })})
+                          </span>
+                        );
+                      })()}
                     </div>
                     <button
                       type="button"
@@ -1389,14 +1656,30 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                 </p>
                 {pkgSelectedItems.length > 0 ? (
                   <ul className="list-disc pl-4 space-y-1 text-slate-700">
-                    {pkgSelectedItems.map(it => (
-                      <li key={it.key}>
-                        <strong>{it.serviceName}</strong> — {formatDateShort(it.startTime)} às {it.startTime.slice(11, 16)} (Prof.{' '}
-                        {it.professionalName} • {modalityLabel(it.modality)}
-                        {it.roomName ? ` • ${it.roomName}` : ''}
-                        {it.recurrenceCount > 1 ? `, ${it.recurrenceCount} semanas` : ''})
-                      </li>
-                    ))}
+                    {pkgSelectedItems.map(it => {
+                      const srvItem = services.find(s => s.id === it.serviceId);
+                      const pkgItemRec = parseServiceRecurrenceConfig(srvItem);
+                      const pkgFreq = pkgItemRec.defaultFrequency || pkgItemRec.allowedFrequencies[0] || 'weekly';
+                      const pkgCustom =
+                        pkgFreq === 'custom_interval'
+                          ? pkgItemRec.defaultCustomInterval || pkgItemRec.customIntervals[0]
+                          : null;
+                      return (
+                        <li key={it.key}>
+                          <strong>{it.serviceName}</strong> — {formatDateShort(it.startTime)} às {it.startTime.slice(11, 16)} (Prof.{' '}
+                          {it.professionalName} • {modalityLabel(it.modality)}
+                          {it.roomName ? ` • ${it.roomName}` : ''}
+                          {it.recurrenceCount > 1
+                            ? `, ${it.recurrenceCount} ocorrências — ${formatRecurrenceDescription({
+                                frequency: pkgFreq,
+                                intervalValue: pkgCustom?.intervalValue,
+                                intervalUnit: pkgCustom?.intervalUnit
+                              })}`
+                            : ''}
+                          )
+                        </li>
+                      );
+                    })}
                   </ul>
                 ) : (
                   <p className="text-slate-500">Sem horários pré-reservados agora — você poderá agendar após confirmação.</p>
@@ -1418,7 +1701,22 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                 <p className="text-slate-700">
                   <strong>Data e hora:</strong> {formatDateShort(selectedSlot.startTime)} às {selectedSlot.time}
                   {selectedSlot.endTimeClock ? ` às ${selectedSlot.endTimeClock}` : ''}
-                  {useRecurrence ? ` (série semanal de ${recurrenceCount} aulas)` : ''}
+                  {useRecurrence
+                    ? ` (série ${formatRecurrenceDescription({
+                        frequency: selectedServiceRecurrence.allowedFrequencies.includes(recurrenceFrequency)
+                          ? recurrenceFrequency
+                          : selectedServiceRecurrence.defaultFrequency || selectedServiceRecurrence.allowedFrequencies[0],
+                        intervalValue: recurrenceIntervalValue,
+                        intervalUnit: recurrenceIntervalUnit,
+                        weekdays: recurrenceWeekdays
+                      })} — ${
+                        recurrencePreview
+                          ? `${recurrencePreview.totalCount} aulas`
+                          : recurrenceEndMode === 'date' && recurrenceEndDate
+                          ? `até ${formatDateShort(recurrenceEndDate)}`
+                          : `${recurrenceCount} aulas`
+                      })`
+                    : ''}
                 </p>
               </div>
             ) : null}

@@ -14,13 +14,18 @@ import { NewInsuranceModal } from '../settings/NewInsuranceModal';
 import { NewRoomModal } from '../services/NewRoomModal';
 import {
   buildActiveStudioSessionFromAppointment,
+  formatCustomIntervalLabel,
   parseServiceRecurrenceConfig,
   RECURRENCE_FREQUENCY_LABELS,
+  RECURRENCE_INTERVAL_BOUNDS,
+  RECURRENCE_UNIT_LABELS,
   RecurrenceFrequency,
+  RecurrenceIntervalUnit,
   shouldRedirectAppointmentToZemdaPersonal,
   supportsStudioFeatures,
   writeActiveStudioSession
 } from '../../utils/establishmentContext';
+import { RecurrencePreviewBox, RecurrencePreviewData } from '../common/RecurrencePreviewBox';
 
 export function parseAppointmentPrice(input: string): number | null {
   const text = input.trim();
@@ -86,11 +91,16 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
   const [isNewRoomModalOpen, setIsNewRoomModalOpen] = useState(false);
 
   const [isRecurring, setIsRecurring] = useState(false);
-  const [recurrenceFrequency, setRecurrenceFrequency] = useState<'weekly' | 'biweekly' | 'monthly' | 'custom_weekdays'>('weekly');
+  const [recurrenceFrequency, setRecurrenceFrequency] = useState<RecurrenceFrequency>('weekly');
+  const [recurrenceIntervalValue, setRecurrenceIntervalValue] = useState<number>(3);
+  const [recurrenceIntervalUnit, setRecurrenceIntervalUnit] = useState<RecurrenceIntervalUnit>('days');
   const [recurrenceWeekdays, setRecurrenceWeekdays] = useState<number[]>([]);
   const [recurrenceEndMode, setRecurrenceEndMode] = useState<'count' | 'date'>('count');
   const [recurrenceCount, setRecurrenceCount] = useState<number>(4);
   const [recurrenceEndDate, setRecurrenceEndDate] = useState<string>('');
+  const [recurrencePreview, setRecurrencePreview] = useState<RecurrencePreviewData | null>(null);
+  const [loadingRecurrencePreview, setLoadingRecurrencePreview] = useState(false);
+  const [recurrencePreviewError, setRecurrencePreviewError] = useState<string | null>(null);
 
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [services, setServices] = useState<Service[]>([]);
@@ -170,10 +180,14 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
       setServiceToEdit(null);
       setIsRecurring(false);
       setRecurrenceFrequency('weekly');
+      setRecurrenceIntervalValue(3);
+      setRecurrenceIntervalUnit('days');
       setRecurrenceWeekdays([]);
       setRecurrenceEndMode('count');
       setRecurrenceCount(4);
       setRecurrenceEndDate('');
+      setRecurrencePreview(null);
+      setRecurrencePreviewError(null);
     } else {
       setShowServiceOnboarding(false);
       setPatientId('');
@@ -445,7 +459,123 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
     setRecurrenceFrequency(prev =>
       serviceRecurrenceConfig.allowedFrequencies.includes(prev) ? prev : nextDefault
     );
+    const defaultCustom =
+      serviceRecurrenceConfig.defaultCustomInterval || serviceRecurrenceConfig.customIntervals[0];
+    if (defaultCustom) {
+      setRecurrenceIntervalValue(defaultCustom.intervalValue);
+      setRecurrenceIntervalUnit(defaultCustom.intervalUnit);
+    }
   }, [serviceId, serviceRecurrenceConfig]);
+
+  useEffect(() => {
+    if (!isOpen || !isRecurring || isRetroactive || !serviceId || !date) {
+      setRecurrencePreview(null);
+      setRecurrencePreviewError(null);
+      setLoadingRecurrencePreview(false);
+      return;
+    }
+    if (isCustomTime && !customTime) {
+      setRecurrencePreview(null);
+      setRecurrencePreviewError(null);
+      return;
+    }
+    if (!isCustomTime && !selectedSlot) {
+      setRecurrencePreview(null);
+      setRecurrencePreviewError(null);
+      return;
+    }
+    if (recurrenceFrequency === 'custom_weekdays' && recurrenceWeekdays.length === 0) {
+      setRecurrencePreview(null);
+      setRecurrencePreviewError('Selecione ao menos um dia da semana para visualizar as datas.');
+      return;
+    }
+    if (recurrenceEndMode === 'date' && (!recurrenceEndDate || recurrenceEndDate < date)) {
+      setRecurrencePreview(null);
+      setRecurrencePreviewError('Informe uma data final válida para visualizar a série.');
+      return;
+    }
+
+    let previewStartIso = '';
+    let previewEndIso = '';
+    if (isCustomTime) {
+      const duration = selectedServiceObj?.duration_minutes || (selectedServiceObj as any)?.duration || 50;
+      const { startStr, endStr } = computeStartAndEnd(date, customTime, duration);
+      previewStartIso = startStr;
+      previewEndIso = endStr;
+    } else if (selectedSlot) {
+      previewStartIso = selectedSlot.startTime;
+      previewEndIso = selectedSlot.endTime;
+    }
+    if (!previewStartIso || !previewEndIso) return;
+
+    let cancelled = false;
+    setLoadingRecurrencePreview(true);
+    setRecurrencePreviewError(null);
+
+    const timer = window.setTimeout(() => {
+      ApiClient.post<RecurrencePreviewData>('/v1/appointments/recurrence-preview', {
+        patientId: patientId || undefined,
+        professionalId: professionalId || undefined,
+        serviceId,
+        roomId: roomId || null,
+        startTime: previewStartIso,
+        endTime: previewEndIso,
+        modality,
+        isCustomTime: isCustomTime ? true : undefined,
+        recurrence: {
+          frequency: recurrenceFrequency,
+          ...(recurrenceFrequency === 'custom_interval'
+            ? { intervalValue: recurrenceIntervalValue, intervalUnit: recurrenceIntervalUnit }
+            : {}),
+          ...(recurrenceFrequency === 'custom_weekdays' ? { weekdays: recurrenceWeekdays } : {}),
+          ...(recurrenceEndMode === 'date'
+            ? { endDate: recurrenceEndDate }
+            : { maxOccurrences: recurrenceCount })
+        }
+      })
+        .then(res => {
+          if (!cancelled) {
+            setRecurrencePreview(res);
+            setRecurrencePreviewError(null);
+          }
+        })
+        .catch((err: any) => {
+          if (!cancelled) {
+            setRecurrencePreview(null);
+            setRecurrencePreviewError(err?.message || 'Não foi possível validar as datas da recorrência.');
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setLoadingRecurrencePreview(false);
+        });
+    }, 280);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [
+    isOpen,
+    isRecurring,
+    isRetroactive,
+    serviceId,
+    patientId,
+    professionalId,
+    roomId,
+    date,
+    isCustomTime,
+    customTime,
+    selectedSlot,
+    selectedServiceObj,
+    modality,
+    recurrenceFrequency,
+    recurrenceIntervalValue,
+    recurrenceIntervalUnit,
+    recurrenceWeekdays,
+    recurrenceEndMode,
+    recurrenceCount,
+    recurrenceEndDate
+  ]);
 
   const activeServiceDuration = useMemo(() => {
     const selectedService = services.find(s => s.id === serviceId);
@@ -591,6 +721,29 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
           showToast('Selecione ao menos um dia da semana para a recorrência personalizada.', 'error');
           return;
         }
+        if (recurrenceFrequency === 'custom_interval') {
+          const bounds = RECURRENCE_INTERVAL_BOUNDS[recurrenceIntervalUnit];
+          if (
+            !Number.isInteger(recurrenceIntervalValue) ||
+            recurrenceIntervalValue < bounds.min ||
+            recurrenceIntervalValue > bounds.max
+          ) {
+            showToast(
+              `Informe um intervalo entre ${bounds.min} e ${bounds.max} (${RECURRENCE_UNIT_LABELS[recurrenceIntervalUnit]}).`,
+              'error'
+            );
+            return;
+          }
+        }
+        if (recurrencePreview && !recurrencePreview.valid) {
+          const firstConflict = recurrencePreview.occurrences.find(o => !o.available);
+          showToast(
+            firstConflict?.reasonMessage ||
+              'Existem ocorrências indisponíveis na série. Ajuste a data, o intervalo ou o horário antes de confirmar.',
+            'error'
+          );
+          return;
+        }
 
         const recurringRes = await ApiClient.post<any>('/v1/appointments/recurring', {
           patientId,
@@ -608,6 +761,8 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
           isCustomTime: isCustomTime ? true : undefined,
           recurrence: {
             frequency: recurrenceFrequency,
+            intervalValue: recurrenceFrequency === 'custom_interval' ? recurrenceIntervalValue : undefined,
+            intervalUnit: recurrenceFrequency === 'custom_interval' ? recurrenceIntervalUnit : undefined,
             weekdays: recurrenceFrequency === 'custom_weekdays' ? recurrenceWeekdays : undefined,
             endDate: recurrenceEndMode === 'date' ? recurrenceEndDate : undefined,
             maxOccurrences: recurrenceEndMode === 'count' ? recurrenceCount : undefined
@@ -1383,6 +1538,79 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                       </div>
                     </div>
                   )}
+
+                  {recurrenceFrequency === 'custom_interval' && (
+                    <div className="p-2 bg-white border border-slate-200 rounded-lg space-y-2">
+                      {serviceRecurrenceConfig.customIntervals.length > 0 && (
+                        <div>
+                          <span className="block text-[10px] font-semibold text-slate-500 mb-1">
+                            Intervalos sugeridos pelo serviço:
+                          </span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {serviceRecurrenceConfig.customIntervals.map((spec, idx) => {
+                              const active =
+                                spec.intervalValue === recurrenceIntervalValue && spec.intervalUnit === recurrenceIntervalUnit;
+                              return (
+                                <button
+                                  key={`${spec.intervalValue}-${spec.intervalUnit}-${idx}`}
+                                  type="button"
+                                  onClick={() => {
+                                    setRecurrenceIntervalValue(spec.intervalValue);
+                                    setRecurrenceIntervalUnit(spec.intervalUnit);
+                                  }}
+                                  className={`px-2 py-0.5 rounded-md border text-[11px] font-bold cursor-pointer ${
+                                    active
+                                      ? 'bg-indigo-600 text-white border-indigo-600'
+                                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-indigo-300'
+                                  }`}
+                                >
+                                  {formatCustomIntervalLabel(spec)}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-[11px] font-semibold text-slate-700">Repetir a cada</span>
+                        <input
+                          type="number"
+                          min={RECURRENCE_INTERVAL_BOUNDS[recurrenceIntervalUnit].min}
+                          max={RECURRENCE_INTERVAL_BOUNDS[recurrenceIntervalUnit].max}
+                          value={recurrenceIntervalValue}
+                          onChange={e => {
+                            const bounds = RECURRENCE_INTERVAL_BOUNDS[recurrenceIntervalUnit];
+                            const val = Math.max(bounds.min, Math.min(bounds.max, Number(e.target.value) || bounds.min));
+                            setRecurrenceIntervalValue(val);
+                          }}
+                          className="w-16 border border-slate-200 rounded-lg px-2 py-1 text-xs bg-white text-center font-bold"
+                          aria-label="Quantidade do intervalo"
+                        />
+                        <select
+                          value={recurrenceIntervalUnit}
+                          onChange={e => {
+                            const nextUnit = e.target.value as RecurrenceIntervalUnit;
+                            const bounds = RECURRENCE_INTERVAL_BOUNDS[nextUnit];
+                            setRecurrenceIntervalUnit(nextUnit);
+                            setRecurrenceIntervalValue(prev => Math.max(bounds.min, Math.min(bounds.max, prev)));
+                          }}
+                          className="border border-slate-200 rounded-lg px-2 py-1 text-xs bg-white font-semibold"
+                          aria-label="Unidade do intervalo"
+                        >
+                          <option value="days">{recurrenceIntervalValue === 1 ? 'Dia' : 'Dias'}</option>
+                          <option value="weeks">{recurrenceIntervalValue === 1 ? 'Semana' : 'Semanas'}</option>
+                          <option value="months">{recurrenceIntervalValue === 1 ? 'Mês' : 'Meses'}</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+
+                  <RecurrencePreviewBox
+                    preview={recurrencePreview}
+                    loading={loadingRecurrencePreview}
+                    error={recurrencePreviewError}
+                    accent="indigo"
+                  />
                 </div>
               )}
             </div>
@@ -1413,6 +1641,11 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
               disabled={
                 loading ||
                 loadingSlots ||
+                Boolean(
+                  isRecurring &&
+                    !isRetroactive &&
+                    (loadingRecurrencePreview || recurrencePreviewError || (recurrencePreview && !recurrencePreview.valid))
+                ) ||
                 (services.length > 0 && (
                   (isRetroactive ? (!date || !retroStartTime || !retroEndTime) : (!isCustomTime ? !selectedSlot : (!date || !customTime || Boolean(customTimeSlotConflict)))) ||
                   !patientId ||

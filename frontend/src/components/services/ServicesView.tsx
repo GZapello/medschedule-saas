@@ -31,6 +31,7 @@ import {
   normalizeEstablishmentProfile,
   parseServiceRecurrenceConfig,
   RecurrenceFrequency,
+  RecurrenceIntervalSpec,
   resolveServiceDomain,
   ServiceDomain,
   supportsStudioFeatures
@@ -351,6 +352,8 @@ export const ServicesView: React.FC = () => {
   const [allowRecurrence, setAllowRecurrence] = useState<boolean>(true);
   const [allowedFrequencies, setAllowedFrequencies] = useState<RecurrenceFrequency[]>(['weekly']);
   const [defaultFrequency, setDefaultFrequency] = useState<RecurrenceFrequency>('weekly');
+  const [customIntervals, setCustomIntervals] = useState<RecurrenceIntervalSpec[]>([]);
+  const [defaultCustomInterval, setDefaultCustomInterval] = useState<RecurrenceIntervalSpec | null>(null);
   const [draftClassSchedules, setDraftClassSchedules] = useState<DraftClassScheduleInput[]>([]);
   const [hasPendingCreateScheduleForm, setHasPendingCreateScheduleForm] = useState<boolean>(false);
   const [description, setDescription] = useState<string>('');
@@ -375,6 +378,8 @@ export const ServicesView: React.FC = () => {
   const [editAllowRecurrence, setEditAllowRecurrence] = useState<boolean>(true);
   const [editAllowedFrequencies, setEditAllowedFrequencies] = useState<RecurrenceFrequency[]>(['weekly']);
   const [editDefaultFrequency, setEditDefaultFrequency] = useState<RecurrenceFrequency>('weekly');
+  const [editCustomIntervals, setEditCustomIntervals] = useState<RecurrenceIntervalSpec[]>([]);
+  const [editDefaultCustomInterval, setEditDefaultCustomInterval] = useState<RecurrenceIntervalSpec | null>(null);
   const [editDraftClassSchedules, setEditDraftClassSchedules] = useState<DraftClassScheduleInput[]>([]);
   const [hasPendingEditScheduleForm, setHasPendingEditScheduleForm] = useState<boolean>(false);
 
@@ -589,7 +594,9 @@ export const ServicesView: React.FC = () => {
         ...(showCreateStudioConfig
           ? {
               allowedRecurrenceFrequencies: allowRecurrence ? allowedFrequencies : [],
-              defaultRecurrenceFrequency: allowRecurrence ? defaultFrequency : null
+              defaultRecurrenceFrequency: allowRecurrence ? defaultFrequency : null,
+              customRecurrenceIntervals: allowRecurrence && allowedFrequencies.includes('custom_interval') ? customIntervals : [],
+              defaultRecurrenceInterval: allowRecurrence && allowedFrequencies.includes('custom_interval') ? defaultCustomInterval : null
             }
           : {}),
         classSchedules: showCreateStudioConfig && effectiveKind === 'group' ? draftClassSchedules : undefined,
@@ -621,6 +628,8 @@ export const ServicesView: React.FC = () => {
       setAllowRecurrence(true);
       setAllowedFrequencies(['weekly']);
       setDefaultFrequency('weekly');
+      setCustomIntervals([]);
+      setDefaultCustomInterval(null);
       setDraftClassSchedules([]);
       setLinkedProfessionalIds(professionalId ? [professionalId] : []);
       setDescription('');
@@ -696,6 +705,8 @@ export const ServicesView: React.FC = () => {
         : (recCfg.allowRecurrence ? ['weekly'] : [])
     );
     setEditDefaultFrequency(recCfg.defaultFrequency || 'weekly');
+    setEditCustomIntervals(recCfg.customIntervals || []);
+    setEditDefaultCustomInterval(recCfg.defaultCustomInterval || null);
     setEditDraftClassSchedules([]);
     setHasPendingEditScheduleForm(false);
     setEditDescription(s.description || '');
@@ -754,7 +765,9 @@ export const ServicesView: React.FC = () => {
         ...(showEditStudioConfig
           ? {
               allowedRecurrenceFrequencies: editAllowRecurrence ? editAllowedFrequencies : [],
-              defaultRecurrenceFrequency: editAllowRecurrence ? editDefaultFrequency : null
+              defaultRecurrenceFrequency: editAllowRecurrence ? editDefaultFrequency : null,
+              customRecurrenceIntervals: editAllowRecurrence && editAllowedFrequencies.includes('custom_interval') ? editCustomIntervals : [],
+              defaultRecurrenceInterval: editAllowRecurrence && editAllowedFrequencies.includes('custom_interval') ? editDefaultCustomInterval : null
             }
           : {}),
         ...(shouldSendEditDraftSchedules ? { classSchedules: editDraftClassSchedules } : {}),
@@ -1593,10 +1606,14 @@ export const ServicesView: React.FC = () => {
                     allowRecurrence={allowRecurrence}
                     allowedFrequencies={allowedFrequencies}
                     defaultFrequency={defaultFrequency}
+                    customIntervals={customIntervals}
+                    defaultCustomInterval={defaultCustomInterval}
                     onChange={next => {
                       setAllowRecurrence(next.allowRecurrence);
                       setAllowedFrequencies(next.allowedFrequencies);
                       setDefaultFrequency(next.defaultFrequency);
+                      setCustomIntervals(next.customIntervals);
+                      setDefaultCustomInterval(next.defaultCustomInterval);
                     }}
                   />
                 </div>
@@ -2028,10 +2045,14 @@ export const ServicesView: React.FC = () => {
                     allowRecurrence={editAllowRecurrence}
                     allowedFrequencies={editAllowedFrequencies}
                     defaultFrequency={editDefaultFrequency}
+                    customIntervals={editCustomIntervals}
+                    defaultCustomInterval={editDefaultCustomInterval}
                     onChange={next => {
                       setEditAllowRecurrence(next.allowRecurrence);
                       setEditAllowedFrequencies(next.allowedFrequencies);
                       setEditDefaultFrequency(next.defaultFrequency);
+                      setEditCustomIntervals(next.customIntervals);
+                      setEditDefaultCustomInterval(next.defaultCustomInterval);
                     }}
                   />
                 </div>

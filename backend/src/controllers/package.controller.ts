@@ -9,6 +9,7 @@ import { NotificationService } from '../services/notification.service';
 import { GoogleCalendarService } from '../services/google-calendar.service';
 import { generateRecurrenceDates, resolveOrCreateGroupOccurrenceTx } from '../services/class-group.service';
 import { ClassScheduleService, buildWeeklyScheduleSummary, todayBrazilYmd, addDaysYmd } from '../services/class-schedule.service';
+import { evaluateRecurrenceSeriesWithExternalBusy } from '../services/recurrence.service';
 import {
   getAllowedConcreteModalities,
   resolveConcreteModality,
@@ -20,7 +21,10 @@ import { bookingTime } from '../utils/booking-time';
 import { validateBrazilianPhone, normalizePhoneWithDDI } from '../utils/phone.utils';
 import { isPrimaryClinicalModule, resolveClinicalModule } from '../utils/clinical-module';
 import {
+  MAX_PUBLIC_RECURRENCE_OCCURRENCES,
   parseServiceRecurrenceConfig,
+  RecurrenceFrequency,
+  RecurrenceIntervalUnit,
   validateServiceRecurrenceFrequency
 } from '../utils/establishment-context';
 
@@ -459,6 +463,7 @@ export class PackageController {
         SELECT id, name, COALESCE(service_kind, 'individual') as service_kind, default_capacity,
                duration_minutes, price, COALESCE(allow_recurrence, 1) as allow_recurrence,
                allowed_recurrence_frequencies_json, default_recurrence_frequency,
+               custom_recurrence_intervals_json, default_recurrence_interval_json,
                modality, modality_category
         FROM services
         WHERE id = ? AND tenant_id = ? AND active = 1
@@ -557,6 +562,8 @@ export class PackageController {
           allowRecurrence: recCfg.allowRecurrence,
           allowedRecurrenceFrequencies: recCfg.allowedFrequencies,
           defaultRecurrenceFrequency: recCfg.defaultFrequency,
+          customRecurrenceIntervals: recCfg.customIntervals,
+          defaultRecurrenceInterval: recCfg.defaultCustomInterval,
           professionals: allLinkedProfs,
           weeklySchedules,
           weeklySummary,
@@ -682,6 +689,8 @@ export class PackageController {
         allowRecurrence: recCfg.allowRecurrence,
         allowedRecurrenceFrequencies: recCfg.allowedFrequencies,
         defaultRecurrenceFrequency: recCfg.defaultFrequency,
+        customRecurrenceIntervals: recCfg.customIntervals,
+        defaultRecurrenceInterval: recCfg.defaultCustomInterval,
         professionals: allLinkedProfs,
         weeklySchedules: [],
         weeklySummary: [],
@@ -706,6 +715,110 @@ export class PackageController {
     } catch (err: any) {
       console.error('[PackageController.getPublicStudioSlots] Erro:', err);
       res.status(500).json({ error: 'Erro ao consultar horários e vagas do Studio.' });
+    }
+  }
+
+  /**
+   * POST /v1/public/studio/recurrence-preview
+   * Prévia pública de datas de recorrência respeitando grade semanal, disponibilidade, bloqueios e feriados.
+   */
+  static async previewPublicStudioRecurrence(req: Request, res: Response): Promise<void> {
+    try {
+      const {
+        tenantSlug,
+        bookingSequence,
+        serviceId,
+        professionalId,
+        classScheduleId,
+        modality,
+        startTime,
+        endTime,
+        startDate,
+        startClock,
+        endClock,
+        recurrence
+      } = req.body || {};
+
+      const tenant = resolveBookingTenant(tenantSlug, bookingSequence);
+      if (!tenant || tenant.public_booking_enabled !== 1) {
+        res.status(404).json({ error: 'Agendamento online indisponível neste estabelecimento.' });
+        return;
+      }
+
+      if (!canOperate(tenant.id)) {
+        res.status(404).json({ error: 'Agendamento online indisponível no momento.' });
+        return;
+      }
+
+      if (!PackageService.isStudioCompatible(tenant.id)) {
+        res.status(403).json({ error: 'Este estabelecimento não utiliza o agendamento público de Studios.' });
+        return;
+      }
+
+      if (!serviceId) {
+        res.status(400).json({ error: 'Informe um serviço válido.' });
+        return;
+      }
+
+      let resolvedDate = startDate ? String(startDate).slice(0, 10) : '';
+      let resolvedStartClock = startClock ? String(startClock).slice(0, 8) : '';
+      let resolvedEndClock = endClock ? String(endClock).slice(0, 8) : undefined;
+
+      if (startTime) {
+        const normStart = bookingTime(String(startTime));
+        if (!normStart || !validBookingDate(normStart.slice(0, 10))) {
+          res.status(400).json({ code: 'INVALID_BOOKING_TIME', error: 'Horário inicial inválido.' });
+          return;
+        }
+        resolvedDate = normStart.slice(0, 10);
+        resolvedStartClock = normStart.slice(11, 19);
+      }
+
+      if (endTime) {
+        const normEnd = bookingTime(String(endTime));
+        if (normEnd) {
+          resolvedEndClock = normEnd.slice(11, 19);
+        }
+      }
+
+      if (!validBookingDate(resolvedDate) || !/^\d{2}:\d{2}/.test(resolvedStartClock)) {
+        res.status(400).json({ code: 'INVALID_BOOKING_TIME', error: 'Informe data e horário válidos.' });
+        return;
+      }
+
+      const preview = await evaluateRecurrenceSeriesWithExternalBusy({
+        tenantId: tenant.id,
+        serviceId: String(serviceId),
+        professionalId: professionalId ? String(professionalId) : 'any',
+        classScheduleId: classScheduleId ? String(classScheduleId) : null,
+        roomId: null,
+        patientId: null,
+        startDate: resolvedDate,
+        startClock: resolvedStartClock,
+        endClock: resolvedEndClock || null,
+        modality: modality ?? null,
+        frequency: recurrence?.frequency ?? null,
+        intervalValue: recurrence?.intervalValue ?? recurrence?.interval_value ?? null,
+        intervalUnit: recurrence?.intervalUnit ?? recurrence?.interval_unit ?? null,
+        weekdays: Array.isArray(recurrence?.weekdays) ? recurrence.weekdays : undefined,
+        endDate: recurrence?.endDate ? String(recurrence.endDate).slice(0, 10) : undefined,
+        maxOccurrences: recurrence?.maxOccurrences !== undefined ? Number(recurrence.maxOccurrences) : undefined,
+        publicOnly: true,
+        isCustomTime: false,
+        ignoreFirstLeadTime: false
+      });
+
+      res.json(preview);
+    } catch (err: any) {
+      console.error('[PackageController.previewPublicStudioRecurrence] Erro:', err);
+      const safeMessage = sanitizeBookingErrorMessage(
+        err,
+        'Não foi possível calcular as datas da recorrência.'
+      );
+      res.status(err?.status || 500).json({
+        error: safeMessage,
+        ...(err?.code ? { code: err.code } : {})
+      });
     }
   }
 
@@ -796,6 +909,13 @@ export class PackageController {
         requestedModality: unknown;
         startIso: string;
         endIso: string;
+        isRecurrenceFollowUp: boolean;
+        recurrenceMeta?: {
+          frequency: RecurrenceFrequency;
+          intervalValue: number | null;
+          intervalUnit: RecurrenceIntervalUnit | null;
+          weekdays: number[];
+        } | null;
       };
 
       const expandScheduleItem = (item: {
@@ -805,12 +925,22 @@ export class PackageController {
         modality?: unknown;
         startTime: string;
         endTime?: string;
-        recurrence?: { frequency?: string; weekdays?: number[]; maxOccurrences?: number; endDate?: string };
+        recurrence?: {
+          frequency?: string;
+          intervalValue?: number;
+          interval_value?: number;
+          intervalUnit?: RecurrenceIntervalUnit;
+          interval_unit?: RecurrenceIntervalUnit;
+          weekdays?: number[];
+          maxOccurrences?: number;
+          endDate?: string;
+        };
       }): ExpandedBookingItem[] => {
         const srv = db.prepare(`
           SELECT id, name, price, duration_minutes, professional_id, COALESCE(service_kind, 'individual') as service_kind,
                  default_capacity, COALESCE(allow_recurrence, 1) as allow_recurrence,
                  allowed_recurrence_frequencies_json, default_recurrence_frequency,
+                 custom_recurrence_intervals_json, default_recurrence_interval_json,
                  service_domain, modality, clinical_module
           FROM services WHERE id = ? AND tenant_id = ? AND active = 1
         `).get(item.serviceId, tenant.id) as any;
@@ -840,29 +970,59 @@ export class PackageController {
         const preferredProfId = item.professionalId && item.professionalId !== 'any' ? String(item.professionalId) : 'any';
 
         let dates: string[] = [startDate];
+        let recMeta: ExpandedBookingItem['recurrenceMeta'] = null;
         if (item.recurrence && (item.recurrence.maxOccurrences || item.recurrence.endDate)) {
-          const recValidation = validateServiceRecurrenceFrequency(srv, item.recurrence.frequency);
+          const recValidation = validateServiceRecurrenceFrequency(
+            srv,
+            item.recurrence.frequency,
+            item.recurrence.intervalValue ?? item.recurrence.interval_value,
+            item.recurrence.intervalUnit ?? item.recurrence.interval_unit
+          );
           if (!recValidation.valid) {
             throw Object.assign(new Error(recValidation.error), { status: 400, code: recValidation.code });
           }
-          const freq = recValidation.frequency;
-          const cappedMax = item.recurrence.maxOccurrences ? Math.min(24, Math.max(1, Number(item.recurrence.maxOccurrences))) : undefined;
+          const rawMax = item.recurrence.maxOccurrences !== undefined && item.recurrence.maxOccurrences !== null
+            ? Number(item.recurrence.maxOccurrences)
+            : undefined;
+          if (rawMax !== undefined && rawMax > MAX_PUBLIC_RECURRENCE_OCCURRENCES) {
+            throw Object.assign(
+              new Error(`No agendamento online, o limite máximo é de ${MAX_PUBLIC_RECURRENCE_OCCURRENCES} ocorrências por série.`),
+              { status: 400, code: 'RECURRENCE_LIMIT_EXCEEDED' }
+            );
+          }
+          const weekdaysList = Array.isArray(item.recurrence.weekdays) ? item.recurrence.weekdays : [];
           dates = generateRecurrenceDates({
             startDate,
-            frequency: freq as any,
-            weekdays: Array.isArray(item.recurrence.weekdays) ? item.recurrence.weekdays : undefined,
+            frequency: recValidation.frequency,
+            intervalValue: recValidation.intervalValue,
+            intervalUnit: recValidation.intervalUnit,
+            weekdays: weekdaysList.length > 0 ? weekdaysList : undefined,
             endDate: item.recurrence.endDate || undefined,
-            maxOccurrences: cappedMax
+            maxOccurrences: rawMax
           });
+          if (dates.length > MAX_PUBLIC_RECURRENCE_OCCURRENCES) {
+            throw Object.assign(
+              new Error(`O período informado excede o limite de ${MAX_PUBLIC_RECURRENCE_OCCURRENCES} ocorrências no agendamento online.`),
+              { status: 400, code: 'RECURRENCE_LIMIT_EXCEEDED' }
+            );
+          }
+          recMeta = {
+            frequency: recValidation.frequency,
+            intervalValue: recValidation.intervalValue,
+            intervalUnit: recValidation.intervalUnit,
+            weekdays: weekdaysList
+          };
         }
 
-        return dates.map(d => ({
+        return dates.map((d, idx) => ({
           serviceRow: srv,
           preferredProfId,
           classScheduleId: item.classScheduleId ? String(item.classScheduleId).trim() : null,
           requestedModality: item.modality,
           startIso: `${d}T${startClock}`,
-          endIso: `${d}T${computedEndClock}`
+          endIso: `${d}T${computedEndClock}`,
+          isRecurrenceFollowUp: idx > 0,
+          recurrenceMeta: recMeta
         }));
       };
 
@@ -922,7 +1082,9 @@ export class PackageController {
             endIso: item.endIso,
             requestedModality: item.requestedModality,
             externalBusyByProfAndDate: extBusyMap,
-            patientId: studentId
+            patientId: studentId,
+            ignoreLeadTime: item.isRecurrenceFollowUp,
+            ignoreAdvanceCap: item.isRecurrenceFollowUp
           });
         }
 
@@ -936,7 +1098,20 @@ export class PackageController {
         for (const prof of candidates) {
           if (!publicBookingProfessional(tenant.id, prof.id) || !professionalBookingService(tenant.id, prof.id, item.serviceRow.id)) continue;
           const extBusy = extBusyMap.get(`${prof.id}|${dateStr}`);
-          const slots = calculateAvailableSlots(tenant.id, prof.id, item.serviceRow.id, dateStr, undefined, undefined, extBusy);
+          const slots = calculateAvailableSlots(
+            tenant.id,
+            prof.id,
+            item.serviceRow.id,
+            dateStr,
+            undefined,
+            undefined,
+            extBusy,
+            studentId,
+            {
+              ignoreLeadTime: item.isRecurrenceFollowUp,
+              ignoreAdvanceCap: item.isRecurrenceFollowUp
+            }
+          );
           if (slots.some(s => s.startTime === item.startIso && s.endTime === item.endIso)) {
             return {
               professionalId: prof.id,
@@ -1173,12 +1348,14 @@ export class PackageController {
         if (seriesId && resolvedSlots.length > 1) {
           const first = resolvedSlots[0];
           const last = resolvedSlots[resolvedSlots.length - 1];
+          const seriesRecMeta = first.slotItem.recurrenceMeta;
           db.prepare(`
             INSERT INTO class_series (
               id, tenant_id, service_id, professional_id, patient_id, service_kind, title,
-              modality, frequency, weekdays_json, start_time_hhmm, duration_minutes, start_date, end_date,
+              modality, frequency, weekdays_json, interval_value, interval_unit,
+              start_time_hhmm, duration_minutes, start_date, end_date,
               max_occurrences, capacity, unit_price, status, created_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 'online_booking')
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 'online_booking')
           `).run(
             seriesId,
             tenant.id,
@@ -1188,8 +1365,10 @@ export class PackageController {
             first.slotItem.serviceRow.service_kind === 'group' ? 'group' : 'individual',
             first.slotItem.serviceRow.name,
             first.resolvedSlot.modality,
-            String(recurrence?.frequency || 'weekly'),
-            JSON.stringify(Array.isArray(recurrence?.weekdays) ? recurrence.weekdays : []),
+            String(seriesRecMeta?.frequency || recurrence?.frequency || 'weekly'),
+            JSON.stringify(Array.isArray(seriesRecMeta?.weekdays) ? seriesRecMeta.weekdays : (Array.isArray(recurrence?.weekdays) ? recurrence.weekdays : [])),
+            seriesRecMeta?.intervalValue ?? null,
+            seriesRecMeta?.intervalUnit ?? null,
             first.slotItem.startIso.slice(11, 16),
             Number(first.slotItem.serviceRow.duration_minutes || 50),
             first.slotItem.startIso.slice(0, 10),

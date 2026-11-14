@@ -50,6 +50,7 @@ const minutesToTime = (m: number): string => {
 
 export interface CalculateSlotsOptions {
   ignoreLeadTime?: boolean;
+  ignoreAdvanceCap?: boolean;
 }
 
 function subtractBreakFromSegments(
@@ -186,7 +187,7 @@ export function calculateAvailableSlots(
 
   const maxDate = new Date(todayOnly);
   maxDate.setDate(maxDate.getDate() + (service.max_advance_days || 60));
-  if (targetDate > maxDate) {
+  if (!options?.ignoreAdvanceCap && targetDate > maxDate) {
     return [];
   }
 

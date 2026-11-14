@@ -899,6 +899,7 @@ export class ClassScheduleService {
     externalBusyIntervals?: Array<{ startMin: number; endMin: number }>;
     patientId?: string;
     ignoreLeadTime?: boolean;
+    ignoreAdvanceCap?: boolean;
     publicOnly?: boolean;
     mockNow?: Date;
   }): {
@@ -982,7 +983,7 @@ export class ClassScheduleService {
     const targetOnly = new Date(y, m - 1, d);
     const maxDate = new Date(todayOnly);
     maxDate.setDate(maxDate.getDate() + (Number(serviceRow.max_advance_days) || 60));
-    if (targetOnly > maxDate) {
+    if (!params.ignoreAdvanceCap && targetOnly > maxDate) {
       return {
         eligibleForDate: false,
         bookable: false,
@@ -1261,6 +1262,7 @@ export class ClassScheduleService {
     externalBusyByProf?: Map<string, Array<{ startMin: number; endMin: number }>>;
     patientId?: string;
     ignoreLeadTime?: boolean;
+    ignoreAdvanceCap?: boolean;
     publicOnly?: boolean;
     includeBlockedNotice?: boolean;
     mockNow?: Date;
@@ -1344,6 +1346,7 @@ export class ClassScheduleService {
         externalBusyIntervals: params.externalBusyByProf?.get(sch.professional_id),
         patientId: params.patientId,
         ignoreLeadTime: params.ignoreLeadTime,
+        ignoreAdvanceCap: params.ignoreAdvanceCap,
         publicOnly: params.publicOnly,
         mockNow: params.mockNow
       });
@@ -1597,6 +1600,8 @@ export class ClassScheduleService {
     requestedModality?: unknown;
     externalBusyByProfAndDate?: Map<string, Array<{ startMin: number; endMin: number }>>;
     patientId?: string;
+    ignoreLeadTime?: boolean;
+    ignoreAdvanceCap?: boolean;
   }): {
     professionalId: string;
     classScheduleId: string;
@@ -1660,6 +1665,8 @@ export class ClassScheduleService {
         dateStr,
         externalBusyIntervals: params.externalBusyByProfAndDate?.get(extKey),
         patientId: params.patientId,
+        ignoreLeadTime: params.ignoreLeadTime,
+        ignoreAdvanceCap: params.ignoreAdvanceCap,
         publicOnly: true
       });
 
