@@ -279,6 +279,36 @@ export const CollectionsModal: React.FC<CollectionsModalProps> = ({
     }
   };
 
+  const handleRenewPlan = async (plan: any) => {
+    try {
+      await ApiClient.post(`/v1/financial/recurring-plans/${plan.id}/renew`, {
+        generateInitialCycle: true,
+        extendAppointments: true
+      });
+      showToast('Contrato renovado com sucesso!', 'success');
+      await Promise.all([fetchPlans(), fetchCollectionsAndSummary()]);
+      onUpdated?.();
+    } catch (err: any) {
+      showToast(err?.message || 'Erro ao renovar contrato', 'error');
+    }
+  };
+
+  const handleCancelPlan = async (plan: any) => {
+    try {
+      await ApiClient.put(`/v1/financial/recurring-plans/${plan.id}`, {
+        status: 'cancelled',
+        statusReason: 'Encerrado pela gestão financeira',
+        cancelFutureAppointments: true,
+        cancelFuturePendingPayments: true
+      });
+      showToast('Contrato encerrado (histórico e presenças preservados).', 'info');
+      await Promise.all([fetchPlans(), fetchCollectionsAndSummary()]);
+      onUpdated?.();
+    } catch (err: any) {
+      showToast(err?.message || 'Erro ao encerrar contrato', 'error');
+    }
+  };
+
   const handleGenerateMonth = async () => {
     setIsGenerating(true);
     try {
@@ -814,22 +844,55 @@ export const CollectionsModal: React.FC<CollectionsModalProps> = ({
                           {plan.service_name ? ` • ${plan.service_name}` : ''}
                           {` • Vencimento todo dia ${plan.due_day}`}
                         </p>
+                        <div className="flex flex-wrap items-center gap-2 mt-1 text-[10px] text-slate-500">
+                          {plan.start_date && (
+                            <span>
+                              Vigência: <strong>{plan.start_date}</strong>{plan.end_date ? ` até ${plan.end_date}` : ''}
+                            </span>
+                          )}
+                          {plan.scheduled_sessions_count !== undefined && (
+                            <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-semibold">
+                              Aulas: {plan.scheduled_sessions_count} ({plan.present_sessions_count || 0} presenças)
+                            </span>
+                          )}
+                          {Number(plan.overdue_payments_count) > 0 && (
+                            <span className="px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200 font-bold">
+                              {plan.overdue_payments_count} parcela(s) vencida(s)
+                            </span>
+                          )}
+                        </div>
                       </div>
 
-                      <div className="flex items-center gap-3 shrink-0">
+                      <div className="flex flex-wrap items-center gap-2 shrink-0">
                         <span className="text-sm font-extrabold text-slate-900">{formatCurrency(plan.amount)}</span>
                         {canManageCollections && plan.status !== 'ended' && plan.status !== 'cancelled' && (
-                          <button
-                            type="button"
-                            onClick={() => handleTogglePlanStatus(plan)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
-                          >
-                            {plan.status === 'active' ? (
-                              <><PauseCircle className="w-3.5 h-3.5 text-amber-600" /> Pausar</>
-                            ) : (
-                              <><PlayCircle className="w-3.5 h-3.5 text-emerald-600" /> Reativar</>
-                            )}
-                          </button>
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleTogglePlanStatus(plan)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                            >
+                              {plan.status === 'active' ? (
+                                <><PauseCircle className="w-3.5 h-3.5 text-amber-600" /> Pausar</>
+                              ) : (
+                                <><PlayCircle className="w-3.5 h-3.5 text-emerald-600" /> Reativar</>
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRenewPlan(plan)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-teal-200 bg-teal-50 text-xs font-semibold text-teal-800 hover:bg-teal-100 cursor-pointer"
+                            >
+                              Renovar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleCancelPlan(plan)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-rose-200 text-xs font-semibold text-rose-700 hover:bg-rose-50 cursor-pointer"
+                            >
+                              Encerrar
+                            </button>
+                          </>
                         )}
                       </div>
                     </div>

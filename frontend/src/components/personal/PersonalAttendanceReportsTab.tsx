@@ -17,6 +17,7 @@ import {
   RefreshCw,
   UserCheck
 } from 'lucide-react';
+import { StudioClassExercisePlanPanel } from './StudioClassExercisePlanPanel';
 
 interface OccurrenceSummary {
   occurrence_key: string;
@@ -51,6 +52,12 @@ interface RosterMember {
   attendance_notes?: string | null;
   occurrence_id?: string | null;
   payment_status?: string | null;
+  recurring_plan_id?: string | null;
+  recurring_plan_title?: string | null;
+  recurring_plan_frequency?: string | null;
+  recurring_plan_status?: string | null;
+  package_contract_id?: string | null;
+  package_name?: string | null;
 }
 
 function getDefaultDates() {
@@ -98,6 +105,10 @@ export const PersonalAttendanceReportsTab: React.FC<PersonalAttendanceReportsTab
     serviceKind: string;
     capacity: number;
     roster: RosterMember[];
+    exercisePlan?: any;
+    serviceLinkedTemplates?: any[];
+    availableTemplates?: any[];
+    canEditExercisePlan?: boolean;
     participants?: Array<{
       id?: string;
       professional_id: string;
@@ -578,6 +589,14 @@ export const PersonalAttendanceReportsTab: React.FC<PersonalAttendanceReportsTab
                   )}
                 </div>
 
+                <StudioClassExercisePlanPanel
+                  occurrenceKey={rosterData.occurrenceId || selectedOccKey}
+                  initialExercisePlan={rosterData.exercisePlan}
+                  initialServiceLinkedTemplates={rosterData.serviceLinkedTemplates}
+                  initialAvailableTemplates={rosterData.availableTemplates}
+                  canEdit={rosterData.canEditExercisePlan !== false}
+                />
+
                 {rosterData.participants && rosterData.participants.length > 0 && (
                   <div className="mb-4 p-3 rounded-xl border border-indigo-200/80 bg-indigo-50/40 space-y-2.5">
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -662,6 +681,19 @@ export const PersonalAttendanceReportsTab: React.FC<PersonalAttendanceReportsTab
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-bold text-xs text-slate-900 truncate">{member.patient_name}</span>
                             <span className="text-[10px] text-slate-400">{member.appointment_number}</span>
+                            {member.recurring_plan_title ? (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                {member.recurring_plan_title}
+                              </span>
+                            ) : member.package_name ? (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200">
+                                Pacote: {member.package_name}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                                Aula avulsa
+                              </span>
+                            )}
                             {member.appointment_status === 'cancelled' && (
                               <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-200 text-slate-600">
                                 Agendamento cancelado
@@ -917,6 +949,7 @@ export const PersonalAttendanceReportsTab: React.FC<PersonalAttendanceReportsTab
                   <thead>
                     <tr className="border-b border-slate-200 text-slate-500">
                       <th className="py-2 pr-3 font-semibold">Aluno</th>
+                      <th className="py-2 px-2 font-semibold">Plano / Contrato</th>
                       <th className="py-2 px-2 font-semibold text-center">Agendadas</th>
                       <th className="py-2 px-2 font-semibold text-center">Presenças</th>
                       <th className="py-2 px-2 font-semibold text-center">Faltas</th>
@@ -928,6 +961,11 @@ export const PersonalAttendanceReportsTab: React.FC<PersonalAttendanceReportsTab
                     {filteredStudentsReport.map((st: any) => (
                       <tr key={st.patient_id} className="hover:bg-slate-50">
                         <td className="py-2 pr-3 font-bold text-slate-800">{st.student_name}</td>
+                        <td className="py-2 px-2">
+                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                            {st.contract_summary || 'Aula avulsa'}
+                          </span>
+                        </td>
                         <td className="py-2 px-2 text-center">{st.total_scheduled}</td>
                         <td className="py-2 px-2 text-center font-bold text-emerald-700">{st.present_count}</td>
                         <td className="py-2 px-2 text-center font-bold text-rose-700">{st.absent_count}</td>

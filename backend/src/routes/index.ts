@@ -415,6 +415,8 @@ api.get('/v1/whatsapp/status', requireTenant, InfobipController.getClientStatus)
 // Turmas, Ocorrências & Lista de Chamada / Frequência
 api.get('/v1/classes/occurrences', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist', 'professional'), ClassAttendanceController.listOccurrences);
 api.get('/v1/classes/occurrences/:id/roster', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist', 'professional'), ClassAttendanceController.getRoster);
+api.get('/v1/classes/occurrences/:occurrenceId/exercise-plan', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist', 'professional'), ClassAttendanceController.getOccurrenceExercisePlan);
+api.put('/v1/classes/occurrences/:occurrenceId/exercise-plan', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'professional'), ClassAttendanceController.updateOccurrenceExercisePlan);
 api.get('/v1/classes/occurrences/:occurrenceId/participants', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist', 'professional'), ClassAttendanceController.getOccurrenceParticipants);
 api.put('/v1/classes/occurrences/:occurrenceId/participants', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'professional'), ClassAttendanceController.updateOccurrenceParticipants);
 api.put('/v1/classes/occurrences/:occurrenceId/attendance/:appointmentId', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist', 'professional'), ClassAttendanceController.markAttendance);
@@ -928,6 +930,9 @@ api.get('/v1/financial/recurring-plans', requireTenant, requireStudioEstablishme
 api.get('/v1/financial/student-coverage', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist', 'professional'), BillingCenterController.getStudentCoverage);
 api.post('/v1/financial/recurring-plans', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist', 'professional'), BillingCenterController.createRecurringPlan);
 api.put('/v1/financial/recurring-plans/:id', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist', 'professional'), BillingCenterController.updateRecurringPlan);
+api.post('/v1/financial/recurring-plans/:id/renew', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist', 'professional'), BillingCenterController.renewRecurringPlan);
+api.post('/v1/financial/recurring-plans/:id/reschedule', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist', 'professional'), BillingCenterController.rescheduleContractClasses);
+api.get('/v1/financial/recurring-plans/:id/history', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist', 'professional'), BillingCenterController.getContractHistory);
 api.post('/v1/financial/recurring-plans/generate', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist', 'professional'), BillingCenterController.generateMonthlyBills);
 
 // Contas a Pagar & Compras de Fornecedores

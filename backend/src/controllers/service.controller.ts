@@ -227,7 +227,7 @@ function validateAndSyncLinkedInstructorsTx(params: {
       INSERT INTO professional_services (id, professional_id, service_id, custom_price, custom_duration)
       VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(professional_id, service_id) DO UPDATE SET
-        custom_price = CASE WHEN ? = 1 THEN excluded.custom_price ELSE professional_services.custom_price END,
+        custom_price = CASE WHEN ? = 1 OR professional_services.custom_price IS NULL OR professional_services.custom_price = 0 THEN excluded.custom_price ELSE professional_services.custom_price END,
         custom_duration = CASE WHEN ? = 1 THEN excluded.custom_duration ELSE professional_services.custom_duration END
     `).run(
       'ps-' + uuidv4().slice(0, 8),
@@ -239,6 +239,133 @@ function validateAndSyncLinkedInstructorsTx(params: {
       pid === primaryProfId ? 1 : 0
     );
   }
+}
+
+export interface LinkedTemplateSummary {
+  id: string;
+  title: string;
+  structure_type: string;
+  description: string | null;
+  exercises_count: number;
+}
+
+function normalizeServiceTemplatesForSave(params: {
+  tenantId: string;
+  isStudioService: boolean;
+  defaultTemplateId?: unknown;
+  linkedTemplateIds?: unknown;
+}): {
+  defaultTemplateId: string | null;
+  linkedTemplateIds: string[];
+  linkedTemplateIdsJson: string | null;
+  error?: string;
+} {
+  if (!params.isStudioService) {
+    return { defaultTemplateId: null, linkedTemplateIds: [], linkedTemplateIdsJson: null };
+  }
+
+  let requestedIds: string[] = [];
+  if (Array.isArray(params.linkedTemplateIds)) {
+    requestedIds = params.linkedTemplateIds.map(x => String(x || '').trim()).filter(Boolean);
+  } else if (typeof params.linkedTemplateIds === 'string' && params.linkedTemplateIds.trim()) {
+    try {
+      const parsed = JSON.parse(params.linkedTemplateIds);
+      if (Array.isArray(parsed)) {
+        requestedIds = parsed.map(x => String(x || '').trim()).filter(Boolean);
+      }
+    } catch {
+      requestedIds = [];
+    }
+  }
+
+  const rawDefault = params.defaultTemplateId !== undefined && params.defaultTemplateId !== null
+    ? String(params.defaultTemplateId).trim()
+    : '';
+
+  if (rawDefault && !requestedIds.includes(rawDefault)) {
+    requestedIds = [rawDefault, ...requestedIds];
+  }
+  const uniqueIds = Array.from(new Set(requestedIds));
+
+  for (const tplId of uniqueIds) {
+    const row = db.prepare(`SELECT id FROM personal_workout_templates WHERE id = ? AND tenant_id = ?`).get(tplId, params.tenantId);
+    if (!row) {
+      return {
+        defaultTemplateId: null,
+        linkedTemplateIds: [],
+        linkedTemplateIdsJson: null,
+        error: 'Template de exercícios selecionado não pertence a este estabelecimento.'
+      };
+    }
+  }
+
+  const finalDefault = rawDefault || (uniqueIds.length > 0 ? uniqueIds[0] : null);
+  return {
+    defaultTemplateId: finalDefault,
+    linkedTemplateIds: uniqueIds,
+    linkedTemplateIdsJson: uniqueIds.length > 0 ? JSON.stringify(uniqueIds) : null
+  };
+}
+
+function getTenantTemplatesMap(tenantId: string): Map<string, LinkedTemplateSummary> {
+  const map = new Map<string, LinkedTemplateSummary>();
+  try {
+    const rows = db.prepare(`
+      SELECT id, title, structure_type, description, workouts_json
+      FROM personal_workout_templates
+      WHERE tenant_id = ?
+    `).all(tenantId) as any[];
+    for (const r of rows) {
+      let exCount = 0;
+      try {
+        const wks = JSON.parse(r.workouts_json || '[]');
+        if (Array.isArray(wks)) {
+          for (const w of wks) {
+            if (Array.isArray(w?.exercises)) exCount += w.exercises.length;
+          }
+        }
+      } catch {}
+      map.set(r.id, {
+        id: r.id,
+        title: r.title || 'Template',
+        structure_type: r.structure_type || 'ABC',
+        description: r.description || null,
+        exercises_count: exCount
+      });
+    }
+  } catch {}
+  return map;
+}
+
+function enrichServiceTemplates(srv: any, templatesMap: Map<string, LinkedTemplateSummary>, isStudioService: boolean) {
+  if (!isStudioService) {
+    return {
+      default_template_id: null,
+      default_template_title: null,
+      linked_template_ids: [] as string[],
+      linked_templates: [] as LinkedTemplateSummary[]
+    };
+  }
+  let ids: string[] = [];
+  if (typeof srv.linked_template_ids_json === 'string' && srv.linked_template_ids_json.trim()) {
+    try {
+      const parsed = JSON.parse(srv.linked_template_ids_json);
+      if (Array.isArray(parsed)) ids = parsed.map(x => String(x || '').trim()).filter(Boolean);
+    } catch {}
+  }
+  const defId = srv.default_template_id ? String(srv.default_template_id).trim() : null;
+  if (defId && !ids.includes(defId)) {
+    ids = [defId, ...ids];
+  }
+  const validIds = ids.filter(id => templatesMap.has(id));
+  const validTemplates = validIds.map(id => templatesMap.get(id)!);
+  const resolvedDefId = defId && templatesMap.has(defId) ? defId : (validIds[0] || null);
+  return {
+    default_template_id: resolvedDefId,
+    default_template_title: resolvedDefId ? (templatesMap.get(resolvedDefId)?.title || null) : null,
+    linked_template_ids: validIds,
+    linked_templates: validTemplates
+  };
 }
 
 export class ServiceController {
@@ -261,7 +388,14 @@ export class ServiceController {
           s.id, s.tenant_id, s.professional_id, s.specialty_id, s.name, s.description,
           COALESCE(ps.custom_duration, s.duration_minutes) as duration_minutes,
           s.buffer_minutes,
-          COALESCE(ps.custom_price, s.price) as price,
+          COALESCE(
+            CASE WHEN ps.custom_price > 0 THEN ps.custom_price ELSE NULL END,
+            CASE WHEN s.price > 0 THEN s.price ELSE NULL END,
+            CASE WHEN s.periodic_price > 0 THEN s.periodic_price ELSE NULL END,
+            s.price,
+            0
+          ) as price,
+          s.price as catalog_base_price,
           s.modality, s.active,
           COALESCE(s.service_kind, 'individual') as service_kind,
           s.default_capacity,
@@ -278,6 +412,8 @@ export class ServiceController {
           s.default_package_id,
           s.default_billing_due_day,
           pkg.name as default_package_name,
+          s.default_template_id,
+          s.linked_template_ids_json,
           s.service_domain,
           s.modality_category,
           s.min_lead_time_hours, s.max_advance_days, s.cancellation_policy,
@@ -313,6 +449,7 @@ export class ServiceController {
       const linkedByService = isStudioCompat
         ? getLinkedProfessionalsMap(tenantId, primaryByService)
         : new Map<string, LinkedProfessionalSummary[]>();
+      const templatesMap = isStudioCompat ? getTenantTemplatesMap(tenantId) : new Map<string, LinkedTemplateSummary>();
 
       const enriched = services.map(srv => {
         const resolvedDomain = resolveServiceDomain({
@@ -324,6 +461,7 @@ export class ServiceController {
         if (!isStudioCompat) {
           return {
             ...srv,
+            catalog_price: Number(srv.price || 0),
             service_kind: 'individual',
             default_capacity: null,
             service_domain: 'clinical',
@@ -333,6 +471,10 @@ export class ServiceController {
             default_package_id: null,
             default_package_name: null,
             default_billing_due_day: null,
+            default_template_id: null,
+            default_template_title: null,
+            linked_template_ids: [],
+            linked_templates: [],
             allowed_recurrence_frequencies: undefined,
             default_recurrence_frequency: null,
             custom_recurrence_intervals: undefined,
@@ -349,6 +491,7 @@ export class ServiceController {
         const billConfig = resolvedDomain === 'studio'
           ? parseServiceBillingConfig(srv)
           : { billingMode: 'per_session' as const, periodicPrice: null, billingCycleMonths: null, defaultPackageId: null, defaultBillingDueDay: null };
+        const tplInfo = enrichServiceTemplates(srv, templatesMap, resolvedDomain === 'studio');
         const linkedProfs = linkedByService.get(srv.id) || [];
         const linkedProfIds = linkedProfs.length > 0
           ? linkedProfs.map(lp => lp.id)
@@ -358,6 +501,7 @@ export class ServiceController {
           : null;
         return {
           ...srv,
+          catalog_price: Number(srv.price || 0) > 0 ? Number(srv.price) : Number(billConfig.periodicPrice || 0),
           service_domain: resolvedDomain,
           billing_mode: billConfig.billingMode,
           periodic_price: billConfig.periodicPrice,
@@ -365,6 +509,10 @@ export class ServiceController {
           default_package_id: billConfig.defaultPackageId,
           default_package_name: billConfig.billingMode === 'package' ? (srv.default_package_name || null) : null,
           default_billing_due_day: billConfig.defaultBillingDueDay,
+          default_template_id: tplInfo.default_template_id,
+          default_template_title: tplInfo.default_template_title,
+          linked_template_ids: tplInfo.linked_template_ids,
+          linked_templates: tplInfo.linked_templates,
           allow_recurrence: recConfig.allowRecurrence ? 1 : 0,
           allowed_recurrence_frequencies: recConfig.allowedFrequencies,
           default_recurrence_frequency: recConfig.defaultFrequency,
@@ -410,7 +558,9 @@ export class ServiceController {
         billingMode, billing_mode,
         periodicPrice, periodic_price,
         defaultPackageId, default_package_id,
-        defaultBillingDueDay, default_billing_due_day
+        defaultBillingDueDay, default_billing_due_day,
+        defaultTemplateId, default_template_id,
+        linkedTemplateIds, linked_template_ids
       } = req.body;
 
       const establishmentProfile = getTenantEstablishmentProfile(tenantId);
@@ -432,6 +582,8 @@ export class ServiceController {
       const rawPeriodicPrice = periodicPrice !== undefined ? periodicPrice : periodic_price;
       const rawDefaultPkgId = defaultPackageId !== undefined ? defaultPackageId : default_package_id;
       const rawDefaultDueDay = defaultBillingDueDay !== undefined ? defaultBillingDueDay : default_billing_due_day;
+      const rawDefaultTplId = defaultTemplateId !== undefined ? defaultTemplateId : default_template_id;
+      const rawLinkedTplIds = linkedTemplateIds !== undefined ? linkedTemplateIds : linked_template_ids;
       const requestedLinkedIds = parseLinkedInstructorIds(req.body);
 
       if (!isStudioCompat) {
@@ -443,6 +595,8 @@ export class ServiceController {
           (rawBillingMode !== undefined && rawBillingMode !== null && String(rawBillingMode).trim().toLowerCase() !== '' && String(rawBillingMode).trim().toLowerCase() !== 'per_session') ||
           (rawPeriodicPrice !== undefined && rawPeriodicPrice !== null && rawPeriodicPrice !== '') ||
           (rawDefaultPkgId !== undefined && rawDefaultPkgId !== null && String(rawDefaultPkgId).trim() !== '') ||
+          (rawDefaultTplId !== undefined && rawDefaultTplId !== null && String(rawDefaultTplId).trim() !== '') ||
+          (Array.isArray(rawLinkedTplIds) && rawLinkedTplIds.length > 0) ||
           (Array.isArray(rawAllowedFreqs) && rawAllowedFreqs.length > 0) ||
           (rawDefaultFreq !== undefined && rawDefaultFreq !== null && String(rawDefaultFreq).trim() !== '') ||
           (Array.isArray(rawCustomIntervals) && rawCustomIntervals.length > 0) ||
@@ -558,6 +712,23 @@ export class ServiceController {
         return;
       }
 
+      const tplNorm = normalizeServiceTemplatesForSave({
+        tenantId,
+        isStudioService: isStudioCompat && resolvedDomain === 'studio',
+        defaultTemplateId: rawDefaultTplId,
+        linkedTemplateIds: rawLinkedTplIds
+      });
+      if (tplNorm.error) {
+        res.status(400).json({ error: tplNorm.error });
+        return;
+      }
+
+      const rawPriceNum = price !== undefined && price !== null && price !== '' ? Number(price) : 0;
+      const effectiveCreatePrice =
+        rawPriceNum > 0
+          ? rawPriceNum
+          : (billNorm.periodicPrice && billNorm.periodicPrice > 0 ? Number(billNorm.periodicPrice) : 0);
+
       const resolvedMinLeadTimeHours = (minLeadTimeHours !== undefined && minLeadTimeHours !== null && minLeadTimeHours !== '' && !Number.isNaN(Number(minLeadTimeHours)))
         ? Math.max(0, Number(minLeadTimeHours))
         : 2;
@@ -579,9 +750,10 @@ export class ServiceController {
             service_domain, allowed_recurrence_frequencies_json, default_recurrence_frequency,
             allowed_plan_durations_json, default_plan_duration,
             custom_recurrence_intervals_json, default_recurrence_interval_json,
-            billing_mode, periodic_price, billing_cycle_months, default_package_id, default_billing_due_day
+            billing_mode, periodic_price, billing_cycle_months, default_package_id, default_billing_due_day,
+            default_template_id, linked_template_ids_json
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
 
         insertStmt.run(
@@ -593,7 +765,7 @@ export class ServiceController {
           description || null,
           durationMinutes !== undefined ? Number(durationMinutes) : 50,
           bufferMinutes !== undefined ? Number(bufferMinutes) : 10,
-          price !== undefined ? Number(price) : 0.0,
+          effectiveCreatePrice,
           modality || 'both',
           resolvedMinLeadTimeHours,
           resolvedMaxAdvanceDays,
@@ -617,10 +789,12 @@ export class ServiceController {
           billNorm.periodicPrice,
           billNorm.billingCycleMonths,
           billNorm.defaultPackageId,
-          billNorm.defaultBillingDueDay
+          billNorm.defaultBillingDueDay,
+          tplNorm.defaultTemplateId,
+          tplNorm.linkedTemplateIdsJson
         );
 
-        const normalizedCustomPrice = price !== undefined && price !== null && price !== '' ? Number(price) : null;
+        const normalizedCustomPrice = effectiveCreatePrice > 0 ? effectiveCreatePrice : (price !== undefined && price !== null && price !== '' ? Number(price) : null);
         const normalizedCustomDuration = durationMinutes !== undefined && durationMinutes !== null && durationMinutes !== '' ? Number(durationMinutes) : null;
 
         validateAndSyncLinkedInstructorsTx({
@@ -644,7 +818,7 @@ export class ServiceController {
         }
       })();
 
-      logAudit(req, 'CREATE_SERVICE', 'services', id, { name, price, professionalId, professionalName: prof.name, clinicalModule: targetModule, serviceDomain: resolvedDomain, linkedCount: requestedLinkedIds?.length || 1 });
+      logAudit(req, 'CREATE_SERVICE', 'services', id, { name, price: effectiveCreatePrice, professionalId, professionalName: prof.name, clinicalModule: targetModule, serviceDomain: resolvedDomain, linkedCount: requestedLinkedIds?.length || 1 });
 
       const parsedCreatedRec = isStudioCompat
         ? parseServiceRecurrenceConfig({
@@ -666,6 +840,12 @@ export class ServiceController {
       const createdDiagnostics = isStudioCompat && resolvedKind === 'group'
         ? ClassScheduleService.diagnoseServiceSchedules(tenantId, id, createdSchedules)
         : null;
+      const createdTemplatesMap = isStudioCompat ? getTenantTemplatesMap(tenantId) : new Map<string, LinkedTemplateSummary>();
+      const createdTplInfo = enrichServiceTemplates(
+        { default_template_id: tplNorm.defaultTemplateId, linked_template_ids_json: tplNorm.linkedTemplateIdsJson },
+        createdTemplatesMap,
+        isStudioCompat && resolvedDomain === 'studio'
+      );
 
       res.status(201).json({
         id,
@@ -678,7 +858,8 @@ export class ServiceController {
         buffer_minutes: bufferMinutes !== undefined ? Number(bufferMinutes) : 10,
         min_lead_time_hours: resolvedMinLeadTimeHours,
         max_advance_days: resolvedMaxAdvanceDays,
-        price: price !== undefined && price !== null && price !== '' ? Number(price) : 0,
+        price: effectiveCreatePrice,
+        catalog_price: effectiveCreatePrice,
         modality: modality || 'both',
         active: 1,
         clinical_module: targetModule,
@@ -690,6 +871,10 @@ export class ServiceController {
         billing_cycle_months: billNorm.billingCycleMonths,
         default_package_id: billNorm.defaultPackageId,
         default_billing_due_day: billNorm.defaultBillingDueDay,
+        default_template_id: createdTplInfo.default_template_id,
+        default_template_title: createdTplInfo.default_template_title,
+        linked_template_ids: createdTplInfo.linked_template_ids,
+        linked_templates: createdTplInfo.linked_templates,
         allow_recurrence: recNorm.allowRecurrenceInt,
         allowed_recurrence_frequencies: parsedCreatedRec ? parsedCreatedRec.allowedFrequencies : undefined,
         default_recurrence_frequency: parsedCreatedRec ? parsedCreatedRec.defaultFrequency : null,
@@ -723,10 +908,11 @@ export class ServiceController {
       }
 
       const existing = db.prepare(`
-        SELECT id, name, professional_id, clinical_module, service_kind, default_capacity, allow_recurrence,
+        SELECT id, name, price, professional_id, clinical_module, service_kind, default_capacity, allow_recurrence,
                modality_category, service_domain, allowed_recurrence_frequencies_json, default_recurrence_frequency,
                custom_recurrence_intervals_json, default_recurrence_interval_json,
-               billing_mode, periodic_price, billing_cycle_months, default_package_id, default_billing_due_day
+               billing_mode, periodic_price, billing_cycle_months, default_package_id, default_billing_due_day,
+               default_template_id, linked_template_ids_json
         FROM services WHERE id = ? AND tenant_id = ?
       `).get(id, tenantId) as any;
       if (!existing) {
@@ -756,7 +942,9 @@ export class ServiceController {
         billingMode, billing_mode,
         periodicPrice, periodic_price,
         defaultPackageId, default_package_id,
-        defaultBillingDueDay, default_billing_due_day
+        defaultBillingDueDay, default_billing_due_day,
+        defaultTemplateId, default_template_id,
+        linkedTemplateIds, linked_template_ids
       } = req.body;
 
       const rawKind = serviceKind !== undefined ? serviceKind : service_kind;
@@ -772,6 +960,8 @@ export class ServiceController {
       const rawPeriodicPrice = periodicPrice !== undefined ? periodicPrice : periodic_price;
       const rawDefaultPkgId = defaultPackageId !== undefined ? defaultPackageId : default_package_id;
       const rawDefaultDueDay = defaultBillingDueDay !== undefined ? defaultBillingDueDay : default_billing_due_day;
+      const rawDefaultTplId = defaultTemplateId !== undefined ? defaultTemplateId : default_template_id;
+      const rawLinkedTplIds = linkedTemplateIds !== undefined ? linkedTemplateIds : linked_template_ids;
       const requestedLinkedIds = parseLinkedInstructorIds(req.body);
       const effectiveTargetProfForCheck = professionalId || existing.professional_id;
 
@@ -783,6 +973,8 @@ export class ServiceController {
           (rawBillingMode !== undefined && rawBillingMode !== null && String(rawBillingMode).trim().toLowerCase() !== '' && String(rawBillingMode).trim().toLowerCase() !== 'per_session') ||
           (rawPeriodicPrice !== undefined && rawPeriodicPrice !== null && rawPeriodicPrice !== '') ||
           (rawDefaultPkgId !== undefined && rawDefaultPkgId !== null && String(rawDefaultPkgId).trim() !== '') ||
+          (rawDefaultTplId !== undefined && rawDefaultTplId !== null && String(rawDefaultTplId).trim() !== '') ||
+          (Array.isArray(rawLinkedTplIds) && rawLinkedTplIds.length > 0) ||
           (Array.isArray(rawAllowedFreqs) && rawAllowedFreqs.length > 0) ||
           (rawDefaultFreq !== undefined && rawDefaultFreq !== null && String(rawDefaultFreq).trim() !== '') ||
           (Array.isArray(rawCustomIntervals) && rawCustomIntervals.length > 0) ||
@@ -947,6 +1139,30 @@ export class ServiceController {
         nextDefaultDueDay = billNorm.defaultBillingDueDay;
       }
 
+      let nextDefaultTplId: string | null = isNextStudioService ? (existing.default_template_id || null) : null;
+      let nextLinkedTplJson: string | null = isNextStudioService ? (existing.linked_template_ids_json || null) : null;
+      if (rawDefaultTplId !== undefined || rawLinkedTplIds !== undefined || !isNextStudioService) {
+        const tplNorm = normalizeServiceTemplatesForSave({
+          tenantId,
+          isStudioService: isNextStudioService,
+          defaultTemplateId: rawDefaultTplId !== undefined ? rawDefaultTplId : existing.default_template_id,
+          linkedTemplateIds: rawLinkedTplIds !== undefined ? rawLinkedTplIds : existing.linked_template_ids_json
+        });
+        if (tplNorm.error) {
+          res.status(400).json({ error: tplNorm.error });
+          return;
+        }
+        nextDefaultTplId = tplNorm.defaultTemplateId;
+        nextLinkedTplJson = tplNorm.linkedTemplateIdsJson;
+      }
+
+      const hasExplicitPrice = price !== undefined && price !== null && price !== '';
+      const rawUpdPriceNum = hasExplicitPrice ? Number(price) : Number(existing.price || 0);
+      const effectiveUpdatePrice =
+        rawUpdPriceNum > 0
+          ? rawUpdPriceNum
+          : (nextPeriodicPrice && nextPeriodicPrice > 0 ? Number(nextPeriodicPrice) : 0);
+
       const updateStmt = db.prepare(`
         UPDATE services SET
           professional_id = CASE WHEN ? = 1 THEN ? ELSE professional_id END,
@@ -981,6 +1197,8 @@ export class ServiceController {
           billing_cycle_months = ?,
           default_package_id = ?,
           default_billing_due_day = ?,
+          default_template_id = ?,
+          linked_template_ids_json = ?,
           updated_at = datetime('now')
         WHERE id = ? AND tenant_id = ?
       `);
@@ -995,7 +1213,8 @@ export class ServiceController {
           description !== undefined ? 1 : 0, description !== null ? description : null,
           durationMinutes !== undefined ? 1 : 0, durationMinutes !== undefined ? Number(durationMinutes) : 50,
           bufferMinutes !== undefined ? 1 : 0, bufferMinutes !== undefined ? Number(bufferMinutes) : 10,
-          price !== undefined ? 1 : 0, price !== undefined ? Number(price) : 0,
+          (hasExplicitPrice || (Number(existing.price || 0) <= 0 && effectiveUpdatePrice > 0)) ? 1 : 0,
+          effectiveUpdatePrice,
           modality !== undefined ? 1 : 0, modality || 'both',
           active !== undefined ? 1 : 0, active ? 1 : 0,
           (minLeadTimeHours !== undefined && minLeadTimeHours !== null && minLeadTimeHours !== '' && !Number.isNaN(Number(minLeadTimeHours))) ? 1 : 0,
@@ -1023,11 +1242,13 @@ export class ServiceController {
           nextBillingCycleMonths,
           nextDefaultPkgId,
           nextDefaultDueDay,
+          nextDefaultTplId,
+          nextLinkedTplJson,
           id,
           tenantId
         );
 
-        const nextCustomPrice = price !== undefined && price !== null && price !== '' ? Number(price) : null;
+        const nextCustomPrice = effectiveUpdatePrice > 0 ? effectiveUpdatePrice : (hasExplicitPrice ? Number(price) : null);
         const nextCustomDuration = durationMinutes !== undefined && durationMinutes !== null && durationMinutes !== '' ? Number(durationMinutes) : null;
 
         validateAndSyncLinkedInstructorsTx({
@@ -1073,9 +1294,14 @@ export class ServiceController {
       const updatedDiagnostics = isStudioCompat && updatedService && (updatedService.service_kind || 'individual') === 'group'
         ? ClassScheduleService.diagnoseServiceSchedules(tenantId, String(id), updatedSchedules)
         : null;
+      const updTemplatesMap = isStudioCompat ? getTenantTemplatesMap(tenantId) : new Map<string, LinkedTemplateSummary>();
+      const updTplInfo = updatedService
+        ? enrichServiceTemplates(updatedService, updTemplatesMap, isStudioCompat && updatedService.service_domain === 'studio')
+        : { default_template_id: null, default_template_title: null, linked_template_ids: [], linked_templates: [] };
       const enrichedUpdated = updatedService
         ? {
             ...updatedService,
+            catalog_price: Number(updatedService.price || 0) > 0 ? Number(updatedService.price) : Number(updatedService.periodic_price || 0),
             service_kind: isStudioCompat ? (updatedService.service_kind || 'individual') : 'individual',
             default_capacity: isStudioCompat ? updatedService.default_capacity : null,
             service_domain: resolveServiceDomain({
@@ -1089,6 +1315,10 @@ export class ServiceController {
             billing_cycle_months: isStudioCompat && updatedService.service_domain === 'studio' ? (updatedService.billing_cycle_months ?? null) : null,
             default_package_id: isStudioCompat && updatedService.service_domain === 'studio' ? (updatedService.default_package_id || null) : null,
             default_billing_due_day: isStudioCompat && updatedService.service_domain === 'studio' ? (updatedService.default_billing_due_day ?? null) : null,
+            default_template_id: updTplInfo.default_template_id,
+            default_template_title: updTplInfo.default_template_title,
+            linked_template_ids: updTplInfo.linked_template_ids,
+            linked_templates: updTplInfo.linked_templates,
             allow_recurrence: parsedUpdRec ? (parsedUpdRec.allowRecurrence ? 1 : 0) : (updatedService.allow_recurrence ?? 1),
             allowed_recurrence_frequencies: parsedUpdRec ? parsedUpdRec.allowedFrequencies : undefined,
             default_recurrence_frequency: parsedUpdRec ? parsedUpdRec.defaultFrequency : null,

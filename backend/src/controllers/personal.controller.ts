@@ -160,6 +160,14 @@ export function hasPersonalAccess(req: Request): boolean {
     return true;
   }
 
+  // 1b. Em estabelecimentos configurados exclusivamente como Studio, instrutores e gestores possuem acesso aos templates e biblioteca
+  try {
+    const tenantProfile = (db.prepare('SELECT establishment_profile FROM tenants WHERE id = ?').get(req.tenantId) as any)?.establishment_profile;
+    if (String(tenantProfile || '').toLowerCase() === 'studio' && (req.user.role === 'clinic_admin' || req.user.role === 'professional')) {
+      return true;
+    }
+  } catch {}
+
   // 2. Se for gestor/administrador da clínica
   if (req.user.role === 'clinic_admin') {
     const cu = db.prepare(`
@@ -2193,7 +2201,13 @@ export class PersonalController {
         return;
       }
       const tenantId = req.tenantId!;
-      const professionalId = getProfessionalId(req);
+      let professionalId: string | null = null;
+      try {
+        professionalId = getProfessionalId(req);
+      } catch {
+        const fallbackProf = db.prepare('SELECT id FROM professionals WHERE tenant_id = ? AND active = 1 ORDER BY created_at ASC LIMIT 1').get(tenantId) as { id?: string } | undefined;
+        professionalId = fallbackProf?.id || null;
+      }
       const { id } = req.params;
       const { target_patient_id, target_division, new_title } = req.body;
 
@@ -2306,7 +2320,13 @@ export class PersonalController {
         return;
       }
       const tenantId = req.tenantId!;
-      const professionalId = getProfessionalId(req);
+      let professionalId: string | null = null;
+      try {
+        professionalId = getProfessionalId(req);
+      } catch {
+        const fallbackProf = db.prepare('SELECT id FROM professionals WHERE tenant_id = ? AND active = 1 ORDER BY created_at ASC LIMIT 1').get(tenantId) as { id?: string } | undefined;
+        professionalId = req.body?.professional_id || req.body?.professionalId || fallbackProf?.id || null;
+      }
       const { title, structure_type, description, workouts } = req.body;
 
       if (!title || !workouts) {
@@ -2372,7 +2392,13 @@ export class PersonalController {
         return;
       }
       const tenantId = req.tenantId!;
-      const professionalId = getProfessionalId(req);
+      let professionalId: string | null = null;
+      try {
+        professionalId = getProfessionalId(req);
+      } catch {
+        const fallbackProf = db.prepare('SELECT id FROM professionals WHERE tenant_id = ? AND active = 1 ORDER BY created_at ASC LIMIT 1').get(tenantId) as { id?: string } | undefined;
+        professionalId = fallbackProf?.id || null;
+      }
       const { id } = req.params;
 
       const existing = db.prepare('SELECT * FROM personal_workout_templates WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
@@ -2403,7 +2429,13 @@ export class PersonalController {
         return;
       }
       const tenantId = req.tenantId!;
-      const professionalId = getProfessionalId(req);
+      let professionalId: string | null = null;
+      try {
+        professionalId = getProfessionalId(req);
+      } catch {
+        const fallbackProf = db.prepare('SELECT id FROM professionals WHERE tenant_id = ? AND active = 1 ORDER BY created_at ASC LIMIT 1').get(tenantId) as { id?: string } | undefined;
+        professionalId = fallbackProf?.id || null;
+      }
       const { id } = req.params; // template id
       const { patient_id } = req.body;
 

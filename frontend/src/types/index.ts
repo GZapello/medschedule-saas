@@ -259,12 +259,23 @@ export interface Service {
   allowed_plan_durations_json?: string | null;
   default_plan_duration?: string | null;
   modality_category?: string | null;
+  catalog_price?: number | null;
   billing_mode?: ServiceBillingMode;
   periodic_price?: number | null;
   billing_cycle_months?: number | null;
   default_package_id?: string | null;
   default_package_name?: string | null;
   default_billing_due_day?: number | null;
+  default_template_id?: string | null;
+  default_template_title?: string | null;
+  linked_template_ids?: string[];
+  linked_templates?: Array<{
+    id: string;
+    title: string;
+    structure_type: string;
+    description?: string | null;
+    exercises_count?: number;
+  }>;
   linked_professional_ids?: string[];
   linked_professionals?: LinkedProfessionalItem[];
   class_schedules?: ClassScheduleItem[];

@@ -19,12 +19,14 @@ import {
   Bell,
   Layers,
   Package,
-  Calendar
+  Calendar,
+  Dumbbell
 } from 'lucide-react';
 import { PackageModal } from './PackageModal';
 import { ClassScheduleSection, DraftClassScheduleInput } from './ClassScheduleSection';
 import { ServiceRecurrenceConfigPanel } from './ServiceRecurrenceConfigPanel';
 import { ServiceBillingConfigPanel } from './ServiceBillingConfigPanel';
+import { ServiceTemplatesConfigPanel } from './ServiceTemplatesConfigPanel';
 import { LinkedInstructorsSelector } from './LinkedInstructorsSelector';
 import {
   ALL_PLAN_DURATIONS,
@@ -367,6 +369,8 @@ export const ServicesView: React.FC = () => {
   const [periodicPrice, setPeriodicPrice] = useState<string>('');
   const [defaultPackageId, setDefaultPackageId] = useState<string>('');
   const [defaultBillingDueDay, setDefaultBillingDueDay] = useState<string>('');
+  const [defaultTemplateId, setDefaultTemplateId] = useState<string>('');
+  const [linkedTemplateIds, setLinkedTemplateIds] = useState<string[]>([]);
   const [draftClassSchedules, setDraftClassSchedules] = useState<DraftClassScheduleInput[]>([]);
   const [hasPendingCreateScheduleForm, setHasPendingCreateScheduleForm] = useState<boolean>(false);
   const [description, setDescription] = useState<string>('');
@@ -399,6 +403,8 @@ export const ServicesView: React.FC = () => {
   const [editPeriodicPrice, setEditPeriodicPrice] = useState<string>('');
   const [editDefaultPackageId, setEditDefaultPackageId] = useState<string>('');
   const [editDefaultBillingDueDay, setEditDefaultBillingDueDay] = useState<string>('');
+  const [editDefaultTemplateId, setEditDefaultTemplateId] = useState<string>('');
+  const [editLinkedTemplateIds, setEditLinkedTemplateIds] = useState<string[]>([]);
   const [editDraftClassSchedules, setEditDraftClassSchedules] = useState<DraftClassScheduleInput[]>([]);
   const [hasPendingEditScheduleForm, setHasPendingEditScheduleForm] = useState<boolean>(false);
 
@@ -638,7 +644,9 @@ export const ServicesView: React.FC = () => {
               billingMode,
               periodicPrice: isPeriodicCreate ? Number(periodicPrice) : null,
               defaultPackageId: billingMode === 'package' && defaultPackageId ? defaultPackageId : null,
-              defaultBillingDueDay: isPeriodicCreate && defaultBillingDueDay.trim() !== '' ? Number(defaultBillingDueDay) : null
+              defaultBillingDueDay: isPeriodicCreate && defaultBillingDueDay.trim() !== '' ? Number(defaultBillingDueDay) : null,
+              defaultTemplateId: defaultTemplateId || null,
+              linkedTemplateIds
             }
           : {}),
         classSchedules: showCreateStudioConfig && effectiveKind === 'group' ? draftClassSchedules : undefined,
@@ -678,6 +686,8 @@ export const ServicesView: React.FC = () => {
       setPeriodicPrice('');
       setDefaultPackageId('');
       setDefaultBillingDueDay('');
+      setDefaultTemplateId('');
+      setLinkedTemplateIds([]);
       setDraftClassSchedules([]);
       setLinkedProfessionalIds(professionalId ? [professionalId] : []);
       setDescription('');
@@ -762,6 +772,8 @@ export const ServicesView: React.FC = () => {
     setEditPeriodicPrice(s.periodic_price !== undefined && s.periodic_price !== null ? String(s.periodic_price) : '');
     setEditDefaultPackageId(s.default_package_id || '');
     setEditDefaultBillingDueDay(s.default_billing_due_day !== undefined && s.default_billing_due_day !== null ? String(s.default_billing_due_day) : '');
+    setEditDefaultTemplateId(s.default_template_id || '');
+    setEditLinkedTemplateIds(Array.isArray(s.linked_template_ids) ? s.linked_template_ids : (s.default_template_id ? [s.default_template_id] : []));
     setEditDraftClassSchedules([]);
     setHasPendingEditScheduleForm(false);
     setEditDescription(s.description || '');
@@ -845,7 +857,9 @@ export const ServicesView: React.FC = () => {
               billingMode: editBillingMode,
               periodicPrice: isPeriodicEdit ? Number(editPeriodicPrice) : null,
               defaultPackageId: editBillingMode === 'package' && editDefaultPackageId ? editDefaultPackageId : null,
-              defaultBillingDueDay: isPeriodicEdit && editDefaultBillingDueDay.trim() !== '' ? Number(editDefaultBillingDueDay) : null
+              defaultBillingDueDay: isPeriodicEdit && editDefaultBillingDueDay.trim() !== '' ? Number(editDefaultBillingDueDay) : null,
+              defaultTemplateId: editDefaultTemplateId || null,
+              linkedTemplateIds: editLinkedTemplateIds
             }
           : {}),
         ...(shouldSendEditDraftSchedules ? { classSchedules: editDraftClassSchedules } : {}),
@@ -978,6 +992,8 @@ export const ServicesView: React.FC = () => {
       setLinkedProfessionalIds([]);
     }
     setDraftClassSchedules([]);
+    setDefaultTemplateId('');
+    setLinkedTemplateIds([]);
     setShowServiceModal(true);
   };
 
@@ -1192,6 +1208,19 @@ export const ServicesView: React.FC = () => {
                               <span>
                                 {s.linked_professionals.map(lp => lp.name).join(', ')}
                               </span>
+                            </div>
+                          )}
+                          {isStudioCompatible && (s.default_template_title || (Array.isArray(s.linked_templates) && s.linked_templates.length > 0)) && (
+                            <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px]">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-teal-50 text-teal-800 border border-teal-200 font-bold">
+                                <Dumbbell className="w-3 h-3 text-teal-600" />
+                                Template padrão: {s.default_template_title || s.linked_templates?.[0]?.title}
+                              </span>
+                              {Array.isArray(s.linked_templates) && s.linked_templates.length > 1 && (
+                                <span className="text-slate-500 font-semibold">
+                                  (+{s.linked_templates.length - 1} modelo{s.linked_templates.length - 1 > 1 ? 's' : ''})
+                                </span>
+                              )}
                             </div>
                           )}
                           {isStudioCompatible && s.service_kind === 'group' && (
@@ -1726,6 +1755,14 @@ export const ServicesView: React.FC = () => {
                       setDefaultBillingDueDay(next.defaultBillingDueDay);
                     }}
                   />
+                  <ServiceTemplatesConfigPanel
+                    defaultTemplateId={defaultTemplateId}
+                    linkedTemplateIds={linkedTemplateIds}
+                    onChange={next => {
+                      setDefaultTemplateId(next.defaultTemplateId);
+                      setLinkedTemplateIds(next.linkedTemplateIds);
+                    }}
+                  />
                 </div>
               ) : (
                 <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200">
@@ -2184,6 +2221,14 @@ export const ServicesView: React.FC = () => {
                       setEditPeriodicPrice(next.periodicPrice);
                       setEditDefaultPackageId(next.defaultPackageId);
                       setEditDefaultBillingDueDay(next.defaultBillingDueDay);
+                    }}
+                  />
+                  <ServiceTemplatesConfigPanel
+                    defaultTemplateId={editDefaultTemplateId}
+                    linkedTemplateIds={editLinkedTemplateIds}
+                    onChange={next => {
+                      setEditDefaultTemplateId(next.defaultTemplateId);
+                      setEditLinkedTemplateIds(next.linkedTemplateIds);
                     }}
                   />
                 </div>

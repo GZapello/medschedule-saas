@@ -546,7 +546,8 @@ export class AppointmentController {
       const serviceRow = db.prepare(`
         SELECT id, price, professional_id, modality, COALESCE(service_kind, 'individual') as service_kind,
                default_capacity, name, service_domain, clinical_module,
-               billing_mode, periodic_price, billing_cycle_months, default_package_id, default_billing_due_day
+               billing_mode, periodic_price, billing_cycle_months, default_package_id, default_billing_due_day,
+               default_template_id
         FROM services WHERE id = ? AND tenant_id = ?
       `).get(serviceId, tenantId) as any;
       if (!serviceRow) { res.status(400).json({ error: 'Serviço não pertence à clínica.' }); return; }
@@ -557,7 +558,10 @@ export class AppointmentController {
         res.status(400).json({ error: 'Dados de agendamento inválidos.' }); return;
       }
       const suppliedPrice = req.body.appointmentPrice;
-      const appointmentPrice = suppliedPrice === undefined ? serviceRow.price : suppliedPrice;
+      const defaultReferenceServicePrice = Number(serviceRow.price) > 0
+        ? Number(serviceRow.price)
+        : (Number(serviceRow.periodic_price) > 0 ? Number(serviceRow.periodic_price) : Number(serviceRow.price || 0));
+      const appointmentPrice = suppliedPrice === undefined ? defaultReferenceServicePrice : suppliedPrice;
       if (typeof appointmentPrice !== 'number' || !Number.isFinite(appointmentPrice) || appointmentPrice < 0 ||
           !Number.isSafeInteger(Math.round(appointmentPrice * 100)) || Math.abs(appointmentPrice * 100 - Math.round(appointmentPrice * 100)) > 0.000001) {
         res.status(400).json({ error: 'Valor da consulta inválido. Informe um número não negativo com até duas casas decimais.' }); return;
@@ -840,9 +844,18 @@ export class AppointmentController {
         !isPublic &&
         !isCoveredSession &&
         Boolean(req.user) &&
+        Boolean(req.body.updateServiceCatalogPrice) &&
         suppliedPrice !== undefined &&
+        agreedAmount > 0 &&
         hasValidProfessionalServiceLink &&
         oldServicePrice !== agreedAmount;
+
+      const priceOverrideReason = typeof (req.body.priceOverrideReason ?? req.body.price_override_reason) === 'string'
+        ? String(req.body.priceOverrideReason ?? req.body.price_override_reason).trim() || null
+        : null;
+      const catalogPriceSnapshot = Number(serviceRow.price) > 0
+        ? Number(serviceRow.price)
+        : (Number((serviceRow as any).periodic_price) > 0 ? Number((serviceRow as any).periodic_price) : Number(serviceRow.price || 0));
 
       const initialStatus = isRetroactive ? 'in_progress' : 'scheduled';
       const initialAttendanceStartAt = isRetroactive
@@ -918,7 +931,7 @@ export class AppointmentController {
           };
         }
 
-        // Insere agendamento com os novos campos de convênio, encaminhamento, turma, pacote e plano periódico
+        // Insere agendamento com os novos campos de convênio, encaminhamento, turma, pacote, plano periódico e template
         const insertAppt = db.prepare(`
           INSERT INTO appointments (
             id, tenant_id, appointment_number, patient_id, professional_id, service_id,
@@ -927,9 +940,10 @@ export class AppointmentController {
             clinical_module, profession_id,
             series_id, occurrence_id, service_kind, attendance_status,
             package_contract_id, is_package_covered, recurring_plan_id, billing_coverage_type,
+            template_id, price_override_reason, catalog_price_snapshot,
             created_by
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
 
         insertAppt.run(
@@ -964,6 +978,9 @@ export class AppointmentController {
           isPackageCovered ? 1 : 0,
           resolvedBillingPlanId,
           billingCov.mode,
+          serviceRow.default_template_id || null,
+          priceOverrideReason,
+          catalogPriceSnapshot,
           req.user ? req.user.userId : 'online_booking'
         );
 
@@ -1698,11 +1715,21 @@ export class AppointmentController {
         return;
       }
 
-      const appt = db.prepare('SELECT patient_id, professional_id, room_id, status FROM appointments WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
+      const appt = db.prepare(`
+        SELECT a.patient_id, a.professional_id, a.service_id, a.room_id, a.status,
+               a.occurrence_id, a.series_id, a.modality, COALESCE(a.service_kind, s.service_kind, 'individual') as service_kind,
+               s.name as service_name, s.default_capacity
+        FROM appointments a
+        LEFT JOIN services s ON s.id = a.service_id AND s.tenant_id = a.tenant_id
+        WHERE a.id = ? AND a.tenant_id = ?
+      `).get(id, tenantId) as any;
       if (!appt) {
         res.status(404).json({ error: 'Agendamento não encontrado' });
         return;
       }
+
+      const isGroupReschedule = appt.service_kind === 'group';
+      const targetProfId = req.body.professionalId ? String(req.body.professionalId) : appt.professional_id;
 
       const normalizedStartTime = bookingTime(startTime);
       const normalizedEndTime = bookingTime(endTime);
@@ -1720,26 +1747,28 @@ export class AppointmentController {
       }
 
       // 0b. Validação da escala de trabalho ativa do profissional
-      const scheduleCheck = validateProfessionalSchedule(tenantId, appt.professional_id, normalizedStartTime, normalizedEndTime);
+      const scheduleCheck = validateProfessionalSchedule(tenantId, targetProfId, normalizedStartTime, normalizedEndTime);
       if (!scheduleCheck.valid) {
         res.status(400).json({ error: scheduleCheck.error });
         return;
       }
       }
 
-      // 1. Conflito de profissional (Item 7)
-      const conflict = db.prepare(`
-        SELECT id FROM appointments
-        WHERE tenant_id = ?
-          AND professional_id = ?
-          AND id != ?
-          AND status NOT IN ('cancelled')
-          AND REPLACE(start_time, ' ', 'T') < ? AND REPLACE(end_time, ' ', 'T') > ?
-      `).get(tenantId, appt.professional_id, id, normalizedEndTime, normalizedStartTime);
+      // 1. Conflito de profissional (apenas para individuais; turmas validam lotação atomicamente)
+      if (!isGroupReschedule) {
+        const conflict = db.prepare(`
+          SELECT id FROM appointments
+          WHERE tenant_id = ?
+            AND professional_id = ?
+            AND id != ?
+            AND status NOT IN ('cancelled')
+            AND REPLACE(start_time, ' ', 'T') < ? AND REPLACE(end_time, ' ', 'T') > ?
+        `).get(tenantId, targetProfId, id, normalizedEndTime, normalizedStartTime);
 
-      if (conflict) {
-        res.status(409).json({ error: 'Este horário não está mais disponível. Escolha outro horário.' });
-        return;
+        if (conflict) {
+          res.status(409).json({ error: 'Este horário não está mais disponível. Escolha outro horário.' });
+          return;
+        }
       }
 
       // 2. Conflito do paciente
@@ -1771,8 +1800,8 @@ export class AppointmentController {
         }
       }
 
-      // 3. Conflito de sala
-      if (appt.room_id) {
+      // 3. Conflito de sala (para individuais)
+      if (appt.room_id && !isGroupReschedule) {
         const roomConflict = db.prepare(`
           SELECT a.id, a.start_time, a.end_time, r.name as room_name, p.name as professional_name
           FROM appointments a
@@ -1794,19 +1823,75 @@ export class AppointmentController {
         }
       }
 
-      db.prepare(`
-        UPDATE appointments SET
-          start_time = ?,
-          end_time = ?,
-          status = 'rescheduled',
-          updated_at = datetime('now')
-        WHERE id = ? AND tenant_id = ?
-      `).run(normalizedStartTime, normalizedEndTime, id, tenantId);
+      let newOccurrenceId: string | null = appt.occurrence_id || null;
+      try {
+        db.transaction(() => {
+          const oldOccId = appt.occurrence_id || null;
+          if (isGroupReschedule && appt.service_id) {
+            const matchedSchedId = req.body.classScheduleId || (db.prepare(`
+              SELECT id FROM class_schedules
+              WHERE tenant_id = ? AND service_id = ? AND professional_id = ? AND day_of_week = ?
+                AND start_time = ? AND end_time = ? AND active = 1
+              LIMIT 1
+            `).get(
+              tenantId,
+              appt.service_id,
+              targetProfId,
+              getDayOfWeekFromYmd(normalizedStartTime.slice(0, 10)),
+              normalizedStartTime.slice(11, 16),
+              normalizedEndTime.slice(11, 16)
+            ) as { id: string } | undefined)?.id || null;
 
-      db.prepare(`
-        INSERT INTO appointment_status_history (id, appointment_id, previous_status, new_status, changed_by, reason)
-        VALUES (?, ?, ?, 'rescheduled', ?, ?)
-      `).run(uuidv4(), id, appt.status, req.user ? req.user.name : 'Sistema', reason || 'Horário remarcado');
+            const resolvedOcc = resolveOrCreateGroupOccurrenceTx({
+              tenantId,
+              serviceId: appt.service_id,
+              serviceName: appt.service_name || 'Turma',
+              professionalId: targetProfId,
+              roomId: appt.room_id || null,
+              classScheduleId: matchedSchedId,
+              startTime: normalizedStartTime,
+              endTime: normalizedEndTime,
+              defaultCapacity: Math.max(1, Number(appt.default_capacity) || 10),
+              modality: appt.modality || 'presential',
+              seriesId: appt.series_id || null,
+              patientId: appt.patient_id
+            });
+            newOccurrenceId = resolvedOcc.occurrenceId;
+          }
+
+          db.prepare(`
+            UPDATE appointments SET
+              professional_id = ?,
+              occurrence_id = ?,
+              start_time = ?,
+              end_time = ?,
+              status = 'rescheduled',
+              updated_at = datetime('now')
+            WHERE id = ? AND tenant_id = ?
+          `).run(targetProfId, newOccurrenceId, normalizedStartTime, normalizedEndTime, id, tenantId);
+
+          if (oldOccId && oldOccId !== newOccurrenceId) {
+            const remCount = (db.prepare(`
+              SELECT COUNT(*) as c FROM appointments
+              WHERE tenant_id = ? AND occurrence_id = ? AND status != 'cancelled'
+            `).get(tenantId, oldOccId) as { c: number } | undefined)?.c || 0;
+            if (remCount === 0) {
+              db.prepare(`UPDATE class_occurrences SET status = 'cancelled', updated_at = datetime('now') WHERE id = ? AND tenant_id = ?`).run(oldOccId, tenantId);
+            }
+          }
+
+          db.prepare(`
+            INSERT INTO appointment_status_history (id, appointment_id, previous_status, new_status, changed_by, reason)
+            VALUES (?, ?, ?, 'rescheduled', ?, ?)
+          `).run(uuidv4(), id, appt.status, req.user ? req.user.name : 'Sistema', reason || 'Horário remarcado');
+        })();
+      } catch (txErr: any) {
+        if (txErr && typeof txErr.status === 'number') {
+          res.status(txErr.status).json({ error: txErr.error || txErr.message, ...(txErr.code ? { code: txErr.code } : {}) });
+          return;
+        }
+        throw txErr;
+      }
 
       // Atualiza os lembretes automáticos para o novo horário (Item 24)
       NotificationService.cancelAppointmentReminders(id as string);
@@ -1902,6 +1987,12 @@ export class AppointmentController {
         return;
       }
 
+      const targetServiceRowForUpd = db.prepare(`
+        SELECT id, name, COALESCE(service_kind, 'individual') as service_kind, default_capacity, service_domain, clinical_module
+        FROM services WHERE id = ? AND tenant_id = ?
+      `).get(serviceId || appt.service_id, tenantId) as any;
+      const isGroupUpdate = (targetServiceRowForUpd?.service_kind || appt.service_kind || 'individual') === 'group';
+
       if (startChanged || endChanged || profChanged) {
         if (!isCustomTime) {
           const hoursCheck = validateClinicBusinessHours(tenantId, safeStart, safeEnd);
@@ -1917,35 +2008,35 @@ export class AppointmentController {
           }
         }
 
-        const scope: 'single' | 'this_and_following' | 'series' =
-          req.body.scope === 'this_and_following' || req.body.scope === 'series' ? req.body.scope : 'single';
         const currentOccurrenceId = appt.occurrence_id || null;
 
-        const profConflict = db.prepare(`
-          SELECT a.id, a.start_time, a.end_time, p.name as professional_name, s.name as service_name
-          FROM appointments a
-          JOIN professionals p ON p.id = a.professional_id
-          LEFT JOIN services s ON s.id = a.service_id
-          WHERE a.tenant_id = ?
-            AND a.professional_id = ?
-            AND a.id != ?
-            AND (a.occurrence_id IS NULL OR ? IS NULL OR a.occurrence_id != ?)
-            AND a.status NOT IN ('cancelled')
-            AND REPLACE(a.start_time, ' ', 'T') < ? AND REPLACE(a.end_time, ' ', 'T') > ?
-        `).get(tenantId, safeProfId, id, currentOccurrenceId, currentOccurrenceId, safeEnd, safeStart) as any;
+        if (!isGroupUpdate) {
+          const profConflict = db.prepare(`
+            SELECT a.id, a.start_time, a.end_time, p.name as professional_name, s.name as service_name
+            FROM appointments a
+            JOIN professionals p ON p.id = a.professional_id
+            LEFT JOIN services s ON s.id = a.service_id
+            WHERE a.tenant_id = ?
+              AND a.professional_id = ?
+              AND a.id != ?
+              AND (a.occurrence_id IS NULL OR ? IS NULL OR a.occurrence_id != ?)
+              AND a.status NOT IN ('cancelled')
+              AND REPLACE(a.start_time, ' ', 'T') < ? AND REPLACE(a.end_time, ' ', 'T') > ?
+          `).get(tenantId, safeProfId, id, currentOccurrenceId, currentOccurrenceId, safeEnd, safeStart) as any;
 
-        if (profConflict) {
-          res.status(409).json({
-            error: 'Este horário não está mais disponível. Escolha outro horário.',
-            code: 'PROFESSIONAL_SLOT_OCCUPIED',
-            conflict: {
-              startTime: profConflict.start_time,
-              endTime: profConflict.end_time,
-              professionalName: profConflict.professional_name,
-              serviceName: profConflict.service_name
-            }
-          });
-          return;
+          if (profConflict) {
+            res.status(409).json({
+              error: 'Este horário não está mais disponível. Escolha outro horário.',
+              code: 'PROFESSIONAL_SLOT_OCCUPIED',
+              conflict: {
+                startTime: profConflict.start_time,
+                endTime: profConflict.end_time,
+                professionalName: profConflict.professional_name,
+                serviceName: profConflict.service_name
+              }
+            });
+            return;
+          }
         }
 
         if (appt.patient_id) {
@@ -1981,7 +2072,7 @@ export class AppointmentController {
         req.body.scope === 'this_and_following' || req.body.scope === 'series' ? req.body.scope : 'single';
       const currentOccurrenceId = appt.occurrence_id || null;
 
-      if ((startChanged || endChanged || roomChanged) && safeRoomId) {
+      if ((startChanged || endChanged || roomChanged) && safeRoomId && !isGroupUpdate) {
         const roomConflict = db.prepare(`
           SELECT a.id, a.start_time, a.end_time, r.name as room_name, p.name as professional_name
           FROM appointments a
@@ -2012,6 +2103,7 @@ export class AppointmentController {
         UPDATE appointments SET
           service_id = COALESCE(?, service_id),
           professional_id = COALESCE(?, professional_id),
+          occurrence_id = ?,
           room_id = CASE WHEN ? THEN ? ELSE room_id END,
           insurance_id = CASE WHEN ? THEN ? ELSE insurance_id END,
           start_time = ?,
@@ -2072,80 +2164,145 @@ export class AppointmentController {
       }
 
       const updatedIds: string[] = [];
-      for (const row of targetSeriesRows) {
-        let targetStart = safeStart;
-        let targetEnd = safeEnd;
-        if (row.id !== appt.id) {
-          const rStart = String(row.start_time || '').trim().replace(' ', 'T');
-          const rEnd = String(row.end_time || '').trim().replace(' ', 'T');
-          if (startChanged || endChanged) {
-            // Mantém a data da ocorrência se só o horário mudou, ou aplica deslocamento se a data mudou
-            const dateShiftOnlySameClock = origStart.slice(0, 10) === safeStart.slice(0, 10);
-            if (dateShiftOnlySameClock && safeStartClock !== origStartClock && Number.isFinite(newDurationMs) && newDurationMs > 0) {
-              targetStart = `${rStart.slice(0, 10)}T${safeStartClock}`;
-              targetEnd = addMinutesToLocalIso(targetStart, Math.round(newDurationMs / 60000)).slice(0, 16);
-            } else if (deltaMinutes !== 0) {
-              targetStart = addMinutesToLocalIso(rStart, deltaMinutes).slice(0, 16);
-              const rowDur = Number.isFinite(newDurationMs) && newDurationMs > 0
-                ? Math.round(newDurationMs / 60000)
-                : Math.max(15, Math.round((new Date(`${rEnd.slice(0, 16)}:00`).getTime() - new Date(`${rStart.slice(0, 16)}:00`).getTime()) / 60000));
-              targetEnd = addMinutesToLocalIso(targetStart, rowDur).slice(0, 16);
-            } else {
-              targetStart = rStart;
-              targetEnd = rEnd;
+      try {
+        db.transaction(() => {
+          for (const row of targetSeriesRows) {
+            let targetStart = safeStart;
+            let targetEnd = safeEnd;
+            if (row.id !== appt.id) {
+              const rStart = String(row.start_time || '').trim().replace(' ', 'T');
+              const rEnd = String(row.end_time || '').trim().replace(' ', 'T');
+              if (startChanged || endChanged) {
+                // Mantém a data da ocorrência se só o horário mudou, ou aplica deslocamento se a data mudou
+                const dateShiftOnlySameClock = origStart.slice(0, 10) === safeStart.slice(0, 10);
+                if (dateShiftOnlySameClock && safeStartClock !== origStartClock && Number.isFinite(newDurationMs) && newDurationMs > 0) {
+                  targetStart = `${rStart.slice(0, 10)}T${safeStartClock}`;
+                  targetEnd = addMinutesToLocalIso(targetStart, Math.round(newDurationMs / 60000)).slice(0, 16);
+                } else if (deltaMinutes !== 0) {
+                  targetStart = addMinutesToLocalIso(rStart, deltaMinutes).slice(0, 16);
+                  const rowDur = Number.isFinite(newDurationMs) && newDurationMs > 0
+                    ? Math.round(newDurationMs / 60000)
+                    : Math.max(15, Math.round((new Date(`${rEnd.slice(0, 16)}:00`).getTime() - new Date(`${rStart.slice(0, 16)}:00`).getTime()) / 60000));
+                  targetEnd = addMinutesToLocalIso(targetStart, rowDur).slice(0, 16);
+                } else {
+                  targetStart = rStart;
+                  targetEnd = rEnd;
+                }
+              } else {
+                targetStart = rStart;
+                targetEnd = rEnd;
+              }
             }
-          } else {
-            targetStart = rStart;
-            targetEnd = rEnd;
+            const targetNextStatus = row.id === appt.id
+              ? nextStatus
+              : (startChanged && ['scheduled', 'confirmed', 'no_show', 'rescheduled'].includes(row.status) ? 'rescheduled' : row.status);
+
+            const oldRowOccId = row.occurrence_id || null;
+            let nextRowOccId = oldRowOccId;
+            const effRowServiceId = serviceId || row.service_id || appt.service_id;
+            const effRowProfId = professionalId || row.professional_id || appt.professional_id;
+            const effRowRoomId = roomId !== undefined ? (roomId || null) : (row.room_id || null);
+
+            if (isGroupUpdate && (startChanged || endChanged || profChanged || serviceChanged) && effRowServiceId) {
+              const normStartIso = targetStart.length === 16 ? `${targetStart}:00` : targetStart;
+              const normEndIso = targetEnd.length === 16 ? `${targetEnd}:00` : targetEnd;
+              const matchedSchedId = req.body.classScheduleId || (db.prepare(`
+                SELECT id FROM class_schedules
+                WHERE tenant_id = ? AND service_id = ? AND professional_id = ? AND day_of_week = ?
+                  AND start_time = ? AND end_time = ? AND active = 1
+                LIMIT 1
+              `).get(
+                tenantId,
+                effRowServiceId,
+                effRowProfId,
+                getDayOfWeekFromYmd(normStartIso.slice(0, 10)),
+                normStartIso.slice(11, 16),
+                normEndIso.slice(11, 16)
+              ) as { id: string } | undefined)?.id || null;
+
+              const resolvedOcc = resolveOrCreateGroupOccurrenceTx({
+                tenantId,
+                serviceId: effRowServiceId,
+                serviceName: targetServiceRowForUpd?.name || 'Turma',
+                professionalId: effRowProfId,
+                roomId: effRowRoomId,
+                classScheduleId: matchedSchedId,
+                startTime: normStartIso,
+                endTime: normEndIso,
+                defaultCapacity: Math.max(1, Number(targetServiceRowForUpd?.default_capacity) || 10),
+                modality: modality || row.modality || 'presential',
+                seriesId: row.series_id || null,
+                patientId: row.patient_id
+              });
+              nextRowOccId = resolvedOcc.occurrenceId;
+            }
+
+            updateApptStmt.run(
+              serviceId || null,
+              professionalId || null,
+              nextRowOccId,
+              roomId !== undefined ? 1 : 0,
+              roomId || null,
+              insuranceId !== undefined ? 1 : 0,
+              insuranceId || null,
+              targetStart,
+              targetEnd,
+              targetNextStatus,
+              notes !== undefined ? notes : null,
+              internalNotes !== undefined ? 1 : 0,
+              typeof internalNotes === 'string' ? internalNotes.trim() || null : null,
+              modality || null,
+              meeting_url !== undefined ? 1 : 0,
+              typeof meeting_url === 'string' ? meeting_url.trim() || null : null,
+              rawDriveUrl !== undefined ? 1 : 0,
+              typeof rawDriveUrl === 'string' ? rawDriveUrl.trim() || null : null,
+              row.id,
+              tenantId
+            );
+            updatedIds.push(row.id);
+
+            if (oldRowOccId && oldRowOccId !== nextRowOccId) {
+              const remCount = (db.prepare(`
+                SELECT COUNT(*) as c FROM appointments
+                WHERE tenant_id = ? AND occurrence_id = ? AND status != 'cancelled'
+              `).get(tenantId, oldRowOccId) as { c: number } | undefined)?.c || 0;
+              if (remCount === 0) {
+                db.prepare(`UPDATE class_occurrences SET status = 'cancelled', updated_at = datetime('now') WHERE id = ? AND tenant_id = ?`).run(oldRowOccId, tenantId);
+              }
+            }
+
+            if (hasExplicitCoIds) {
+              InstructorParticipationService.syncAppointmentParticipantsTx({
+                tenantId,
+                serviceId: serviceId || row.service_id || appt.service_id,
+                appointmentId: row.id,
+                occurrenceId: nextRowOccId || null,
+                primaryProfessionalId: safeProfId,
+                coInstructorIds: validatedCoIds,
+                source: 'manual',
+                updatedBy: req.user?.userId || 'system',
+                replaceCoInstructors: true
+              });
+            }
+
+            if (startChanged) {
+              db.prepare(`
+                INSERT INTO appointment_status_history (id, appointment_id, previous_status, new_status, changed_by, reason)
+                VALUES (?, ?, ?, ?, ?, ?)
+              `).run(uuidv4(), row.id, row.status, targetNextStatus, req.user ? req.user.name : 'Sistema', reason || 'Horário remarcado');
+            }
           }
+        })();
+      } catch (txErr: any) {
+        if (txErr && typeof txErr.status === 'number') {
+          res.status(txErr.status).json({ error: txErr.error || txErr.message, ...(txErr.code ? { code: txErr.code } : {}) });
+          return;
         }
-        const targetNextStatus = row.id === appt.id
-          ? nextStatus
-          : (startChanged && ['scheduled', 'confirmed', 'no_show', 'rescheduled'].includes(row.status) ? 'rescheduled' : row.status);
+        throw txErr;
+      }
 
-        updateApptStmt.run(
-          serviceId || null,
-          professionalId || null,
-          roomId !== undefined ? 1 : 0,
-          roomId || null,
-          insuranceId !== undefined ? 1 : 0,
-          insuranceId || null,
-          targetStart,
-          targetEnd,
-          targetNextStatus,
-          notes !== undefined ? notes : null,
-          internalNotes !== undefined ? 1 : 0,
-          typeof internalNotes === 'string' ? internalNotes.trim() || null : null,
-          modality || null,
-          meeting_url !== undefined ? 1 : 0,
-          typeof meeting_url === 'string' ? meeting_url.trim() || null : null,
-          rawDriveUrl !== undefined ? 1 : 0,
-          typeof rawDriveUrl === 'string' ? rawDriveUrl.trim() || null : null,
-          row.id,
-          tenantId
-        );
-        updatedIds.push(row.id);
-
-        if (hasExplicitCoIds) {
-          InstructorParticipationService.syncAppointmentParticipantsTx({
-            tenantId,
-            serviceId: serviceId || row.service_id || appt.service_id,
-            appointmentId: row.id,
-            occurrenceId: row.occurrence_id || null,
-            primaryProfessionalId: safeProfId,
-            coInstructorIds: validatedCoIds,
-            source: 'manual',
-            updatedBy: req.user?.userId || 'system',
-            replaceCoInstructors: true
-          });
-        }
-
+      for (const row of targetSeriesRows) {
         if (startChanged) {
-          db.prepare(`
-            INSERT INTO appointment_status_history (id, appointment_id, previous_status, new_status, changed_by, reason)
-            VALUES (?, ?, ?, ?, ?, ?)
-          `).run(uuidv4(), row.id, row.status, targetNextStatus, req.user ? req.user.name : 'Sistema', reason || 'Horário remarcado');
-
           NotificationService.cancelAppointmentReminders(row.id);
           NotificationService.scheduleAppointmentReminder(row.id);
         }
@@ -2552,7 +2709,8 @@ export class AppointmentController {
                allowed_recurrence_frequencies_json, default_recurrence_frequency,
                custom_recurrence_intervals_json, default_recurrence_interval_json,
                service_domain, clinical_module,
-               billing_mode, periodic_price, billing_cycle_months, default_package_id, default_billing_due_day
+               billing_mode, periodic_price, billing_cycle_months, default_package_id, default_billing_due_day,
+               default_template_id
         FROM services WHERE id = ? AND tenant_id = ? AND active = 1
       `).get(serviceId, tenantId) as any;
       if (!serviceRow) {
@@ -2749,18 +2907,43 @@ export class AppointmentController {
       })();
 
       const runTx = db.transaction(() => {
+        const effWeekdays = Array.isArray(recurrence?.weekdays) && recurrence.weekdays.length > 0
+          ? recurrence.weekdays
+          : Array.from(new Set(evalResult.occurrences.map(o => o.dayOfWeek)));
+
+        const scheduleRulesForPlan = recScheduleEntries && recScheduleEntries.length > 0
+          ? recScheduleEntries
+          : effWeekdays.map((wd: number) => ({
+              weekday: wd,
+              startTime: startClock,
+              endTime: endClock,
+              professionalId,
+              classScheduleId: classScheduleId || null,
+              roomId: roomId || null,
+              modality: effectiveModality
+            }));
+
         if (billingCov.enrollPlanInput) {
           const enrolled = BillingCycleService.createPeriodicPlanTx({
             ...billingCov.enrollPlanInput,
+            seriesId,
+            classScheduleId: classScheduleId ? String(classScheduleId) : (recScheduleEntries?.[0]?.classScheduleId || null),
+            scheduleRules: scheduleRulesForPlan,
+            planDurationCode: evalResult.durationCode || null,
+            weeklyFrequency: billingCov.enrollPlanInput.weeklyFrequency ?? effWeekdays.length,
             createdBy: req.user?.userId || 'system'
           });
           resolvedBillingPlanId = enrolled.plan.id;
           generatedBillingPaymentIds = enrolled.generatedIds;
+        } else if (resolvedBillingPlanId) {
+          db.prepare(`
+            UPDATE recurring_billing_plans
+            SET series_id = COALESCE(series_id, ?),
+                schedule_rules_json = COALESCE(schedule_rules_json, ?),
+                updated_at = datetime('now')
+            WHERE id = ? AND tenant_id = ?
+          `).run(seriesId, JSON.stringify(scheduleRulesForPlan), resolvedBillingPlanId, tenantId);
         }
-
-        const effWeekdays = Array.isArray(recurrence?.weekdays) && recurrence.weekdays.length > 0
-          ? recurrence.weekdays
-          : Array.from(new Set(evalResult.occurrences.map(o => o.dayOfWeek)));
 
         db.prepare(`
           INSERT INTO class_series (
@@ -2768,8 +2951,8 @@ export class AppointmentController {
             modality, frequency, weekdays_json, interval_value, interval_unit,
             series_mode, plan_duration_code, schedule_entries_json,
             start_time_hhmm, duration_minutes, start_date, end_date,
-            max_occurrences, capacity, unit_price, status, created_by
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)
+            max_occurrences, capacity, unit_price, recurring_plan_id, package_contract_id, status, created_by
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)
         `).run(
           seriesId,
           tenantId,
@@ -2794,6 +2977,8 @@ export class AppointmentController {
           dates.length,
           defaultCapacity,
           isCoveredSeries ? 0 : agreedAmount,
+          resolvedBillingPlanId,
+          isPackageCovered ? String(packageContractId) : null,
           req.user?.userId || 'system'
         );
 
@@ -2886,8 +3071,9 @@ export class AppointmentController {
               room_id, start_time, end_time, status, modality, meeting_url, google_drive_url,
               patient_notes, internal_notes, insurance_id, clinical_module, profession_id,
               series_id, occurrence_id, service_kind, attendance_status,
-              package_contract_id, is_package_covered, recurring_plan_id, billing_coverage_type, created_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)
+              package_contract_id, is_package_covered, recurring_plan_id, billing_coverage_type,
+              template_id, catalog_price_snapshot, created_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)
           `).run(
             apptId, tenantId, apptNumber, patientId, occProfId, serviceId,
             effRoomId, sIso, eIso, effOccModality,
@@ -2900,6 +3086,8 @@ export class AppointmentController {
             isPackageCovered ? 1 : 0,
             resolvedBillingPlanId,
             billingCov.mode,
+            serviceRow.default_template_id || null,
+            Number(serviceRow.price) > 0 ? Number(serviceRow.price) : Number(serviceRow.periodic_price || 0),
             req.user?.userId || 'system'
           );
 

@@ -128,6 +128,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
   const [professionalId, setProfessionalId] = useState<string>('');
   const [serviceId, setServiceId] = useState<string>('');
   const [appointmentPrice, setAppointmentPrice] = useState('');
+  const [priceOverrideReason, setPriceOverrideReason] = useState('');
   const priceServiceId = useRef<string | null>(null);
   const priceEdited = useRef(false);
   const [insuranceId, setInsuranceId] = useState<string>('');
@@ -358,13 +359,21 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
     const selectedService = services.find(service => service.id === serviceId);
-    if (priceServiceId.current !== serviceId) priceEdited.current = false;
+    if (priceServiceId.current !== serviceId) {
+      priceEdited.current = false;
+      setPriceOverrideReason('');
+    }
     if (priceEdited.current) return;
     priceServiceId.current = serviceId;
-    setAppointmentPrice(selectedService ? formatAppointmentPrice(Number(selectedService.price)) : '');
     if (selectedService) {
+      const rawPrice = Number(selectedService.price ?? selectedService.catalog_price ?? 0);
+      const fallbackPeriodic = Number(selectedService.periodic_price ?? 0);
+      const effectiveCatalogPrice = rawPrice > 0 ? rawPrice : (fallbackPeriodic > 0 ? fallbackPeriodic : 0);
+      setAppointmentPrice(formatAppointmentPrice(effectiveCatalogPrice));
       const dur = selectedService.duration_minutes || (selectedService as any).duration || 50;
       setRetroEndTime(prevEnd => computeEndTimeStr(retroStartTime, dur) || prevEnd);
+    } else {
+      setAppointmentPrice('');
     }
   }, [isOpen, serviceId, services]);
 
@@ -638,6 +647,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
       .filter(cs => selectedScheduleIds.includes(cs.id))
       .map(cs => ({
         classScheduleId: cs.id,
+        dayOfWeek: cs.day_of_week,
         weekday: cs.day_of_week,
         startTime: cs.start_time.slice(0, 5),
         endTime: cs.end_time.slice(0, 5),
@@ -1004,6 +1014,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
           professionalId,
           serviceId,
           appointmentPrice: normalizedPrice,
+          ...(priceOverrideReason.trim() ? { priceOverrideReason: priceOverrideReason.trim() } : {}),
           packageContractId: isCoveredByPackage ? packageContractId : undefined,
           ...(isStudioTarget
             ? {
@@ -1044,6 +1055,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
         professionalId,
         serviceId,
         appointmentPrice: normalizedPrice,
+        ...(priceOverrideReason.trim() ? { priceOverrideReason: priceOverrideReason.trim() } : {}),
         packageContractId: isCoveredByPackage ? packageContractId : undefined,
         ...(isStudioTarget
           ? {
@@ -1289,7 +1301,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                     <div className="flex items-center gap-1 w-24 border-l border-slate-200 pl-2">
                       <span aria-hidden="true" className="shrink-0 whitespace-nowrap text-slate-500">R$</span>
                       <input id="appointment-price" type="text" inputMode="decimal" required
-                        value={isSessionFinanciallyCovered ? '0,00' : appointmentPrice} disabled={!serviceId || isSessionFinanciallyCovered}
+                        value={appointmentPrice} disabled={!serviceId || isSessionFinanciallyCovered}
                         onChange={event => {
                           if (!/^[\d.,]*$/.test(event.target.value)) return;
                           priceEdited.current = true;
@@ -1298,8 +1310,8 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                         onBlur={() => { const value = parseAppointmentPrice(appointmentPrice); if (value !== null) setAppointmentPrice(formatAppointmentPrice(value)); }}
                         aria-label="Valor da consulta *"
                         aria-invalid={!isSessionFinanciallyCovered && appointmentPrice !== '' && parseAppointmentPrice(appointmentPrice) === null}
-                        title={isSessionFinanciallyCovered ? 'Aula coberta por contratação periódica ou pacote' : undefined}
-                        className={`w-full min-w-0 !min-h-0 flex-1 !p-0 bg-transparent outline-none text-xs ${isSessionFinanciallyCovered ? 'text-emerald-700 font-semibold' : ''}`} />
+                        title={isSessionFinanciallyCovered ? 'Valor de referência do serviço (aula coberta por contratação ativa)' : 'Valor de referência / cobrado'}
+                        className={`w-full min-w-0 !min-h-0 flex-1 !p-0 bg-transparent outline-none text-xs ${isSessionFinanciallyCovered ? 'text-slate-600 font-semibold' : ''}`} />
                     </div>
                   }
                 />
@@ -1307,12 +1319,44 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
             </div>
           </div>
 
+          {isStudioTarget && selectedServiceObj && (
+            <div className="px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+              <div className="flex items-center gap-1.5 text-slate-700">
+                <span className="font-semibold text-slate-500">Valor cadastrado do serviço (referência):</span>
+                <strong className="text-slate-900">
+                  {formatCurrencyBRL(Number(selectedServiceObj.price || selectedServiceObj.catalog_price || 0))}
+                </strong>
+                {isPeriodicBillingMode(selectedServiceObj.billing_mode) && selectedServiceObj.periodic_price ? (
+                  <span className="text-indigo-700 font-semibold">
+                    • {formatCurrencyBRL(Number(selectedServiceObj.periodic_price))}/{SERVICE_BILLING_MODE_LABELS[selectedServiceObj.billing_mode]?.toLowerCase()}
+                  </span>
+                ) : null}
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="font-semibold text-slate-500">Valor efetivamente cobrado:</span>
+                {billingChoice === 'existing_plan' || billingChoice === 'package' ? (
+                  <strong className="text-emerald-700">
+                    R$ 0,00 (coberto por plano/pacote ativo)
+                  </strong>
+                ) : billingChoice === 'enroll_periodic' ? (
+                  <strong className="text-emerald-700">
+                    {formatCurrencyBRL(parseAppointmentPrice(enrollAmount) ?? 0)} ({SERVICE_BILLING_MODE_LABELS[enrollFrequency]}) • R$ 0,00 avulso
+                  </strong>
+                ) : (
+                  <strong className="text-indigo-700">
+                    {formatCurrencyBRL(parseAppointmentPrice(appointmentPrice) ?? 0)} (aula avulsa)
+                  </strong>
+                )}
+              </div>
+            </div>
+          )}
+
           {isStudioTarget && patientId && serviceId ? (
             <div className="p-3 rounded-2xl bg-emerald-50/70 border border-emerald-200 space-y-2.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <label className="font-bold text-emerald-950 flex items-center gap-1.5 text-xs">
                   <CreditCard className="w-4 h-4 text-emerald-600" />
-                  Modalidade de Cobrança da Aula
+                  Contratação e Cobrança da Aula
                 </label>
                 {isSessionFinanciallyCovered && (
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-600 text-white">
@@ -1321,42 +1365,36 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                 )}
               </div>
 
-              <div className="flex flex-wrap gap-1.5">
-                {activePeriodicPlans.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => {
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+                <button
+                  type="button"
+                  disabled={activePeriodicPlans.length === 0 && compatiblePackages.length === 0}
+                  onClick={() => {
+                    if (activePeriodicPlans.length > 0) {
                       setPackageContractId('');
                       if (!selectedBillingPlanId) setSelectedBillingPlanId(activePeriodicPlans[0].id);
                       setBillingChoice('existing_plan');
-                    }}
-                    className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border cursor-pointer transition-colors ${
-                      billingChoice === 'existing_plan'
-                        ? 'bg-emerald-600 text-white border-emerald-600'
-                        : 'bg-white text-slate-700 border-slate-200 hover:border-emerald-300'
-                    }`}
-                  >
-                    Plano Ativo ({activePeriodicPlans.length})
-                  </button>
-                )}
-
-                {compatiblePackages.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => {
+                    } else if (compatiblePackages.length > 0) {
                       setSelectedBillingPlanId('');
                       if (!packageContractId) setPackageContractId(compatiblePackages[0].id);
                       setBillingChoice('package');
-                    }}
-                    className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border cursor-pointer transition-colors ${
-                      billingChoice === 'package'
-                        ? 'bg-indigo-600 text-white border-indigo-600'
-                        : 'bg-white text-slate-700 border-slate-200 hover:border-indigo-300'
-                    }`}
-                  >
-                    Pacote Contratado ({compatiblePackages.length})
-                  </button>
-                )}
+                    }
+                  }}
+                  className={`px-2.5 py-2 rounded-xl text-left text-[11px] font-bold border transition-colors ${
+                    activePeriodicPlans.length === 0 && compatiblePackages.length === 0
+                      ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-60'
+                      : billingChoice === 'existing_plan' || billingChoice === 'package'
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs cursor-pointer'
+                        : 'bg-white text-slate-700 border-slate-200 hover:border-emerald-300 cursor-pointer'
+                  }`}
+                >
+                  <span className="block">A. Utilizar contratação existente</span>
+                  <span className={`block text-[10px] font-normal mt-0.5 ${billingChoice === 'existing_plan' || billingChoice === 'package' ? 'text-emerald-100' : 'text-slate-500'}`}>
+                    {activePeriodicPlans.length + compatiblePackages.length > 0
+                      ? `${activePeriodicPlans.length + compatiblePackages.length} plano(s)/pacote(s) ativo(s)`
+                      : 'Nenhum plano ativo para este aluno'}
+                  </span>
+                </button>
 
                 {!isRetroactive && (
                   <button
@@ -1365,14 +1403,30 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                       setPackageContractId('');
                       setSelectedBillingPlanId('');
                       setBillingChoice('enroll_periodic');
+                      if (serviceRecurrenceConfig.allowRecurrence && serviceRecurrenceConfig.allowedFrequencies.length > 0 && !isRecurring) {
+                        setIsRecurring(true);
+                        const durMap: Record<PeriodicBillingFrequency, Exclude<PlanDurationCode, 'legacy_frequency'>> = {
+                          monthly: '1_month',
+                          quarterly: '3_months',
+                          semiannual: '6_months',
+                          annual: '12_months'
+                        };
+                        const targetDur = durMap[enrollFrequency] || '1_month';
+                        if ((serviceRecurrenceConfig.allowedPlanDurations || ALL_PLAN_DURATIONS).includes(targetDur)) {
+                          setRecurrenceDurationCode(targetDur);
+                        }
+                      }
                     }}
-                    className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border cursor-pointer transition-colors ${
+                    className={`px-2.5 py-2 rounded-xl text-left text-[11px] font-bold border cursor-pointer transition-colors ${
                       billingChoice === 'enroll_periodic'
-                        ? 'bg-emerald-600 text-white border-emerald-600'
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
                         : 'bg-white text-slate-700 border-slate-200 hover:border-emerald-300'
                     }`}
                   >
-                    Nova Contratação Periódica
+                    <span className="block">B. Criar nova contratação periódica</span>
+                    <span className={`block text-[10px] font-normal mt-0.5 ${billingChoice === 'enroll_periodic' ? 'text-emerald-100' : 'text-slate-500'}`}>
+                      Mensal, Trimestral, Semestral ou Anual
+                    </span>
                   </button>
                 )}
 
@@ -1383,63 +1437,119 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                     setSelectedBillingPlanId('');
                     setBillingChoice('drop_in');
                   }}
-                  className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border cursor-pointer transition-colors ${
+                  className={`px-2.5 py-2 rounded-xl text-left text-[11px] font-bold border cursor-pointer transition-colors ${
                     billingChoice === 'drop_in'
-                      ? 'bg-slate-800 text-white border-slate-800'
+                      ? 'bg-slate-800 text-white border-slate-800 shadow-2xs'
                       : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
                   }`}
                 >
-                  Cobrança Avulsa por Aula
+                  <span className="block">C. Agendar aula avulsa</span>
+                  <span className={`block text-[10px] font-normal mt-0.5 ${billingChoice === 'drop_in' ? 'text-slate-300' : 'text-slate-500'}`}>
+                    Cobrança individual ({formatCurrencyBRL(parseAppointmentPrice(appointmentPrice) ?? 0)})
+                  </span>
                 </button>
               </div>
 
-              {billingChoice === 'existing_plan' && activePeriodicPlans.length > 0 && (
-                <div className="space-y-1.5">
-                  <select
-                    value={selectedBillingPlanId}
-                    onChange={e => {
-                      setSelectedBillingPlanId(e.target.value);
-                      setPackageContractId('');
-                    }}
-                    className="w-full border border-emerald-200 rounded-xl px-3 py-2 text-xs bg-white font-semibold text-slate-800"
-                  >
-                    {activePeriodicPlans.map(plan => (
-                      <option key={plan.id} value={plan.id}>
-                        {plan.title} — {formatCurrencyBRL(Number(plan.amount || 0))} (
-                        {SERVICE_BILLING_MODE_LABELS[(plan.billing_frequency || 'monthly') as keyof typeof SERVICE_BILLING_MODE_LABELS] || 'Mensal'}
-                        ) • Venc. dia {plan.due_day}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="flex items-start gap-1.5 text-[11px] text-emerald-900 bg-white/90 border border-emerald-200 rounded-lg px-2.5 py-1.5">
-                    <Info className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                    <span>
-                      Aula coberta pela contratação {selectedPeriodicPlanObj?.title ? `"${selectedPeriodicPlanObj.title}"` : 'periódica'}. Nenhuma cobrança avulsa será criada.
-                    </span>
-                  </div>
-                </div>
-              )}
+              {(billingChoice === 'existing_plan' || billingChoice === 'package') && (activePeriodicPlans.length > 0 || compatiblePackages.length > 0) && (
+                <div className="space-y-1.5 pt-1 border-t border-emerald-200/70">
+                  {activePeriodicPlans.length > 0 && compatiblePackages.length > 0 && (
+                    <div className="flex gap-1.5 mb-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPackageContractId('');
+                          if (!selectedBillingPlanId) setSelectedBillingPlanId(activePeriodicPlans[0].id);
+                          setBillingChoice('existing_plan');
+                        }}
+                        className={`px-2 py-1 rounded-lg text-[10px] font-bold border cursor-pointer ${
+                          billingChoice === 'existing_plan'
+                            ? 'bg-emerald-700 text-white border-emerald-700'
+                            : 'bg-white text-slate-600 border-slate-200'
+                        }`}
+                      >
+                        Planos Periódicos ({activePeriodicPlans.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedBillingPlanId('');
+                          if (!packageContractId) setPackageContractId(compatiblePackages[0].id);
+                          setBillingChoice('package');
+                        }}
+                        className={`px-2 py-1 rounded-lg text-[10px] font-bold border cursor-pointer ${
+                          billingChoice === 'package'
+                            ? 'bg-indigo-600 text-white border-indigo-600'
+                            : 'bg-white text-slate-600 border-slate-200'
+                        }`}
+                      >
+                        Pacotes de Aulas ({compatiblePackages.length})
+                      </button>
+                    </div>
+                  )}
 
-              {billingChoice === 'package' && compatiblePackages.length > 0 && (
-                <div className="space-y-1.5">
-                  <select
-                    value={packageContractId}
-                    onChange={e => setPackageContractId(e.target.value)}
-                    className="w-full border border-indigo-200 rounded-xl px-3 py-2 text-xs bg-white font-semibold text-slate-800"
-                  >
-                    {compatiblePackages.map(cp => (
-                      <option key={cp.id} value={cp.id}>
-                        {cp.package_name_snapshot} — {cp.matchedRemaining} aula(s) restante(s)
-                        {cp.end_date ? ` • até ${cp.end_date}` : ''}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="flex items-start gap-1.5 text-[11px] text-indigo-900 bg-white/90 border border-indigo-200 rounded-lg px-2.5 py-1.5">
-                    <Info className="w-3.5 h-3.5 text-indigo-600 shrink-0 mt-0.5" />
-                    <span>
-                      Aula coberta pelo pacote contratado. Nenhuma cobrança avulsa será criada.
-                    </span>
-                  </div>
+                  {billingChoice === 'existing_plan' && activePeriodicPlans.length > 0 && (
+                    <>
+                      <select
+                        value={selectedBillingPlanId}
+                        onChange={e => {
+                          setSelectedBillingPlanId(e.target.value);
+                          setPackageContractId('');
+                        }}
+                        className="w-full border border-emerald-200 rounded-xl px-3 py-2 text-xs bg-white font-semibold text-slate-800"
+                      >
+                        {activePeriodicPlans.map(plan => (
+                          <option key={plan.id} value={plan.id}>
+                            {plan.title} — {formatCurrencyBRL(Number(plan.amount || 0))} (
+                            {SERVICE_BILLING_MODE_LABELS[(plan.billing_frequency || 'monthly') as keyof typeof SERVICE_BILLING_MODE_LABELS] || 'Mensal'}
+                            ) • Venc. dia {plan.due_day}
+                            {plan.scheduled_sessions_count !== undefined ? ` • ${plan.scheduled_sessions_count} aula(s) vinculada(s)` : ''}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="flex flex-wrap items-center justify-between gap-1.5 text-[11px] text-emerald-900 bg-white/90 border border-emerald-200 rounded-lg px-2.5 py-1.5">
+                        <div className="flex items-start gap-1.5">
+                          <Info className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                          <span>
+                            Aula vinculada ao contrato {selectedPeriodicPlanObj?.title ? `"${selectedPeriodicPlanObj.title}"` : 'periódico'}. Nenhuma cobrança avulsa será gerada.
+                          </span>
+                        </div>
+                        {selectedPeriodicPlanObj && (
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            Number(selectedPeriodicPlanObj.overdue_payments_count) > 0
+                              ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                              : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          }`}>
+                            {Number(selectedPeriodicPlanObj.overdue_payments_count) > 0
+                              ? `${selectedPeriodicPlanObj.overdue_payments_count} cobrança(s) vencida(s)`
+                              : 'Financeiro em dia'}
+                          </span>
+                        )}
+                      </div>
+                    </>
+                  )}
+
+                  {billingChoice === 'package' && compatiblePackages.length > 0 && (
+                    <>
+                      <select
+                        value={packageContractId}
+                        onChange={e => setPackageContractId(e.target.value)}
+                        className="w-full border border-indigo-200 rounded-xl px-3 py-2 text-xs bg-white font-semibold text-slate-800"
+                      >
+                        {compatiblePackages.map(cp => (
+                          <option key={cp.id} value={cp.id}>
+                            {cp.package_name_snapshot} — {cp.matchedRemaining} aula(s) restante(s)
+                            {cp.end_date ? ` • até ${cp.end_date}` : ''}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="flex items-start gap-1.5 text-[11px] text-indigo-900 bg-white/90 border border-indigo-200 rounded-lg px-2.5 py-1.5">
+                        <Info className="w-3.5 h-3.5 text-indigo-600 shrink-0 mt-0.5" />
+                        <span>
+                          Aula coberta pelo pacote contratado. Nenhuma cobrança avulsa será criada.
+                        </span>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
 
@@ -1450,7 +1560,20 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                       <label className="block font-semibold text-slate-700 mb-0.5 text-[11px]">Periodicidade financeira</label>
                       <select
                         value={enrollFrequency}
-                        onChange={e => setEnrollFrequency(e.target.value as PeriodicBillingFrequency)}
+                        onChange={e => {
+                          const nextFreq = e.target.value as PeriodicBillingFrequency;
+                          setEnrollFrequency(nextFreq);
+                          const durMap: Record<PeriodicBillingFrequency, Exclude<PlanDurationCode, 'legacy_frequency'>> = {
+                            monthly: '1_month',
+                            quarterly: '3_months',
+                            semiannual: '6_months',
+                            annual: '12_months'
+                          };
+                          const targetDur = durMap[nextFreq];
+                          if (targetDur && (serviceRecurrenceConfig.allowedPlanDurations || ALL_PLAN_DURATIONS).includes(targetDur)) {
+                            setRecurrenceDurationCode(targetDur);
+                          }
+                        }}
                         className="w-full border border-emerald-200 rounded-lg px-2 py-1.5 text-xs bg-white font-medium"
                       >
                         <option value="monthly">Mensal (1 mês)</option>
@@ -1545,9 +1668,43 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                   <div className="flex items-start gap-1.5 text-[11px] text-emerald-900 bg-white/90 border border-emerald-200 rounded-lg px-2.5 py-1.5">
                     <Info className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
                     <span>
-                      Aula coberta pela contratação periódica ({SERVICE_BILLING_MODE_LABELS[enrollFrequency]} — a cada {getCycleMonthsForBillingMode(enrollFrequency)} {getCycleMonthsForBillingMode(enrollFrequency) === 1 ? 'mês' : 'meses'}). Nenhuma cobrança avulsa será criada.
+                      Cria em um único fluxo o contrato do aluno ({SERVICE_BILLING_MODE_LABELS[enrollFrequency]}), os agendamentos da série e as cobranças periódicas sem gerar cobranças avulsas por aula.
                     </span>
                   </div>
+                </div>
+              )}
+
+              {billingChoice === 'drop_in' && (
+                <div className="space-y-2 pt-1 border-t border-emerald-200/70">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-700 bg-white/90 border border-slate-200 rounded-lg px-2.5 py-1.5">
+                    <span>
+                      Cobrança avulsa por aula: <strong>{formatCurrencyBRL(parseAppointmentPrice(appointmentPrice) ?? 0)}</strong>
+                    </span>
+                    {selectedServiceObj && Math.abs((parseAppointmentPrice(appointmentPrice) ?? 0) - Number(selectedServiceObj.price || 0)) > 0.009 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          priceEdited.current = false;
+                          setPriceOverrideReason('');
+                          setAppointmentPrice(formatAppointmentPrice(Number(selectedServiceObj.price || 0)));
+                        }}
+                        className="text-[10px] font-bold text-indigo-600 hover:underline cursor-pointer"
+                      >
+                        Restaurar valor cadastrado ({formatCurrencyBRL(Number(selectedServiceObj.price || 0))})
+                      </button>
+                    )}
+                  </div>
+                  {selectedServiceObj && Math.abs((parseAppointmentPrice(appointmentPrice) ?? 0) - Number(selectedServiceObj.price || 0)) > 0.009 && (
+                    <div>
+                      <input
+                        type="text"
+                        value={priceOverrideReason}
+                        onChange={e => setPriceOverrideReason(e.target.value)}
+                        placeholder="Motivo do ajuste manual do valor para esta aula (ex.: desconto experimental, cortesia)..."
+                        className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-[11px] bg-white"
+                      />
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -2332,7 +2489,11 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                     (loadingRecurrencePreview || recurrencePreviewError || (recurrencePreview && !recurrencePreview.valid))
                 ) ||
                 (services.length > 0 && (
-                  (isRetroactive ? (!date || !retroStartTime || !retroEndTime) : (!isCustomTime ? !selectedSlot : (!date || !customTime || Boolean(customTimeSlotConflict)))) ||
+                  (isRetroactive
+                    ? (!date || !retroStartTime || !retroEndTime)
+                    : (!isCustomTime
+                      ? (!selectedSlot && !(isRecurring && isStudioTarget && selectedScheduleEntriesPayload && selectedScheduleEntriesPayload.length > 0))
+                      : (!date || !customTime || Boolean(customTimeSlotConflict)))) ||
                   !patientId ||
                   !professionalId ||
                   !serviceId

@@ -43,6 +43,7 @@ import { PersonalExerciseLibraryModal } from './PersonalExerciseLibraryModal';
 import { PersonalWorkoutBuilder } from './PersonalWorkoutBuilder';
 import { PersonalAssessmentModal } from './PersonalAssessmentModal';
 import { PersonalAIAssistantModal } from './PersonalAIAssistantModal';
+import { StudioClassExercisePlanPanel } from './StudioClassExercisePlanPanel';
 import { PersonalAttendanceReportsTab } from './PersonalAttendanceReportsTab';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
 import { ProfessionalModuleHeader } from '../common/ProfessionalModuleHeader';
@@ -863,24 +864,31 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
         <div className="max-w-6xl mx-auto space-y-6">
           {/* Se o perfil do aluno estiver ativo, renderiza o perfil detalhado */}
           {selectedStudentId ? (
-            <PersonalStudentProfile
-              studentId={selectedStudentId}
-              onBack={lockStudentContext ? undefined : () => {
-                handleSelectStudent(null);
-                loadDashboard();
-                loadStudents();
-              }}
-              onOpenNewWorkout={() => {
-                setWorkoutToEdit(null);
-                setIsWorkoutBuilderOpen(true);
-              }}
-              onEditWorkout={(w) => {
-                setWorkoutToEdit(w);
-                setIsWorkoutBuilderOpen(true);
-              }}
-              onOpenNewAssessment={() => setIsAssessmentModalOpen(true)}
-              onOpenAIAssistant={() => setIsAIAssistantOpen(true)}
-            />
+            <div className="space-y-4">
+              {studioSession && studioSession.appointmentId && (
+                <StudioClassExercisePlanPanel
+                  occurrenceKey={studioSession.occurrenceId || `apt:${studioSession.appointmentId}`}
+                />
+              )}
+              <PersonalStudentProfile
+                studentId={selectedStudentId}
+                onBack={lockStudentContext ? undefined : () => {
+                  handleSelectStudent(null);
+                  loadDashboard();
+                  loadStudents();
+                }}
+                onOpenNewWorkout={() => {
+                  setWorkoutToEdit(null);
+                  setIsWorkoutBuilderOpen(true);
+                }}
+                onEditWorkout={(w) => {
+                  setWorkoutToEdit(w);
+                  setIsWorkoutBuilderOpen(true);
+                }}
+                onOpenNewAssessment={() => setIsAssessmentModalOpen(true)}
+                onOpenAIAssistant={() => setIsAIAssistantOpen(true)}
+              />
+            </div>
           ) : (
             <>
 

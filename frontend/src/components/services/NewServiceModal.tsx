@@ -7,6 +7,7 @@ import { Professional, Room, Service } from '../../types';
 import { ClassScheduleSection, DraftClassScheduleInput } from './ClassScheduleSection';
 import { ServiceRecurrenceConfigPanel } from './ServiceRecurrenceConfigPanel';
 import { ServiceBillingConfigPanel, ServicePackageOption } from './ServiceBillingConfigPanel';
+import { ServiceTemplatesConfigPanel } from './ServiceTemplatesConfigPanel';
 import { LinkedInstructorsSelector } from './LinkedInstructorsSelector';
 import {
   ALL_PLAN_DURATIONS,
@@ -72,6 +73,8 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
   const [periodicPrice, setPeriodicPrice] = useState<string>('');
   const [defaultPackageId, setDefaultPackageId] = useState<string>('');
   const [defaultBillingDueDay, setDefaultBillingDueDay] = useState<string>('');
+  const [defaultTemplateId, setDefaultTemplateId] = useState<string>('');
+  const [linkedTemplateIds, setLinkedTemplateIds] = useState<string[]>([]);
   const [availablePackages, setAvailablePackages] = useState<ServicePackageOption[]>([]);
   const [description, setDescription] = useState<string>('');
   const [draftSchedules, setDraftSchedules] = useState<DraftClassScheduleInput[]>([]);
@@ -127,6 +130,8 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
         setPeriodicPrice(serviceToEdit.periodic_price !== undefined && serviceToEdit.periodic_price !== null ? String(serviceToEdit.periodic_price) : '');
         setDefaultPackageId(serviceToEdit.default_package_id || '');
         setDefaultBillingDueDay(serviceToEdit.default_billing_due_day !== undefined && serviceToEdit.default_billing_due_day !== null ? String(serviceToEdit.default_billing_due_day) : '');
+        setDefaultTemplateId(serviceToEdit.default_template_id || '');
+        setLinkedTemplateIds(Array.isArray(serviceToEdit.linked_template_ids) ? serviceToEdit.linked_template_ids : (serviceToEdit.default_template_id ? [serviceToEdit.default_template_id] : []));
         setDescription(serviceToEdit.description || '');
         const editPrimaryId = serviceToEdit.professional_id || initialProfessionalId || professionals[0]?.id || '';
         setProfessionalId(editPrimaryId);
@@ -154,6 +159,8 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
         setPeriodicPrice('');
         setDefaultPackageId('');
         setDefaultBillingDueDay('');
+        setDefaultTemplateId('');
+        setLinkedTemplateIds([]);
         setDescription('');
         let defaultProf = '';
         if (initialProfessionalId && professionals.some(p => p.id === initialProfessionalId)) {
@@ -258,7 +265,9 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
               billingMode,
               periodicPrice: isPeriodicSave ? numPeriodicPrice : null,
               defaultPackageId: billingMode === 'package' && defaultPackageId ? defaultPackageId : null,
-              defaultBillingDueDay: isPeriodicSave && defaultBillingDueDay.trim() !== '' ? Number(defaultBillingDueDay) : null
+              defaultBillingDueDay: isPeriodicSave && defaultBillingDueDay.trim() !== '' ? Number(defaultBillingDueDay) : null,
+              defaultTemplateId: defaultTemplateId || null,
+              linkedTemplateIds
             }
           : {}),
         classSchedules: shouldSendDraftSchedules ? draftSchedules : undefined,
@@ -546,6 +555,15 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
                   setPeriodicPrice(next.periodicPrice);
                   setDefaultPackageId(next.defaultPackageId);
                   setDefaultBillingDueDay(next.defaultBillingDueDay);
+                }}
+              />
+              <ServiceTemplatesConfigPanel
+                compact
+                defaultTemplateId={defaultTemplateId}
+                linkedTemplateIds={linkedTemplateIds}
+                onChange={next => {
+                  setDefaultTemplateId(next.defaultTemplateId);
+                  setLinkedTemplateIds(next.linkedTemplateIds);
                 }}
               />
             </div>

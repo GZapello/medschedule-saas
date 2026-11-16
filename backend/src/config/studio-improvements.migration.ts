@@ -602,4 +602,67 @@ export function migrateStudioImprovements(rawDb: DatabaseSync): void {
   } catch (e) {
     console.warn('[StudioMigration] Aviso ao criar índices de cobrança periódica:', e);
   }
+
+  // 12. Integração Zemda Studio: Templates por Serviço/Aula, Vínculo Contrato <-> Série/Turma e Auditoria de Contratações
+  addColIfMissing('services', 'default_template_id', 'TEXT');
+  addColIfMissing('services', 'linked_template_ids_json', 'TEXT');
+  addColIfMissing('class_schedules', 'default_template_id', 'TEXT');
+  addColIfMissing('class_occurrences', 'template_id', 'TEXT');
+  addColIfMissing('class_occurrences', 'template_snapshot_json', 'TEXT');
+  addColIfMissing('class_occurrences', 'execution_state_json', 'TEXT');
+  addColIfMissing('appointments', 'template_id', 'TEXT');
+  addColIfMissing('appointments', 'template_snapshot_json', 'TEXT');
+  addColIfMissing('appointments', 'execution_state_json', 'TEXT');
+  addColIfMissing('appointments', 'price_override_reason', 'TEXT');
+  addColIfMissing('appointments', 'catalog_price_snapshot', 'REAL');
+
+  addColIfMissing('recurring_billing_plans', 'series_id', 'TEXT');
+  addColIfMissing('recurring_billing_plans', 'class_schedule_id', 'TEXT');
+  addColIfMissing('recurring_billing_plans', 'schedule_rules_json', 'TEXT');
+  addColIfMissing('recurring_billing_plans', 'plan_duration_code', 'TEXT');
+  addColIfMissing('recurring_billing_plans', 'weekly_frequency', 'INTEGER');
+  addColIfMissing('recurring_billing_plans', 'included_sessions', 'INTEGER');
+  addColIfMissing('recurring_billing_plans', 'renewed_from_plan_id', 'TEXT');
+  addColIfMissing('recurring_billing_plans', 'status_reason', 'TEXT');
+
+  addColIfMissing('class_series', 'recurring_plan_id', 'TEXT');
+  addColIfMissing('class_series', 'package_contract_id', 'TEXT');
+
+  try {
+    rawDb.exec(`
+      CREATE TABLE IF NOT EXISTS student_contract_history (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        recurring_plan_id TEXT,
+        package_contract_id TEXT,
+        series_id TEXT,
+        action TEXT NOT NULL,
+        summary TEXT,
+        previous_state_json TEXT,
+        new_state_json TEXT,
+        reason TEXT,
+        created_by TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_student_contract_hist_plan
+        ON student_contract_history(tenant_id, recurring_plan_id, created_at);
+      CREATE INDEX IF NOT EXISTS idx_student_contract_hist_patient
+        ON student_contract_history(tenant_id, patient_id, created_at);
+      CREATE INDEX IF NOT EXISTS idx_rec_billing_series
+        ON recurring_billing_plans(tenant_id, series_id);
+      CREATE INDEX IF NOT EXISTS idx_class_series_plan
+        ON class_series(tenant_id, recurring_plan_id);
+
+      -- Reparo não-destrutivo: se custom_price foi gravado como 0 mas o serviço possui preço cadastrado > 0, restaura o preço do serviço
+      UPDATE professional_services
+      SET custom_price = (SELECT s.price FROM services s WHERE s.id = professional_services.service_id)
+      WHERE custom_price = 0
+        AND EXISTS (SELECT 1 FROM services s WHERE s.id = professional_services.service_id AND s.price > 0);
+    `);
+  } catch (e) {
+    console.warn('[StudioMigration] Aviso ao criar tabelas/índices de integração Studio:', e);
+  }
 }

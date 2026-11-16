@@ -321,6 +321,47 @@ export class BillingCycleService {
   }
 
   /**
+   * Registra evento na trilha de auditoria de contratações do aluno (student_contract_history).
+   */
+  static recordContractHistoryTx(params: {
+    tenantId: string;
+    patientId: string;
+    recurringPlanId?: string | null;
+    packageContractId?: string | null;
+    seriesId?: string | null;
+    action: string;
+    summary?: string | null;
+    previousState?: any;
+    newState?: any;
+    reason?: string | null;
+    createdBy?: string | null;
+  }): void {
+    try {
+      db.prepare(`
+        INSERT INTO student_contract_history (
+          id, tenant_id, patient_id, recurring_plan_id, package_contract_id, series_id,
+          action, summary, previous_state_json, new_state_json, reason, created_by, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      `).run(
+        'sch-' + uuidv4().slice(0, 8),
+        params.tenantId,
+        params.patientId,
+        params.recurringPlanId || null,
+        params.packageContractId || null,
+        params.seriesId || null,
+        params.action,
+        params.summary || null,
+        params.previousState !== undefined ? JSON.stringify(params.previousState) : null,
+        params.newState !== undefined ? JSON.stringify(params.newState) : null,
+        params.reason || null,
+        params.createdBy || 'system'
+      );
+    } catch (e) {
+      console.warn('[BillingCycleService.recordContractHistoryTx] Aviso:', e);
+    }
+  }
+
+  /**
    * Cria um plano periódico (assinatura por serviço no Studio) de forma explícita na contratação do aluno.
    */
   static createPeriodicPlanTx(input: {
@@ -329,6 +370,13 @@ export class BillingCycleService {
     serviceId?: string | null;
     professionalId?: string | null;
     packageContractId?: string | null;
+    seriesId?: string | null;
+    classScheduleId?: string | null;
+    scheduleRules?: any;
+    planDurationCode?: string | null;
+    weeklyFrequency?: number | null;
+    includedSessions?: number | null;
+    renewedFromPlanId?: string | null;
     title: string;
     amount: number;
     billingFrequency?: PeriodicBillingFrequency;
@@ -353,14 +401,25 @@ export class BillingCycleService {
     const planId = 'rbp-' + uuidv4().slice(0, 8);
     const status = input.status === 'paused' ? 'paused' : 'active';
     const coversSessions = input.coversSessions === false ? 0 : 1;
+    const scheduleRulesJson = input.scheduleRules !== undefined && input.scheduleRules !== null
+      ? (typeof input.scheduleRules === 'string' ? input.scheduleRules : JSON.stringify(input.scheduleRules))
+      : null;
+    const weeklyFreq = input.weeklyFrequency !== undefined && input.weeklyFrequency !== null && Number(input.weeklyFrequency) > 0
+      ? Math.floor(Number(input.weeklyFrequency))
+      : null;
+    const inclSessions = input.includedSessions !== undefined && input.includedSessions !== null && Number(input.includedSessions) > 0
+      ? Math.floor(Number(input.includedSessions))
+      : null;
 
     db.prepare(`
       INSERT INTO recurring_billing_plans (
         id, tenant_id, patient_id, service_id, professional_id, package_contract_id,
+        series_id, class_schedule_id, schedule_rules_json, plan_duration_code,
+        weekly_frequency, included_sessions, renewed_from_plan_id,
         title, amount, billing_cycle, billing_frequency, cycle_months, covers_sessions,
         due_day, payment_method, start_date, end_date, status, notes, created_by,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
     `).run(
       planId,
       input.tenantId,
@@ -368,6 +427,13 @@ export class BillingCycleService {
       input.serviceId || null,
       input.professionalId || null,
       input.packageContractId || null,
+      input.seriesId || null,
+      input.classScheduleId || null,
+      scheduleRulesJson,
+      input.planDurationCode || null,
+      weeklyFreq,
+      inclSessions,
+      input.renewedFromPlanId || null,
       String(input.title).trim(),
       roundedAmount,
       frequency,
@@ -400,7 +466,28 @@ export class BillingCycleService {
       skippedCount = genRes.skippedCount;
     }
 
-    const freshPlan = db.prepare(`SELECT * FROM recurring_billing_plans WHERE id = ?`).get(planId);
+    const freshPlan = db.prepare(`SELECT * FROM recurring_billing_plans WHERE id = ?`).get(planId) as any;
+    this.recordContractHistoryTx({
+      tenantId: input.tenantId,
+      patientId: input.patientId,
+      recurringPlanId: planId,
+      packageContractId: input.packageContractId || null,
+      seriesId: input.seriesId || null,
+      action: input.renewedFromPlanId ? 'RENEW_CONTRACT' : 'CREATE_CONTRACT',
+      summary: `Contratação ${FREQUENCY_PT_LABELS[frequency]} (${String(input.title).trim()}) criada por R$ ${roundedAmount.toFixed(2)}`,
+      newState: {
+        id: planId,
+        amount: roundedAmount,
+        billingFrequency: frequency,
+        startDate,
+        endDate,
+        dueDay,
+        seriesId: input.seriesId || null,
+        generatedCharges: generatedIds.length
+      },
+      createdBy: input.createdBy || 'system'
+    });
+
     return { plan: freshPlan, generatedIds, skippedCount };
   }
 
@@ -449,6 +536,21 @@ export class BillingCycleService {
       if (plan.end_date && maxDate > String(plan.end_date).slice(0, 10)) {
         return { plan: null, error: `A vigência do plano expira em ${plan.end_date}.`, code: 'BILLING_PLAN_EXPIRED', status: 409 };
       }
+      if (plan.included_sessions && Number(plan.included_sessions) > 0) {
+        const usedRow = db.prepare(`
+          SELECT COUNT(*) as c FROM appointments
+          WHERE tenant_id = ? AND recurring_plan_id = ? AND status != 'cancelled'
+        `).get(params.tenantId, plan.id) as { c: number } | undefined;
+        const usedCount = Number(usedRow?.c || 0);
+        if (usedCount + cleanDates.length > Number(plan.included_sessions)) {
+          return {
+            plan: null,
+            error: `O limite de ${plan.included_sessions} aula(s) incluída(s) nesta contratação já foi atingido (${usedCount}/${plan.included_sessions}).`,
+            code: 'PLAN_SESSION_LIMIT_EXCEEDED',
+            status: 409
+          };
+        }
+      }
       return { plan };
     }
 
@@ -484,6 +586,16 @@ export class BillingCycleService {
         LIMIT 1
       `).get(params.tenantId, params.patientId, params.serviceId, minDate, maxDate) as any;
 
+      if (candidate && candidate.included_sessions && Number(candidate.included_sessions) > 0) {
+        const usedRow = db.prepare(`
+          SELECT COUNT(*) as c FROM appointments
+          WHERE tenant_id = ? AND recurring_plan_id = ? AND status != 'cancelled'
+        `).get(params.tenantId, candidate.id) as { c: number } | undefined;
+        if (Number(usedRow?.c || 0) + cleanDates.length > Number(candidate.included_sessions)) {
+          return { plan: null };
+        }
+      }
+
       return { plan: candidate || null };
     }
 
@@ -516,6 +628,12 @@ export class BillingCycleService {
       patientId: string;
       serviceId: string;
       professionalId: string;
+      seriesId?: string | null;
+      classScheduleId?: string | null;
+      scheduleRules?: any;
+      planDurationCode?: string | null;
+      weeklyFrequency?: number | null;
+      includedSessions?: number | null;
       title: string;
       amount: number;
       billingFrequency: PeriodicBillingFrequency;
@@ -623,6 +741,12 @@ export class BillingCycleService {
           patientId: params.patientId,
           serviceId: params.serviceId,
           professionalId: params.professionalId,
+          seriesId: params.enrollBillingPlan.seriesId || null,
+          classScheduleId: params.enrollBillingPlan.classScheduleId || null,
+          scheduleRules: params.enrollBillingPlan.scheduleRules ?? null,
+          planDurationCode: params.enrollBillingPlan.planDurationCode || null,
+          weeklyFrequency: params.enrollBillingPlan.weeklyFrequency ?? null,
+          includedSessions: params.enrollBillingPlan.includedSessions ?? null,
           title,
           amount: Math.round(rawAmount * 100) / 100,
           billingFrequency: frequency,

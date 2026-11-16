@@ -452,7 +452,7 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
     const occPreferredProf = occPlan.professionalId || preferredProfId;
     const occRoomId = occPlan.roomId || roomId || null;
     const ignoreLeadTime = idx > 0 ? true : ignoreFirstLeadTime;
-    const ignoreAdvanceCap = idx > 0;
+    const ignoreAdvanceCap = idx > 0 || !publicOnly;
 
     // 1. Conflito de paciente/aluno na própria data
     if (patientId) {

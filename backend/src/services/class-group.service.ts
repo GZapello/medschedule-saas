@@ -315,7 +315,7 @@ export function generateSchedulePlanOccurrences(opts: {
   if (Array.isArray(opts.scheduleEntries) && opts.scheduleEntries.length > 0) {
     const seenKeys = new Set<string>();
     for (const rawEntry of opts.scheduleEntries) {
-      const dow = Number(rawEntry.dayOfWeek);
+      const dow = Number(rawEntry.dayOfWeek ?? (rawEntry as any).weekday);
       if (!Number.isInteger(dow) || dow < 0 || dow > 6) continue;
       const entrySchedId = rawEntry.classScheduleId || rawEntry.scheduleId || null;
       const rawStartClock = rawEntry.startClock || rawEntry.startTime || defaultStartClock;
