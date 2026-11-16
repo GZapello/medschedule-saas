@@ -29,6 +29,7 @@ export interface RecurrenceOccurrencePreviewItem {
   roomName?: string | null;
   capacity?: number;
   remainingSpots?: number | null;
+  statusLabel?: string;
   alternatives?: RecurrenceAlternativeItem[];
 }
 
@@ -41,6 +42,9 @@ export interface RecurrencePreviewData {
   intervalUnit: string | null;
   startDate?: string | null;
   endDate?: string | null;
+  serviceId?: string;
+  serviceName?: string;
+  serviceKind?: 'individual' | 'group';
   description: string;
   totalCount: number;
   availableCount: number;
@@ -59,6 +63,43 @@ function formatBrDate(ymd: string): string {
   if (!ymd || !/^\d{4}-\d{2}-\d{2}/.test(ymd)) return ymd;
   const [y, m, d] = ymd.slice(0, 10).split('-');
   return `${d}/${m}/${y}`;
+}
+
+export function resolveOccurrenceStatusLabel(
+  occ: RecurrenceOccurrencePreviewItem,
+  isGroupService: boolean
+): string {
+  if (!isGroupService) {
+    return occ.available ? 'Disponível' : (occ.statusLabel || 'Indisponível');
+  }
+  if (occ.available) {
+    if (occ.statusLabel && occ.statusLabel.startsWith('Disponível —')) {
+      return occ.statusLabel;
+    }
+    if (typeof occ.remainingSpots === 'number') {
+      return `Disponível — ${occ.remainingSpots} vaga${occ.remainingSpots === 1 ? '' : 's'} restante${occ.remainingSpots === 1 ? '' : 's'}`;
+    }
+    return occ.statusLabel || 'Disponível';
+  }
+  switch (occ.reasonCode) {
+    case 'CLASS_FULL':
+      return 'Turma lotada';
+    case 'ALREADY_ENROLLED':
+      return 'Aluno já inscrito';
+    case 'PROFESSIONAL_CONFLICT':
+    case 'PROFESSIONAL_SLOT_OCCUPIED':
+    case 'PATIENT_APPOINTMENT_CONFLICT':
+    case 'ROOM_CONFLICT':
+      return 'Conflito com outro atendimento';
+    case 'OCCURRENCE_CANCELLED':
+      return 'Turma cancelada';
+    case 'BLOCKED_TIME':
+    case 'HOLIDAY':
+    case 'CLINIC_CLOSED':
+      return 'Horário bloqueado';
+    default:
+      return occ.statusLabel || 'Indisponível';
+  }
 }
 
 export const RecurrencePreviewBox: React.FC<RecurrencePreviewBoxProps> = ({
@@ -136,65 +177,64 @@ export const RecurrencePreviewBox: React.FC<RecurrencePreviewBoxProps> = ({
             )}
           </div>
           <div className="max-h-44 overflow-y-auto space-y-1 pr-0.5">
-            {visibleOccurrences.map(occ => (
-              <div
-                key={`${occ.index}-${occ.date}`}
-                className={`rounded-lg border px-2 py-1.5 text-[11px] flex flex-col gap-1 ${
-                  occ.available
-                    ? 'bg-emerald-50/40 border-emerald-200/80 text-slate-800'
-                    : 'bg-rose-50/70 border-rose-200 text-rose-900'
-                }`}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    {occ.available ? (
-                      <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-emerald-600" />
-                    ) : (
-                      <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-rose-600" />
-                    )}
-                    <span className="font-bold whitespace-nowrap">
-                      {occ.dayLabel}, {formatBrDate(occ.date)}
-                    </span>
-                    <span className="inline-flex items-center gap-0.5 text-[10px] text-slate-600 font-semibold whitespace-nowrap">
-                      <Clock className="w-2.5 h-2.5" />
-                      {occ.startTime.slice(11, 16)}–{occ.endTime.slice(11, 16)}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    {occ.available && occ.professionalName && (
-                      <span className="text-[10px] text-slate-500 truncate max-w-[110px]">
-                        {occ.professionalName}
+            {visibleOccurrences.map(occ => {
+              const isGroupOcc = preview.serviceKind === 'group' || (occ.capacity || 1) > 1;
+              const statusText = resolveOccurrenceStatusLabel(occ, isGroupOcc);
+              return (
+                <div
+                  key={`${occ.index}-${occ.date}`}
+                  className={`rounded-lg border px-2 py-1.5 text-[11px] flex flex-col gap-1 ${
+                    occ.available
+                      ? 'bg-emerald-50/40 border-emerald-200/80 text-slate-800'
+                      : 'bg-rose-50/70 border-rose-200 text-rose-900'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      {occ.available ? (
+                        <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-emerald-600" />
+                      ) : (
+                        <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-rose-600" />
+                      )}
+                      <span className="font-bold whitespace-nowrap">
+                        {occ.dayLabel}, {formatBrDate(occ.date)}
                       </span>
-                    )}
-                    {occ.available && typeof occ.remainingSpots === 'number' && (occ.capacity || 1) > 1 && (
-                      <span className="px-1.5 py-0.5 rounded bg-teal-50 text-teal-800 border border-teal-200 text-[9px] font-bold">
-                        {occ.remainingSpots} vaga{occ.remainingSpots === 1 ? '' : 's'}
+                      <span className="inline-flex items-center gap-0.5 text-[10px] text-slate-600 font-semibold whitespace-nowrap">
+                        <Clock className="w-2.5 h-2.5" />
+                        {occ.startTime.slice(11, 16)}–{occ.endTime.slice(11, 16)}
                       </span>
-                    )}
-                    <span
-                      className={`text-[10px] font-bold ${
-                        occ.available ? 'text-emerald-700' : 'text-rose-700'
-                      }`}
-                    >
-                      {occ.available ? 'Disponível' : 'Indisponível'}
-                    </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {occ.available && occ.professionalName && (
+                        <span className="text-[10px] text-slate-500 truncate max-w-[110px]">
+                          {occ.professionalName}
+                        </span>
+                      )}
+                      <span
+                        className={`text-[10px] font-bold ${
+                          occ.available ? 'text-emerald-700' : 'text-rose-700'
+                        }`}
+                      >
+                        {statusText}
+                      </span>
+                    </div>
                   </div>
+                  {!occ.available && occ.reasonMessage && occ.reasonMessage !== statusText && (
+                    <div className="text-[10px] text-rose-800 pl-5">
+                      {occ.reasonMessage}
+                    </div>
+                  )}
+                  {!occ.available && occ.alternatives && occ.alternatives.length > 0 && (
+                    <div className="text-[10px] text-slate-700 pl-5">
+                      Horários autorizados nesta data:{' '}
+                      <span className="font-semibold text-indigo-700">
+                        {occ.alternatives.slice(0, 3).map(a => `${a.timeLabel} (${a.professionalName})`).join(' • ')}
+                      </span>
+                    </div>
+                  )}
                 </div>
-                {!occ.available && occ.reasonMessage && (
-                  <div className="text-[10px] text-rose-800 pl-5">
-                    {occ.reasonMessage}
-                  </div>
-                )}
-                {!occ.available && occ.alternatives && occ.alternatives.length > 0 && (
-                  <div className="text-[10px] text-slate-700 pl-5">
-                    Horários autorizados nesta data:{' '}
-                    <span className="font-semibold text-indigo-700">
-                      {occ.alternatives.slice(0, 3).map(a => `${a.timeLabel} (${a.professionalName})`).join(' • ')}
-                    </span>
-                  </div>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
           {preview.conflictCount > 0 && (
             <div className="p-2 rounded-lg bg-amber-50 border border-amber-200 text-[10px] text-amber-900 font-semibold">

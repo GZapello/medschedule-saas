@@ -77,6 +77,7 @@ export interface RecurrenceOccurrenceEvaluation {
   roomName?: string | null;
   capacity?: number;
   remainingSpots?: number | null;
+  statusLabel?: string;
   modality?: ConcreteModality;
   alternatives?: RecurrenceAlternativeSlot[];
 }
@@ -457,12 +458,24 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
     // 1. Conflito de paciente/aluno na própria data
     if (patientId) {
       const patientOverlap = db.prepare(`
-        SELECT a.id FROM appointments a
+        SELECT a.id, a.service_id, a.occurrence_id, a.start_time
+        FROM appointments a
         WHERE a.tenant_id = ? AND a.patient_id = ? AND a.status != 'cancelled'
           AND REPLACE(a.start_time, ' ', 'T') < ? AND REPLACE(a.end_time, ' ', 'T') > ?
+        ORDER BY CASE WHEN a.service_id = ? THEN 0 ELSE 1 END ASC
         LIMIT 1
-      `).get(tenantId, patientId, cleanE, cleanS);
+      `).get(tenantId, patientId, cleanE, cleanS, serviceRow.id) as {
+        id: string;
+        service_id?: string | null;
+        occurrence_id?: string | null;
+        start_time?: string;
+      } | undefined;
       if (patientOverlap) {
+        const isSameGroupEnrollment = Boolean(
+          isGroupService &&
+          patientOverlap.service_id === serviceRow.id &&
+          String(patientOverlap.start_time || '').trim().replace(' ', 'T').slice(0, 16) === cleanS.slice(0, 16)
+        );
         occurrences.push({
           index: idx + 1,
           date: dateStr,
@@ -471,8 +484,15 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
           startTime: cleanS,
           endTime: cleanE,
           available: false,
-          reasonCode: 'PATIENT_APPOINTMENT_CONFLICT',
-          reasonMessage: `Aluno já possui outro agendamento em ${dateStr} às ${startClockHHMM}.`
+          reasonCode: isSameGroupEnrollment ? 'ALREADY_ENROLLED' : 'PATIENT_APPOINTMENT_CONFLICT',
+          reasonMessage: isSameGroupEnrollment
+            ? 'Aluno já inscrito'
+            : (isGroupService
+                ? 'Conflito com outro atendimento'
+                : `Aluno já possui outro agendamento em ${dateStr} às ${startClockHHMM}.`),
+          statusLabel: isSameGroupEnrollment
+            ? 'Aluno já inscrito'
+            : (isGroupService ? 'Conflito com outro atendimento' : 'Indisponível')
         });
         continue;
       }
@@ -491,7 +511,8 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
           endTime: cleanE,
           available: false,
           reasonCode: 'HOLIDAY',
-          reasonMessage: `Feriado cadastrado (${holiday.name || dateStr}).`
+          reasonMessage: `Feriado cadastrado (${holiday.name || dateStr}).`,
+          statusLabel: isGroupService ? 'Horário bloqueado' : 'Feriado'
         });
         continue;
       }
@@ -507,7 +528,8 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
           endTime: cleanE,
           available: false,
           reasonCode: clinicHours.code || 'CLINIC_CLOSED',
-          reasonMessage: clinicHours.error
+          reasonMessage: clinicHours.error,
+          statusLabel: isGroupService ? 'Horário bloqueado' : 'Estabelecimento fechado'
         });
         continue;
       }
@@ -515,18 +537,35 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
 
     // 3. Aula coletiva com grade semanal cadastrada (class_schedules)
     if (isGroupService && hasClassSchedules && !isCustomTime) {
-      const candidates = allClassSchedules.filter(s => {
-        if (occScheduleId && s.id !== occScheduleId) return false;
-        if (Number(s.day_of_week) !== dow) return false;
-        if (s.start_time.slice(0, 5) !== startClockHHMM || s.end_time.slice(0, 5) !== endClockHHMM) return false;
-        if (occPreferredProf !== 'any' && s.professional_id !== occPreferredProf) return false;
-        if (dateStr < s.effective_start_date) return false;
-        if (s.effective_end_date && dateStr > s.effective_end_date) return false;
-        return true;
-      });
+      const scheduleIdMatchesDow = Boolean(
+        occScheduleId && allClassSchedules.some(cs => cs.id === occScheduleId && Number(cs.day_of_week) === dow)
+      );
+      const effectiveOccScheduleId = scheduleIdMatchesDow ? occScheduleId : null;
+
+      const filterSchedules = (requireExactEndClock: boolean) =>
+        allClassSchedules.filter(s => {
+          if (effectiveOccScheduleId && s.id !== effectiveOccScheduleId) return false;
+          if (Number(s.day_of_week) !== dow) return false;
+          if (s.start_time.slice(0, 5) !== startClockHHMM) return false;
+          if (requireExactEndClock && s.end_time.slice(0, 5) !== endClockHHMM) return false;
+          if (
+            !effectiveOccScheduleId &&
+            occPreferredProf !== 'any' &&
+            s.professional_id !== occPreferredProf &&
+            !(Array.isArray(s.co_instructor_ids) && s.co_instructor_ids.includes(occPreferredProf))
+          ) {
+            return false;
+          }
+          if (dateStr < s.effective_start_date) return false;
+          if (s.effective_end_date && dateStr > s.effective_end_date) return false;
+          return true;
+        });
+
+      const exactCandidates = filterSchedules(true);
+      const candidates = exactCandidates.length > 0 ? exactCandidates : filterSchedules(false);
 
       let bookedSlot: RecurrenceOccurrenceEvaluation | null = null;
-      let lastFailure: { code?: string; message?: string } | null = null;
+      let lastFailure: { code?: string; message?: string; statusLabel?: string } | null = null;
 
       for (const sch of candidates) {
         let resolvedModality: ConcreteModality;
@@ -556,17 +595,21 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
           mockNow: input.mockNow
         });
 
+        const schStartIso = `${dateStr}T${sch.start_time.slice(0, 5)}:00`;
+        const schEndIso = `${dateStr}T${sch.end_time.slice(0, 5)}:00`;
+
         if (evalRes.bookable) {
           const effCoIds = occPlan.coInstructorIds.length > 0
             ? occPlan.coInstructorIds
             : (Array.isArray(sch.co_instructor_ids) ? sch.co_instructor_ids : []);
+          const remSpots = evalRes.slot.remainingSpots;
           bookedSlot = {
             index: idx + 1,
             date: dateStr,
             dayOfWeek: dow,
             dayLabel,
-            startTime: cleanS,
-            endTime: cleanE,
+            startTime: schStartIso,
+            endTime: schEndIso,
             available: true,
             professionalId: sch.professional_id,
             professionalName: sch.professional_name || 'Instrutor',
@@ -575,7 +618,10 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
             roomId: occRoomId || evalRes.slot.roomId,
             roomName: evalRes.slot.roomName,
             capacity: evalRes.slot.capacity,
-            remainingSpots: evalRes.slot.remainingSpots,
+            remainingSpots: remSpots,
+            statusLabel:
+              evalRes.slot.statusLabel ||
+              `Disponível — ${remSpots} vaga${remSpots === 1 ? '' : 's'} restante${remSpots === 1 ? '' : 's'}`,
             modality: resolvedModality
           };
           break;
@@ -583,7 +629,8 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
 
         lastFailure = {
           code: evalRes.reasonCode,
-          message: evalRes.reasonMessage
+          message: evalRes.reasonMessage,
+          statusLabel: evalRes.slot.statusLabel
         };
       }
 
@@ -625,6 +672,7 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
           reasonMessage:
             lastFailure?.message ||
             `Não há turma ativa da aula "${serviceRow.name}" autorizada em ${dateStr} (${startClockHHMM} - ${endClockHHMM}).`,
+          statusLabel: lastFailure?.statusLabel || (lastFailure?.code === 'CLASS_FULL' ? 'Turma lotada' : undefined),
           alternatives: alternatives.length > 0 ? alternatives : undefined
         });
       }
@@ -642,18 +690,24 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
       : occEligibles;
 
     let matchedOk: RecurrenceOccurrenceEvaluation | null = null;
-    let firstFailure: { code?: string; message?: string } | null = null;
+    let firstFailure: { code?: string; message?: string; statusLabel?: string } | null = null;
 
     for (const prof of candidatesToTry) {
       if (!isCustomTime) {
         const schedCheck = checkProfessionalWorkScheduleAndBlocks(tenantId, prof.id, dateStr, cleanS, cleanE);
         if (!schedCheck.valid) {
-          if (!firstFailure) firstFailure = { code: schedCheck.code, message: schedCheck.error };
+          if (!firstFailure) {
+            firstFailure = {
+              code: schedCheck.code,
+              message: isGroupService && schedCheck.code === 'BLOCKED_TIME' ? 'Horário bloqueado' : schedCheck.error,
+              statusLabel: schedCheck.code === 'BLOCKED_TIME' ? 'Horário bloqueado' : undefined
+            };
+          }
           continue;
         }
 
         const extBusy = input.externalBusyByProfAndDate?.get(`${prof.id}|${dateStr}`);
-        if (extBusy && extBusy.length > 0) {
+        if (!isGroupService && extBusy && extBusy.length > 0) {
           const hasGcalConflict = extBusy.some(b => startMin < b.endMin && endMin > b.startMin);
           if (hasGcalConflict) {
             if (!firstFailure) firstFailure = { code: 'GOOGLE_BUSY', message: 'Profissional indisponível neste horário (agenda externa).' };
@@ -661,7 +715,7 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
           }
         }
 
-        if (publicOnly) {
+        if (publicOnly && !isGroupService) {
           const publicSlots = calculateAvailableSlots(
             tenantId,
             prof.id,
@@ -687,40 +741,75 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
 
       if (isGroupService) {
         const cleanStartMin = cleanS.slice(0, 16);
-        const occ = db.prepare(`
+        const matchingOccs = db.prepare(`
           SELECT o.*
           FROM class_occurrences o
           WHERE o.tenant_id = ? AND o.service_id = ? AND o.professional_id = ?
             AND REPLACE(substr(o.start_time, 1, 16), ' ', 'T') = ?
-          ORDER BY o.created_at DESC
-          LIMIT 1
-        `).get(tenantId, serviceRow.id, prof.id, cleanStartMin) as any;
+          ORDER BY
+            CASE WHEN o.status != 'cancelled' THEN 0 ELSE 1 END ASC,
+            o.created_at ASC
+        `).all(tenantId, serviceRow.id, prof.id, cleanStartMin) as any[];
 
-        if (occ && occ.status === 'cancelled') {
-          if (!firstFailure) firstFailure = { code: 'OCCURRENCE_CANCELLED', message: `Esta aula foi cancelada para ${dateStr}.` };
+        if (matchingOccs.length > 0 && matchingOccs.every(o => o.status === 'cancelled')) {
+          if (!firstFailure) {
+            firstFailure = { code: 'OCCURRENCE_CANCELLED', message: 'Turma cancelada', statusLabel: 'Turma cancelada' };
+          }
           continue;
         }
 
+        const occ = matchingOccs.find(o => o.status !== 'cancelled') || null;
         const occId = occ ? occ.id : null;
         const profConflict = db.prepare(`
           SELECT a.id FROM appointments a
           WHERE a.tenant_id = ? AND a.professional_id = ?
-            AND (? IS NULL OR COALESCE(a.occurrence_id, '') != ?)
             AND a.status != 'cancelled'
             AND REPLACE(a.start_time, ' ', 'T') < ? AND REPLACE(a.end_time, ' ', 'T') > ?
+            AND NOT (
+              (a.service_id = ? AND REPLACE(substr(a.start_time, 1, 16), ' ', 'T') = ?)
+              OR (a.occurrence_id IS NOT NULL AND ? IS NOT NULL AND a.occurrence_id = ?)
+            )
           LIMIT 1
-        `).get(tenantId, prof.id, occId, occId, cleanE, cleanS);
+        `).get(tenantId, prof.id, cleanE, cleanS, serviceRow.id, cleanStartMin, occId, occId);
         if (profConflict) {
-          if (!firstFailure) firstFailure = { code: 'PROFESSIONAL_SLOT_OCCUPIED', message: `Profissional já possui atendimento conflitante em ${dateStr} às ${startClockHHMM}.` };
+          if (!firstFailure) {
+            firstFailure = {
+              code: 'PROFESSIONAL_CONFLICT',
+              message: 'Conflito com outro atendimento',
+              statusLabel: 'Conflito com outro atendimento'
+            };
+          }
+          continue;
+        }
+
+        const enrolledRows = db.prepare(`
+          SELECT DISTINCT a.id, a.patient_id
+          FROM appointments a
+          WHERE a.tenant_id = ?
+            AND a.status != 'cancelled'
+            AND (
+              (a.service_id = ? AND a.professional_id = ? AND REPLACE(substr(a.start_time, 1, 16), ' ', 'T') = ?)
+              OR (? IS NOT NULL AND a.occurrence_id = ?)
+            )
+        `).all(tenantId, serviceRow.id, prof.id, cleanStartMin, occId, occId) as Array<{ id: string; patient_id: string }>;
+
+        if (patientId && enrolledRows.some(r => r.patient_id === patientId)) {
+          if (!firstFailure) {
+            firstFailure = {
+              code: 'ALREADY_ENROLLED',
+              message: 'Aluno já inscrito',
+              statusLabel: 'Aluno já inscrito'
+            };
+          }
           continue;
         }
 
         const cap = Math.max(1, Number(occ?.capacity) || Number(serviceRow.default_capacity) || 1);
-        const enrolled = occ
-          ? (db.prepare(`SELECT COUNT(*) as c FROM appointments WHERE occurrence_id = ? AND tenant_id = ? AND status != 'cancelled'`).get(occ.id, tenantId) as { c: number }).c
-          : 0;
+        const enrolled = enrolledRows.length;
         if (enrolled >= cap) {
-          if (!firstFailure) firstFailure = { code: 'CLASS_FULL', message: `Turma lotada em ${dateStr} (${enrolled}/${cap}).` };
+          if (!firstFailure) {
+            firstFailure = { code: 'CLASS_FULL', message: 'Turma lotada', statusLabel: 'Turma lotada' };
+          }
           continue;
         }
 
@@ -729,17 +818,21 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
             SELECT a.id, r.name as room_name FROM appointments a
             LEFT JOIN rooms r ON r.id = a.room_id
             WHERE a.tenant_id = ? AND a.room_id = ?
-              AND (? IS NULL OR COALESCE(a.occurrence_id, '') != ?)
               AND a.status != 'cancelled'
               AND REPLACE(a.start_time, ' ', 'T') < ? AND REPLACE(a.end_time, ' ', 'T') > ?
+              AND NOT (
+                (a.service_id = ? AND a.professional_id = ? AND REPLACE(substr(a.start_time, 1, 16), ' ', 'T') = ?)
+                OR (a.occurrence_id IS NOT NULL AND ? IS NOT NULL AND a.occurrence_id = ?)
+              )
             LIMIT 1
-          `).get(tenantId, occRoomId, occId, occId, cleanE, cleanS) as any;
+          `).get(tenantId, occRoomId, cleanE, cleanS, serviceRow.id, prof.id, cleanStartMin, occId, occId) as any;
           if (roomConflict) {
             if (!firstFailure) firstFailure = { code: 'ROOM_CONFLICT', message: `Sala ocupada em ${dateStr} (${startClockHHMM}).` };
             continue;
           }
         }
 
+        const remSpots = Math.max(0, cap - enrolled);
         matchedOk = {
           index: idx + 1,
           date: dateStr,
@@ -754,7 +847,8 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
           classScheduleId: null,
           roomId: occRoomId || occ?.room_id || null,
           capacity: cap,
-          remainingSpots: Math.max(0, cap - enrolled),
+          remainingSpots: remSpots,
+          statusLabel: `Disponível — ${remSpots} vaga${remSpots === 1 ? '' : 's'} restante${remSpots === 1 ? '' : 's'}`,
           modality: concreteServiceModality
         };
         break;
@@ -849,6 +943,7 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
         available: false,
         reasonCode: firstFailure?.code || 'SLOT_UNAVAILABLE',
         reasonMessage: firstFailure?.message || `Horário indisponível em ${dateStr} às ${startClockHHMM}.`,
+        statusLabel: firstFailure?.statusLabel,
         alternatives: alternatives.length > 0 ? alternatives : undefined
       });
     }
@@ -955,29 +1050,19 @@ export async function evaluateRecurrenceSeriesWithExternalBusy(
   });
 
   const profIdsToPrefetch = new Set<string>(eligibleProfs.map(p => p.id));
-  if (serviceRow.service_kind === 'group') {
-    const classScheds = ClassScheduleService.listForService(input.tenantId, serviceRow.id, {
-      includeInactive: false,
-      publicOnly: Boolean(input.publicOnly)
-    });
-    for (const cs of classScheds) {
-      if (preferredProfId === 'any' || cs.professional_id === preferredProfId) {
-        profIdsToPrefetch.add(cs.professional_id);
-      }
-    }
-  }
-
-  for (const pid of profIdsToPrefetch) {
-    const gcalConn = GoogleCalendarService.getConnectionForProfessional(input.tenantId, pid);
-    if (!gcalConn) continue;
-    for (const dateStr of dates) {
-      const key = `${pid}|${dateStr}`;
-      if (extBusyMap.has(key)) continue;
-      try {
-        const busy = await GoogleCalendarService.getBusyIntervals(input.tenantId, pid, dateStr);
-        extBusyMap.set(key, busy.map(b => ({ startMin: b.startMin, endMin: b.endMin })));
-      } catch {
-        extBusyMap.set(key, []);
+  if (serviceRow.service_kind !== 'group') {
+    for (const pid of profIdsToPrefetch) {
+      const gcalConn = GoogleCalendarService.getConnectionForProfessional(input.tenantId, pid);
+      if (!gcalConn) continue;
+      for (const dateStr of dates) {
+        const key = `${pid}|${dateStr}`;
+        if (extBusyMap.has(key)) continue;
+        try {
+          const busy = await GoogleCalendarService.getBusyIntervals(input.tenantId, pid, dateStr);
+          extBusyMap.set(key, busy.map(b => ({ startMin: b.startMin, endMin: b.endMin })));
+        } catch {
+          extBusyMap.set(key, []);
+        }
       }
     }
   }

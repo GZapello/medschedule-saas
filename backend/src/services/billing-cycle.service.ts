@@ -19,9 +19,13 @@ export interface CycleWindow {
 
 export const FREQUENCY_PT_LABELS: Record<PeriodicBillingFrequency, string> = {
   monthly: 'Mensal',
+  bimonthly: 'Bimestral',
   quarterly: 'Trimestral',
   semiannual: 'Semestral',
-  annual: 'Anual'
+  annual: 'Anual',
+  biennial: 'Bienal',
+  custom_date: 'Data final personalizada',
+  count: 'Quantidade fixa de aulas'
 };
 
 export function getClinicTodayIso(): string {
@@ -56,14 +60,97 @@ export function normalizePeriodicFrequency(raw?: unknown, fallbackCycleMonths?: 
   cycleMonths: number;
 } {
   const val = String(raw || '').trim().toLowerCase();
-  if (val === 'monthly' || val === 'quarterly' || val === 'semiannual' || val === 'annual') {
-    return { frequency: val, cycleMonths: getCycleMonthsForBillingFrequency(val) };
+  const aliasMap: Record<string, PeriodicBillingFrequency> = {
+    '1_month': 'monthly',
+    '2_months': 'bimonthly',
+    '3_months': 'quarterly',
+    '6_months': 'semiannual',
+    '12_months': 'annual',
+    '24_months': 'biennial',
+    fixed_count: 'count'
+  };
+  const mapped = aliasMap[val] || val;
+  if (
+    mapped === 'monthly' ||
+    mapped === 'bimonthly' ||
+    mapped === 'quarterly' ||
+    mapped === 'semiannual' ||
+    mapped === 'annual' ||
+    mapped === 'biennial' ||
+    mapped === 'custom_date' ||
+    mapped === 'count'
+  ) {
+    return { frequency: mapped, cycleMonths: getCycleMonthsForBillingFrequency(mapped) };
   }
   const cm = Number(fallbackCycleMonths);
+  if (cm === 2) return { frequency: 'bimonthly', cycleMonths: 2 };
   if (cm === 3) return { frequency: 'quarterly', cycleMonths: 3 };
   if (cm === 6) return { frequency: 'semiannual', cycleMonths: 6 };
   if (cm === 12) return { frequency: 'annual', cycleMonths: 12 };
+  if (cm === 24) return { frequency: 'biennial', cycleMonths: 24 };
   return { frequency: 'monthly', cycleMonths: 1 };
+}
+
+export function buildSpecialContractCycleWindows(
+  plan: any,
+  firstDueDateOverride?: string | null
+): CycleWindow[] {
+  const startDate = String(plan?.start_date || getClinicTodayIso()).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) return [];
+  const { frequency } = normalizePeriodicFrequency(plan?.billing_frequency || plan?.billing_cycle, plan?.cycle_months);
+  const dueDay = Math.min(28, Math.max(1, Math.floor(Number(plan?.due_day) || 10)));
+  const chargesCount = Math.min(24, Math.max(1, Math.floor(Number(plan?.billing_charges_count) || 1)));
+  const customEnd = String(
+    plan?.billing_custom_end_date ||
+    plan?.end_date ||
+    addDaysIso(addMonthsPreserveDay(startDate, chargesCount), -1)
+  ).slice(0, 10);
+  const incl = Math.max(1, Math.floor(Number(plan?.included_sessions) || 1));
+
+  const windows: CycleWindow[] = [];
+  for (let k = 0; k < chargesCount; k++) {
+    const baseWin = buildCycleWindow({
+      startDate,
+      cycleMonths: 1,
+      dueDay,
+      cycleIndex: k,
+      firstDueDate: firstDueDateOverride
+    });
+    if (frequency === 'custom_date') {
+      const cycleStart = chargesCount === 1 ? startDate : baseWin.cycleStart;
+      const cycleEnd =
+        chargesCount === 1 || k === chargesCount - 1
+          ? customEnd
+          : (baseWin.cycleEnd < customEnd ? baseWin.cycleEnd : customEnd);
+      const billingCycleKey =
+        chargesCount === 1
+          ? `${startDate}..${customEnd}`
+          : `${startDate}..${customEnd}#${k + 1}/${chargesCount}`;
+      windows.push({
+        index: k,
+        cycleStart,
+        cycleEnd,
+        billingCycleKey,
+        competenceMonth: baseWin.dueDate.slice(0, 7),
+        dueDate: baseWin.dueDate
+      });
+    } else {
+      const cycleEnd = plan?.end_date ? String(plan.end_date).slice(0, 10) : baseWin.cycleEnd;
+      const billingCycleKey =
+        chargesCount === 1
+          ? `${startDate}..count-${incl}`
+          : `${startDate}..count-${incl}#${k + 1}/${chargesCount}`;
+      windows.push({
+        index: k,
+        cycleStart: baseWin.cycleStart,
+        cycleEnd,
+        billingCycleKey,
+        competenceMonth: baseWin.dueDate.slice(0, 7),
+        dueDate: baseWin.dueDate
+      });
+    }
+  }
+  return windows;
 }
 
 export function buildCycleWindow(params: {
@@ -122,8 +209,12 @@ export class BillingCycleService {
     const startDate = String(plan?.start_date || '').slice(0, 10);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) return [];
 
+    const { frequency, cycleMonths } = normalizePeriodicFrequency(plan?.billing_frequency || plan?.billing_cycle, plan?.cycle_months);
+    if (frequency === 'custom_date' || frequency === 'count') {
+      return buildSpecialContractCycleWindows(plan);
+    }
+
     const endDate = plan?.end_date ? String(plan.end_date).slice(0, 10) : null;
-    const { cycleMonths } = normalizePeriodicFrequency(plan?.billing_frequency || plan?.billing_cycle, plan?.cycle_months);
     const dueDay = Math.min(28, Math.max(1, Math.floor(Number(plan?.due_day) || 10)));
 
     const windows: CycleWindow[] = [];
@@ -148,7 +239,13 @@ export class BillingCycleService {
     const endDate = plan?.end_date ? String(plan.end_date).slice(0, 10) : null;
     if (endDate && /^\d{4}-\d{2}-\d{2}$/.test(endDate) && cleanTarget > endDate) return null;
 
-    const { cycleMonths } = normalizePeriodicFrequency(plan?.billing_frequency || plan?.billing_cycle, plan?.cycle_months);
+    const { frequency, cycleMonths } = normalizePeriodicFrequency(plan?.billing_frequency || plan?.billing_cycle, plan?.cycle_months);
+    if (frequency === 'custom_date' || frequency === 'count') {
+      const specialWins = buildSpecialContractCycleWindows(plan);
+      const matched = specialWins.find(w => cleanTarget >= w.cycleStart && cleanTarget <= w.cycleEnd);
+      return matched || specialWins[0] || null;
+    }
+
     const dueDay = Math.min(28, Math.max(1, Math.floor(Number(plan?.due_day) || 10)));
 
     for (let k = 0; k < 240; k++) {
@@ -174,6 +271,12 @@ export class BillingCycleService {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) return null;
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(competenceMonth)) return null;
 
+    const { frequency, cycleMonths } = normalizePeriodicFrequency(plan?.billing_frequency || plan?.billing_cycle, plan?.cycle_months);
+    if (frequency === 'custom_date' || frequency === 'count') {
+      const specialWins = buildSpecialContractCycleWindows(plan);
+      return specialWins.find(w => w.competenceMonth === competenceMonth) || specialWins[0] || null;
+    }
+
     const year = Number(competenceMonth.slice(0, 4));
     const month = Number(competenceMonth.slice(5, 7));
     const lastDay = getLastDayOfMonth(year, month);
@@ -184,7 +287,6 @@ export class BillingCycleService {
     if (startDate > monthEnd) return null;
     if (endDate && /^\d{4}-\d{2}-\d{2}$/.test(endDate) && endDate < monthStart) return null;
 
-    const { cycleMonths } = normalizePeriodicFrequency(plan?.billing_frequency || plan?.billing_cycle, plan?.cycle_months);
     const dueDay = Math.min(28, Math.max(1, Math.floor(Number(plan?.due_day) || 10)));
 
     let intersectingCandidate: CycleWindow | null = null;
@@ -223,7 +325,16 @@ export class BillingCycleService {
     const dueDay = Math.min(28, Math.max(1, Math.floor(Number(plan.due_day) || 10)));
 
     let targetWindows: CycleWindow[] = [];
-    if (params.generateAllContractCycles) {
+    if (frequency === 'custom_date' || frequency === 'count') {
+      const specialWins = buildSpecialContractCycleWindows(plan, params.firstDueDate);
+      if (params.generateAllContractCycles) {
+        targetWindows = specialWins;
+      } else {
+        const compMonth = params.competenceMonth || String(plan.start_date || getClinicTodayIso()).slice(0, 7);
+        const matched = specialWins.find(w => w.competenceMonth === compMonth) || specialWins[0];
+        if (matched) targetWindows = [matched];
+      }
+    } else if (params.generateAllContractCycles) {
       const startDate = String(plan.start_date).slice(0, 10);
       const boundEnd = plan.end_date && /^\d{4}-\d{2}-\d{2}$/.test(String(plan.end_date))
         ? String(plan.end_date).slice(0, 10)
@@ -273,6 +384,7 @@ export class BillingCycleService {
       WHERE id = ? AND tenant_id = ?
     `);
 
+    const chargesCount = Math.min(24, Math.max(1, Math.floor(Number(plan.billing_charges_count) || 1)));
     for (const win of targetWindows) {
       const existing = findExistingStmt.get(tenantId, plan.id, win.billingCycleKey, win.competenceMonth) as { id: string } | undefined;
       if (existing) {
@@ -283,9 +395,17 @@ export class BillingCycleService {
       const payId = 'pay-' + uuidv4().slice(0, 8);
       const isPaidNow = params.initialPaymentStatus === 'paid' && win.index === 0;
       const paidDate = isPaidNow ? new Date().toISOString() : null;
-      const cycleLabel = cycleMonths === 1
-        ? `${freqLabel} ${plan.title} (${win.competenceMonth})`
-        : `${freqLabel} ${plan.title} (${win.cycleStart} a ${win.cycleEnd})`;
+      let cycleLabel: string;
+      if (frequency === 'custom_date') {
+        cycleLabel = `${freqLabel} ${plan.title} (${win.cycleStart} a ${win.cycleEnd}${chargesCount > 1 ? ` • Parcela ${win.index + 1}/${chargesCount}` : ''})`;
+      } else if (frequency === 'count') {
+        const incl = Math.max(1, Math.floor(Number(plan.included_sessions) || 1));
+        cycleLabel = `${freqLabel} (${incl} aula${incl === 1 ? '' : 's'}) ${plan.title}${chargesCount > 1 ? ` • Parcela ${win.index + 1}/${chargesCount}` : ` (${win.competenceMonth})`}`;
+      } else if (cycleMonths === 1) {
+        cycleLabel = `${freqLabel} ${plan.title} (${win.competenceMonth})`;
+      } else {
+        cycleLabel = `${freqLabel} ${plan.title} (${win.cycleStart} a ${win.cycleEnd})`;
+      }
 
       const res = insStmt.run(
         payId,
@@ -376,6 +496,8 @@ export class BillingCycleService {
     planDurationCode?: string | null;
     weeklyFrequency?: number | null;
     includedSessions?: number | null;
+    billingChargesCount?: number | null;
+    billingCustomEndDate?: string | null;
     renewedFromPlanId?: string | null;
     title: string;
     amount: number;
@@ -410,16 +532,23 @@ export class BillingCycleService {
     const inclSessions = input.includedSessions !== undefined && input.includedSessions !== null && Number(input.includedSessions) > 0
       ? Math.floor(Number(input.includedSessions))
       : null;
+    const billingChargesCount = input.billingChargesCount !== undefined && input.billingChargesCount !== null && Number(input.billingChargesCount) > 0
+      ? Math.min(24, Math.max(1, Math.floor(Number(input.billingChargesCount))))
+      : (frequency === 'custom_date' || frequency === 'count' ? 1 : null);
+    const billingCustomEndDate = input.billingCustomEndDate && String(input.billingCustomEndDate).trim()
+      ? String(input.billingCustomEndDate).slice(0, 10)
+      : (frequency === 'custom_date' && endDate ? endDate : null);
+    const effectiveEndDate = endDate || billingCustomEndDate || null;
 
     db.prepare(`
       INSERT INTO recurring_billing_plans (
         id, tenant_id, patient_id, service_id, professional_id, package_contract_id,
         series_id, class_schedule_id, schedule_rules_json, plan_duration_code,
-        weekly_frequency, included_sessions, renewed_from_plan_id,
+        weekly_frequency, included_sessions, billing_charges_count, billing_custom_end_date, renewed_from_plan_id,
         title, amount, billing_cycle, billing_frequency, cycle_months, covers_sessions,
         due_day, payment_method, start_date, end_date, status, notes, created_by,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
     `).run(
       planId,
       input.tenantId,
@@ -433,6 +562,8 @@ export class BillingCycleService {
       input.planDurationCode || null,
       weeklyFreq,
       inclSessions,
+      billingChargesCount,
+      billingCustomEndDate,
       input.renewedFromPlanId || null,
       String(input.title).trim(),
       roundedAmount,
@@ -443,7 +574,7 @@ export class BillingCycleService {
       dueDay,
       input.paymentMethod || 'pix',
       startDate,
-      endDate,
+      effectiveEndDate,
       status,
       input.notes ? String(input.notes).trim() : null,
       input.createdBy || 'system'
@@ -634,6 +765,8 @@ export class BillingCycleService {
       planDurationCode?: string | null;
       weeklyFrequency?: number | null;
       includedSessions?: number | null;
+      billingChargesCount?: number | null;
+      billingCustomEndDate?: string | null;
       title: string;
       amount: number;
       billingFrequency: PeriodicBillingFrequency;
@@ -692,14 +825,31 @@ export class BillingCycleService {
         params.serviceRow?.billing_mode ||
         'monthly'
       ).trim().toLowerCase();
-      if (!['monthly', 'quarterly', 'semiannual', 'annual'].includes(rawFreq)) {
+      const validFreqs = [
+        'monthly',
+        'bimonthly',
+        'quarterly',
+        'semiannual',
+        'annual',
+        'biennial',
+        'custom_date',
+        'count',
+        'fixed_count',
+        '1_month',
+        '2_months',
+        '3_months',
+        '6_months',
+        '12_months',
+        '24_months'
+      ];
+      if (!validFreqs.includes(rawFreq)) {
         return {
           mode: 'drop_in',
           isPackageCovered: false,
           billingPlanId: null,
           status: 400,
           code: 'INVALID_BILLING_FREQUENCY',
-          error: 'Periodicidade do plano inválida. Selecione Mensal, Trimestral, Semestral ou Anual.'
+          error: 'Periodicidade financeira inválida. Selecione Mensal, Bimestral, Trimestral, Semestral, Anual, Bienal, Data final personalizada ou Quantidade fixa de aulas.'
         };
       }
       const { frequency } = normalizePeriodicFrequency(rawFreq);
@@ -721,9 +871,70 @@ export class BillingCycleService {
       const startDate = params.enrollBillingPlan.startDate
         ? String(params.enrollBillingPlan.startDate).slice(0, 10)
         : minDate;
-      const endDate = params.enrollBillingPlan.endDate
+      const rawCustomEnd = params.enrollBillingPlan.billingCustomEndDate || params.enrollBillingPlan.customEndDate || null;
+      const rawPlanEnd = params.enrollBillingPlan.endDate
         ? String(params.enrollBillingPlan.endDate).slice(0, 10)
         : null;
+      const billingCustomEndDate = rawCustomEnd ? String(rawCustomEnd).slice(0, 10) : (frequency === 'custom_date' ? rawPlanEnd : null);
+      const endDate = rawPlanEnd || billingCustomEndDate || null;
+
+      const rawChargesCount = params.enrollBillingPlan.billingChargesCount ?? params.enrollBillingPlan.chargesCount;
+      const parsedChargesCount = rawChargesCount !== undefined && rawChargesCount !== null && String(rawChargesCount).trim() !== ''
+        ? Number(rawChargesCount)
+        : 1;
+      if (!Number.isInteger(parsedChargesCount) || parsedChargesCount < 1 || parsedChargesCount > 24) {
+        return {
+          mode: 'drop_in',
+          isPackageCovered: false,
+          billingPlanId: null,
+          status: 400,
+          code: 'INVALID_BILLING_CHARGES_COUNT',
+          error: 'Informe uma quantidade válida de cobranças (entre 1 e 24).'
+        };
+      }
+
+      if (frequency === 'custom_date') {
+        if (!billingCustomEndDate || !/^\d{4}-\d{2}-\d{2}$/.test(billingCustomEndDate) || billingCustomEndDate < startDate) {
+          return {
+            mode: 'drop_in',
+            isPackageCovered: false,
+            billingPlanId: null,
+            status: 400,
+            code: 'INVALID_BILLING_CUSTOM_DATE',
+            error: 'Para periodicidade financeira com data final personalizada, informe uma data final válida igual ou posterior à data inicial.'
+          };
+        }
+      }
+
+      const rawIncludedSessions = params.enrollBillingPlan.includedSessions ?? params.enrollBillingPlan.fixedSessionCount;
+      let resolvedIncludedSessions: number | null =
+        rawIncludedSessions !== undefined && rawIncludedSessions !== null && String(rawIncludedSessions).trim() !== ''
+          ? Math.floor(Number(rawIncludedSessions))
+          : null;
+
+      if (frequency === 'count') {
+        if (!resolvedIncludedSessions || !Number.isFinite(resolvedIncludedSessions) || resolvedIncludedSessions < 1 || resolvedIncludedSessions > 366) {
+          return {
+            mode: 'drop_in',
+            isPackageCovered: false,
+            billingPlanId: null,
+            status: 400,
+            code: 'INVALID_INCLUDED_SESSIONS',
+            error: 'Para periodicidade financeira por quantidade fixa de aulas, informe explicitamente a quantidade de aulas contratadas (entre 1 e 366).'
+          };
+        }
+        if (cleanDates.length > resolvedIncludedSessions) {
+          return {
+            mode: 'drop_in',
+            isPackageCovered: false,
+            billingPlanId: null,
+            status: 400,
+            code: 'PLAN_SESSION_LIMIT_EXCEEDED',
+            error: `A série selecionada possui ${cleanDates.length} aulas, mas a contratação financeira por quantidade fixa cobre apenas ${resolvedIncludedSessions} aula(s).`
+          };
+        }
+      }
+
       const firstDueDate = params.enrollBillingPlan.firstDueDate
         ? String(params.enrollBillingPlan.firstDueDate).slice(0, 10)
         : null;
@@ -746,7 +957,9 @@ export class BillingCycleService {
           scheduleRules: params.enrollBillingPlan.scheduleRules ?? null,
           planDurationCode: params.enrollBillingPlan.planDurationCode || null,
           weeklyFrequency: params.enrollBillingPlan.weeklyFrequency ?? null,
-          includedSessions: params.enrollBillingPlan.includedSessions ?? null,
+          includedSessions: resolvedIncludedSessions,
+          billingChargesCount: frequency === 'custom_date' || frequency === 'count' ? parsedChargesCount : null,
+          billingCustomEndDate: frequency === 'custom_date' ? billingCustomEndDate : null,
           title,
           amount: Math.round(rawAmount * 100) / 100,
           billingFrequency: frequency,
@@ -757,7 +970,10 @@ export class BillingCycleService {
           endDate,
           notes: params.enrollBillingPlan.notes ? String(params.enrollBillingPlan.notes).trim() : null,
           generateInitialCycle: params.enrollBillingPlan.generateInitialCycle !== false,
-          generateAllContractCycles: Boolean(params.enrollBillingPlan.generateAllContractCycles),
+          generateAllContractCycles:
+            frequency === 'custom_date' || frequency === 'count'
+              ? true
+              : Boolean(params.enrollBillingPlan.generateAllContractCycles),
           initialPaymentStatus: params.enrollBillingPlan.initialPaymentStatus === 'paid' ? 'paid' : 'pending'
         }
       };

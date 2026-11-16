@@ -140,6 +140,7 @@ export function calculateAvailableSlots(
         externalBusyByProf: extMap,
         patientId,
         ignoreLeadTime: options?.ignoreLeadTime,
+        ignoreAdvanceCap: options?.ignoreAdvanceCap,
         publicOnly: false,
         mockNow
       });
@@ -291,11 +292,41 @@ export function calculateAvailableSlots(
       `).all(tenantId, professionalId, serviceId, `${dateStr}%`) as any[];
       for (const occ of occRows) {
         const key = String(occ.start_time || '').trim().replace(' ', 'T').slice(0, 16);
+        const enrolledCount = Number(
+          (
+            db.prepare(`
+              SELECT COUNT(DISTINCT a.id) as c
+              FROM appointments a
+              WHERE a.tenant_id = ?
+                AND a.status NOT IN ('cancelled')
+                AND (
+                  a.occurrence_id = ?
+                  OR (a.service_id = ? AND a.professional_id = ? AND REPLACE(substr(a.start_time, 1, 16), ' ', 'T') = ?)
+                )
+            `).get(tenantId, occ.id, serviceId, professionalId, key) as any
+          )?.c || occ.enrolled_count || 0
+        );
         groupOccurrencesByStart.set(key, {
           id: occ.id,
           capacity: Math.max(1, Number(occ.capacity) || defaultGroupCapacity),
-          enrolledCount: Number(occ.enrolled_count) || 0
+          enrolledCount
         });
+      }
+      // Inclui também horários com inscrições ativas deste mesmo serviço coletivo mesmo que ainda não possuam linha em class_occurrences
+      for (const appt of rawAppts) {
+        if (appt.service_id === serviceId) {
+          const key = String(appt.start_time || '').trim().replace(' ', 'T').slice(0, 16);
+          if (!groupOccurrencesByStart.has(key)) {
+            const countSame = rawAppts.filter(
+              a => a.service_id === serviceId && String(a.start_time || '').trim().replace(' ', 'T').slice(0, 16) === key
+            ).length;
+            groupOccurrencesByStart.set(key, {
+              id: appt.occurrence_id || '',
+              capacity: defaultGroupCapacity,
+              enrolledCount: countSame
+            });
+          }
+        }
       }
     } catch (_) {}
   }
@@ -423,10 +454,9 @@ export function calculateAvailableSlots(
             const isSameNonFullGroupOccurrence = Boolean(
               isGroupService &&
               slotOcc &&
-              appt.serviceKind === 'group' &&
               appt.serviceId === serviceId &&
-              appt.occurrenceId === slotOcc.id &&
               appt.startKey === slotStartKey &&
+              (!slotOcc.id || !appt.occurrenceId || appt.occurrenceId === slotOcc.id) &&
               slotOcc.enrolledCount < slotOcc.capacity &&
               (!patientId || appt.patientId !== patientId)
             );
@@ -442,7 +472,7 @@ export function calculateAvailableSlots(
           }
         }
 
-        if (externalBusyIntervals && externalBusyIntervals.length > 0) {
+        if (!isGroupService && externalBusyIntervals && externalBusyIntervals.length > 0) {
           for (const ext of externalBusyIntervals) {
             if (current < ext.endMin && slotEndMin > ext.startMin) {
               maxConflictRecovery = Math.max(maxConflictRecovery, ext.endMin);

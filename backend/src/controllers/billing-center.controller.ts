@@ -595,6 +595,9 @@ export class BillingCenterController {
         billingFrequency,
         billingCycle,
         coversSessions,
+        includedSessions,
+        billingChargesCount,
+        billingCustomEndDate,
         generateCurrentMonth,
         generateInitialCycle,
         generateAllContractCycles,
@@ -628,16 +631,36 @@ export class BillingCenterController {
         return;
       }
 
-      const rawFreq = billingFrequency || billingCycle || 'monthly';
-      if (!['monthly', 'quarterly', 'semiannual', 'annual'].includes(String(rawFreq).toLowerCase())) {
-        res.status(400).json({ error: 'Periodicidade inválida. Utilize monthly, quarterly, semiannual ou annual.' });
+      const rawFreq = String(billingFrequency || billingCycle || 'monthly').trim().toLowerCase();
+      if (!['monthly', 'bimonthly', 'quarterly', 'semiannual', 'annual', 'biennial', 'custom_date', 'count', 'fixed_count', '1_month', '2_months', '3_months', '6_months', '12_months', '24_months'].includes(rawFreq)) {
+        res.status(400).json({ error: 'Periodicidade inválida. Utilize Mensal, Bimestral, Trimestral, Semestral, Anual, Bienal, Data final personalizada ou Quantidade fixa de aulas.' });
         return;
       }
       const { frequency } = normalizePeriodicFrequency(rawFreq);
 
       const effStartDate = startDate ? String(startDate).slice(0, 10) : getClinicTodayIso();
-      const effEndDate = endDate ? String(endDate).slice(0, 10) : null;
+      const rawCustomEnd = billingCustomEndDate ? String(billingCustomEndDate).slice(0, 10) : null;
+      const effEndDate = endDate ? String(endDate).slice(0, 10) : rawCustomEnd;
       const roundedAmount = Math.round(numAmount * 100) / 100;
+
+      if (frequency === 'custom_date' && (!effEndDate || !/^\d{4}-\d{2}-\d{2}$/.test(effEndDate) || effEndDate < effStartDate)) {
+        res.status(400).json({ error: 'Para periodicidade financeira com data final personalizada, informe uma data final válida igual ou posterior à data inicial.' });
+        return;
+      }
+      const parsedIncludedSessions = includedSessions !== undefined && includedSessions !== null && String(includedSessions).trim() !== ''
+        ? Math.floor(Number(includedSessions))
+        : null;
+      if (frequency === 'count' && (!parsedIncludedSessions || parsedIncludedSessions < 1)) {
+        res.status(400).json({ error: 'Para periodicidade financeira por quantidade fixa de aulas, informe a quantidade de aulas contratadas (mínimo 1).' });
+        return;
+      }
+      const parsedChargesCount = billingChargesCount !== undefined && billingChargesCount !== null && String(billingChargesCount).trim() !== ''
+        ? Math.floor(Number(billingChargesCount))
+        : 1;
+      if (!Number.isInteger(parsedChargesCount) || parsedChargesCount < 1 || parsedChargesCount > 24) {
+        res.status(400).json({ error: 'Informe uma quantidade válida de cobranças (entre 1 e 24).' });
+        return;
+      }
 
       const result = db.transaction(() => {
         return BillingCycleService.createPeriodicPlanTx({
@@ -645,6 +668,9 @@ export class BillingCenterController {
           patientId,
           serviceId: serviceId || null,
           professionalId: professionalId || null,
+          includedSessions: parsedIncludedSessions,
+          billingChargesCount: frequency === 'custom_date' || frequency === 'count' ? parsedChargesCount : null,
+          billingCustomEndDate: frequency === 'custom_date' ? effEndDate : null,
           title: String(title).trim(),
           amount: roundedAmount,
           billingFrequency: frequency,
@@ -656,7 +682,10 @@ export class BillingCenterController {
           notes: notes ? String(notes).trim() : null,
           coversSessions: coversSessions !== false && coversSessions !== 0,
           generateInitialCycle: Boolean(generateCurrentMonth || generateInitialCycle),
-          generateAllContractCycles: Boolean(generateAllContractCycles),
+          generateAllContractCycles:
+            frequency === 'custom_date' || frequency === 'count'
+              ? Boolean(generateCurrentMonth || generateInitialCycle || generateAllContractCycles)
+              : Boolean(generateAllContractCycles),
           initialPaymentStatus: initialPaymentStatus === 'paid' ? 'paid' : 'pending',
           createdBy: req.user?.userId || 'system'
         });
@@ -738,8 +767,8 @@ export class BillingCenterController {
       let nextFrequency = existing.billing_frequency || existing.billing_cycle || 'monthly';
       let nextCycleMonths = Number(existing.cycle_months || 1);
       if (billingFrequency !== undefined || billingCycle !== undefined) {
-        const rawFreq = billingFrequency || billingCycle;
-        if (!['monthly', 'quarterly', 'semiannual', 'annual'].includes(String(rawFreq).toLowerCase())) {
+        const rawFreq = String(billingFrequency || billingCycle).trim().toLowerCase();
+        if (!['monthly', 'bimonthly', 'quarterly', 'semiannual', 'annual', 'biennial', 'custom_date', 'count', 'fixed_count', '1_month', '2_months', '3_months', '6_months', '12_months', '24_months'].includes(rawFreq)) {
           res.status(400).json({ error: 'Periodicidade inválida.' });
           return;
         }

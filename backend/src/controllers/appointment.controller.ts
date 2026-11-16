@@ -714,7 +714,7 @@ export class AppointmentController {
 
       // 2. Verifica concorrência do PACIENTE em toda a clínica (Regra do Item 9)
       const patientConflict = db.prepare(`
-        SELECT a.id, a.start_time, a.end_time, p.name as professional_name, s.name as service_name
+        SELECT a.id, a.service_id, a.occurrence_id, a.start_time, a.end_time, p.name as professional_name, s.name as service_name
         FROM appointments a
         JOIN professionals p ON p.id = a.professional_id
         LEFT JOIN services s ON s.id = a.service_id
@@ -722,12 +722,20 @@ export class AppointmentController {
           AND a.patient_id = ?
           AND a.status NOT IN ('cancelled')
           AND REPLACE(a.start_time, ' ', 'T') < ? AND REPLACE(a.end_time, ' ', 'T') > ?
-      `).get(tenantId, resolvedPatientId, normalizedEndTime, normalizedStartTime) as any;
+        ORDER BY CASE WHEN a.service_id = ? THEN 0 ELSE 1 END ASC
+      `).get(tenantId, resolvedPatientId, normalizedEndTime, normalizedStartTime, serviceId) as any;
 
       if (patientConflict) {
+        const isSameGroupEnrollment = Boolean(
+          isGroupService &&
+          patientConflict.service_id === serviceId &&
+          String(patientConflict.start_time || '').trim().replace(' ', 'T').slice(0, 16) === normalizedStartTime.slice(0, 16)
+        );
         res.status(409).json({
-          error: isGroupService ? 'Este aluno já possui um atendimento ou aula neste horário.' : 'Este paciente já possui um atendimento neste horário.',
-          code: 'PATIENT_APPOINTMENT_CONFLICT',
+          error: isSameGroupEnrollment
+            ? 'Aluno já inscrito nesta turma e horário.'
+            : (isGroupService ? 'Este aluno já possui um atendimento ou aula neste horário.' : 'Este paciente já possui um atendimento neste horário.'),
+          code: isSameGroupEnrollment ? 'ALREADY_ENROLLED' : 'PATIENT_APPOINTMENT_CONFLICT',
           ...(isPublic ? {} : { conflict: {
             startTime: patientConflict.start_time,
             endTime: patientConflict.end_time,
@@ -766,18 +774,47 @@ export class AppointmentController {
         }
       }
 
-      if (!isCustomTime && !isPublic && !calculateAvailableSlots(
-        tenantId,
-        professionalId,
-        serviceId,
-        normalizedStartTime.slice(0, 10),
-        roomId || undefined,
-        mockNow,
-        undefined,
-        resolvedPatientId,
-        { ignoreLeadTime: true }
-      ).some(slot => slot.startTime === normalizedStartTime && slot.endTime === normalizedEndTime)) {
-        res.status(409).json({ code: 'SLOT_UNAVAILABLE', error: 'Este horário não está mais disponível para a duração do serviço. Atualize os horários e escolha novamente.' }); return;
+      if (!isCustomTime && !isPublic) {
+        const slotFound = calculateAvailableSlots(
+          tenantId,
+          professionalId,
+          serviceId,
+          normalizedStartTime.slice(0, 10),
+          roomId || undefined,
+          mockNow,
+          undefined,
+          resolvedPatientId,
+          { ignoreLeadTime: true }
+        ).some(slot => slot.startTime === normalizedStartTime && slot.endTime === normalizedEndTime);
+
+        if (!slotFound) {
+          if (isGroupService) {
+            const cleanGroupStart = normalizedStartTime.slice(0, 16);
+            const hasExistingGroupSession = Boolean(
+              db.prepare(`
+                SELECT 1 FROM class_occurrences
+                WHERE tenant_id = ? AND service_id = ? AND professional_id = ?
+                  AND REPLACE(substr(start_time, 1, 16), ' ', 'T') = ?
+                  AND status != 'cancelled'
+                LIMIT 1
+              `).get(tenantId, serviceId, professionalId, cleanGroupStart) ||
+              db.prepare(`
+                SELECT 1 FROM appointments
+                WHERE tenant_id = ? AND service_id = ? AND professional_id = ?
+                  AND REPLACE(substr(start_time, 1, 16), ' ', 'T') = ?
+                  AND status NOT IN ('cancelled')
+                LIMIT 1
+              `).get(tenantId, serviceId, professionalId, cleanGroupStart)
+            );
+            if (!hasExistingGroupSession) {
+              res.status(409).json({ code: 'SLOT_UNAVAILABLE', error: 'Este horário não está mais disponível para a duração do serviço. Atualize os horários e escolha novamente.' });
+              return;
+            }
+          } else {
+            res.status(409).json({ code: 'SLOT_UNAVAILABLE', error: 'Este horário não está mais disponível para a duração do serviço. Atualize os horários e escolha novamente.' });
+            return;
+          }
+        }
       }
 
       const appointmentId = 'apt-' + uuidv4().slice(0, 8);
@@ -3005,12 +3042,25 @@ export class AppointmentController {
             : normalizeUniqueIds(occEval.coInstructorIds || [], occProfId);
 
           const patientConflict = db.prepare(`
-            SELECT a.id FROM appointments a
+            SELECT a.id, a.service_id, a.start_time FROM appointments a
             WHERE a.tenant_id = ? AND a.patient_id = ? AND a.status != 'cancelled'
               AND REPLACE(a.start_time, ' ', 'T') < ? AND REPLACE(a.end_time, ' ', 'T') > ?
-          `).get(tenantId, patientId, eIso, sIso);
+            ORDER BY CASE WHEN a.service_id = ? THEN 0 ELSE 1 END ASC
+            LIMIT 1
+          `).get(tenantId, patientId, eIso, sIso, serviceId) as { id: string; service_id?: string | null; start_time?: string } | undefined;
           if (patientConflict) {
-            throw { status: 409, code: 'PATIENT_APPOINTMENT_CONFLICT', error: `O aluno/paciente já possui agendamento conflitante em ${d} (${occStartClock}).` };
+            const isSameGroup = Boolean(
+              isGroupService &&
+              patientConflict.service_id === serviceId &&
+              String(patientConflict.start_time || '').trim().replace(' ', 'T').slice(0, 16) === sIso.slice(0, 16)
+            );
+            throw {
+              status: 409,
+              code: isSameGroup ? 'ALREADY_ENROLLED' : 'PATIENT_APPOINTMENT_CONFLICT',
+              error: isSameGroup
+                ? 'Aluno já inscrito nesta turma e horário.'
+                : `O aluno/paciente já possui agendamento conflitante em ${d} (${occStartClock}).`
+            };
           }
 
           let occurrenceId: string | null = null;

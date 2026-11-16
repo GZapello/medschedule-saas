@@ -913,36 +913,71 @@ export function requireStudioEstablishment(req: Request, res: Response, next: Ne
 export type ServiceBillingMode =
   | 'per_session'
   | 'monthly'
+  | 'bimonthly'
   | 'quarterly'
   | 'semiannual'
   | 'annual'
+  | 'biennial'
+  | 'custom_date'
+  | 'count'
   | 'package';
 
-export type PeriodicBillingFrequency = 'monthly' | 'quarterly' | 'semiannual' | 'annual';
+export type PeriodicBillingFrequency =
+  | 'monthly'
+  | 'bimonthly'
+  | 'quarterly'
+  | 'semiannual'
+  | 'annual'
+  | 'biennial'
+  | 'custom_date'
+  | 'count';
+
+export const ALL_PERIODIC_BILLING_FREQUENCIES: PeriodicBillingFrequency[] = [
+  'monthly',
+  'bimonthly',
+  'quarterly',
+  'semiannual',
+  'annual',
+  'biennial',
+  'custom_date',
+  'count'
+];
 
 export const ALL_SERVICE_BILLING_MODES: ServiceBillingMode[] = [
   'per_session',
   'monthly',
+  'bimonthly',
   'quarterly',
   'semiannual',
   'annual',
+  'biennial',
+  'custom_date',
+  'count',
   'package'
 ];
 
 export const SERVICE_BILLING_MODE_LABELS: Record<ServiceBillingMode, string> = {
   per_session: 'Por Atendimento / Aula',
   monthly: 'Mensal',
+  bimonthly: 'Bimestral',
   quarterly: 'Trimestral',
   semiannual: 'Semestral',
   annual: 'Anual',
+  biennial: 'Bienal',
+  custom_date: 'Data final personalizada',
+  count: 'Quantidade fixa de aulas',
   package: 'Utilizar Pacote de Serviços existente'
 };
 
 export const PERIODIC_BILLING_CYCLE_MONTHS: Record<PeriodicBillingFrequency, number> = {
   monthly: 1,
+  bimonthly: 2,
   quarterly: 3,
   semiannual: 6,
-  annual: 12
+  annual: 12,
+  biennial: 24,
+  custom_date: 1,
+  count: 1
 };
 
 export function isValidServiceBillingMode(value: unknown): value is ServiceBillingMode {
@@ -951,7 +986,7 @@ export function isValidServiceBillingMode(value: unknown): value is ServiceBilli
 
 export function isPeriodicBillingMode(mode: unknown): mode is PeriodicBillingFrequency {
   const m = String(mode || '').trim().toLowerCase();
-  return m === 'monthly' || m === 'quarterly' || m === 'semiannual' || m === 'annual';
+  return (ALL_PERIODIC_BILLING_FREQUENCIES as string[]).includes(m);
 }
 
 export function getCycleMonthsForBillingFrequency(freq: unknown): number {

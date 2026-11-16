@@ -92,7 +92,7 @@ export const CollectionsModal: React.FC<CollectionsModalProps> = ({
   const [planProfessionalId, setPlanProfessionalId] = useState<string>('');
   const [planTitle, setPlanTitle] = useState<string>('Mensalidade');
   const [planAmount, setPlanAmount] = useState<string>('');
-  const [planFrequency, setPlanFrequency] = useState<'monthly' | 'quarterly' | 'semiannual' | 'annual'>('monthly');
+  const [planFrequency, setPlanFrequency] = useState<'monthly' | 'bimonthly' | 'quarterly' | 'semiannual' | 'annual' | 'biennial' | 'custom_date' | 'count'>('monthly');
   const [planDueDay, setPlanDueDay] = useState<number>(10);
   const [planPaymentMethod, setPlanPaymentMethod] = useState<string>('pix');
   const [planGenerateNow, setPlanGenerateNow] = useState<boolean>(true);
@@ -710,10 +710,12 @@ export const CollectionsModal: React.FC<CollectionsModalProps> = ({
                           onChange={e => setPlanFrequency(e.target.value as any)}
                           className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white"
                         >
-                          <option value="monthly">Mensal</option>
+                          <option value="monthly">Mensal (1 mês)</option>
+                          <option value="bimonthly">Bimestral (2 meses)</option>
                           <option value="quarterly">Trimestral (3 meses)</option>
                           <option value="semiannual">Semestral (6 meses)</option>
                           <option value="annual">Anual (12 meses)</option>
+                          <option value="biennial">Bienal (24 meses)</option>
                         </select>
                       </div>
                     </div>
@@ -830,13 +832,21 @@ export const CollectionsModal: React.FC<CollectionsModalProps> = ({
                             {plan.status === 'active' ? 'Ativo' : plan.status === 'paused' ? 'Pausado' : 'Encerrado'}
                           </span>
                           <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
-                            {plan.billing_frequency === 'quarterly'
-                              ? 'Trimestral'
-                              : plan.billing_frequency === 'semiannual'
-                                ? 'Semestral'
-                                : plan.billing_frequency === 'annual'
-                                  ? 'Anual'
-                                  : 'Mensal'}
+                            {plan.billing_frequency === 'bimonthly'
+                              ? 'Bimestral'
+                              : plan.billing_frequency === 'quarterly'
+                                ? 'Trimestral'
+                                : plan.billing_frequency === 'semiannual'
+                                  ? 'Semestral'
+                                  : plan.billing_frequency === 'annual'
+                                    ? 'Anual'
+                                    : plan.billing_frequency === 'biennial'
+                                      ? 'Bienal'
+                                      : plan.billing_frequency === 'custom_date'
+                                        ? 'Data personalizada'
+                                        : plan.billing_frequency === 'count'
+                                          ? 'Qtd. fixa de aulas'
+                                          : 'Mensal'}
                           </span>
                         </div>
                         <p className="text-xs text-slate-600 mt-0.5">

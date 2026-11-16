@@ -531,12 +531,50 @@ export function clearActiveStudioSession(): void {
 export type ServiceBillingMode =
   | 'per_session'
   | 'monthly'
+  | 'bimonthly'
   | 'quarterly'
   | 'semiannual'
   | 'annual'
+  | 'biennial'
+  | 'custom_date'
+  | 'count'
   | 'package';
 
-export type PeriodicBillingFrequency = 'monthly' | 'quarterly' | 'semiannual' | 'annual';
+export type PeriodicBillingFrequency =
+  | 'monthly'
+  | 'bimonthly'
+  | 'quarterly'
+  | 'semiannual'
+  | 'annual'
+  | 'biennial'
+  | 'custom_date'
+  | 'count';
+
+export const PERIODIC_BILLING_FREQUENCY_OPTIONS: Array<{
+  value: PeriodicBillingFrequency;
+  label: string;
+  cycleMonths: number | null;
+}> = [
+  { value: 'monthly', label: 'Mensal (1 mês)', cycleMonths: 1 },
+  { value: 'bimonthly', label: 'Bimestral (2 meses)', cycleMonths: 2 },
+  { value: 'quarterly', label: 'Trimestral (3 meses)', cycleMonths: 3 },
+  { value: 'semiannual', label: 'Semestral (6 meses)', cycleMonths: 6 },
+  { value: 'annual', label: 'Anual (12 meses)', cycleMonths: 12 },
+  { value: 'biennial', label: 'Bienal (24 meses)', cycleMonths: 24 },
+  { value: 'custom_date', label: 'Data final personalizada', cycleMonths: null },
+  { value: 'count', label: 'Quantidade fixa de aulas', cycleMonths: null }
+];
+
+export const PERIODIC_BILLING_FREQUENCY_LABELS: Record<PeriodicBillingFrequency, string> = {
+  monthly: 'Mensal (1 mês)',
+  bimonthly: 'Bimestral (2 meses)',
+  quarterly: 'Trimestral (3 meses)',
+  semiannual: 'Semestral (6 meses)',
+  annual: 'Anual (12 meses)',
+  biennial: 'Bienal (24 meses)',
+  custom_date: 'Data final personalizada',
+  count: 'Quantidade fixa de aulas'
+};
 
 export const SERVICE_BILLING_MODE_OPTIONS: Array<{
   value: ServiceBillingMode;
@@ -545,33 +583,52 @@ export const SERVICE_BILLING_MODE_OPTIONS: Array<{
   shortPeriod: string;
 }> = [
   { value: 'per_session', label: 'Por Atendimento / Aula', cycleMonths: null, shortPeriod: 'por aula' },
-  { value: 'monthly', label: 'Mensal', cycleMonths: 1, shortPeriod: 'a cada 1 mês' },
-  { value: 'quarterly', label: 'Trimestral', cycleMonths: 3, shortPeriod: 'a cada 3 meses' },
-  { value: 'semiannual', label: 'Semestral', cycleMonths: 6, shortPeriod: 'a cada 6 meses' },
-  { value: 'annual', label: 'Anual', cycleMonths: 12, shortPeriod: 'a cada 12 meses' },
+  { value: 'monthly', label: 'Mensal (1 mês)', cycleMonths: 1, shortPeriod: 'a cada 1 mês' },
+  { value: 'bimonthly', label: 'Bimestral (2 meses)', cycleMonths: 2, shortPeriod: 'a cada 2 meses' },
+  { value: 'quarterly', label: 'Trimestral (3 meses)', cycleMonths: 3, shortPeriod: 'a cada 3 meses' },
+  { value: 'semiannual', label: 'Semestral (6 meses)', cycleMonths: 6, shortPeriod: 'a cada 6 meses' },
+  { value: 'annual', label: 'Anual (12 meses)', cycleMonths: 12, shortPeriod: 'a cada 12 meses' },
+  { value: 'biennial', label: 'Bienal (24 meses)', cycleMonths: 24, shortPeriod: 'a cada 24 meses' },
+  { value: 'custom_date', label: 'Data final personalizada', cycleMonths: null, shortPeriod: 'período personalizado' },
+  { value: 'count', label: 'Quantidade fixa de aulas', cycleMonths: null, shortPeriod: 'lote fixo de aulas' },
   { value: 'package', label: 'Utilizar Pacote de Serviços existente', cycleMonths: null, shortPeriod: 'via pacote' }
 ];
 
 export const SERVICE_BILLING_MODE_LABELS: Record<ServiceBillingMode, string> = {
   per_session: 'Por Atendimento / Aula',
   monthly: 'Mensal',
+  bimonthly: 'Bimestral',
   quarterly: 'Trimestral',
   semiannual: 'Semestral',
   annual: 'Anual',
+  biennial: 'Bienal',
+  custom_date: 'Data final personalizada',
+  count: 'Quantidade fixa de aulas',
   package: 'Pacote de Serviços'
 };
 
 export function isPeriodicBillingMode(mode?: unknown): mode is PeriodicBillingFrequency {
   const m = String(mode || '').trim().toLowerCase();
-  return m === 'monthly' || m === 'quarterly' || m === 'semiannual' || m === 'annual';
+  return (
+    m === 'monthly' ||
+    m === 'bimonthly' ||
+    m === 'quarterly' ||
+    m === 'semiannual' ||
+    m === 'annual' ||
+    m === 'biennial' ||
+    m === 'custom_date' ||
+    m === 'count'
+  );
 }
 
 export function getCycleMonthsForBillingMode(mode?: unknown): number {
   const m = String(mode || '').trim().toLowerCase();
   if (m === 'monthly') return 1;
+  if (m === 'bimonthly') return 2;
   if (m === 'quarterly') return 3;
   if (m === 'semiannual') return 6;
   if (m === 'annual') return 12;
+  if (m === 'biennial') return 24;
   return 1;
 }
 
@@ -592,6 +649,10 @@ export function formatServiceBillingSummary(params: {
     const val = Number(params.periodicPrice ?? params.sessionPrice ?? 0);
     return `${name} — ${formatCurrencyBRL(val)} por mês.`;
   }
+  if (mode === 'bimonthly') {
+    const val = Number(params.periodicPrice ?? 0);
+    return `${name} — ${formatCurrencyBRL(val)} a cada 2 meses.`;
+  }
   if (mode === 'quarterly') {
     const val = Number(params.periodicPrice ?? 0);
     return `${name} — ${formatCurrencyBRL(val)} a cada 3 meses.`;
@@ -603,6 +664,18 @@ export function formatServiceBillingSummary(params: {
   if (mode === 'annual') {
     const val = Number(params.periodicPrice ?? 0);
     return `${name} — ${formatCurrencyBRL(val)} a cada 12 meses.`;
+  }
+  if (mode === 'biennial') {
+    const val = Number(params.periodicPrice ?? 0);
+    return `${name} — ${formatCurrencyBRL(val)} a cada 24 meses.`;
+  }
+  if (mode === 'custom_date') {
+    const val = Number(params.periodicPrice ?? 0);
+    return `${name} — ${formatCurrencyBRL(val)} em período com data final personalizada.`;
+  }
+  if (mode === 'count') {
+    const val = Number(params.periodicPrice ?? 0);
+    return `${name} — ${formatCurrencyBRL(val)} por quantidade fixa de aulas.`;
   }
   if (mode === 'package') {
     return params.packageName

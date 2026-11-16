@@ -329,7 +329,7 @@ export function generateSchedulePlanOccurrences(opts: {
         dayOfWeek: dow,
         startClock: sc,
         endClock: ec,
-        classScheduleId: entrySchedId ? String(entrySchedId) : (opts.classScheduleId ? String(opts.classScheduleId) : null),
+        classScheduleId: entrySchedId ? String(entrySchedId) : null,
         professionalId: rawEntry.professionalId ? String(rawEntry.professionalId) : (opts.professionalId ? String(opts.professionalId) : null),
         coInstructorIds: Array.isArray(rawEntry.coInstructorIds)
           ? rawEntry.coInstructorIds.map(String).filter(Boolean)
@@ -337,6 +337,23 @@ export function generateSchedulePlanOccurrences(opts: {
         roomId: rawEntry.roomId ? String(rawEntry.roomId) : (opts.roomId ? String(opts.roomId) : null),
         modality: rawEntry.modality ? String(rawEntry.modality) : (opts.modality ? String(opts.modality) : null)
       });
+    }
+    if (opts.frequency === 'custom_weekdays' && Array.isArray(opts.weekdays) && opts.weekdays.length > 0) {
+      const extraWds = Array.from(new Set(opts.weekdays.map(Number).filter(n => Number.isInteger(n) && n >= 0 && n <= 6))).sort((a, b) => a - b);
+      for (const wd of extraWds) {
+        if (!normalizedEntries.some(e => e.dayOfWeek === wd)) {
+          normalizedEntries.push({
+            dayOfWeek: wd,
+            startClock: defaultStartClock,
+            endClock: defaultEndClock,
+            classScheduleId: null,
+            professionalId: opts.professionalId ? String(opts.professionalId) : null,
+            coInstructorIds: Array.isArray(opts.coInstructorIds) ? opts.coInstructorIds.map(String).filter(Boolean) : [],
+            roomId: opts.roomId ? String(opts.roomId) : null,
+            modality: opts.modality ? String(opts.modality) : null
+          });
+        }
+      }
     }
     normalizedEntries.sort((a, b) => (a.dayOfWeek - b.dayOfWeek) || a.startClock.localeCompare(b.startClock));
   }
@@ -351,7 +368,7 @@ export function generateSchedulePlanOccurrences(opts: {
         dayOfWeek: wd,
         startClock: defaultStartClock,
         endClock: defaultEndClock,
-        classScheduleId: opts.classScheduleId ? String(opts.classScheduleId) : null,
+        classScheduleId: opts.classScheduleId && wds.length === 1 && wd === startWeekday ? String(opts.classScheduleId) : null,
         professionalId: opts.professionalId ? String(opts.professionalId) : null,
         coInstructorIds: Array.isArray(opts.coInstructorIds) ? opts.coInstructorIds.map(String).filter(Boolean) : [],
         roomId: opts.roomId ? String(opts.roomId) : null,
@@ -545,40 +562,109 @@ export function resolveOrCreateGroupOccurrenceTx(params: {
   });
 
   let existingOcc: any = null;
-  if (explicitOccurrenceId) {
-    existingOcc = db.prepare(`
-      SELECT * FROM class_occurrences
-      WHERE id = ? AND tenant_id = ? AND status != 'cancelled'
-    `).get(explicitOccurrenceId, tenantId);
-  } else {
-    if (classScheduleId) {
-      existingOcc = db.prepare(`
-        SELECT * FROM class_occurrences
-        WHERE tenant_id = ?
-          AND class_schedule_id = ?
-          AND REPLACE(substr(start_time, 1, 16), ' ', 'T') = ?
-          AND status != 'cancelled'
-        ORDER BY created_at ASC
-        LIMIT 1
-      `).get(tenantId, classScheduleId, cleanStart);
-    }
-    if (!existingOcc) {
-      existingOcc = db.prepare(`
-        SELECT * FROM class_occurrences
-        WHERE tenant_id = ?
-          AND professional_id = ?
-          AND service_id = ?
-          AND REPLACE(substr(start_time, 1, 16), ' ', 'T') = ?
-          AND status != 'cancelled'
-        ORDER BY created_at ASC
-        LIMIT 1
-      `).get(tenantId, professionalId, serviceId, cleanStart);
+  const allMatchingOccs = db.prepare(`
+    SELECT * FROM class_occurrences
+    WHERE tenant_id = ?
+      AND status != 'cancelled'
+      AND (
+        (? IS NOT NULL AND id = ?)
+        OR (
+          REPLACE(substr(start_time, 1, 16), ' ', 'T') = ?
+          AND (
+            (? IS NOT NULL AND class_schedule_id = ?)
+            OR (professional_id = ? AND service_id = ?)
+          )
+        )
+      )
+    ORDER BY
+      CASE WHEN ? IS NOT NULL AND id = ? THEN 0 ELSE 1 END ASC,
+      CASE WHEN ? IS NOT NULL AND class_schedule_id = ? THEN 0 ELSE 1 END ASC,
+      created_at ASC
+  `).all(
+    tenantId,
+    explicitOccurrenceId || null,
+    explicitOccurrenceId || null,
+    cleanStart,
+    classScheduleId || null,
+    classScheduleId || null,
+    professionalId,
+    serviceId,
+    explicitOccurrenceId || null,
+    explicitOccurrenceId || null,
+    classScheduleId || null,
+    classScheduleId || null
+  ) as any[];
+
+  if (allMatchingOccs.length > 0) {
+    existingOcc = allMatchingOccs[0];
+    // Consolida ocorrências duplicadas da mesma sessão/turma, se existirem
+    if (allMatchingOccs.length > 1) {
+      for (let i = 1; i < allMatchingOccs.length; i++) {
+        const dupOcc = allMatchingOccs[i];
+        db.prepare(`UPDATE appointments SET occurrence_id = ?, updated_at = datetime('now') WHERE tenant_id = ? AND occurrence_id = ?`)
+          .run(existingOcc.id, tenantId, dupOcc.id);
+        db.prepare(`UPDATE class_occurrences SET status = 'cancelled', updated_at = datetime('now') WHERE id = ? AND tenant_id = ?`)
+          .run(dupOcc.id, tenantId);
+      }
     }
   }
 
   if (existingOcc && classScheduleId && !existingOcc.class_schedule_id) {
     db.prepare(`UPDATE class_occurrences SET class_schedule_id = ?, updated_at = datetime('now') WHERE id = ? AND tenant_id = ?`)
       .run(classScheduleId, existingOcc.id, tenantId);
+  }
+
+  // Se ainda não há ocorrência mas já existem agendamentos ativos deste mesmo serviço/instrutor/horário (ex.: criados sem occurrence_id), cria a ocorrência canônica e vincula-os
+  if (!existingOcc) {
+    const orphanSameClassAppts = db.prepare(`
+      SELECT id FROM appointments
+      WHERE tenant_id = ?
+        AND service_id = ?
+        AND professional_id = ?
+        AND REPLACE(substr(start_time, 1, 16), ' ', 'T') = ?
+        AND status NOT IN ('cancelled')
+    `).all(tenantId, serviceId, professionalId, cleanStart) as Array<{ id: string }>;
+
+    if (orphanSameClassAppts.length > 0) {
+      const occIdNew = 'occ-' + uuidv4().slice(0, 8);
+      const capNew = Math.max(1, Number(defaultCapacity) || 1);
+      db.prepare(`
+        INSERT INTO class_occurrences (
+          id, tenant_id, series_id, class_schedule_id, service_id, professional_id, room_id,
+          title, modality, start_time, end_time, capacity, status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled')
+      `).run(
+        occIdNew,
+        tenantId,
+        seriesId || null,
+        classScheduleId || null,
+        serviceId,
+        professionalId,
+        roomId || null,
+        serviceName,
+        concreteModality,
+        startTime,
+        endTime,
+        capNew
+      );
+      for (const orph of orphanSameClassAppts) {
+        db.prepare(`UPDATE appointments SET occurrence_id = ?, service_kind = 'group', updated_at = datetime('now') WHERE id = ? AND tenant_id = ?`)
+          .run(occIdNew, orph.id, tenantId);
+      }
+      existingOcc = db.prepare(`SELECT * FROM class_occurrences WHERE id = ? AND tenant_id = ?`).get(occIdNew, tenantId);
+    }
+  } else {
+    // Vincula eventuais agendamentos ativos da mesma turma/horário que estavam com occurrence_id nulo
+    db.prepare(`
+      UPDATE appointments
+      SET occurrence_id = ?, service_kind = 'group', updated_at = datetime('now')
+      WHERE tenant_id = ?
+        AND service_id = ?
+        AND professional_id = ?
+        AND REPLACE(substr(start_time, 1, 16), ' ', 'T') = ?
+        AND status NOT IN ('cancelled')
+        AND (occurrence_id IS NULL OR occurrence_id = '')
+    `).run(existingOcc.id, tenantId, serviceId, professionalId, cleanStart);
   }
 
   if (existingOcc) {
@@ -592,7 +678,7 @@ export function resolveOrCreateGroupOccurrenceTx(params: {
     `).get(tenantId, existingOcc.id, patientId) as any;
 
     if (duplicate) {
-      throw Object.assign(new Error('Este aluno já está inscrito neste horário da turma.'), {
+      throw Object.assign(new Error('Aluno já inscrito nesta turma e horário.'), {
         status: 409,
         code: 'ALREADY_ENROLLED'
       });
@@ -613,6 +699,25 @@ export function resolveOrCreateGroupOccurrenceTx(params: {
       });
     }
 
+    // Verifica se o profissional possui conflito real com OUTRO serviço ou horário incompatível fora desta turma
+    const profOtherConflict = db.prepare(`
+      SELECT a.id FROM appointments a
+      WHERE a.tenant_id = ?
+        AND a.professional_id = ?
+        AND COALESCE(a.occurrence_id, '') != ?
+        AND NOT (a.service_id = ? AND REPLACE(substr(a.start_time, 1, 16), ' ', 'T') = ?)
+        AND a.status NOT IN ('cancelled')
+        AND REPLACE(a.start_time, ' ', 'T') < ? AND REPLACE(a.end_time, ' ', 'T') > ?
+      LIMIT 1
+    `).get(tenantId, professionalId, existingOcc.id, serviceId, cleanStart, endTime, startTime) as any;
+
+    if (profOtherConflict) {
+      throw Object.assign(new Error('Conflito com outro atendimento do instrutor neste horário.'), {
+        status: 409,
+        code: 'PROFESSIONAL_CONFLICT'
+      });
+    }
+
     // Se a sala ainda não estava vinculada à ocorrência e veio na nova reserva, verifica conflito de sala antes de associar
     const resolvedRoomId = existingOcc.room_id || roomId || null;
     if (!existingOcc.room_id && roomId) {
@@ -624,10 +729,11 @@ export function resolveOrCreateGroupOccurrenceTx(params: {
         WHERE a.tenant_id = ?
           AND a.room_id = ?
           AND COALESCE(a.occurrence_id, '') != ?
+          AND NOT (a.service_id = ? AND a.professional_id = ? AND REPLACE(substr(a.start_time, 1, 16), ' ', 'T') = ?)
           AND a.status NOT IN ('cancelled')
           AND REPLACE(a.start_time, ' ', 'T') < ? AND REPLACE(a.end_time, ' ', 'T') > ?
         LIMIT 1
-      `).get(tenantId, roomId, existingOcc.id, endTime, startTime) as any;
+      `).get(tenantId, roomId, existingOcc.id, serviceId, professionalId, cleanStart, endTime, startTime) as any;
       if (roomConflict) {
         throw Object.assign(new Error(`A sala ${roomConflict.room_name} já está ocupada neste horário por ${roomConflict.professional_name}.`), {
           status: 409,
@@ -669,15 +775,16 @@ export function resolveOrCreateGroupOccurrenceTx(params: {
     LEFT JOIN services s ON s.id = a.service_id
     WHERE a.tenant_id = ?
       AND a.professional_id = ?
+      AND NOT (a.service_id = ? AND REPLACE(substr(a.start_time, 1, 16), ' ', 'T') = ?)
       AND a.status NOT IN ('cancelled')
       AND REPLACE(a.start_time, ' ', 'T') < ? AND REPLACE(a.end_time, ' ', 'T') > ?
     LIMIT 1
-  `).get(tenantId, professionalId, endTime, startTime) as any;
+  `).get(tenantId, professionalId, serviceId, cleanStart, endTime, startTime) as any;
 
   if (profConflict) {
-    throw Object.assign(new Error('Este horário não está mais disponível para o profissional selecionado.'), {
+    throw Object.assign(new Error('Conflito com outro atendimento do instrutor neste horário.'), {
       status: 409,
-      code: 'PROFESSIONAL_SLOT_OCCUPIED'
+      code: 'PROFESSIONAL_CONFLICT'
     });
   }
 

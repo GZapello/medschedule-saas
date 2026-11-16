@@ -622,6 +622,8 @@ export function migrateStudioImprovements(rawDb: DatabaseSync): void {
   addColIfMissing('recurring_billing_plans', 'plan_duration_code', 'TEXT');
   addColIfMissing('recurring_billing_plans', 'weekly_frequency', 'INTEGER');
   addColIfMissing('recurring_billing_plans', 'included_sessions', 'INTEGER');
+  addColIfMissing('recurring_billing_plans', 'billing_charges_count', 'INTEGER');
+  addColIfMissing('recurring_billing_plans', 'billing_custom_end_date', 'TEXT');
   addColIfMissing('recurring_billing_plans', 'renewed_from_plan_id', 'TEXT');
   addColIfMissing('recurring_billing_plans', 'status_reason', 'TEXT');
 

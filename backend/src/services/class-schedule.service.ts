@@ -1153,87 +1153,107 @@ export class ClassScheduleService {
           eligibleForDate: true,
           bookable: false,
           reasonCode: 'BLOCKED_TIME',
-          reasonMessage: 'Horário bloqueado na agenda do instrutor.',
-          slot: { ...baseSlot, statusLabel: 'Bloqueado', unavailableReason: 'Horário bloqueado na agenda' }
+          reasonMessage: 'Horário bloqueado',
+          slot: { ...baseSlot, statusLabel: 'Horário bloqueado', unavailableReason: 'Horário bloqueado na agenda' }
         };
       }
     }
 
-    // Google Calendar ocupado
-    if (params.externalBusyIntervals && params.externalBusyIntervals.length > 0) {
-      for (const ext of params.externalBusyIntervals) {
-        if (startMin < ext.endMin && endMin > ext.startMin) {
-          return {
-            eligibleForDate: false,
-            bookable: false,
-            reasonCode: 'GOOGLE_BUSY',
-            reasonMessage: 'Instrutor indisponível neste horário.',
-            slot: baseSlot
-          };
-        }
-      }
-    }
-
-    // Ocorrência existente para esta turma/horário (por class_schedule_id ou chave clássica)
+    // Ocorrências existentes para esta turma/horário (por class_schedule_id ou chave de serviço/instrutor/horário)
     const cleanStart = startTimeIso.slice(0, 16);
-    let occ = db.prepare(`
+    const matchingOccs = db.prepare(`
       SELECT o.*
       FROM class_occurrences o
       WHERE o.tenant_id = ?
-        AND o.class_schedule_id = ?
         AND REPLACE(substr(o.start_time, 1, 16), ' ', 'T') = ?
-      ORDER BY o.created_at DESC
-      LIMIT 1
-    `).get(tenantId, schedule.id, cleanStart) as any;
+        AND (
+          o.class_schedule_id = ?
+          OR (o.service_id = ? AND o.professional_id = ?)
+        )
+      ORDER BY
+        CASE WHEN o.status != 'cancelled' THEN 0 ELSE 1 END ASC,
+        CASE WHEN o.class_schedule_id = ? THEN 0 ELSE 1 END ASC,
+        o.created_at ASC
+    `).all(
+      tenantId,
+      cleanStart,
+      schedule.id,
+      schedule.service_id,
+      schedule.professional_id,
+      schedule.id
+    ) as any[];
 
-    if (!occ) {
-      occ = db.prepare(`
-        SELECT o.*
-        FROM class_occurrences o
-        WHERE o.tenant_id = ?
-          AND o.service_id = ?
-          AND o.professional_id = ?
-          AND REPLACE(substr(o.start_time, 1, 16), ' ', 'T') = ?
-        ORDER BY o.created_at DESC
-        LIMIT 1
-      `).get(tenantId, schedule.service_id, schedule.professional_id, cleanStart) as any;
-    }
-
-    if (occ && occ.status === 'cancelled') {
+    if (matchingOccs.length > 0 && matchingOccs.every(o => o.status === 'cancelled')) {
+      const cancelledOcc = matchingOccs[0];
       return {
         eligibleForDate: true,
         bookable: false,
         reasonCode: 'OCCURRENCE_CANCELLED',
-        reasonMessage: 'Esta aula foi cancelada para esta data.',
-        slot: { ...baseSlot, occurrenceId: occ.id, statusLabel: 'Aula cancelada', unavailableReason: 'Aula cancelada nesta data' }
+        reasonMessage: 'Turma cancelada',
+        slot: {
+          ...baseSlot,
+          occurrenceId: cancelledOcc.id,
+          statusLabel: 'Turma cancelada',
+          unavailableReason: 'Turma cancelada nesta data'
+        }
       };
     }
 
+    const activeOccs = matchingOccs.filter(o => o.status !== 'cancelled');
+    const occ = activeOccs[0] || null;
     const occId = occ ? occ.id : null;
 
-    // Conflitos de agenda com outros atendimentos do instrutor (fora desta mesma ocorrência)
+    // Conflitos de agenda com OUTROS atendimentos do instrutor (exceto inscrições de alunos nesta mesma turma/sessão)
     const profConflict = db.prepare(`
-      SELECT a.id FROM appointments a
+      SELECT a.id, a.service_id, a.occurrence_id, a.start_time, a.end_time FROM appointments a
       WHERE a.tenant_id = ?
         AND a.professional_id = ?
-        AND (? IS NULL OR COALESCE(a.occurrence_id, '') != ?)
         AND a.status NOT IN ('cancelled')
         AND REPLACE(a.start_time, ' ', 'T') < ?
         AND REPLACE(a.end_time, ' ', 'T') > ?
+        AND NOT (
+          (a.service_id = ? AND REPLACE(substr(a.start_time, 1, 16), ' ', 'T') = ?)
+          OR (a.occurrence_id IS NOT NULL AND ? IS NOT NULL AND a.occurrence_id = ?)
+          OR (a.occurrence_id IS NOT NULL AND a.occurrence_id IN (
+            SELECT o2.id FROM class_occurrences o2
+            WHERE o2.tenant_id = ?
+              AND o2.status != 'cancelled'
+              AND REPLACE(substr(o2.start_time, 1, 16), ' ', 'T') = ?
+              AND (o2.class_schedule_id = ? OR (o2.service_id = ? AND o2.professional_id = ?))
+          ))
+        )
       LIMIT 1
-    `).get(tenantId, schedule.professional_id, occId, occId, endTimeIso, startTimeIso);
+    `).get(
+      tenantId,
+      schedule.professional_id,
+      endTimeIso,
+      startTimeIso,
+      schedule.service_id,
+      cleanStart,
+      occId,
+      occId,
+      tenantId,
+      cleanStart,
+      schedule.id,
+      schedule.service_id,
+      schedule.professional_id
+    ) as any;
 
     if (profConflict) {
       return {
         eligibleForDate: false,
         bookable: false,
         reasonCode: 'PROFESSIONAL_CONFLICT',
-        reasonMessage: 'Instrutor já possui outro atendimento neste horário.',
-        slot: baseSlot
+        reasonMessage: 'Conflito com outro atendimento',
+        slot: {
+          ...baseSlot,
+          statusLabel: 'Conflito com outro atendimento',
+          unavailableReason: 'Conflito com outro atendimento'
+        }
       };
     }
 
-    // Conflito de sala física
+    // Conflito de sala física (exceto inscrições desta mesma turma/sessão)
     const effectiveRoomId = occ?.room_id || schedule.room_id || null;
     if (effectiveRoomId) {
       const roomConflict = db.prepare(`
@@ -1241,12 +1261,37 @@ export class ClassScheduleService {
         LEFT JOIN rooms r ON r.id = a.room_id
         WHERE a.tenant_id = ?
           AND a.room_id = ?
-          AND (? IS NULL OR COALESCE(a.occurrence_id, '') != ?)
           AND a.status NOT IN ('cancelled')
           AND REPLACE(a.start_time, ' ', 'T') < ?
           AND REPLACE(a.end_time, ' ', 'T') > ?
+          AND NOT (
+            (a.service_id = ? AND a.professional_id = ? AND REPLACE(substr(a.start_time, 1, 16), ' ', 'T') = ?)
+            OR (a.occurrence_id IS NOT NULL AND ? IS NOT NULL AND a.occurrence_id = ?)
+            OR (a.occurrence_id IS NOT NULL AND a.occurrence_id IN (
+              SELECT o2.id FROM class_occurrences o2
+              WHERE o2.tenant_id = ?
+                AND o2.status != 'cancelled'
+                AND REPLACE(substr(o2.start_time, 1, 16), ' ', 'T') = ?
+                AND (o2.class_schedule_id = ? OR (o2.service_id = ? AND o2.professional_id = ?))
+            ))
+          )
         LIMIT 1
-      `).get(tenantId, effectiveRoomId, occId, occId, endTimeIso, startTimeIso) as any;
+      `).get(
+        tenantId,
+        effectiveRoomId,
+        endTimeIso,
+        startTimeIso,
+        schedule.service_id,
+        schedule.professional_id,
+        cleanStart,
+        occId,
+        occId,
+        tenantId,
+        cleanStart,
+        schedule.id,
+        schedule.service_id,
+        schedule.professional_id
+      ) as any;
 
       if (roomConflict) {
         return {
@@ -1259,43 +1304,58 @@ export class ClassScheduleService {
       }
     }
 
-    const capacity = Math.max(1, Number(occ?.capacity) || Number(schedule.capacity) || Number(serviceRow.default_capacity) || 1);
-    const enrolledCount = occId
-      ? Number(
-          (
-            db.prepare(`
-              SELECT COUNT(*) as c FROM appointments
-              WHERE tenant_id = ? AND occurrence_id = ? AND status NOT IN ('cancelled')
-            `).get(tenantId, occId) as any
-          )?.c || 0
+    const enrolledRows = db.prepare(`
+      SELECT DISTINCT a.id, a.patient_id
+      FROM appointments a
+      WHERE a.tenant_id = ?
+        AND a.status NOT IN ('cancelled')
+        AND (
+          (a.service_id = ? AND a.professional_id = ? AND REPLACE(substr(a.start_time, 1, 16), ' ', 'T') = ?)
+          OR (? IS NOT NULL AND a.occurrence_id = ?)
+          OR a.occurrence_id IN (
+            SELECT o2.id FROM class_occurrences o2
+            WHERE o2.tenant_id = ?
+              AND o2.status != 'cancelled'
+              AND REPLACE(substr(o2.start_time, 1, 16), ' ', 'T') = ?
+              AND (o2.class_schedule_id = ? OR (o2.service_id = ? AND o2.professional_id = ?))
+          )
         )
-      : 0;
+    `).all(
+      tenantId,
+      schedule.service_id,
+      schedule.professional_id,
+      cleanStart,
+      occId,
+      occId,
+      tenantId,
+      cleanStart,
+      schedule.id,
+      schedule.service_id,
+      schedule.professional_id
+    ) as Array<{ id: string; patient_id: string }>;
+
+    const capacity = Math.max(1, Number(occ?.capacity) || Number(schedule.capacity) || Number(serviceRow.default_capacity) || 1);
+    const enrolledCount = enrolledRows.length;
     const remainingSpots = Math.max(0, capacity - enrolledCount);
     const isFull = remainingSpots <= 0;
 
-    if (params.patientId && occId) {
-      const dup = db.prepare(`
-        SELECT id FROM appointments
-        WHERE tenant_id = ? AND occurrence_id = ? AND patient_id = ? AND status NOT IN ('cancelled')
-        LIMIT 1
-      `).get(tenantId, occId, params.patientId);
-      if (dup) {
-        return {
-          eligibleForDate: true,
-          bookable: false,
-          reasonCode: 'ALREADY_ENROLLED',
-          reasonMessage: 'Este aluno já está inscrito neste horário da turma.',
-          slot: {
-            ...baseSlot,
-            occurrenceId: occId,
-            capacity,
-            enrolledCount,
-            remainingSpots,
-            isFull: true,
-            statusLabel: 'Já inscrito'
-          }
-        };
-      }
+    if (params.patientId && enrolledRows.some(r => r.patient_id === params.patientId)) {
+      return {
+        eligibleForDate: true,
+        bookable: false,
+        reasonCode: 'ALREADY_ENROLLED',
+        reasonMessage: 'Aluno já inscrito',
+        slot: {
+          ...baseSlot,
+          occurrenceId: occId,
+          capacity,
+          enrolledCount,
+          remainingSpots,
+          isFull: true,
+          statusLabel: 'Aluno já inscrito',
+          unavailableReason: 'Aluno já inscrito'
+        }
+      };
     }
 
     return {
@@ -1304,7 +1364,7 @@ export class ClassScheduleService {
       ...(isFull
         ? {
             reasonCode: 'CLASS_FULL',
-            reasonMessage: 'Turma lotada: todas as vagas para este horário já foram preenchidas.'
+            reasonMessage: 'Turma lotada'
           }
         : {}),
       slot: {
@@ -1317,7 +1377,7 @@ export class ClassScheduleService {
         isFull,
         statusLabel: isFull
           ? 'Turma lotada'
-          : `${remainingSpots} vaga${remainingSpots === 1 ? '' : 's'} disponíve${remainingSpots === 1 ? 'l' : 'is'}`
+          : `Disponível — ${remainingSpots} vaga${remainingSpots === 1 ? '' : 's'} restante${remainingSpots === 1 ? '' : 's'}`
       }
     };
   }

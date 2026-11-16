@@ -548,7 +548,449 @@ async function runTests() {
   const preservedPaidPayment = db.prepare(`SELECT COUNT(*) as cnt FROM payments WHERE recurring_plan_id = ? AND status = 'paid'`).get(monthlyPlanId).cnt;
   assert.ok(preservedPaidPayment >= 1, 'Cancelamento do contrato deve preservar cobranças já pagas');
 
-  console.log('✅ TODOS OS 12 BLOCOS DE TESTES DE INTEGRAÇÃO DO ZEMDA STUDIO PASSARAM COM SUCESSO!');
+  // 13. Padronização da Periodicidade Financeira (Bimestral, Bienal, Data final personalizada, Quantidade fixa de aulas e independência da Duração do Plano)
+  // 13a. Duração Anual (12 meses) + Pagamento Bimestral (a cada 2 meses) -> 6 competências bimestrais exatas
+  const bimonthlyPlanRes = await callController(BillingCenterController.createRecurringPlan, {
+    body: {
+      patientId: 'student-3',
+      serviceId,
+      professionalId: 'prof-ana',
+      title: 'Contrato Anual c/ Pagamento Bimestral',
+      amount: 600,
+      billingFrequency: 'bimonthly',
+      dueDay: 10,
+      startDate: '2027-01-01',
+      endDate: '2027-12-31',
+      generateAllContractCycles: true
+    }
+  });
+  assert.equal(bimonthlyPlanRes.status, 201, `Erro ao criar plano bimestral: ${JSON.stringify(bimonthlyPlanRes.body)}`);
+  assert.equal(bimonthlyPlanRes.body.generatedPaymentIds.length, 6, 'Plano anual com periodicidade bimestral (2 meses) deve gerar exatamente 6 cobranças');
+  const bimonthlyPayments = db.prepare(`
+    SELECT competence_month, billing_cycle_start, billing_cycle_end, due_date
+    FROM payments WHERE recurring_plan_id = ? ORDER BY billing_cycle_start ASC
+  `).all(bimonthlyPlanRes.body.plan.id);
+  assert.deepEqual(
+    bimonthlyPayments.map(p => p.competence_month),
+    ['2027-01', '2027-03', '2027-05', '2027-07', '2027-09', '2027-11'],
+    'Competências bimestrais devem avançar de 2 em 2 meses'
+  );
+
+  // 13b. Duração Bienal (24 meses) + Pagamento Bienal (24 meses) -> 1 competência bienal de 24 meses
+  const biennialPlanRes = await callController(BillingCenterController.createRecurringPlan, {
+    body: {
+      patientId: 'student-3',
+      serviceId,
+      professionalId: 'prof-ana',
+      title: 'Contrato Bienal 24 Meses',
+      amount: 5400,
+      billingFrequency: 'biennial',
+      dueDay: 15,
+      startDate: '2027-01-01',
+      endDate: '2028-12-31',
+      generateAllContractCycles: true
+    }
+  });
+  assert.equal(biennialPlanRes.status, 201, `Erro ao criar plano bienal: ${JSON.stringify(biennialPlanRes.body)}`);
+  assert.equal(biennialPlanRes.body.generatedPaymentIds.length, 1, 'Plano de 24 meses com periodicidade bienal deve gerar exatamente 1 cobrança');
+  const biennialPay = db.prepare(`SELECT * FROM payments WHERE id = ?`).get(biennialPlanRes.body.generatedPaymentIds[0]);
+  assert.equal(biennialPay.billing_cycle_start, '2027-01-01');
+  assert.equal(biennialPay.billing_cycle_end, '2028-12-31');
+
+  // 13c. Periodicidade "Data final personalizada" (custom_date): valida data final obrigatória e gera exatamente N cobranças
+  const invalidCustomDateRes = await callController(BillingCenterController.createRecurringPlan, {
+    body: {
+      patientId: 'student-3',
+      serviceId,
+      professionalId: 'prof-ana',
+      title: 'Plano Data Inválida',
+      amount: 400,
+      billingFrequency: 'custom_date',
+      startDate: '2027-05-10',
+      billingCustomEndDate: '2027-05-01' // anterior ao início -> deve falhar com 400
+    }
+  });
+  assert.equal(invalidCustomDateRes.status, 400, 'Deve rejeitar periodicidade custom_date com data final anterior à inicial');
+
+  const validCustomDateRes = await callController(BillingCenterController.createRecurringPlan, {
+    body: {
+      patientId: 'student-3',
+      serviceId,
+      professionalId: 'prof-ana',
+      title: 'Plano Temporada Especial',
+      amount: 350,
+      billingFrequency: 'custom_date',
+      dueDay: 10,
+      startDate: '2027-03-01',
+      billingCustomEndDate: '2027-05-20',
+      billingChargesCount: 3,
+      generateAllContractCycles: true
+    }
+  });
+  assert.equal(validCustomDateRes.status, 201, `Erro em custom_date válido: ${JSON.stringify(validCustomDateRes.body)}`);
+  assert.equal(validCustomDateRes.body.generatedPaymentIds.length, 3, 'Periodicidade custom_date com 3 cobranças deve gerar exatamente 3 cobranças');
+
+  // 13d. Periodicidade "Quantidade fixa de aulas" (count): valida includedSessions obrigatório e gera exatamente N cobranças
+  const invalidFixedCountRes = await callController(BillingCenterController.createRecurringPlan, {
+    body: {
+      patientId: 'student-3',
+      serviceId,
+      professionalId: 'prof-ana',
+      title: 'Plano Sem Quantidade',
+      amount: 400,
+      billingFrequency: 'count',
+      startDate: '2027-06-01'
+    }
+  });
+  assert.equal(invalidFixedCountRes.status, 400, 'Deve rejeitar periodicidade count sem includedSessions');
+
+  const validFixedCountRes = await callController(BillingCenterController.createRecurringPlan, {
+    body: {
+      patientId: 'student-3',
+      serviceId,
+      professionalId: 'prof-ana',
+      title: 'Pacote Financeiro 10 Aulas',
+      amount: 450,
+      billingFrequency: 'count',
+      includedSessions: 10,
+      billingChargesCount: 2,
+      dueDay: 12,
+      startDate: '2027-06-01',
+      generateAllContractCycles: true
+    }
+  });
+  assert.equal(validFixedCountRes.status, 201, `Erro em count válido: ${JSON.stringify(validFixedCountRes.body)}`);
+  assert.equal(validFixedCountRes.body.generatedPaymentIds.length, 2, 'Periodicidade count com 2 cobranças deve gerar exatamente 2 cobranças');
+  assert.equal(Number(validFixedCountRes.body.plan.included_sessions), 10, 'Plano deve persistir included_sessions = 10');
+
+  // =========================================================================
+  // 14. DISPONIBILIDADE DE VAGAS EM TURMAS COLETIVAS E RECORRÊNCIA (10 CENÁRIOS)
+  // =========================================================================
+  console.log('14. Testando disponibilidade de vagas em turmas coletivas e recorrência (Cenários A a E + 10 validações)...');
+
+  // Cria alunos adicionais para testar turma coletiva (prof-bruno e schedules já existem em studio-tenant)
+  const studioTenantId = 'studio-tenant';
+  for (let i = 4; i <= 7; i++) {
+    db.prepare(`
+      INSERT INTO patients (id, tenant_id, full_name, phone)
+      VALUES (?, ?, ?, ?)
+    `).run(`student-${i}`, studioTenantId, `Aluno Turma ${i}`, `1199999000${i}`);
+  }
+
+  // Cria serviço coletivo "Pilates Coletivo 15h" (Seg e Qua 15:00 às 15:55, capacidade 3, múltiplos instrutores)
+  const createGroup15hRes = await callController(ServiceController.create, {
+    body: {
+      name: 'Pilates Coletivo 15h',
+      durationMinutes: 55,
+      price: 90,
+      modality: 'presential',
+      serviceKind: 'group',
+      serviceDomain: 'studio',
+      defaultCapacity: 3,
+      professionalId: 'prof-ana',
+      linkedProfessionalIds: ['prof-ana', 'prof-bruno'],
+      allowRecurrence: true,
+      allowedRecurrenceFrequencies: ['weekly', 'biweekly', 'monthly', 'quarterly', 'semiannual', 'annual', 'custom_weekdays', 'custom_interval'],
+      defaultRecurrenceFrequency: 'weekly',
+      allowedPlanDurations: ['1_month', '2_months', '3_months', '6_months', '12_months', '24_months', 'custom_date', 'count'],
+      defaultPlanDuration: '1_month',
+      billingMode: 'monthly',
+      periodicPrice: 360,
+      defaultBillingDueDay: 10,
+      classSchedules: [
+        {
+          dayOfWeek: 1,
+          startTime: '15:00',
+          endTime: '15:55',
+          professionalId: 'prof-ana',
+          coInstructorIds: ['prof-bruno'],
+          capacity: 3,
+          modality: 'presential',
+          effectiveStartDate: '2026-01-01'
+        },
+        {
+          dayOfWeek: 3,
+          startTime: '15:00',
+          endTime: '15:55',
+          professionalId: 'prof-ana',
+          coInstructorIds: ['prof-bruno'],
+          capacity: 3,
+          modality: 'presential',
+          effectiveStartDate: '2026-01-01'
+        }
+      ]
+    }
+  });
+  assert.equal(createGroup15hRes.status, 201, `Erro ao criar turma 15h: ${JSON.stringify(createGroup15hRes.body)}`);
+  const group15hServiceId = createGroup15hRes.body.id;
+  const group15hSchedules = createGroup15hRes.body.class_schedules || [];
+  assert.equal(group15hSchedules.length, 2, 'Deve ter criado 2 horários na grade semanal (Seg e Qua 15:00-15:55)');
+  const mon15hSched = group15hSchedules.find(s => Number(s.day_of_week) === 1);
+  const wed15hSched = group15hSchedules.find(s => Number(s.day_of_week) === 3);
+
+  // Aluno 4 contrata recorrência nas segundas-feiras de 2027-08-02 a 2027-09-02 (5 segundas-feiras: 02, 09, 16, 23, 30/08)
+  const student4MonRec = await callController(AppointmentController.createRecurring, {
+    body: {
+      patientId: 'student-4',
+      professionalId: 'prof-ana',
+      serviceId: group15hServiceId,
+      startTime: '2027-08-02T15:00:00',
+      endTime: '2027-08-02T15:55:00',
+      modality: 'presential',
+      billingChoice: 'enroll_periodic',
+      enrollBillingPlan: {
+        billingFrequency: 'monthly',
+        amount: 360,
+        dueDay: 10,
+        startDate: '2027-08-02',
+        endDate: '2027-09-02',
+        generateInitialCycle: true,
+        initialPaymentStatus: 'paid'
+      },
+      recurrence: {
+        frequency: 'weekly',
+        durationCode: '1_month',
+        seriesMode: 'schedule_plan',
+        scheduleEntries: [
+          {
+            classScheduleId: mon15hSched.id,
+            dayOfWeek: 1,
+            startTime: '15:00',
+            endTime: '15:55',
+            professionalId: 'prof-ana',
+            coInstructorIds: ['prof-bruno'],
+            modality: 'presential'
+          }
+        ]
+      }
+    }
+  });
+  assert.equal(student4MonRec.status, 201, `Erro ao inscrever Aluno 4 nas segundas: ${JSON.stringify(student4MonRec.body)}`);
+  assert.equal(student4MonRec.body.createdCount, 5, 'Aluno 4 deve ter 5 aulas nas segundas-feiras');
+
+  // Cenário do print: Aluno 5 tenta agendar recorrência semanal em Seg e Qua (15:00 às 15:55), vigência mensal (9 aulas: 5 Seg + 4 Qua)
+  // Mesmo com Aluno 4 já inscrito nas 5 segundas-feiras, TODAS as 9/9 aulas devem estar disponíveis (com 2 vagas restantes nas segundas e 3 nas quartas)!
+  const previewStudent5MonWed = await callController(AppointmentController.previewRecurring, {
+    body: {
+      patientId: 'student-5',
+      professionalId: 'prof-ana',
+      serviceId: group15hServiceId,
+      classScheduleId: wed15hSched.id,
+      startTime: '2027-08-02T15:00:00',
+      endTime: '2027-08-02T15:55:00',
+      modality: 'presential',
+      recurrence: {
+        frequency: 'custom_weekdays',
+        durationCode: '1_month',
+        weekdays: [1, 3]
+      }
+    }
+  });
+  assert.equal(previewStudent5MonWed.status, 200, `Erro no preview Seg+Qua: ${JSON.stringify(previewStudent5MonWed.body)}`);
+  assert.equal(previewStudent5MonWed.body.totalCount, 10, 'Série mensal Seg+Qua de 02/08/2027 a 02/09/2027 deve prever 10 aulas (5 Seg + 5 Qua)');
+  assert.equal(previewStudent5MonWed.body.availableCount, 10, `Todas as 10/10 aulas devem estar disponíveis (recebido ${previewStudent5MonWed.body.availableCount}/10: ${JSON.stringify(previewStudent5MonWed.body.occurrences.filter(o => !o.available))})`);
+  assert.equal(previewStudent5MonWed.body.valid, true, 'Preview deve ser válido (10/10 disponíveis)');
+  const monOccPreview = previewStudent5MonWed.body.occurrences.find(o => o.dayOfWeek === 1);
+  const wedOccPreview = previewStudent5MonWed.body.occurrences.find(o => o.dayOfWeek === 3);
+  assert.equal(monOccPreview.remainingSpots, 2, 'Segundas-feiras devem ter 2 vagas restantes (1/3 ocupada pelo Aluno 4)');
+  assert.equal(monOccPreview.statusLabel, 'Disponível — 2 vagas restantes', 'Status da segunda-feira deve ser "Disponível — 2 vagas restantes"');
+  assert.equal(wedOccPreview.remainingSpots, 3, 'Quartas-feiras devem ter 3 vagas restantes (0/3 ocupadas)');
+  assert.equal(wedOccPreview.statusLabel, 'Disponível — 3 vagas restantes', 'Status da quarta-feira deve ser "Disponível — 3 vagas restantes"');
+
+  // Confirma a inscrição recorrente do Aluno 5 (Seg e Qua, cobrança trimestral) e verifica reutilização das ocorrências existentes sem duplicar turmas
+  const bookStudent5MonWed = await callController(AppointmentController.createRecurring, {
+    body: {
+      patientId: 'student-5',
+      professionalId: 'prof-ana',
+      serviceId: group15hServiceId,
+      startTime: '2027-08-02T15:00:00',
+      endTime: '2027-08-02T15:55:00',
+      modality: 'presential',
+      billingChoice: 'enroll_periodic',
+      enrollBillingPlan: {
+        billingFrequency: 'quarterly',
+        amount: 960,
+        dueDay: 10,
+        startDate: '2027-08-02',
+        endDate: '2027-09-02',
+        generateInitialCycle: true,
+        initialPaymentStatus: 'pending'
+      },
+      recurrence: {
+        frequency: 'custom_weekdays',
+        durationCode: '1_month',
+        weekdays: [1, 3]
+      }
+    }
+  });
+  assert.equal(bookStudent5MonWed.status, 201, `Erro ao confirmar série Seg+Qua do Aluno 5: ${JSON.stringify(bookStudent5MonWed.body)}`);
+  assert.equal(bookStudent5MonWed.body.createdCount, 10, 'Deve criar 10 agendamentos para o Aluno 5');
+
+  // Verifica que na segunda-feira 2027-08-02 existe apenas UMA class_occurrences compartilhada por Aluno 4 e Aluno 5
+  const occsAug02 = db.prepare(`
+    SELECT id FROM class_occurrences
+    WHERE tenant_id = ? AND service_id = ? AND REPLACE(substr(start_time, 1, 16), ' ', 'T') = '2027-08-02T15:00' AND status != 'cancelled'
+  `).all(studioTenantId, group15hServiceId);
+  assert.equal(occsAug02.length, 1, 'Não deve duplicar class_occurrences para o mesmo horário da turma');
+  const sharedOccAug02Id = occsAug02[0].id;
+  const apptsInSharedOcc = db.prepare(`
+    SELECT patient_id FROM appointments WHERE tenant_id = ? AND occurrence_id = ? AND status != 'cancelled'
+  `).all(studioTenantId, sharedOccAug02Id);
+  assert.equal(apptsInSharedOcc.length, 2, 'Os 2 alunos devem estar vinculados à mesma ocorrência em 2027-08-02');
+
+  // Verifica participantes (múltiplos instrutores: titular prof-ana + coinstrutor prof-bruno) na ocorrência compartilhada
+  const occParticipants = db.prepare(`
+    SELECT professional_id, role FROM session_instructor_participants WHERE tenant_id = ? AND occurrence_id = ?
+  `).all(studioTenantId, sharedOccAug02Id);
+  assert.ok(occParticipants.some(p => p.professional_id === 'prof-ana' && p.role === 'primary'), 'Titular prof-ana presente na ocorrência');
+  assert.ok(occParticipants.some(p => p.professional_id === 'prof-bruno' && p.role === 'co_instructor'), 'Coinstrutor prof-bruno presente na ocorrência');
+
+  // Cenário D — Mesmo aluno já inscrito: Aluno 5 tenta se inscrever novamente em 2027-08-02T15:00
+  const dupPreviewRes = await callController(AppointmentController.previewRecurring, {
+    body: {
+      patientId: 'student-5',
+      professionalId: 'prof-ana',
+      serviceId: group15hServiceId,
+      startTime: '2027-08-02T15:00:00',
+      endTime: '2027-08-02T15:55:00',
+      modality: 'presential',
+      recurrence: {
+        frequency: 'weekly',
+        durationCode: 'count',
+        maxOccurrences: 2
+      }
+    }
+  });
+  assert.equal(dupPreviewRes.status, 200);
+  assert.equal(dupPreviewRes.body.valid, false, 'Preview deve bloquear inscrição duplicada do mesmo aluno');
+  assert.equal(dupPreviewRes.body.occurrences[0].reasonCode, 'ALREADY_ENROLLED', 'Código deve ser ALREADY_ENROLLED');
+  assert.equal(dupPreviewRes.body.occurrences[0].reasonMessage, 'Aluno já inscrito', 'Mensagem deve ser "Aluno já inscrito"');
+  assert.equal(dupPreviewRes.body.occurrences[0].statusLabel, 'Aluno já inscrito', 'StatusLabel deve ser "Aluno já inscrito"');
+
+  const dupSingleRes = await callController(AppointmentController.create, {
+    body: {
+      patientId: 'student-5',
+      professionalId: 'prof-ana',
+      serviceId: group15hServiceId,
+      startTime: '2027-08-02T15:00:00',
+      endTime: '2027-08-02T15:55:00',
+      modality: 'presential'
+    }
+  });
+  assert.equal(dupSingleRes.status, 409, 'Agendamento avulso duplicado na mesma turma deve retornar 409');
+  assert.equal(dupSingleRes.body.code, 'ALREADY_ENROLLED', 'Código de bloqueio duplicado deve ser ALREADY_ENROLLED');
+
+  // Aluno 6 preenche a 3ª e última vaga de 2027-08-02T15:00 (com contrato anual)
+  const student6BookRes = await callController(AppointmentController.create, {
+    body: {
+      patientId: 'student-6',
+      professionalId: 'prof-ana',
+      serviceId: group15hServiceId,
+      startTime: '2027-08-02T15:00:00',
+      endTime: '2027-08-02T15:55:00',
+      modality: 'presential',
+      billingChoice: 'enroll_periodic',
+      enrollBillingPlan: {
+        billingFrequency: 'annual',
+        amount: 3600,
+        dueDay: 10,
+        startDate: '2027-08-02',
+        endDate: '2028-08-02',
+        generateInitialCycle: true,
+        initialPaymentStatus: 'paid'
+      }
+    }
+  });
+  assert.equal(student6BookRes.status, 201, `Aluno 6 deve ocupar a 3ª vaga: ${JSON.stringify(student6BookRes.body)}`);
+  assert.equal(student6BookRes.body.occurrenceId, sharedOccAug02Id, 'Aluno 6 deve compartilhar a mesma occurrenceId');
+
+  // Cenário B — Turma lotada (3/3 vagas ocupadas em 2027-08-02T15:00): Aluno 7 tenta agendar
+  const fullPreviewRes = await callController(AppointmentController.previewRecurring, {
+    body: {
+      patientId: 'student-7',
+      professionalId: 'prof-ana',
+      serviceId: group15hServiceId,
+      startTime: '2027-08-02T15:00:00',
+      endTime: '2027-08-02T15:55:00',
+      modality: 'presential',
+      recurrence: {
+        frequency: 'weekly',
+        durationCode: 'count',
+        maxOccurrences: 2
+      }
+    }
+  });
+  assert.equal(fullPreviewRes.status, 200);
+  assert.equal(fullPreviewRes.body.occurrences[0].available, false, '02/08 deve estar indisponível (lotada 3/3)');
+  assert.equal(fullPreviewRes.body.occurrences[0].reasonCode, 'CLASS_FULL', 'Código deve ser CLASS_FULL');
+  assert.equal(fullPreviewRes.body.occurrences[0].reasonMessage, 'Turma lotada', 'Mensagem deve ser "Turma lotada"');
+  assert.equal(fullPreviewRes.body.occurrences[0].statusLabel, 'Turma lotada', 'StatusLabel deve ser "Turma lotada"');
+  assert.equal(fullPreviewRes.body.occurrences[1].available, true, '09/08 deve estar disponível (2/3 ocupadas -> 1 vaga restante)');
+  assert.equal(fullPreviewRes.body.occurrences[1].statusLabel, 'Disponível — 1 vaga restante', 'StatusLabel de 09/08 deve ser "Disponível — 1 vaga restante"');
+
+  const fullSingleRes = await callController(AppointmentController.create, {
+    body: {
+      patientId: 'student-7',
+      professionalId: 'prof-ana',
+      serviceId: group15hServiceId,
+      startTime: '2027-08-02T15:00:00',
+      endTime: '2027-08-02T15:55:00',
+      modality: 'presential'
+    }
+  });
+  assert.equal(fullSingleRes.status, 409, 'Agendamento avulso em turma lotada deve retornar 409');
+  assert.equal(fullSingleRes.body.code, 'CLASS_FULL', 'Código deve ser CLASS_FULL');
+
+  // Cenário C — Instrutor ocupado em OUTRO atendimento individual conflitante (em 2027-08-11T15:00)
+  const createIndivSrvRes = await callController(ServiceController.create, {
+    body: {
+      name: 'Avaliação Postural Individual',
+      durationMinutes: 55,
+      price: 150,
+      modality: 'presential',
+      serviceKind: 'individual',
+      serviceDomain: 'studio',
+      professionalId: 'prof-ana'
+    }
+  });
+  const indivSrvId = createIndivSrvRes.body.id;
+  db.prepare(`
+    INSERT INTO appointments (
+      id, tenant_id, appointment_number, patient_id, professional_id, service_id,
+      start_time, end_time, status, modality, service_kind
+    ) VALUES ('apt-indiv-conflict', ?, 'AG-2027-9999', 'student-7', 'prof-ana', ?, '2027-08-11T15:00:00', '2027-08-11T15:55:00', 'scheduled', 'presential', 'individual')
+  `).run(studioTenantId, indivSrvId);
+
+  const conflictPreviewRes = await callController(AppointmentController.previewRecurring, {
+    body: {
+      patientId: 'student-6',
+      professionalId: 'prof-ana',
+      serviceId: group15hServiceId,
+      startTime: '2027-08-04T15:00:00',
+      endTime: '2027-08-04T15:55:00',
+      modality: 'presential',
+      recurrence: {
+        frequency: 'weekly',
+        durationCode: 'count',
+        maxOccurrences: 2
+      }
+    }
+  });
+  assert.equal(conflictPreviewRes.status, 200);
+  assert.equal(conflictPreviewRes.body.occurrences[0].available, true, '04/08 (quarta) deve estar disponível');
+  assert.equal(conflictPreviewRes.body.occurrences[1].available, false, '11/08 (quarta com atendimento individual conflitante) deve estar bloqueada');
+  assert.equal(conflictPreviewRes.body.occurrences[1].reasonCode, 'PROFESSIONAL_CONFLICT', 'Código deve ser PROFESSIONAL_CONFLICT');
+  assert.equal(conflictPreviewRes.body.occurrences[1].reasonMessage, 'Conflito com outro atendimento', 'Mensagem deve ser "Conflito com outro atendimento"');
+  assert.equal(conflictPreviewRes.body.occurrences[1].statusLabel, 'Conflito com outro atendimento', 'StatusLabel deve ser "Conflito com outro atendimento"');
+
+  // Verifica lista de chamada (getRoster) na ocorrência compartilhada de 2027-08-02 (3 alunos inscritos)
+  const rosterAug02Res = await callController(ClassAttendanceController.getRoster, {
+    params: { occurrenceId: sharedOccAug02Id }
+  });
+  assert.equal(rosterAug02Res.status, 200);
+  assert.equal(rosterAug02Res.body.roster.length, 3, 'Lista de presença da turma de 02/08 deve listar todos os 3 alunos inscritos');
+
+  console.log('✅ TODOS OS 14 BLOCOS DE TESTES DE INTEGRAÇÃO DO ZEMDA STUDIO PASSARAM COM SUCESSO!');
 }
 
 runTests()

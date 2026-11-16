@@ -21,6 +21,8 @@ import {
   isPeriodicBillingMode,
   MAX_RECURRENCE_OCCURRENCES,
   parseServiceRecurrenceConfig,
+  PERIODIC_BILLING_FREQUENCY_LABELS,
+  PERIODIC_BILLING_FREQUENCY_OPTIONS,
   PeriodicBillingFrequency,
   PLAN_DURATION_LABELS,
   PlanDurationCode,
@@ -146,6 +148,9 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
   const [enrollGenerateAllCycles, setEnrollGenerateAllCycles] = useState<boolean>(true);
   const [enrollEndDate, setEnrollEndDate] = useState<string>('');
   const [enrollPaidNow, setEnrollPaidNow] = useState<boolean>(false);
+  const [enrollChargesCount, setEnrollChargesCount] = useState<number>(1);
+  const [enrollCustomEndDate, setEnrollCustomEndDate] = useState<string>('');
+  const [enrollIncludedSessions, setEnrollIncludedSessions] = useState<number>(8);
   const submissionPending = useRef(false);
   const [errorTitle, setErrorTitle] = useState('Não foi possível concluir');
   const slotRequest = useRef(0);
@@ -588,6 +593,9 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
     setEnrollEndDate('');
     setEnrollGenerateAllCycles(true);
     setEnrollPaidNow(false);
+    setEnrollChargesCount(1);
+    setEnrollCustomEndDate('');
+    setEnrollIncludedSessions(8);
 
     if (activePeriodicPlans.length > 0) {
       const preferredPlan = activePeriodicPlans.find(p => p.service_id === serviceId) || activePeriodicPlans[0];
@@ -871,12 +879,33 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
         showToast('Dia de vencimento deve estar entre 1 e 28.', 'error');
         return;
       }
+      if (enrollFrequency === 'custom_date') {
+        const minValidDate = date || todayBrazilStr;
+        if (!enrollCustomEndDate || enrollCustomEndDate < minValidDate) {
+          showToast('Informe uma data final válida (igual ou posterior à data inicial) para a periodicidade financeira personalizada.', 'error');
+          return;
+        }
+        if (!Number.isInteger(enrollChargesCount) || enrollChargesCount < 1 || enrollChargesCount > 24) {
+          showToast('Informe a quantidade de cobranças (entre 1 e 24) para o período personalizado.', 'error');
+          return;
+        }
+      }
+      if (enrollFrequency === 'count') {
+        if (!Number.isInteger(enrollIncludedSessions) || enrollIncludedSessions < 1 || enrollIncludedSessions > MAX_RECURRENCE_OCCURRENCES) {
+          showToast(`Informe a quantidade de aulas contratadas (entre 1 e ${MAX_RECURRENCE_OCCURRENCES}) para a periodicidade financeira.`, 'error');
+          return;
+        }
+        if (!Number.isInteger(enrollChargesCount) || enrollChargesCount < 1 || enrollChargesCount > 24) {
+          showToast('Informe a quantidade de cobranças (entre 1 e 24) para o lote fixo de aulas.', 'error');
+          return;
+        }
+      }
       const computedEndForPlan =
         isRecurring && isStudioTarget && recurrenceDurationCode !== 'count' && recurrenceDurationCode !== 'custom_date'
           ? resolvePlanDurationEndDate(date, recurrenceDurationCode)
           : isRecurring && isStudioTarget && recurrenceDurationCode === 'custom_date' && recurrenceEndDate
             ? recurrenceEndDate
-            : (enrollEndDate || null);
+            : (enrollFrequency === 'custom_date' && enrollCustomEndDate ? enrollCustomEndDate : (enrollEndDate || null));
       enrollPayload = {
         billingFrequency: enrollFrequency,
         amount: parsedPlanAmount,
@@ -885,8 +914,23 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
         endDate: computedEndForPlan,
         firstDueDate: enrollFirstDueDate || null,
         paymentMethod: enrollPaymentMethod || 'pix',
+        ...(enrollFrequency === 'custom_date'
+          ? {
+              billingCustomEndDate: enrollCustomEndDate,
+              billingChargesCount: enrollChargesCount
+            }
+          : {}),
+        ...(enrollFrequency === 'count'
+          ? {
+              includedSessions: enrollIncludedSessions,
+              billingChargesCount: enrollChargesCount
+            }
+          : {}),
         generateInitialCycle: true,
-        generateAllContractCycles: Boolean(enrollGenerateAllCycles && computedEndForPlan),
+        generateAllContractCycles:
+          enrollFrequency === 'custom_date' || enrollFrequency === 'count'
+            ? true
+            : Boolean(enrollGenerateAllCycles && computedEndForPlan),
         initialPaymentStatus: enrollPaidNow ? 'paid' : 'pending'
       };
     }
@@ -1405,16 +1449,6 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                       setBillingChoice('enroll_periodic');
                       if (serviceRecurrenceConfig.allowRecurrence && serviceRecurrenceConfig.allowedFrequencies.length > 0 && !isRecurring) {
                         setIsRecurring(true);
-                        const durMap: Record<PeriodicBillingFrequency, Exclude<PlanDurationCode, 'legacy_frequency'>> = {
-                          monthly: '1_month',
-                          quarterly: '3_months',
-                          semiannual: '6_months',
-                          annual: '12_months'
-                        };
-                        const targetDur = durMap[enrollFrequency] || '1_month';
-                        if ((serviceRecurrenceConfig.allowedPlanDurations || ALL_PLAN_DURATIONS).includes(targetDur)) {
-                          setRecurrenceDurationCode(targetDur);
-                        }
                       }
                     }}
                     className={`px-2.5 py-2 rounded-xl text-left text-[11px] font-bold border cursor-pointer transition-colors ${
@@ -1425,7 +1459,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                   >
                     <span className="block">B. Criar nova contratação periódica</span>
                     <span className={`block text-[10px] font-normal mt-0.5 ${billingChoice === 'enroll_periodic' ? 'text-emerald-100' : 'text-slate-500'}`}>
-                      Mensal, Trimestral, Semestral ou Anual
+                      Mensal, Bimestral, Trimestral, Semestral, Anual, Bienal...
                     </span>
                   </button>
                 )}
@@ -1563,27 +1597,22 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                         onChange={e => {
                           const nextFreq = e.target.value as PeriodicBillingFrequency;
                           setEnrollFrequency(nextFreq);
-                          const durMap: Record<PeriodicBillingFrequency, Exclude<PlanDurationCode, 'legacy_frequency'>> = {
-                            monthly: '1_month',
-                            quarterly: '3_months',
-                            semiannual: '6_months',
-                            annual: '12_months'
-                          };
-                          const targetDur = durMap[nextFreq];
-                          if (targetDur && (serviceRecurrenceConfig.allowedPlanDurations || ALL_PLAN_DURATIONS).includes(targetDur)) {
-                            setRecurrenceDurationCode(targetDur);
-                          }
                         }}
                         className="w-full border border-emerald-200 rounded-lg px-2 py-1.5 text-xs bg-white font-medium"
                       >
-                        <option value="monthly">Mensal (1 mês)</option>
-                        <option value="quarterly">Trimestral (3 meses)</option>
-                        <option value="semiannual">Semestral (6 meses)</option>
-                        <option value="annual">Anual (12 meses)</option>
+                        {PERIODIC_BILLING_FREQUENCY_OPTIONS.map(opt => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
                       </select>
                     </div>
                     <div>
-                      <label className="block font-semibold text-slate-700 mb-0.5 text-[11px]">Valor por período (R$)</label>
+                      <label className="block font-semibold text-slate-700 mb-0.5 text-[11px]">
+                        {enrollFrequency === 'custom_date' || enrollFrequency === 'count'
+                          ? 'Valor por cobrança (R$)'
+                          : 'Valor por período (R$)'}
+                      </label>
                       <input
                         type="text"
                         inputMode="decimal"
@@ -1607,6 +1636,80 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                       />
                     </div>
                   </div>
+
+                  {enrollFrequency === 'custom_date' && (
+                    <div className="p-2.5 rounded-xl bg-white border border-emerald-200 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div>
+                        <label className="block font-semibold text-slate-700 mb-0.5 text-[11px]">
+                          Data final do período financeiro *
+                        </label>
+                        <input
+                          type="date"
+                          min={date || todayBrazilStr}
+                          value={enrollCustomEndDate}
+                          onChange={e => setEnrollCustomEndDate(e.target.value)}
+                          className="w-full border border-emerald-200 rounded-lg px-2.5 py-1.5 text-xs bg-slate-50 font-medium"
+                          aria-label="Data final do período financeiro"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-semibold text-slate-700 mb-0.5 text-[11px]">
+                          Quantidade de cobranças no período *
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={24}
+                          value={enrollChargesCount}
+                          onChange={e => setEnrollChargesCount(Math.max(1, Math.min(24, Number(e.target.value) || 1)))}
+                          className="w-full border border-emerald-200 rounded-lg px-2.5 py-1.5 text-xs bg-slate-50 font-semibold"
+                          aria-label="Quantidade de cobranças no período"
+                        />
+                      </div>
+                      <p className="sm:col-span-2 text-[10px] text-slate-500">
+                        Define explicitamente até quando o período financeiro vai e quantas cobranças de {formatCurrencyBRL(parseAppointmentPrice(enrollAmount) ?? 0)} serão geradas.
+                      </p>
+                    </div>
+                  )}
+
+                  {enrollFrequency === 'count' && (
+                    <div className="p-2.5 rounded-xl bg-white border border-emerald-200 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div>
+                        <label className="block font-semibold text-slate-700 mb-0.5 text-[11px]">
+                          Quantidade fixa de aulas contratadas *
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={MAX_RECURRENCE_OCCURRENCES}
+                          value={enrollIncludedSessions}
+                          onChange={e =>
+                            setEnrollIncludedSessions(Math.max(1, Math.min(MAX_RECURRENCE_OCCURRENCES, Number(e.target.value) || 1)))
+                          }
+                          className="w-full border border-emerald-200 rounded-lg px-2.5 py-1.5 text-xs bg-slate-50 font-semibold"
+                          aria-label="Quantidade fixa de aulas contratadas"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-semibold text-slate-700 mb-0.5 text-[11px]">
+                          Quantidade de cobranças a gerar *
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={24}
+                          value={enrollChargesCount}
+                          onChange={e => setEnrollChargesCount(Math.max(1, Math.min(24, Number(e.target.value) || 1)))}
+                          className="w-full border border-emerald-200 rounded-lg px-2.5 py-1.5 text-xs bg-slate-50 font-semibold"
+                          aria-label="Quantidade de cobranças a gerar"
+                        />
+                      </div>
+                      <p className="sm:col-span-2 text-[10px] text-slate-500">
+                        Contrato para {enrollIncludedSessions} aula(s) com geração explícita de {enrollChargesCount} cobrança(s) de {formatCurrencyBRL(parseAppointmentPrice(enrollAmount) ?? 0)}.
+                      </p>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <div>
                       <label className="block font-semibold text-slate-700 mb-0.5 text-[11px]">1º vencimento (opcional)</label>
@@ -1632,7 +1735,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                         <option value="transfer">Transferência</option>
                       </select>
                     </div>
-                    {!isRecurring && (
+                    {!isRecurring && enrollFrequency !== 'custom_date' && (
                       <div>
                         <label className="block font-semibold text-slate-700 mb-0.5 text-[11px]">Término vigência (opcional)</label>
                         <input
@@ -1646,15 +1749,17 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                     )}
                   </div>
                   <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-700">
-                    <label className="inline-flex items-center gap-1.5 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={enrollGenerateAllCycles}
-                        onChange={e => setEnrollGenerateAllCycles(e.target.checked)}
-                        className="rounded border-slate-300 text-emerald-600"
-                      />
-                      <span>Gerar todas as competências do período contratado</span>
-                    </label>
+                    {enrollFrequency !== 'custom_date' && enrollFrequency !== 'count' && (
+                      <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={enrollGenerateAllCycles}
+                          onChange={e => setEnrollGenerateAllCycles(e.target.checked)}
+                          className="rounded border-slate-300 text-emerald-600"
+                        />
+                        <span>Gerar todas as competências do período contratado</span>
+                      </label>
+                    )}
                     <label className="inline-flex items-center gap-1.5 cursor-pointer">
                       <input
                         type="checkbox"
@@ -1668,7 +1773,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                   <div className="flex items-start gap-1.5 text-[11px] text-emerald-900 bg-white/90 border border-emerald-200 rounded-lg px-2.5 py-1.5">
                     <Info className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
                     <span>
-                      Cria em um único fluxo o contrato do aluno ({SERVICE_BILLING_MODE_LABELS[enrollFrequency]}), os agendamentos da série e as cobranças periódicas sem gerar cobranças avulsas por aula.
+                      Cria em um único fluxo o contrato do aluno ({PERIODIC_BILLING_FREQUENCY_LABELS[enrollFrequency] || SERVICE_BILLING_MODE_LABELS[enrollFrequency]}), os agendamentos da série e as cobranças financeiras sem gerar cobranças avulsas por aula.
                     </span>
                   </div>
                 </div>
