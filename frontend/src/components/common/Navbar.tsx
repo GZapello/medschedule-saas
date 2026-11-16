@@ -1,6 +1,7 @@
 import React from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { ClinicSwitcher } from './ClinicSwitcher';
+import { NotificationBell } from './NotificationBell';
 import {
   LogOut,
   Shield,
@@ -68,6 +69,9 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, onNavigate }) =
           <HelpCircle className="w-3.5 h-3.5 text-slate-400 shrink-0" />
           <span className="hidden sm:inline">Ajuda</span>
         </button>
+
+        {/* Notificações Internas (Novos Agendamentos Públicos) */}
+        <NotificationBell onNavigate={onNavigate} />
 
         {/* Configurações */}
         <button

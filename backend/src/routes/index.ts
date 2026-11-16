@@ -32,6 +32,7 @@ import { CashRegisterController } from '../controllers/cash-register.controller'
 import { InsuranceController } from '../controllers/insurance.controller';
 import { ImportController } from '../controllers/import.controller';
 import { NotificationController } from '../controllers/notification.controller';
+import { InternalNotificationController } from '../controllers/internal-notification.controller';
 import { ReferralController } from '../controllers/referral.controller';
 import { SupportController } from '../controllers/support.controller';
 import { PendingExamController } from '../controllers/pending-exam.controller';
@@ -916,6 +917,11 @@ api.get('/v1/notifications/:id', requireTenant, requireRole('clinic_admin', 'rec
 api.post('/v1/notifications/schedule', requireTenant, requireRole('clinic_admin', 'receptionist'), NotificationController.schedule);
 api.post('/v1/notifications/:id/cancel', requireTenant, requireRole('clinic_admin', 'receptionist'), NotificationController.cancel);
 api.post('/v1/notifications/:id/retry', requireTenant, requireRole('clinic_admin', 'receptionist'), NotificationController.retry);
+
+// Notificações Internas de Novos Agendamentos pelo Link Público (Gestor e Profissionais)
+api.get('/v1/internal-notifications/unread-count', requireTenant, requireRole('clinic_admin', 'professional'), InternalNotificationController.unreadCount);
+api.get('/v1/internal-notifications', requireTenant, requireRole('clinic_admin', 'professional'), InternalNotificationController.list);
+api.post('/v1/internal-notifications/mark-read', requireTenant, requireRole('clinic_admin', 'professional'), InternalNotificationController.markRead);
 
 // Financeiro & Pagamentos
 api.get('/v1/payments', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), PaymentController.list);

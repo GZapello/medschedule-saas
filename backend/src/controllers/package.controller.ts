@@ -6,6 +6,7 @@ import { PackageService } from '../services/package.service';
 import { canAccessPatient } from '../services/patient-sharing.service';
 import { canOperate } from '../services/billing.service';
 import { NotificationService } from '../services/notification.service';
+import { InternalNotificationService } from '../services/internal-notification.service';
 import { GoogleCalendarService } from '../services/google-calendar.service';
 import {
   generateRecurrenceDates,
@@ -1350,6 +1351,15 @@ export class PackageController {
           NotificationService.scheduleAppointmentReminder(b.id);
         }
 
+        InternalNotificationService.notifyPublicStudioBooking({
+          tenantId: tenant.id,
+          mode: 'package',
+          studentName: fullName,
+          packageName: pkg.name,
+          contractId: result.contract?.id || null,
+          appointments: result.bookedAppointments
+        });
+
         res.status(201).json({
           mode: 'package',
           paymentPending: true,
@@ -1554,6 +1564,13 @@ export class PackageController {
       for (const b of bookedResult) {
         NotificationService.scheduleAppointmentReminder(b.id);
       }
+
+      InternalNotificationService.notifyPublicStudioBooking({
+        tenantId: tenant.id,
+        mode: 'service',
+        studentName: fullName,
+        appointments: bookedResult
+      });
 
       res.status(201).json({
         mode: 'service',

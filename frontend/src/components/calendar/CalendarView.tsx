@@ -547,6 +547,28 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
       setProfessionals(Array.isArray(profsData) ? profsData : []);
       setRooms(Array.isArray(roomsData) ? roomsData : []);
 
+      const pendingFocusRaw = sessionStorage.getItem('zemda_focus_appointment');
+      if (pendingFocusRaw) {
+        sessionStorage.removeItem('zemda_focus_appointment');
+        try {
+          const parsedFocus = JSON.parse(pendingFocusRaw);
+          const targetAppt = parsedFocus?.appointmentId
+            ? safeAppts.find(a => a.id === parsedFocus.appointmentId)
+            : null;
+          const rawDate = targetAppt?.start_time || parsedFocus?.startTime || parsedFocus?.date;
+          if (rawDate) {
+            const datePart = String(rawDate).slice(0, 10);
+            const [y, m, d] = datePart.split('-').map(Number);
+            if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+              setCurrentDate(new Date(y, m - 1, d, 12, 0, 0));
+            }
+          }
+          if (targetAppt) {
+            setSelectedAppt(targetAppt);
+          }
+        } catch (_) {}
+      }
+
       const pendingRetroRaw = sessionStorage.getItem('zemda_open_retroactive_appt');
       if (pendingRetroRaw) {
         sessionStorage.removeItem('zemda_open_retroactive_appt');
@@ -611,10 +633,12 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
 
     window.addEventListener('zemda-appointment-updated', handleRemoteUpdate);
     window.addEventListener('zemda-schedule-updated', handleRemoteUpdate);
+    window.addEventListener('zemda-focus-appointment', handleRemoteUpdate);
 
     return () => {
       window.removeEventListener('zemda-appointment-updated', handleRemoteUpdate);
       window.removeEventListener('zemda-schedule-updated', handleRemoteUpdate);
+      window.removeEventListener('zemda-focus-appointment', handleRemoteUpdate);
     };
   }, [fetchSelectedProfSchedule]);
 

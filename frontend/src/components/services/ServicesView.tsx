@@ -29,6 +29,7 @@ import { ServiceBillingConfigPanel } from './ServiceBillingConfigPanel';
 import { StudioPricingRule } from '../../utils/studioPricing';
 import { ServiceTemplatesConfigPanel } from './ServiceTemplatesConfigPanel';
 import { LinkedInstructorsSelector } from './LinkedInstructorsSelector';
+import { ServiceFormBody, ServiceFormSection, StudioServiceIndicators, StudioServicePresentation } from './StudioServicePresentation';
 import {
   ALL_PLAN_DURATIONS,
   formatCurrencyBRL,
@@ -1511,10 +1512,21 @@ export const ServicesView: React.FC = () => {
       {/* Modal Novo Serviço */}
       {showServiceModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-hidden mobile-modal">
-          <div className="bg-white rounded-3xl max-w-lg w-full max-h-[90vh] shadow-2xl border border-slate-200 flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+          <StudioServicePresentation enabled={isPureStudio} title="Novo Serviço" onClose={() => setShowServiceModal(false)}
+            values={{
+              name, professionalId, serviceKind,
+              price, billingMode, periodicPrice,
+              defaultBillingDueDay, weeklySessionsCount, includedSessionsCount,
+              allowRecurrence, defaultFrequency, defaultCustomInterval,
+              defaultPlanDuration, linkedTemplateIds, defaultTemplateId,
+              reminderEnabled, draftSchedules: draftClassSchedules, hasPendingScheduleForm: hasPendingCreateScheduleForm
+            }}
+            className="bg-white rounded-3xl max-w-lg w-full max-h-[90vh] shadow-2xl border border-slate-200 flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
             {/* Header Fixo / Sticky */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 flex-shrink-0 bg-white">
-              <h3 className="text-lg font-bold text-slate-900">Novo Serviço</h3>
+              <div><h3 className="text-lg font-bold text-slate-900">Novo Serviço</h3>
+                {isPureStudio && <p className="text-xs text-slate-500 mt-1">Cadastre um novo serviço e defina como ele será oferecido, agendado e cobrado.</p>}
+              </div>
               <button aria-label="Fechar"
                 type="button"
                 onClick={() => setShowServiceModal(false)}
@@ -1525,11 +1537,16 @@ export const ServicesView: React.FC = () => {
               </button>
             </div>
 
+            <StudioServiceIndicators />
+
             {/* Conteúdo com Scroll */}
-            <div className="p-6 overflow-y-auto flex-1 space-y-3.5 text-xs">
+            <ServiceFormBody>
+              <ServiceFormSection section="basics">
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Profissional Responsável *</label>
                 <select
+                  data-studio-field={isPureStudio ? "professional" : undefined}
+                  aria-label={isPureStudio ? "Profissional responsável" : undefined}
                   value={professionalId}
                   onChange={e => handleSelectProfessional(e.target.value)}
                   className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium cursor-pointer"
@@ -1594,6 +1611,8 @@ export const ServicesView: React.FC = () => {
                 <label className="block font-semibold text-slate-700 mb-1">Nome do Atendimento *</label>
                 <input
                   type="text"
+                  data-studio-field={isPureStudio ? "name" : undefined}
+                  aria-label={isPureStudio ? "Nome do serviço" : undefined}
                   value={name}
                   onChange={e => setName(e.target.value)}
                   placeholder="Ex: Consulta Odontológica Inicial"
@@ -1622,6 +1641,8 @@ export const ServicesView: React.FC = () => {
                 <input
                   type="number"
                   step="0.01"
+                  data-studio-field={isPureStudio ? "price" : undefined}
+                  aria-label={isPureStudio ? "Preço por aula" : undefined}
                   value={price}
                   onChange={e => setPrice(e.target.value)}
                   className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
@@ -1663,6 +1684,8 @@ export const ServicesView: React.FC = () => {
                 </select>
               </div>
 
+              </ServiceFormSection>
+
               {isMixed && (
                 <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
                   <div className="font-bold text-slate-800 text-xs">Segmento do Serviço</div>
@@ -1697,8 +1720,9 @@ export const ServicesView: React.FC = () => {
               )}
 
               {showCreateStudioConfig ? (
-                <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-2.5">
-                  <div className="font-bold text-slate-800 text-xs">Configurações do Studio</div>
+                <div className={isPureStudio ? "studio-service-config contents" : "p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-2.5"}>
+                  {!isPureStudio && <div className="font-bold text-slate-800 text-xs">Configurações do Studio</div>}
+                  <ServiceFormSection section="format">
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
@@ -1737,20 +1761,8 @@ export const ServicesView: React.FC = () => {
                       />
                     </div>
                   )}
-                  {serviceKind === 'group' && (
-                    <ClassScheduleSection
-                      serviceId={null}
-                      serviceModality={modality}
-                      durationMinutes={Number(durationMinutes) || 50}
-                      defaultCapacity={Number(defaultCapacity) || 10}
-                      defaultProfessionalId={professionalId}
-                      professionals={selectableCreateScheduleProfessionals}
-                      rooms={rooms}
-                      draftSchedules={draftClassSchedules}
-                      onDraftSchedulesChange={setDraftClassSchedules}
-                      onFormOpenChange={setHasPendingCreateScheduleForm}
-                    />
-                  )}
+                  </ServiceFormSection>
+                  <ServiceFormSection section="recurrence">
                   <ServiceRecurrenceConfigPanel
                     allowRecurrence={allowRecurrence}
                     allowedFrequencies={allowedFrequencies}
@@ -1769,6 +1781,22 @@ export const ServicesView: React.FC = () => {
                       setDefaultPlanDuration(next.defaultPlanDuration);
                     }}
                   />
+                  {serviceKind === 'group' && (
+                    <ClassScheduleSection
+                      serviceId={null}
+                      serviceModality={modality}
+                      durationMinutes={Number(durationMinutes) || 50}
+                      defaultCapacity={Number(defaultCapacity) || 10}
+                      defaultProfessionalId={professionalId}
+                      professionals={selectableCreateScheduleProfessionals}
+                      rooms={rooms}
+                      draftSchedules={draftClassSchedules}
+                      onDraftSchedulesChange={setDraftClassSchedules}
+                      onFormOpenChange={setHasPendingCreateScheduleForm}
+                    />
+                  )}
+                  </ServiceFormSection>
+                  <ServiceFormSection section="billing">
                   <ServiceBillingConfigPanel
                     serviceName={name}
                     billingMode={billingMode}
@@ -1795,6 +1823,8 @@ export const ServicesView: React.FC = () => {
                       setDefaultBillingDueDay(next.defaultBillingDueDay);
                     }}
                   />
+                  </ServiceFormSection>
+                  <ServiceFormSection section="templates">
                   <ServiceTemplatesConfigPanel
                     defaultTemplateId={defaultTemplateId}
                     linkedTemplateIds={linkedTemplateIds}
@@ -1803,6 +1833,7 @@ export const ServicesView: React.FC = () => {
                       setLinkedTemplateIds(next.linkedTemplateIds);
                     }}
                   />
+                  </ServiceFormSection>
                 </div>
               ) : (
                 <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200">
@@ -1818,6 +1849,7 @@ export const ServicesView: React.FC = () => {
                 </div>
               )}
 
+              <ServiceFormSection section="description">
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Descrição</label>
                 <textarea
@@ -1868,7 +1900,8 @@ export const ServicesView: React.FC = () => {
                   </div>
                 )}
               </div>
-            </div>
+              </ServiceFormSection>
+            </ServiceFormBody>
 
             {/* Footer Fixo */}
             <div className="flex items-center justify-end gap-2 px-6 py-3.5 border-t border-slate-100 flex-shrink-0 bg-slate-50/80">
@@ -1881,13 +1914,14 @@ export const ServicesView: React.FC = () => {
               </button>
               <button
                 type="button"
+                data-studio-save={isPureStudio || undefined}
                 onClick={handleCreateService}
                 className="px-6 py-2 font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs cursor-pointer"
               >
                 Salvar Serviço
               </button>
             </div>
-          </div>
+          </StudioServicePresentation>
         </div>
       )}
 
@@ -1946,12 +1980,22 @@ export const ServicesView: React.FC = () => {
       {/* Modal Editar Serviço */}
       {editingService && (
         <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-hidden mobile-modal">
-          <div className="bg-white rounded-3xl max-w-lg w-full max-h-[90vh] shadow-2xl border border-slate-200 flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+          <StudioServicePresentation enabled={isPureStudio} title="Editar Serviço" onClose={() => setEditingService(null)}
+            values={{
+              name: editName, professionalId: editProfessionalId, serviceKind: editServiceKind,
+              price: editPrice, billingMode: editBillingMode, periodicPrice: editPeriodicPrice,
+              defaultBillingDueDay: editDefaultBillingDueDay, weeklySessionsCount: editWeeklySessionsCount, includedSessionsCount: editIncludedSessionsCount,
+              allowRecurrence: editAllowRecurrence, defaultFrequency: editDefaultFrequency, defaultCustomInterval: editDefaultCustomInterval,
+              defaultPlanDuration: editDefaultPlanDuration, linkedTemplateIds: editLinkedTemplateIds, defaultTemplateId: editDefaultTemplateId,
+              reminderEnabled: editReminderEnabled, draftSchedules: editDraftClassSchedules, hasPendingScheduleForm: hasPendingEditScheduleForm,
+              schedules: editingService.class_schedules
+            }}
+            className="bg-white rounded-3xl max-w-lg w-full max-h-[90vh] shadow-2xl border border-slate-200 flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
             {/* Header Fixo */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 flex-shrink-0 bg-white">
               <div>
                 <h3 className="text-base font-bold text-slate-900">Editar Serviço</h3>
-                <p className="text-xs text-slate-500">Altere os dados do atendimento ou regras de retorno</p>
+                <p className="text-xs text-slate-500">{isPureStudio ? 'Cadastre um novo serviço e defina como ele será oferecido, agendado e cobrado.' : 'Altere os dados do atendimento ou regras de retorno'}</p>
               </div>
               <button aria-label="Fechar"
                 onClick={() => setEditingService(null)}
@@ -1961,11 +2005,16 @@ export const ServicesView: React.FC = () => {
               </button>
             </div>
 
+            <StudioServiceIndicators />
+
             {/* Conteúdo com Scroll */}
-            <div className="p-6 overflow-y-auto flex-1 space-y-3.5 text-xs">
+            <ServiceFormBody>
+              <ServiceFormSection section="basics">
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Profissional Responsável *</label>
                 <select
+                  data-studio-field={isPureStudio ? "professional" : undefined}
+                  aria-label={isPureStudio ? "Profissional responsável" : undefined}
                   value={editProfessionalId}
                   onChange={e => handleSelectEditProfessional(e.target.value)}
                   className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium"
@@ -2031,6 +2080,8 @@ export const ServicesView: React.FC = () => {
                 <label className="block font-semibold text-slate-700 mb-1">Nome do Atendimento *</label>
                 <input
                   type="text"
+                  data-studio-field={isPureStudio ? "name" : undefined}
+                  aria-label={isPureStudio ? "Nome do serviço" : undefined}
                   value={editName}
                   onChange={e => setEditName(e.target.value)}
                   placeholder="Ex: Consulta Odontológica Inicial"
@@ -2064,6 +2115,8 @@ export const ServicesView: React.FC = () => {
                 <input
                   type="number"
                   step="0.01"
+                  data-studio-field={isPureStudio ? "price" : undefined}
+                  aria-label={isPureStudio ? "Preço por aula" : undefined}
                   value={editPrice}
                   onChange={e => setEditPrice(e.target.value)}
                   className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
@@ -2118,6 +2171,8 @@ export const ServicesView: React.FC = () => {
                 </div>
               </div>
 
+              </ServiceFormSection>
+
               {isMixed && (
                 <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
                   <div className="font-bold text-slate-800 text-xs">Segmento do Serviço</div>
@@ -2152,8 +2207,9 @@ export const ServicesView: React.FC = () => {
               )}
 
               {showEditStudioConfig ? (
-                <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-2.5">
-                  <div className="font-bold text-slate-800 text-xs">Configurações do Studio</div>
+                <div className={isPureStudio ? "studio-service-config contents" : "p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-2.5"}>
+                  {!isPureStudio && <div className="font-bold text-slate-800 text-xs">Configurações do Studio</div>}
+                  <ServiceFormSection section="format">
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
@@ -2192,6 +2248,26 @@ export const ServicesView: React.FC = () => {
                       />
                     </div>
                   )}
+                  </ServiceFormSection>
+                  <ServiceFormSection section="recurrence">
+                  <ServiceRecurrenceConfigPanel
+                    allowRecurrence={editAllowRecurrence}
+                    allowedFrequencies={editAllowedFrequencies}
+                    defaultFrequency={editDefaultFrequency}
+                    customIntervals={editCustomIntervals}
+                    defaultCustomInterval={editDefaultCustomInterval}
+                    allowedPlanDurations={editAllowedPlanDurations}
+                    defaultPlanDuration={editDefaultPlanDuration}
+                    onChange={next => {
+                      setEditAllowRecurrence(next.allowRecurrence);
+                      setEditAllowedFrequencies(next.allowedFrequencies);
+                      setEditDefaultFrequency(next.defaultFrequency);
+                      setEditCustomIntervals(next.customIntervals);
+                      setEditDefaultCustomInterval(next.defaultCustomInterval);
+                      setEditAllowedPlanDurations(next.allowedPlanDurations);
+                      setEditDefaultPlanDuration(next.defaultPlanDuration);
+                    }}
+                  />
                   {editServiceKind === 'group' && editingService && (
                     <ClassScheduleSection
                       serviceId={editingService.service_kind === 'group' ? editingService.id : null}
@@ -2230,24 +2306,8 @@ export const ServicesView: React.FC = () => {
                       }}
                     />
                   )}
-                  <ServiceRecurrenceConfigPanel
-                    allowRecurrence={editAllowRecurrence}
-                    allowedFrequencies={editAllowedFrequencies}
-                    defaultFrequency={editDefaultFrequency}
-                    customIntervals={editCustomIntervals}
-                    defaultCustomInterval={editDefaultCustomInterval}
-                    allowedPlanDurations={editAllowedPlanDurations}
-                    defaultPlanDuration={editDefaultPlanDuration}
-                    onChange={next => {
-                      setEditAllowRecurrence(next.allowRecurrence);
-                      setEditAllowedFrequencies(next.allowedFrequencies);
-                      setEditDefaultFrequency(next.defaultFrequency);
-                      setEditCustomIntervals(next.customIntervals);
-                      setEditDefaultCustomInterval(next.defaultCustomInterval);
-                      setEditAllowedPlanDurations(next.allowedPlanDurations);
-                      setEditDefaultPlanDuration(next.defaultPlanDuration);
-                    }}
-                  />
+                  </ServiceFormSection>
+                  <ServiceFormSection section="billing">
                   <ServiceBillingConfigPanel
                     serviceName={editName}
                     billingMode={editBillingMode}
@@ -2274,6 +2334,8 @@ export const ServicesView: React.FC = () => {
                       setEditDefaultBillingDueDay(next.defaultBillingDueDay);
                     }}
                   />
+                  </ServiceFormSection>
+                  <ServiceFormSection section="templates">
                   <ServiceTemplatesConfigPanel
                     defaultTemplateId={editDefaultTemplateId}
                     linkedTemplateIds={editLinkedTemplateIds}
@@ -2282,6 +2344,7 @@ export const ServicesView: React.FC = () => {
                       setEditLinkedTemplateIds(next.linkedTemplateIds);
                     }}
                   />
+                  </ServiceFormSection>
                 </div>
               ) : (
                 <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200">
@@ -2297,6 +2360,7 @@ export const ServicesView: React.FC = () => {
                 </div>
               )}
 
+              <ServiceFormSection section="description">
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Descrição</label>
                 <textarea
@@ -2347,7 +2411,8 @@ export const ServicesView: React.FC = () => {
                   </div>
                 )}
               </div>
-            </div>
+              </ServiceFormSection>
+            </ServiceFormBody>
 
             {/* Footer Fixo */}
             <div className="flex items-center justify-end gap-2 px-6 py-3.5 border-t border-slate-100 flex-shrink-0 bg-slate-50/80">
@@ -2360,6 +2425,7 @@ export const ServicesView: React.FC = () => {
               </button>
               <button
                 type="button"
+                data-studio-save={isPureStudio || undefined}
                 onClick={handleUpdateService}
                 disabled={updating}
                 className="px-6 py-2 font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs disabled:opacity-50 cursor-pointer"
@@ -2367,7 +2433,7 @@ export const ServicesView: React.FC = () => {
                 {updating ? 'Salvando...' : 'Salvar Alterações'}
               </button>
             </div>
-          </div>
+          </StudioServicePresentation>
         </div>
       )}
 

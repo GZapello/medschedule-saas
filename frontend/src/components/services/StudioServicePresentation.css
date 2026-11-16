@@ -1,0 +1,22 @@
+/* Scoped to the Studio catalogue dialog; shared panels and other profiles keep their styles. */
+.studio-service-dialog { max-height: min(92dvh, calc(var(--studio-visible-height, 100dvh) - 2rem)); }
+.studio-service-dialog .studio-service-panel > div { border: 0; border-radius: 0; background: transparent; padding: 0; }
+.studio-service-dialog .studio-service-basics > :first-child { grid-column: 1 / -1; }
+.studio-service-dialog :is(input, select, textarea) { min-width: 0; max-width: 100%; }
+.studio-service-dialog :is(input, select, textarea):focus-visible { outline: 2px solid #0d9488; outline-offset: 2px; }
+.studio-service-dialog [hidden] { display: none; }
+.studio-service-dialog .studio-service-config > section { margin-top: .75rem; }
+@media (max-width: 639px) {
+  .mobile-modal > .studio-service-dialog {
+    position: fixed;
+    top: calc(var(--studio-visible-top, 0px) + .5rem);
+    height: calc(var(--studio-visible-height, 100dvh) - 1rem);
+    max-height: calc(var(--studio-visible-height, 100dvh) - 1rem);
+    width: calc(100% - 1rem);
+    padding: 0;
+  }
+  .studio-service-dialog .studio-service-basics > .grid { grid-template-columns: minmax(0, 1fr); }
+  .studio-service-dialog [data-studio-section="description"] .flex { flex-wrap: wrap; }
+  .studio-service-dialog > div:last-child { padding-inline: 1rem; }
+  .studio-service-dialog > div:last-child > button { white-space: nowrap; flex-shrink: 0; padding-inline: 1rem; }
+}

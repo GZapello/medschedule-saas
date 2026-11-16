@@ -21,6 +21,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '../middlewares/audit.middleware';
 import { GoogleCalendarService } from '../services/google-calendar.service';
 import { NotificationService } from '../services/notification.service';
+import { InternalNotificationService } from '../services/internal-notification.service';
 import { WhatsAppService } from '../services/whatsapp.service';
 import { isValidPhoneNumber, normalizePhoneWithDDI, buildWhatsAppReminderMessage } from '../utils/phone.utils';
 import {
@@ -1128,6 +1129,15 @@ export class AppointmentController {
       // Agenda lembrete automático inteligente de 1 hora antes (Item 22)
       if (!isRetroactive) {
         NotificationService.scheduleAppointmentReminder(appointmentId);
+      }
+
+      // Notificação interna exclusiva para novos agendamentos concluídos pelo link público
+      if (isPublic) {
+        InternalNotificationService.notifyPublicSingleAppointment({
+          tenantId,
+          appointmentId,
+          classScheduleId: matchedScheduleId
+        });
       }
 
       if (isRetroactive) {

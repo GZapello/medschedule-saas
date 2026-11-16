@@ -189,4 +189,43 @@ export function migrateIntegratedImprovements(rawDb: any): void {
   addColIfMissing('pre_consultation_submissions', 'guardian_cpf', 'TEXT');
   addColIfMissing('pre_consultation_submissions', 'body_map_json', 'TEXT');
   addColIfMissing('pre_consultation_submissions', 'body_map_imported_assessment_id', 'TEXT');
+
+  // =========================================================================
+  // FASE 5: Notificações Internas de Novos Agendamentos pelo Link Público
+  // =========================================================================
+  rawDb.exec(`
+    CREATE TABLE IF NOT EXISTS internal_notifications (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      recipient_user_id TEXT NOT NULL,
+      category TEXT NOT NULL DEFAULT 'public_booking',
+      establishment_mode TEXT NOT NULL DEFAULT 'clinic',
+      title TEXT NOT NULL,
+      summary TEXT NOT NULL,
+      student_or_patient_name TEXT NOT NULL,
+      service_or_class_name TEXT NOT NULL,
+      weekdays_label TEXT,
+      time_range_label TEXT,
+      start_date_label TEXT,
+      start_date_iso TEXT,
+      professional_names TEXT,
+      class_group_label TEXT,
+      sessions_count INTEGER NOT NULL DEFAULT 1,
+      appointment_id TEXT,
+      occurrence_id TEXT,
+      series_id TEXT,
+      package_contract_id TEXT,
+      idempotency_key TEXT NOT NULL,
+      metadata_json TEXT,
+      read_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(tenant_id, recipient_user_id, idempotency_key)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_internal_notifications_recipient
+      ON internal_notifications (tenant_id, recipient_user_id, created_at DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_internal_notifications_unread
+      ON internal_notifications (tenant_id, recipient_user_id, read_at, created_at DESC);
+  `);
 }
