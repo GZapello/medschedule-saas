@@ -266,6 +266,10 @@ export interface Service {
   default_package_id?: string | null;
   default_package_name?: string | null;
   default_billing_due_day?: number | null;
+  pricing_rule?: 'four_weeks' | 'annual_average' | 'scheduled_sessions';
+  is_price_customized?: number | boolean;
+  suggested_price?: number | null;
+  weekly_sessions_count?: number | null;
   default_template_id?: string | null;
   default_template_title?: string | null;
   linked_template_ids?: string[];

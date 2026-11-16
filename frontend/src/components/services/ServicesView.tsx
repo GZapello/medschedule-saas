@@ -26,6 +26,7 @@ import { PackageModal } from './PackageModal';
 import { ClassScheduleSection, DraftClassScheduleInput } from './ClassScheduleSection';
 import { ServiceRecurrenceConfigPanel } from './ServiceRecurrenceConfigPanel';
 import { ServiceBillingConfigPanel } from './ServiceBillingConfigPanel';
+import { StudioPricingRule } from '../../utils/studioPricing';
 import { ServiceTemplatesConfigPanel } from './ServiceTemplatesConfigPanel';
 import { LinkedInstructorsSelector } from './LinkedInstructorsSelector';
 import {
@@ -367,6 +368,11 @@ export const ServicesView: React.FC = () => {
   const [defaultPlanDuration, setDefaultPlanDuration] = useState<Exclude<PlanDurationCode, 'legacy_frequency'>>('1_month');
   const [billingMode, setBillingMode] = useState<ServiceBillingMode>('per_session');
   const [periodicPrice, setPeriodicPrice] = useState<string>('');
+  const [pricingRule, setPricingRule] = useState<StudioPricingRule>('four_weeks');
+  const [isPriceCustomized, setIsPriceCustomized] = useState<boolean>(false);
+  const [suggestedPrice, setSuggestedPrice] = useState<number | null>(null);
+  const [weeklySessionsCount, setWeeklySessionsCount] = useState<number>(1);
+  const [includedSessionsCount, setIncludedSessionsCount] = useState<number>(8);
   const [defaultPackageId, setDefaultPackageId] = useState<string>('');
   const [defaultBillingDueDay, setDefaultBillingDueDay] = useState<string>('');
   const [defaultTemplateId, setDefaultTemplateId] = useState<string>('');
@@ -401,6 +407,11 @@ export const ServicesView: React.FC = () => {
   const [editDefaultPlanDuration, setEditDefaultPlanDuration] = useState<Exclude<PlanDurationCode, 'legacy_frequency'>>('1_month');
   const [editBillingMode, setEditBillingMode] = useState<ServiceBillingMode>('per_session');
   const [editPeriodicPrice, setEditPeriodicPrice] = useState<string>('');
+  const [editPricingRule, setEditPricingRule] = useState<StudioPricingRule>('four_weeks');
+  const [editIsPriceCustomized, setEditIsPriceCustomized] = useState<boolean>(false);
+  const [editSuggestedPrice, setEditSuggestedPrice] = useState<number | null>(null);
+  const [editWeeklySessionsCount, setEditWeeklySessionsCount] = useState<number>(1);
+  const [editIncludedSessionsCount, setEditIncludedSessionsCount] = useState<number>(8);
   const [editDefaultPackageId, setEditDefaultPackageId] = useState<string>('');
   const [editDefaultBillingDueDay, setEditDefaultBillingDueDay] = useState<string>('');
   const [editDefaultTemplateId, setEditDefaultTemplateId] = useState<string>('');
@@ -643,6 +654,10 @@ export const ServicesView: React.FC = () => {
               defaultPlanDuration: allowRecurrence ? defaultPlanDuration : null,
               billingMode,
               periodicPrice: isPeriodicCreate ? Number(periodicPrice) : null,
+              pricingRule: isPeriodicCreate ? pricingRule : undefined,
+              isPriceCustomized: isPeriodicCreate ? isPriceCustomized : undefined,
+              suggestedPrice: isPeriodicCreate ? suggestedPrice : undefined,
+              weeklySessionsCount: isPeriodicCreate ? weeklySessionsCount : undefined,
               defaultPackageId: billingMode === 'package' && defaultPackageId ? defaultPackageId : null,
               defaultBillingDueDay: isPeriodicCreate && defaultBillingDueDay.trim() !== '' ? Number(defaultBillingDueDay) : null,
               defaultTemplateId: defaultTemplateId || null,
@@ -684,6 +699,11 @@ export const ServicesView: React.FC = () => {
       setDefaultPlanDuration('1_month');
       setBillingMode('per_session');
       setPeriodicPrice('');
+      setPricingRule('four_weeks');
+      setIsPriceCustomized(false);
+      setSuggestedPrice(null);
+      setWeeklySessionsCount(1);
+      setIncludedSessionsCount(8);
       setDefaultPackageId('');
       setDefaultBillingDueDay('');
       setDefaultTemplateId('');
@@ -770,6 +790,11 @@ export const ServicesView: React.FC = () => {
     const initialBillingMode = (domain === 'studio' && s.billing_mode ? s.billing_mode : 'per_session') as ServiceBillingMode;
     setEditBillingMode(initialBillingMode);
     setEditPeriodicPrice(s.periodic_price !== undefined && s.periodic_price !== null ? String(s.periodic_price) : '');
+    setEditPricingRule(((s as any).pricing_rule || 'four_weeks') as StudioPricingRule);
+    setEditIsPriceCustomized(Boolean((s as any).is_price_customized));
+    setEditSuggestedPrice((s as any).suggested_price ?? null);
+    setEditWeeklySessionsCount(Number((s as any).weekly_sessions_count) || 1);
+    setEditIncludedSessionsCount(8);
     setEditDefaultPackageId(s.default_package_id || '');
     setEditDefaultBillingDueDay(s.default_billing_due_day !== undefined && s.default_billing_due_day !== null ? String(s.default_billing_due_day) : '');
     setEditDefaultTemplateId(s.default_template_id || '');
@@ -856,6 +881,10 @@ export const ServicesView: React.FC = () => {
               defaultPlanDuration: editAllowRecurrence ? editDefaultPlanDuration : null,
               billingMode: editBillingMode,
               periodicPrice: isPeriodicEdit ? Number(editPeriodicPrice) : null,
+              pricingRule: isPeriodicEdit ? editPricingRule : undefined,
+              isPriceCustomized: isPeriodicEdit ? editIsPriceCustomized : undefined,
+              suggestedPrice: isPeriodicEdit ? editSuggestedPrice : undefined,
+              weeklySessionsCount: isPeriodicEdit ? editWeeklySessionsCount : undefined,
               defaultPackageId: editBillingMode === 'package' && editDefaultPackageId ? editDefaultPackageId : null,
               defaultBillingDueDay: isPeriodicEdit && editDefaultBillingDueDay.trim() !== '' ? Number(editDefaultBillingDueDay) : null,
               defaultTemplateId: editDefaultTemplateId || null,
@@ -1745,12 +1774,23 @@ export const ServicesView: React.FC = () => {
                     billingMode={billingMode}
                     sessionPrice={Number(price) || 0}
                     periodicPrice={periodicPrice}
+                    pricingRule={pricingRule}
+                    isPriceCustomized={isPriceCustomized}
+                    suggestedPrice={suggestedPrice}
+                    weeklySessionsCount={weeklySessionsCount}
+                    includedSessionsCount={includedSessionsCount}
                     defaultPackageId={defaultPackageId}
                     defaultBillingDueDay={defaultBillingDueDay}
                     availablePackages={packages}
+                    scheduleWeekdaysCount={draftClassSchedules.length}
                     onChange={next => {
                       setBillingMode(next.billingMode);
                       setPeriodicPrice(next.periodicPrice);
+                      setPricingRule(next.pricingRule);
+                      setIsPriceCustomized(next.isPriceCustomized);
+                      setSuggestedPrice(next.suggestedPrice);
+                      setWeeklySessionsCount(next.weeklySessionsCount);
+                      if (next.includedSessionsCount) setIncludedSessionsCount(next.includedSessionsCount);
                       setDefaultPackageId(next.defaultPackageId);
                       setDefaultBillingDueDay(next.defaultBillingDueDay);
                     }}
@@ -2213,12 +2253,23 @@ export const ServicesView: React.FC = () => {
                     billingMode={editBillingMode}
                     sessionPrice={Number(editPrice) || 0}
                     periodicPrice={editPeriodicPrice}
+                    pricingRule={editPricingRule}
+                    isPriceCustomized={editIsPriceCustomized}
+                    suggestedPrice={editSuggestedPrice}
+                    weeklySessionsCount={editWeeklySessionsCount}
+                    includedSessionsCount={editIncludedSessionsCount}
                     defaultPackageId={editDefaultPackageId}
                     defaultBillingDueDay={editDefaultBillingDueDay}
                     availablePackages={packages}
+                    scheduleWeekdaysCount={editingService?.class_schedules?.filter(s => Number(s.active) !== 0).length || editDraftClassSchedules.length}
                     onChange={next => {
                       setEditBillingMode(next.billingMode);
                       setEditPeriodicPrice(next.periodicPrice);
+                      setEditPricingRule(next.pricingRule);
+                      setEditIsPriceCustomized(next.isPriceCustomized);
+                      setEditSuggestedPrice(next.suggestedPrice);
+                      setEditWeeklySessionsCount(next.weeklySessionsCount);
+                      if (next.includedSessionsCount) setEditIncludedSessionsCount(next.includedSessionsCount);
                       setEditDefaultPackageId(next.defaultPackageId);
                       setEditDefaultBillingDueDay(next.defaultBillingDueDay);
                     }}

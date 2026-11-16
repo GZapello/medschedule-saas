@@ -547,6 +547,7 @@ export class AppointmentController {
         SELECT id, price, professional_id, modality, COALESCE(service_kind, 'individual') as service_kind,
                default_capacity, name, service_domain, clinical_module,
                billing_mode, periodic_price, billing_cycle_months, default_package_id, default_billing_due_day,
+               pricing_rule, is_price_customized, suggested_price, weekly_sessions_count,
                default_template_id
         FROM services WHERE id = ? AND tenant_id = ?
       `).get(serviceId, tenantId) as any;
@@ -2747,6 +2748,7 @@ export class AppointmentController {
                custom_recurrence_intervals_json, default_recurrence_interval_json,
                service_domain, clinical_module,
                billing_mode, periodic_price, billing_cycle_months, default_package_id, default_billing_due_day,
+               pricing_rule, is_price_customized, suggested_price, weekly_sessions_count,
                default_template_id
         FROM services WHERE id = ? AND tenant_id = ? AND active = 1
       `).get(serviceId, tenantId) as any;
@@ -2884,11 +2886,16 @@ export class AppointmentController {
         endDate ||
         dates[dates.length - 1];
 
+      const effWeekdays = Array.isArray(recurrence?.weekdays) && recurrence.weekdays.length > 0
+        ? recurrence.weekdays
+        : Array.from(new Set(evalResult.occurrences.map(o => o.dayOfWeek)));
+
       const normalizedEnrollPlan = reqEnrollBillingPlan && typeof reqEnrollBillingPlan === 'object'
         ? {
             ...reqEnrollBillingPlan,
             startDate: reqEnrollBillingPlan.startDate || dates[0],
-            endDate: contractResolvedEnd
+            endDate: contractResolvedEnd,
+            weeklySessionsCount: reqEnrollBillingPlan.weeklySessionsCount ?? reqEnrollBillingPlan.weeklyFrequency ?? (effWeekdays.length > 0 ? effWeekdays.length : undefined)
           }
         : undefined;
 
@@ -2944,10 +2951,6 @@ export class AppointmentController {
       })();
 
       const runTx = db.transaction(() => {
-        const effWeekdays = Array.isArray(recurrence?.weekdays) && recurrence.weekdays.length > 0
-          ? recurrence.weekdays
-          : Array.from(new Set(evalResult.occurrences.map(o => o.dayOfWeek)));
-
         const scheduleRulesForPlan = recScheduleEntries && recScheduleEntries.length > 0
           ? recScheduleEntries
           : effWeekdays.map((wd: number) => ({

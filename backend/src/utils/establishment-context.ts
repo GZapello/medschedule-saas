@@ -1,5 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import { db } from '../config/database';
+import {
+  calculateStudioRecurringPrice,
+  StudioPricingRule
+} from './studio-pricing';
 
 export type EstablishmentProfile = 'clinic' | 'studio' | 'mixed';
 export type ServiceDomain = 'clinical' | 'studio';
@@ -1000,6 +1004,10 @@ export function parseServiceBillingConfig(row: any): {
   billingCycleMonths: number | null;
   defaultPackageId: string | null;
   defaultBillingDueDay: number | null;
+  pricingRule: StudioPricingRule;
+  isPriceCustomized: boolean;
+  suggestedPrice: number | null;
+  weeklySessionsCount: number;
 } {
   const rawMode = String(row?.billing_mode || 'per_session').trim().toLowerCase();
   const billingMode: ServiceBillingMode = isValidServiceBillingMode(rawMode) ? rawMode : 'per_session';
@@ -1015,7 +1023,45 @@ export function parseServiceBillingConfig(row: any): {
   const defaultBillingDueDay = row?.default_billing_due_day !== null && row?.default_billing_due_day !== undefined
     ? Math.min(28, Math.max(1, Math.floor(Number(row.default_billing_due_day))))
     : null;
-  return { billingMode, periodicPrice, billingCycleMonths, defaultPackageId, defaultBillingDueDay };
+
+  const rawRule = String(row?.pricing_rule || '').trim().toLowerCase();
+  const pricingRule: StudioPricingRule =
+    rawRule === 'annual_average' || rawRule === 'scheduled_sessions' ? rawRule : 'four_weeks';
+
+  const weeklySessionsCount = Math.max(1, Math.min(7, Math.floor(Number(row?.weekly_sessions_count) || 1)));
+
+  const sessionPrice = Math.max(0, Number(row?.price) || 0);
+
+  const hasStoredSuggested =
+    row?.suggested_price !== null &&
+    row?.suggested_price !== undefined &&
+    Number.isFinite(Number(row.suggested_price));
+
+  const calc = calculateStudioRecurringPrice({
+    sessionPrice,
+    weeklySessionsCount,
+    billingMode,
+    pricingRule,
+    customPrice: periodicPrice,
+    isPriceCustomized: Number(row?.is_price_customized) === 1 ? true : (hasStoredSuggested ? false : undefined)
+  });
+
+  const isPriceCustomized = Number(row?.is_price_customized) === 1 || calc.isPriceCustomized;
+  const suggestedPrice = hasStoredSuggested
+    ? Math.round(Number(row.suggested_price) * 100) / 100
+    : calc.suggestedPrice;
+
+  return {
+    billingMode,
+    periodicPrice,
+    billingCycleMonths,
+    defaultPackageId,
+    defaultBillingDueDay,
+    pricingRule,
+    isPriceCustomized,
+    suggestedPrice,
+    weeklySessionsCount
+  };
 }
 
 export function normalizeServiceBillingForSave(input: {
@@ -1024,6 +1070,12 @@ export function normalizeServiceBillingForSave(input: {
   periodicPrice?: unknown;
   defaultPackageId?: unknown;
   defaultBillingDueDay?: unknown;
+  pricingRule?: unknown;
+  isPriceCustomized?: unknown;
+  suggestedPrice?: unknown;
+  weeklySessionsCount?: unknown;
+  sessionPrice?: unknown;
+  scheduleEntriesCount?: unknown;
   tenantId: string;
   serviceId?: string;
 }): {
@@ -1032,11 +1084,27 @@ export function normalizeServiceBillingForSave(input: {
   billingCycleMonths: number | null;
   defaultPackageId: string | null;
   defaultBillingDueDay: number | null;
+  pricingRule: StudioPricingRule;
+  isPriceCustomized: boolean;
+  suggestedPrice: number | null;
+  weeklySessionsCount: number;
   error?: string;
 } {
   const rawMode = input.billingMode !== undefined && input.billingMode !== null && String(input.billingMode).trim() !== ''
     ? String(input.billingMode).trim().toLowerCase()
     : 'per_session';
+
+  const rawRule = String(input.pricingRule || '').trim().toLowerCase();
+  const pricingRule: StudioPricingRule =
+    rawRule === 'annual_average' || rawRule === 'scheduled_sessions' ? rawRule : 'four_weeks';
+
+  let weeklySessionsCount = Math.max(
+    1,
+    Math.min(7, Math.floor(Number(input.weeklySessionsCount) || Number(input.scheduleEntriesCount) || 1))
+  );
+
+  const rawSessionPrice = Number(input.sessionPrice);
+  const sessionPrice = Number.isFinite(rawSessionPrice) && rawSessionPrice > 0 ? rawSessionPrice : 0;
 
   if (!isValidServiceBillingMode(rawMode)) {
     return {
@@ -1045,6 +1113,10 @@ export function normalizeServiceBillingForSave(input: {
       billingCycleMonths: null,
       defaultPackageId: null,
       defaultBillingDueDay: null,
+      pricingRule: 'four_weeks',
+      isPriceCustomized: false,
+      suggestedPrice: null,
+      weeklySessionsCount: 1,
       error: 'Modalidade de cobrança do serviço inválida.'
     };
   }
@@ -1057,6 +1129,10 @@ export function normalizeServiceBillingForSave(input: {
         billingCycleMonths: null,
         defaultPackageId: null,
         defaultBillingDueDay: null,
+        pricingRule: 'four_weeks',
+        isPriceCustomized: false,
+        suggestedPrice: null,
+        weeklySessionsCount: 1,
         error: 'Configuração de cobrança periódica ou por pacote está disponível apenas para serviços do domínio Studio.'
       };
     }
@@ -1065,7 +1141,11 @@ export function normalizeServiceBillingForSave(input: {
       periodicPrice: null,
       billingCycleMonths: null,
       defaultPackageId: null,
-      defaultBillingDueDay: null
+      defaultBillingDueDay: null,
+      pricingRule: 'four_weeks',
+      isPriceCustomized: false,
+      suggestedPrice: null,
+      weeklySessionsCount: 1
     };
   }
 
@@ -1083,28 +1163,62 @@ export function normalizeServiceBillingForSave(input: {
       billingCycleMonths: null,
       defaultPackageId: null,
       defaultBillingDueDay: null,
+      pricingRule: 'four_weeks',
+      isPriceCustomized: false,
+      suggestedPrice: null,
+      weeklySessionsCount: 1,
       error: 'O dia padrão de vencimento deve estar entre 1 e 28.'
     };
   }
 
   if (isPeriodicBillingMode(rawMode)) {
-    const numPeriodic = Number(input.periodicPrice);
-    if (!Number.isFinite(numPeriodic) || numPeriodic <= 0) {
+    const calc = calculateStudioRecurringPrice({
+      sessionPrice,
+      weeklySessionsCount,
+      billingMode: rawMode,
+      pricingRule,
+      customPrice: input.periodicPrice !== undefined && input.periodicPrice !== null && String(input.periodicPrice).trim() !== '' ? Number(input.periodicPrice) : undefined,
+      isPriceCustomized: input.isPriceCustomized === true || input.isPriceCustomized === 1 || input.isPriceCustomized === 'true'
+    });
+
+    let effectivePrice = calc.effectivePrice;
+    const suppliedPeriodic = input.periodicPrice !== undefined && input.periodicPrice !== null && String(input.periodicPrice).trim() !== ''
+      ? Number(input.periodicPrice)
+      : null;
+
+    if (suppliedPeriodic !== null && Number.isFinite(suppliedPeriodic) && suppliedPeriodic > 0) {
+      effectivePrice = Math.round(suppliedPeriodic * 100) / 100;
+    }
+
+    if (!Number.isFinite(effectivePrice) || effectivePrice <= 0) {
       return {
         billingMode: rawMode,
         periodicPrice: null,
         billingCycleMonths: getCycleMonthsForBillingFrequency(rawMode),
         defaultPackageId: null,
         defaultBillingDueDay: parsedDueDay,
+        pricingRule,
+        isPriceCustomized: false,
+        suggestedPrice: calc.suggestedPrice,
+        weeklySessionsCount,
         error: 'Informe o valor por período de cobrança maior que zero para modalidades periódicas.'
       };
     }
+
+    const isCustom = input.isPriceCustomized === true || input.isPriceCustomized === 1 || input.isPriceCustomized === 'true'
+      ? true
+      : (Math.abs(effectivePrice - calc.suggestedPrice) > 0.01);
+
     return {
       billingMode: rawMode,
-      periodicPrice: Math.round(numPeriodic * 100) / 100,
+      periodicPrice: effectivePrice,
       billingCycleMonths: getCycleMonthsForBillingFrequency(rawMode),
       defaultPackageId: null,
-      defaultBillingDueDay: parsedDueDay
+      defaultBillingDueDay: parsedDueDay,
+      pricingRule,
+      isPriceCustomized: isCustom,
+      suggestedPrice: calc.suggestedPrice,
+      weeklySessionsCount
     };
   }
 
@@ -1121,6 +1235,10 @@ export function normalizeServiceBillingForSave(input: {
           billingCycleMonths: null,
           defaultPackageId: null,
           defaultBillingDueDay: parsedDueDay,
+          pricingRule: 'four_weeks',
+          isPriceCustomized: false,
+          suggestedPrice: null,
+          weeklySessionsCount: 1,
           error: 'Pacote de serviços selecionado não encontrado ou inativo neste estabelecimento.'
         };
       }
@@ -1130,7 +1248,11 @@ export function normalizeServiceBillingForSave(input: {
       periodicPrice: null,
       billingCycleMonths: null,
       defaultPackageId: pkgId || null,
-      defaultBillingDueDay: parsedDueDay
+      defaultBillingDueDay: parsedDueDay,
+      pricingRule: 'four_weeks',
+      isPriceCustomized: false,
+      suggestedPrice: null,
+      weeklySessionsCount: 1
     };
   }
 
@@ -1139,6 +1261,10 @@ export function normalizeServiceBillingForSave(input: {
     periodicPrice: null,
     billingCycleMonths: null,
     defaultPackageId: null,
-    defaultBillingDueDay: parsedDueDay
+    defaultBillingDueDay: parsedDueDay,
+    pricingRule: 'four_weeks',
+    isPriceCustomized: false,
+    suggestedPrice: null,
+    weeklySessionsCount: 1
   };
 }

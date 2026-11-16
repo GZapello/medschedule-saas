@@ -1,11 +1,25 @@
-import React from 'react';
-import { CreditCard, Info, Package as PackageIcon, Repeat } from 'lucide-react';
+import React, { useMemo, useEffect, useRef } from 'react';
+import {
+  CreditCard,
+  Info,
+  Package as PackageIcon,
+  Repeat,
+  RotateCcw,
+  Sparkles,
+  Calculator,
+  CheckCircle2
+} from 'lucide-react';
 import {
   SERVICE_BILLING_MODE_OPTIONS,
   ServiceBillingMode,
-  formatServiceBillingSummary,
   isPeriodicBillingMode
 } from '../../utils/establishmentContext';
+import {
+  calculateStudioRecurringPrice,
+  StudioPricingRule,
+  STUDIO_PRICING_RULE_OPTIONS,
+  formatBRL
+} from '../../utils/studioPricing';
 
 export interface ServicePackageOption {
   id: string;
@@ -22,13 +36,24 @@ interface ServiceBillingConfigPanelProps {
   billingMode: ServiceBillingMode;
   sessionPrice: number;
   periodicPrice: string;
+  pricingRule?: StudioPricingRule;
+  isPriceCustomized?: boolean;
+  suggestedPrice?: number | null;
+  weeklySessionsCount?: number;
+  includedSessionsCount?: number;
   defaultPackageId: string;
   defaultBillingDueDay: string;
   availablePackages?: ServicePackageOption[];
+  scheduleWeekdaysCount?: number;
   compact?: boolean;
   onChange: (next: {
     billingMode: ServiceBillingMode;
     periodicPrice: string;
+    pricingRule: StudioPricingRule;
+    isPriceCustomized: boolean;
+    suggestedPrice: number | null;
+    weeklySessionsCount: number;
+    includedSessionsCount?: number;
     defaultPackageId: string;
     defaultBillingDueDay: string;
   }) => void;
@@ -39,51 +64,240 @@ export const ServiceBillingConfigPanel: React.FC<ServiceBillingConfigPanelProps>
   billingMode,
   sessionPrice,
   periodicPrice,
+  pricingRule = 'four_weeks',
+  isPriceCustomized = false,
+  suggestedPrice: propSuggestedPrice,
+  weeklySessionsCount = 1,
+  includedSessionsCount = 8,
   defaultPackageId,
   defaultBillingDueDay,
   availablePackages = [],
+  scheduleWeekdaysCount,
   compact = false,
   onChange
 }) => {
   const isPeriodic = isPeriodicBillingMode(billingMode);
   const selectedPkg = availablePackages.find((pkg) => pkg.id === defaultPackageId) || null;
-  const parsedPeriodicPrice = periodicPrice.trim() !== '' ? Number(periodicPrice) : 0;
 
-  const summaryText = formatServiceBillingSummary({
-    serviceName: serviceName || 'Serviço',
-    billingMode,
+  const effectiveWeeklySessions = useMemo(() => {
+    return Math.max(1, Math.min(7, Math.floor(weeklySessionsCount || 1)));
+  }, [weeklySessionsCount]);
+
+  const prevScheduleCountRef = useRef<number | undefined>(scheduleWeekdaysCount);
+
+  const calcResult = useMemo(() => {
+    const parsedNumPrice = periodicPrice.trim() !== '' ? Number(periodicPrice.replace(',', '.')) : null;
+    return calculateStudioRecurringPrice({
+      serviceName: serviceName || 'Serviço',
+      sessionPrice: Number(sessionPrice) || 0,
+      weeklySessionsCount: effectiveWeeklySessions,
+      billingMode,
+      pricingRule,
+      customPrice: parsedNumPrice,
+      isPriceCustomized,
+      includedSessionsCount: Number(includedSessionsCount) || (effectiveWeeklySessions * 4),
+      packageName: selectedPkg?.name || null
+    });
+  }, [
+    serviceName,
     sessionPrice,
-    periodicPrice: isPeriodic ? (Number.isFinite(parsedPeriodicPrice) ? parsedPeriodicPrice : 0) : null,
-    packageName: selectedPkg?.name || null
-  });
+    effectiveWeeklySessions,
+    billingMode,
+    pricingRule,
+    periodicPrice,
+    isPriceCustomized,
+    includedSessionsCount,
+    selectedPkg
+  ]);
+
+  // Se o valor não for personalizado e estiver vazio ou o preço avulso/frequência/regra/lote mudar, atualiza automaticamente
+  useEffect(() => {
+    if (!isPeriodic) return;
+    if (!isPriceCustomized) {
+      const formattedSuggested = calcResult.suggestedPrice.toFixed(2);
+      const currentValNum = periodicPrice.trim() !== '' ? Number(periodicPrice.replace(',', '.')) : 0;
+      if (Math.abs(currentValNum - calcResult.suggestedPrice) > 0.01 || periodicPrice.trim() === '') {
+        onChange({
+          billingMode,
+          periodicPrice: formattedSuggested,
+          pricingRule,
+          isPriceCustomized: false,
+          suggestedPrice: calcResult.suggestedPrice,
+          weeklySessionsCount: effectiveWeeklySessions,
+          includedSessionsCount,
+          defaultPackageId,
+          defaultBillingDueDay
+        });
+      }
+    }
+  }, [
+    isPeriodic,
+    isPriceCustomized,
+    calcResult.suggestedPrice,
+    sessionPrice,
+    effectiveWeeklySessions,
+    billingMode,
+    pricingRule,
+    includedSessionsCount
+  ]);
+
+  // Quando o gestor adiciona/remove horários na grade semanal, sincroniza a sugestão inicial sem travar edições manuais do dropdown
+  useEffect(() => {
+    const prev = prevScheduleCountRef.current;
+    prevScheduleCountRef.current = scheduleWeekdaysCount;
+    if (
+      prev !== undefined &&
+      scheduleWeekdaysCount !== undefined &&
+      scheduleWeekdaysCount > 0 &&
+      scheduleWeekdaysCount !== prev
+    ) {
+      const clamped = Math.max(1, Math.min(7, scheduleWeekdaysCount));
+      if (clamped !== effectiveWeeklySessions) {
+        handleWeeklySessionsChange(clamped);
+      }
+    }
+  }, [scheduleWeekdaysCount]);
 
   const handleModeChange = (nextMode: ServiceBillingMode) => {
+    const isNextPeriodic = isPeriodicBillingMode(nextMode);
+    const nextCalc = calculateStudioRecurringPrice({
+      serviceName,
+      sessionPrice,
+      weeklySessionsCount: effectiveWeeklySessions,
+      billingMode: nextMode,
+      pricingRule,
+      includedSessionsCount,
+      packageName: selectedPkg?.name || null
+    });
+
     let nextPeriodicPrice = periodicPrice;
-    if (isPeriodicBillingMode(nextMode) && (!nextPeriodicPrice || Number(nextPeriodicPrice) <= 0) && sessionPrice > 0) {
-      nextPeriodicPrice = String(sessionPrice);
+    let nextIsCustom = isPriceCustomized;
+
+    if (isNextPeriodic) {
+      if (!nextIsCustom || !nextPeriodicPrice || Number(nextPeriodicPrice) <= 0) {
+        nextPeriodicPrice = nextCalc.suggestedPrice.toFixed(2);
+        nextIsCustom = false;
+      }
     }
+
     onChange({
       billingMode: nextMode,
       periodicPrice: nextPeriodicPrice,
+      pricingRule,
+      isPriceCustomized: nextIsCustom,
+      suggestedPrice: nextCalc.suggestedPrice,
+      weeklySessionsCount: effectiveWeeklySessions,
+      includedSessionsCount,
       defaultPackageId: nextMode === 'package' ? defaultPackageId : '',
       defaultBillingDueDay
     });
   };
 
+  const handleWeeklySessionsChange = (nextSessions: number) => {
+    const nextVal = Math.max(1, Math.min(7, nextSessions));
+    const nextCalc = calculateStudioRecurringPrice({
+      serviceName,
+      sessionPrice,
+      weeklySessionsCount: nextVal,
+      billingMode,
+      pricingRule,
+      customPrice: periodicPrice ? Number(periodicPrice) : undefined,
+      isPriceCustomized,
+      includedSessionsCount
+    });
+
+    const nextPriceStr = isPriceCustomized ? periodicPrice : nextCalc.suggestedPrice.toFixed(2);
+
+    onChange({
+      billingMode,
+      periodicPrice: nextPriceStr,
+      pricingRule,
+      isPriceCustomized,
+      suggestedPrice: nextCalc.suggestedPrice,
+      weeklySessionsCount: nextVal,
+      includedSessionsCount,
+      defaultPackageId,
+      defaultBillingDueDay
+    });
+  };
+
+  const handlePricingRuleChange = (nextRule: StudioPricingRule) => {
+    const nextCalc = calculateStudioRecurringPrice({
+      serviceName,
+      sessionPrice,
+      weeklySessionsCount: effectiveWeeklySessions,
+      billingMode,
+      pricingRule: nextRule,
+      customPrice: periodicPrice ? Number(periodicPrice) : undefined,
+      isPriceCustomized,
+      includedSessionsCount
+    });
+
+    const nextPriceStr = isPriceCustomized ? periodicPrice : nextCalc.suggestedPrice.toFixed(2);
+
+    onChange({
+      billingMode,
+      periodicPrice: nextPriceStr,
+      pricingRule: nextRule,
+      isPriceCustomized,
+      suggestedPrice: nextCalc.suggestedPrice,
+      weeklySessionsCount: effectiveWeeklySessions,
+      includedSessionsCount,
+      defaultPackageId,
+      defaultBillingDueDay
+    });
+  };
+
+  const handlePriceManualInput = (val: string) => {
+    const parsed = val.trim() !== '' ? parseFloat(val.replace(',', '.')) : null;
+    const isNowCustom =
+      parsed !== null && !isNaN(parsed)
+        ? Math.abs(parsed - calcResult.suggestedPrice) > 0.01
+        : true;
+
+    onChange({
+      billingMode,
+      periodicPrice: val,
+      pricingRule,
+      isPriceCustomized: isNowCustom,
+      suggestedPrice: calcResult.suggestedPrice,
+      weeklySessionsCount: effectiveWeeklySessions,
+      includedSessionsCount,
+      defaultPackageId,
+      defaultBillingDueDay
+    });
+  };
+
+  const handleResetToSuggested = () => {
+    const resetPrice = calcResult.suggestedPrice.toFixed(2);
+    onChange({
+      billingMode,
+      periodicPrice: resetPrice,
+      pricingRule,
+      isPriceCustomized: false,
+      suggestedPrice: calcResult.suggestedPrice,
+      weeklySessionsCount: effectiveWeeklySessions,
+      includedSessionsCount,
+      defaultPackageId,
+      defaultBillingDueDay
+    });
+  };
+
   return (
-    <div className={`rounded-xl border border-emerald-100 bg-emerald-50/40 ${compact ? 'p-3 space-y-2.5' : 'p-4 space-y-3'}`}>
+    <div className={`rounded-xl border border-emerald-100 bg-emerald-50/40 ${compact ? 'p-3 space-y-2.5' : 'p-4 space-y-3.5'}`}>
       <div className="flex items-start justify-between gap-2">
         <div>
           <div className="flex items-center gap-1.5 text-sm font-semibold text-gray-900">
             <CreditCard className="w-4 h-4 text-emerald-600" />
-            <span>Configuração de Cobrança</span>
+            <span>Configuração de Cobrança e Precificação Recorrente</span>
           </div>
           <p className="text-[11px] text-gray-600 mt-0.5">
-            Define o modelo comercial padrão no Studio. Não gera cobranças ao salvar e preserva contratos existentes.
+            Calcula automaticamente o valor sugerido a partir do preço por aula, frequência semanal e periodicidade financeira, permitindo preço personalizado.
           </p>
         </div>
       </div>
 
+      {/* 1. Modalidades de cobrança padrão */}
       <div>
         <label className="block text-xs font-medium text-gray-700 mb-1.5">
           Modalidade de cobrança padrão
@@ -112,55 +326,193 @@ export const ServiceBillingConfigPanel: React.FC<ServiceBillingConfigPanelProps>
         </div>
       </div>
 
+      {/* 2. Seção periódica com Frequência, Regra de Cálculo e Valor */}
       {isPeriodic && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">
-              Valor por período de cobrança (R$) *
-            </label>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={periodicPrice}
-              onChange={(e) =>
-                onChange({
-                  billingMode,
-                  periodicPrice: e.target.value,
-                  defaultPackageId,
-                  defaultBillingDueDay
-                })
-              }
-              placeholder="Ex: 540.00"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
-            />
-            <p className="text-[11px] text-gray-500 mt-1">
-              Valor configurado por ciclo ({SERVICE_BILLING_MODE_OPTIONS.find((o) => o.value === billingMode)?.shortPeriod}), independente da quantidade de aulas na semana.
-            </p>
+        <div className="space-y-3 pt-1">
+          {/* Frequência semanal & Regra de cálculo */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1 flex items-center justify-between">
+                <span>Frequência semanal de referência</span>
+                {scheduleWeekdaysCount !== undefined && scheduleWeekdaysCount > 0 && (
+                  scheduleWeekdaysCount !== effectiveWeeklySessions ? (
+                    <button
+                      type="button"
+                      onClick={() => handleWeeklySessionsChange(scheduleWeekdaysCount)}
+                      className="text-[10px] text-emerald-700 font-medium bg-emerald-100 hover:bg-emerald-200 px-1.5 py-0.5 rounded cursor-pointer transition-colors"
+                      title="Sincronizar com a quantidade de horários da grade semanal"
+                    >
+                      Usar {Math.min(7, scheduleWeekdaysCount)}x da grade
+                    </button>
+                  ) : (
+                    <span className="text-[10px] text-emerald-700 font-normal bg-emerald-100 px-1.5 py-0.5 rounded">
+                      {scheduleWeekdaysCount}x/sem na grade
+                    </span>
+                  )
+                )}
+              </label>
+              <select
+                value={effectiveWeeklySessions}
+                onChange={(e) => handleWeeklySessionsChange(Number(e.target.value))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
+              >
+                <option value={1}>1 aula por semana (1x)</option>
+                <option value={2}>2 aulas por semana (2x)</option>
+                <option value={3}>3 aulas por semana (3x)</option>
+                <option value={4}>4 aulas por semana (4x)</option>
+                <option value={5}>5 aulas por semana (5x)</option>
+                <option value={6}>6 aulas por semana (6x)</option>
+                <option value={7}>7 aulas por semana (todos os dias)</option>
+              </select>
+              <p className="text-[10px] text-gray-500 mt-1">
+                Utilizada para projetar os encontros no período contratado.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Regra de cálculo da recorrência
+              </label>
+              <select
+                value={pricingRule}
+                onChange={(e) => handlePricingRuleChange(e.target.value as StudioPricingRule)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
+              >
+                {STUDIO_PRICING_RULE_OPTIONS.map((r) => (
+                  <option key={r.value} value={r.value}>
+                    {r.label}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[10px] text-gray-500 mt-1">
+                {STUDIO_PRICING_RULE_OPTIONS.find((r) => r.value === pricingRule)?.description}
+              </p>
+            </div>
           </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">
-              Dia padrão de vencimento (opcional)
-            </label>
-            <input
-              type="number"
-              min={1}
-              max={28}
-              value={defaultBillingDueDay}
-              onChange={(e) =>
-                onChange({
-                  billingMode,
-                  periodicPrice,
-                  defaultPackageId,
-                  defaultBillingDueDay: e.target.value
-                })
-              }
-              placeholder="Ex: 10 (1 a 28)"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
-            />
-            <p className="text-[11px] text-gray-500 mt-1">
-              Pode ser ajustado no momento da contratação do aluno.
-            </p>
+
+          {billingMode === 'count' && (
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Quantidade de aulas incluídas no plano
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="200"
+                value={includedSessionsCount}
+                onChange={(e) => {
+                  const val = Math.max(1, parseInt(e.target.value, 10) || 1);
+                  const nextCalc = calculateStudioRecurringPrice({
+                    serviceName,
+                    sessionPrice,
+                    weeklySessionsCount: effectiveWeeklySessions,
+                    billingMode,
+                    pricingRule,
+                    customPrice: periodicPrice ? Number(periodicPrice) : undefined,
+                    isPriceCustomized,
+                    includedSessionsCount: val
+                  });
+                  onChange({
+                    billingMode,
+                    periodicPrice: isPriceCustomized ? periodicPrice : nextCalc.suggestedPrice.toFixed(2),
+                    pricingRule,
+                    isPriceCustomized,
+                    suggestedPrice: nextCalc.suggestedPrice,
+                    weeklySessionsCount: effectiveWeeklySessions,
+                    includedSessionsCount: val,
+                    defaultPackageId,
+                    defaultBillingDueDay
+                  });
+                }}
+                className="w-full sm:w-48 px-3 py-1.5 border border-gray-300 rounded-lg text-xs bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
+              />
+              <p className="text-[10px] text-gray-500 mt-1">
+                O valor sugerido multiplicará esta quantidade pelo preço avulso da aula.
+              </p>
+            </div>
+          )}
+
+          {/* Campo de Preço do Período & Dia de Vencimento */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-medium text-gray-700">
+                  Valor por período de cobrança (R$) *
+                </label>
+                {isPriceCustomized ? (
+                  <span className="text-[10px] font-medium text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-full inline-flex items-center gap-1">
+                    Personalizado
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-medium text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-full inline-flex items-center gap-1">
+                    <Sparkles className="w-3 h-3 text-emerald-600" />
+                    Sugerido
+                  </span>
+                )}
+              </div>
+              <div className="relative">
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={periodicPrice}
+                  onChange={(e) => handlePriceManualInput(e.target.value)}
+                  placeholder={`Ex: ${calcResult.suggestedPrice.toFixed(2)}`}
+                  className={`w-full px-3 py-2 border rounded-lg text-sm bg-white outline-none transition-all ${
+                    isPriceCustomized
+                      ? 'border-amber-400 focus:ring-2 focus:ring-amber-400'
+                      : 'border-gray-300 focus:ring-2 focus:ring-emerald-500'
+                  }`}
+                />
+              </div>
+
+              {/* Botão de recalcular quando personalizado */}
+              <div className="flex items-center justify-between mt-1.5">
+                <span className="text-[11px] text-gray-500">
+                  Sugerido: <strong className="text-gray-700">{formatBRL(calcResult.suggestedPrice)}</strong>
+                </span>
+                {isPriceCustomized && (
+                  <button
+                    type="button"
+                    onClick={handleResetToSuggested}
+                    className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 hover:text-emerald-800 hover:underline cursor-pointer"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    Recalcular valor sugerido
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Dia padrão de vencimento (opcional)
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={28}
+                value={defaultBillingDueDay}
+                onChange={(e) =>
+                  onChange({
+                    billingMode,
+                    periodicPrice,
+                    pricingRule,
+                    isPriceCustomized,
+                    suggestedPrice: calcResult.suggestedPrice,
+                    weeklySessionsCount: effectiveWeeklySessions,
+                    includedSessionsCount,
+                    defaultPackageId,
+                    defaultBillingDueDay: e.target.value
+                  })
+                }
+                placeholder="Ex: 10 (1 a 28)"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
+              />
+              <p className="text-[11px] text-gray-500 mt-1">
+                Pode ser ajustado individualmente na contratação do aluno.
+              </p>
+            </div>
           </div>
         </div>
       )}
@@ -177,6 +529,11 @@ export const ServiceBillingConfigPanel: React.FC<ServiceBillingConfigPanelProps>
               onChange({
                 billingMode,
                 periodicPrice,
+                pricingRule,
+                isPriceCustomized,
+                suggestedPrice: calcResult.suggestedPrice,
+                weeklySessionsCount: effectiveWeeklySessions,
+                includedSessionsCount,
                 defaultPackageId: e.target.value,
                 defaultBillingDueDay
               })
@@ -201,16 +558,77 @@ export const ServiceBillingConfigPanel: React.FC<ServiceBillingConfigPanelProps>
         </div>
       )}
 
-      <div className="flex items-start gap-2 rounded-lg bg-white border border-emerald-200/80 px-3 py-2 text-xs text-emerald-950">
-        {isPeriodic ? (
-          <Repeat className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-        ) : (
-          <Info className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-        )}
-        <div>
-          <span className="font-medium">Resumo comercial: </span>
-          <span>{summaryText}</span>
+      {/* 3. RESUMO FINANCEIRO INTELIGENTE (Card Estruturado) */}
+      <div className="rounded-xl border border-emerald-200/90 bg-white p-3.5 shadow-sm space-y-2">
+        <div className="flex items-center justify-between border-b border-emerald-100 pb-2">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-950">
+            <Calculator className="w-4 h-4 text-emerald-600" />
+            <span>Resumo comercial — {serviceName || 'Serviço'}</span>
+          </div>
+          {isPeriodic && (
+            <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md font-medium border border-emerald-200">
+              {calcResult.referenceSessionsText}
+            </span>
+          )}
         </div>
+
+        {isPeriodic ? (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-xs">
+            <div className="bg-slate-50/70 p-2 rounded-lg border border-slate-100">
+              <span className="text-[10px] text-gray-500 block">Preço avulso</span>
+              <span className="font-semibold text-gray-800">{formatBRL(sessionPrice)}</span>
+              <span className="text-[9px] text-gray-400 block mt-0.5">por aula</span>
+            </div>
+
+            <div className="bg-slate-50/70 p-2 rounded-lg border border-slate-100">
+              <span className="text-[10px] text-gray-500 block">Frequência semanal</span>
+              <span className="font-semibold text-gray-800">{effectiveWeeklySessions}x por semana</span>
+              <span className="text-[9px] text-gray-400 block mt-0.5">{SERVICE_BILLING_MODE_OPTIONS.find((o) => o.value === billingMode)?.shortPeriod}</span>
+            </div>
+
+            <div className="bg-emerald-50/50 p-2 rounded-lg border border-emerald-100">
+              <span className="text-[10px] text-emerald-700 block">Valor sugerido</span>
+              <span className="font-semibold text-emerald-800">{formatBRL(calcResult.suggestedPrice)}</span>
+              <span className="text-[9px] text-emerald-600 block mt-0.5 truncate">
+                {pricingRule === 'annual_average' ? '52 sem/12m' : pricingRule === 'scheduled_sessions' ? 'calendário real' : '4 semanas'}
+              </span>
+            </div>
+
+            <div className={`p-2 rounded-lg border ${isPriceCustomized ? 'bg-amber-50/50 border-amber-200' : 'bg-emerald-50/50 border-emerald-100'}`}>
+              <span className={`text-[10px] block ${isPriceCustomized ? 'text-amber-700' : 'text-emerald-700'}`}>
+                {isPriceCustomized ? 'Valor configurado' : 'Valor do plano'}
+              </span>
+              <span className={`font-semibold ${isPriceCustomized ? 'text-amber-900' : 'text-emerald-900'}`}>
+                {formatBRL(calcResult.effectivePrice)}
+              </span>
+              <span className={`text-[9px] block mt-0.5 ${isPriceCustomized ? 'text-amber-600' : 'text-emerald-600'}`}>
+                {isPriceCustomized ? 'Personalizado' : 'Conforme sugestão'}
+              </span>
+            </div>
+          </div>
+        ) : (
+          <div className="text-xs text-gray-700 py-1">
+            <span>Preço cadastrado: </span>
+            <strong className="text-gray-900">{formatBRL(sessionPrice)}</strong>
+            <span className="text-gray-500"> por atendimento / aula avulsa na agenda.</span>
+          </div>
+        )}
+
+        {isPeriodic && (
+          <div className="pt-1 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 text-xs">
+            <div className="flex items-center gap-1.5 text-emerald-900 font-medium">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+              <span>
+                Valor médio por aula: <strong className="text-emerald-700">{formatBRL(calcResult.averagePricePerSession)}</strong>, considerando {calcResult.referenceSessionsCount} aulas de referência.
+              </span>
+            </div>
+            {calcResult.discountPercent && calcResult.discountPercent > 0 ? (
+              <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-md">
+                Economia de {calcResult.discountPercent.toLocaleString('pt-BR')}% no plano
+              </span>
+            ) : null}
+          </div>
+        )}
       </div>
     </div>
   );

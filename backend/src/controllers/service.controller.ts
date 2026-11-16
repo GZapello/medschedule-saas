@@ -411,6 +411,10 @@ export class ServiceController {
           s.billing_cycle_months,
           s.default_package_id,
           s.default_billing_due_day,
+          s.pricing_rule,
+          s.is_price_customized,
+          s.suggested_price,
+          s.weekly_sessions_count,
           pkg.name as default_package_name,
           s.default_template_id,
           s.linked_template_ids_json,
@@ -471,6 +475,10 @@ export class ServiceController {
             default_package_id: null,
             default_package_name: null,
             default_billing_due_day: null,
+            pricing_rule: 'four_weeks',
+            is_price_customized: 0,
+            suggested_price: null,
+            weekly_sessions_count: 1,
             default_template_id: null,
             default_template_title: null,
             linked_template_ids: [],
@@ -490,7 +498,17 @@ export class ServiceController {
         const recConfig = parseServiceRecurrenceConfig(srv);
         const billConfig = resolvedDomain === 'studio'
           ? parseServiceBillingConfig(srv)
-          : { billingMode: 'per_session' as const, periodicPrice: null, billingCycleMonths: null, defaultPackageId: null, defaultBillingDueDay: null };
+          : {
+              billingMode: 'per_session' as const,
+              periodicPrice: null,
+              billingCycleMonths: null,
+              defaultPackageId: null,
+              defaultBillingDueDay: null,
+              pricingRule: 'four_weeks' as const,
+              isPriceCustomized: false,
+              suggestedPrice: null,
+              weeklySessionsCount: 1
+            };
         const tplInfo = enrichServiceTemplates(srv, templatesMap, resolvedDomain === 'studio');
         const linkedProfs = linkedByService.get(srv.id) || [];
         const linkedProfIds = linkedProfs.length > 0
@@ -509,6 +527,10 @@ export class ServiceController {
           default_package_id: billConfig.defaultPackageId,
           default_package_name: billConfig.billingMode === 'package' ? (srv.default_package_name || null) : null,
           default_billing_due_day: billConfig.defaultBillingDueDay,
+          pricing_rule: billConfig.pricingRule,
+          is_price_customized: billConfig.isPriceCustomized ? 1 : 0,
+          suggested_price: billConfig.suggestedPrice,
+          weekly_sessions_count: billConfig.weeklySessionsCount,
           default_template_id: tplInfo.default_template_id,
           default_template_title: tplInfo.default_template_title,
           linked_template_ids: tplInfo.linked_template_ids,
@@ -559,6 +581,10 @@ export class ServiceController {
         periodicPrice, periodic_price,
         defaultPackageId, default_package_id,
         defaultBillingDueDay, default_billing_due_day,
+        pricingRule, pricing_rule,
+        isPriceCustomized, is_price_customized,
+        suggestedPrice, suggested_price,
+        weeklySessionsCount, weekly_sessions_count,
         defaultTemplateId, default_template_id,
         linkedTemplateIds, linked_template_ids
       } = req.body;
@@ -582,6 +608,10 @@ export class ServiceController {
       const rawPeriodicPrice = periodicPrice !== undefined ? periodicPrice : periodic_price;
       const rawDefaultPkgId = defaultPackageId !== undefined ? defaultPackageId : default_package_id;
       const rawDefaultDueDay = defaultBillingDueDay !== undefined ? defaultBillingDueDay : default_billing_due_day;
+      const rawPricingRule = pricingRule !== undefined ? pricingRule : pricing_rule;
+      const rawIsPriceCustomized = isPriceCustomized !== undefined ? isPriceCustomized : is_price_customized;
+      const rawSuggestedPrice = suggestedPrice !== undefined ? suggestedPrice : suggested_price;
+      const rawWeeklySessionsCount = weeklySessionsCount !== undefined ? weeklySessionsCount : weekly_sessions_count;
       const rawDefaultTplId = defaultTemplateId !== undefined ? defaultTemplateId : default_template_id;
       const rawLinkedTplIds = linkedTemplateIds !== undefined ? linkedTemplateIds : linked_template_ids;
       const requestedLinkedIds = parseLinkedInstructorIds(req.body);
@@ -705,6 +735,12 @@ export class ServiceController {
         periodicPrice: rawPeriodicPrice,
         defaultPackageId: rawDefaultPkgId,
         defaultBillingDueDay: rawDefaultDueDay,
+        pricingRule: rawPricingRule,
+        isPriceCustomized: rawIsPriceCustomized,
+        suggestedPrice: rawSuggestedPrice,
+        weeklySessionsCount: rawWeeklySessionsCount,
+        sessionPrice: price !== undefined && price !== null && price !== '' ? Number(price) : 0,
+        scheduleEntriesCount: rawClassSchedules.length > 0 ? rawClassSchedules.length : 1,
         tenantId
       });
       if (billNorm.error) {
@@ -751,9 +787,10 @@ export class ServiceController {
             allowed_plan_durations_json, default_plan_duration,
             custom_recurrence_intervals_json, default_recurrence_interval_json,
             billing_mode, periodic_price, billing_cycle_months, default_package_id, default_billing_due_day,
+            pricing_rule, is_price_customized, suggested_price, weekly_sessions_count,
             default_template_id, linked_template_ids_json
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
 
         insertStmt.run(
@@ -790,6 +827,10 @@ export class ServiceController {
           billNorm.billingCycleMonths,
           billNorm.defaultPackageId,
           billNorm.defaultBillingDueDay,
+          billNorm.pricingRule,
+          billNorm.isPriceCustomized ? 1 : 0,
+          billNorm.suggestedPrice,
+          billNorm.weeklySessionsCount,
           tplNorm.defaultTemplateId,
           tplNorm.linkedTemplateIdsJson
         );
@@ -871,6 +912,10 @@ export class ServiceController {
         billing_cycle_months: billNorm.billingCycleMonths,
         default_package_id: billNorm.defaultPackageId,
         default_billing_due_day: billNorm.defaultBillingDueDay,
+        pricing_rule: billNorm.pricingRule,
+        is_price_customized: billNorm.isPriceCustomized ? 1 : 0,
+        suggested_price: billNorm.suggestedPrice,
+        weekly_sessions_count: billNorm.weeklySessionsCount,
         default_template_id: createdTplInfo.default_template_id,
         default_template_title: createdTplInfo.default_template_title,
         linked_template_ids: createdTplInfo.linked_template_ids,
@@ -912,6 +957,7 @@ export class ServiceController {
                modality_category, service_domain, allowed_recurrence_frequencies_json, default_recurrence_frequency,
                custom_recurrence_intervals_json, default_recurrence_interval_json,
                billing_mode, periodic_price, billing_cycle_months, default_package_id, default_billing_due_day,
+               pricing_rule, is_price_customized, suggested_price, weekly_sessions_count,
                default_template_id, linked_template_ids_json
         FROM services WHERE id = ? AND tenant_id = ?
       `).get(id, tenantId) as any;
@@ -943,6 +989,10 @@ export class ServiceController {
         periodicPrice, periodic_price,
         defaultPackageId, default_package_id,
         defaultBillingDueDay, default_billing_due_day,
+        pricingRule, pricing_rule,
+        isPriceCustomized, is_price_customized,
+        suggestedPrice, suggested_price,
+        weeklySessionsCount, weekly_sessions_count,
         defaultTemplateId, default_template_id,
         linkedTemplateIds, linked_template_ids
       } = req.body;
@@ -960,6 +1010,10 @@ export class ServiceController {
       const rawPeriodicPrice = periodicPrice !== undefined ? periodicPrice : periodic_price;
       const rawDefaultPkgId = defaultPackageId !== undefined ? defaultPackageId : default_package_id;
       const rawDefaultDueDay = defaultBillingDueDay !== undefined ? defaultBillingDueDay : default_billing_due_day;
+      const rawPricingRule = pricingRule !== undefined ? pricingRule : pricing_rule;
+      const rawIsPriceCustomized = isPriceCustomized !== undefined ? isPriceCustomized : is_price_customized;
+      const rawSuggestedPrice = suggestedPrice !== undefined ? suggestedPrice : suggested_price;
+      const rawWeeklySessionsCount = weeklySessionsCount !== undefined ? weeklySessionsCount : weekly_sessions_count;
       const rawDefaultTplId = defaultTemplateId !== undefined ? defaultTemplateId : default_template_id;
       const rawLinkedTplIds = linkedTemplateIds !== undefined ? linkedTemplateIds : linked_template_ids;
       const requestedLinkedIds = parseLinkedInstructorIds(req.body);
@@ -1110,6 +1164,11 @@ export class ServiceController {
         rawPeriodicPrice !== undefined ||
         rawDefaultPkgId !== undefined ||
         rawDefaultDueDay !== undefined ||
+        rawPricingRule !== undefined ||
+        rawIsPriceCustomized !== undefined ||
+        rawSuggestedPrice !== undefined ||
+        rawWeeklySessionsCount !== undefined ||
+        price !== undefined ||
         !isNextStudioService;
 
       let nextBillingMode: string | null = existing.billing_mode || null;
@@ -1117,14 +1176,40 @@ export class ServiceController {
       let nextBillingCycleMonths: number | null = existing.billing_cycle_months ?? null;
       let nextDefaultPkgId: string | null = existing.default_package_id || null;
       let nextDefaultDueDay: number | null = existing.default_billing_due_day ?? null;
+      let nextPricingRule: string = existing.pricing_rule || 'four_weeks';
+      let nextIsPriceCustomized: number = existing.is_price_customized ?? 0;
+      let nextSuggestedPrice: number | null = existing.suggested_price ?? null;
+      let nextWeeklySessionsCount: number = existing.weekly_sessions_count ?? 1;
 
       if (hasBillingFieldUpdate) {
+        const requestedCustomFlag =
+          rawIsPriceCustomized === true || rawIsPriceCustomized === 1 || rawIsPriceCustomized === 'true'
+            ? true
+            : rawIsPriceCustomized === false || rawIsPriceCustomized === 0 || rawIsPriceCustomized === 'false'
+              ? false
+              : undefined;
+        const existingParsedBill = parseServiceBillingConfig(existing);
+        const isCurrentlyCustom = requestedCustomFlag !== undefined ? requestedCustomFlag : existingParsedBill.isPriceCustomized;
+        const shouldAutoRecalcPeriodic =
+          rawPeriodicPrice === undefined &&
+          isCurrentlyCustom === false &&
+          (requestedCustomFlag === false ||
+            rawBillingMode !== undefined ||
+            rawPricingRule !== undefined ||
+            rawWeeklySessionsCount !== undefined ||
+            price !== undefined);
+
         const billNorm = normalizeServiceBillingForSave({
           isStudioService: isNextStudioService,
           billingMode: rawBillingMode !== undefined ? rawBillingMode : (isNextStudioService ? (existing.billing_mode || 'per_session') : 'per_session'),
-          periodicPrice: rawPeriodicPrice !== undefined ? rawPeriodicPrice : existing.periodic_price,
+          periodicPrice: rawPeriodicPrice !== undefined ? rawPeriodicPrice : (shouldAutoRecalcPeriodic ? undefined : existing.periodic_price),
           defaultPackageId: rawDefaultPkgId !== undefined ? rawDefaultPkgId : existing.default_package_id,
           defaultBillingDueDay: rawDefaultDueDay !== undefined ? rawDefaultDueDay : existing.default_billing_due_day,
+          pricingRule: rawPricingRule !== undefined ? rawPricingRule : existing.pricing_rule,
+          isPriceCustomized: requestedCustomFlag !== undefined ? requestedCustomFlag : existingParsedBill.isPriceCustomized,
+          suggestedPrice: rawSuggestedPrice !== undefined ? rawSuggestedPrice : existing.suggested_price,
+          weeklySessionsCount: rawWeeklySessionsCount !== undefined ? rawWeeklySessionsCount : existing.weekly_sessions_count,
+          sessionPrice: price !== undefined && price !== null && price !== '' ? Number(price) : Number(existing.price || 0),
           tenantId,
           serviceId: String(id)
         });
@@ -1137,6 +1222,10 @@ export class ServiceController {
         nextBillingCycleMonths = billNorm.billingCycleMonths;
         nextDefaultPkgId = billNorm.defaultPackageId;
         nextDefaultDueDay = billNorm.defaultBillingDueDay;
+        nextPricingRule = billNorm.pricingRule;
+        nextIsPriceCustomized = billNorm.isPriceCustomized ? 1 : 0;
+        nextSuggestedPrice = billNorm.suggestedPrice;
+        nextWeeklySessionsCount = billNorm.weeklySessionsCount;
       }
 
       let nextDefaultTplId: string | null = isNextStudioService ? (existing.default_template_id || null) : null;
@@ -1197,6 +1286,10 @@ export class ServiceController {
           billing_cycle_months = ?,
           default_package_id = ?,
           default_billing_due_day = ?,
+          pricing_rule = ?,
+          is_price_customized = ?,
+          suggested_price = ?,
+          weekly_sessions_count = ?,
           default_template_id = ?,
           linked_template_ids_json = ?,
           updated_at = datetime('now')
@@ -1242,6 +1335,10 @@ export class ServiceController {
           nextBillingCycleMonths,
           nextDefaultPkgId,
           nextDefaultDueDay,
+          nextPricingRule,
+          nextIsPriceCustomized,
+          nextSuggestedPrice,
+          nextWeeklySessionsCount,
           nextDefaultTplId,
           nextLinkedTplJson,
           id,
@@ -1315,6 +1412,10 @@ export class ServiceController {
             billing_cycle_months: isStudioCompat && updatedService.service_domain === 'studio' ? (updatedService.billing_cycle_months ?? null) : null,
             default_package_id: isStudioCompat && updatedService.service_domain === 'studio' ? (updatedService.default_package_id || null) : null,
             default_billing_due_day: isStudioCompat && updatedService.service_domain === 'studio' ? (updatedService.default_billing_due_day ?? null) : null,
+            pricing_rule: isStudioCompat && updatedService.service_domain === 'studio' ? (updatedService.pricing_rule || 'four_weeks') : 'four_weeks',
+            is_price_customized: isStudioCompat && updatedService.service_domain === 'studio' ? (updatedService.is_price_customized ?? 0) : 0,
+            suggested_price: isStudioCompat && updatedService.service_domain === 'studio' ? (updatedService.suggested_price ?? null) : null,
+            weekly_sessions_count: isStudioCompat && updatedService.service_domain === 'studio' ? (updatedService.weekly_sessions_count ?? 1) : 1,
             default_template_id: updTplInfo.default_template_id,
             default_template_title: updTplInfo.default_template_title,
             linked_template_ids: updTplInfo.linked_template_ids,

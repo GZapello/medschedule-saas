@@ -7,6 +7,7 @@ import {
   resolveServiceDomain,
   supportsStudioFeatures
 } from '../utils/establishment-context';
+import { calculateStudioRecurringPrice, StudioPricingRule } from '../utils/studio-pricing';
 
 export interface CycleWindow {
   index: number;
@@ -499,6 +500,9 @@ export class BillingCycleService {
     billingChargesCount?: number | null;
     billingCustomEndDate?: string | null;
     renewedFromPlanId?: string | null;
+    pricingRuleSnapshot?: string | null;
+    weeklySessionsSnapshot?: number | null;
+    referenceSessionsCount?: number | null;
     title: string;
     amount: number;
     billingFrequency?: PeriodicBillingFrequency;
@@ -539,16 +543,26 @@ export class BillingCycleService {
       ? String(input.billingCustomEndDate).slice(0, 10)
       : (frequency === 'custom_date' && endDate ? endDate : null);
     const effectiveEndDate = endDate || billingCustomEndDate || null;
+    const pricingRuleSnapshot = input.pricingRuleSnapshot ? String(input.pricingRuleSnapshot).trim() : null;
+    const weeklySessionsSnapshot =
+      input.weeklySessionsSnapshot !== undefined && input.weeklySessionsSnapshot !== null && Number(input.weeklySessionsSnapshot) > 0
+        ? Math.floor(Number(input.weeklySessionsSnapshot))
+        : weeklyFreq;
+    const referenceSessionsCount =
+      input.referenceSessionsCount !== undefined && input.referenceSessionsCount !== null && Number(input.referenceSessionsCount) > 0
+        ? Math.floor(Number(input.referenceSessionsCount))
+        : null;
 
     db.prepare(`
       INSERT INTO recurring_billing_plans (
         id, tenant_id, patient_id, service_id, professional_id, package_contract_id,
         series_id, class_schedule_id, schedule_rules_json, plan_duration_code,
         weekly_frequency, included_sessions, billing_charges_count, billing_custom_end_date, renewed_from_plan_id,
+        pricing_rule_snapshot, weekly_sessions_snapshot, reference_sessions_count,
         title, amount, billing_cycle, billing_frequency, cycle_months, covers_sessions,
         due_day, payment_method, start_date, end_date, status, notes, created_by,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
     `).run(
       planId,
       input.tenantId,
@@ -565,6 +579,9 @@ export class BillingCycleService {
       billingChargesCount,
       billingCustomEndDate,
       input.renewedFromPlanId || null,
+      pricingRuleSnapshot,
+      weeklySessionsSnapshot,
+      referenceSessionsCount,
       String(input.title).trim(),
       roundedAmount,
       frequency,
@@ -767,6 +784,9 @@ export class BillingCycleService {
       includedSessions?: number | null;
       billingChargesCount?: number | null;
       billingCustomEndDate?: string | null;
+      pricingRuleSnapshot?: string | null;
+      weeklySessionsSnapshot?: number | null;
+      referenceSessionsCount?: number | null;
       title: string;
       amount: number;
       billingFrequency: PeriodicBillingFrequency;
@@ -853,19 +873,6 @@ export class BillingCycleService {
         };
       }
       const { frequency } = normalizePeriodicFrequency(rawFreq);
-      const rawAmount = params.enrollBillingPlan.amount !== undefined
-        ? Number(params.enrollBillingPlan.amount)
-        : Number(params.serviceRow?.periodic_price ?? params.serviceRow?.price ?? 0);
-      if (!Number.isFinite(rawAmount) || rawAmount <= 0) {
-        return {
-          mode: 'drop_in',
-          isPackageCovered: false,
-          billingPlanId: null,
-          status: 400,
-          code: 'INVALID_BILLING_AMOUNT',
-          error: 'Informe um valor maior que zero para o período de cobrança.'
-        };
-      }
 
       const dueDay = Math.min(28, Math.max(1, Math.floor(Number(params.enrollBillingPlan.dueDay || params.serviceRow?.default_billing_due_day || 10))));
       const startDate = params.enrollBillingPlan.startDate
@@ -877,6 +884,49 @@ export class BillingCycleService {
         : null;
       const billingCustomEndDate = rawCustomEnd ? String(rawCustomEnd).slice(0, 10) : (frequency === 'custom_date' ? rawPlanEnd : null);
       const endDate = rawPlanEnd || billingCustomEndDate || null;
+
+      const rawIncludedSessionsPre = params.enrollBillingPlan.includedSessions ?? params.enrollBillingPlan.fixedSessionCount;
+      const pricingRuleRaw = String(params.enrollBillingPlan.pricingRule || params.serviceRow?.pricing_rule || 'four_weeks').trim().toLowerCase();
+      const pricingRuleResolved: StudioPricingRule =
+        pricingRuleRaw === 'annual_average' || pricingRuleRaw === 'scheduled_sessions' ? pricingRuleRaw : 'four_weeks';
+      const weeklySnapResolved = Math.max(
+        1,
+        Math.min(7, Math.floor(Number(params.enrollBillingPlan.weeklySessionsCount || params.enrollBillingPlan.weeklyFrequency || params.serviceRow?.weekly_sessions_count) || 1))
+      );
+
+      const pricingCalc = calculateStudioRecurringPrice({
+        serviceName: params.serviceRow?.name || 'Serviço',
+        sessionPrice: Number(params.serviceRow?.price || 0),
+        weeklySessionsCount: weeklySnapResolved,
+        billingMode: frequency as any,
+        pricingRule: pricingRuleResolved,
+        includedSessionsCount: rawIncludedSessionsPre ? Number(rawIncludedSessionsPre) : undefined,
+        scheduledSessionsCount: cleanDates.length > 0 ? cleanDates.length : undefined,
+        startDate,
+        endDate: billingCustomEndDate || endDate || undefined
+      });
+
+      const hasExplicitAmount =
+        params.enrollBillingPlan.amount !== undefined &&
+        params.enrollBillingPlan.amount !== null &&
+        String(params.enrollBillingPlan.amount).trim() !== '';
+
+      const rawAmount = hasExplicitAmount
+        ? Number(params.enrollBillingPlan.amount)
+        : (params.serviceRow?.billing_mode === frequency && Number(params.serviceRow?.periodic_price) > 0
+            ? Number(params.serviceRow.periodic_price)
+            : (pricingCalc.suggestedPrice > 0 ? pricingCalc.suggestedPrice : Number(params.serviceRow?.periodic_price ?? params.serviceRow?.price ?? 0)));
+
+      if (!Number.isFinite(rawAmount) || rawAmount <= 0) {
+        return {
+          mode: 'drop_in',
+          isPackageCovered: false,
+          billingPlanId: null,
+          status: 400,
+          code: 'INVALID_BILLING_AMOUNT',
+          error: 'Informe um valor maior que zero para o período de cobrança.'
+        };
+      }
 
       const rawChargesCount = params.enrollBillingPlan.billingChargesCount ?? params.enrollBillingPlan.chargesCount;
       const parsedChargesCount = rawChargesCount !== undefined && rawChargesCount !== null && String(rawChargesCount).trim() !== ''
@@ -960,6 +1010,12 @@ export class BillingCycleService {
           includedSessions: resolvedIncludedSessions,
           billingChargesCount: frequency === 'custom_date' || frequency === 'count' ? parsedChargesCount : null,
           billingCustomEndDate: frequency === 'custom_date' ? billingCustomEndDate : null,
+          pricingRuleSnapshot: pricingRuleResolved,
+          weeklySessionsSnapshot: weeklySnapResolved,
+          referenceSessionsCount:
+            params.enrollBillingPlan.referenceSessionsCount && Number(params.enrollBillingPlan.referenceSessionsCount) > 0
+              ? Math.floor(Number(params.enrollBillingPlan.referenceSessionsCount))
+              : pricingCalc.referenceSessionsCount,
           title,
           amount: Math.round(rawAmount * 100) / 100,
           billingFrequency: frequency,

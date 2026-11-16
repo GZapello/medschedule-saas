@@ -4,7 +4,13 @@ import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
 import { Professional, Service, Patient, AvailableSlot } from '../../types';
-import { X, Calendar, Clock, User, Plus, CheckCircle2, Sparkles, Pencil, Users, Repeat, Package, CreditCard, Info } from 'lucide-react';
+import { X, Calendar, Clock, User, Plus, CheckCircle2, Sparkles, Pencil, Users, Repeat, Package, CreditCard, Info, RotateCcw } from 'lucide-react';
+import {
+  calculateStudioRecurringPrice,
+  computeBillingCycleEndDate,
+  countWeekdayOccurrencesBetweenDates,
+  formatBRL
+} from '../../utils/studioPricing';
 import { isMeetingUrl } from '../../utils/teleconsultation';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
 import { QuickActionDropdown } from '../common/QuickActionDropdown';
@@ -142,6 +148,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
   const [selectedBillingPlanId, setSelectedBillingPlanId] = useState<string>('');
   const [enrollFrequency, setEnrollFrequency] = useState<PeriodicBillingFrequency>('monthly');
   const [enrollAmount, setEnrollAmount] = useState<string>('');
+  const [isEnrollAmountCustomized, setIsEnrollAmountCustomized] = useState<boolean>(false);
   const [enrollDueDay, setEnrollDueDay] = useState<number>(10);
   const [enrollFirstDueDate, setEnrollFirstDueDate] = useState<string>('');
   const [enrollPaymentMethod, setEnrollPaymentMethod] = useState<string>('pix');
@@ -574,13 +581,24 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
     }
 
     const svcBillingMode = selectedServiceObj.billing_mode || 'per_session';
+    const svcIsCustom = Boolean(selectedServiceObj.is_price_customized);
     if (isPeriodicBillingMode(svcBillingMode)) {
       setEnrollFrequency(svcBillingMode);
       const basePeriodic = selectedServiceObj.periodic_price ?? selectedServiceObj.price ?? 0;
       setEnrollAmount(Number(basePeriodic).toFixed(2));
+      setIsEnrollAmountCustomized(svcIsCustom);
     } else {
       setEnrollFrequency('monthly');
-      setEnrollAmount(Number(selectedServiceObj.price || 0).toFixed(2));
+      setIsEnrollAmountCustomized(false);
+      const weeklyCount = recurrenceWeekdays.length > 0 ? recurrenceWeekdays.length : Math.max(1, Math.min(7, Number(selectedServiceObj.weekly_sessions_count) || 1));
+      const calc = calculateStudioRecurringPrice({
+        serviceName: selectedServiceObj.name,
+        sessionPrice: Number(selectedServiceObj.price) || 0,
+        weeklySessionsCount: weeklyCount,
+        billingMode: 'monthly',
+        pricingRule: (selectedServiceObj.pricing_rule || 'four_weeks') as any
+      });
+      setEnrollAmount(calc.suggestedPrice.toFixed(2));
     }
     setEnrollDueDay(
       selectedServiceObj.default_billing_due_day &&
@@ -666,6 +684,96 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
       }));
     return entries.length > 0 ? entries : undefined;
   }, [isStudioTarget, selectedScheduleIds, activeServiceClassSchedules]);
+
+  const activeEnrollWeekdays = useMemo(() => {
+    if (selectedScheduleEntriesPayload && selectedScheduleEntriesPayload.length > 0) {
+      return Array.from(new Set(selectedScheduleEntriesPayload.map(e => Number(e.weekday)).filter(d => d >= 0 && d <= 6)));
+    }
+    if (recurrenceFrequency === 'custom_weekdays' && recurrenceWeekdays.length > 0) {
+      return recurrenceWeekdays;
+    }
+    if (isRecurring && recurrenceFrequency === 'weekly' && date && /^\d{4}-\d{2}-\d{2}/.test(date)) {
+      return [new Date(`${date.slice(0, 10)}T12:00:00Z`).getUTCDay()];
+    }
+    return recurrenceWeekdays;
+  }, [selectedScheduleEntriesPayload, recurrenceFrequency, recurrenceWeekdays, isRecurring, date]);
+
+  const activeEnrollWeeklyCount = useMemo(() => {
+    if (selectedScheduleEntriesPayload && selectedScheduleEntriesPayload.length > 0) {
+      return Math.max(1, Math.min(7, selectedScheduleEntriesPayload.length));
+    }
+    if (activeEnrollWeekdays.length > 0) {
+      return Math.max(1, Math.min(7, activeEnrollWeekdays.length));
+    }
+    return Math.max(1, Math.min(7, Number(selectedServiceObj?.weekly_sessions_count) || 1));
+  }, [selectedScheduleEntriesPayload, activeEnrollWeekdays, selectedServiceObj]);
+
+  const suggestedEnrollCalculation = useMemo(() => {
+    if (!selectedServiceObj || !isStudioTarget) return null;
+    const sessionPrice = Number(selectedServiceObj.price) > 0 ? Number(selectedServiceObj.price) : 0;
+    const rule = (selectedServiceObj.pricing_rule || 'four_weeks') as any;
+    const startRef = date || todayBrazilStr;
+    const parsedEnrollAmount = parseAppointmentPrice(enrollAmount);
+
+    let scheduledCountForRule: number | undefined = undefined;
+    if (rule === 'scheduled_sessions') {
+      if (enrollFrequency === 'custom_date' && enrollCustomEndDate && activeEnrollWeekdays.length > 0) {
+        scheduledCountForRule = countWeekdayOccurrencesBetweenDates(startRef, enrollCustomEndDate, activeEnrollWeekdays);
+      } else {
+        const cycleMonths = getCycleMonthsForBillingMode(enrollFrequency) || 1;
+        const cycleEnd = computeBillingCycleEndDate(startRef, cycleMonths);
+        if (cycleEnd && activeEnrollWeekdays.length > 0) {
+          scheduledCountForRule = countWeekdayOccurrencesBetweenDates(startRef, cycleEnd, activeEnrollWeekdays);
+        } else if (recurrencePreview?.totalCount && recurrencePreview.totalCount > 0) {
+          scheduledCountForRule = recurrencePreview.totalCount;
+        }
+      }
+    }
+
+    return calculateStudioRecurringPrice({
+      serviceName: selectedServiceObj.name,
+      sessionPrice,
+      weeklySessionsCount: activeEnrollWeeklyCount,
+      billingMode: enrollFrequency as any,
+      pricingRule: rule,
+      customPrice: parsedEnrollAmount,
+      isPriceCustomized: isEnrollAmountCustomized,
+      includedSessionsCount: enrollIncludedSessions,
+      scheduledSessionsCount: scheduledCountForRule,
+      startDate: startRef,
+      endDate: enrollCustomEndDate || undefined,
+      scheduleWeekdays: activeEnrollWeekdays
+    });
+  }, [
+    selectedServiceObj,
+    isStudioTarget,
+    activeEnrollWeeklyCount,
+    activeEnrollWeekdays,
+    enrollFrequency,
+    enrollAmount,
+    isEnrollAmountCustomized,
+    enrollIncludedSessions,
+    date,
+    todayBrazilStr,
+    enrollCustomEndDate,
+    recurrencePreview?.totalCount
+  ]);
+
+  useEffect(() => {
+    if (!isStudioTarget || billingChoice !== 'enroll_periodic' || isEnrollAmountCustomized || !suggestedEnrollCalculation) {
+      return;
+    }
+    const nextFormatted = suggestedEnrollCalculation.suggestedPrice.toFixed(2);
+    const currentParsed = parseAppointmentPrice(enrollAmount);
+    if (currentParsed === null || Math.abs(currentParsed - suggestedEnrollCalculation.suggestedPrice) > 0.01) {
+      setEnrollAmount(nextFormatted);
+    }
+  }, [
+    isStudioTarget,
+    billingChoice,
+    isEnrollAmountCustomized,
+    suggestedEnrollCalculation?.suggestedPrice
+  ]);
 
   useEffect(() => {
     if (!isOpen || !isRecurring || isRetroactive || !serviceId || !date) {
@@ -914,6 +1022,9 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
         endDate: computedEndForPlan,
         firstDueDate: enrollFirstDueDate || null,
         paymentMethod: enrollPaymentMethod || 'pix',
+        pricingRule: selectedServiceObj?.pricing_rule || 'four_weeks',
+        weeklySessionsCount: activeEnrollWeeklyCount,
+        referenceSessionsCount: suggestedEnrollCalculation?.referenceSessionsCount || undefined,
         ...(enrollFrequency === 'custom_date'
           ? {
               billingCustomEndDate: enrollCustomEndDate,
@@ -1608,21 +1719,50 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                       </select>
                     </div>
                     <div>
-                      <label className="block font-semibold text-slate-700 mb-0.5 text-[11px]">
-                        {enrollFrequency === 'custom_date' || enrollFrequency === 'count'
-                          ? 'Valor por cobrança (R$)'
-                          : 'Valor por período (R$)'}
-                      </label>
+                      <div className="flex items-center justify-between mb-0.5">
+                        <label className="block font-semibold text-slate-700 text-[11px]">
+                          {enrollFrequency === 'custom_date' || enrollFrequency === 'count'
+                            ? 'Valor por cobrança (R$)'
+                            : 'Valor por período (R$)'}
+                        </label>
+                        {isEnrollAmountCustomized ? (
+                          <span className="text-[9px] font-medium text-amber-700 bg-amber-100 px-1 rounded">Personalizado</span>
+                        ) : (
+                          <span className="text-[9px] font-medium text-emerald-700 bg-emerald-100 px-1 rounded inline-flex items-center gap-0.5">
+                            <Sparkles className="w-2.5 h-2.5 text-emerald-600" /> Sugerido
+                          </span>
+                        )}
+                      </div>
                       <input
                         type="text"
                         inputMode="decimal"
                         value={enrollAmount}
                         onChange={e => {
-                          if (/^[\d.,]*$/.test(e.target.value)) setEnrollAmount(e.target.value);
+                          if (/^[\d.,]*$/.test(e.target.value)) {
+                            setEnrollAmount(e.target.value);
+                            setIsEnrollAmountCustomized(true);
+                          }
                         }}
                         placeholder="540.00"
-                        className="w-full border border-emerald-200 rounded-lg px-2.5 py-1.5 text-xs bg-white font-semibold"
+                        className={`w-full border rounded-lg px-2.5 py-1.5 text-xs bg-white font-semibold outline-none ${
+                          isEnrollAmountCustomized ? 'border-amber-400 focus:ring-1 focus:ring-amber-400' : 'border-emerald-200 focus:ring-1 focus:ring-emerald-500'
+                        }`}
                       />
+                      {isEnrollAmountCustomized && suggestedEnrollCalculation && (
+                        <div className="flex justify-end mt-0.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEnrollAmount(suggestedEnrollCalculation.suggestedPrice.toFixed(2));
+                              setIsEnrollAmountCustomized(false);
+                            }}
+                            className="inline-flex items-center gap-0.5 text-[10px] text-emerald-700 hover:text-emerald-800 hover:underline cursor-pointer"
+                          >
+                            <RotateCcw className="w-2.5 h-2.5" />
+                            Recalcular sugerido ({formatBRL(suggestedEnrollCalculation.suggestedPrice)})
+                          </button>
+                        </div>
+                      )}
                     </div>
                     <div>
                       <label className="block font-semibold text-slate-700 mb-0.5 text-[11px]">Dia de vencimento</label>
@@ -1636,6 +1776,22 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                       />
                     </div>
                   </div>
+
+                  {suggestedEnrollCalculation && (
+                    <div className="p-2 rounded-lg bg-emerald-50/80 border border-emerald-200/90 text-[11px] text-emerald-950 flex flex-wrap items-center justify-between gap-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <span>
+                          Valor médio por aula: <strong className="text-emerald-800">{formatBRL(suggestedEnrollCalculation.averagePricePerSession)}</strong> ({suggestedEnrollCalculation.referenceSessionsText})
+                        </span>
+                      </div>
+                      {suggestedEnrollCalculation.discountPercent && suggestedEnrollCalculation.discountPercent > 0 ? (
+                        <span className="font-semibold text-emerald-800 bg-emerald-100/90 px-1.5 py-0.5 rounded text-[10px]">
+                          Economia de {suggestedEnrollCalculation.discountPercent.toLocaleString('pt-BR')}% no plano
+                        </span>
+                      ) : null}
+                    </div>
+                  )}
 
                   {enrollFrequency === 'custom_date' && (
                     <div className="p-2.5 rounded-xl bg-white border border-emerald-200 grid grid-cols-1 sm:grid-cols-2 gap-2">

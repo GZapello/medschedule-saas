@@ -565,6 +565,10 @@ export function migrateStudioImprovements(rawDb: DatabaseSync): void {
   addColIfMissing('services', 'billing_cycle_months', 'INTEGER');
   addColIfMissing('services', 'default_package_id', 'TEXT');
   addColIfMissing('services', 'default_billing_due_day', 'INTEGER');
+  addColIfMissing('services', 'pricing_rule', `TEXT DEFAULT 'four_weeks'`);
+  addColIfMissing('services', 'is_price_customized', 'INTEGER DEFAULT 0');
+  addColIfMissing('services', 'suggested_price', 'REAL');
+  addColIfMissing('services', 'weekly_sessions_count', 'INTEGER DEFAULT 1');
 
   addColIfMissing('recurring_billing_plans', 'billing_frequency', `TEXT NOT NULL DEFAULT 'monthly'`);
   addColIfMissing('recurring_billing_plans', 'cycle_months', 'INTEGER NOT NULL DEFAULT 1');
@@ -573,6 +577,9 @@ export function migrateStudioImprovements(rawDb: DatabaseSync): void {
   addColIfMissing('recurring_billing_plans', 'cancelled_at', 'TEXT');
   addColIfMissing('recurring_billing_plans', 'paused_at', 'TEXT');
   addColIfMissing('recurring_billing_plans', 'cancellation_reason', 'TEXT');
+  addColIfMissing('recurring_billing_plans', 'pricing_rule_snapshot', 'TEXT');
+  addColIfMissing('recurring_billing_plans', 'weekly_sessions_snapshot', 'INTEGER');
+  addColIfMissing('recurring_billing_plans', 'reference_sessions_count', 'INTEGER');
 
   addColIfMissing('payments', 'billing_cycle_key', 'TEXT');
   addColIfMissing('payments', 'billing_cycle_start', 'TEXT');
