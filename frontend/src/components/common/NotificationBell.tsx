@@ -194,7 +194,7 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate }
     window.dispatchEvent(new CustomEvent('zemda-focus-appointment', { detail: focusPayload }));
   };
 
-  if (!canUseNotifications) return null;
+  if (!canUseNotifications || (unreadCount <= 0 && !isOpen)) return null;
 
   return (
     <div ref={containerRef} className="relative flex items-center shrink-0">
