@@ -1,3 +1,5 @@
+import { FrequencyPricing, supportsFrequencyPricing, offeredWeeklyMeetings } from '../../utils/studioFrequencyPricing';
+import { calculateStudioRecurringPrice, StudioPricingRule } from '../../utils/studioPricing';
 import React, { createContext, useContext, useEffect, useId, useRef, useState } from 'react';
 import { Calendar, ChevronDown, CreditCard, Dumbbell, FileText, SlidersHorizontal, Users } from 'lucide-react';
 import { ClassScheduleItem } from '../../types';
@@ -16,6 +18,8 @@ interface PresentationValues {
   price: string;
   billingMode: ServiceBillingMode;
   periodicPrice: string;
+  frequencyPricing?: FrequencyPricing;
+  pricingRule?: StudioPricingRule;
   defaultBillingDueDay: string;
   weeklySessionsCount: number;
   includedSessionsCount: number;
@@ -62,13 +66,18 @@ const scheduleLines = (v: PresentationValues) => v.serviceKind !== 'group' ? [] 
   ...v.draftSchedules.map(s => `${s.weekdays.map(day => weekdays[day]).join(', ')} • ${s.startTime}–${s.endTime}`)
 ];
 
+const frequencyTotal = (v: PresentationValues) => v.serviceKind === 'group' && v.frequencyPricing?.enabled && supportsFrequencyPricing(v.billingMode) ? calculateStudioRecurringPrice({
+  serviceName: v.name, sessionPrice: Number(v.price), billingMode: v.billingMode, pricingRule: v.pricingRule,
+  weeklySessionsCount: Math.max(1, Math.min(v.weeklySessionsCount, offeredWeeklyMeetings([...(v.schedules || []), ...v.draftSchedules]).length)), frequencyPricing: v.frequencyPricing
+}).effectivePrice.toFixed(2) : null;
+
 function sectionSummary(section: Section, v: PresentationValues) {
   switch (section) {
     case 'basics': return v.name || 'Dados do serviço';
     case 'format': return v.serviceKind === 'group' ? 'Aula coletiva' : 'Individual';
     case 'recurrence': return v.allowRecurrence
       ? [frequency(v), ...scheduleLines(v), PLAN_DURATION_LABELS[v.defaultPlanDuration]].join(' • ') : 'Sem recorrência';
-    case 'billing': return `${SERVICE_BILLING_MODE_LABELS[v.billingMode]}${v.billingMode === 'package' ? '' : ` • ${money(isPeriodicBillingMode(v.billingMode) ? v.periodicPrice : v.price)}${isPeriodicBillingMode(v.billingMode) ? ' por período' : ''}`}`;
+    case 'billing': return `${SERVICE_BILLING_MODE_LABELS[v.billingMode]}${v.billingMode === 'package' ? '' : ` • ${money(isPeriodicBillingMode(v.billingMode) ? frequencyTotal(v) ?? v.periodicPrice : v.price)}${isPeriodicBillingMode(v.billingMode) ? ' por período' : ''}`}`;
     case 'templates': return templateCount(v);
     case 'description': return v.reminderEnabled ? 'Lembrete ativado' : 'Opcional';
   }
@@ -196,7 +205,8 @@ function SummaryCards({ values: v }: { values: PresentationValues }) {
         <SummaryRow label="Preço por aula" value={money(v.price)} />
         <SummaryRow label="Tipo de cobrança" value={SERVICE_BILLING_MODE_LABELS[v.billingMode]} />
         {isPeriodicBillingMode(v.billingMode) && <>
-          <SummaryRow label="Valor por período" value={money(v.periodicPrice)} />
+          {frequencyTotal(v) !== null && <SummaryRow label="Preço" value="Conforme frequência semanal" />}
+          <SummaryRow label="Valor por período" value={money(frequencyTotal(v) ?? v.periodicPrice)} />
           <SummaryRow label={v.billingMode === 'count' ? 'Quantidade de aulas' : 'Aulas por semana'} value={String(v.billingMode === 'count' ? v.includedSessionsCount : v.weeklySessionsCount)} />
         </>}
       </dl>

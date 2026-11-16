@@ -1,3 +1,4 @@
+import { normalizeFrequencyPricing, readFrequencyPricing, supportsFrequencyPricing } from '../utils/studio-frequency-pricing';
 import { ConsentService } from '../services/consent.service';
 import { Request, Response } from 'express';
 import { db } from '../config/database';
@@ -15,6 +16,15 @@ import {
   resolveServiceDomain,
   ServiceDomain
 } from '../utils/establishment-context';
+
+function frequencyConfigForSave(raw: unknown, profile: string, kind: string, mode: unknown) {
+  try {
+    const config = normalizeFrequencyPricing(raw);
+    if (config && profile !== 'studio') throw new Error('Preços por frequência estão disponíveis apenas no perfil Studio.');
+    if (config?.enabled && (kind !== 'group' || !supportsFrequencyPricing(mode))) throw new Error('Preços por frequência exigem aulas com grade e cobrança periódica compatível.');
+    return config;
+  } catch (error: any) { throw Object.assign(error, { status: 400 }); }
+}
 
 export interface LinkedProfessionalSummary {
   id: string;
@@ -415,6 +425,7 @@ export class ServiceController {
           s.is_price_customized,
           s.suggested_price,
           s.weekly_sessions_count,
+          s.frequency_pricing_json,
           pkg.name as default_package_name,
           s.default_template_id,
           s.linked_template_ids_json,
@@ -531,6 +542,7 @@ export class ServiceController {
           is_price_customized: billConfig.isPriceCustomized ? 1 : 0,
           suggested_price: billConfig.suggestedPrice,
           weekly_sessions_count: billConfig.weeklySessionsCount,
+          frequency_pricing: establishmentProfile === 'studio' ? readFrequencyPricing(srv.frequency_pricing_json) : null,
           default_template_id: tplInfo.default_template_id,
           default_template_title: tplInfo.default_template_title,
           linked_template_ids: tplInfo.linked_template_ids,
@@ -730,6 +742,7 @@ export class ServiceController {
       }
 
       const billNorm = normalizeServiceBillingForSave({
+        frequencyPricing: req.body.frequencyPricing,
         isStudioService: isStudioCompat && resolvedDomain === 'studio',
         billingMode: rawBillingMode,
         periodicPrice: rawPeriodicPrice,
@@ -747,6 +760,8 @@ export class ServiceController {
         res.status(400).json({ error: billNorm.error });
         return;
       }
+
+      const frequencyPricing = frequencyConfigForSave(req.body.frequencyPricing, establishmentProfile, resolvedKind, billNorm.billingMode);
 
       const tplNorm = normalizeServiceTemplatesForSave({
         tenantId,
@@ -835,6 +850,9 @@ export class ServiceController {
           tplNorm.linkedTemplateIdsJson
         );
 
+        db.prepare('UPDATE services SET frequency_pricing_json = ? WHERE id = ? AND tenant_id = ?')
+          .run(frequencyPricing ? JSON.stringify(frequencyPricing) : null, id, tenantId);
+
         const normalizedCustomPrice = effectiveCreatePrice > 0 ? effectiveCreatePrice : (price !== undefined && price !== null && price !== '' ? Number(price) : null);
         const normalizedCustomDuration = durationMinutes !== undefined && durationMinutes !== null && durationMinutes !== '' ? Number(durationMinutes) : null;
 
@@ -916,6 +934,7 @@ export class ServiceController {
         is_price_customized: billNorm.isPriceCustomized ? 1 : 0,
         suggested_price: billNorm.suggestedPrice,
         weekly_sessions_count: billNorm.weeklySessionsCount,
+        frequency_pricing: frequencyPricing,
         default_template_id: createdTplInfo.default_template_id,
         default_template_title: createdTplInfo.default_template_title,
         linked_template_ids: createdTplInfo.linked_template_ids,
@@ -957,7 +976,7 @@ export class ServiceController {
                modality_category, service_domain, allowed_recurrence_frequencies_json, default_recurrence_frequency,
                custom_recurrence_intervals_json, default_recurrence_interval_json,
                billing_mode, periodic_price, billing_cycle_months, default_package_id, default_billing_due_day,
-               pricing_rule, is_price_customized, suggested_price, weekly_sessions_count,
+               pricing_rule, is_price_customized, suggested_price, weekly_sessions_count, frequency_pricing_json,
                default_template_id, linked_template_ids_json
         FROM services WHERE id = ? AND tenant_id = ?
       `).get(id, tenantId) as any;
@@ -1200,6 +1219,7 @@ export class ServiceController {
             price !== undefined);
 
         const billNorm = normalizeServiceBillingForSave({
+          frequencyPricing: req.body.frequencyPricing === undefined ? readFrequencyPricing(existing.frequency_pricing_json) : req.body.frequencyPricing,
           isStudioService: isNextStudioService,
           billingMode: rawBillingMode !== undefined ? rawBillingMode : (isNextStudioService ? (existing.billing_mode || 'per_session') : 'per_session'),
           periodicPrice: rawPeriodicPrice !== undefined ? rawPeriodicPrice : (shouldAutoRecalcPeriodic ? undefined : existing.periodic_price),
@@ -1298,6 +1318,10 @@ export class ServiceController {
 
       const scheduleWarnings: string[] = [];
 
+      const frequencyPricing = req.body.frequencyPricing === undefined
+        ? readFrequencyPricing(existing.frequency_pricing_json)
+        : frequencyConfigForSave(req.body.frequencyPricing, establishmentProfile, nextKind, nextBillingMode);
+
       db.transaction(() => {
         updateStmt.run(
           professionalId !== undefined ? 1 : 0, professionalId || null,
@@ -1347,6 +1371,9 @@ export class ServiceController {
 
         const nextCustomPrice = effectiveUpdatePrice > 0 ? effectiveUpdatePrice : (hasExplicitPrice ? Number(price) : null);
         const nextCustomDuration = durationMinutes !== undefined && durationMinutes !== null && durationMinutes !== '' ? Number(durationMinutes) : null;
+
+        db.prepare('UPDATE services SET frequency_pricing_json = ? WHERE id = ? AND tenant_id = ?')
+          .run(frequencyPricing ? JSON.stringify(frequencyPricing) : null, req.params.id, tenantId);
 
         validateAndSyncLinkedInstructorsTx({
           tenantId,
@@ -1416,6 +1443,7 @@ export class ServiceController {
             is_price_customized: isStudioCompat && updatedService.service_domain === 'studio' ? (updatedService.is_price_customized ?? 0) : 0,
             suggested_price: isStudioCompat && updatedService.service_domain === 'studio' ? (updatedService.suggested_price ?? null) : null,
             weekly_sessions_count: isStudioCompat && updatedService.service_domain === 'studio' ? (updatedService.weekly_sessions_count ?? 1) : 1,
+            frequency_pricing: establishmentProfile === 'studio' ? readFrequencyPricing(updatedService.frequency_pricing_json) : null,
             default_template_id: updTplInfo.default_template_id,
             default_template_title: updTplInfo.default_template_title,
             linked_template_ids: updTplInfo.linked_template_ids,

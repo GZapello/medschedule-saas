@@ -1,3 +1,4 @@
+import { readFrequencyPricing } from '../utils/studio-frequency-pricing';
 import { clinicTeam } from '../services/clinic-team.service';
 import { canOperate } from '../services/billing.service';
 import { ensureClinicBookingIdentity } from '../utils/clinic-booking-identity';
@@ -1498,6 +1499,7 @@ export class TenantController {
                s.allowed_recurrence_frequencies_json, s.default_recurrence_frequency,
                s.custom_recurrence_intervals_json, s.default_recurrence_interval_json,
                s.service_domain, s.clinical_module,
+               s.billing_mode, s.periodic_price, s.pricing_rule, s.frequency_pricing_json, s.weekly_sessions_count,
                s.modality_category, spec.name as specialty_name
         FROM services s LEFT JOIN specialties spec ON spec.id = s.specialty_id
         WHERE s.tenant_id = ? AND s.active = 1 AND EXISTS (
@@ -1554,6 +1556,8 @@ export class TenantController {
       const enrichedServices = (services as any[])
         .map(srv => {
           const scheds = publicSchedulesByService.get(srv.id) || [];
+          srv.frequency_pricing = establishmentProfile === 'studio' ? readFrequencyPricing(srv.frequency_pricing_json) : null;
+          delete srv.frequency_pricing_json;
           const resolvedDomain = resolveServiceDomain({
             establishmentProfile,
             serviceDomain: srv.service_domain,

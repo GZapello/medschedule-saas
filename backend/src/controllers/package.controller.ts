@@ -1,3 +1,5 @@
+import { BillingCycleService } from '../services/billing-cycle.service';
+import { quoteFrequencyPlan } from '../services/frequency-pricing.service';
 import { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../config/database';
@@ -32,7 +34,7 @@ import {
   PlanDurationCode,
   RecurrenceFrequency,
   RecurrenceIntervalUnit,
-  validateServiceRecurrenceFrequency
+  validateServiceRecurrenceFrequency, resolvePlanDurationEndDate
 } from '../utils/establishment-context';
 
 function getOwnProfessionalIds(userId: string, tenantId: string): string[] {
@@ -963,7 +965,7 @@ export class PackageController {
                  allowed_recurrence_frequencies_json, default_recurrence_frequency,
                  allowed_plan_durations_json, default_plan_duration,
                  custom_recurrence_intervals_json, default_recurrence_interval_json,
-                 service_domain, modality, clinical_module
+                 service_domain, modality, clinical_module, billing_mode, default_billing_due_day
           FROM services WHERE id = ? AND tenant_id = ? AND active = 1
         `).get(item.serviceId, tenant.id) as any;
 
@@ -1455,6 +1457,50 @@ export class PackageController {
           );
         }
 
+        const firstSlot = resolvedSlots[0];
+        const planStart = bookingTime(String(startTime))!.slice(0, 10);
+        const planEnd = resolvePlanDurationEndDate(planStart, firstSlot.slotItem.recurrenceMeta?.durationCode) ||
+          (recurrence?.endDate ? String(recurrence.endDate).slice(0, 10) : resolvedSlots[resolvedSlots.length - 1].slotItem.startIso.slice(0, 10));
+        const quote = recurrence && firstSlot.slotItem.recurrenceMeta ? quoteFrequencyPlan({
+          tenantId: tenant.id, serviceId: String(serviceId), billingFrequency: firstSlot.slotItem.serviceRow.billing_mode,
+          startDate: planStart, endDate: planEnd, publicOnly: true, cadence: firstSlot.slotItem.recurrenceMeta.frequency,
+          slots: resolvedSlots.map(({ slotItem, resolvedSlot }) => ({
+            startTime: slotItem.startIso, endTime: slotItem.endIso,
+            professionalId: resolvedSlot.professionalId, classScheduleId: resolvedSlot.classScheduleId
+          }))
+        }) : null;
+        let frequencyPlan: any = null;
+        let newPlanAmount = 0;
+        if (quote) {
+          const existingCoverage = BillingCycleService.resolveActivePlanCoverage({
+            tenantId: tenant.id, patientId: resolvedStudentId, serviceId: String(serviceId),
+            sessionDates: resolvedSlots.map(s => s.slotItem.startIso.slice(0, 10)), autoMatch: true
+          });
+          if (existingCoverage.error) throw Object.assign(new Error(existingCoverage.error), { status: existingCoverage.status || 409 });
+          frequencyPlan = existingCoverage.plan;
+          if (!frequencyPlan) {
+            const overlapping = db.prepare(`SELECT id FROM recurring_billing_plans WHERE tenant_id = ? AND patient_id = ? AND service_id = ?
+              AND status = 'active' AND COALESCE(covers_sessions, 1) = 1 AND start_date <= ? AND (end_date IS NULL OR end_date = '' OR end_date >= ?) LIMIT 1`)
+              .get(tenant.id, resolvedStudentId, String(serviceId), planEnd, planStart);
+            if (overlapping) throw Object.assign(new Error('Você já possui um plano vigente neste período. Entre em contato com o Studio para ajustar os horários sem duplicar sua contratação.'), { status: 409, code: 'EXISTING_PLAN_OVERLAP' });
+            const createdPlan = BillingCycleService.createPeriodicPlanTx({
+              tenantId: tenant.id, patientId: resolvedStudentId, serviceId: String(serviceId),
+              professionalId: firstSlot.resolvedSlot.professionalId, seriesId,
+              title: firstSlot.slotItem.serviceRow.name,
+              billingFrequency: firstSlot.slotItem.serviceRow.billing_mode,
+              amount: quote.calculation.effectivePrice, startDate: planStart, endDate: planEnd,
+              dueDay: firstSlot.slotItem.serviceRow.default_billing_due_day || 10,
+              weeklyFrequency: quote.weeklyCount, weeklySessionsSnapshot: quote.weeklyCount,
+              referenceSessionsCount: quote.calculation.referenceSessionsCount,
+              pricingRuleSnapshot: quote.pricingRule, scheduleRules: quote.meetings,
+              planDurationCode: firstSlot.slotItem.recurrenceMeta?.durationCode,
+              coversSessions: true, generateInitialCycle: true, createdBy: 'online_booking'
+            });
+            frequencyPlan = createdPlan.plan;
+            newPlanAmount = quote.calculation.effectivePrice;
+          }
+        }
+
         const createdList: any[] = [];
         for (const { slotItem, resolvedSlot } of resolvedSlots) {
           const concreteProfId = resolvedSlot.professionalId;
@@ -1524,7 +1570,11 @@ export class PackageController {
             VALUES (?, ?, NULL, 'scheduled', 'Cliente Online', 'Agendamento público do Studio')
           `).run(uuidv4(), apptId);
 
-          const unitPrice = Math.round(Number(slotItem.serviceRow.price || 0) * 100) / 100;
+          if (frequencyPlan) {
+            db.prepare("UPDATE appointments SET recurring_plan_id = ?, billing_coverage_type = 'periodic_plan' WHERE id = ? AND tenant_id = ?")
+              .run(frequencyPlan.id, apptId, tenant.id);
+          }
+          const unitPrice = frequencyPlan ? 0 : Math.round(Number(slotItem.serviceRow.price || 0) * 100) / 100;
           if (unitPrice > 0) {
             db.prepare(`
               INSERT INTO payments (
@@ -1554,7 +1604,9 @@ export class PackageController {
             modality: concreteModality,
             startTime: slotItem.startIso,
             endTime: slotItem.endIso,
-            price: unitPrice
+            price: unitPrice,
+            billingPlanId: frequencyPlan?.id || null,
+            planAmount: createdList.length === 0 ? newPlanAmount : 0
           });
         }
 
@@ -1574,9 +1626,9 @@ export class PackageController {
 
       res.status(201).json({
         mode: 'service',
-        paymentPending: bookedResult.some(b => Number(b.price) > 0),
+        paymentPending: bookedResult.some(b => Number(b.price) > 0 || Number(b.planAmount) > 0),
         appointments: bookedResult,
-        message: bookedResult.some(b => Number(b.price) > 0)
+        message: bookedResult.some(b => Number(b.price) > 0 || Number(b.planAmount) > 0)
           ? 'Horário reservado com sucesso! O pagamento será acertado no Studio.'
           : 'Horário reservado com sucesso!'
       });

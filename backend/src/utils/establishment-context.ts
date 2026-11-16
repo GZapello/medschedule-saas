@@ -1,3 +1,4 @@
+import { readFrequencyPricing } from './studio-frequency-pricing';
 import { Request, Response, NextFunction } from 'express';
 import { db } from '../config/database';
 import {
@@ -1028,7 +1029,7 @@ export function parseServiceBillingConfig(row: any): {
   const pricingRule: StudioPricingRule =
     rawRule === 'annual_average' || rawRule === 'scheduled_sessions' ? rawRule : 'four_weeks';
 
-  const weeklySessionsCount = Math.max(1, Math.min(7, Math.floor(Number(row?.weekly_sessions_count) || 1)));
+  const weeklySessionsCount = Math.max(1, Math.min(readFrequencyPricing(row?.frequency_pricing_json)?.enabled ? Number.MAX_SAFE_INTEGER : 7, Math.floor(Number(row?.weekly_sessions_count) || 1)));
 
   const sessionPrice = Math.max(0, Number(row?.price) || 0);
 
@@ -1076,6 +1077,7 @@ export function normalizeServiceBillingForSave(input: {
   weeklySessionsCount?: unknown;
   sessionPrice?: unknown;
   scheduleEntriesCount?: unknown;
+  frequencyPricing?: unknown;
   tenantId: string;
   serviceId?: string;
 }): {
@@ -1100,7 +1102,7 @@ export function normalizeServiceBillingForSave(input: {
 
   let weeklySessionsCount = Math.max(
     1,
-    Math.min(7, Math.floor(Number(input.weeklySessionsCount) || Number(input.scheduleEntriesCount) || 1))
+    Math.min(readFrequencyPricing(input.frequencyPricing)?.enabled ? Number.MAX_SAFE_INTEGER : 7, Math.floor(Number(input.weeklySessionsCount) || Number(input.scheduleEntriesCount) || 1))
   );
 
   const rawSessionPrice = Number(input.sessionPrice);

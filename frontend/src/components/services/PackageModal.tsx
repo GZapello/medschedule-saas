@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
+import { isStudioProfile } from '../../utils/establishmentContext';
+import { PackageFormBody, PackageFormSection, StudioPackageIndicators, StudioPackagePresentation } from './StudioPackagePresentation';
 import { Service, Professional } from '../../types';
 import { X, Package, CheckCircle2, Layers, Repeat, Calendar, ShieldCheck, AlertCircle } from 'lucide-react';
 
@@ -29,6 +32,8 @@ export const PackageModal: React.FC<PackageModalProps> = ({
   editingPackage
 }) => {
   const { showToast } = useToast();
+  const { currentTenant } = useAuth();
+  const isPureStudio = isStudioProfile(currentTenant?.establishment_profile);
   const [saving, setSaving] = useState(false);
 
   const [name, setName] = useState('');
@@ -214,7 +219,15 @@ export const PackageModal: React.FC<PackageModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 mobile-modal">
-      <div className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl border border-slate-200 flex flex-col max-h-[92vh] overflow-hidden animate-in zoom-in-95 duration-200">
+      <StudioPackagePresentation enabled={isPureStudio} onClose={onClose}
+        title={editingPackage ? 'Editar Pacote de Serviços' : 'Criar Pacote de Serviços'}
+        values={{
+          name, price, billingType, billingFrequency, creditMode, totalCredits, weeklyLimit,
+          totalClasses: creditMode === 'per_service' ? perServiceComputedTotal : totalCredits,
+          validityDays, installmentsCount, dueDay, absentPolicy, cancelHoursLimit,
+          allowPublicBooking, active, selectedItems, services
+        }}
+        className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl border border-slate-200 flex flex-col max-h-[92vh] overflow-hidden animate-in zoom-in-95 duration-200">
         {/* Header */}
         <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-slate-100 bg-slate-50/80 shrink-0">
           <div className="flex items-center gap-3 min-w-0">
@@ -222,11 +235,13 @@ export const PackageModal: React.FC<PackageModalProps> = ({
               <Package className="w-5 h-5" />
             </div>
             <div className="min-w-0">
-              <h3 className="text-base sm:text-lg font-bold text-slate-900 truncate">
+              <h3 className={`text-base sm:text-lg font-bold text-slate-900 ${isPureStudio ? "" : "truncate"}`}>
                 {editingPackage ? 'Editar Pacote de Serviços' : 'Criar Pacote de Serviços'}
               </h3>
-              <p className="text-xs text-slate-500 truncate">
-                Combine modalidades e instrutores distintos sem gerar cobrança por sessão individual.
+              <p className={`text-xs text-slate-500 ${isPureStudio ? "mt-1" : "truncate"}`}>
+                {isPureStudio
+                  ? 'Combine diferentes aulas e serviços em um único pacote, definindo valores, validade e regras de utilização.'
+                  : 'Combine modalidades e instrutores distintos sem gerar cobrança por sessão individual.'}
               </p>
             </div>
           </div>
@@ -240,20 +255,26 @@ export const PackageModal: React.FC<PackageModalProps> = ({
           </button>
         </div>
 
+        <StudioPackageIndicators />
+
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="overflow-y-auto p-5 sm:p-6 space-y-5 text-xs flex-1">
+        <form onSubmit={handleSubmit} className={isPureStudio ? 'flex flex-col min-h-0 flex-1 text-xs' : 'overflow-y-auto p-5 sm:p-6 space-y-5 text-xs flex-1'}>
+          <PackageFormBody>
           {/* Informações Gerais */}
-          <div className="space-y-3">
-            <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+          <div className={isPureStudio ? 'contents' : 'space-y-3'}>
+            {!isPureStudio && <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
               <Layers className="w-3.5 h-3.5 text-indigo-600" />
               Informações Gerais e Cobrança
-            </h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            </h4>}
+            <div className={isPureStudio ? 'contents' : 'grid grid-cols-1 sm:grid-cols-2 gap-3'}>
+              <PackageFormSection section="basics">
               <div className="sm:col-span-2">
                 <label className="block font-semibold text-slate-700 mb-1">Nome do Pacote *</label>
                 <input
                   type="text"
                   required
+                  aria-label={isPureStudio ? "Nome do pacote" : undefined}
+                  data-package-field={isPureStudio ? "name" : undefined}
                   value={name}
                   onChange={e => setName(e.target.value)}
                   placeholder="Ex: Pacote Pilates + Dança + Zumba (12 aulas)"
@@ -264,6 +285,8 @@ export const PackageModal: React.FC<PackageModalProps> = ({
                 <label className="block font-semibold text-slate-700 mb-1">Descrição</label>
                 <textarea
                   rows={2}
+                  aria-label={isPureStudio ? "Descrição" : undefined}
+                  data-package-field={isPureStudio ? "description" : undefined}
                   value={description}
                   onChange={e => setDescription(e.target.value)}
                   placeholder="Descreva os benefícios e regras gerais para o aluno e recepção..."
@@ -274,6 +297,8 @@ export const PackageModal: React.FC<PackageModalProps> = ({
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Tipo de Cobrança *</label>
                 <select
+                  aria-label={isPureStudio ? "Tipo de cobrança" : undefined}
+                  data-package-field={isPureStudio ? "billingType" : undefined}
                   value={billingType}
                   onChange={e => setBillingType(e.target.value as any)}
                   className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white font-medium"
@@ -287,6 +312,8 @@ export const PackageModal: React.FC<PackageModalProps> = ({
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">Periodicidade do Pacote *</label>
                   <select
+                    aria-label={isPureStudio ? "Periodicidade do pacote" : undefined}
+                    data-package-field={isPureStudio ? "billingFrequency" : undefined}
                     value={billingFrequency}
                     onChange={e => setBillingFrequency(e.target.value as any)}
                     className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white font-medium"
@@ -299,6 +326,8 @@ export const PackageModal: React.FC<PackageModalProps> = ({
                 </div>
               )}
 
+              </PackageFormSection>
+              <PackageFormSection section="values">
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Valor do Pacote (R$) *</label>
                 <input
@@ -306,6 +335,8 @@ export const PackageModal: React.FC<PackageModalProps> = ({
                   step="0.01"
                   min="0"
                   required
+                  aria-label={isPureStudio ? "Valor do pacote" : undefined}
+                  data-package-field={isPureStudio ? "price" : undefined}
                   value={price}
                   onChange={e => setPrice(e.target.value)}
                   className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white font-bold text-indigo-700"
@@ -318,6 +349,8 @@ export const PackageModal: React.FC<PackageModalProps> = ({
                   type="number"
                   min="1"
                   max="3650"
+                  aria-label={isPureStudio ? "Validade da matrícula em dias" : undefined}
+                  data-package-field={isPureStudio ? "validityDays" : undefined}
                   value={validityDays}
                   onChange={e => setValidityDays(Number(e.target.value) || 30)}
                   className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white"
@@ -331,6 +364,8 @@ export const PackageModal: React.FC<PackageModalProps> = ({
                     type="number"
                     min="1"
                     max="28"
+                    aria-label={isPureStudio ? "Dia padrão de vencimento" : undefined}
+                    data-package-field={isPureStudio ? "dueDay" : undefined}
                     value={dueDay}
                     onChange={e => setDueDay(Math.min(28, Math.max(1, Number(e.target.value) || 10)))}
                     className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white"
@@ -340,6 +375,8 @@ export const PackageModal: React.FC<PackageModalProps> = ({
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">Parcelamento máximo do pacote</label>
                   <select
+                    aria-label={isPureStudio ? "Parcelamento máximo do pacote" : undefined}
+                    data-package-field={isPureStudio ? "installmentsCount" : undefined}
                     value={installmentsCount}
                     onChange={e => setInstallmentsCount(Number(e.target.value) || 1)}
                     className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white"
@@ -350,19 +387,22 @@ export const PackageModal: React.FC<PackageModalProps> = ({
                   </select>
                 </div>
               )}
+              </PackageFormSection>
             </div>
           </div>
 
           {/* Modo de Créditos */}
-          <div className="p-4 rounded-2xl bg-indigo-50/50 border border-indigo-100 space-y-3">
-            <h4 className="font-bold text-indigo-950 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+          <PackageFormSection section="distribution">
+          <div className={isPureStudio ? 'space-y-3' : 'p-4 rounded-2xl bg-indigo-50/50 border border-indigo-100 space-y-3'}>
+            {!isPureStudio && <h4 className="font-bold text-indigo-950 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
               <Repeat className="w-3.5 h-3.5 text-indigo-600" />
               Distribuição das Aulas no Pacote
-            </h4>
+            </h4>}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <button
                 type="button"
                 onClick={() => setCreditMode('per_service')}
+                aria-pressed={isPureStudio ? creditMode === 'per_service' : undefined}
                 className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
                   creditMode === 'per_service'
                     ? 'bg-white border-indigo-500 ring-2 ring-indigo-500/20'
@@ -376,6 +416,7 @@ export const PackageModal: React.FC<PackageModalProps> = ({
               <button
                 type="button"
                 onClick={() => setCreditMode('shared_pool')}
+                aria-pressed={isPureStudio ? creditMode === 'shared_pool' : undefined}
                 className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
                   creditMode === 'shared_pool'
                     ? 'bg-white border-indigo-500 ring-2 ring-indigo-500/20'
@@ -395,6 +436,8 @@ export const PackageModal: React.FC<PackageModalProps> = ({
                     type="number"
                     min="1"
                     max="1000"
+                    aria-label={isPureStudio ? "Total de aulas no período" : undefined}
+                    data-package-field={isPureStudio ? "totalCredits" : undefined}
                     value={totalCredits}
                     onChange={e => setTotalCredits(Number(e.target.value) || 1)}
                     className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white font-bold"
@@ -407,6 +450,8 @@ export const PackageModal: React.FC<PackageModalProps> = ({
                     min="1"
                     max="50"
                     placeholder="Sem teto semanal"
+                    aria-label={isPureStudio ? "Limite semanal global" : undefined}
+                    data-package-field={isPureStudio ? "weeklyLimit" : undefined}
                     value={weeklyLimit}
                     onChange={e => setWeeklyLimit(e.target.value)}
                     className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white"
@@ -416,7 +461,10 @@ export const PackageModal: React.FC<PackageModalProps> = ({
             )}
           </div>
 
+          </PackageFormSection>
+
           {/* Serviços Incluídos */}
+          <PackageFormSection section="services">
           <div className="space-y-2.5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">
@@ -433,7 +481,7 @@ export const PackageModal: React.FC<PackageModalProps> = ({
                 <span>Cadastre serviços individuais ou turmas antes de montar um pacote.</span>
               </div>
             ) : (
-              <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+              <div className={isPureStudio ? "space-y-2" : "space-y-2 max-h-60 overflow-y-auto pr-1"}>
                 {services.map(srv => {
                   const draft = itemMap[srv.id] || { serviceId: srv.id, selected: false, includedCredits: 4, weeklyFrequency: '' };
                   const profName = srv.professional_id ? profNameById.get(srv.professional_id) : null;
@@ -452,7 +500,7 @@ export const PackageModal: React.FC<PackageModalProps> = ({
                           className="mt-0.5 w-4 h-4 text-indigo-600 rounded border-slate-300 shrink-0"
                         />
                         <div className="min-w-0">
-                          <div className="font-bold text-slate-900 truncate">{srv.name}</div>
+                          <div className={`font-bold text-slate-900 ${isPureStudio ? "break-words" : "truncate"}`}>{srv.name}</div>
                           <div className="text-[11px] text-slate-500 flex flex-wrap gap-x-2">
                             <span>{srv.duration_minutes} min</span>
                             {srv.service_kind === 'group' && <span className="text-teal-700 font-semibold">Turma ({srv.default_capacity || 1} vagas)</span>}
@@ -469,6 +517,8 @@ export const PackageModal: React.FC<PackageModalProps> = ({
                               type="number"
                               min="1"
                               max="500"
+                              aria-label={isPureStudio ? `Quantidade de aulas de ${srv.name}` : undefined}
+                              data-package-field={isPureStudio ? `credits-${srv.id}` : undefined}
                               value={draft.includedCredits}
                               onChange={e => updateItemField(srv.id, 'includedCredits', Number(e.target.value) || 1)}
                               className="w-16 border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold text-center bg-white"
@@ -481,6 +531,7 @@ export const PackageModal: React.FC<PackageModalProps> = ({
                               min="1"
                               max="14"
                               placeholder="-"
+                              aria-label={isPureStudio ? `Aulas por semana de ${srv.name}` : undefined}
                               value={draft.weeklyFrequency}
                               onChange={e => updateItemField(srv.id, 'weeklyFrequency', e.target.value)}
                               className="w-16 border border-slate-200 rounded-lg px-2 py-1 text-xs text-center bg-white"
@@ -495,16 +546,21 @@ export const PackageModal: React.FC<PackageModalProps> = ({
             )}
           </div>
 
+          </PackageFormSection>
+
           {/* Políticas */}
-          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
-            <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+          <PackageFormSection section="complementary">
+          <div className={isPureStudio ? 'space-y-3' : 'p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3'}>
+            {!isPureStudio && <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
               Regras de Falta, Cancelamento e Divulgação
-            </h4>
+            </h4>}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Em caso de falta (sem aviso)</label>
                 <select
+                  aria-label={isPureStudio ? "Em caso de falta" : undefined}
+                  data-package-field={isPureStudio ? "absentPolicy" : undefined}
                   value={absentPolicy}
                   onChange={e => setAbsentPolicy(e.target.value as any)}
                   className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white"
@@ -519,6 +575,8 @@ export const PackageModal: React.FC<PackageModalProps> = ({
                   type="number"
                   min="0"
                   max="168"
+                  aria-label={isPureStudio ? "Antecedência de cancelamento" : undefined}
+                  data-package-field={isPureStudio ? "cancelHoursLimit" : undefined}
                   value={cancelHoursLimit}
                   onChange={e => setCancelHoursLimit(Math.max(0, Number(e.target.value) || 0))}
                   className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white"
@@ -549,7 +607,10 @@ export const PackageModal: React.FC<PackageModalProps> = ({
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-slate-100">
+          </PackageFormSection>
+          </PackageFormBody>
+
+          <div className={isPureStudio ? 'studio-package-footer shrink-0 flex items-center justify-end gap-2 px-5 sm:px-6 py-3.5 border-t border-slate-100 bg-slate-50/80' : 'flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-slate-100'}>
             <button
               type="button"
               onClick={onClose}
@@ -563,11 +624,11 @@ export const PackageModal: React.FC<PackageModalProps> = ({
               className="px-5 py-2 font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
             >
               <CheckCircle2 className="w-4 h-4" />
-              {saving ? 'Salvando...' : editingPackage ? 'Salvar Pacote' : 'Criar Pacote'}
+              {saving ? 'Salvando...' : isPureStudio || editingPackage ? 'Salvar Pacote' : 'Criar Pacote'}
             </button>
           </div>
         </form>
-      </div>
+      </StudioPackagePresentation>
     </div>
   );
 };

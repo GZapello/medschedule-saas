@@ -1,3 +1,5 @@
+import { FrequencyPricing, supportsFrequencyPricing } from '../../utils/studioFrequencyPricing';
+import { ServiceFrequencyPricingPanel } from './ServiceFrequencyPricingPanel';
 import React, { useMemo, useEffect, useRef } from 'react';
 import {
   CreditCard,
@@ -46,6 +48,10 @@ interface ServiceBillingConfigPanelProps {
   availablePackages?: ServicePackageOption[];
   scheduleWeekdaysCount?: number;
   compact?: boolean;
+  frequencyPricing?: FrequencyPricing | null;
+  onFrequencyPricingChange?: (value: FrequencyPricing) => void;
+  offeredWeeklySessions?: number;
+  allowFrequencyPricing?: boolean;
   onChange: (next: {
     billingMode: ServiceBillingMode;
     periodicPrice: string;
@@ -74,14 +80,17 @@ export const ServiceBillingConfigPanel: React.FC<ServiceBillingConfigPanelProps>
   availablePackages = [],
   scheduleWeekdaysCount,
   compact = false,
+  frequencyPricing, onFrequencyPricingChange, offeredWeeklySessions = 0, allowFrequencyPricing = false,
   onChange
 }) => {
   const isPeriodic = isPeriodicBillingMode(billingMode);
   const selectedPkg = availablePackages.find((pkg) => pkg.id === defaultPackageId) || null;
 
+  const frequencyActive = Boolean(allowFrequencyPricing && frequencyPricing?.enabled && supportsFrequencyPricing(billingMode));
+  const weeklyLimit = frequencyActive ? Math.max(1, offeredWeeklySessions) : 7;
   const effectiveWeeklySessions = useMemo(() => {
-    return Math.max(1, Math.min(7, Math.floor(weeklySessionsCount || 1)));
-  }, [weeklySessionsCount]);
+    return Math.max(1, Math.min(weeklyLimit, Math.floor(weeklySessionsCount || 1)));
+  }, [weeklySessionsCount, weeklyLimit]);
 
   const prevScheduleCountRef = useRef<number | undefined>(scheduleWeekdaysCount);
 
@@ -109,6 +118,8 @@ export const ServiceBillingConfigPanel: React.FC<ServiceBillingConfigPanelProps>
     includedSessionsCount,
     selectedPkg
   ]);
+
+  const displayCalc = frequencyActive ? calculateStudioRecurringPrice({ serviceName, sessionPrice, weeklySessionsCount: effectiveWeeklySessions, billingMode, pricingRule, frequencyPricing }) : calcResult;
 
   // Se o valor não for personalizado e estiver vazio ou o preço avulso/frequência/regra/lote mudar, atualiza automaticamente
   useEffect(() => {
@@ -151,7 +162,7 @@ export const ServiceBillingConfigPanel: React.FC<ServiceBillingConfigPanelProps>
       scheduleWeekdaysCount > 0 &&
       scheduleWeekdaysCount !== prev
     ) {
-      const clamped = Math.max(1, Math.min(7, scheduleWeekdaysCount));
+      const clamped = Math.max(1, Math.min(weeklyLimit, scheduleWeekdaysCount));
       if (clamped !== effectiveWeeklySessions) {
         handleWeeklySessionsChange(clamped);
       }
@@ -194,7 +205,7 @@ export const ServiceBillingConfigPanel: React.FC<ServiceBillingConfigPanelProps>
   };
 
   const handleWeeklySessionsChange = (nextSessions: number) => {
-    const nextVal = Math.max(1, Math.min(7, nextSessions));
+    const nextVal = Math.max(1, Math.min(weeklyLimit, nextSessions));
     const nextCalc = calculateStudioRecurringPrice({
       serviceName,
       sessionPrice,
@@ -342,7 +353,7 @@ export const ServiceBillingConfigPanel: React.FC<ServiceBillingConfigPanelProps>
                       className="text-[10px] text-emerald-700 font-medium bg-emerald-100 hover:bg-emerald-200 px-1.5 py-0.5 rounded cursor-pointer transition-colors"
                       title="Sincronizar com a quantidade de horários da grade semanal"
                     >
-                      Usar {Math.min(7, scheduleWeekdaysCount)}x da grade
+                      Usar {Math.min(weeklyLimit, scheduleWeekdaysCount)}x da grade
                     </button>
                   ) : (
                     <span className="text-[10px] text-emerald-700 font-normal bg-emerald-100 px-1.5 py-0.5 rounded">
@@ -356,13 +367,7 @@ export const ServiceBillingConfigPanel: React.FC<ServiceBillingConfigPanelProps>
                 onChange={(e) => handleWeeklySessionsChange(Number(e.target.value))}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
               >
-                <option value={1}>1 aula por semana (1x)</option>
-                <option value={2}>2 aulas por semana (2x)</option>
-                <option value={3}>3 aulas por semana (3x)</option>
-                <option value={4}>4 aulas por semana (4x)</option>
-                <option value={5}>5 aulas por semana (5x)</option>
-                <option value={6}>6 aulas por semana (6x)</option>
-                <option value={7}>7 aulas por semana (todos os dias)</option>
+                {Array.from({ length: weeklyLimit }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1} aula(s) por semana ({i + 1}x)</option>)}
               </select>
               <p className="text-[10px] text-gray-500 mt-1">
                 Utilizada para projetar os encontros no período contratado.
@@ -455,7 +460,8 @@ export const ServiceBillingConfigPanel: React.FC<ServiceBillingConfigPanelProps>
                   type="number"
                   min="0"
                   step="0.01"
-                  value={periodicPrice}
+                  disabled={frequencyActive}
+                  value={frequencyActive ? displayCalc.effectivePrice.toFixed(2) : periodicPrice}
                   onChange={(e) => handlePriceManualInput(e.target.value)}
                   placeholder={`Ex: ${calcResult.suggestedPrice.toFixed(2)}`}
                   className={`w-full px-3 py-2 border rounded-lg text-sm bg-white outline-none transition-all ${
@@ -465,6 +471,8 @@ export const ServiceBillingConfigPanel: React.FC<ServiceBillingConfigPanelProps>
                   }`}
                 />
               </div>
+
+              {frequencyActive && <p className="mt-1 text-xs text-emerald-800">Valor da tabela para {effectiveWeeklySessions}x por semana. Edite os preços no painel abaixo.</p>}
 
               {/* Botão de recalcular quando personalizado */}
               <div className="flex items-center justify-between mt-1.5">
@@ -558,6 +566,8 @@ export const ServiceBillingConfigPanel: React.FC<ServiceBillingConfigPanelProps>
         </div>
       )}
 
+      {allowFrequencyPricing && onFrequencyPricingChange && <ServiceFrequencyPricingPanel value={frequencyPricing} onChange={onFrequencyPricingChange} count={offeredWeeklySessions} billingMode={billingMode} />}
+
       {/* 3. RESUMO FINANCEIRO INTELIGENTE (Card Estruturado) */}
       <div className="rounded-xl border border-emerald-200/90 bg-white p-3.5 shadow-sm space-y-2">
         <div className="flex items-center justify-between border-b border-emerald-100 pb-2">
@@ -567,7 +577,7 @@ export const ServiceBillingConfigPanel: React.FC<ServiceBillingConfigPanelProps>
           </div>
           {isPeriodic && (
             <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md font-medium border border-emerald-200">
-              {calcResult.referenceSessionsText}
+              {displayCalc.referenceSessionsText}
             </span>
           )}
         </div>
@@ -588,7 +598,7 @@ export const ServiceBillingConfigPanel: React.FC<ServiceBillingConfigPanelProps>
 
             <div className="bg-emerald-50/50 p-2 rounded-lg border border-emerald-100">
               <span className="text-[10px] text-emerald-700 block">Valor sugerido</span>
-              <span className="font-semibold text-emerald-800">{formatBRL(calcResult.suggestedPrice)}</span>
+              <span className="font-semibold text-emerald-800">{formatBRL(displayCalc.suggestedPrice)}</span>
               <span className="text-[9px] text-emerald-600 block mt-0.5 truncate">
                 {pricingRule === 'annual_average' ? '52 sem/12m' : pricingRule === 'scheduled_sessions' ? 'calendário real' : '4 semanas'}
               </span>
@@ -599,7 +609,7 @@ export const ServiceBillingConfigPanel: React.FC<ServiceBillingConfigPanelProps>
                 {isPriceCustomized ? 'Valor configurado' : 'Valor do plano'}
               </span>
               <span className={`font-semibold ${isPriceCustomized ? 'text-amber-900' : 'text-emerald-900'}`}>
-                {formatBRL(calcResult.effectivePrice)}
+                {formatBRL(displayCalc.effectivePrice)}
               </span>
               <span className={`text-[9px] block mt-0.5 ${isPriceCustomized ? 'text-amber-600' : 'text-emerald-600'}`}>
                 {isPriceCustomized ? 'Personalizado' : 'Conforme sugestão'}
@@ -619,12 +629,12 @@ export const ServiceBillingConfigPanel: React.FC<ServiceBillingConfigPanelProps>
             <div className="flex items-center gap-1.5 text-emerald-900 font-medium">
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
               <span>
-                Valor médio por aula: <strong className="text-emerald-700">{formatBRL(calcResult.averagePricePerSession)}</strong>, considerando {calcResult.referenceSessionsCount} aulas de referência.
+                Valor médio por aula: <strong className="text-emerald-700">{formatBRL(displayCalc.averagePricePerSession)}</strong>, considerando {displayCalc.referenceSessionsCount} aulas de referência.
               </span>
             </div>
-            {calcResult.discountPercent && calcResult.discountPercent > 0 ? (
+            {displayCalc.discountPercent && displayCalc.discountPercent > 0 ? (
               <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-md">
-                Economia de {calcResult.discountPercent.toLocaleString('pt-BR')}% no plano
+                Economia de {displayCalc.discountPercent.toLocaleString('pt-BR')}% no plano
               </span>
             ) : null}
           </div>

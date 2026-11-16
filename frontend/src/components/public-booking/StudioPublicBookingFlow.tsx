@@ -1,3 +1,6 @@
+import { readFrequencyPricing, supportsFrequencyPricing, offeredWeeklyMeetings, countMeetingOccurrences } from '../../utils/studioFrequencyPricing';
+import { calculateStudioRecurringPrice, computeBillingCycleEndDate, getCycleMonthsForBillingMode } from '../../utils/studioPricing';
+import { SERVICE_BILLING_MODE_OPTIONS } from '../../utils/establishmentContext';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Calendar,
@@ -106,6 +109,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
   const [linkedProfessionals, setLinkedProfessionals] = useState<any[]>([]);
   const [emptyReason, setEmptyReason] = useState<string>('');
   const [selectedSlot, setSelectedSlot] = useState<any | null>(null);
+  const [frequencyScheduleIds, setFrequencyScheduleIds] = useState<string[]>([]);
   const [useRecurrence, setUseRecurrence] = useState<boolean>(false);
   const [recurrenceFrequency, setRecurrenceFrequency] = useState<RecurrenceFrequency>('weekly');
   const [recurrenceIntervalValue, setRecurrenceIntervalValue] = useState<number>(3);
@@ -161,6 +165,28 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
     () => services.find(s => s.id === selectedServiceId) || null,
     [services, selectedServiceId]
   );
+
+  const frequencyConfig = readFrequencyPricing(selectedService?.frequency_pricing);
+  const frequencyPlanActive = Boolean(objective === 'service' && frequencyConfig?.enabled && supportsFrequencyPricing(selectedService?.billing_mode) && useRecurrence && ['weekly', 'custom_weekdays'].includes(recurrenceFrequency));
+  const frequencyMeetings = useMemo(() => offeredWeeklyMeetings(selectedService?.class_schedules || []).filter(m => selectedProfFilter === 'any' || m.professionalId === selectedProfFilter), [selectedService, selectedProfFilter]);
+  useEffect(() => { setFrequencyScheduleIds(selectedSlot?.classScheduleId ? [selectedSlot.classScheduleId] : []); }, [selectedServiceId, selectedSlot]);
+  const frequencyEntries = useMemo(() => frequencyPlanActive ? frequencyMeetings.filter(m => frequencyScheduleIds.includes(m.id || '')).map(m => ({
+    classScheduleId: m.id, weekday: m.weekday, dayOfWeek: m.weekday, startTime: m.startTime, endTime: m.endTime, professionalId: m.professionalId, modality: selectedModality
+  })) : [], [frequencyPlanActive, frequencyMeetings, frequencyScheduleIds, selectedModality]);
+  const frequencyQuote = useMemo(() => {
+    if (!frequencyPlanActive || !frequencyEntries.length || !selectedSlot?.startTime) return null;
+    const start = selectedSlot.startTime.slice(0, 10);
+    const cycleEnd = computeBillingCycleEndDate(start, getCycleMonthsForBillingMode(selectedService.billing_mode) || 1)!;
+    const planEnd = recurrenceDurationCode === 'custom_date' ? recurrenceEndDate : recurrenceDurationCode === 'count'
+      ? recurrencePreview?.occurrences?.at(-1)?.date : resolvePlanDurationEndDate(start, recurrenceDurationCode);
+    const end = planEnd && planEnd < cycleEnd ? planEnd : cycleEnd;
+    const selectedMeetings = frequencyMeetings.filter(m => frequencyScheduleIds.includes(m.id || '') && (!recurrencePreview?.valid || !recurrencePreview.occurrences.length || recurrencePreview.occurrences.some(o => o.classScheduleId === m.id)));
+    return calculateStudioRecurringPrice({ serviceName: selectedService.name, sessionPrice: Number(selectedService.price),
+      weeklySessionsCount: Math.max(1, selectedMeetings.length), billingMode: selectedService.billing_mode, pricingRule: selectedService.pricing_rule,
+      frequencyPricing: frequencyConfig, scheduledSessionsCount: countMeetingOccurrences(selectedMeetings, start, end)
+    });
+  }, [frequencyPlanActive, frequencyEntries, selectedSlot, selectedService, frequencyConfig, recurrenceDurationCode, recurrenceEndDate, recurrencePreview, frequencyMeetings, frequencyScheduleIds]);
+  const frequencyPeriodLabel = SERVICE_BILLING_MODE_OPTIONS.find(o => o.value === selectedService?.billing_mode)?.label.toLowerCase();
 
   const selectedServiceRecurrence = useMemo(() => {
     const merged = slotRecurrenceMeta
@@ -226,7 +252,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
       return;
     }
 
-    if (recurrenceFrequency === 'custom_weekdays' && recurrenceWeekdays.length === 0) {
+    if (frequencyPlanActive ? frequencyEntries.length === 0 : recurrenceFrequency === 'custom_weekdays' && recurrenceWeekdays.length === 0) {
       setRecurrencePreview(null);
       setRecurrencePreviewError('Selecione ao menos um dia da semana para consultar as datas.');
       return;
@@ -271,11 +297,12 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
         recurrence: {
           frequency: activeFrequency,
           durationCode: recurrenceDurationCode,
-          seriesMode: 'cadence_duration',
+          seriesMode: frequencyPlanActive ? 'schedule_plan' : 'cadence_duration',
+          ...(frequencyPlanActive ? { scheduleEntries: frequencyEntries, weekdays: [...new Set(frequencyEntries.map(m => m.weekday))] } : {}),
           ...(activeFrequency === 'custom_interval'
             ? { intervalValue: recurrenceIntervalValue, intervalUnit: recurrenceIntervalUnit }
             : {}),
-          ...(activeFrequency === 'custom_weekdays' ? { weekdays: recurrenceWeekdays } : {}),
+          ...(!frequencyPlanActive && activeFrequency === 'custom_weekdays' ? { weekdays: recurrenceWeekdays } : {}),
           ...(effectiveEndMode === 'date'
             ? { endDate: effectiveEndDateStr }
             : { maxOccurrences: recurrenceCount })
@@ -318,7 +345,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
     recurrenceDurationCode,
     recurrenceIntervalValue,
     recurrenceIntervalUnit,
-    recurrenceWeekdays,
+    recurrenceWeekdays, frequencyPlanActive, frequencyEntries,
     recurrenceEndMode,
     recurrenceCount,
     recurrenceEndDate
@@ -631,11 +658,12 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                       recurrence: {
                         frequency: effectiveFreq,
                         durationCode: recurrenceDurationCode,
-                        seriesMode: 'cadence_duration',
+                        seriesMode: frequencyPlanActive ? 'schedule_plan' : 'cadence_duration',
+          ...(frequencyPlanActive ? { scheduleEntries: frequencyEntries, weekdays: [...new Set(frequencyEntries.map(m => m.weekday))] } : {}),
                         ...(effectiveFreq === 'custom_interval'
                           ? { intervalValue: recurrenceIntervalValue, intervalUnit: recurrenceIntervalUnit }
                           : {}),
-                        ...(effectiveFreq === 'custom_weekdays' && recurrenceWeekdays.length > 0
+                        ...(!frequencyPlanActive && effectiveFreq === 'custom_weekdays' && recurrenceWeekdays.length > 0
                           ? { weekdays: recurrenceWeekdays }
                           : {}),
                         ...(effectiveEndMode === 'date' && effectiveEndDateStr
@@ -1361,7 +1389,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                       </div>
                     </div>
                   )}
-                  {recurrenceFrequency === 'custom_weekdays' && (
+                  {!frequencyPlanActive && recurrenceFrequency === 'custom_weekdays' && (
                     <div className="flex flex-wrap gap-1.5">
                       {[
                         { v: 1, l: 'Seg' },
@@ -1392,6 +1420,16 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                       })}
                     </div>
                   )}
+                  {frequencyPlanActive && <div className="space-y-2 rounded-xl border border-teal-200 bg-white p-3">
+                    <p className="text-xs font-bold text-slate-800">Encontros semanais do plano</p>
+                    <p className="text-xs text-slate-600">Selecione os horários da grade. A disponibilidade de todas as datas será verificada abaixo.</p>
+                    {frequencyMeetings.map(meeting => <label key={meeting.id} className="flex items-center gap-2 text-xs text-slate-700">
+                      <input type="checkbox" checked={frequencyScheduleIds.includes(meeting.id || '')} onChange={event => setFrequencyScheduleIds(ids => event.target.checked ? [...ids, meeting.id!] : ids.filter(id => id !== meeting.id))} />
+                      {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'][meeting.weekday]} · {meeting.startTime}–{meeting.endTime} · {professionals.find(p => p.id === meeting.professionalId)?.name || 'Instrutor'}
+                    </label>)}
+                    {frequencyQuote && <p className="text-sm font-bold text-teal-800">{frequencyQuote.weeklySessionsCount}x por semana · {formatMoney(frequencyQuote.effectivePrice)} por período {frequencyPeriodLabel}</p>}
+                    <p className="text-xs text-slate-600">As aulas selecionadas serão cobertas pelo plano, sem cobrança avulsa por encontro. Um plano vigente aplicável mantém suas condições.</p>
+                  </div>}
                   <RecurrencePreviewBox
                     preview={recurrencePreview}
                     loading={loadingRecurrencePreview}
@@ -1407,7 +1445,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
             <button
               type="button"
               disabled={
-                !selectedSlot ||
+                !selectedSlot || (frequencyPlanActive && !frequencyEntries.length) ||
                 (useRecurrence &&
                   (loadingRecurrencePreview ||
                     Boolean(recurrencePreviewError) ||
@@ -1741,7 +1779,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
               <div className="space-y-2">
                 <div className="flex justify-between font-bold text-sm text-slate-900">
                   <span>{selectedService.name}</span>
-                  <span className="text-teal-700">{formatMoney(selectedService.price)}</span>
+                  <span className="text-teal-700">{formatMoney(frequencyQuote?.effectivePrice ?? selectedService.price)}{frequencyQuote ? ` / período ${frequencyPeriodLabel} · ${frequencyQuote.weeklySessionsCount}x por semana` : " / aula"}</span>
                 </div>
                 <p className="text-slate-700">
                   <strong>Instrutor:</strong> {selectedSlot.professionalName}

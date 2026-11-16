@@ -1,3 +1,4 @@
+import { readFrequencyPricing, supportsFrequencyPricing, offeredWeeklyMeetings, countMeetingOccurrences } from '../../utils/studioFrequencyPricing';
 import { bookingError } from '../../utils/booking-error';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { ApiClient } from '../../api/client';
@@ -698,7 +699,14 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
     return recurrenceWeekdays;
   }, [selectedScheduleEntriesPayload, recurrenceFrequency, recurrenceWeekdays, isRecurring, date]);
 
+  const enrollmentFrequencyPricing = isStudioTarget && currentTenant?.establishment_profile === 'studio' ? readFrequencyPricing(selectedServiceObj?.frequency_pricing) : null;
+  const frequencyPricingActive = Boolean(enrollmentFrequencyPricing?.enabled && supportsFrequencyPricing(enrollFrequency) && (!isRecurring || ['weekly', 'custom_weekdays'].includes(recurrenceFrequency)));
   const activeEnrollWeeklyCount = useMemo(() => {
+    if (frequencyPricingActive) {
+      if (!isRecurring) return 1;
+      if (recurrencePreview?.valid && recurrencePreview.occurrences.length) return new Set(recurrencePreview.occurrences.map(o => `${o.dayOfWeek}|${o.startTime.slice(11, 16)}|${o.professionalId}`)).size;
+      return Math.max(1, selectedScheduleEntriesPayload?.length || activeEnrollWeekdays.length || 1);
+    }
     if (selectedScheduleEntriesPayload && selectedScheduleEntriesPayload.length > 0) {
       return Math.max(1, Math.min(7, selectedScheduleEntriesPayload.length));
     }
@@ -706,7 +714,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
       return Math.max(1, Math.min(7, activeEnrollWeekdays.length));
     }
     return Math.max(1, Math.min(7, Number(selectedServiceObj?.weekly_sessions_count) || 1));
-  }, [selectedScheduleEntriesPayload, activeEnrollWeekdays, selectedServiceObj]);
+  }, [selectedScheduleEntriesPayload, activeEnrollWeekdays, selectedServiceObj, frequencyPricingActive, isRecurring, recurrencePreview]);
 
   const suggestedEnrollCalculation = useMemo(() => {
     if (!selectedServiceObj || !isStudioTarget) return null;
@@ -730,10 +738,19 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
       }
     }
 
+    if (frequencyPricingActive && rule === 'scheduled_sessions') {
+      const cycleEnd = computeBillingCycleEndDate(startRef, getCycleMonthsForBillingMode(enrollFrequency) || 1);
+      const planEnd = isRecurring ? (recurrenceDurationCode === 'custom_date' ? recurrenceEndDate : recurrenceDurationCode === 'count' ? recurrencePreview?.occurrences?.at(-1)?.date : resolvePlanDurationEndDate(startRef, recurrenceDurationCode)) : enrollEndDate;
+      const end = cycleEnd && planEnd && planEnd < cycleEnd ? planEnd : cycleEnd;
+      const meetings = offeredWeeklyMeetings(activeServiceClassSchedules).filter(m => isRecurring ? (selectedScheduleIds.includes(m.id || '') && (!recurrencePreview?.valid || !recurrencePreview.occurrences.length || recurrencePreview.occurrences.some(o => o.classScheduleId === m.id))) : m.weekday === new Date(`${startRef}T12:00:00Z`).getUTCDay() && m.startTime === (selectedSlot?.time || customTime).slice(0, 5) && m.professionalId === professionalId);
+      if (end && meetings.length) scheduledCountForRule = countMeetingOccurrences(meetings, startRef, end);
+    }
+
     return calculateStudioRecurringPrice({
       serviceName: selectedServiceObj.name,
       sessionPrice,
       weeklySessionsCount: activeEnrollWeeklyCount,
+      frequencyPricing: frequencyPricingActive ? enrollmentFrequencyPricing : null,
       billingMode: enrollFrequency as any,
       pricingRule: rule,
       customPrice: parsedEnrollAmount,
@@ -756,23 +773,24 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
     date,
     todayBrazilStr,
     enrollCustomEndDate,
-    recurrencePreview?.totalCount
+    recurrencePreview?.totalCount, frequencyPricingActive, enrollmentFrequencyPricing, activeServiceClassSchedules, selectedScheduleIds, isRecurring, selectedSlot, customTime, professionalId, recurrenceDurationCode, recurrenceEndDate, enrollEndDate
   ]);
 
   useEffect(() => {
-    if (!isStudioTarget || billingChoice !== 'enroll_periodic' || isEnrollAmountCustomized || !suggestedEnrollCalculation) {
+    if (!isStudioTarget || billingChoice !== 'enroll_periodic' || (isEnrollAmountCustomized && !frequencyPricingActive) || !suggestedEnrollCalculation) {
       return;
     }
-    const nextFormatted = suggestedEnrollCalculation.suggestedPrice.toFixed(2);
+    const total = frequencyPricingActive ? suggestedEnrollCalculation.effectivePrice : suggestedEnrollCalculation.suggestedPrice;
+    const nextFormatted = total.toFixed(2);
     const currentParsed = parseAppointmentPrice(enrollAmount);
-    if (currentParsed === null || Math.abs(currentParsed - suggestedEnrollCalculation.suggestedPrice) > 0.01) {
+    if (currentParsed === null || Math.abs(currentParsed - total) > 0.01) {
       setEnrollAmount(nextFormatted);
     }
   }, [
     isStudioTarget,
     billingChoice,
     isEnrollAmountCustomized,
-    suggestedEnrollCalculation?.suggestedPrice
+    suggestedEnrollCalculation?.suggestedPrice, suggestedEnrollCalculation?.effectivePrice, frequencyPricingActive
   ]);
 
   useEffect(() => {
@@ -1737,6 +1755,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                         type="text"
                         inputMode="decimal"
                         value={enrollAmount}
+                            readOnly={frequencyPricingActive}
                         onChange={e => {
                           if (/^[\d.,]*$/.test(e.target.value)) {
                             setEnrollAmount(e.target.value);
@@ -1748,7 +1767,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                           isEnrollAmountCustomized ? 'border-amber-400 focus:ring-1 focus:ring-amber-400' : 'border-emerald-200 focus:ring-1 focus:ring-emerald-500'
                         }`}
                       />
-                      {isEnrollAmountCustomized && suggestedEnrollCalculation && (
+                      {!frequencyPricingActive && isEnrollAmountCustomized && suggestedEnrollCalculation && (
                         <div className="flex justify-end mt-0.5">
                           <button
                             type="button"
@@ -1777,6 +1796,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                     </div>
                   </div>
 
+                  {frequencyPricingActive && <p className="text-xs text-emerald-800">Preço da tabela para {activeEnrollWeeklyCount}x por semana. As aulas do plano não geram cobranças avulsas.</p>}
                   {suggestedEnrollCalculation && (
                     <div className="p-2 rounded-lg bg-emerald-50/80 border border-emerald-200/90 text-[11px] text-emerald-950 flex flex-wrap items-center justify-between gap-1.5">
                       <div className="flex items-center gap-1.5">

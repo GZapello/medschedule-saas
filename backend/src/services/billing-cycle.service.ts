@@ -1,3 +1,4 @@
+import { quoteFrequencyPlan, PricedSessionSlot } from './frequency-pricing.service';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import {
@@ -762,6 +763,8 @@ export class BillingCycleService {
     professionalId: string;
     serviceRow: any;
     sessionDates: string[];
+    sessionSlots?: PricedSessionSlot[];
+    cadence?: string;
     packageContractId?: string | null;
     billingPlanId?: string | null;
     billingChoice?: unknown;
@@ -889,12 +892,12 @@ export class BillingCycleService {
       const pricingRuleRaw = String(params.enrollBillingPlan.pricingRule || params.serviceRow?.pricing_rule || 'four_weeks').trim().toLowerCase();
       const pricingRuleResolved: StudioPricingRule =
         pricingRuleRaw === 'annual_average' || pricingRuleRaw === 'scheduled_sessions' ? pricingRuleRaw : 'four_weeks';
-      const weeklySnapResolved = Math.max(
+      let weeklySnapResolved = Math.max(
         1,
         Math.min(7, Math.floor(Number(params.enrollBillingPlan.weeklySessionsCount || params.enrollBillingPlan.weeklyFrequency || params.serviceRow?.weekly_sessions_count) || 1))
       );
 
-      const pricingCalc = calculateStudioRecurringPrice({
+      let pricingCalc = calculateStudioRecurringPrice({
         serviceName: params.serviceRow?.name || 'Serviço',
         sessionPrice: Number(params.serviceRow?.price || 0),
         weeklySessionsCount: weeklySnapResolved,
@@ -906,12 +909,26 @@ export class BillingCycleService {
         endDate: billingCustomEndDate || endDate || undefined
       });
 
+      let frequencyQuote;
+      try {
+        frequencyQuote = quoteFrequencyPlan({
+          tenantId: params.tenantId, serviceId: params.serviceId, billingFrequency: frequency,
+          slots: params.sessionSlots || [], startDate, endDate, cadence: params.cadence
+        });
+      } catch (error: any) {
+        return { mode: 'drop_in', isPackageCovered: false, billingPlanId: null, status: 400, code: error.code, error: error.message };
+      }
+      if (frequencyQuote) {
+        weeklySnapResolved = frequencyQuote.weeklyCount;
+        pricingCalc = frequencyQuote.calculation;
+      }
+
       const hasExplicitAmount =
         params.enrollBillingPlan.amount !== undefined &&
         params.enrollBillingPlan.amount !== null &&
         String(params.enrollBillingPlan.amount).trim() !== '';
 
-      const rawAmount = hasExplicitAmount
+      const rawAmount = frequencyQuote ? frequencyQuote.calculation.effectivePrice : hasExplicitAmount
         ? Number(params.enrollBillingPlan.amount)
         : (params.serviceRow?.billing_mode === frequency && Number(params.serviceRow?.periodic_price) > 0
             ? Number(params.serviceRow.periodic_price)
@@ -1004,16 +1021,16 @@ export class BillingCycleService {
           professionalId: params.professionalId,
           seriesId: params.enrollBillingPlan.seriesId || null,
           classScheduleId: params.enrollBillingPlan.classScheduleId || null,
-          scheduleRules: params.enrollBillingPlan.scheduleRules ?? null,
+          scheduleRules: frequencyQuote?.meetings ?? params.enrollBillingPlan.scheduleRules ?? null,
           planDurationCode: params.enrollBillingPlan.planDurationCode || null,
-          weeklyFrequency: params.enrollBillingPlan.weeklyFrequency ?? null,
+          weeklyFrequency: frequencyQuote?.weeklyCount ?? params.enrollBillingPlan.weeklyFrequency ?? null,
           includedSessions: resolvedIncludedSessions,
           billingChargesCount: frequency === 'custom_date' || frequency === 'count' ? parsedChargesCount : null,
           billingCustomEndDate: frequency === 'custom_date' ? billingCustomEndDate : null,
-          pricingRuleSnapshot: pricingRuleResolved,
+          pricingRuleSnapshot: frequencyQuote?.pricingRule || pricingRuleResolved,
           weeklySessionsSnapshot: weeklySnapResolved,
           referenceSessionsCount:
-            params.enrollBillingPlan.referenceSessionsCount && Number(params.enrollBillingPlan.referenceSessionsCount) > 0
+            !frequencyQuote && params.enrollBillingPlan.referenceSessionsCount && Number(params.enrollBillingPlan.referenceSessionsCount) > 0
               ? Math.floor(Number(params.enrollBillingPlan.referenceSessionsCount))
               : pricingCalc.referenceSessionsCount,
           title,

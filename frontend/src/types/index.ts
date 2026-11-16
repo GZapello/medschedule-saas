@@ -204,6 +204,7 @@ export interface StaffMember {
 }
 
 export interface Service {
+  frequency_pricing?: import('../utils/studioFrequencyPricing').FrequencyPricing | null;
   id: string;
   tenant_id: string;
   professional_id?: string;

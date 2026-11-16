@@ -1,3 +1,4 @@
+import { FrequencyPricing, emptyFrequencyPricing, readFrequencyPricing, offeredWeeklyMeetings, supportsFrequencyPricing } from '../../utils/studioFrequencyPricing';
 import React, { useState, useEffect, useMemo } from 'react';
 import { X, Plus, Edit3, Loader2, Users } from 'lucide-react';
 import { ApiClient } from '../../api/client';
@@ -75,6 +76,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
   const [pricingRule, setPricingRule] = useState<StudioPricingRule>('four_weeks');
   const [isPriceCustomized, setIsPriceCustomized] = useState<boolean>(false);
   const [suggestedPrice, setSuggestedPrice] = useState<number | null>(null);
+  const [frequencyPricing, setFrequencyPricing] = useState<FrequencyPricing>(emptyFrequencyPricing);
   const [weeklySessionsCount, setWeeklySessionsCount] = useState<number>(1);
   const [includedSessionsCount, setIncludedSessionsCount] = useState<number>(8);
   const [defaultPackageId, setDefaultPackageId] = useState<string>('');
@@ -83,6 +85,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
   const [linkedTemplateIds, setLinkedTemplateIds] = useState<string[]>([]);
   const [availablePackages, setAvailablePackages] = useState<ServicePackageOption[]>([]);
   const [description, setDescription] = useState<string>('');
+  const [savedSchedules, setSavedSchedules] = useState<any[]>([]);
   const [draftSchedules, setDraftSchedules] = useState<DraftClassScheduleInput[]>([]);
   const [hasPendingScheduleForm, setHasPendingScheduleForm] = useState<boolean>(false);
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -137,7 +140,9 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
         setPricingRule(((serviceToEdit as any).pricing_rule || 'four_weeks') as StudioPricingRule);
         setIsPriceCustomized(Boolean((serviceToEdit as any).is_price_customized));
         setSuggestedPrice((serviceToEdit as any).suggested_price ?? null);
+        setSavedSchedules(serviceToEdit.class_schedules || []);
         setWeeklySessionsCount(Number((serviceToEdit as any).weekly_sessions_count) || 1);
+        setFrequencyPricing(readFrequencyPricing(serviceToEdit.frequency_pricing) || emptyFrequencyPricing());
         setIncludedSessionsCount(8);
         setDefaultPackageId(serviceToEdit.default_package_id || '');
         setDefaultBillingDueDay(serviceToEdit.default_billing_due_day !== undefined && serviceToEdit.default_billing_due_day !== null ? String(serviceToEdit.default_billing_due_day) : '');
@@ -172,6 +177,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
         setIsPriceCustomized(false);
         setSuggestedPrice(null);
         setWeeklySessionsCount(1);
+      setFrequencyPricing(emptyFrequencyPricing());
         setIncludedSessionsCount(8);
         setDefaultPackageId('');
         setDefaultBillingDueDay('');
@@ -284,6 +290,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
               isPriceCustomized: isPeriodicSave ? isPriceCustomized : undefined,
               suggestedPrice: isPeriodicSave ? suggestedPrice : undefined,
               weeklySessionsCount: isPeriodicSave ? weeklySessionsCount : undefined,
+              ...(isPureStudio && (frequencyPricing.enabled || Object.keys(frequencyPricing.tables).length > 0) ? { frequencyPricing: { ...frequencyPricing, enabled: frequencyPricing.enabled && effectiveKind === 'group' && supportsFrequencyPricing(billingMode) } } : {}),
               defaultPackageId: billingMode === 'package' && defaultPackageId ? defaultPackageId : null,
               defaultBillingDueDay: isPeriodicSave && defaultBillingDueDay.trim() !== '' ? Number(defaultBillingDueDay) : null,
               defaultTemplateId: defaultTemplateId || null,
@@ -540,6 +547,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
                   rooms={rooms}
                   draftSchedules={draftSchedules}
                   onDraftSchedulesChange={setDraftSchedules}
+                  onSchedulesChanged={setSavedSchedules}
                   onFormOpenChange={setHasPendingScheduleForm}
                 />
               )}
@@ -571,6 +579,9 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
                 isPriceCustomized={isPriceCustomized}
                 suggestedPrice={suggestedPrice}
                 weeklySessionsCount={weeklySessionsCount}
+                allowFrequencyPricing={isPureStudio && serviceKind === 'group'}
+                frequencyPricing={frequencyPricing} onFrequencyPricingChange={setFrequencyPricing}
+                offeredWeeklySessions={offeredWeeklyMeetings(isEditing && serviceToEdit?.service_kind === 'group' ? savedSchedules : draftSchedules).length}
                 includedSessionsCount={includedSessionsCount}
                 defaultPackageId={defaultPackageId}
                 defaultBillingDueDay={defaultBillingDueDay}

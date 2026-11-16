@@ -569,6 +569,7 @@ export function migrateStudioImprovements(rawDb: DatabaseSync): void {
   addColIfMissing('services', 'is_price_customized', 'INTEGER DEFAULT 0');
   addColIfMissing('services', 'suggested_price', 'REAL');
   addColIfMissing('services', 'weekly_sessions_count', 'INTEGER DEFAULT 1');
+  addColIfMissing('services', 'frequency_pricing_json', 'TEXT');
 
   addColIfMissing('recurring_billing_plans', 'billing_frequency', `TEXT NOT NULL DEFAULT 'monthly'`);
   addColIfMissing('recurring_billing_plans', 'cycle_months', 'INTEGER NOT NULL DEFAULT 1');

@@ -1,3 +1,4 @@
+import { FrequencyPricing, frequencyPriceCents, supportsFrequencyPricing } from './studio-frequency-pricing';
 /**
  * studio-pricing.ts
  * Cálculo automático de valores de planos e cobranças recorrentes no Zemda Studio.
@@ -26,6 +27,7 @@ export type ServiceBillingMode =
 
 export interface StudioPricingCalculationInput {
   sessionPrice: number;
+  frequencyPricing?: FrequencyPricing | null;
   weeklySessionsCount?: number;
   billingMode: ServiceBillingMode;
   pricingRule?: StudioPricingRule;
@@ -124,9 +126,13 @@ export function countWeekdayOccurrencesBetweenDates(
 export function calculateStudioRecurringPrice(
   input: StudioPricingCalculationInput
 ): StudioPricingCalculationResult {
-  const rawSessionPrice = Number(input.sessionPrice);
+  const frequencyPricingActive = Boolean(input.frequencyPricing?.enabled && supportsFrequencyPricing(input.billingMode));
+  const selectedWeeklyCount = Math.max(1, Math.floor(Number(input.weeklySessionsCount) || 1));
+  const frequencyCents = frequencyPriceCents(input.frequencyPricing, input.billingMode, selectedWeeklyCount);
+  const frequencySessionPrice = frequencyPricingActive && input.frequencyPricing?.unit === 'per_session' && frequencyCents !== undefined;
+  const rawSessionPrice = frequencySessionPrice ? frequencyCents! / 100 : Number(input.sessionPrice);
   const sessionPrice = Number.isFinite(rawSessionPrice) && rawSessionPrice > 0 ? rawSessionPrice : 0;
-  const weeklySessions = Math.max(1, Math.min(7, Math.floor(Number(input.weeklySessionsCount) || 1)));
+  const weeklySessions = frequencyPricingActive ? selectedWeeklyCount : Math.min(7, selectedWeeklyCount);
   const pricingRule: StudioPricingRule =
     input.pricingRule === 'annual_average' || input.pricingRule === 'scheduled_sessions'
       ? input.pricingRule
@@ -208,7 +214,10 @@ export function calculateStudioRecurringPrice(
     }
   }
 
-  const effectivePrice = isPriceCustomized && numCustomPrice !== null ? numCustomPrice : suggestedPrice;
+  if (frequencyPricingActive) isPriceCustomized = frequencyCents !== undefined;
+  const effectivePrice = frequencyPricingActive
+    ? (input.frequencyPricing?.unit === 'per_period' && frequencyCents !== undefined ? frequencyCents / 100 : suggestedPrice)
+    : (isPriceCustomized && numCustomPrice !== null ? numCustomPrice : suggestedPrice);
 
   const averagePricePerSession = referenceSessionsCount > 0
     ? Math.round((effectivePrice / referenceSessionsCount) * 100) / 100
