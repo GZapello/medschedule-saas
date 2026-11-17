@@ -1360,7 +1360,40 @@ const AppContent: React.FC = () => {
       return <BillingView onBack={() => handleNavigateView('dashboard')} />;
     }
   }
+  const canAccessSubscription =
+    isClinicAdmin ||
+    (isSuperAdmin && !isSandboxSession) ||
+    Boolean((currentUser as any)?.isManager || (currentUser as any)?.is_manager === 1) ||
+    hasPermission('manage_subscription');
   if (currentView === 'subscription' || window.location.pathname === '/assinatura') {
+    if (!canAccessSubscription) {
+      return (
+        <div className="min-h-screen bg-[#fafbfc] flex items-center justify-center p-6">
+          <div className="max-w-md w-full bg-white rounded-3xl border border-slate-200 p-8 shadow-xs text-center space-y-4">
+            <h2 className="text-lg font-bold text-slate-900">Acesso Restrito à Assinatura</h2>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Você não possui permissão para visualizar ou gerenciar os dados de assinatura e cobrança da clínica.
+            </p>
+            <div className="flex items-center justify-center gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => handleNavigateView('settings', null, false)}
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
+              >
+                Ir para Configurações
+              </button>
+              <button
+                type="button"
+                onClick={() => handleNavigateView('dashboard')}
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-colors cursor-pointer"
+              >
+                Voltar ao Início
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
     return <BillingView onBack={() => handleNavigateView('dashboard')} />;
   }
 

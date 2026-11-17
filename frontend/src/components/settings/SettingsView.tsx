@@ -56,7 +56,9 @@ import {
   X,
   RefreshCw,
   FlaskConical,
-  RotateCcw
+  RotateCcw,
+  UserRoundCog,
+  ArrowLeftRight
 } from 'lucide-react';
 import { Professional, Profession } from '../../types';
 
@@ -85,11 +87,76 @@ export interface SettingsViewProps {
   onNavigateView?: (view: string, subId?: string | null, forceOrTab?: boolean | string, tab?: string) => void;
 }
 
+type AccountTab = 'profile' | 'professional' | 'connected_accounts' | 'privacy' | 'billing';
+type DataTransferTab = 'import' | 'export';
+
 export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, initialTab, onNavigateView }) => {
-  const { currentUser, currentTenant, isClinicAdmin, isReceptionist, isProfessional, isSandboxSession, exitSandboxSession, refreshTenant, reloadSession, hasPermission } = useAuth();
+  const { currentUser, currentTenant, isClinicAdmin, isReceptionist, isProfessional, isSuperAdmin, isSandboxSession, exitSandboxSession, refreshTenant, reloadSession, hasPermission } = useAuth();
   const { showToast } = useToast();
   const [showSandboxResetModal, setShowSandboxResetModal] = useState(false);
   const [isResettingSandbox, setIsResettingSandbox] = useState(false);
+
+  const canImportData = isClinicAdmin || hasPermission('can_import_data');
+  const canExportData = isClinicAdmin || isProfessional || hasPermission('can_export_records');
+  const canAccessDataTransfer = canImportData || canExportData;
+  const canAccessGoogleCalendar = !isReceptionist && (isProfessional || isClinicAdmin);
+  const canAccessSubscription =
+    isClinicAdmin ||
+    (isSuperAdmin && !isSandboxSession) ||
+    Boolean((currentUser as any)?.isManager || (currentUser as any)?.is_manager === 1) ||
+    hasPermission('manage_subscription');
+  const canShowProfessionalProfile = !isReceptionist || Boolean(currentUser?.professionalId);
+
+  const resolveSectionAndTabs = (section?: string, tab?: string): {
+    section: string;
+    accountTab?: AccountTab;
+    dataTransferTab?: DataTransferTab;
+  } => {
+    if (!section) return { section: 'hub' };
+    if (['team', 'professionals', 'staff', 'schedules', 'work-schedules'].includes(section)) return { section: 'team' };
+    if (section === 'services') return { section: 'services' };
+    if (['financial', 'comissoes', 'payroll'].includes(section)) return { section: 'financial' };
+    if (['clinic', 'clinica'].includes(section)) return { section: 'clinic' };
+    if (section === 'sandbox_lab') return { section: 'sandbox_lab' };
+
+    if (['resources', 'my-resources', 'profile_professional'].includes(section)) {
+      return { section: 'account', accountTab: canShowProfessionalProfile ? 'professional' : 'profile' };
+    }
+    if (['integrations', 'integracoes', 'google-calendar'].includes(section)) {
+      return { section: 'account', accountTab: canAccessGoogleCalendar ? 'connected_accounts' : 'profile' };
+    }
+    if (['legal', 'privacidade'].includes(section)) {
+      return { section: 'account', accountTab: 'privacy' };
+    }
+    if (['billing', 'assinatura'].includes(section)) {
+      return { section: 'account', accountTab: canAccessSubscription ? 'billing' : 'profile' };
+    }
+    if (['account', 'profile', 'minha-conta'].includes(section)) {
+      let resolvedAccountTab: AccountTab = 'profile';
+      if (tab === 'legal' || tab === 'privacy') resolvedAccountTab = 'privacy';
+      else if ((tab === 'professional' || tab === 'resources') && canShowProfessionalProfile) resolvedAccountTab = 'professional';
+      else if ((tab === 'connected_accounts' || tab === 'integrations') && canAccessGoogleCalendar) resolvedAccountTab = 'connected_accounts';
+      else if (tab === 'billing' && canAccessSubscription) resolvedAccountTab = 'billing';
+      return { section: 'account', accountTab: resolvedAccountTab };
+    }
+
+    if (['import', 'importar-dados'].includes(section)) {
+      if (!canAccessDataTransfer) return { section: 'hub' };
+      return { section: 'data_transfer', dataTransferTab: canImportData ? 'import' : 'export' };
+    }
+    if (['export', 'export_clinical', 'exportar-prontuarios'].includes(section)) {
+      if (!canAccessDataTransfer) return { section: 'hub' };
+      return { section: 'data_transfer', dataTransferTab: canExportData ? 'export' : 'import' };
+    }
+    if (section === 'data_transfer') {
+      if (!canAccessDataTransfer) return { section: 'hub' };
+      const resolvedTransferTab: DataTransferTab =
+        tab === 'export' && canExportData ? 'export' : (canImportData ? 'import' : 'export');
+      return { section: 'data_transfer', dataTransferTab: resolvedTransferTab };
+    }
+
+    return { section: 'hub' };
+  };
 
   const handleConfirmSandboxReset = async () => {
     try {
@@ -107,47 +174,38 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, init
     }
   };
 
-  const [activeSection, setActiveSection] = useState<string>(() => {
-    if (initialSection) {
-      if (['team', 'professionals', 'staff', 'schedules', 'work-schedules'].includes(initialSection)) return 'team';
-      if (initialSection === 'services') return 'services';
-      if (['resources', 'my-resources'].includes(initialSection)) return 'profile_professional';
-      if (['import', 'importar-dados'].includes(initialSection)) return 'import';
-      if (['export', 'export_clinical', 'exportar-prontuarios'].includes(initialSection)) return 'export_clinical';
-      if (['financial', 'comissoes', 'payroll'].includes(initialSection)) return 'financial';
-      if (['billing', 'assinatura'].includes(initialSection)) return 'billing';
-      if (['clinic', 'clinica'].includes(initialSection)) return 'clinic';
-      if (['account', 'profile', 'minha-conta'].includes(initialSection)) return 'account';
-      if (['legal', 'privacidade'].includes(initialSection)) return 'legal';
-      if (['integrations', 'integracoes', 'google-calendar'].includes(initialSection)) return 'integrations';
-      if (initialSection === 'my_booking') return 'hub';
-    }
-    return 'hub';
-  });
+  const initialResolved = resolveSectionAndTabs(initialSection, initialTab);
+  const [activeSection, setActiveSection] = useState<string>(initialResolved.section);
+  const [accountTab, setAccountTab] = useState<AccountTab>(initialResolved.accountTab || 'profile');
+  const [dataTransferTab, setDataTransferTab] = useState<DataTransferTab>(
+    initialResolved.dataTransferTab || (canImportData ? 'import' : 'export')
+  );
 
   const [hubSearchTerm, setHubSearchTerm] = useState<string>('');
   const [showClinicalExportModal, setShowClinicalExportModal] = useState<boolean>(false);
 
   useEffect(() => {
     if (initialSection) {
-      if (['team', 'professionals', 'staff', 'schedules', 'work-schedules'].includes(initialSection)) setActiveSection('team');
-      else if (initialSection === 'services') setActiveSection('services');
-      else if (['resources', 'my-resources'].includes(initialSection)) setActiveSection('profile_professional');
-      else if (['import', 'importar-dados'].includes(initialSection)) setActiveSection('import');
-      else if (['export', 'export_clinical', 'exportar-prontuarios'].includes(initialSection)) setActiveSection('export_clinical');
-      else if (['financial', 'comissoes', 'payroll'].includes(initialSection)) setActiveSection('financial');
-      else if (['billing', 'assinatura'].includes(initialSection)) setActiveSection('billing');
-      else if (['clinic', 'clinica'].includes(initialSection)) setActiveSection('clinic');
-      else if (['account', 'profile', 'minha-conta'].includes(initialSection)) setActiveSection('account');
-      else if (['legal', 'privacidade'].includes(initialSection)) setActiveSection('legal');
-      else if (['integrations', 'integracoes', 'google-calendar'].includes(initialSection)) setActiveSection('integrations');
-      else if (initialSection === 'my_booking') {
+      if (initialSection === 'my_booking') {
         setActiveSection('hub');
         window.dispatchEvent(new CustomEvent('zemda-open-help-booking'));
+        return;
       }
-      else if (initialSection === 'hub') setActiveSection('hub');
+      const resolved = resolveSectionAndTabs(initialSection, initialTab);
+      setActiveSection(resolved.section);
+      if (resolved.accountTab) setAccountTab(resolved.accountTab);
+      if (resolved.dataTransferTab) setDataTransferTab(resolved.dataTransferTab);
     }
-  }, [initialSection]);
+  }, [
+    initialSection,
+    initialTab,
+    canAccessSubscription,
+    canAccessGoogleCalendar,
+    canShowProfessionalProfile,
+    canAccessDataTransfer,
+    canImportData,
+    canExportData
+  ]);
   useAndroidSectionBack(activeSection !== 'hub', () => setActiveSection('hub'));
 
   const [activeTab, setActiveTab] = useState<'clinic' | 'document_templates' | 'insurances' | 'profile' | 'billing' | 'legal'>(
@@ -780,15 +838,42 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, init
     }
   };
 
-  const exportCard = {
-    id: 'export_clinical',
-    title: 'Exportação de Prontuários & Documentos',
-    desc: 'Exporte prontuários clínicos completos com histórico 360°, laudos e especialidades em Word (.docx Oficial), PDF, JSON ou ZIP.',
-    icon: Download,
+  const accountCard = {
+    id: 'account',
+    title: 'Minha Conta',
+    desc: 'Gerencie seus dados pessoais, perfil profissional, segurança, contas conectadas e assinatura.',
+    icon: UserRoundCog,
     iconBg: 'bg-indigo-50',
     iconColor: 'text-indigo-600',
-    tags: ['DOCX Oficial', 'PDF', 'JSON', 'Prontuário 360°'],
-    defaultTab: 'export_clinical'
+    tags: [
+      'Perfil',
+      'Segurança',
+      ...(canAccessGoogleCalendar ? ['Integrações'] : []),
+      ...(canAccessSubscription ? ['Assinatura'] : ['LGPD'])
+    ],
+    searchKeywords: [
+      'conta segurança e-mail email senha perfil profissional conselho registro especialidades profissão',
+      canAccessGoogleCalendar ? 'google agenda meet contas conectadas integrações sincronização' : '',
+      'privacidade lgpd termos cookies dpo',
+      canAccessSubscription ? 'assinatura plano ativo faturas upgrade limites' : ''
+    ].filter(Boolean).join(' ')
+  };
+
+  const dataTransferCard = {
+    id: 'data_transfer',
+    title: 'Importação & Exportação',
+    desc: 'Importe dados de pacientes e agendas ou exporte prontuários e documentos clínicos em múltiplos formatos.',
+    icon: ArrowLeftRight,
+    iconBg: 'bg-amber-50',
+    iconColor: 'text-amber-600',
+    tags: [
+      ...(canImportData ? ['Importar', 'Planilhas'] : []),
+      ...(canExportData ? ['Exportar', 'Prontuários'] : [])
+    ],
+    searchKeywords: [
+      canImportData ? 'importação importar dados planilhas excel csv docx fotos pacientes agendamentos migração' : '',
+      canExportData ? 'exportação exportar prontuários documentos clínicos word docx oficial pdf json zip histórico 360 laudos' : ''
+    ].filter(Boolean).join(' ')
   };
 
   const adminCards = [
@@ -829,112 +914,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, init
       iconColor: 'text-emerald-600',
       tags: ['Comissões', 'Repasses', 'Folha']
     },
-    {
-      id: 'import',
-      title: 'Importação de Dados',
-      desc: 'Importe dados de pacientes, agendamentos e prontuários a partir de planilhas Excel/CSV ou outros sistemas.',
-      icon: Upload,
-      iconBg: 'bg-amber-50',
-      iconColor: 'text-amber-600',
-      tags: ['Planilhas CSV', 'Pacientes', 'Migração']
-    },
-    exportCard,
-    {
-      id: 'account',
-      title: 'Conta & Segurança',
-      desc: 'E-mail de acesso, alteração de senha pessoal, conformidade LGPD, termos legais vigentes e cookies.',
-      icon: Shield,
-      iconBg: 'bg-slate-100',
-      iconColor: 'text-slate-700',
-      tags: ['Minha Conta', 'Senha', 'LGPD'],
-      defaultTab: 'profile'
-    },
-        {
-      id: 'billing',
-      title: 'Assinatura & Plano',
-      desc: 'Gerenciamento do plano ativo, limites de capacidade da clínica, faturas e opções de upgrade.',
-      icon: CreditCard,
-      iconBg: 'bg-rose-50',
-      iconColor: 'text-rose-600',
-      tags: ['Plano Ativo', 'Faturas', 'Limites']
-    }
+    accountCard,
+    ...(canAccessDataTransfer ? [dataTransferCard] : [])
   ];
 
   const staffCards = [
-    {
-      id: 'account',
-      title: 'Minha Conta',
-      desc: 'Dados pessoais cadastrados, e-mail de acesso e alteração de senha de segurança.',
-      icon: User,
-      iconBg: 'bg-indigo-50',
-      iconColor: 'text-indigo-600',
-      tags: ['E-mail', 'Senha', 'Segurança'],
-      defaultTab: 'profile'
-    },
-    {
-      id: 'profile_professional',
-      title: 'Perfil Profissional',
-      desc: 'Consulte e edite suas informações profissionais autorizadas, especialidades, registro e biografia.',
-      icon: Briefcase,
-      iconBg: 'bg-teal-50',
-      iconColor: 'text-teal-600',
-      tags: ['Registro', 'Bio', 'Especialidades']
-    },
-    {
-      id: 'legal',
-      title: 'Segurança & Privacidade (LGPD)',
-      desc: 'Termos de uso da plataforma, política de privacidade da LGPD e preferências de cookies.',
-      icon: ShieldCheck,
-      iconBg: 'bg-emerald-50',
-      iconColor: 'text-emerald-600',
-      tags: ['Termos', 'Privacidade', 'Cookies'],
-      defaultTab: 'legal'
-    }
+    accountCard,
+    ...(canAccessDataTransfer ? [dataTransferCard] : [])
   ];
 
-
-  const canImportData = isClinicAdmin || hasPermission('can_import_data');
-  const canExportData = isClinicAdmin || isProfessional || hasPermission('can_export_records');
-
-  const importCard = {
-    id: 'import',
-    title: 'Importação de Dados',
-    desc: 'Importe dados de pacientes, agendamentos e prontuários a partir de planilhas Excel/CSV, DOCX ou fotos.',
-    icon: Upload,
-    iconBg: 'bg-amber-50',
-    iconColor: 'text-amber-600',
-    tags: ['Planilhas', 'DOCX', 'Prontuários', 'Migração'],
-    defaultTab: 'import'
-  };
-
-  const staffCardsWithExport = canExportData
-    ? [...staffCards.slice(0, 2), exportCard, ...staffCards.slice(2)]
-    : staffCards;
-  const effectiveStaffCards = canImportData
-    ? [...staffCardsWithExport.slice(0, 2), importCard, ...staffCardsWithExport.slice(2)]
-    : staffCardsWithExport;
-
-  const cards = isClinicAdmin
-    ? (currentUser?.professionalId ? [
-        adminCards[0],
-        {
-          id: 'profile_professional',
-          title: 'Meu Perfil Profissional',
-          desc: 'Consulte suas informações profissionais autorizadas, especialidades, registro e corrija sua profissão.',
-          icon: Briefcase,
-          iconBg: 'bg-teal-50',
-          iconColor: 'text-teal-600',
-          tags: ['Registro', 'Bio', 'Especialidades', 'Profissão']
-        },
-        ...adminCards.slice(1)
-      ] : adminCards)
-    : effectiveStaffCards;
-
-  const googleCard = { id: 'integrations', title: 'Google Agenda e Meet', desc: 'Conecte sua agenda, configure a sincronização e gerencie o acesso à sua conta Google.', icon: Calendar, iconBg: 'bg-indigo-50', iconColor: 'text-indigo-600', tags: ['Google', 'Integrações', 'Meet'] };
-  const canAccessGoogleCalendar = !isReceptionist && (isProfessional || isClinicAdmin);
-  if (canAccessGoogleCalendar) {
-    cards.push(googleCard);
-  }
   const sandboxLabCard = {
     id: 'sandbox_lab',
     title: 'Laboratório de Testes',
@@ -944,19 +932,33 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, init
     iconColor: 'text-purple-700',
     tags: ['Sandbox', 'Reset Seguro', 'Dados de Teste']
   };
-  if (isSandboxSession && isClinicAdmin) {
-    cards.push(sandboxLabCard);
-  }
+
+  const cards = [
+    ...(isClinicAdmin ? adminCards : staffCards),
+    ...(isSandboxSession && isClinicAdmin ? [sandboxLabCard] : [])
+  ];
+
   const getSectionTitle = (sec: string) => {
-    const found = [
-      ...adminCards,
-      ...staffCards,
-      importCard,
-      ...(canAccessGoogleCalendar ? [googleCard] : []),
-      ...(isSandboxSession && isClinicAdmin ? [sandboxLabCard] : [])
-    ].find(c => c.id === sec);
-    return found ? found.title : 'Configurações';
+    const found = cards.find(c => c.id === sec);
+    if (found) return found.title;
+    if (['account', 'profile', 'profile_professional', 'integrations', 'legal', 'billing'].includes(sec)) return 'Minha Conta';
+    if (['data_transfer', 'import', 'export_clinical'].includes(sec)) return 'Importação & Exportação';
+    if (sec === 'sandbox_lab') return 'Laboratório de Testes';
+    return 'Configurações';
   };
+
+  const effectiveAccountTab: AccountTab = (() => {
+    if (accountTab === 'billing') return canAccessSubscription ? 'billing' : 'profile';
+    if (accountTab === 'connected_accounts') return canAccessGoogleCalendar ? 'connected_accounts' : 'profile';
+    if (accountTab === 'professional') return canShowProfessionalProfile ? 'professional' : 'profile';
+    if (accountTab === 'privacy') return 'privacy';
+    return 'profile';
+  })();
+
+  const effectiveDataTransferTab: DataTransferTab = (() => {
+    if (dataTransferTab === 'export') return canExportData ? 'export' : 'import';
+    return canImportData ? 'import' : 'export';
+  })();
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -1002,7 +1004,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, init
               .filter(card => {
                 if (!hubSearchTerm.trim()) return true;
                 const term = hubSearchTerm.toLowerCase();
-                return card.title.toLowerCase().includes(term) || card.desc.toLowerCase().includes(term) || card.tags.some(t => t.toLowerCase().includes(term));
+                return (
+                  card.title.toLowerCase().includes(term) ||
+                  card.desc.toLowerCase().includes(term) ||
+                  card.tags.some(t => t.toLowerCase().includes(term)) ||
+                  Boolean((card as any).searchKeywords?.toLowerCase().includes(term))
+                );
               })
               .map(card => (
                 <div
@@ -1013,11 +1020,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, init
                   onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.currentTarget.click(); } }}
                   data-tour={`settings-${card.id}`}
                   onClick={() => {
-                    if (card.id === 'export_clinical') {
-                      setShowClinicalExportModal(true);
-                      return;
-                    }
                     setActiveSection(card.id as any);
+                    if (card.id === 'account') {
+                      setAccountTab('profile');
+                    } else if (card.id === 'data_transfer') {
+                      setDataTransferTab(canImportData ? 'import' : 'export');
+                    }
                     if ((card as any).defaultTab) setActiveTab((card as any).defaultTab as any);
                   }}
                   className="bg-white rounded-3xl border border-slate-200 p-6 shadow-xs hover:shadow-md hover:border-indigo-300 transition-all cursor-pointer group flex flex-col justify-between gap-4"
@@ -1085,18 +1093,99 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, init
       )}
 
       {/* SEÇÃO: EQUIPE & ACESSOS (Unificação de Profissionais + Equipe + Escala) */}
-      {activeSection === 'integrations' && <GoogleCalendarSettings onBack={() => setActiveSection('hub')} />}
       {activeSection === 'team' && <UnifiedTeamManagement />}
 
       {/* SEÇÃO: AGENDA & OPERAÇÃO (Serviços e Salas) */}
       {activeSection === 'services' && <ServicesView />}
 
-      {/* SEÇÃO: IMPORTAÇÃO DE DADOS */}
-      {activeSection === 'import' && (
-        <ImportDataView
-          onNavigate={onNavigateView}
-          initialScannerMode={initialTab === 'medical-record' ? 'document' : null}
-        />
+      {/* SEÇÃO: IMPORTAÇÃO & EXPORTAÇÃO UNIFICADA */}
+      {activeSection === 'data_transfer' && canAccessDataTransfer && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-2xl text-xs font-bold flex-wrap">
+            {canImportData && (
+              <button
+                type="button"
+                onClick={() => setDataTransferTab('import')}
+                className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+                  effectiveDataTransferTab === 'import' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span>Importar</span>
+              </button>
+            )}
+            {canExportData && (
+              <button
+                type="button"
+                onClick={() => setDataTransferTab('export')}
+                className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+                  effectiveDataTransferTab === 'export' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Exportar</span>
+              </button>
+            )}
+          </div>
+
+          {canImportData && (
+            <div className={effectiveDataTransferTab === 'import' ? '' : 'hidden'}>
+              <ImportDataView
+                onNavigate={onNavigateView}
+                initialScannerMode={initialTab === 'medical-record' ? 'document' : null}
+              />
+            </div>
+          )}
+
+          {canExportData && (
+            <div className={effectiveDataTransferTab === 'export' ? 'space-y-6' : 'hidden'}>
+              <div className="bg-white rounded-3xl border border-slate-200 p-8 shadow-xs">
+                <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-6 border-b border-slate-100">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
+                        <Download className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h2 className="text-xl font-bold text-slate-900">Exportação de Prontuários & Documentos Clínicos</h2>
+                        <p className="text-xs text-slate-500">Central unificada de exportação de prontuários em Word (.docx Oficial), PDF, JSON e Pacote ZIP.</p>
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowClinicalExportModal(true)}
+                    className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold flex items-center gap-2 shadow-xs transition-colors cursor-pointer"
+                  >
+                    <Sparkles className="w-4 h-4 text-indigo-200" />
+                    Abrir Central de Exportação
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-6">
+                  <div className="p-5 rounded-2xl bg-indigo-50/50 border border-indigo-100/60">
+                    <div className="font-bold text-sm text-indigo-900 mb-1">Word (.docx Oficial)</div>
+                    <p className="text-xs text-indigo-700/80 leading-relaxed">
+                      Documento padrão ECMA-376 OpenXML com formatação clínica formal, cabeçalho institucional, sumário do paciente e seções categorizadas.
+                    </p>
+                  </div>
+                  <div className="p-5 rounded-2xl bg-rose-50/50 border border-rose-100/60">
+                    <div className="font-bold text-sm text-rose-900 mb-1">PDF Vetorial Completo</div>
+                    <p className="text-xs text-rose-700/80 leading-relaxed">
+                      Prontuário paginado para impressão e entrega judicial ou pericial, gerado via PDFKit com total isolamento e segurança.
+                    </p>
+                  </div>
+                  <div className="p-5 rounded-2xl bg-emerald-50/50 border border-emerald-100/60">
+                    <div className="font-bold text-sm text-emerald-900 mb-1">JSON & Pacote ZIP</div>
+                    <p className="text-xs text-emerald-700/80 leading-relaxed">
+                      Interoperabilidade máxima para migração de dados e backup completo contendo os documentos e o arquivo manifest.json.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
       {/* SEÇÃO: LABORATÓRIO DE TESTES (SANDBOX GESTOR) */}
@@ -1207,71 +1296,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, init
         </div>
       )}
 
-      {activeSection === 'export_clinical' && (
-        <div className="space-y-6">
-          <div className="bg-white rounded-3xl border border-slate-200 p-8 shadow-xs">
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-6 border-b border-slate-100">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
-                    <Download className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-bold text-slate-900">Exportação de Prontuários & Documentos Clínicos</h2>
-                    <p className="text-xs text-slate-500">Central unificada de exportação de prontuários em Word (.docx Oficial), PDF, JSON e Pacote ZIP.</p>
-                  </div>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowClinicalExportModal(true)}
-                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold flex items-center gap-2 shadow-xs transition-colors cursor-pointer"
-              >
-                <Sparkles className="w-4 h-4 text-indigo-200" />
-                Abrir Central de Exportação
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-6">
-              <div className="p-5 rounded-2xl bg-indigo-50/50 border border-indigo-100/60">
-                <div className="font-bold text-sm text-indigo-900 mb-1">Word (.docx Oficial)</div>
-                <p className="text-xs text-indigo-700/80 leading-relaxed">
-                  Documento padrão ECMA-376 OpenXML com formatação clínica formal, cabeçalho institucional, sumário do paciente e seções categorizadas.
-                </p>
-              </div>
-              <div className="p-5 rounded-2xl bg-rose-50/50 border border-rose-100/60">
-                <div className="font-bold text-sm text-rose-900 mb-1">PDF Vetorial Completo</div>
-                <p className="text-xs text-rose-700/80 leading-relaxed">
-                  Prontuário paginado para impressão e entrega judicial ou pericial, gerado via PDFKit com total isolamento e segurança.
-                </p>
-              </div>
-              <div className="p-5 rounded-2xl bg-emerald-50/50 border border-emerald-100/60">
-                <div className="font-bold text-sm text-emerald-900 mb-1">JSON & Pacote ZIP</div>
-                <p className="text-xs text-emerald-700/80 leading-relaxed">
-                  Interoperabilidade máxima para migração de dados e backup completo contendo os documentos e o arquivo manifest.json.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-
-      {/* SEÇÃO: ASSINATURA & PLANO */}
-      {activeSection === 'billing' && (
-        <BillingView
-          onBack={() => {
-            if (onNavigateView) {
-              onNavigateView('dashboard');
-            } else {
-              sessionStorage.setItem('activeView', 'dashboard');
-              window.history.pushState({ view: 'dashboard' }, '', '/dashboard');
-              window.dispatchEvent(new CustomEvent('zemda-navigate', { detail: { view: 'dashboard' } }));
-              window.dispatchEvent(new PopStateEvent('popstate'));
-            }
-          }}
-        />
-      )}
-
       {/* SEÇÃO: FINANCEIRO & REPASSES */}
       {activeSection === 'financial' && (
         <div className="space-y-6">
@@ -1286,96 +1310,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, init
             </p>
           </div>
           <ProfessionalPayrollView />
-        </div>
-      )}
-
-            {/* SEÇÃO: PERFIL PROFISSIONAL (Não-Admin) */}
-      {activeSection === 'profile_professional' && (
-        <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xs space-y-5 text-xs">
-          <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
-            <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center font-bold">
-              <Briefcase className="w-6 h-6" />
-            </div>
-            <div>
-              <h3 className="font-bold text-slate-900 text-base">Meu Perfil Profissional</h3>
-              <p className="text-slate-500 text-[11px] mt-0.5">
-                Consulte suas informações profissionais, conselho, número de registro e especialidades ativas.
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">Nome Profissional</label>
-              <input
-                type="text"
-                disabled
-                value={myProfessional?.name || currentUser?.name || ''}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-100 text-slate-600 cursor-not-allowed"
-              />
-            </div>
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">E-mail Cadastrado</label>
-              <input
-                type="text"
-                disabled
-                value={myProfessional?.email || currentUser?.email || ''}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-100 text-slate-600 cursor-not-allowed"
-              />
-            </div>
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">Profissão / Atuação</label>
-              <input
-                type="text"
-                disabled
-                value={myProfessional?.profession_name || (currentUser as any)?.professionName || (currentUser as any)?.profession_name || currentUser?.role || 'Profissional'}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-100 text-slate-600 cursor-not-allowed"
-              />
-              {!Boolean(myProfessional?.profession_change_used ?? (currentUser as any)?.profession_change_used) && (
-                <div className="mt-1.5">
-                  <button
-                    type="button"
-                    onClick={handleOpenProfessionModal}
-                    className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 hover:underline inline-flex items-center gap-1 cursor-pointer"
-                  >
-                    <Edit2 className="w-3.5 h-3.5" />
-                    <span>Errei minha profissão, preciso trocar</span>
-                  </button>
-                </div>
-              )}
-            </div>
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block font-semibold text-slate-700">Registro / Conselho</label>
-                <button
-                  type="button"
-                  onClick={handleOpenRegModal}
-                  className="text-xs font-semibold text-teal-700 hover:text-teal-900 hover:underline inline-flex items-center gap-1 cursor-pointer"
-                  title="Editar Registro / Conselho Profissional"
-                >
-                  <Edit3 className="w-3.5 h-3.5" />
-                  <span>Editar registro</span>
-                </button>
-              </div>
-              <div className="relative flex items-center">
-                <input
-                  type="text"
-                  disabled
-                  value={`${myProfessional?.registration_type || (currentUser as any)?.registrationType || 'Conselho'}: ${myProfessional?.registration_number || (currentUser as any)?.registrationNumber || 'Pendente'}`}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 pr-9 text-xs bg-slate-100 text-slate-600 cursor-not-allowed"
-                />
-                <button
-                  type="button"
-                  onClick={handleOpenRegModal}
-                  className="absolute right-2 p-1 text-slate-400 hover:text-teal-700 hover:bg-slate-200/60 rounded-lg transition-colors cursor-pointer"
-                  title="Editar Registro / Conselho Profissional"
-                >
-                  <Edit3 className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-            <ProfileSpecialties />
-          </div>
         </div>
       )}
 
@@ -1606,34 +1540,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, init
             >
               <CreditCard className="w-3.5 h-3.5" />
               <span>Convênios</span>
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* SEÇÃO: CONTA & SEGURANÇA (Sub-abas: Minha Conta, Privacidade) */}
-      {activeSection === 'account' && (
-        <div className="space-y-4">
-          <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-2xl text-xs font-bold flex-wrap">
-            <button
-              type="button"
-              onClick={() => setActiveTab('profile')}
-              className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
-                activeTab === 'profile' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <User className="w-3.5 h-3.5" />
-              <span>Minha Conta</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('legal')}
-              className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
-                activeTab === 'legal' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <Scale className="w-3.5 h-3.5" />
-              <span>Privacidade e Documentos Legais</span>
             </button>
           </div>
         </div>
@@ -2601,8 +2507,74 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, init
         </div>
       )}
 
-      {/* ABA: Minha Conta & Segurança (Disponível para TODOS os usuários) */}
-      {((activeSection === 'account' && activeTab === 'profile') || activeSection === 'profile') && (
+      {/* SEÇÃO UNIFICADA: MINHA CONTA */}
+      {activeSection === 'account' && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-2xl text-xs font-bold flex-wrap">
+            <button
+              type="button"
+              onClick={() => setAccountTab('profile')}
+              className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+                effectiveAccountTab === 'profile' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <User className="w-3.5 h-3.5" />
+              <span>Dados e Segurança</span>
+            </button>
+
+            {canShowProfessionalProfile && (
+              <button
+                type="button"
+                onClick={() => setAccountTab('professional')}
+                className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+                  effectiveAccountTab === 'professional' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Briefcase className="w-3.5 h-3.5" />
+                <span>Perfil Profissional</span>
+              </button>
+            )}
+
+            {canAccessGoogleCalendar && (
+              <button
+                type="button"
+                onClick={() => setAccountTab('connected_accounts')}
+                className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+                  effectiveAccountTab === 'connected_accounts' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Calendar className="w-3.5 h-3.5" />
+                <span>Contas Conectadas</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setAccountTab('privacy')}
+              className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+                effectiveAccountTab === 'privacy' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Scale className="w-3.5 h-3.5" />
+              <span>Privacidade</span>
+            </button>
+
+            {canAccessSubscription && (
+              <button
+                type="button"
+                onClick={() => setAccountTab('billing')}
+                className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+                  effectiveAccountTab === 'billing' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <CreditCard className="w-3.5 h-3.5" />
+                <span>Assinatura</span>
+              </button>
+            )}
+          </div>
+
+          {/* ABA: Dados e Segurança (Disponível para TODOS os usuários) */}
+          {effectiveAccountTab === 'profile' && (
         <div className="space-y-6">
           {/* Card de Alteração de E-mail */}
           <form onSubmit={handleUpdateProfileEmail} className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xs space-y-4 text-xs">
@@ -2786,8 +2758,103 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, init
         </div>
       )}
 
-      {/* ABA: Privacidade e Documentos Legais */}
-      {(activeSection === 'legal' || (activeSection === 'account' && activeTab === 'legal')) && (
+          {/* ABA: Perfil Profissional */}
+          {effectiveAccountTab === 'professional' && canShowProfessionalProfile && (
+            <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xs space-y-5 text-xs">
+              <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
+                <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center font-bold">
+                  <Briefcase className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">Meu Perfil Profissional</h3>
+                  <p className="text-slate-500 text-[11px] mt-0.5">
+                    Consulte suas informações profissionais, conselho, número de registro e especialidades ativas.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Nome Profissional</label>
+                  <input
+                    type="text"
+                    disabled
+                    value={myProfessional?.name || currentUser?.name || ''}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-100 text-slate-600 cursor-not-allowed"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">E-mail Cadastrado</label>
+                  <input
+                    type="text"
+                    disabled
+                    value={myProfessional?.email || currentUser?.email || ''}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-100 text-slate-600 cursor-not-allowed"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Profissão / Atuação</label>
+                  <input
+                    type="text"
+                    disabled
+                    value={myProfessional?.profession_name || (currentUser as any)?.professionName || (currentUser as any)?.profession_name || currentUser?.role || 'Profissional'}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-100 text-slate-600 cursor-not-allowed"
+                  />
+                  {!Boolean(myProfessional?.profession_change_used ?? (currentUser as any)?.profession_change_used) && (
+                    <div className="mt-1.5">
+                      <button
+                        type="button"
+                        onClick={handleOpenProfessionModal}
+                        className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 hover:underline inline-flex items-center gap-1 cursor-pointer"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                        <span>Errei minha profissão, preciso trocar</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-semibold text-slate-700">Registro / Conselho</label>
+                    <button
+                      type="button"
+                      onClick={handleOpenRegModal}
+                      className="text-xs font-semibold text-teal-700 hover:text-teal-900 hover:underline inline-flex items-center gap-1 cursor-pointer"
+                      title="Editar Registro / Conselho Profissional"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      <span>Editar registro</span>
+                    </button>
+                  </div>
+                  <div className="relative flex items-center">
+                    <input
+                      type="text"
+                      disabled
+                      value={`${myProfessional?.registration_type || (currentUser as any)?.registrationType || 'Conselho'}: ${myProfessional?.registration_number || (currentUser as any)?.registrationNumber || 'Pendente'}`}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 pr-9 text-xs bg-slate-100 text-slate-600 cursor-not-allowed"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleOpenRegModal}
+                      className="absolute right-2 p-1 text-slate-400 hover:text-teal-700 hover:bg-slate-200/60 rounded-lg transition-colors cursor-pointer"
+                      title="Editar Registro / Conselho Profissional"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+                <ProfileSpecialties />
+              </div>
+            </div>
+          )}
+
+          {/* ABA: Contas Conectadas (Google Agenda & Meet) */}
+          {effectiveAccountTab === 'connected_accounts' && canAccessGoogleCalendar && (
+            <GoogleCalendarSettings />
+          )}
+
+          {/* ABA: Privacidade e Documentos Legais */}
+          {effectiveAccountTab === 'privacy' && (
         <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xs space-y-6">
           <div>
             <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
@@ -2894,6 +2961,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, init
               privacidade@zemda.com.br • dpo@zemda.com.br
             </p>
           </div>
+        </div>
+      )}
+
+          {/* ABA: Assinatura & Plano (Somente perfis autorizados) */}
+          {effectiveAccountTab === 'billing' && canAccessSubscription && (
+            <BillingView onBack={() => setActiveSection('hub')} />
+          )}
         </div>
       )}
       <ClinicalExportModal
