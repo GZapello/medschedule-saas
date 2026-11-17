@@ -472,7 +472,7 @@ export class PackageController {
       const srv = db.prepare(`
         SELECT id, name, COALESCE(service_kind, 'individual') as service_kind, default_capacity,
                duration_minutes, price, COALESCE(allow_recurrence, 1) as allow_recurrence,
-               allowed_recurrence_frequencies_json, default_recurrence_frequency,
+               allowed_recurrence_frequencies_json, allowed_recurrence_weekdays_json, default_recurrence_frequency,
                custom_recurrence_intervals_json, default_recurrence_interval_json,
                modality, modality_category, allowed_plan_durations_json, default_plan_duration, service_domain
         FROM services
@@ -571,6 +571,7 @@ export class PackageController {
           defaultCapacity: srv.default_capacity || 1,
           allowRecurrence: recCfg.allowRecurrence,
           allowedRecurrenceFrequencies: recCfg.allowedFrequencies,
+          allowedRecurrenceWeekdays: recCfg.allowedWeekdays,
           defaultRecurrenceFrequency: recCfg.defaultFrequency,
           allowedPlanDurations: recCfg.allowedPlanDurations,
           defaultPlanDuration: recCfg.defaultPlanDuration,
@@ -624,8 +625,16 @@ export class PackageController {
         ? 'presential'
         : allowedModalities[0] || 'presential';
 
+      const restrictWeekdays = recCfg.allowedFrequencies.includes('custom_weekdays') && recCfg.allowedWeekdays.length > 0
+        ? new Set(recCfg.allowedWeekdays)
+        : null;
+      const wantDateAllowed = !wantDate || !restrictWeekdays || (() => {
+        const [wy, wm, wd] = wantDate.split('-').map(Number);
+        return restrictWeekdays.has(new Date(Date.UTC(wy, wm - 1, wd, 12, 0, 0)).getUTCDay());
+      })();
+
       const mergedSlots: Array<any> = [];
-      if (wantDate) {
+      if (wantDate && wantDateAllowed) {
         for (const prof of professionals) {
           let externalBusy: Array<{ startMin: number; endMin: number }> = [];
           try {
@@ -679,17 +688,20 @@ export class PackageController {
 
       const upcomingStart =
         typeof startDate === 'string' && validBookingDate(startDate) ? startDate : todayBrazilYmd();
-      const upcomingSlots = wantUpcoming
+      const rawUpcomingSlots = wantUpcoming
         ? ClassScheduleService.getUpcomingOccurrencesForService({
             tenantId: tenant.id,
             serviceRow: srv,
             professionalId: reqProfId,
             startDate: upcomingStart,
             daysAhead: 14,
-            limit: 20,
+            limit: 30,
             publicOnly: true
           })
         : [];
+      const upcomingSlots = restrictWeekdays
+        ? rawUpcomingSlots.filter((u: any) => restrictWeekdays.has(Number(u.dayOfWeek)))
+        : rawUpcomingSlots;
 
       res.json({
         date: wantDate,
@@ -700,6 +712,7 @@ export class PackageController {
         defaultCapacity: srv.default_capacity || 1,
         allowRecurrence: recCfg.allowRecurrence,
         allowedRecurrenceFrequencies: recCfg.allowedFrequencies,
+        allowedRecurrenceWeekdays: recCfg.allowedWeekdays,
         defaultRecurrenceFrequency: recCfg.defaultFrequency,
         allowedPlanDurations: recCfg.allowedPlanDurations,
         defaultPlanDuration: recCfg.defaultPlanDuration,
@@ -712,7 +725,9 @@ export class PackageController {
         totalAvailable: mergedSlots.length,
         slots: mergedSlots,
         upcomingSlots,
-        ...(wantDate && mergedSlots.length === 0
+        ...(wantDate && !wantDateAllowed
+          ? { emptyReason: 'Esta aula é oferecida apenas nos dias da semana configurados pelo instrutor. Escolha outro dia.' }
+          : wantDate && mergedSlots.length === 0
           ? { emptyReason: 'Não há horários ou vagas disponíveis para esta data. Experimente outro dia.' }
           : {}),
         ...(!wantDate && upcomingSlots.length === 0
@@ -828,11 +843,19 @@ export class PackageController {
 
       let pricing = null;
       if (preview.valid && req.body.bookingIntent === 'recurring') {
-        const service = db.prepare('SELECT billing_mode FROM services WHERE id = ? AND tenant_id = ?').get(String(serviceId), tenant.id) as any;
+        const service = db.prepare('SELECT billing_mode, pricing_rule, frequency_pricing_json FROM services WHERE id = ? AND tenant_id = ?').get(String(serviceId), tenant.id) as any;
         const quote = quoteFrequencyPlan({ tenantId: tenant.id, serviceId: String(serviceId), billingFrequency: service?.billing_mode,
           startDate: resolvedDate, endDate: resolvePlanDurationEndDate(resolvedDate, recurrence?.durationCode) || recurrence?.endDate || preview.occurrences.at(-1)?.date,
           slots: preview.occurrences, cadence: preview.frequency, publicOnly: true, includeStandardPricing: true });
-        if (quote) pricing = { amount: quote.calculation.effectivePrice, weeklyCount: quote.weeklyCount, billingFrequency: quote.billingFrequency, referenceSessionsCount: quote.calculation.referenceSessionsCount };
+        if (quote) pricing = {
+          amount: quote.calculation.effectivePrice,
+          averagePricePerSession: quote.calculation.averagePricePerSession,
+          weeklyCount: quote.weeklyCount,
+          billingFrequency: quote.billingFrequency,
+          cycleMonths: quote.calculation.cycleMonths,
+          pricingRule: quote.pricingRule,
+          referenceSessionsCount: quote.calculation.referenceSessionsCount
+        };
       }
       res.json({ ...preview, ...(req.body.bookingIntent === 'recurring' ? { pricing } : {}) });
     } catch (err: any) {

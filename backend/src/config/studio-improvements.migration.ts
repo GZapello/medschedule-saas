@@ -32,6 +32,7 @@ export function migrateStudioImprovements(rawDb: DatabaseSync): void {
   addColIfMissing('services', 'modality_category', 'TEXT');
   addColIfMissing('services', 'service_domain', 'TEXT');
   addColIfMissing('services', 'allowed_recurrence_frequencies_json', 'TEXT');
+  addColIfMissing('services', 'allowed_recurrence_weekdays_json', 'TEXT');
   addColIfMissing('services', 'default_recurrence_frequency', 'TEXT');
   addColIfMissing('services', 'custom_recurrence_intervals_json', 'TEXT');
   addColIfMissing('services', 'default_recurrence_interval_json', 'TEXT');

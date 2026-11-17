@@ -390,8 +390,9 @@ export class ServiceController {
       const duration = Number(req.body.durationMinutes), buffer = Number(req.body.bufferMinutes ?? 0);
       if (!Number.isInteger(duration) || duration < 1 || duration > 1440 || !Number.isInteger(buffer) || buffer < 0 || buffer > 1440) { res.status(400).json({ error: 'Duração ou intervalo inválido.' }); return; }
       const ids = Array.isArray(req.body.professionalIds) ? req.body.professionalIds.filter((id: unknown) => typeof id === 'string') : [];
+      const allowedWeekdays = Array.isArray(req.body.allowedWeekdays) ? req.body.allowedWeekdays.map(Number).filter((n: number) => Number.isInteger(n) && n >= 0 && n <= 6) : undefined;
       const startDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date(Date.now() + 7 * 86400000));
-      const meetings = individualStudioMeetings({ tenantId, professionalIds: ids, startDate,
+      const meetings = individualStudioMeetings({ tenantId, professionalIds: ids, startDate, allowedWeekdays,
         draft: { duration_minutes: duration, buffer_minutes: buffer, modality: req.body.modality || 'presential', service_kind: 'individual', active: 1, min_lead_time_hours: 0, max_advance_days: 60 } });
       res.json({ meetings, startDate });
     } catch (error: any) { res.status(400).json({ error: error.message }); }
@@ -429,6 +430,7 @@ export class ServiceController {
           s.default_capacity,
           COALESCE(s.allow_recurrence, 1) as allow_recurrence,
           s.allowed_recurrence_frequencies_json,
+          s.allowed_recurrence_weekdays_json,
           s.default_recurrence_frequency,
           s.allowed_plan_durations_json,
           s.default_plan_duration,
@@ -513,6 +515,7 @@ export class ServiceController {
             linked_template_ids: [],
             linked_templates: [],
             allowed_recurrence_frequencies: undefined,
+            allowed_recurrence_weekdays: undefined,
             default_recurrence_frequency: null,
             custom_recurrence_intervals: undefined,
             default_recurrence_interval: null,
@@ -567,6 +570,7 @@ export class ServiceController {
           linked_templates: tplInfo.linked_templates,
           allow_recurrence: recConfig.allowRecurrence ? 1 : 0,
           allowed_recurrence_frequencies: recConfig.allowedFrequencies,
+          allowed_recurrence_weekdays: recConfig.allowedWeekdays,
           default_recurrence_frequency: recConfig.defaultFrequency,
           allowed_plan_durations: recConfig.allowedPlanDurations,
           default_plan_duration: recConfig.defaultPlanDuration,
@@ -602,6 +606,7 @@ export class ServiceController {
         modalityCategory, modality_category,
         serviceDomain, service_domain,
         allowedRecurrenceFrequencies, allowed_recurrence_frequencies,
+        allowedRecurrenceWeekdays, allowed_recurrence_weekdays,
         defaultRecurrenceFrequency, default_recurrence_frequency,
         allowedPlanDurations, allowed_plan_durations,
         defaultPlanDuration, default_plan_duration,
@@ -629,6 +634,7 @@ export class ServiceController {
       const rawCapacity = defaultCapacity !== undefined ? defaultCapacity : default_capacity;
       const rawRequestedDomain = serviceDomain ?? service_domain;
       const rawAllowedFreqs = allowedRecurrenceFrequencies !== undefined ? allowedRecurrenceFrequencies : allowed_recurrence_frequencies;
+      const rawAllowedWeekdays = allowedRecurrenceWeekdays !== undefined ? allowedRecurrenceWeekdays : allowed_recurrence_weekdays;
       const rawDefaultFreq = defaultRecurrenceFrequency !== undefined ? defaultRecurrenceFrequency : default_recurrence_frequency;
       const rawAllowedDurations = allowedPlanDurations !== undefined ? allowedPlanDurations : allowed_plan_durations;
       const rawDefaultDuration = defaultPlanDuration !== undefined ? defaultPlanDuration : default_plan_duration;
@@ -734,10 +740,11 @@ export class ServiceController {
         return;
       }
 
-      const recNorm = isStudioCompat && (resolvedDomain === 'studio' || rawAllowedFreqs !== undefined || rawAllowedDurations !== undefined || rawDefaultDuration !== undefined || rawCustomIntervals !== undefined || rawDefaultInterval !== undefined)
+      const recNorm = isStudioCompat && (resolvedDomain === 'studio' || rawAllowedFreqs !== undefined || rawAllowedWeekdays !== undefined || rawAllowedDurations !== undefined || rawDefaultDuration !== undefined || rawCustomIntervals !== undefined || rawDefaultInterval !== undefined)
         ? normalizeRecurrenceConfigForSave({
             allowRecurrence: allowRecurrence ?? allow_recurrence,
             allowedRecurrenceFrequencies: rawAllowedFreqs,
+            allowedRecurrenceWeekdays: rawAllowedWeekdays,
             defaultRecurrenceFrequency: rawDefaultFreq,
             allowedPlanDurations: rawAllowedDurations,
             defaultPlanDuration: rawDefaultDuration,
@@ -747,6 +754,7 @@ export class ServiceController {
         : {
             allowRecurrenceInt: ((allowRecurrence ?? allow_recurrence) === false || (allowRecurrence ?? allow_recurrence) === 0 ? 0 : 1) as 0 | 1,
             allowedJson: null,
+            allowedWeekdaysJson: null,
             defaultFrequency: null,
             allowedPlanDurationsJson: null,
             defaultPlanDuration: null,
@@ -868,8 +876,8 @@ export class ServiceController {
           tplNorm.linkedTemplateIdsJson
         );
 
-        db.prepare('UPDATE services SET frequency_pricing_json = ? WHERE id = ? AND tenant_id = ?')
-          .run(frequencyPricing ? JSON.stringify(frequencyPricing) : null, id, tenantId);
+        db.prepare('UPDATE services SET frequency_pricing_json = ?, allowed_recurrence_weekdays_json = ? WHERE id = ? AND tenant_id = ?')
+          .run(frequencyPricing ? JSON.stringify(frequencyPricing) : null, isStudioCompat && resolvedDomain === 'studio' ? recNorm.allowedWeekdaysJson : null, id, tenantId);
 
         const normalizedCustomPrice = effectiveCreatePrice > 0 ? effectiveCreatePrice : (price !== undefined && price !== null && price !== '' ? Number(price) : null);
         const normalizedCustomDuration = durationMinutes !== undefined && durationMinutes !== null && durationMinutes !== '' ? Number(durationMinutes) : null;
@@ -901,6 +909,7 @@ export class ServiceController {
         ? parseServiceRecurrenceConfig({
             allow_recurrence: recNorm.allowRecurrenceInt,
             allowed_recurrence_frequencies_json: recNorm.allowedJson,
+            allowed_recurrence_weekdays_json: resolvedDomain === 'studio' ? recNorm.allowedWeekdaysJson : null,
             default_recurrence_frequency: recNorm.defaultFrequency,
             allowed_plan_durations_json: recNorm.allowedPlanDurationsJson,
             default_plan_duration: recNorm.defaultPlanDuration,
@@ -959,6 +968,7 @@ export class ServiceController {
         linked_templates: createdTplInfo.linked_templates,
         allow_recurrence: recNorm.allowRecurrenceInt,
         allowed_recurrence_frequencies: parsedCreatedRec ? parsedCreatedRec.allowedFrequencies : undefined,
+        allowed_recurrence_weekdays: parsedCreatedRec ? parsedCreatedRec.allowedWeekdays : undefined,
         default_recurrence_frequency: parsedCreatedRec ? parsedCreatedRec.defaultFrequency : null,
         allowed_plan_durations: parsedCreatedRec ? parsedCreatedRec.allowedPlanDurations : undefined,
         default_plan_duration: parsedCreatedRec ? parsedCreatedRec.defaultPlanDuration : null,
@@ -991,7 +1001,7 @@ export class ServiceController {
 
       const existing = db.prepare(`
         SELECT id, name, price, professional_id, clinical_module, service_kind, default_capacity, allow_recurrence,
-               modality_category, service_domain, allowed_recurrence_frequencies_json, default_recurrence_frequency,
+               modality_category, service_domain, allowed_recurrence_frequencies_json, allowed_recurrence_weekdays_json, default_recurrence_frequency,
                custom_recurrence_intervals_json, default_recurrence_interval_json,
                billing_mode, periodic_price, billing_cycle_months, default_package_id, default_billing_due_day,
                pricing_rule, is_price_customized, suggested_price, weekly_sessions_count, frequency_pricing_json,
@@ -1017,6 +1027,7 @@ export class ServiceController {
         modalityCategory, modality_category,
         serviceDomain, service_domain,
         allowedRecurrenceFrequencies, allowed_recurrence_frequencies,
+        allowedRecurrenceWeekdays, allowed_recurrence_weekdays,
         defaultRecurrenceFrequency, default_recurrence_frequency,
         allowedPlanDurations, allowed_plan_durations,
         defaultPlanDuration, default_plan_duration,
@@ -1038,6 +1049,7 @@ export class ServiceController {
       const rawCapacity = defaultCapacity !== undefined ? defaultCapacity : default_capacity;
       const rawRequestedDomain = serviceDomain ?? service_domain;
       const rawAllowedFreqs = allowedRecurrenceFrequencies !== undefined ? allowedRecurrenceFrequencies : allowed_recurrence_frequencies;
+      const rawAllowedWeekdays = allowedRecurrenceWeekdays !== undefined ? allowedRecurrenceWeekdays : allowed_recurrence_weekdays;
       const rawDefaultFreq = defaultRecurrenceFrequency !== undefined ? defaultRecurrenceFrequency : default_recurrence_frequency;
       const rawAllowedDurations = allowedPlanDurations !== undefined ? allowedPlanDurations : allowed_plan_durations;
       const rawDefaultDuration = defaultPlanDuration !== undefined ? defaultPlanDuration : default_plan_duration;
@@ -1143,6 +1155,7 @@ export class ServiceController {
       const rawAllowRec = allowRecurrence !== undefined ? allowRecurrence : allow_recurrence;
       let nextAllowRec: 0 | 1 = rawAllowRec !== undefined ? (rawAllowRec === false || rawAllowRec === 0 ? 0 : 1) : ((existing.allow_recurrence ?? 1) === 0 ? 0 : 1);
       let nextAllowedJson: string | null = existing.allowed_recurrence_frequencies_json ?? null;
+      let nextAllowedWeekdaysJson: string | null = existing.allowed_recurrence_weekdays_json ?? null;
       let nextDefaultFreq: string | null = existing.default_recurrence_frequency ?? null;
       let nextAllowedDurationsJson: string | null = existing.allowed_plan_durations_json ?? null;
       let nextDefaultDuration: string | null = existing.default_plan_duration ?? null;
@@ -1151,6 +1164,7 @@ export class ServiceController {
 
       if (!isStudioCompat) {
         nextAllowedJson = null;
+        nextAllowedWeekdaysJson = null;
         nextDefaultFreq = null;
         nextAllowedDurationsJson = null;
         nextDefaultDuration = null;
@@ -1159,6 +1173,7 @@ export class ServiceController {
       } else if (
         rawAllowRec !== undefined ||
         rawAllowedFreqs !== undefined ||
+        rawAllowedWeekdays !== undefined ||
         rawDefaultFreq !== undefined ||
         rawAllowedDurations !== undefined ||
         rawDefaultDuration !== undefined ||
@@ -1172,6 +1187,7 @@ export class ServiceController {
               ? (() => { try { return JSON.parse(existing.allowed_recurrence_frequencies_json); } catch { return undefined; } })()
               : undefined
           ),
+          allowedRecurrenceWeekdays: rawAllowedWeekdays !== undefined ? rawAllowedWeekdays : existing.allowed_recurrence_weekdays_json,
           defaultRecurrenceFrequency: rawDefaultFreq !== undefined ? rawDefaultFreq : existing.default_recurrence_frequency,
           allowedPlanDurations: rawAllowedDurations !== undefined ? rawAllowedDurations : (
             typeof existing.allowed_plan_durations_json === 'string' && existing.allowed_plan_durations_json.trim()
@@ -1188,6 +1204,7 @@ export class ServiceController {
         }
         nextAllowRec = recNorm.allowRecurrenceInt;
         nextAllowedJson = recNorm.allowedJson;
+        nextAllowedWeekdaysJson = recNorm.allowedWeekdaysJson;
         nextDefaultFreq = recNorm.defaultFrequency;
         nextAllowedDurationsJson = recNorm.allowedPlanDurationsJson;
         nextDefaultDuration = recNorm.defaultPlanDuration;
@@ -1390,8 +1407,8 @@ export class ServiceController {
         const nextCustomPrice = effectiveUpdatePrice > 0 ? effectiveUpdatePrice : (hasExplicitPrice ? Number(price) : null);
         const nextCustomDuration = durationMinutes !== undefined && durationMinutes !== null && durationMinutes !== '' ? Number(durationMinutes) : null;
 
-        db.prepare('UPDATE services SET frequency_pricing_json = ? WHERE id = ? AND tenant_id = ?')
-          .run(frequencyPricing ? JSON.stringify(frequencyPricing) : null, req.params.id, tenantId);
+        db.prepare('UPDATE services SET frequency_pricing_json = ?, allowed_recurrence_weekdays_json = ? WHERE id = ? AND tenant_id = ?')
+          .run(frequencyPricing ? JSON.stringify(frequencyPricing) : null, isStudioCompat && nextDomain === 'studio' ? nextAllowedWeekdaysJson : null, req.params.id, tenantId);
 
         validateAndSyncLinkedInstructorsTx({
           tenantId,
@@ -1468,6 +1485,7 @@ export class ServiceController {
             linked_templates: updTplInfo.linked_templates,
             allow_recurrence: parsedUpdRec ? (parsedUpdRec.allowRecurrence ? 1 : 0) : (updatedService.allow_recurrence ?? 1),
             allowed_recurrence_frequencies: parsedUpdRec ? parsedUpdRec.allowedFrequencies : undefined,
+            allowed_recurrence_weekdays: parsedUpdRec ? parsedUpdRec.allowedWeekdays : undefined,
             default_recurrence_frequency: parsedUpdRec ? parsedUpdRec.defaultFrequency : null,
             allowed_plan_durations: parsedUpdRec ? parsedUpdRec.allowedPlanDurations : undefined,
             default_plan_duration: parsedUpdRec ? parsedUpdRec.defaultPlanDuration : null,

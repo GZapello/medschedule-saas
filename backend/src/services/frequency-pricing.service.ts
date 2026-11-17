@@ -32,6 +32,7 @@ export function quoteFrequencyPlan(params: {
   `).all(params.tenantId, params.serviceId) as any[];
   const individual = service.service_kind !== 'group';
   const available = individual ? individualStudioMeetings({ tenantId: params.tenantId, serviceId: params.serviceId, startDate: params.startDate, publicOnly: params.publicOnly }) : offeredWeeklyMeetings(rows);
+  const contractableLimit = individual ? new Set(available.map(m => m.weekday)).size : available.length;
   const eligibleRows = individual ? available : rows.flatMap(row => offeredWeeklyMeetings([row]));
   const selected = new Map<string, typeof available[number]>();
   if (!params.slots.length) fail('Selecione os dias e horários da grade para contratar o plano por frequência.');
@@ -50,7 +51,7 @@ export function quoteFrequencyPlan(params: {
     selected.set(`${match!.weekday}|${match!.startTime}|${match!.professionalId}`, match!);
   }
   const weeklyCount = selected.size;
-  if (!weeklyCount || weeklyCount > available.length) fail('A frequência contratada excede os encontros ofertados na grade.');
+  if (!weeklyCount || weeklyCount > contractableLimit) fail('A frequência contratada excede os encontros ofertados na grade.');
   const months = getCycleMonthsForBillingMode(params.billingFrequency) || 1;
   const [y, m, d] = params.startDate.split('-').map(Number);
   const next = new Date(Date.UTC(y, m - 1 + months, 1, 12));
@@ -61,7 +62,7 @@ export function quoteFrequencyPlan(params: {
   const calculation = calculateStudioRecurringPrice({
     serviceName: service.name, sessionPrice: Number(service.price), weeklySessionsCount: weeklyCount,
     billingMode: params.billingFrequency, pricingRule: service.pricing_rule,
-    frequencyPricing: available.length >= 2 ? config : null,
+    frequencyPricing: contractableLimit >= 2 ? config : null,
     customPrice: Number(service.periodic_price) || undefined,
     isPriceCustomized: Boolean(service.is_price_customized),
     scheduledSessionsCount: countMeetingOccurrences(Array.from(selected.values()), params.startDate, end)

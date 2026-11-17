@@ -241,6 +241,8 @@ export interface Service {
     | 'custom_interval'
   )[];
   allowed_recurrence_frequencies_json?: string | null;
+  allowed_recurrence_weekdays?: number[];
+  allowed_recurrence_weekdays_json?: string | null;
   default_recurrence_frequency?:
     | 'weekly'
     | 'biweekly'

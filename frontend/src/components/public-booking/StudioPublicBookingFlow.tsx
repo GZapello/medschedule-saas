@@ -85,6 +85,25 @@ const formatDateShort = (iso: string) => {
 const formatMoney = (v: number | string) =>
   Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
+const WEEKDAY_NAMES_FULL = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
+const WEEKDAY_NAMES_SHORT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+
+const PLAN_DURATION_MONTHS_MAP: Record<string, number> = {
+  '1_month': 1,
+  '2_months': 2,
+  '3_months': 3,
+  '6_months': 6,
+  '12_months': 12
+};
+
+function resolveMeetingKey(m: any): string {
+  return String(m?.id || `${m?.weekday}:${String(m?.startTime || m?.start_time || '').slice(0, 5)}:${String(m?.endTime || m?.end_time || '').slice(0, 5)}:${m?.professionalId || m?.professional_id || ''}`);
+}
+
+function isRealClassScheduleId(id: unknown): id is string {
+  return typeof id === 'string' && id.trim() !== '' && !id.startsWith('individual:');
+}
+
 export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = ({
   clinic,
   tenantSlug,
@@ -110,6 +129,11 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
   const [linkedProfessionals, setLinkedProfessionals] = useState<any[]>([]);
   const [emptyReason, setEmptyReason] = useState<string>('');
   const [selectedSlot, setSelectedSlot] = useState<any | null>(null);
+  const [bookingModeChoice, setBookingModeChoice] = useState<'single' | 'recurring' | null>(null);
+  const [weeklySchedulesFromApi, setWeeklySchedulesFromApi] = useState<any[]>([]);
+  const [weeklyMeetingsFromApi, setWeeklyMeetingsFromApi] = useState<any[]>([]);
+  const [planStartDate, setPlanStartDate] = useState<string>(() => todayIso());
+  const [selectedPlanWeekdayTab, setSelectedPlanWeekdayTab] = useState<number | 'all'>('all');
   const [frequencyScheduleIds, setFrequencyScheduleIds] = useState<string[]>([]);
   const [useRecurrence, setUseRecurrence] = useState<boolean>(false);
   const [recurrenceFrequency, setRecurrenceFrequency] = useState<RecurrenceFrequency>('weekly');
@@ -120,12 +144,13 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
   const [recurrenceDurationCode, setRecurrenceDurationCode] = useState<Exclude<PlanDurationCode, 'legacy_frequency'>>('1_month');
   const [recurrenceCount, setRecurrenceCount] = useState<number>(4);
   const [recurrenceEndDate, setRecurrenceEndDate] = useState<string>('');
-  const [recurrencePreview, setRecurrencePreview] = useState<RecurrencePreviewData | null>(null);
+  const [recurrencePreview, setRecurrencePreview] = useState<(RecurrencePreviewData & { pricing?: any }) | null>(null);
   const [loadingRecurrencePreview, setLoadingRecurrencePreview] = useState<boolean>(false);
   const [recurrencePreviewError, setRecurrencePreviewError] = useState<string | null>(null);
   const [slotRecurrenceMeta, setSlotRecurrenceMeta] = useState<{
     allow_recurrence?: boolean | number;
     allowed_recurrence_frequencies?: string[];
+    allowed_recurrence_weekdays?: number[];
     default_recurrence_frequency?: string | null;
     custom_recurrence_intervals?: RecurrenceIntervalSpec[] | null;
     default_recurrence_interval?: RecurrenceIntervalSpec | null;
@@ -167,28 +192,6 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
     [services, selectedServiceId]
   );
 
-  const frequencyConfig = readFrequencyPricing(selectedService?.frequency_pricing);
-  const frequencyPlanActive = Boolean(objective === 'service' && frequencyConfig?.enabled && supportsFrequencyPricing(selectedService?.billing_mode) && useRecurrence && ['weekly', 'custom_weekdays'].includes(recurrenceFrequency));
-  const frequencyMeetings = useMemo(() => offeredWeeklyMeetings(selectedService?.class_schedules || []).filter(m => selectedProfFilter === 'any' || m.professionalId === selectedProfFilter), [selectedService, selectedProfFilter]);
-  useEffect(() => { setFrequencyScheduleIds(selectedSlot?.classScheduleId ? [selectedSlot.classScheduleId] : []); }, [selectedServiceId, selectedSlot]);
-  const frequencyEntries = useMemo(() => frequencyPlanActive ? frequencyMeetings.filter(m => frequencyScheduleIds.includes(m.id || '')).map(m => ({
-    classScheduleId: m.id, weekday: m.weekday, dayOfWeek: m.weekday, startTime: m.startTime, endTime: m.endTime, professionalId: m.professionalId, modality: selectedModality
-  })) : [], [frequencyPlanActive, frequencyMeetings, frequencyScheduleIds, selectedModality]);
-  const frequencyQuote = useMemo(() => {
-    if (!frequencyPlanActive || !frequencyEntries.length || !selectedSlot?.startTime) return null;
-    const start = selectedSlot.startTime.slice(0, 10);
-    const cycleEnd = computeBillingCycleEndDate(start, getCycleMonthsForBillingMode(selectedService.billing_mode) || 1)!;
-    const planEnd = recurrenceDurationCode === 'custom_date' ? recurrenceEndDate : recurrenceDurationCode === 'count'
-      ? recurrencePreview?.occurrences?.at(-1)?.date : resolvePlanDurationEndDate(start, recurrenceDurationCode);
-    const end = planEnd && planEnd < cycleEnd ? planEnd : cycleEnd;
-    const selectedMeetings = frequencyMeetings.filter(m => frequencyScheduleIds.includes(m.id || '') && (!recurrencePreview?.valid || !recurrencePreview.occurrences.length || recurrencePreview.occurrences.some(o => o.classScheduleId === m.id)));
-    return calculateStudioRecurringPrice({ serviceName: selectedService.name, sessionPrice: Number(selectedService.price),
-      weeklySessionsCount: Math.max(1, selectedMeetings.length), billingMode: selectedService.billing_mode, pricingRule: selectedService.pricing_rule,
-      frequencyPricing: frequencyConfig, scheduledSessionsCount: countMeetingOccurrences(selectedMeetings, start, end)
-    });
-  }, [frequencyPlanActive, frequencyEntries, selectedSlot, selectedService, frequencyConfig, recurrenceDurationCode, recurrenceEndDate, recurrencePreview, frequencyMeetings, frequencyScheduleIds]);
-  const frequencyPeriodLabel = SERVICE_BILLING_MODE_OPTIONS.find(o => o.value === selectedService?.billing_mode)?.label.toLowerCase();
-
   const selectedServiceRecurrence = useMemo(() => {
     const merged = slotRecurrenceMeta
       ? {
@@ -196,6 +199,8 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
           allow_recurrence: slotRecurrenceMeta.allow_recurrence ?? selectedService?.allow_recurrence,
           allowed_recurrence_frequencies:
             slotRecurrenceMeta.allowed_recurrence_frequencies ?? selectedService?.allowed_recurrence_frequencies,
+          allowed_recurrence_weekdays:
+            slotRecurrenceMeta.allowed_recurrence_weekdays ?? selectedService?.allowed_recurrence_weekdays,
           default_recurrence_frequency:
             slotRecurrenceMeta.default_recurrence_frequency ?? selectedService?.default_recurrence_frequency,
           custom_recurrence_intervals:
@@ -210,6 +215,229 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
       : selectedService;
     return parseServiceRecurrenceConfig(merged);
   }, [selectedService, slotRecurrenceMeta]);
+
+  const isServiceStudioDomain = !selectedService || clinic?.establishment_profile !== 'mixed' || selectedService.service_domain === 'studio' || selectedService.service_kind === 'group';
+  const canUseRecurringPlan = Boolean(
+    isServiceStudioDomain &&
+    selectedServiceRecurrence.allowRecurrence &&
+    selectedServiceRecurrence.allowedFrequencies.length > 0
+  );
+  const supportsWeeklyMultiSelect = useMemo(
+    () => selectedServiceRecurrence.allowedFrequencies.some(f => f === 'weekly' || f === 'custom_weekdays'),
+    [selectedServiceRecurrence]
+  );
+
+  const frequencyConfig = readFrequencyPricing(selectedService?.frequency_pricing);
+  const isWeeklySchedulePlan = Boolean(objective === 'service' && useRecurrence && supportsWeeklyMultiSelect);
+  const frequencyPlanActive = Boolean(isWeeklySchedulePlan && frequencyConfig?.enabled && supportsFrequencyPricing(selectedService?.billing_mode));
+
+  const planMeetings = useMemo(() => {
+    if (!selectedService) return [] as Array<any>;
+    const restrictDays =
+      selectedServiceRecurrence.allowedFrequencies.includes('custom_weekdays') &&
+      selectedServiceRecurrence.allowedWeekdays.length > 0
+        ? new Set(selectedServiceRecurrence.allowedWeekdays)
+        : null;
+    if (selectedService.service_kind === 'group') {
+      const rawRows = weeklySchedulesFromApi.length > 0 ? weeklySchedulesFromApi : (selectedService.class_schedules || []);
+      const profFiltered = rawRows.filter((r: any) => selectedProfFilter === 'any' || r.professional_id === selectedProfFilter);
+      const offered = offeredWeeklyMeetings(profFiltered).map(m => {
+        const srcRow = profFiltered.find((r: any) => r.id === m.id);
+        return {
+          ...m,
+          id: resolveMeetingKey(m),
+          professionalName: srcRow?.professional_name || professionals.find(p => p.id === m.professionalId)?.name || 'Instrutor',
+          capacity: Number(srcRow?.capacity || selectedService.default_capacity || 1),
+          modality: srcRow?.modality || null
+        };
+      });
+      return restrictDays ? offered.filter(m => restrictDays.has(m.weekday)) : offered;
+    }
+    const indList = (weeklyMeetingsFromApi || [])
+      .filter((m: any) => selectedProfFilter === 'any' || m.professionalId === selectedProfFilter)
+      .filter((m: any) => !restrictDays || restrictDays.has(Number(m.weekday)))
+      .map((m: any) => ({
+        ...m,
+        id: resolveMeetingKey(m),
+        professionalName: m.professionalName || professionals.find(p => p.id === m.professionalId)?.name || 'Instrutor'
+      }));
+    return indList;
+  }, [selectedService, selectedServiceRecurrence, weeklySchedulesFromApi, weeklyMeetingsFromApi, selectedProfFilter, professionals]);
+
+  const selectedPlanMeetings = useMemo(
+    () => planMeetings.filter(m => frequencyScheduleIds.includes(resolveMeetingKey(m))),
+    [planMeetings, frequencyScheduleIds]
+  );
+
+  const togglePlanMeetingSelection = (meeting: any) => {
+    const key = resolveMeetingKey(meeting);
+    const isGroup = selectedService?.service_kind === 'group';
+    setFrequencyScheduleIds(prev => {
+      if (prev.includes(key)) {
+        return prev.filter(id => id !== key);
+      }
+      if (!isGroup) {
+        // Em aula individual, permite selecionar 1 horário por dia da semana desejado
+        const sameWeekdayKeys = new Set(
+          planMeetings.filter(m => m.weekday === meeting.weekday).map(m => resolveMeetingKey(m))
+        );
+        return [...prev.filter(id => !sameWeekdayKeys.has(id)), key];
+      }
+      return [...prev, key];
+    });
+  };
+
+  useEffect(() => {
+    if (selectedSlot?.classScheduleId && !useRecurrence) {
+      setFrequencyScheduleIds([selectedSlot.classScheduleId]);
+    }
+  }, [selectedServiceId, selectedSlot, useRecurrence]);
+
+  const effectiveRecurrenceAnchorSlot = useMemo(() => {
+    if (!isWeeklySchedulePlan) return selectedSlot;
+    if (selectedPlanMeetings.length === 0) return null;
+    const baseStart = planStartDate && /^\d{4}-\d{2}-\d{2}$/.test(planStartDate) ? planStartDate : todayIso();
+    const minBase = baseStart < todayIso() ? todayIso() : baseStart;
+    // Prioriza primeira ocorrência real já validada nos próximos horários quando existir
+    const matchedUpcoming = (upcomingSlots || []).find((u: any) => {
+      if (u.isFull) return false;
+      const uDate = u.date || String(u.startTime || '').slice(0, 10);
+      if (uDate < minBase) return false;
+      const uDow = new Date(`${uDate}T12:00:00Z`).getUTCDay();
+      return selectedPlanMeetings.some(m =>
+        (isRealClassScheduleId(m.id) && u.classScheduleId === m.id) ||
+        (m.weekday === uDow && m.startTime === (u.time || String(u.startTime || '').slice(11, 16)) && m.professionalId === u.professionalId)
+      );
+    });
+    if (matchedUpcoming) return matchedUpcoming;
+    // Caso contrário resolve a próxima data a partir de baseStart
+    for (let offset = 0; offset < 14; offset++) {
+      const candidateDate = addDays(minBase, offset);
+      const dow = new Date(`${candidateDate}T12:00:00Z`).getUTCDay();
+      const matched = selectedPlanMeetings.find(m => m.weekday === dow);
+      if (matched) {
+        return {
+          startTime: `${candidateDate}T${matched.startTime}:00`,
+          endTime: `${candidateDate}T${matched.endTime}:00`,
+          time: matched.startTime,
+          endTimeClock: matched.endTime,
+          professionalId: matched.professionalId,
+          professionalName: matched.professionalName,
+          classScheduleId: isRealClassScheduleId(matched.id) ? matched.id : null
+        };
+      }
+    }
+    return null;
+  }, [isWeeklySchedulePlan, selectedSlot, selectedPlanMeetings, planStartDate, upcomingSlots]);
+
+  const frequencyEntries = useMemo(
+    () =>
+      isWeeklySchedulePlan
+        ? selectedPlanMeetings.map(m => ({
+            classScheduleId: isRealClassScheduleId(m.id) ? m.id : null,
+            weekday: m.weekday,
+            dayOfWeek: m.weekday,
+            startTime: m.startTime,
+            endTime: m.endTime,
+            professionalId: m.professionalId,
+            modality: selectedModality
+          }))
+        : [],
+    [isWeeklySchedulePlan, selectedPlanMeetings, selectedModality]
+  );
+
+  const frequencyQuote = useMemo(() => {
+    if (!useRecurrence || !selectedService || !supportsFrequencyPricing(selectedService.billing_mode)) return null;
+    if (isWeeklySchedulePlan && selectedPlanMeetings.length === 0) return null;
+    const anchorStart = effectiveRecurrenceAnchorSlot?.startTime?.slice(0, 10) || planStartDate || todayIso();
+    const cycleMonths = getCycleMonthsForBillingMode(selectedService.billing_mode) || 1;
+    const cycleEnd = computeBillingCycleEndDate(anchorStart, cycleMonths)!;
+    const planEnd =
+      recurrenceDurationCode === 'custom_date'
+        ? recurrenceEndDate
+        : recurrenceDurationCode === 'count'
+        ? recurrencePreview?.occurrences?.at(-1)?.date
+        : resolvePlanDurationEndDate(anchorStart, recurrenceDurationCode);
+    const end = planEnd && planEnd < cycleEnd ? planEnd : cycleEnd;
+    const weeklyCount = isWeeklySchedulePlan ? Math.max(1, selectedPlanMeetings.length) : 1;
+    const scheduledCnt = isWeeklySchedulePlan
+      ? countMeetingOccurrences(selectedPlanMeetings, anchorStart, end)
+      : undefined;
+    return calculateStudioRecurringPrice({
+      serviceName: selectedService.name,
+      sessionPrice: Number(selectedService.price),
+      weeklySessionsCount: weeklyCount,
+      billingMode: selectedService.billing_mode,
+      pricingRule: selectedService.pricing_rule,
+      frequencyPricing: frequencyConfig,
+      customPrice: selectedService.periodic_price ?? undefined,
+      isPriceCustomized: Boolean(selectedService.is_price_customized),
+      scheduledSessionsCount: scheduledCnt
+    });
+  }, [
+    useRecurrence,
+    selectedService,
+    isWeeklySchedulePlan,
+    selectedPlanMeetings,
+    effectiveRecurrenceAnchorSlot,
+    planStartDate,
+    recurrenceDurationCode,
+    recurrenceEndDate,
+    recurrencePreview,
+    frequencyConfig
+  ]);
+
+  const billingModeOption = SERVICE_BILLING_MODE_OPTIONS.find(o => o.value === selectedService?.billing_mode);
+  const frequencyPeriodLabel = billingModeOption?.label.toLowerCase() || 'por aula';
+
+  const resolvedPlanFinancials = useMemo(() => {
+    if (!selectedService || !useRecurrence) return null;
+    const previewPricing = recurrencePreview?.pricing;
+    const isPeriodic = supportsFrequencyPricing(selectedService.billing_mode);
+    const weeklyCount = previewPricing?.weeklyCount ?? (isWeeklySchedulePlan ? Math.max(1, selectedPlanMeetings.length) : 1);
+    const durationMonths = PLAN_DURATION_MONTHS_MAP[recurrenceDurationCode] || null;
+    if (isPeriodic) {
+      const periodAmount = Number(previewPricing?.amount ?? frequencyQuote?.effectivePrice ?? 0);
+      const averagePerSession = Number(
+        previewPricing?.averagePricePerSession ?? frequencyQuote?.averagePricePerSession ?? selectedService.price ?? 0
+      );
+      const cycleMonths = Number(previewPricing?.cycleMonths ?? getCycleMonthsForBillingMode(selectedService.billing_mode) ?? 1);
+      const cycleCount =
+        durationMonths && cycleMonths && durationMonths >= cycleMonths && durationMonths % cycleMonths === 0
+          ? durationMonths / cycleMonths
+          : null;
+      const pricingRuleUsed = previewPricing?.pricingRule || selectedService.pricing_rule || 'four_weeks';
+      const fixedPerCycleAmount = pricingRuleUsed !== 'scheduled_sessions' || (frequencyConfig?.enabled && frequencyConfig.unit === 'per_period');
+      const contractTotal =
+        cycleCount && periodAmount > 0 && (cycleCount === 1 || fixedPerCycleAmount)
+          ? Math.round(periodAmount * cycleCount * 100) / 100
+          : null;
+      return {
+        isPeriodic: true,
+        weeklyCount,
+        periodAmount,
+        averagePerSession,
+        cycleMonths,
+        cycleCount,
+        contractTotal,
+        billingPeriodLabel: billingModeOption?.label || 'Mensal',
+        billingShortPeriod: billingModeOption?.shortPeriod || '/mês'
+      };
+    }
+    const perSessionPrice = Number(selectedService.price || 0);
+    const totalCount = recurrencePreview?.availableCount || recurrencePreview?.totalCount || null;
+    return {
+      isPeriodic: false,
+      weeklyCount,
+      periodAmount: perSessionPrice,
+      averagePerSession: perSessionPrice,
+      cycleMonths: null,
+      cycleCount: totalCount,
+      contractTotal: totalCount ? Math.round(perSessionPrice * totalCount * 100) / 100 : null,
+      billingPeriodLabel: 'Por aula',
+      billingShortPeriod: '/aula'
+    };
+  }, [selectedService, useRecurrence, recurrencePreview, frequencyQuote, isWeeklySchedulePlan, selectedPlanMeetings.length, recurrenceDurationCode, frequencyConfig, billingModeOption]);
 
   useEffect(() => {
     if (!selectedServiceRecurrence.allowRecurrence || selectedServiceRecurrence.allowedFrequencies.length === 0) {
@@ -243,8 +471,6 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
       step !== 3 ||
       !useRecurrence ||
       !selectedServiceId ||
-      !selectedSlot?.startTime ||
-      !selectedSlot?.endTime ||
       !selectedServiceRecurrence.allowRecurrence
     ) {
       setRecurrencePreview(null);
@@ -253,13 +479,27 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
       return;
     }
 
-    if (frequencyPlanActive ? frequencyEntries.length === 0 : recurrenceFrequency === 'custom_weekdays' && recurrenceWeekdays.length === 0) {
+    if (isWeeklySchedulePlan && frequencyEntries.length === 0) {
+      setRecurrencePreview(null);
+      setRecurrencePreviewError(null);
+      setLoadingRecurrencePreview(false);
+      return;
+    }
+
+    if (!effectiveRecurrenceAnchorSlot?.startTime || !effectiveRecurrenceAnchorSlot?.endTime) {
+      setRecurrencePreview(null);
+      setRecurrencePreviewError(null);
+      setLoadingRecurrencePreview(false);
+      return;
+    }
+
+    if (!isWeeklySchedulePlan && recurrenceFrequency === 'custom_weekdays' && recurrenceWeekdays.length === 0) {
       setRecurrencePreview(null);
       setRecurrencePreviewError('Selecione ao menos um dia da semana para consultar as datas.');
       return;
     }
 
-    const startDateIso = String(selectedSlot.startTime).slice(0, 10);
+    const startDateIso = String(effectiveRecurrenceAnchorSlot.startTime).slice(0, 10);
     const effectiveEndMode: 'count' | 'date' = recurrenceDurationCode === 'count' ? 'count' : 'date';
     const computedPlanEnd =
       recurrenceDurationCode !== 'count' && recurrenceDurationCode !== 'custom_date'
@@ -285,25 +525,35 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
       : selectedServiceRecurrence.defaultFrequency || selectedServiceRecurrence.allowedFrequencies[0];
 
     const timer = window.setTimeout(() => {
-      ApiClient.post<RecurrencePreviewData>('/v1/public/studio/recurrence-preview', {
+      ApiClient.post<RecurrencePreviewData & { pricing?: any }>('/v1/public/studio/recurrence-preview', {
         tenantSlug: tenantSlug || clinic?.slug,
         bookingSequence,
+        bookingIntent: 'recurring',
         serviceId: selectedServiceId,
         professionalId:
-          selectedProfFilter === 'any' ? selectedSlot?.professionalId || 'any' : selectedProfFilter,
-        classScheduleId: selectedSlot?.classScheduleId || null,
+          selectedProfFilter === 'any'
+            ? effectiveRecurrenceAnchorSlot?.professionalId || 'any'
+            : selectedProfFilter,
+        classScheduleId: isRealClassScheduleId(effectiveRecurrenceAnchorSlot?.classScheduleId)
+          ? effectiveRecurrenceAnchorSlot.classScheduleId
+          : null,
         modality: selectedModality,
-        startTime: selectedSlot.startTime,
-        endTime: selectedSlot.endTime,
+        startTime: effectiveRecurrenceAnchorSlot.startTime,
+        endTime: effectiveRecurrenceAnchorSlot.endTime,
         recurrence: {
           frequency: activeFrequency,
           durationCode: recurrenceDurationCode,
-          seriesMode: frequencyPlanActive ? 'schedule_plan' : 'cadence_duration',
-          ...(frequencyPlanActive ? { scheduleEntries: frequencyEntries, weekdays: [...new Set(frequencyEntries.map(m => m.weekday))] } : {}),
+          seriesMode: isWeeklySchedulePlan ? 'schedule_plan' : 'cadence_duration',
+          ...(isWeeklySchedulePlan
+            ? {
+                scheduleEntries: frequencyEntries,
+                weekdays: [...new Set(frequencyEntries.map(m => m.weekday))]
+              }
+            : {}),
           ...(activeFrequency === 'custom_interval'
             ? { intervalValue: recurrenceIntervalValue, intervalUnit: recurrenceIntervalUnit }
             : {}),
-          ...(!frequencyPlanActive && activeFrequency === 'custom_weekdays' ? { weekdays: recurrenceWeekdays } : {}),
+          ...(!isWeeklySchedulePlan && activeFrequency === 'custom_weekdays' ? { weekdays: recurrenceWeekdays } : {}),
           ...(effectiveEndMode === 'date'
             ? { endDate: effectiveEndDateStr }
             : { maxOccurrences: recurrenceCount })
@@ -335,7 +585,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
     step,
     useRecurrence,
     selectedServiceId,
-    selectedSlot,
+    effectiveRecurrenceAnchorSlot,
     selectedProfFilter,
     selectedModality,
     selectedServiceRecurrence,
@@ -346,7 +596,9 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
     recurrenceDurationCode,
     recurrenceIntervalValue,
     recurrenceIntervalUnit,
-    recurrenceWeekdays, frequencyPlanActive, frequencyEntries,
+    recurrenceWeekdays,
+    isWeeklySchedulePlan,
+    frequencyEntries,
     recurrenceEndMode,
     recurrenceCount,
     recurrenceEndDate
@@ -379,7 +631,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
     const profParam = selectedProfFilter ? `&professionalId=${encodeURIComponent(selectedProfFilter)}` : '';
     const dateParam = selectedDate ? `&date=${encodeURIComponent(selectedDate)}` : '';
     ApiClient.get<any>(
-      `/v1/public/studio/slots?tenantSlug=${encodeURIComponent(tenantSlug || clinic?.slug || '')}${seqParam}&serviceId=${encodeURIComponent(selectedServiceId)}${dateParam}${profParam}&includeUpcoming=1`
+      `/v1/public/studio/slots?tenantSlug=${encodeURIComponent(tenantSlug || clinic?.slug || '')}${seqParam}&serviceId=${encodeURIComponent(selectedServiceId)}${dateParam}${profParam}&includeUpcoming=1&includeWeekly=1`
     )
       .then(res => {
         if (cancelled) return;
@@ -391,6 +643,8 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
         setSlots(res?.slots || []);
         setUpcomingSlots(res?.upcomingSlots || []);
         setWeeklySummary(res?.weeklySummary || []);
+        setWeeklySchedulesFromApi(Array.isArray(res?.weeklySchedules) ? res.weeklySchedules : []);
+        setWeeklyMeetingsFromApi(Array.isArray(res?.weeklyMeetings) ? res.weeklyMeetings : []);
         const allowed: ConcreteModality[] =
           Array.isArray(res?.allowedModalities) && res.allowedModalities.length > 0
             ? res.allowedModalities
@@ -401,6 +655,9 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
           allow_recurrence: res?.allowRecurrence,
           allowed_recurrence_frequencies: Array.isArray(res?.allowedRecurrenceFrequencies)
             ? res.allowedRecurrenceFrequencies
+            : undefined,
+          allowed_recurrence_weekdays: Array.isArray(res?.allowedRecurrenceWeekdays)
+            ? res.allowedRecurrenceWeekdays
             : undefined,
           default_recurrence_frequency: res?.defaultRecurrenceFrequency ?? null,
           custom_recurrence_intervals: Array.isArray(res?.customRecurrenceIntervals)
@@ -632,56 +889,66 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                 notes: studentForm.notes.trim() || null
               }
             }
-          : {
-              tenantSlug: tenantSlug || clinic?.slug,
-              bookingSequence,
-              mode: 'service',
-              serviceId: selectedServiceId,
-              professionalId: selectedProfFilter === 'any' ? selectedSlot?.professionalId || 'any' : selectedProfFilter,
-              classScheduleId: selectedSlot?.classScheduleId || null,
-              modality: concreteServiceModality,
-              startTime: selectedSlot?.startTime,
-              endTime: selectedSlot?.endTime,
-              ...(useRecurrence && selectedServiceRecurrence.allowRecurrence && selectedServiceRecurrence.allowedFrequencies.length > 0
-                ? (() => {
-                    const effectiveFreq = selectedServiceRecurrence.allowedFrequencies.includes(recurrenceFrequency)
-                      ? recurrenceFrequency
-                      : selectedServiceRecurrence.defaultFrequency || selectedServiceRecurrence.allowedFrequencies[0];
-                    const startDateIso = String(selectedSlot?.startTime || '').slice(0, 10);
-                    const effectiveEndMode: 'count' | 'date' = recurrenceDurationCode === 'count' ? 'count' : 'date';
-                    const computedPlanEnd =
-                      recurrenceDurationCode !== 'count' && recurrenceDurationCode !== 'custom_date'
-                        ? resolvePlanDurationEndDate(startDateIso, recurrenceDurationCode)
-                        : null;
-                    const effectiveEndDateStr =
-                      recurrenceDurationCode === 'custom_date' ? recurrenceEndDate : (computedPlanEnd || '');
-                    return {
-                      recurrence: {
-                        frequency: effectiveFreq,
-                        durationCode: recurrenceDurationCode,
-                        seriesMode: frequencyPlanActive ? 'schedule_plan' : 'cadence_duration',
-          ...(frequencyPlanActive ? { scheduleEntries: frequencyEntries, weekdays: [...new Set(frequencyEntries.map(m => m.weekday))] } : {}),
-                        ...(effectiveFreq === 'custom_interval'
-                          ? { intervalValue: recurrenceIntervalValue, intervalUnit: recurrenceIntervalUnit }
-                          : {}),
-                        ...(!frequencyPlanActive && effectiveFreq === 'custom_weekdays' && recurrenceWeekdays.length > 0
-                          ? { weekdays: recurrenceWeekdays }
-                          : {}),
-                        ...(effectiveEndMode === 'date' && effectiveEndDateStr
-                          ? { endDate: effectiveEndDateStr }
-                          : { maxOccurrences: recurrenceCount })
-                      }
-                    };
-                  })()
-                : {}),
-              student: {
-                fullName: studentForm.fullName.trim(),
-                phone: studentForm.phone.trim(),
-                whatsapp: studentForm.whatsapp.trim() || studentForm.phone.trim(),
-                email: studentForm.email.trim() || null,
-                notes: studentForm.notes.trim() || null
-              }
-            };
+          : (() => {
+              const targetSlot = useRecurrence ? effectiveRecurrenceAnchorSlot : selectedSlot;
+              return {
+                tenantSlug: tenantSlug || clinic?.slug,
+                bookingSequence,
+                bookingIntent: useRecurrence ? 'recurring' : 'single',
+                mode: 'service',
+                serviceId: selectedServiceId,
+                professionalId:
+                  selectedProfFilter === 'any' ? targetSlot?.professionalId || 'any' : selectedProfFilter,
+                classScheduleId: isRealClassScheduleId(targetSlot?.classScheduleId) ? targetSlot.classScheduleId : null,
+                modality: concreteServiceModality,
+                startTime: targetSlot?.startTime,
+                endTime: targetSlot?.endTime,
+                ...(useRecurrence && selectedServiceRecurrence.allowRecurrence && selectedServiceRecurrence.allowedFrequencies.length > 0
+                  ? (() => {
+                      const effectiveFreq = selectedServiceRecurrence.allowedFrequencies.includes(recurrenceFrequency)
+                        ? recurrenceFrequency
+                        : selectedServiceRecurrence.defaultFrequency || selectedServiceRecurrence.allowedFrequencies[0];
+                      const startDateIso = String(targetSlot?.startTime || '').slice(0, 10);
+                      const effectiveEndMode: 'count' | 'date' = recurrenceDurationCode === 'count' ? 'count' : 'date';
+                      const computedPlanEnd =
+                        recurrenceDurationCode !== 'count' && recurrenceDurationCode !== 'custom_date'
+                          ? resolvePlanDurationEndDate(startDateIso, recurrenceDurationCode)
+                          : null;
+                      const effectiveEndDateStr =
+                        recurrenceDurationCode === 'custom_date' ? recurrenceEndDate : (computedPlanEnd || '');
+                      return {
+                        recurrence: {
+                          frequency: effectiveFreq,
+                          durationCode: recurrenceDurationCode,
+                          seriesMode: isWeeklySchedulePlan ? 'schedule_plan' : 'cadence_duration',
+                          ...(isWeeklySchedulePlan
+                            ? {
+                                scheduleEntries: frequencyEntries,
+                                weekdays: [...new Set(frequencyEntries.map(m => m.weekday))]
+                              }
+                            : {}),
+                          ...(effectiveFreq === 'custom_interval'
+                            ? { intervalValue: recurrenceIntervalValue, intervalUnit: recurrenceIntervalUnit }
+                            : {}),
+                          ...(!isWeeklySchedulePlan && effectiveFreq === 'custom_weekdays' && recurrenceWeekdays.length > 0
+                            ? { weekdays: recurrenceWeekdays }
+                            : {}),
+                          ...(effectiveEndMode === 'date' && effectiveEndDateStr
+                            ? { endDate: effectiveEndDateStr }
+                            : { maxOccurrences: recurrenceCount })
+                        }
+                      };
+                    })()
+                  : {}),
+                student: {
+                  fullName: studentForm.fullName.trim(),
+                  phone: studentForm.phone.trim(),
+                  whatsapp: studentForm.whatsapp.trim() || studentForm.phone.trim(),
+                  email: studentForm.email.trim() || null,
+                  notes: studentForm.notes.trim() || null
+                }
+              };
+            })();
 
       const res = await ApiClient.post<any>('/v1/public/studio/bookings', payload);
       setBookingResult(res);
@@ -721,6 +988,9 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
   const resetFlow = () => {
     setBookingResult(null);
     setSelectedSlot(null);
+    setBookingModeChoice(null);
+    setUseRecurrence(false);
+    setFrequencyScheduleIds([]);
     setSelectedDate('');
     setPkgDate('');
     setPkgSelectedItems([]);
@@ -857,29 +1127,27 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
             </span>
           </div>
 
-          {objective === 'service' ? (
+          {objective === 'service' ? (() => {
+            const domainFiltered =
+              clinic?.establishment_profile === 'mixed' && services.some(s => s.service_domain === 'studio')
+                ? services.filter(s => s.service_domain === 'studio')
+                : services;
+            const visibleServices = domainFiltered.filter(
+              s =>
+                s.service_kind !== 'group' ||
+                (s.has_public_schedules !== false &&
+                  s.is_publicly_available !== false &&
+                  Array.isArray(s.weekly_schedule_summary) &&
+                  s.weekly_schedule_summary.length > 0)
+            );
+            return (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {services.filter(
-                s =>
-                  s.service_kind !== 'group' ||
-                  (s.has_public_schedules !== false &&
-                    s.is_publicly_available !== false &&
-                    Array.isArray(s.weekly_schedule_summary) &&
-                    s.weekly_schedule_summary.length > 0)
-              ).length === 0 ? (
+              {visibleServices.length === 0 ? (
                 <div className="col-span-full p-5 rounded-2xl border border-dashed border-slate-200 bg-slate-50 text-center text-xs text-slate-600">
                   Nenhuma aula com horários públicos ativos disponível para reserva online neste momento.
                 </div>
               ) : (
-                services
-                  .filter(
-                    s =>
-                      s.service_kind !== 'group' ||
-                      (s.has_public_schedules !== false &&
-                        s.is_publicly_available !== false &&
-                        Array.isArray(s.weekly_schedule_summary) &&
-                        s.weekly_schedule_summary.length > 0)
-                  )
+                visibleServices
                   .map(s => {
                 const chosen = selectedServiceId === s.id;
                 return (
@@ -889,6 +1157,11 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                     onClick={() => {
                       setSelectedServiceId(s.id);
                       setSelectedSlot(null);
+                      setBookingModeChoice(null);
+                      setUseRecurrence(false);
+                      setFrequencyScheduleIds([]);
+                      setSelectedPlanWeekdayTab('all');
+                      setPlanStartDate(todayIso());
                       setSelectedDate('');
                       setSelectedProfFilter('any');
                       setError('');
@@ -951,7 +1224,8 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
               })
               )}
             </div>
-          ) : (
+            );
+          })() : (
             <div className="grid grid-cols-1 gap-3">
               {packages.map(pkg => (
                 <button
@@ -1036,239 +1310,438 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Instrutor</label>
-              <select
-                value={selectedProfFilter}
-                onChange={e => {
-                  setSelectedProfFilter(e.target.value);
-                  setSelectedSlot(null);
-                }}
-                className={bookingInput}
-              >
-                <option value="any">Qualquer instrutor disponível</option>
-                {linkedProfessionals.map(p => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-xs font-bold text-slate-700">Filtrar por data (opcional)</label>
-                {selectedDate && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedDate('');
-                      setSelectedSlot(null);
-                    }}
-                    className="text-[11px] font-bold text-teal-700 hover:underline cursor-pointer"
-                  >
-                    Ver próximas turmas
-                  </button>
-                )}
-              </div>
-              <input
-                type="date"
-                min={todayIso()}
-                value={selectedDate}
-                onChange={e => {
-                  setSelectedDate(e.target.value);
-                  setSelectedSlot(null);
-                }}
-                className={bookingInput}
-              />
-            </div>
-          </div>
+          {canUseRecurringPlan && (
+            <div className="space-y-2">
+              <div className="text-xs font-bold text-slate-800">Como deseja agendar esta aula?</div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBookingModeChoice('single');
+                    setUseRecurrence(false);
+                    setError('');
+                  }}
+                  aria-pressed={bookingModeChoice === 'single'}
+                  className={`p-4 rounded-2xl border-2 text-left space-y-1.5 transition-all cursor-pointer ${
+                    bookingModeChoice === 'single'
+                      ? 'border-teal-600 bg-teal-50/60 ring-2 ring-teal-500/20'
+                      : 'border-slate-200 bg-white hover:border-teal-400'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-bold text-sm text-slate-900 flex items-center gap-1.5">
+                      <Calendar className="w-4 h-4 text-teal-700" />
+                      Aula avulsa
+                    </span>
+                    {bookingModeChoice === 'single' && (
+                      <CheckCircle2 className="w-4 h-4 text-teal-700 shrink-0" />
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-600">
+                    Escolha uma data e um horário para participar de uma aula.
+                  </p>
+                </button>
 
-          <div className="flex gap-1.5 overflow-x-auto pb-1">
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedDate('');
-                setSelectedSlot(null);
-              }}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 border cursor-pointer ${
-                !selectedDate
-                  ? 'bg-teal-700 text-white border-teal-700'
-                  : 'bg-white text-slate-700 border-slate-200 hover:border-teal-400'
-              }`}
-            >
-              {selectedService.service_kind === 'group' ? 'Próximas turmas' : 'Próximos horários'}
-            </button>
-            {upcomingDatePills.map(d => (
-              <button
-                key={d}
-                type="button"
-                onClick={() => {
-                  setSelectedDate(d);
-                  setSelectedSlot(null);
-                }}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 border cursor-pointer ${
-                  selectedDate === d
-                    ? 'bg-teal-700 text-white border-teal-700'
-                    : 'bg-white text-slate-700 border-slate-200 hover:border-teal-400'
-                }`}
-              >
-                {formatDateShort(d)}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex items-center justify-between text-xs">
-            <span className="font-bold text-slate-800">
-              {selectedDate
-                ? `Horários em ${formatDateShort(selectedDate)}`
-                : selectedService.service_kind === 'group'
-                ? 'Próximas turmas disponíveis'
-                : 'Próximos horários disponíveis'}
-            </span>
-          </div>
-
-          {(() => {
-            const visibleSlots = selectedDate ? slots : upcomingSlots;
-            if (loadingSlots) {
-              return <div className="p-6 text-center text-xs text-slate-400">Buscando horários e vagas...</div>;
-            }
-            if (visibleSlots.length === 0) {
-              return (
-                <div className="p-5 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-800 text-center">
-                  {emptyReason || 'Sem horários ou turmas disponíveis nesta seleção. Tente outra data ou instrutor.'}
-                </div>
-              );
-            }
-            return (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                {visibleSlots.map((s, idx) => {
-                  const isFull = Boolean(s.isFull);
-                  const isChosen =
-                    !isFull &&
-                    selectedSlot?.startTime === s.startTime &&
-                    selectedSlot?.professionalId === s.professionalId;
-                  const slotDate = s.date || s.startTime?.slice(0, 10);
-                  const endClock = s.endTimeClock || s.endTime?.slice(11, 16);
-                  return (
-                    <button
-                      key={`${s.professionalId}-${s.startTime}-${idx}`}
-                      type="button"
-                      disabled={isFull}
-                      onClick={() => handleSelectServiceSlot(s)}
-                      className={`p-3.5 rounded-2xl border text-left transition-all ${
-                        isFull
-                          ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-80'
-                          : isChosen
-                          ? 'bg-teal-700 text-white border-teal-700 shadow-sm cursor-pointer'
-                          : 'bg-white text-slate-800 border-slate-200 hover:border-teal-500 cursor-pointer'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className={`text-[11px] font-bold ${isChosen ? 'text-teal-100' : 'text-slate-500'}`}>
-                          {slotDate ? formatDateShort(slotDate) : ''}
-                        </span>
-                        {s.serviceKind === 'group' && (
-                          <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                              isFull
-                                ? 'bg-rose-100 text-rose-700'
-                                : isChosen
-                                ? 'bg-teal-800 text-teal-100'
-                                : 'bg-teal-50 text-teal-800 border border-teal-200'
-                            }`}
-                          >
-                            {isFull
-                              ? 'Turma lotada'
-                              : `${s.remainingSpots} vaga${s.remainingSpots === 1 ? '' : 's'} disponíve${s.remainingSpots === 1 ? 'l' : 'is'}`}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-baseline justify-between gap-2 mt-1">
-                        <span className="text-sm font-extrabold">
-                          {s.time}
-                          {endClock ? ` às ${endClock}` : ''}
-                        </span>
-                        <span
-                          className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
-                            isChosen ? 'bg-teal-800 text-teal-100' : 'bg-slate-100 text-slate-600'
-                          }`}
-                        >
-                          {modalityLabel(s.modality)}
-                        </span>
-                      </div>
-                      <div className={`text-[11px] mt-1 truncate ${isChosen ? 'text-teal-100' : 'text-slate-600'}`}>
-                        Prof. {s.professionalName}
-                        {s.roomName ? ` • ${s.roomName}` : ''}
-                      </div>
-                      {s.serviceKind === 'group' && Number(s.capacity) > 0 && (
-                        <div className={`text-[10px] mt-1 font-medium ${isChosen ? 'text-teal-100' : 'text-slate-500'}`}>
-                          {s.enrolledCount ?? 0} de {s.capacity} vagas ocupadas
-                        </div>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            );
-          })()}
-
-          {/* Escolha explícita de modalidade quando a aula/serviço permitir Presencial e Online */}
-          {selectedSlot && (() => {
-            const slotAllowed: ConcreteModality[] =
-              Array.isArray(selectedSlot.allowedModalities) && selectedSlot.allowedModalities.length > 0
-                ? selectedSlot.allowedModalities
-                : serviceAllowedModalities;
-            if (slotAllowed.length <= 1) return null;
-            return (
-              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
-                <div className="font-bold text-slate-800">Escolha como prefere participar desta aula:</div>
-                <div className="flex flex-wrap gap-2">
-                  {slotAllowed.map(m => (
-                    <button
-                      key={m}
-                      type="button"
-                      onClick={() => setSelectedModality(m)}
-                      className={`px-3.5 py-1.5 rounded-xl font-bold border transition-all cursor-pointer ${
-                        selectedModality === m
-                          ? 'bg-teal-700 text-white border-teal-700'
-                          : 'bg-white text-slate-700 border-slate-200 hover:border-teal-400'
-                      }`}
-                    >
-                      {modalityLabel(m)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            );
-          })()}
-
-          {/* Recorrência conforme configuração do serviço */}
-          {selectedSlot && selectedServiceRecurrence.allowRecurrence && selectedServiceRecurrence.allowedFrequencies.length > 0 && (
-            <div className="p-4 rounded-2xl bg-indigo-50/50 border border-indigo-200 space-y-2.5 text-xs">
-              <label className="flex items-center gap-2 cursor-pointer font-bold text-indigo-950">
-                <input
-                  type="checkbox"
-                  checked={useRecurrence}
-                  onChange={e => {
-                    const checked = e.target.checked;
-                    setUseRecurrence(checked);
-                    if (checked && selectedSlot?.startTime && recurrenceWeekdays.length === 0) {
-                      const dStr = String(selectedSlot.startTime).slice(0, 10);
-                      const [yy, mm, dd] = dStr.split('-').map(Number);
-                      const wd = new Date(Date.UTC(yy, (mm || 1) - 1, dd || 1)).getUTCDay();
-                      setRecurrenceWeekdays([wd]);
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBookingModeChoice('recurring');
+                    setUseRecurrence(true);
+                    setError('');
+                    if (selectedSlot?.classScheduleId && !frequencyScheduleIds.includes(selectedSlot.classScheduleId)) {
+                      setFrequencyScheduleIds([selectedSlot.classScheduleId]);
                     }
                   }}
-                  className="w-4 h-4 text-indigo-600 rounded"
-                />
-                <Repeat className="w-4 h-4 text-indigo-600" />
-                Repetir este horário automaticamente (plano finito)
-              </label>
-              {useRecurrence && (
-                <div className="space-y-2.5 pl-6">
+                  aria-pressed={bookingModeChoice === 'recurring'}
+                  className={`p-4 rounded-2xl border-2 text-left space-y-1.5 transition-all cursor-pointer ${
+                    bookingModeChoice === 'recurring'
+                      ? 'border-teal-600 bg-teal-50/60 ring-2 ring-teal-500/20'
+                      : 'border-slate-200 bg-white hover:border-teal-400'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-bold text-sm text-slate-900 flex items-center gap-1.5">
+                      <Repeat className="w-4 h-4 text-teal-700" />
+                      Plano de aulas
+                    </span>
+                    {bookingModeChoice === 'recurring' && (
+                      <CheckCircle2 className="w-4 h-4 text-teal-700 shrink-0" />
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-600">
+                    Escolha quantas vezes por semana deseja participar, seus horários e a duração do plano.
+                  </p>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {(!canUseRecurringPlan || bookingModeChoice === 'single' || (bookingModeChoice === 'recurring' && !supportsWeeklyMultiSelect)) && (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Instrutor</label>
+                  <select
+                    value={selectedProfFilter}
+                    onChange={e => {
+                      setSelectedProfFilter(e.target.value);
+                      setSelectedSlot(null);
+                    }}
+                    className={bookingInput}
+                  >
+                    <option value="any">Qualquer instrutor disponível</option>
+                    {linkedProfessionals.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-slate-700">Filtrar por data (opcional)</label>
+                    {selectedDate && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedDate('');
+                          setSelectedSlot(null);
+                        }}
+                        className="text-[11px] font-bold text-teal-700 hover:underline cursor-pointer"
+                      >
+                        Ver próximas turmas
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    type="date"
+                    min={todayIso()}
+                    value={selectedDate}
+                    onChange={e => {
+                      setSelectedDate(e.target.value);
+                      setSelectedSlot(null);
+                    }}
+                    className={bookingInput}
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-1.5 overflow-x-auto pb-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedDate('');
+                    setSelectedSlot(null);
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 border cursor-pointer ${
+                    !selectedDate
+                      ? 'bg-teal-700 text-white border-teal-700'
+                      : 'bg-white text-slate-700 border-slate-200 hover:border-teal-400'
+                  }`}
+                >
+                  {selectedService.service_kind === 'group' ? 'Próximas turmas' : 'Próximos horários'}
+                </button>
+                {upcomingDatePills.map(d => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => {
+                      setSelectedDate(d);
+                      setSelectedSlot(null);
+                    }}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 border cursor-pointer ${
+                      selectedDate === d
+                        ? 'bg-teal-700 text-white border-teal-700'
+                        : 'bg-white text-slate-700 border-slate-200 hover:border-teal-400'
+                    }`}
+                  >
+                    {formatDateShort(d)}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-slate-800">
+                  {selectedDate
+                    ? `Horários em ${formatDateShort(selectedDate)}`
+                    : selectedService.service_kind === 'group'
+                    ? 'Próximas turmas disponíveis'
+                    : 'Próximos horários disponíveis'}
+                </span>
+              </div>
+
+              {(() => {
+                const visibleSlots = selectedDate ? slots : upcomingSlots;
+                if (loadingSlots) {
+                  return <div className="p-6 text-center text-xs text-slate-400">Buscando horários e vagas...</div>;
+                }
+                if (visibleSlots.length === 0) {
+                  return (
+                    <div className="p-5 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-800 text-center">
+                      {emptyReason || 'Sem horários ou turmas disponíveis nesta seleção. Tente outra data ou instrutor.'}
+                    </div>
+                  );
+                }
+                return (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                    {visibleSlots.map((s, idx) => {
+                      const isFull = Boolean(s.isFull);
+                      const isChosen =
+                        !isFull &&
+                        selectedSlot?.startTime === s.startTime &&
+                        selectedSlot?.professionalId === s.professionalId;
+                      const slotDate = s.date || s.startTime?.slice(0, 10);
+                      const endClock = s.endTimeClock || s.endTime?.slice(11, 16);
+                      return (
+                        <button
+                          key={`${s.professionalId}-${s.startTime}-${idx}`}
+                          type="button"
+                          disabled={isFull}
+                          onClick={() => handleSelectServiceSlot(s)}
+                          className={`p-3.5 rounded-2xl border text-left transition-all ${
+                            isFull
+                              ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-80'
+                              : isChosen
+                              ? 'bg-teal-700 text-white border-teal-700 shadow-sm cursor-pointer'
+                              : 'bg-white text-slate-800 border-slate-200 hover:border-teal-500 cursor-pointer'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className={`text-[11px] font-bold ${isChosen ? 'text-teal-100' : 'text-slate-500'}`}>
+                              {slotDate ? formatDateShort(slotDate) : ''}
+                            </span>
+                            {s.serviceKind === 'group' && (
+                              <span
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                  isFull
+                                    ? 'bg-rose-100 text-rose-700'
+                                    : isChosen
+                                    ? 'bg-teal-800 text-teal-100'
+                                    : 'bg-teal-50 text-teal-800 border border-teal-200'
+                                }`}
+                              >
+                                {isFull
+                                  ? 'Turma lotada'
+                                  : `${s.remainingSpots} vaga${s.remainingSpots === 1 ? '' : 's'} disponíve${s.remainingSpots === 1 ? 'l' : 'is'}`}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-baseline justify-between gap-2 mt-1">
+                            <span className="text-sm font-extrabold">
+                              {s.time}
+                              {endClock ? ` às ${endClock}` : ''}
+                            </span>
+                            <span
+                              className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                                isChosen ? 'bg-teal-800 text-teal-100' : 'bg-slate-100 text-slate-600'
+                              }`}
+                            >
+                              {modalityLabel(s.modality)}
+                            </span>
+                          </div>
+                          <div className={`text-[11px] mt-1 truncate ${isChosen ? 'text-teal-100' : 'text-slate-600'}`}>
+                            Prof. {s.professionalName}
+                            {s.roomName ? ` • ${s.roomName}` : ''}
+                          </div>
+                          {s.serviceKind === 'group' && Number(s.capacity) > 0 && (
+                            <div className={`text-[10px] mt-1 font-medium ${isChosen ? 'text-teal-100' : 'text-slate-500'}`}>
+                              {s.enrolledCount ?? 0} de {s.capacity} vagas ocupadas
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+
+              {/* Escolha explícita de modalidade quando a aula/serviço permitir Presencial e Online */}
+              {selectedSlot && (() => {
+                const slotAllowed: ConcreteModality[] =
+                  Array.isArray(selectedSlot.allowedModalities) && selectedSlot.allowedModalities.length > 0
+                    ? selectedSlot.allowedModalities
+                    : serviceAllowedModalities;
+                if (slotAllowed.length <= 1) return null;
+                return (
+                  <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
+                    <div className="font-bold text-slate-800">Escolha como prefere participar desta aula:</div>
+                    <div className="flex flex-wrap gap-2">
+                      {slotAllowed.map(m => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => setSelectedModality(m)}
+                          className={`px-3.5 py-1.5 rounded-xl font-bold border transition-all cursor-pointer ${
+                            selectedModality === m
+                              ? 'bg-teal-700 text-white border-teal-700'
+                              : 'bg-white text-slate-700 border-slate-200 hover:border-teal-400'
+                          }`}
+                        >
+                          {modalityLabel(m)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+            </>
+          )}
+
+          {/* Plano de aulas recorrente (sem checkbox técnico) */}
+          {canUseRecurringPlan && bookingModeChoice === 'recurring' && (
+            <div className="p-4 rounded-2xl bg-slate-50 border border-teal-200 space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Instrutor</label>
+                  <select
+                    value={selectedProfFilter}
+                    onChange={e => {
+                      setSelectedProfFilter(e.target.value);
+                      setFrequencyScheduleIds([]);
+                    }}
+                    className={bookingInput}
+                  >
+                    <option value="any">Qualquer instrutor disponível</option>
+                    {linkedProfessionals.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {isWeeklySchedulePlan && (
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Início do plano</label>
+                    <input
+                      type="date"
+                      min={todayIso()}
+                      value={planStartDate}
+                      onChange={e => setPlanStartDate(e.target.value || todayIso())}
+                      className={bookingInput}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {serviceAllowedModalities.length > 1 && isWeeklySchedulePlan && (
+                <div className="space-y-1.5">
+                  <span className="block font-bold text-slate-700">Modalidade de participação</span>
+                  <div className="flex flex-wrap gap-2">
+                    {serviceAllowedModalities.map(m => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => setSelectedModality(m)}
+                        className={`px-3 py-1.5 rounded-xl font-bold border transition-all cursor-pointer ${
+                          selectedModality === m
+                            ? 'bg-teal-700 text-white border-teal-700'
+                            : 'bg-white text-slate-700 border-slate-200 hover:border-teal-400'
+                        }`}
+                      >
+                        {modalityLabel(m)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {isWeeklySchedulePlan ? (
+                <div className="space-y-2.5 rounded-xl border border-teal-200 bg-white p-3.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-xs font-bold text-slate-900">1. Escolha os encontros semanais</p>
+                      <p className="text-[11px] text-slate-500">
+                        Marque os dias e horários desejados. A frequência semanal é calculada automaticamente.
+                      </p>
+                    </div>
+                    {selectedPlanMeetings.length > 0 && (
+                      <span className="px-2.5 py-1 rounded-full bg-teal-50 text-teal-800 border border-teal-200 font-bold text-[11px]">
+                        {selectedPlanMeetings.length}x por semana
+                      </span>
+                    )}
+                  </div>
+
+                  {loadingSlots ? (
+                    <div className="py-4 text-center text-slate-400">Carregando horários disponíveis...</div>
+                  ) : planMeetings.length === 0 ? (
+                    <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-center">
+                      {emptyReason || 'Sem horários semanais disponíveis para montar um plano neste serviço.'}
+                    </div>
+                  ) : (
+                    <>
+                      {planMeetings.length > 6 && (
+                        <div className="flex gap-1.5 overflow-x-auto pb-1">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedPlanWeekdayTab('all')}
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border cursor-pointer shrink-0 ${
+                              selectedPlanWeekdayTab === 'all'
+                                ? 'bg-teal-700 text-white border-teal-700'
+                                : 'bg-slate-50 text-slate-600 border-slate-200'
+                            }`}
+                          >
+                            Todos os dias
+                          </button>
+                          {Array.from(new Set(planMeetings.map(m => Number(m.weekday))))
+                            .sort((a, b) => (a === 0 ? 7 : a) - (b === 0 ? 7 : b))
+                            .map(wd => (
+                              <button
+                                key={wd}
+                                type="button"
+                                onClick={() => setSelectedPlanWeekdayTab(wd)}
+                                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border cursor-pointer shrink-0 ${
+                                  selectedPlanWeekdayTab === wd
+                                    ? 'bg-teal-700 text-white border-teal-700'
+                                    : 'bg-slate-50 text-slate-600 border-slate-200'
+                                }`}
+                              >
+                                {WEEKDAY_NAMES_SHORT[wd]}
+                              </button>
+                            ))}
+                        </div>
+                      )}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {planMeetings
+                          .filter(m => selectedPlanWeekdayTab === 'all' || Number(m.weekday) === selectedPlanWeekdayTab)
+                          .map(meeting => {
+                            const key = resolveMeetingKey(meeting);
+                            const isChecked = frequencyScheduleIds.includes(key);
+                            return (
+                              <label
+                                key={key}
+                                className={`flex items-center justify-between gap-2 p-2.5 rounded-xl border text-xs cursor-pointer transition-all ${
+                                  isChecked
+                                    ? 'border-teal-600 bg-teal-50/70 text-teal-950 font-semibold ring-1 ring-teal-500/20'
+                                    : 'border-slate-200 bg-white text-slate-700 hover:border-teal-400'
+                                }`}
+                              >
+                                <span className="flex items-center gap-2 min-w-0">
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={() => togglePlanMeetingSelection(meeting)}
+                                    className="w-4 h-4 text-teal-600 rounded shrink-0"
+                                  />
+                                  <span className="truncate">
+                                    {WEEKDAY_NAMES_SHORT[meeting.weekday]} · {meeting.startTime}–{meeting.endTime} · {meeting.professionalName}
+                                  </span>
+                                </span>
+                                {selectedService.service_kind === 'group' && Number(meeting.capacity) > 0 && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 shrink-0">
+                                    {meeting.capacity} vagas
+                                  </span>
+                                )}
+                              </label>
+                            );
+                          })}
+                      </div>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-2.5">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-slate-600 font-semibold">Frequência da aula:</span>
+                    <span className="text-slate-700 font-bold">Frequência da aula:</span>
                     <select
                       value={
                         selectedServiceRecurrence.allowedFrequencies.includes(recurrenceFrequency)
@@ -1276,7 +1749,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                           : (selectedServiceRecurrence.defaultFrequency || selectedServiceRecurrence.allowedFrequencies[0])
                       }
                       onChange={e => setRecurrenceFrequency(e.target.value as RecurrenceFrequency)}
-                      className="border border-indigo-200 rounded-lg px-2.5 py-1 bg-white font-bold"
+                      className="border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white font-bold"
                     >
                       {selectedServiceRecurrence.allowedFrequencies.map(f => (
                         <option key={f} value={f}>
@@ -1284,49 +1757,9 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                         </option>
                       ))}
                     </select>
-                    <span className="text-slate-600 font-semibold">Duração do plano:</span>
-                    <select
-                      value={recurrenceDurationCode}
-                      onChange={e => setRecurrenceDurationCode(e.target.value as any)}
-                      className="border border-indigo-200 rounded-lg px-2 py-1 bg-white font-semibold"
-                    >
-                      {(selectedServiceRecurrence.allowedPlanDurations || ALL_PLAN_DURATIONS).map(dur => (
-                        <option key={dur} value={dur}>
-                          {PLAN_DURATION_LABELS[dur]}
-                        </option>
-                      ))}
-                    </select>
-                    {recurrenceDurationCode === 'count' && (
-                      <div className="inline-flex items-center gap-1.5">
-                        <input
-                          type="number"
-                          min={2}
-                          max={MAX_PUBLIC_RECURRENCE_OCCURRENCES}
-                          value={recurrenceCount}
-                          onChange={e =>
-                            setRecurrenceCount(
-                              Math.max(2, Math.min(MAX_PUBLIC_RECURRENCE_OCCURRENCES, Number(e.target.value) || 2))
-                            )
-                          }
-                          className="w-16 border border-indigo-200 rounded-lg px-2 py-1 bg-white text-center font-bold"
-                          aria-label="Quantidade de aulas"
-                        />
-                        <span className="text-slate-600 font-semibold">aulas</span>
-                      </div>
-                    )}
-                    {recurrenceDurationCode === 'custom_date' && (
-                      <input
-                        type="date"
-                        min={selectedSlot?.startTime ? String(selectedSlot.startTime).slice(0, 10) : todayIso()}
-                        value={recurrenceEndDate}
-                        onChange={e => setRecurrenceEndDate(e.target.value)}
-                        className="border border-indigo-200 rounded-lg px-2 py-1 bg-white font-semibold"
-                        aria-label="Data limite da recorrência"
-                      />
-                    )}
                   </div>
                   {recurrenceFrequency === 'custom_interval' && (
-                    <div className="p-2.5 rounded-xl bg-white border border-indigo-200 space-y-2">
+                    <div className="p-2.5 rounded-xl bg-white border border-slate-200 space-y-2">
                       {selectedServiceRecurrence.customIntervals.length > 0 && (
                         <div>
                           <span className="block text-[11px] font-semibold text-slate-500 mb-1">
@@ -1346,8 +1779,8 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                                   }}
                                   className={`px-2 py-1 rounded-md border text-[11px] font-bold cursor-pointer ${
                                     active
-                                      ? 'bg-indigo-600 text-white border-indigo-600'
-                                      : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-indigo-300'
+                                      ? 'bg-teal-700 text-white border-teal-700'
+                                      : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-teal-300'
                                   }`}
                                 >
                                   {formatCustomIntervalLabel(spec)}
@@ -1370,7 +1803,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                               Math.max(bounds.min, Math.min(bounds.max, Number(e.target.value) || bounds.min))
                             );
                           }}
-                          className="w-16 border border-indigo-200 rounded-lg px-2 py-1 bg-white text-center font-bold"
+                          className="w-16 border border-slate-200 rounded-lg px-2 py-1 bg-white text-center font-bold"
                           aria-label="Quantidade do intervalo"
                         />
                         <select
@@ -1381,7 +1814,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                             setRecurrenceIntervalUnit(nextUnit);
                             setRecurrenceIntervalValue(prev => Math.max(bounds.min, Math.min(bounds.max, prev)));
                           }}
-                          className="border border-indigo-200 rounded-lg px-2 py-1 bg-white font-bold"
+                          className="border border-slate-200 rounded-lg px-2 py-1 bg-white font-bold"
                           aria-label="Unidade do intervalo"
                         >
                           <option value="days">{recurrenceIntervalValue === 1 ? 'Dia' : 'Dias'}</option>
@@ -1391,55 +1824,102 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                       </div>
                     </div>
                   )}
-                  {!frequencyPlanActive && recurrenceFrequency === 'custom_weekdays' && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {[
-                        { v: 1, l: 'Seg' },
-                        { v: 2, l: 'Ter' },
-                        { v: 3, l: 'Qua' },
-                        { v: 4, l: 'Qui' },
-                        { v: 5, l: 'Sex' },
-                        { v: 6, l: 'Sáb' },
-                        { v: 0, l: 'Dom' }
-                      ].map(w => {
-                        const active = recurrenceWeekdays.includes(w.v);
-                        return (
-                          <button
-                            key={w.v}
-                            type="button"
-                            onClick={() =>
-                              setRecurrenceWeekdays(prev =>
-                                prev.includes(w.v) ? prev.filter(x => x !== w.v) : [...prev, w.v]
-                              )
-                            }
-                            className={`px-2 py-1 rounded-md border text-[11px] font-bold cursor-pointer ${
-                              active ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200'
-                            }`}
-                          >
-                            {w.l}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                  {frequencyPlanActive && <div className="space-y-2 rounded-xl border border-teal-200 bg-white p-3">
-                    <p className="text-xs font-bold text-slate-800">Encontros semanais do plano</p>
-                    <p className="text-xs text-slate-600">Selecione os horários da grade. A disponibilidade de todas as datas será verificada abaixo.</p>
-                    {frequencyMeetings.map(meeting => <label key={meeting.id} className="flex items-center gap-2 text-xs text-slate-700">
-                      <input type="checkbox" checked={frequencyScheduleIds.includes(meeting.id || '')} onChange={event => setFrequencyScheduleIds(ids => event.target.checked ? [...ids, meeting.id!] : ids.filter(id => id !== meeting.id))} />
-                      {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'][meeting.weekday]} · {meeting.startTime}–{meeting.endTime} · {professionals.find(p => p.id === meeting.professionalId)?.name || 'Instrutor'}
-                    </label>)}
-                    {frequencyQuote && <p className="text-sm font-bold text-teal-800">{frequencyQuote.weeklySessionsCount}x por semana · {formatMoney(frequencyQuote.effectivePrice)} por período {frequencyPeriodLabel}</p>}
-                    <p className="text-xs text-slate-600">As aulas selecionadas serão cobertas pelo plano, sem cobrança avulsa por encontro. Um plano vigente aplicável mantém suas condições.</p>
-                  </div>}
-                  <RecurrencePreviewBox
-                    preview={recurrencePreview}
-                    loading={loadingRecurrencePreview}
-                    error={recurrencePreviewError}
-                    accent="teal"
-                  />
                 </div>
               )}
+
+              {/* 2. Duração do plano (somente durações permitidas pelo serviço, separada da periodicidade financeira) */}
+              <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-3.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-bold text-slate-900">2. Duração do plano</span>
+                  <span className="text-[11px] font-semibold text-slate-600">
+                    Periodicidade de cobrança: <strong>{billingModeOption?.label || 'Por aula'}</strong>
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {(selectedServiceRecurrence.allowedPlanDurations || ALL_PLAN_DURATIONS).map(dur => {
+                    const activeDur = recurrenceDurationCode === dur;
+                    return (
+                      <button
+                        key={dur}
+                        type="button"
+                        onClick={() => setRecurrenceDurationCode(dur)}
+                        className={`px-3 py-1.5 rounded-xl border text-xs font-bold cursor-pointer transition-all ${
+                          activeDur
+                            ? 'bg-teal-700 text-white border-teal-700'
+                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-teal-400'
+                        }`}
+                      >
+                        {PLAN_DURATION_LABELS[dur]}
+                      </button>
+                    );
+                  })}
+                </div>
+                {recurrenceDurationCode === 'count' && (
+                  <div className="inline-flex items-center gap-1.5 pt-1">
+                    <input
+                      type="number"
+                      min={2}
+                      max={MAX_PUBLIC_RECURRENCE_OCCURRENCES}
+                      value={recurrenceCount}
+                      onChange={e =>
+                        setRecurrenceCount(
+                          Math.max(2, Math.min(MAX_PUBLIC_RECURRENCE_OCCURRENCES, Number(e.target.value) || 2))
+                        )
+                      }
+                      className="w-16 border border-slate-200 rounded-lg px-2 py-1 bg-white text-center font-bold"
+                      aria-label="Quantidade de aulas"
+                    />
+                    <span className="text-slate-600 font-semibold">aulas</span>
+                  </div>
+                )}
+                {recurrenceDurationCode === 'custom_date' && (
+                  <div className="pt-1">
+                    <input
+                      type="date"
+                      min={effectiveRecurrenceAnchorSlot?.startTime ? String(effectiveRecurrenceAnchorSlot.startTime).slice(0, 10) : todayIso()}
+                      value={recurrenceEndDate}
+                      onChange={e => setRecurrenceEndDate(e.target.value)}
+                      className="border border-slate-200 rounded-lg px-2 py-1 bg-white font-semibold"
+                      aria-label="Data limite da recorrência"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {resolvedPlanFinancials && (!isWeeklySchedulePlan || selectedPlanMeetings.length > 0) && (
+                <div className="p-3.5 rounded-xl border border-emerald-200 bg-emerald-50/50 space-y-1">
+                  <div className="flex flex-wrap items-center justify-between gap-2 font-bold text-slate-900">
+                    <span>
+                      {resolvedPlanFinancials.weeklyCount}x por semana · {formatMoney(resolvedPlanFinancials.periodAmount)}{' '}
+                      {resolvedPlanFinancials.isPeriodic ? `por período ${frequencyPeriodLabel}` : '/ aula'}
+                    </span>
+                    {resolvedPlanFinancials.averagePerSession > 0 && resolvedPlanFinancials.isPeriodic && (
+                      <span className="text-[11px] font-semibold text-emerald-800">
+                        ({formatMoney(resolvedPlanFinancials.averagePerSession)} / aula)
+                      </span>
+                    )}
+                  </div>
+                  {resolvedPlanFinancials.contractTotal !== null &&
+                    resolvedPlanFinancials.cycleCount &&
+                    resolvedPlanFinancials.cycleCount > 1 && (
+                      <p className="text-xs font-semibold text-teal-900">
+                        {resolvedPlanFinancials.isPeriodic
+                          ? `Total estimado na duração (${PLAN_DURATION_LABELS[recurrenceDurationCode]} — ${resolvedPlanFinancials.cycleCount} ciclos): ${formatMoney(resolvedPlanFinancials.contractTotal)}`
+                          : `Total previsto (${resolvedPlanFinancials.cycleCount} aulas): ${formatMoney(resolvedPlanFinancials.contractTotal)}`}
+                      </p>
+                    )}
+                  <p className="text-[11px] text-slate-600">
+                    As aulas incluídas no plano seguem a regra financeira do serviço, sem cobrança avulsa duplicada por encontro.
+                  </p>
+                </div>
+              )}
+
+              <RecurrencePreviewBox
+                preview={recurrencePreview}
+                loading={loadingRecurrencePreview}
+                error={recurrencePreviewError}
+                accent="teal"
+              />
             </div>
           )}
 
@@ -1447,7 +1927,10 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
             <button
               type="button"
               disabled={
-                !selectedSlot || (frequencyPlanActive && !frequencyEntries.length) ||
+                (canUseRecurringPlan && bookingModeChoice === null) ||
+                (isWeeklySchedulePlan
+                  ? !effectiveRecurrenceAnchorSlot || selectedPlanMeetings.length === 0
+                  : !selectedSlot) ||
                 (useRecurrence &&
                   (loadingRecurrencePreview ||
                     Boolean(recurrencePreviewError) ||
@@ -1777,41 +2260,107 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                   <p className="text-slate-500">Sem horários pré-reservados agora — você poderá agendar após confirmação.</p>
                 )}
               </div>
-            ) : selectedService && selectedSlot ? (
-              <div className="space-y-2">
-                <div className="flex justify-between font-bold text-sm text-slate-900">
-                  <span>{selectedService.name}</span>
-                  <span className="text-teal-700">{formatMoney(frequencyQuote?.effectivePrice ?? selectedService.price)}{frequencyQuote ? ` / período ${frequencyPeriodLabel} · ${frequencyQuote.weeklySessionsCount}x por semana` : " / aula"}</span>
+            ) : selectedService && (useRecurrence ? effectiveRecurrenceAnchorSlot : selectedSlot) ? (() => {
+              const displayAnchor = useRecurrence ? effectiveRecurrenceAnchorSlot : selectedSlot;
+              const instructorNames =
+                isWeeklySchedulePlan && selectedPlanMeetings.length > 0
+                  ? Array.from(new Set(selectedPlanMeetings.map(m => m.professionalName).filter(Boolean))).join(', ')
+                  : displayAnchor?.professionalName;
+              const totalSessionsCount = recurrencePreview?.totalCount ?? (
+                recurrenceDurationCode === 'count' ? recurrenceCount : null
+              );
+              return (
+                <div className="space-y-2.5">
+                  <div className="flex flex-wrap justify-between gap-2 font-bold text-sm text-slate-900">
+                    <span>{selectedService.name}</span>
+                    {useRecurrence && resolvedPlanFinancials ? (
+                      <span className="text-teal-700">
+                        {formatMoney(resolvedPlanFinancials.periodAmount)}{' '}
+                        {resolvedPlanFinancials.isPeriodic
+                          ? `/ período ${frequencyPeriodLabel} · ${resolvedPlanFinancials.weeklyCount}x por semana`
+                          : '/ aula'}
+                      </span>
+                    ) : (
+                      <span className="text-teal-700">{formatMoney(selectedService.price)} / aula</span>
+                    )}
+                  </div>
+
+                  <p className="text-slate-700">
+                    <strong>Instrutor:</strong> {instructorNames || 'Instrutor'}
+                    {displayAnchor?.roomName ? ` • ${displayAnchor.roomName}` : ''}
+                  </p>
+
+                  <p className="text-slate-700">
+                    <strong>Modalidade:</strong> {modalityLabel(selectedModality)}
+                  </p>
+
+                  {useRecurrence ? (
+                    <>
+                      {isWeeklySchedulePlan && selectedPlanMeetings.length > 0 ? (
+                        <div className="space-y-1 text-slate-700">
+                          <div>
+                            <strong>Frequência semanal:</strong> {selectedPlanMeetings.length}x por semana
+                          </div>
+                          <div>
+                            <strong>Dias e horários selecionados:</strong>
+                            <ul className="mt-1 list-disc pl-4 space-y-0.5">
+                              {selectedPlanMeetings.map(m => (
+                                <li key={resolveMeetingKey(m)}>
+                                  {WEEKDAY_NAMES_FULL[m.weekday]} · {m.startTime}–{m.endTime} ({m.professionalName})
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-slate-700">
+                          <strong>Data inicial e horário:</strong> {formatDateShort(displayAnchor.startTime)} às {displayAnchor.time}
+                          {displayAnchor.endTimeClock ? ` às ${displayAnchor.endTimeClock}` : ''}
+                        </p>
+                      )}
+
+                      <p className="text-slate-700">
+                        <strong>Duração contratada:</strong> {PLAN_DURATION_LABELS[recurrenceDurationCode] || 'Duração do plano'}
+                        {totalSessionsCount ? ` (${totalSessionsCount} aula${totalSessionsCount === 1 ? '' : 's'} prevista${totalSessionsCount === 1 ? '' : 's'})` : ''}
+                      </p>
+
+                      {resolvedPlanFinancials && (
+                        <div className="p-3 rounded-xl bg-white border border-slate-200 space-y-1">
+                          <div>
+                            <strong>Periodicidade de cobrança:</strong> {resolvedPlanFinancials.billingPeriodLabel}
+                          </div>
+                          {resolvedPlanFinancials.averagePerSession > 0 && (
+                            <div>
+                              <strong>Valor por aula:</strong> {formatMoney(resolvedPlanFinancials.averagePerSession)}
+                            </div>
+                          )}
+                          {resolvedPlanFinancials.isPeriodic && (
+                            <div>
+                              <strong>Valor por período ({resolvedPlanFinancials.billingPeriodLabel.toLowerCase()}):</strong>{' '}
+                              {formatMoney(resolvedPlanFinancials.periodAmount)}
+                            </div>
+                          )}
+                          {resolvedPlanFinancials.contractTotal !== null &&
+                            resolvedPlanFinancials.cycleCount &&
+                            resolvedPlanFinancials.cycleCount > 1 && (
+                              <div className="text-teal-800 font-bold pt-0.5">
+                                {resolvedPlanFinancials.isPeriodic
+                                  ? `Total contratual estimado (${resolvedPlanFinancials.cycleCount} cobranças de ${formatMoney(resolvedPlanFinancials.periodAmount)}): ${formatMoney(resolvedPlanFinancials.contractTotal)}`
+                                  : `Total previsto (${resolvedPlanFinancials.cycleCount} aulas): ${formatMoney(resolvedPlanFinancials.contractTotal)}`}
+                              </div>
+                            )}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-slate-700">
+                      <strong>Data e hora:</strong> {formatDateShort(displayAnchor.startTime)} às {displayAnchor.time}
+                      {displayAnchor.endTimeClock ? ` às ${displayAnchor.endTimeClock}` : ''}
+                    </p>
+                  )}
                 </div>
-                <p className="text-slate-700">
-                  <strong>Instrutor:</strong> {selectedSlot.professionalName}
-                  {selectedSlot.roomName ? ` • ${selectedSlot.roomName}` : ''}
-                </p>
-                <p className="text-slate-700">
-                  <strong>Modalidade:</strong> {modalityLabel(selectedModality)}
-                </p>
-                <p className="text-slate-700">
-                  <strong>Data e hora:</strong> {formatDateShort(selectedSlot.startTime)} às {selectedSlot.time}
-                  {selectedSlot.endTimeClock ? ` às ${selectedSlot.endTimeClock}` : ''}
-                  {useRecurrence
-                    ? ` (série ${formatRecurrenceDescription({
-                        frequency: selectedServiceRecurrence.allowedFrequencies.includes(recurrenceFrequency)
-                          ? recurrenceFrequency
-                          : selectedServiceRecurrence.defaultFrequency || selectedServiceRecurrence.allowedFrequencies[0],
-                        intervalValue: recurrenceIntervalValue,
-                        intervalUnit: recurrenceIntervalUnit,
-                        weekdays: recurrenceWeekdays
-                      })} • ${PLAN_DURATION_LABELS[recurrenceDurationCode] || 'Duração do plano'} — ${
-                        recurrencePreview
-                          ? `${recurrencePreview.totalCount} aulas`
-                          : recurrenceDurationCode === 'custom_date' && recurrenceEndDate
-                          ? `até ${formatDateShort(recurrenceEndDate)}`
-                          : `${recurrenceCount} aulas`
-                      })`
-                    : ''}
-                </p>
-              </div>
-            ) : null}
+              );
+            })() : null}
           </div>
 
           <div className="flex justify-end">

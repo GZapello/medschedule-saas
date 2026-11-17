@@ -69,7 +69,7 @@ const scheduleLines = (v: PresentationValues) => v.serviceKind !== 'group' ? [] 
 
 const frequencyTotal = (v: PresentationValues) => v.frequencyPricing?.enabled && supportsFrequencyPricing(v.billingMode) ? calculateStudioRecurringPrice({
   serviceName: v.name, sessionPrice: Number(v.price), billingMode: v.billingMode, pricingRule: v.pricingRule,
-  weeklySessionsCount: Math.max(1, Math.min(v.weeklySessionsCount, (v.serviceKind === 'individual' ? v.individualMeetings?.length || 0 : offeredWeeklyMeetings([...(v.schedules || []), ...v.draftSchedules]).length))), frequencyPricing: v.frequencyPricing
+  weeklySessionsCount: Math.max(1, Math.min(v.weeklySessionsCount, (v.serviceKind === 'individual' ? new Set((v.individualMeetings || []).map(m => m.weekday)).size : offeredWeeklyMeetings([...(v.schedules || []), ...v.draftSchedules]).length))), frequencyPricing: v.frequencyPricing
 }).effectivePrice.toFixed(2) : null;
 
 function sectionSummary(section: Section, v: PresentationValues) {

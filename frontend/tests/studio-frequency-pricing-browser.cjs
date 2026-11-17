@@ -24,33 +24,44 @@ const backendCalc = require('../../backend/dist/utils/studio-pricing').calculate
       await page.goto(`http://127.0.0.1:${server.address().port}`);
       const button = page.getByRole('button', { name: 'Personalizar preços por frequência', exact: true });
       assert.equal(await button.count(), 0);
-      for (const count of [2, 3, 7, 9]) {
+      await page.getByLabel('Encontros', { exact: true }).fill('0');
+      await page.getByText('Configure os dias e horários das aulas para habilitar preços personalizados por frequência.', { exact: true }).waitFor();
+      assert.equal(await button.count(), 0);
+      for (const count of [2, 3, 5]) {
         await page.getByLabel('Encontros', { exact: true }).fill(String(count));
         if (await button.getAttribute('aria-expanded') === 'false') await button.click();
-        assert.equal(await page.getByRole('spinbutton', { name: /x por semana — valor/ }).count(), count);
+        assert.equal(await page.getByLabel(/x por semana — valor/).count(), count);
       }
+      await page.getByLabel('Encontros', { exact: true }).fill('9');
+      assert.equal(await page.getByLabel(/x por semana — valor/).count(), 5);
+      await page.getByLabel('Selecionar frequência adicional').selectOption('9');
+      await page.getByRole('button', { name: /Adicionar frequência \(9x\)/ }).click();
+      assert.equal(await page.getByLabel(/x por semana — valor/).count(), 6);
       await page.getByRole('checkbox', { name: 'Ativar preços por frequência' }).check();
-      await page.getByRole('spinbutton', { name: /^2x por semana —/ }).fill('320.55');
+      await page.getByLabel(/^2x por semana —/).fill('320.55');
+      await page.getByLabel(/^2x por semana —/).blur();
       assert.equal(await page.evaluate(() => window.config.tables.monthly[2]), 32055);
-      await page.getByRole('spinbutton', { name: /^9x por semana —/ }).fill('999');
+      await page.getByLabel(/^9x por semana —/).fill('999');
+      await page.getByLabel(/^9x por semana —/).blur();
       await page.getByLabel('Encontros', { exact: true }).fill('2');
       await page.getByText(/Há preços salvos para frequências acima/).waitFor();
       assert.equal(await page.evaluate(() => window.config.tables.monthly[9]), 99900);
       await page.getByRole('button', { name: 'Recolher cobrança' }).click();
       await page.getByRole('button', { name: 'Recolher cobrança' }).click();
-      assert.equal(await page.getByRole('spinbutton', { name: /^2x por semana —/ }).inputValue(), '320.55');
+      assert.equal(await page.getByLabel(/^2x por semana —/).inputValue(), '320,55');
       await page.getByRole('checkbox', { name: 'Ativar preços por frequência' }).uncheck();
       assert.equal(await page.evaluate(() => window.config.tables.monthly[2]), 32055);
       await page.getByRole('checkbox', { name: 'Ativar preços por frequência' }).check();
       await page.getByLabel('Modalidade do preço personalizado').selectOption('per_session');
-      await page.getByRole('spinbutton', { name: /^2x por semana —/ }).fill('17');
+      await page.getByLabel(/^2x por semana —/).fill('17');
+      await page.getByLabel(/^2x por semana —/).blur();
       assert.equal(await page.evaluate(() => window.config.tables.per_session[2]), 1700);
       await page.getByLabel('Modalidade do preço personalizado').selectOption('per_period');
-      assert.equal(await page.getByRole('spinbutton', { name: /^2x por semana —/ }).inputValue(), '320.55');
+      assert.equal(await page.getByLabel(/^2x por semana —/).inputValue(), '320,55');
       await page.getByRole('button', { name: /Anual \(12 meses\)/ }).click();
-      assert.equal(await page.getByRole('spinbutton', { name: /^2x por semana —/ }).inputValue(), '');
+      assert.equal(await page.getByLabel(/^2x por semana —/).inputValue(), '');
       await page.getByRole('button', { name: /Mensal \(1 mês\)/ }).click();
-      assert.equal(await page.getByRole('spinbutton', { name: /^2x por semana —/ }).inputValue(), '320.55');
+      assert.equal(await page.getByLabel(/^2x por semana —/).inputValue(), '320,55');
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
       await page.screenshot({ path: path.join(out, `panel-${width}.png`), fullPage: true });
       await page.getByRole('button', { name: 'Alternar perfil' }).click();
@@ -62,15 +73,16 @@ const backendCalc = require('../../backend/dist/utils/studio-pricing').calculate
           assert.deepEqual(await page.evaluate(input => window.calculatePrice(input), input), backendCalc(input));
         }
       }
-      console.log(`PASS ${width}px: grade 1/2/3/7/9, valores, unidades, ativação, persistência, períodos, perfis e paridade de cálculo`);
+      console.log(`PASS ${width}px: grade 0/1/2/3/5/9 progressiva, valores BRL, unidades, ativação, persistência, períodos, perfis e paridade`);
       await page.goto(`http://127.0.0.1:${server.address().port}?view=public`);
-      // The actual public flow is exercised with its regular step navigation.
+      // The actual public flow is exercised with its explicit choice (Aula avulsa vs Plano de aulas).
       await page.screenshot({ path: path.join(out, `public-initial-${width}.png`), fullPage: true });
       await page.getByRole('button', { name: /^Agendar uma aula/ }).click();
       await page.getByRole('button', { name: /Pilates/ }).click();
-      await page.getByRole('button', { name: /08:00/ }).first().click();
-      await page.getByRole('checkbox', { name: /Repetir este horário/ }).check();
-      await page.getByText('Encontros semanais do plano', { exact: true }).waitFor();
+      await page.getByRole('button', { name: /Plano de aulas/ }).click();
+      assert.equal(await page.getByRole('checkbox', { name: /Repetir este horário/ }).count(), 0);
+      await page.getByText('1. Escolha os encontros semanais', { exact: true }).waitFor();
+      await page.getByRole('checkbox', { name: /Seg · 08:00/ }).check();
       await page.getByRole('checkbox', { name: /Seg · 10:00/ }).check();
       await page.getByText(/2x por semana · R.*320,00/).waitFor();
       await page.waitForFunction(() => window.posts.some(p => p.body.recurrence?.scheduleEntries?.length === 2));
@@ -78,15 +90,16 @@ const backendCalc = require('../../backend/dist/utils/studio-pricing').calculate
       await page.screenshot({ path: path.join(out, `public-plan-${width}.png`), fullPage: true });
       await page.getByRole('button', { name: 'Continuar', exact: true }).click();
       await page.getByText(/320,00.*período mensal/).waitFor();
-      console.log(`PASS ${width}px: seleção pública 2x, preview e resumo R$ 320,00`);
+      console.log(`PASS ${width}px: seleção pública direta 2x sem checkbox técnico, preview e resumo R$ 320,00`);
       await page.goto(`http://127.0.0.1:${server.address().port}/edit`);
       await page.getByTitle('Editar Serviço',{exact:true}).click();
       await page.locator('[data-studio-section="billing"] h4 > button').click();
-      assert.equal(await page.getByRole('spinbutton',{name:/^2x por semana —/}).inputValue(),'320');
-      await page.getByRole('spinbutton',{name:/^2x por semana —/}).fill('350.55');
+      assert.equal(await page.getByLabel(/^2x por semana —/).inputValue(),'320,00');
+      await page.getByLabel(/^2x por semana —/).fill('350.55');
+      await page.getByLabel(/^2x por semana —/).blur();
       await page.locator('[data-studio-section="billing"] h4 > button').click();
       await page.locator('[data-studio-section="billing"] h4 > button').click();
-      assert.equal(await page.getByRole('spinbutton',{name:/^2x por semana —/}).inputValue(),'350.55');
+      assert.equal(await page.getByLabel(/^2x por semana —/).inputValue(),'350,55');
       await page.getByRole('button',{name:'Salvar Alterações',exact:true}).click();
       await page.waitForFunction(()=>window.__writes.length===1);
       assert.equal(await page.evaluate(()=>window.__writes[0].payload.frequencyPricing.tables.monthly[2]),35055);

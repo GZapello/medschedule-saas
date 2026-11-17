@@ -19,14 +19,18 @@ type ConcretePlanDurationCode = Exclude<PlanDurationCode, 'legacy_frequency'>;
 interface ServiceRecurrenceConfigPanelProps {
   allowRecurrence: boolean;
   allowedFrequencies: RecurrenceFrequency[];
+  allowedWeekdays?: number[];
   defaultFrequency: RecurrenceFrequency;
   customIntervals?: RecurrenceIntervalSpec[];
   defaultCustomInterval?: RecurrenceIntervalSpec | null;
   allowedPlanDurations?: ConcretePlanDurationCode[];
   defaultPlanDuration?: ConcretePlanDurationCode;
+  serviceKind?: 'individual' | 'group';
+  scheduledWeekdays?: number[];
   onChange: (next: {
     allowRecurrence: boolean;
     allowedFrequencies: RecurrenceFrequency[];
+    allowedWeekdays: number[];
     defaultFrequency: RecurrenceFrequency;
     customIntervals: RecurrenceIntervalSpec[];
     defaultCustomInterval: RecurrenceIntervalSpec | null;
@@ -34,6 +38,16 @@ interface ServiceRecurrenceConfigPanelProps {
     defaultPlanDuration: ConcretePlanDurationCode;
   }) => void;
 }
+
+const WEEKDAY_OPTIONS: Array<{ value: number; short: string; full: string }> = [
+  { value: 0, short: 'Dom', full: 'Domingo' },
+  { value: 1, short: 'Seg', full: 'Segunda-feira' },
+  { value: 2, short: 'Ter', full: 'Terça-feira' },
+  { value: 3, short: 'Qua', full: 'Quarta-feira' },
+  { value: 4, short: 'Qui', full: 'Quinta-feira' },
+  { value: 5, short: 'Sex', full: 'Sexta-feira' },
+  { value: 6, short: 'Sáb', full: 'Sábado' }
+];
 
 const FALLBACK_CUSTOM_INTERVAL: RecurrenceIntervalSpec = {
   intervalValue: 3,
@@ -50,15 +64,22 @@ const STUDIO_CADENCE_FREQUENCIES: RecurrenceFrequency[] = [
 export const ServiceRecurrenceConfigPanel: React.FC<ServiceRecurrenceConfigPanelProps> = ({
   allowRecurrence,
   allowedFrequencies,
+  allowedWeekdays = [],
   defaultFrequency,
   customIntervals = [],
   defaultCustomInterval = null,
   allowedPlanDurations = ALL_PLAN_DURATIONS,
   defaultPlanDuration = '1_month',
+  serviceKind = 'individual',
+  scheduledWeekdays,
   onChange
 }) => {
   const [draftValue, setDraftValue] = useState<number>(defaultCustomInterval?.intervalValue || customIntervals[0]?.intervalValue || 3);
   const [draftUnit, setDraftUnit] = useState<RecurrenceIntervalUnit>(defaultCustomInterval?.intervalUnit || customIntervals[0]?.intervalUnit || 'days');
+
+  const safeAllowedWeekdays = Array.from(
+    new Set((allowedWeekdays || []).map(Number).filter(n => Number.isInteger(n) && n >= 0 && n <= 6))
+  ).sort((a, b) => a - b);
 
   const safeAllowedDurations: ConcretePlanDurationCode[] =
     allowedPlanDurations && allowedPlanDurations.length > 0 ? allowedPlanDurations : [...ALL_PLAN_DURATIONS];
@@ -68,6 +89,7 @@ export const ServiceRecurrenceConfigPanel: React.FC<ServiceRecurrenceConfigPanel
   const emitChange = (next: {
     allowRecurrence: boolean;
     allowedFrequencies: RecurrenceFrequency[];
+    allowedWeekdays?: number[];
     defaultFrequency: RecurrenceFrequency;
     customIntervals?: RecurrenceIntervalSpec[];
     defaultCustomInterval?: RecurrenceIntervalSpec | null;
@@ -75,6 +97,15 @@ export const ServiceRecurrenceConfigPanel: React.FC<ServiceRecurrenceConfigPanel
     defaultPlanDuration?: ConcretePlanDurationCode;
   }) => {
     const hasCustom = next.allowedFrequencies.includes('custom_interval');
+    const cleanWeekdays = next.allowedFrequencies.includes('custom_weekdays')
+      ? Array.from(
+          new Set(
+            (next.allowedWeekdays !== undefined ? next.allowedWeekdays : safeAllowedWeekdays)
+              .map(Number)
+              .filter(n => Number.isInteger(n) && n >= 0 && n <= 6)
+          )
+        ).sort((a, b) => a - b)
+      : [];
     const cleanIntervals = hasCustom
       ? dedupeCustomIntervals(
           next.customIntervals && next.customIntervals.length > 0
@@ -101,6 +132,7 @@ export const ServiceRecurrenceConfigPanel: React.FC<ServiceRecurrenceConfigPanel
     onChange({
       allowRecurrence: next.allowRecurrence,
       allowedFrequencies: next.allowedFrequencies,
+      allowedWeekdays: cleanWeekdays,
       defaultFrequency: next.defaultFrequency,
       customIntervals: cleanIntervals,
       defaultCustomInterval: effDefInterval,
@@ -148,12 +180,30 @@ export const ServiceRecurrenceConfigPanel: React.FC<ServiceRecurrenceConfigPanel
     const nextCustomList = nextAllowed.includes('custom_interval')
       ? (customIntervals.length > 0 ? customIntervals : [{ intervalValue: draftValue || 3, intervalUnit: draftUnit }])
       : [];
+    const nextWeekdays = nextAllowed.includes('custom_weekdays')
+      ? (safeAllowedWeekdays.length > 0 ? safeAllowedWeekdays : (Array.isArray(scheduledWeekdays) ? scheduledWeekdays : []))
+      : [];
     emitChange({
       allowRecurrence: true,
       allowedFrequencies: nextAllowed,
+      allowedWeekdays: nextWeekdays,
       defaultFrequency: nextDefault,
       customIntervals: nextCustomList,
       defaultCustomInterval: defaultCustomInterval || nextCustomList[0] || null
+    });
+  };
+
+  const toggleAllowedWeekday = (wd: number) => {
+    const nextDays = safeAllowedWeekdays.includes(wd)
+      ? safeAllowedWeekdays.filter(d => d !== wd)
+      : [...safeAllowedWeekdays, wd].sort((a, b) => a - b);
+    emitChange({
+      allowRecurrence: true,
+      allowedFrequencies,
+      allowedWeekdays: nextDays,
+      defaultFrequency,
+      customIntervals,
+      defaultCustomInterval
     });
   };
 
@@ -222,8 +272,14 @@ export const ServiceRecurrenceConfigPanel: React.FC<ServiceRecurrenceConfigPanel
     });
   };
 
+  const customWeekdaysEnabled = allowRecurrence && allowedFrequencies.includes('custom_weekdays');
   const customEnabled = allowRecurrence && allowedFrequencies.includes('custom_interval');
   const activeUnitBounds = RECURRENCE_INTERVAL_BOUNDS[draftUnit];
+  const scheduledSet = Array.isArray(scheduledWeekdays) ? new Set(scheduledWeekdays) : null;
+  const missingGroupScheduleDays =
+    serviceKind === 'group' && scheduledSet
+      ? safeAllowedWeekdays.filter(d => !scheduledSet.has(d))
+      : [];
 
   return (
     <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-2.5">
@@ -316,6 +372,61 @@ export const ServiceRecurrenceConfigPanel: React.FC<ServiceRecurrenceConfigPanel
               </div>
             )}
           </div>
+
+          {customWeekdaysEnabled && (
+            <div className="p-2.5 bg-teal-50/40 border border-teal-200 rounded-xl space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-1">
+                <span className="text-[11px] font-bold text-teal-950">Dias específicos da semana oferecidos</span>
+                {safeAllowedWeekdays.length > 0 && (
+                  <span className="text-[10px] font-semibold text-teal-800">
+                    {safeAllowedWeekdays.length} dia{safeAllowedWeekdays.length === 1 ? '' : 's'} selecionado{safeAllowedWeekdays.length === 1 ? '' : 's'}
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-1.5" role="group" aria-label="Dias específicos da semana oferecidos">
+                {WEEKDAY_OPTIONS.map(wd => {
+                  const selected = safeAllowedWeekdays.includes(wd.value);
+                  const hasSched = scheduledSet ? scheduledSet.has(wd.value) : true;
+                  return (
+                    <button
+                      key={wd.value}
+                      type="button"
+                      aria-pressed={selected}
+                      aria-label={wd.full}
+                      title={wd.full}
+                      onClick={() => toggleAllowedWeekday(wd.value)}
+                      className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-bold cursor-pointer transition-colors inline-flex items-center gap-1 ${
+                        selected
+                          ? 'bg-teal-600 text-white border-teal-600'
+                          : 'bg-white text-slate-600 border-slate-200 hover:border-teal-400'
+                      }`}
+                    >
+                      <span>{wd.short}</span>
+                      {scheduledSet && !hasSched && (
+                        <span
+                          className={`text-[9px] font-normal ${selected ? 'text-teal-100' : 'text-slate-400'}`}
+                          title={serviceKind === 'group' ? 'Sem horário na grade de turmas' : 'Sem horário livre na agenda do instrutor'}
+                        >
+                          •
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              {missingGroupScheduleDays.length > 0 ? (
+                <p className="text-[10px] text-amber-800">
+                  Adicione horários na grade de turmas para os dias marcados que ainda não possuem turma cadastrada.
+                </p>
+              ) : (
+                <p className="text-[10px] text-teal-800/80">
+                  {serviceKind === 'group'
+                    ? 'Integra-se diretamente à grade semanal de turmas e alimenta as frequências contratáveis.'
+                    : 'Filtra os dias em que esta aula é oferecida respeitando os horários reais do instrutor.'}
+                </p>
+              )}
+            </div>
+          )}
 
           {customEnabled && (
             <div className="p-2.5 bg-teal-50/50 border border-teal-200 rounded-xl space-y-2">

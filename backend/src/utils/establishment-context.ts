@@ -247,6 +247,7 @@ export interface ParsedServiceRecurrenceConfig {
   allowRecurrence: boolean;
   allowedFrequencies: RecurrenceFrequency[];
   defaultFrequency: RecurrenceFrequency | null;
+  allowedWeekdays: number[];
   allowedPlanDurations: PlanDurationCode[];
   defaultPlanDuration: PlanDurationCode | null;
   customIntervals: RecurrenceIntervalSpec[];
@@ -441,10 +442,33 @@ function parsePlanDurationsColumn(raw: unknown): PlanDurationCode[] | null {
   return null;
 }
 
+function parseAllowedWeekdaysColumn(raw: unknown): number[] {
+  let list: unknown[] = [];
+  if (Array.isArray(raw)) list = raw;
+  else if (typeof raw === 'string' && raw.trim() !== '') {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) list = parsed;
+    } catch {
+      return [];
+    }
+  }
+  return Array.from(
+    new Set(
+      list
+        .map(v => Number(v))
+        .filter(n => Number.isInteger(n) && n >= 0 && n <= 6)
+    )
+  ).sort((a, b) => a - b);
+}
+
 export function parseServiceRecurrenceConfig(serviceRow: any): ParsedServiceRecurrenceConfig {
   const allowFlag = Number(serviceRow?.allow_recurrence ?? 1) !== 0;
   const rawJson = serviceRow?.allowed_recurrence_frequencies_json;
   const rawDefault = String(serviceRow?.default_recurrence_frequency || '').trim();
+  const allowedWeekdays = parseAllowedWeekdaysColumn(
+    serviceRow?.allowed_recurrence_weekdays ?? serviceRow?.allowed_recurrence_weekdays_json
+  );
   const explicitPlanDurations = parsePlanDurationsColumn(
     serviceRow?.allowed_plan_durations ?? serviceRow?.allowed_plan_durations_json
   );
@@ -463,6 +487,7 @@ export function parseServiceRecurrenceConfig(serviceRow: any): ParsedServiceRecu
       allowRecurrence: false,
       allowedFrequencies: [],
       defaultFrequency: null,
+      allowedWeekdays: [],
       allowedPlanDurations: [],
       defaultPlanDuration: null,
       customIntervals: [],
@@ -488,6 +513,7 @@ export function parseServiceRecurrenceConfig(serviceRow: any): ParsedServiceRecu
             allowRecurrence: false,
             allowedFrequencies: [],
             defaultFrequency: null,
+            allowedWeekdays: [],
             allowedPlanDurations: [],
             defaultPlanDuration: null,
             customIntervals: [],
@@ -508,6 +534,7 @@ export function parseServiceRecurrenceConfig(serviceRow: any): ParsedServiceRecu
           allowRecurrence: true,
           allowedFrequencies: filtered,
           defaultFrequency,
+          allowedWeekdays: filtered.includes('custom_weekdays') ? allowedWeekdays : [],
           allowedPlanDurations: planDurations,
           defaultPlanDuration,
           customIntervals: filtered.includes('custom_interval') ? normalizedCustomIntervals : [],
@@ -531,6 +558,7 @@ export function parseServiceRecurrenceConfig(serviceRow: any): ParsedServiceRecu
     allowRecurrence: true,
     allowedFrequencies: [...ALL_RECURRENCE_FREQUENCIES],
     defaultFrequency: fallbackDefault,
+    allowedWeekdays,
     allowedPlanDurations: fallbackDurations,
     defaultPlanDuration: fallbackDefaultDuration,
     customIntervals: normalizedCustomIntervals,
@@ -660,6 +688,7 @@ export function validateServiceRecurrenceFrequency(
 export function normalizeRecurrenceConfigForSave(input: {
   allowRecurrence?: unknown;
   allowedRecurrenceFrequencies?: unknown;
+  allowedRecurrenceWeekdays?: unknown;
   defaultRecurrenceFrequency?: unknown;
   allowedPlanDurations?: unknown;
   defaultPlanDuration?: unknown;
@@ -668,6 +697,7 @@ export function normalizeRecurrenceConfigForSave(input: {
 }): {
   allowRecurrenceInt: 0 | 1;
   allowedJson: string | null;
+  allowedWeekdaysJson: string | null;
   defaultFrequency: RecurrenceFrequency | null;
   allowedPlanDurationsJson: string | null;
   defaultPlanDuration: PlanDurationCode | null;
@@ -677,6 +707,12 @@ export function normalizeRecurrenceConfigForSave(input: {
 } {
   const rawAllowed = input.allowedRecurrenceFrequencies;
   const hasExplicitArray = Array.isArray(rawAllowed);
+
+  const normalizeWeekdaysPart = (): string | null => {
+    const raw = input.allowedRecurrenceWeekdays;
+    const list = parseAllowedWeekdaysColumn(raw);
+    return list.length > 0 ? JSON.stringify(list) : null;
+  };
 
   const normalizePlanDurationsPart = (): {
     allowedPlanDurationsJson: string | null;
@@ -722,6 +758,7 @@ export function normalizeRecurrenceConfigForSave(input: {
     return {
       allowRecurrenceInt: 0,
       allowedJson: hasExplicitArray ? '[]' : null,
+      allowedWeekdaysJson: null,
       defaultFrequency: null,
       allowedPlanDurationsJson: null,
       defaultPlanDuration: null,
@@ -735,6 +772,7 @@ export function normalizeRecurrenceConfigForSave(input: {
     return {
       allowRecurrenceInt: 1,
       allowedJson: null,
+      allowedWeekdaysJson: null,
       defaultFrequency: null,
       allowedPlanDurationsJson: null,
       defaultPlanDuration: null,
@@ -753,6 +791,7 @@ export function normalizeRecurrenceConfigForSave(input: {
       return {
         allowRecurrenceInt: 1,
         allowedJson: null,
+        allowedWeekdaysJson: null,
         defaultFrequency: null,
         allowedPlanDurationsJson: planDurPart.allowedPlanDurationsJson,
         defaultPlanDuration: planDurPart.defaultPlanDuration,
@@ -767,6 +806,7 @@ export function normalizeRecurrenceConfigForSave(input: {
         return {
           allowRecurrenceInt: 1,
           allowedJson: null,
+          allowedWeekdaysJson: null,
           defaultFrequency: null,
           allowedPlanDurationsJson: planDurPart.allowedPlanDurationsJson,
           defaultPlanDuration: planDurPart.defaultPlanDuration,
@@ -786,6 +826,7 @@ export function normalizeRecurrenceConfigForSave(input: {
       return {
         allowRecurrenceInt: 1,
         allowedJson: null,
+        allowedWeekdaysJson: null,
         defaultFrequency: null,
         allowedPlanDurationsJson: planDurPart.allowedPlanDurationsJson,
         defaultPlanDuration: planDurPart.defaultPlanDuration,
@@ -810,6 +851,7 @@ export function normalizeRecurrenceConfigForSave(input: {
       return {
         allowRecurrenceInt: 1,
         allowedJson: null,
+        allowedWeekdaysJson: null,
         defaultFrequency: null,
         allowedPlanDurationsJson: planDurPart.allowedPlanDurationsJson,
         defaultPlanDuration: planDurPart.defaultPlanDuration,
@@ -824,6 +866,7 @@ export function normalizeRecurrenceConfigForSave(input: {
       return {
         allowRecurrenceInt: 0,
         allowedJson: '[]',
+        allowedWeekdaysJson: null,
         defaultFrequency: null,
         allowedPlanDurationsJson: null,
         defaultPlanDuration: null,
@@ -846,6 +889,7 @@ export function normalizeRecurrenceConfigForSave(input: {
       return {
         allowRecurrenceInt: 1,
         allowedJson: null,
+        allowedWeekdaysJson: null,
         defaultFrequency: null,
         allowedPlanDurationsJson: planDurPart.allowedPlanDurationsJson,
         defaultPlanDuration: planDurPart.defaultPlanDuration,
@@ -863,6 +907,7 @@ export function normalizeRecurrenceConfigForSave(input: {
     return {
       allowRecurrenceInt: 1,
       allowedJson: JSON.stringify(deduped),
+      allowedWeekdaysJson: deduped.includes('custom_weekdays') ? normalizeWeekdaysPart() : null,
       defaultFrequency,
       allowedPlanDurationsJson: planDurPart.allowedPlanDurationsJson,
       defaultPlanDuration: planDurPart.defaultPlanDuration,
@@ -878,6 +923,7 @@ export function normalizeRecurrenceConfigForSave(input: {
     return {
       allowRecurrenceInt: 1,
       allowedJson: null,
+      allowedWeekdaysJson: null,
       defaultFrequency: null,
       allowedPlanDurationsJson: planDurPart.allowedPlanDurationsJson,
       defaultPlanDuration: planDurPart.defaultPlanDuration,
@@ -890,6 +936,7 @@ export function normalizeRecurrenceConfigForSave(input: {
   return {
     allowRecurrenceInt: 1,
     allowedJson: null,
+    allowedWeekdaysJson: normalizeWeekdaysPart(),
     defaultFrequency: rawDefault && isValidRecurrenceFrequency(rawDefault) ? rawDefault : null,
     allowedPlanDurationsJson: planDurPart.allowedPlanDurationsJson,
     defaultPlanDuration: planDurPart.defaultPlanDuration,

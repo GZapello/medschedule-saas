@@ -257,6 +257,96 @@ async function runTests() {
     const off=await makeReq('PUT','/api/v1/services/'+id,authStudio,{frequencyPricing:{...config,enabled:false}});
     assert(off.status===200 && off.data.frequency_pricing.tables.monthly[2]===32000,'Desativar mantém valores salvos');
     assert(quoteFrequencyPlan({tenantId:studioId,serviceId:id,billingFrequency:'monthly',startDate:startMon,slots:[]})===null,'Desativado retorna ao comportamento existente');
+
+    // Individual Studio service with custom_weekdays [1, 3, 5] + per_session table + 2_months plan on monthly billing
+    const indSrvPayload = {
+      professionalId: profSt2,
+      name: 'Musculação Individual Dias Específicos',
+      durationMinutes: 60,
+      bufferMinutes: 0,
+      price: 80,
+      modality: 'presential',
+      serviceDomain: 'studio',
+      serviceKind: 'individual',
+      billingMode: 'monthly',
+      pricingRule: 'four_weeks',
+      allowRecurrence: true,
+      allowedRecurrenceFrequencies: ['weekly', 'custom_weekdays'],
+      allowedRecurrenceWeekdays: [1, 3, 5],
+      defaultRecurrenceFrequency: 'custom_weekdays',
+      allowedPlanDurations: ['1_month', '2_months', '3_months'],
+      defaultPlanDuration: '1_month',
+      frequencyPricing: { version: 1, enabled: true, unit: 'per_session', tables: { per_session: { 1: 8000, 2: 7500, 3: 7000 } } }
+    };
+    const indCreated = await makeReq('POST', '/api/v1/services', authStudio, indSrvPayload);
+    assert(indCreated.status === 201 && JSON.stringify(indCreated.data.allowed_recurrence_weekdays) === '[1,3,5]', 'Criar aula individual com dias específicos persistidos', indCreated.data);
+    const indId = indCreated.data.id;
+
+    const indFreqMeetings = await makeReq('POST', '/api/v1/services/frequency-meetings', authStudio, {
+      professionalIds: [profSt2], durationMinutes: 60, bufferMinutes: 0, modality: 'presential', serviceDomain: 'studio', allowedWeekdays: [1, 3, 5]
+    });
+    assert(indFreqMeetings.status === 200 && indFreqMeetings.data.meetings.length > 0 && indFreqMeetings.data.meetings.every(m => [1, 3, 5].includes(m.weekday)), 'Reuniões individuais respeitam dias específicos [1,3,5]');
+
+    const indSlotsRes = await makeReq('GET', `/api/v1/public/studio/slots?tenantSlug=studio-zen-bil&serviceId=${indId}&includeUpcoming=1&includeWeekly=1`);
+    assert(indSlotsRes.status === 200 && JSON.stringify(indSlotsRes.data.allowedRecurrenceWeekdays) === '[1,3,5]' && indSlotsRes.data.weeklyMeetings.every(m => [1, 3, 5].includes(m.weekday)), 'Slots públicos individuais retornam e filtram por dias específicos');
+
+    const startWed = addDaysIso(startMon, 2);
+    const indRecEntries = [
+      { dayOfWeek: 1, weekday: 1, startTime: '14:00', endTime: '15:00', professionalId: profSt2, modality: 'presential', classScheduleId: null },
+      { dayOfWeek: 3, weekday: 3, startTime: '14:00', endTime: '15:00', professionalId: profSt2, modality: 'presential', classScheduleId: null }
+    ];
+    const indPreview = await makeReq('POST', '/api/v1/public/studio/recurrence-preview', {}, {
+      tenantSlug: 'studio-zen-bil',
+      bookingIntent: 'recurring',
+      serviceId: indId,
+      professionalId: profSt2,
+      modality: 'presential',
+      startTime: startMon + 'T14:00:00',
+      endTime: startMon + 'T15:00:00',
+      recurrence: {
+        frequency: 'custom_weekdays',
+        durationCode: '2_months',
+        seriesMode: 'schedule_plan',
+        scheduleEntries: indRecEntries,
+        weekdays: [1, 3],
+        endDate: addMonthsClampIso(startMon, 2)
+      }
+    });
+    assert(
+      indPreview.status === 200 &&
+      indPreview.data.valid === true &&
+      indPreview.data.pricing &&
+      indPreview.data.pricing.weeklyCount === 2 &&
+      indPreview.data.pricing.amount === 600 &&
+      indPreview.data.pricing.averagePricePerSession === 75 &&
+      indPreview.data.pricing.billingFrequency === 'monthly',
+      'Preview público individual 2x/sem calcula R$ 75/aula = R$ 600/mês preservando periodicidade mensal em plano de 2 meses',
+      indPreview.data
+    );
+
+    const indPublicBook = await makeReq('POST', '/api/v1/public/studio/bookings', {}, {
+      tenantSlug: 'studio-zen-bil',
+      bookingIntent: 'recurring',
+      mode: 'service',
+      serviceId: indId,
+      professionalId: profSt2,
+      modality: 'presential',
+      startTime: startMon + 'T14:00:00',
+      endTime: startMon + 'T15:00:00',
+      recurrence: {
+        frequency: 'custom_weekdays',
+        durationCode: '2_months',
+        seriesMode: 'schedule_plan',
+        scheduleEntries: indRecEntries,
+        weekdays: [1, 3],
+        endDate: addMonthsClampIso(startMon, 2)
+      },
+      student: { fullName: 'Aluno Individual Recorrente', phone: '11977665544', whatsapp: '11977665544', email: 'ind.rec@test.com' }
+    });
+    assert(indPublicBook.status === 201 && indPublicBook.data.appointments.length >= 16, 'Reserva pública recorrente individual 2x/sem por 2 meses cria série', indPublicBook.data);
+    const indPlan = db.prepare('SELECT * FROM recurring_billing_plans WHERE id = ?').get(indPublicBook.data.appointments[0].billingPlanId);
+    assert(indPlan && indPlan.amount === 600 && indPlan.billing_frequency === 'monthly' && indPlan.weekly_sessions_snapshot === 2, 'Contrato recorrente individual registra mensalidade R$ 600 com 2x/sem', indPlan);
+    assert(startWed > startMon, 'Sanidade de data');
   } catch(err) { console.error(err);failed++; }
   finally { server.close();try{db.close();}catch{} console.log(`RESULTADO: ${passed} PASSOU | ${failed} FALHOU`);process.exit(failed?1:0); }
 }

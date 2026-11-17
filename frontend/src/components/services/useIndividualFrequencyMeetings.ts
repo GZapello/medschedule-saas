@@ -3,7 +3,7 @@ import { ApiClient } from '../../api/client';
 import { WeeklyMeeting } from '../../utils/studioFrequencyPricing';
 
 export function useIndividualFrequencyMeetings(enabled: boolean, input: {
-  professionalIds: string[]; durationMinutes: number; bufferMinutes: number; modality: string;
+  professionalIds: string[]; durationMinutes: number; bufferMinutes: number; modality: string; allowedWeekdays?: number[];
 }) {
   const [meetings, setMeetings] = useState<WeeklyMeeting[]>([]);
   const key = JSON.stringify(input);

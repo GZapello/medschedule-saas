@@ -67,6 +67,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
   const [defaultCapacity, setDefaultCapacity] = useState<number>(10);
   const [allowRecurrence, setAllowRecurrence] = useState<boolean>(true);
   const [allowedFrequencies, setAllowedFrequencies] = useState<RecurrenceFrequency[]>(['weekly']);
+  const [allowedWeekdays, setAllowedWeekdays] = useState<number[]>([]);
   const [defaultFrequency, setDefaultFrequency] = useState<RecurrenceFrequency>('weekly');
   const [customIntervals, setCustomIntervals] = useState<RecurrenceIntervalSpec[]>([]);
   const [defaultCustomInterval, setDefaultCustomInterval] = useState<RecurrenceIntervalSpec | null>(null);
@@ -93,7 +94,23 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
   const [loading, setLoading] = useState<boolean>(false);
 
   const showStudioConfig = isPureStudio || (isMixed && serviceDomain === 'studio');
-  const individualMeetings = useIndividualFrequencyMeetings(isOpen && showStudioConfig && serviceKind === 'individual', { professionalIds: [professionalId, ...linkedProfessionalIds].filter(Boolean), durationMinutes: Number(durationMinutes), bufferMinutes: Number(bufferMinutes), modality });
+  const individualMeetings = useIndividualFrequencyMeetings(isOpen && showStudioConfig && serviceKind === 'individual', {
+    professionalIds: [professionalId, ...linkedProfessionalIds].filter(Boolean),
+    durationMinutes: Number(durationMinutes),
+    bufferMinutes: Number(bufferMinutes),
+    modality,
+    allowedWeekdays: allowedFrequencies.includes('custom_weekdays') ? allowedWeekdays : []
+  });
+  const groupWeeklyMeetings = offeredWeeklyMeetings(isEditing && serviceToEdit?.service_kind === 'group' ? savedSchedules : draftSchedules);
+  const contractableWeeklySessions = useMemo(() => {
+    const useCustomDays = allowRecurrence && allowedFrequencies.includes('custom_weekdays') && allowedWeekdays.length > 0;
+    if (serviceKind === 'individual') {
+      const filtered = useCustomDays ? individualMeetings.filter(m => allowedWeekdays.includes(m.weekday)) : individualMeetings;
+      return new Set(filtered.map(m => m.weekday)).size;
+    }
+    const filtered = useCustomDays ? groupWeeklyMeetings.filter(m => allowedWeekdays.includes(m.weekday)) : groupWeeklyMeetings;
+    return filtered.length;
+  }, [allowRecurrence, allowedFrequencies, allowedWeekdays, serviceKind, individualMeetings, groupWeeklyMeetings]);
 
 
   useEffect(() => {
@@ -133,6 +150,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
             ? recCfg.allowedFrequencies
             : (recCfg.allowRecurrence ? ['weekly'] : [])
         );
+        setAllowedWeekdays(recCfg.allowedWeekdays || []);
         setDefaultFrequency(recCfg.defaultFrequency || 'weekly');
         setCustomIntervals(recCfg.customIntervals || []);
         setDefaultCustomInterval(recCfg.defaultCustomInterval || null);
@@ -169,6 +187,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
         setDefaultCapacity(10);
         setAllowRecurrence(true);
         setAllowedFrequencies(['weekly']);
+        setAllowedWeekdays([]);
         setDefaultFrequency('weekly');
         setCustomIntervals([]);
         setDefaultCustomInterval(null);
@@ -282,6 +301,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
         ...(showStudioConfig
           ? {
               allowedRecurrenceFrequencies: allowRecurrence ? allowedFrequencies : [],
+              allowedRecurrenceWeekdays: allowRecurrence && allowedFrequencies.includes('custom_weekdays') ? allowedWeekdays : [],
               defaultRecurrenceFrequency: allowRecurrence ? defaultFrequency : null,
               customRecurrenceIntervals: allowRecurrence && allowedFrequencies.includes('custom_interval') ? customIntervals : [],
               defaultRecurrenceInterval: allowRecurrence && allowedFrequencies.includes('custom_interval') ? defaultCustomInterval : null,
@@ -557,14 +577,22 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
               <ServiceRecurrenceConfigPanel
                 allowRecurrence={allowRecurrence}
                 allowedFrequencies={allowedFrequencies}
+                allowedWeekdays={allowedWeekdays}
                 defaultFrequency={defaultFrequency}
                 customIntervals={customIntervals}
                 defaultCustomInterval={defaultCustomInterval}
                 allowedPlanDurations={allowedPlanDurations}
                 defaultPlanDuration={defaultPlanDuration}
+                serviceKind={serviceKind}
+                scheduledWeekdays={
+                  serviceKind === 'group'
+                    ? Array.from(new Set(groupWeeklyMeetings.map(m => m.weekday))).sort((a, b) => a - b)
+                    : Array.from(new Set(individualMeetings.map(m => m.weekday))).sort((a, b) => a - b)
+                }
                 onChange={next => {
                   setAllowRecurrence(next.allowRecurrence);
                   setAllowedFrequencies(next.allowedFrequencies);
+                  setAllowedWeekdays(next.allowedWeekdays);
                   setDefaultFrequency(next.defaultFrequency);
                   setCustomIntervals(next.customIntervals);
                   setDefaultCustomInterval(next.defaultCustomInterval);
@@ -584,7 +612,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
                 weeklySessionsCount={weeklySessionsCount}
                 allowFrequencyPricing={showStudioConfig}
                 frequencyPricing={frequencyPricing} onFrequencyPricingChange={setFrequencyPricing}
-                offeredWeeklySessions={serviceKind === 'individual' ? individualMeetings.length : offeredWeeklyMeetings(isEditing && serviceToEdit?.service_kind === 'group' ? savedSchedules : draftSchedules).length}
+                offeredWeeklySessions={contractableWeeklySessions}
                 includedSessionsCount={includedSessionsCount}
                 defaultPackageId={defaultPackageId}
                 defaultBillingDueDay={defaultBillingDueDay}

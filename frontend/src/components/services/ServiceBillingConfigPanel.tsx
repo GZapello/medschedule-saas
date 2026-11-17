@@ -566,7 +566,7 @@ export const ServiceBillingConfigPanel: React.FC<ServiceBillingConfigPanelProps>
         </div>
       )}
 
-      {allowFrequencyPricing && onFrequencyPricingChange && <ServiceFrequencyPricingPanel value={frequencyPricing} onChange={onFrequencyPricingChange} count={offeredWeeklySessions} billingMode={billingMode} />}
+      {allowFrequencyPricing && onFrequencyPricingChange && <ServiceFrequencyPricingPanel value={frequencyPricing} onChange={onFrequencyPricingChange} count={offeredWeeklySessions} billingMode={billingMode} sessionPrice={sessionPrice} pricingRule={pricingRule} />}
 
       {/* 3. RESUMO FINANCEIRO INTELIGENTE (Card Estruturado) */}
       <div className="rounded-xl border border-emerald-200/90 bg-white p-3.5 shadow-sm space-y-2">

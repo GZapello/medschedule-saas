@@ -205,6 +205,7 @@ export interface ParsedServiceRecurrenceConfig {
   allowRecurrence: boolean;
   allowedFrequencies: RecurrenceFrequency[];
   defaultFrequency: RecurrenceFrequency | null;
+  allowedWeekdays: number[];
   customIntervals: RecurrenceIntervalSpec[];
   defaultCustomInterval: RecurrenceIntervalSpec | null;
   allowedPlanDurations: Exclude<PlanDurationCode, 'legacy_frequency'>[];
@@ -302,10 +303,32 @@ function parseDefaultIntervalInput(raw: unknown): RecurrenceIntervalSpec | null 
   return null;
 }
 
+function parseAllowedWeekdaysInput(raw: unknown): number[] {
+  let list: unknown[] = [];
+  if (Array.isArray(raw)) list = raw;
+  else if (typeof raw === 'string' && raw.trim()) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) list = parsed;
+    } catch {
+      return [];
+    }
+  }
+  return Array.from(
+    new Set(
+      list
+        .map(v => Number(v))
+        .filter(n => Number.isInteger(n) && n >= 0 && n <= 6)
+    )
+  ).sort((a, b) => a - b);
+}
+
 export function parseServiceRecurrenceConfig(service?: {
   allow_recurrence?: number | boolean | null;
   allowed_recurrence_frequencies?: string[] | null;
   allowed_recurrence_frequencies_json?: string | null;
+  allowed_recurrence_weekdays?: number[] | null;
+  allowed_recurrence_weekdays_json?: string | null;
   default_recurrence_frequency?: string | null;
   custom_recurrence_intervals?: RecurrenceIntervalSpec[] | null;
   custom_recurrence_intervals_json?: string | null;
@@ -322,6 +345,7 @@ export function parseServiceRecurrenceConfig(service?: {
       allowRecurrence: true,
       allowedFrequencies: [...ALL_RECURRENCE_FREQUENCIES],
       defaultFrequency: 'weekly',
+      allowedWeekdays: [],
       customIntervals: [],
       defaultCustomInterval: null,
       allowedPlanDurations: defaultDurations,
@@ -329,6 +353,10 @@ export function parseServiceRecurrenceConfig(service?: {
       hasExplicitConfig: false
     };
   }
+
+  const allowedWeekdays = parseAllowedWeekdaysInput(
+    service.allowed_recurrence_weekdays ?? service.allowed_recurrence_weekdays_json
+  );
 
   let allowedPlanDurations: Exclude<PlanDurationCode, 'legacy_frequency'>[] = [...defaultDurations];
   const rawDurations = Array.isArray(service.allowed_plan_durations)
@@ -366,6 +394,7 @@ export function parseServiceRecurrenceConfig(service?: {
       allowRecurrence: false,
       allowedFrequencies: [],
       defaultFrequency: null,
+      allowedWeekdays: [],
       customIntervals: [],
       defaultCustomInterval: null,
       allowedPlanDurations,
@@ -410,6 +439,7 @@ export function parseServiceRecurrenceConfig(service?: {
         allowRecurrence: false,
         allowedFrequencies: [],
         defaultFrequency: null,
+        allowedWeekdays: [],
         customIntervals: [],
         defaultCustomInterval: null,
         allowedPlanDurations,
@@ -424,6 +454,7 @@ export function parseServiceRecurrenceConfig(service?: {
       allowRecurrence: true,
       allowedFrequencies: parsedList,
       defaultFrequency,
+      allowedWeekdays: parsedList.includes('custom_weekdays') ? allowedWeekdays : [],
       customIntervals: parsedList.includes('custom_interval') ? customIntervals : [],
       defaultCustomInterval: parsedList.includes('custom_interval') ? effectiveDefaultInterval : null,
       allowedPlanDurations,
@@ -436,6 +467,7 @@ export function parseServiceRecurrenceConfig(service?: {
     allowRecurrence: true,
     allowedFrequencies: [...ALL_RECURRENCE_FREQUENCIES],
     defaultFrequency: isValidRecurrenceFrequency(rawDefault) ? rawDefault : 'weekly',
+    allowedWeekdays,
     customIntervals,
     defaultCustomInterval: effectiveDefaultInterval,
     allowedPlanDurations,
