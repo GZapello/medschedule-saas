@@ -27,6 +27,7 @@ interface ServiceRecurrenceConfigPanelProps {
   defaultPlanDuration?: ConcretePlanDurationCode;
   serviceKind?: 'individual' | 'group';
   scheduledWeekdays?: number[];
+  individualAvailabilitySlot?: React.ReactNode;
   onChange: (next: {
     allowRecurrence: boolean;
     allowedFrequencies: RecurrenceFrequency[];
@@ -72,6 +73,7 @@ export const ServiceRecurrenceConfigPanel: React.FC<ServiceRecurrenceConfigPanel
   defaultPlanDuration = '1_month',
   serviceKind = 'individual',
   scheduledWeekdays,
+  individualAvailabilitySlot,
   onChange
 }) => {
   const [draftValue, setDraftValue] = useState<number>(defaultCustomInterval?.intervalValue || customIntervals[0]?.intervalValue || 3);
@@ -496,6 +498,8 @@ export const ServiceRecurrenceConfigPanel: React.FC<ServiceRecurrenceConfigPanel
             </div>
           )}
 
+          {!isGroupService && individualAvailabilitySlot}
+
           {customEnabled && (
             <div className="p-2.5 bg-teal-50/50 border border-teal-200 rounded-xl space-y-2">
               <div className="text-[11px] font-bold text-teal-950">Intervalo personalizado sugerido</div>
@@ -713,6 +717,8 @@ export const ServiceRecurrenceConfigPanel: React.FC<ServiceRecurrenceConfigPanel
           </div>
         </div>
       )}
+
+      {!allowRecurrence && !isGroupService && individualAvailabilitySlot}
     </div>
   );
 };

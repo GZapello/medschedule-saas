@@ -295,6 +295,10 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
         }
         return [...withoutSameWeekday, key];
       }
+      const maxGroupWeekly = Math.min(7, planMeetings.length);
+      if (prev.length >= maxGroupWeekly) {
+        return prev;
+      }
       return [...prev, key];
     });
   };
@@ -1501,7 +1505,10 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                       const isChosen =
                         !isFull &&
                         selectedSlot?.startTime === s.startTime &&
-                        selectedSlot?.professionalId === s.professionalId;
+                        selectedSlot?.professionalId === s.professionalId &&
+                        (!s.classScheduleId ||
+                          !selectedSlot?.classScheduleId ||
+                          selectedSlot.classScheduleId === s.classScheduleId);
                       const slotDate = s.date || s.startTime?.slice(0, 10);
                       const endClock = s.endTimeClock || s.endTime?.slice(11, 16);
                       return (
@@ -1712,38 +1719,54 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                             ))}
                         </div>
                       )}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {planMeetings
-                          .filter(m => selectedPlanWeekdayTab === 'all' || Number(m.weekday) === selectedPlanWeekdayTab)
-                          .map(meeting => {
-                            const key = resolveMeetingKey(meeting);
-                            const isChecked = frequencyScheduleIds.includes(key);
+                      <div className="space-y-3">
+                        {Array.from(new Set(
+                          planMeetings
+                            .filter(m => selectedPlanWeekdayTab === 'all' || Number(m.weekday) === selectedPlanWeekdayTab)
+                            .map(m => Number(m.weekday))
+                        ))
+                          .sort((a, b) => (a === 0 ? 7 : a) - (b === 0 ? 7 : b))
+                          .map(wd => {
+                            const dayMeetings = planMeetings.filter(m => Number(m.weekday) === wd);
                             return (
-                              <label
-                                key={key}
-                                className={`flex items-center justify-between gap-2 p-2.5 rounded-xl border text-xs cursor-pointer transition-all ${
-                                  isChecked
-                                    ? 'border-teal-600 bg-teal-50/70 text-teal-950 font-semibold ring-1 ring-teal-500/20'
-                                    : 'border-slate-200 bg-white text-slate-700 hover:border-teal-400'
-                                }`}
-                              >
-                                <span className="flex items-center gap-2 min-w-0">
-                                  <input
-                                    type="checkbox"
-                                    checked={isChecked}
-                                    onChange={() => togglePlanMeetingSelection(meeting)}
-                                    className="w-4 h-4 text-teal-600 rounded shrink-0"
-                                  />
-                                  <span className="truncate">
-                                    {WEEKDAY_NAMES_SHORT[meeting.weekday]} · {meeting.startTime}–{meeting.endTime} · {meeting.professionalName}
-                                  </span>
-                                </span>
-                                {selectedService.service_kind === 'group' && Number(meeting.capacity) > 0 && (
-                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 shrink-0">
-                                    {meeting.capacity} vagas
-                                  </span>
-                                )}
-                              </label>
+                              <div key={wd} className="space-y-1.5">
+                                <div className="text-[11px] font-bold text-slate-700">
+                                  {WEEKDAY_NAMES_FULL[wd] || `Dia ${wd}`}
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                  {dayMeetings.map(meeting => {
+                                    const key = resolveMeetingKey(meeting);
+                                    const isChecked = frequencyScheduleIds.includes(key);
+                                    return (
+                                      <label
+                                        key={key}
+                                        className={`flex items-center justify-between gap-2 p-2.5 rounded-xl border text-xs cursor-pointer transition-all ${
+                                          isChecked
+                                            ? 'border-teal-600 bg-teal-50/70 text-teal-950 font-semibold ring-1 ring-teal-500/20'
+                                            : 'border-slate-200 bg-white text-slate-700 hover:border-teal-400'
+                                        }`}
+                                      >
+                                        <span className="flex items-center gap-2 min-w-0">
+                                          <input
+                                            type="checkbox"
+                                            checked={isChecked}
+                                            onChange={() => togglePlanMeetingSelection(meeting)}
+                                            className="w-4 h-4 text-teal-600 rounded shrink-0"
+                                          />
+                                          <span className="truncate">
+                                            {WEEKDAY_NAMES_SHORT[meeting.weekday]} · {meeting.startTime}–{meeting.endTime} · {meeting.professionalName}
+                                          </span>
+                                        </span>
+                                        {selectedService.service_kind === 'group' && Number(meeting.capacity) > 0 && (
+                                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 shrink-0">
+                                            {meeting.capacity} vagas
+                                          </span>
+                                        )}
+                                      </label>
+                                    );
+                                  })}
+                                </div>
+                              </div>
                             );
                           })}
                       </div>

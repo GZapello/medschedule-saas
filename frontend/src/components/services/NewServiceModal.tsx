@@ -5,9 +5,11 @@ import { X, Plus, Edit3, Loader2, Users } from 'lucide-react';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
-import { Professional, Room, Service } from '../../types';
+import { Professional, Room, Service, ServiceAvailabilityMode, ServiceAvailabilityWindow } from '../../types';
 import { ClassScheduleSection, DraftClassScheduleInput } from './ClassScheduleSection';
 import { ServiceRecurrenceConfigPanel } from './ServiceRecurrenceConfigPanel';
+import { ServiceAvailabilitySection, validateServiceAvailabilityWindows } from './ServiceAvailabilitySection';
+import { useProfessionalSchedules } from './useProfessionalSchedules';
 import { ServiceBillingConfigPanel, ServicePackageOption } from './ServiceBillingConfigPanel';
 import { StudioPricingRule } from '../../utils/studioPricing';
 import { ServiceTemplatesConfigPanel } from './ServiceTemplatesConfigPanel';
@@ -91,15 +93,27 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
   const [draftSchedules, setDraftSchedules] = useState<DraftClassScheduleInput[]>([]);
   const [hasPendingScheduleForm, setHasPendingScheduleForm] = useState<boolean>(false);
   const [rooms, setRooms] = useState<Room[]>([]);
+  const [availabilityMode, setAvailabilityMode] = useState<ServiceAvailabilityMode>('professional_schedule');
+  const [availabilityWindows, setAvailabilityWindows] = useState<ServiceAvailabilityWindow[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
 
   const showStudioConfig = isPureStudio || (isMixed && serviceDomain === 'studio');
+  const activeAvailProfIds = useMemo(
+    () => Array.from(new Set([professionalId, ...linkedProfessionalIds].filter(Boolean))),
+    [professionalId, linkedProfessionalIds]
+  );
+  const { schedules: professionalSchedules, loading: professionalSchedulesLoading } = useProfessionalSchedules(
+    isOpen && showStudioConfig && serviceKind === 'individual',
+    activeAvailProfIds
+  );
   const individualMeetings = useIndividualFrequencyMeetings(isOpen && showStudioConfig && serviceKind === 'individual', {
     professionalIds: [professionalId, ...linkedProfessionalIds].filter(Boolean),
     durationMinutes: Number(durationMinutes),
     bufferMinutes: Number(bufferMinutes),
     modality,
-    allowedWeekdays: allowedFrequencies.includes('custom_weekdays') ? allowedWeekdays : []
+    allowedWeekdays: allowedFrequencies.includes('custom_weekdays') ? allowedWeekdays : [],
+    availabilityMode,
+    availabilityWindows
   });
   const groupWeeklyMeetings = offeredWeeklyMeetings(isEditing && serviceToEdit?.service_kind === 'group' ? savedSchedules : draftSchedules);
   const groupScheduledWeekdays = useMemo(
@@ -112,8 +126,8 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
       const filtered = useCustomDays ? individualMeetings.filter(m => allowedWeekdays.includes(m.weekday)) : individualMeetings;
       return new Set(filtered.map(m => m.weekday)).size;
     }
-    // Aulas coletivas usam diretamente os encontros cadastrados em Dias e Horários das Aulas
-    return groupWeeklyMeetings.length;
+    // Aulas coletivas usam a grade de turmas, limitadas ao teto semanal real (sem multiplicar dezenas de horários como 30x/40x)
+    return Math.min(7, groupWeeklyMeetings.length);
   }, [allowRecurrence, allowedFrequencies, allowedWeekdays, serviceKind, individualMeetings, groupWeeklyMeetings]);
 
 
@@ -173,6 +187,12 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
         setDefaultBillingDueDay(serviceToEdit.default_billing_due_day !== undefined && serviceToEdit.default_billing_due_day !== null ? String(serviceToEdit.default_billing_due_day) : '');
         setDefaultTemplateId(serviceToEdit.default_template_id || '');
         setLinkedTemplateIds(Array.isArray(serviceToEdit.linked_template_ids) ? serviceToEdit.linked_template_ids : (serviceToEdit.default_template_id ? [serviceToEdit.default_template_id] : []));
+        setAvailabilityMode(
+          domain === 'studio' && serviceToEdit.service_kind !== 'group' && serviceToEdit.availability_mode === 'custom_windows'
+            ? 'custom_windows'
+            : 'professional_schedule'
+        );
+        setAvailabilityWindows(Array.isArray(serviceToEdit.availability_windows) ? serviceToEdit.availability_windows : []);
         setDescription(serviceToEdit.description || '');
         const editPrimaryId = serviceToEdit.professional_id || initialProfessionalId || professionals[0]?.id || '';
         setProfessionalId(editPrimaryId);
@@ -209,6 +229,8 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
         setDefaultBillingDueDay('');
         setDefaultTemplateId('');
         setLinkedTemplateIds([]);
+        setAvailabilityMode('professional_schedule');
+        setAvailabilityWindows([]);
         setDescription('');
         let defaultProf = '';
         if (initialProfessionalId && professionals.some(p => p.id === initialProfessionalId)) {
@@ -278,6 +300,20 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
       showToast('Confirme ou cancele o horário aberto na grade semanal antes de salvar a aula.', 'error');
       return;
     }
+    if (showStudioConfig && serviceKind === 'individual' && availabilityMode === 'custom_windows') {
+      const availCheck = validateServiceAvailabilityWindows({
+        mode: availabilityMode,
+        windows: availabilityWindows,
+        schedules: professionalSchedules,
+        schedulesLoaded: !professionalSchedulesLoading,
+        allowedWeekdays,
+        restrictWeekdays: allowRecurrence && allowedFrequencies.includes('custom_weekdays') && allowedWeekdays.length > 0
+      });
+      if (!availCheck.valid) {
+        showToast(availCheck.formError || 'Revise os horários específicos configurados para este serviço.', 'error');
+        return;
+      }
+    }
 
     try {
       setLoading(true);
@@ -326,7 +362,11 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
               defaultPackageId: billingMode === 'package' && defaultPackageId ? defaultPackageId : null,
               defaultBillingDueDay: isPeriodicSave && defaultBillingDueDay.trim() !== '' ? Number(defaultBillingDueDay) : null,
               defaultTemplateId: defaultTemplateId || null,
-              linkedTemplateIds
+              linkedTemplateIds,
+              availabilityMode: effectiveKind === 'individual' ? availabilityMode : 'professional_schedule',
+              ...(effectiveKind === 'individual' && availabilityMode === 'custom_windows'
+                ? { availabilityWindows }
+                : {})
             }
           : {}),
         classSchedules: shouldSendDraftSchedules ? draftSchedules : undefined,
@@ -598,6 +638,23 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
                     ? Array.from(new Set(groupWeeklyMeetings.map(m => m.weekday))).sort((a, b) => a - b)
                     : Array.from(new Set(individualMeetings.map(m => m.weekday))).sort((a, b) => a - b)
                 }
+                individualAvailabilitySlot={
+                  serviceKind === 'individual' ? (
+                    <ServiceAvailabilitySection
+                      mode={availabilityMode}
+                      windows={availabilityWindows}
+                      schedules={professionalSchedules}
+                      schedulesLoading={professionalSchedulesLoading}
+                      allowedWeekdays={allowedWeekdays}
+                      restrictWeekdays={allowRecurrence && allowedFrequencies.includes('custom_weekdays') && allowedWeekdays.length > 0}
+                      diagnostics={isEditing ? serviceToEdit?.availability_diagnostics : null}
+                      defaultProfessionalId={professionalId}
+                      onModeChange={setAvailabilityMode}
+                      onWindowsChange={setAvailabilityWindows}
+                      testIdPrefix="modal-service-availability"
+                    />
+                  ) : null
+                }
                 onChange={next => {
                   setAllowRecurrence(next.allowRecurrence);
                   setAllowedFrequencies(next.allowedFrequencies);
@@ -627,9 +684,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
                 defaultBillingDueDay={defaultBillingDueDay}
                 availablePackages={availablePackages}
                 scheduleWeekdaysCount={
-                  isEditing && serviceToEdit?.class_schedules
-                    ? serviceToEdit.class_schedules.filter(cs => Number(cs.active) !== 0).length
-                    : draftSchedules.length
+                  serviceKind === 'group' ? groupScheduledWeekdays.length : undefined
                 }
                 onChange={next => {
                   setBillingMode(next.billingMode);

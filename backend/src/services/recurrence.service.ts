@@ -9,6 +9,8 @@ import {
   validateServiceRecurrenceFrequency
 } from '../utils/establishment-context';
 import { ConcreteModality, resolveConcreteModality } from '../utils/modality-resolver';
+import { getTenantEstablishmentProfile, resolveServiceDomain, supportsStudioFeatures } from '../utils/establishment-context';
+import { getServiceDayAvailabilitySegments, intersectIntervalLists } from '../utils/service-availability';
 import { calculateAvailableSlots } from '../utils/slot-calculator';
 import {
   generateRecurrenceDates,
@@ -302,7 +304,8 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
            allowed_plan_durations_json, default_plan_duration,
            custom_recurrence_intervals_json, default_recurrence_interval_json,
            min_lead_time_hours, max_advance_days,
-           service_domain, clinical_module
+           service_domain, clinical_module,
+           COALESCE(availability_mode, 'professional_schedule') as availability_mode
     FROM services
     WHERE id = ? AND tenant_id = ? AND active = 1
   `).get(serviceId, tenantId) as any;
@@ -704,6 +707,33 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
             };
           }
           continue;
+        }
+
+        if (!isGroupService && String(serviceRow.availability_mode || 'professional_schedule') === 'custom_windows') {
+          const estProf = getTenantEstablishmentProfile(tenantId);
+          const srvDom = resolveServiceDomain({
+            establishmentProfile: estProf,
+            serviceDomain: serviceRow.service_domain,
+            serviceKind: serviceRow.service_kind,
+            clinicalModule: serviceRow.clinical_module
+          });
+          if (supportsStudioFeatures(estProf) && srvDom === 'studio') {
+            const customDaySegs = getServiceDayAvailabilitySegments({
+              tenantId,
+              serviceId: serviceRow.id,
+              dayOfWeek: dow
+            });
+            const fitsServiceWindow = customDaySegs.some(seg => startMin >= seg.start && endMin <= seg.end);
+            if (!fitsServiceWindow) {
+              if (!firstFailure) {
+                firstFailure = {
+                  code: 'SERVICE_OUTSIDE_AVAILABILITY',
+                  message: `Horário ${startClockHHMM} está fora da disponibilidade configurada para "${serviceRow.name}".`
+                };
+              }
+              continue;
+            }
+          }
         }
 
         const extBusy = input.externalBusyByProfAndDate?.get(`${prof.id}|${dateStr}`);

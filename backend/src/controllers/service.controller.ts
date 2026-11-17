@@ -1,6 +1,14 @@
 import { individualStudioMeetings } from '../services/studio-individual-meetings.service';
 import { supportsStudioFeatures } from '../utils/establishment-context';
 import { normalizeFrequencyPricing, readFrequencyPricing, supportsFrequencyPricing } from '../utils/studio-frequency-pricing';
+import {
+  diagnoseServiceAvailability,
+  listServiceAvailabilityWindows,
+  listServiceAvailabilityWindowsGrouped,
+  normalizeAndValidateServiceAvailability,
+  saveServiceAvailabilityWindowsTx,
+  ServiceAvailabilityMode
+} from '../utils/service-availability';
 import { ConsentService } from '../services/consent.service';
 import { Request, Response } from 'express';
 import { db } from '../config/database';
@@ -391,9 +399,31 @@ export class ServiceController {
       if (!Number.isInteger(duration) || duration < 1 || duration > 1440 || !Number.isInteger(buffer) || buffer < 0 || buffer > 1440) { res.status(400).json({ error: 'Duração ou intervalo inválido.' }); return; }
       const ids = Array.isArray(req.body.professionalIds) ? req.body.professionalIds.filter((id: unknown) => typeof id === 'string') : [];
       const allowedWeekdays = Array.isArray(req.body.allowedWeekdays) ? req.body.allowedWeekdays.map(Number).filter((n: number) => Number.isInteger(n) && n >= 0 && n <= 6) : undefined;
+      const rawAvailabilityMode = (req.body.availabilityMode ?? req.body.availability_mode) === 'custom_windows'
+        ? 'custom_windows'
+        : 'professional_schedule';
+      const rawAvailabilityWindows = Array.isArray(req.body.availabilityWindows ?? req.body.availability_windows)
+        ? (req.body.availabilityWindows ?? req.body.availability_windows)
+        : undefined;
       const startDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date(Date.now() + 7 * 86400000));
-      const meetings = individualStudioMeetings({ tenantId, professionalIds: ids, startDate, allowedWeekdays,
-        draft: { duration_minutes: duration, buffer_minutes: buffer, modality: req.body.modality || 'presential', service_kind: 'individual', active: 1, min_lead_time_hours: 0, max_advance_days: 60 } });
+      const meetings = individualStudioMeetings({
+        tenantId,
+        professionalIds: ids,
+        startDate,
+        allowedWeekdays,
+        draft: {
+          duration_minutes: duration,
+          buffer_minutes: buffer,
+          modality: req.body.modality || 'presential',
+          service_kind: 'individual',
+          service_domain: domain,
+          availability_mode: rawAvailabilityMode,
+          availability_windows: rawAvailabilityWindows,
+          active: 1,
+          min_lead_time_hours: 0,
+          max_advance_days: 60
+        }
+      });
       res.json({ meetings, startDate });
     } catch (error: any) { res.status(400).json({ error: error.message }); }
   }
@@ -450,6 +480,7 @@ export class ServiceController {
           s.default_template_id,
           s.linked_template_ids_json,
           s.service_domain,
+          COALESCE(s.availability_mode, 'professional_schedule') as availability_mode,
           s.modality_category,
           s.min_lead_time_hours, s.max_advance_days, s.cancellation_policy,
           s.reminder_enabled, s.reminder_value, s.reminder_unit,
@@ -485,6 +516,9 @@ export class ServiceController {
         ? getLinkedProfessionalsMap(tenantId, primaryByService)
         : new Map<string, LinkedProfessionalSummary[]>();
       const templatesMap = isStudioCompat ? getTenantTemplatesMap(tenantId) : new Map<string, LinkedTemplateSummary>();
+      const availWindowsByService = isStudioCompat
+        ? listServiceAvailabilityWindowsGrouped(tenantId)
+        : new Map();
 
       const enriched = services.map(srv => {
         const resolvedDomain = resolveServiceDomain({
@@ -523,7 +557,10 @@ export class ServiceController {
             linked_professionals: [],
             class_schedules: [],
             weekly_schedule_summary: [],
-            schedule_diagnostics: null
+            schedule_diagnostics: null,
+            availability_mode: 'professional_schedule',
+            availability_windows: [],
+            availability_diagnostics: null
           };
         }
         const schedules = schedulesByService.get(srv.id) || [];
@@ -548,6 +585,14 @@ export class ServiceController {
           : (srv.professional_id ? [srv.professional_id] : []);
         const scheduleDiagnostics = (srv.service_kind || 'individual') === 'group'
           ? ClassScheduleService.diagnoseServiceSchedules(tenantId, srv.id, schedules)
+          : null;
+        const supportsCustomAvailability = resolvedDomain === 'studio' && (srv.service_kind || 'individual') === 'individual';
+        const resolvedAvailMode: ServiceAvailabilityMode = supportsCustomAvailability && srv.availability_mode === 'custom_windows'
+          ? 'custom_windows'
+          : 'professional_schedule';
+        const availWindows = supportsCustomAvailability ? (availWindowsByService.get(srv.id) || []) : [];
+        const availDiagnostics = supportsCustomAvailability && resolvedAvailMode === 'custom_windows'
+          ? diagnoseServiceAvailability(tenantId, linkedProfIds, availWindows)
           : null;
         return {
           ...srv,
@@ -580,7 +625,10 @@ export class ServiceController {
           linked_professionals: linkedProfs,
           class_schedules: schedules,
           weekly_schedule_summary: buildWeeklyScheduleSummary(schedules),
-          schedule_diagnostics: scheduleDiagnostics
+          schedule_diagnostics: scheduleDiagnostics,
+          availability_mode: resolvedAvailMode,
+          availability_windows: availWindows,
+          availability_diagnostics: availDiagnostics
         };
       });
       res.json(enriched);
@@ -621,7 +669,9 @@ export class ServiceController {
         suggestedPrice, suggested_price,
         weeklySessionsCount, weekly_sessions_count,
         defaultTemplateId, default_template_id,
-        linkedTemplateIds, linked_template_ids
+        linkedTemplateIds, linked_template_ids,
+        availabilityMode, availability_mode,
+        availabilityWindows, availability_windows
       } = req.body;
 
       const establishmentProfile = getTenantEstablishmentProfile(tenantId);
@@ -650,6 +700,8 @@ export class ServiceController {
       const rawWeeklySessionsCount = weeklySessionsCount !== undefined ? weeklySessionsCount : weekly_sessions_count;
       const rawDefaultTplId = defaultTemplateId !== undefined ? defaultTemplateId : default_template_id;
       const rawLinkedTplIds = linkedTemplateIds !== undefined ? linkedTemplateIds : linked_template_ids;
+      const rawAvailabilityMode = availabilityMode !== undefined ? availabilityMode : availability_mode;
+      const rawAvailabilityWindows = availabilityWindows !== undefined ? availabilityWindows : availability_windows;
       const requestedLinkedIds = parseLinkedInstructorIds(req.body);
 
       if (!isStudioCompat) {
@@ -658,6 +710,7 @@ export class ServiceController {
           (rawCapacity !== undefined && rawCapacity !== null && rawCapacity !== '') ||
           rawClassSchedules.length > 0 ||
           String(rawRequestedDomain || '').trim().toLowerCase() === 'studio' ||
+          String(rawAvailabilityMode || '').trim().toLowerCase() === 'custom_windows' ||
           (rawBillingMode !== undefined && rawBillingMode !== null && String(rawBillingMode).trim().toLowerCase() !== '' && String(rawBillingMode).trim().toLowerCase() !== 'per_session') ||
           (rawPeriodicPrice !== undefined && rawPeriodicPrice !== null && rawPeriodicPrice !== '') ||
           (rawDefaultPkgId !== undefined && rawDefaultPkgId !== null && String(rawDefaultPkgId).trim() !== '') ||
@@ -813,6 +866,23 @@ export class ServiceController {
         ? Math.max(1, Number(maxAdvanceDays))
         : 60;
 
+      const resolvedAvailProfIds = isStudioCompat && resolvedDomain === 'studio'
+        ? Array.from(new Set([professionalId, ...(requestedLinkedIds || [])].filter(Boolean)))
+        : [professionalId];
+      const availNorm = normalizeAndValidateServiceAvailability({
+        tenantId,
+        isStudioCompat,
+        serviceDomain: resolvedDomain,
+        serviceKind: resolvedKind,
+        professionalIds: resolvedAvailProfIds,
+        rawAvailabilityMode,
+        rawAvailabilityWindows
+      });
+      if (availNorm.error) {
+        res.status(400).json({ error: availNorm.error });
+        return;
+      }
+
       const id = 'srv-' + uuidv4().slice(0, 8);
       const scheduleWarnings: string[] = [];
       let createdSchedules: any[] = [];
@@ -876,8 +946,18 @@ export class ServiceController {
           tplNorm.linkedTemplateIdsJson
         );
 
-        db.prepare('UPDATE services SET frequency_pricing_json = ?, allowed_recurrence_weekdays_json = ? WHERE id = ? AND tenant_id = ?')
-          .run(frequencyPricing ? JSON.stringify(frequencyPricing) : null, isStudioCompat && resolvedDomain === 'studio' ? recNorm.allowedWeekdaysJson : null, id, tenantId);
+        db.prepare('UPDATE services SET frequency_pricing_json = ?, allowed_recurrence_weekdays_json = ?, availability_mode = ? WHERE id = ? AND tenant_id = ?')
+          .run(
+            frequencyPricing ? JSON.stringify(frequencyPricing) : null,
+            isStudioCompat && resolvedDomain === 'studio' ? recNorm.allowedWeekdaysJson : null,
+            availNorm.availabilityMode,
+            id,
+            tenantId
+          );
+
+        if (availNorm.shouldPersistWindows) {
+          saveServiceAvailabilityWindowsTx(tenantId, id, professionalId, availNorm.windows);
+        }
 
         const normalizedCustomPrice = effectiveCreatePrice > 0 ? effectiveCreatePrice : (price !== undefined && price !== null && price !== '' ? Number(price) : null);
         const normalizedCustomDuration = durationMinutes !== undefined && durationMinutes !== null && durationMinutes !== '' ? Number(durationMinutes) : null;
@@ -936,6 +1016,12 @@ export class ServiceController {
       const createdDiagnostics = isStudioCompat && resolvedKind === 'group'
         ? ClassScheduleService.diagnoseServiceSchedules(tenantId, id, createdSchedules)
         : null;
+      const savedAvailWindows = isStudioCompat && resolvedDomain === 'studio' && resolvedKind === 'individual'
+        ? listServiceAvailabilityWindows(tenantId, id)
+        : [];
+      const createdAvailDiagnostics = isStudioCompat && resolvedDomain === 'studio' && resolvedKind === 'individual' && availNorm.availabilityMode === 'custom_windows'
+        ? diagnoseServiceAvailability(tenantId, linkedCreatedIds, savedAvailWindows)
+        : null;
       const createdTemplatesMap = isStudioCompat ? getTenantTemplatesMap(tenantId) : new Map<string, LinkedTemplateSummary>();
       const createdTplInfo = enrichServiceTemplates(
         { default_template_id: tplNorm.defaultTemplateId, linked_template_ids_json: tplNorm.linkedTemplateIdsJson },
@@ -992,6 +1078,9 @@ export class ServiceController {
         weekly_schedule_summary: buildWeeklyScheduleSummary(createdSchedules),
         schedule_diagnostics: createdDiagnostics,
         schedule_warnings: scheduleWarnings,
+        availability_mode: availNorm.availabilityMode,
+        availability_windows: savedAvailWindows,
+        availability_diagnostics: createdAvailDiagnostics,
         message: 'Serviço criado com sucesso'
       });
     } catch (err: any) {
@@ -1015,7 +1104,8 @@ export class ServiceController {
                custom_recurrence_intervals_json, default_recurrence_interval_json,
                billing_mode, periodic_price, billing_cycle_months, default_package_id, default_billing_due_day,
                pricing_rule, is_price_customized, suggested_price, weekly_sessions_count, frequency_pricing_json,
-               default_template_id, linked_template_ids_json
+               default_template_id, linked_template_ids_json,
+               COALESCE(availability_mode, 'professional_schedule') as availability_mode
         FROM services WHERE id = ? AND tenant_id = ?
       `).get(id, tenantId) as any;
       if (!existing) {
@@ -1052,7 +1142,9 @@ export class ServiceController {
         suggestedPrice, suggested_price,
         weeklySessionsCount, weekly_sessions_count,
         defaultTemplateId, default_template_id,
-        linkedTemplateIds, linked_template_ids
+        linkedTemplateIds, linked_template_ids,
+        availabilityMode, availability_mode,
+        availabilityWindows, availability_windows
       } = req.body;
 
       const rawKind = serviceKind !== undefined ? serviceKind : service_kind;
@@ -1075,6 +1167,8 @@ export class ServiceController {
       const rawWeeklySessionsCount = weeklySessionsCount !== undefined ? weeklySessionsCount : weekly_sessions_count;
       const rawDefaultTplId = defaultTemplateId !== undefined ? defaultTemplateId : default_template_id;
       const rawLinkedTplIds = linkedTemplateIds !== undefined ? linkedTemplateIds : linked_template_ids;
+      const rawAvailabilityMode = availabilityMode !== undefined ? availabilityMode : availability_mode;
+      const rawAvailabilityWindows = availabilityWindows !== undefined ? availabilityWindows : availability_windows;
       const requestedLinkedIds = parseLinkedInstructorIds(req.body);
       const effectiveTargetProfForCheck = professionalId || existing.professional_id;
 
@@ -1083,6 +1177,7 @@ export class ServiceController {
           rawKind === 'group' ||
           (rawCapacity !== undefined && rawCapacity !== null && rawCapacity !== '') ||
           String(rawRequestedDomain || '').trim().toLowerCase() === 'studio' ||
+          String(rawAvailabilityMode || '').trim().toLowerCase() === 'custom_windows' ||
           (rawBillingMode !== undefined && rawBillingMode !== null && String(rawBillingMode).trim().toLowerCase() !== '' && String(rawBillingMode).trim().toLowerCase() !== 'per_session') ||
           (rawPeriodicPrice !== undefined && rawPeriodicPrice !== null && rawPeriodicPrice !== '') ||
           (rawDefaultPkgId !== undefined && rawDefaultPkgId !== null && String(rawDefaultPkgId).trim() !== '') ||
@@ -1317,6 +1412,41 @@ export class ServiceController {
           ? rawUpdPriceNum
           : (nextPeriodicPrice && nextPeriodicPrice > 0 ? Number(nextPeriodicPrice) : 0);
 
+      let nextAvailabilityMode: ServiceAvailabilityMode = isStudioCompat && nextDomain === 'studio' && nextKind === 'individual' && existing.availability_mode === 'custom_windows'
+        ? 'custom_windows'
+        : 'professional_schedule';
+      let availShouldPersistWindows = false;
+      let availValidatedWindows: ReturnType<typeof listServiceAvailabilityWindows> = [];
+
+      if (rawAvailabilityMode !== undefined || rawAvailabilityWindows !== undefined) {
+        const existingLinkedProfsForAvail = requestedLinkedIds !== undefined
+          ? []
+          : (isStudioCompat ? (getLinkedProfessionalsMap(tenantId, new Map([[String(id), targetProfId || null]])).get(String(id)) || []) : []);
+        const effectiveAvailProfIds = requestedLinkedIds !== undefined
+          ? Array.from(new Set([targetProfId, ...requestedLinkedIds].filter(Boolean)))
+          : Array.from(new Set([targetProfId, ...existingLinkedProfsForAvail.map(lp => lp.id)].filter(Boolean)));
+        const effModeInput = rawAvailabilityMode !== undefined ? rawAvailabilityMode : existing.availability_mode;
+        const effWindowsInput = rawAvailabilityWindows !== undefined
+          ? rawAvailabilityWindows
+          : listServiceAvailabilityWindows(tenantId, String(id));
+        const availNorm = normalizeAndValidateServiceAvailability({
+          tenantId,
+          isStudioCompat,
+          serviceDomain: nextDomain,
+          serviceKind: nextKind,
+          professionalIds: effectiveAvailProfIds,
+          rawAvailabilityMode: effModeInput,
+          rawAvailabilityWindows: effWindowsInput
+        });
+        if (availNorm.error) {
+          res.status(400).json({ error: availNorm.error });
+          return;
+        }
+        nextAvailabilityMode = availNorm.availabilityMode;
+        availShouldPersistWindows = availNorm.shouldPersistWindows;
+        availValidatedWindows = availNorm.windows;
+      }
+
       const updateStmt = db.prepare(`
         UPDATE services SET
           professional_id = CASE WHEN ? = 1 THEN ? ELSE professional_id END,
@@ -1417,8 +1547,18 @@ export class ServiceController {
         const nextCustomPrice = effectiveUpdatePrice > 0 ? effectiveUpdatePrice : (hasExplicitPrice ? Number(price) : null);
         const nextCustomDuration = durationMinutes !== undefined && durationMinutes !== null && durationMinutes !== '' ? Number(durationMinutes) : null;
 
-        db.prepare('UPDATE services SET frequency_pricing_json = ?, allowed_recurrence_weekdays_json = ? WHERE id = ? AND tenant_id = ?')
-          .run(frequencyPricing ? JSON.stringify(frequencyPricing) : null, isStudioCompat && nextDomain === 'studio' ? nextAllowedWeekdaysJson : null, req.params.id, tenantId);
+        db.prepare('UPDATE services SET frequency_pricing_json = ?, allowed_recurrence_weekdays_json = ?, availability_mode = ? WHERE id = ? AND tenant_id = ?')
+          .run(
+            frequencyPricing ? JSON.stringify(frequencyPricing) : null,
+            isStudioCompat && nextDomain === 'studio' ? nextAllowedWeekdaysJson : null,
+            nextAvailabilityMode,
+            req.params.id,
+            tenantId
+          );
+
+        if (availShouldPersistWindows) {
+          saveServiceAvailabilityWindowsTx(tenantId, String(id), targetProfId || null, availValidatedWindows);
+        }
 
         validateAndSyncLinkedInstructorsTx({
           tenantId,
@@ -1475,6 +1615,27 @@ export class ServiceController {
       const updatedDiagnostics = isStudioCompat && updatedService && (updatedService.service_kind || 'individual') === 'group'
         ? ClassScheduleService.diagnoseServiceSchedules(tenantId, String(id), updatedSchedules)
         : null;
+      const updSupportsCustomAvail = Boolean(
+        isStudioCompat &&
+        updatedService &&
+        resolveServiceDomain({
+          establishmentProfile,
+          serviceDomain: updatedService.service_domain,
+          serviceKind: updatedService.service_kind,
+          clinicalModule: updatedService.clinical_module
+        }) === 'studio' &&
+        (updatedService.service_kind || 'individual') === 'individual'
+      );
+      const updAvailMode: ServiceAvailabilityMode =
+        updSupportsCustomAvail && updatedService?.availability_mode === 'custom_windows'
+          ? 'custom_windows'
+          : 'professional_schedule';
+      const updAvailWindows = updSupportsCustomAvail
+        ? listServiceAvailabilityWindows(tenantId, String(id))
+        : [];
+      const updAvailDiagnostics = updSupportsCustomAvail && updAvailMode === 'custom_windows'
+        ? diagnoseServiceAvailability(tenantId, linkedUpdIds, updAvailWindows)
+        : null;
       const updTemplatesMap = isStudioCompat ? getTenantTemplatesMap(tenantId) : new Map<string, LinkedTemplateSummary>();
       const updTplInfo = updatedService
         ? enrichServiceTemplates(updatedService, updTemplatesMap, isStudioCompat && updatedService.service_domain === 'studio')
@@ -1518,7 +1679,10 @@ export class ServiceController {
             class_schedules: updatedSchedules,
             weekly_schedule_summary: buildWeeklyScheduleSummary(updatedSchedules),
             schedule_diagnostics: updatedDiagnostics,
-            schedule_warnings: scheduleWarnings
+            schedule_warnings: scheduleWarnings,
+            availability_mode: updAvailMode,
+            availability_windows: updAvailWindows,
+            availability_diagnostics: updAvailDiagnostics
           }
         : updatedService;
       res.json({ success: true, message: 'Serviço atualizado com sucesso', service: enrichedUpdated, schedule_warnings: scheduleWarnings, ...(enrichedUpdated || {}) });

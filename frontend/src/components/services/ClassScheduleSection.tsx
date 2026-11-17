@@ -55,13 +55,13 @@ interface ClassScheduleSectionProps {
 }
 
 const WEEKDAYS = [
-  { value: 1, short: 'Seg', plural: 'Segundas' },
-  { value: 2, short: 'Ter', plural: 'Terças' },
-  { value: 3, short: 'Qua', plural: 'Quartas' },
-  { value: 4, short: 'Qui', plural: 'Quintas' },
-  { value: 5, short: 'Sex', plural: 'Sextas' },
-  { value: 6, short: 'Sáb', plural: 'Sábados' },
-  { value: 0, short: 'Dom', plural: 'Domingos' }
+  { value: 1, short: 'Seg', plural: 'Segundas', full: 'Segunda-feira' },
+  { value: 2, short: 'Ter', plural: 'Terças', full: 'Terça-feira' },
+  { value: 3, short: 'Qua', plural: 'Quartas', full: 'Quarta-feira' },
+  { value: 4, short: 'Qui', plural: 'Quintas', full: 'Quinta-feira' },
+  { value: 5, short: 'Sex', plural: 'Sextas', full: 'Sexta-feira' },
+  { value: 6, short: 'Sáb', plural: 'Sábados', full: 'Sábado' },
+  { value: 0, short: 'Dom', plural: 'Domingos', full: 'Domingo' }
 ];
 
 function addMinutesToClock(clock: string, durationMinutes: number): string {
@@ -193,16 +193,33 @@ export const ClassScheduleSection: React.FC<ClassScheduleSectionProps> = ({
   }, [defaultProfessionalId, professionals]);
 
   const openAddForm = () => {
+    const targetProf = professionals.some(p => p.id === defaultProfessionalId)
+      ? defaultProfessionalId
+      : (professionals[0]?.id || defaultProfessionalId || '');
+    const defaultDays = [1, 3];
+    const occupiedIntervals = isPersisted
+      ? schedules
+          .filter(s => Number(s.active) !== 0 && s.professional_id === targetProf && defaultDays.includes(Number(s.day_of_week)))
+          .map(s => ({ start: s.start_time.slice(0, 5), end: s.end_time.slice(0, 5) }))
+      : draftSchedules
+          .filter(d => d.professionalId === targetProf && d.weekdays.some(w => defaultDays.includes(w)))
+          .map(d => ({ start: d.startTime.slice(0, 5), end: d.endTime.slice(0, 5) }));
+    let suggestedStart = '08:00';
+    for (const candidateHour of [8, 17, 9, 10, 14, 15, 16, 18, 19, 11, 13, 20, 7]) {
+      const sCand = `${String(candidateHour).padStart(2, '0')}:00`;
+      const eCand = addMinutesToClock(sCand, durationMinutes);
+      if (!occupiedIntervals.some(o => sCand < o.end && eCand > o.start)) {
+        suggestedStart = sCand;
+        break;
+      }
+    }
+
     setEditingScheduleId(null);
-    setSelectedDays([1, 3]);
-    setStartTime('08:00');
-    setEndTime(addMinutesToClock('08:00', durationMinutes));
+    setSelectedDays(defaultDays);
+    setStartTime(suggestedStart);
+    setEndTime(addMinutesToClock(suggestedStart, durationMinutes));
     setEndTimeTouched(false);
-    setProfId(
-      professionals.some(p => p.id === defaultProfessionalId)
-        ? defaultProfessionalId
-        : (professionals[0]?.id || defaultProfessionalId || '')
-    );
+    setProfId(targetProf);
     setCoInstructorIds([]);
     setRoomId('');
     setCapacity(Math.max(1, defaultCapacity || 10));
@@ -289,6 +306,28 @@ export const ClassScheduleSection: React.FC<ClassScheduleSectionProps> = ({
     const normalizedCoIds = coInstructorIds.filter(id => id && id !== profId);
 
     if (!isPersisted) {
+      const nextStartEff = effectiveStartDate || getTodayIso();
+      const nextEndEff = effectiveEndDate || '9999-12-31';
+      for (const existingDraft of draftSchedules) {
+        if (editingScheduleId && existingDraft.tempId === editingScheduleId) continue;
+        const sharesWeekday = existingDraft.weekdays.some(w => selectedDays.includes(w));
+        if (!sharesWeekday) continue;
+        const timeOverlaps = startTime < existingDraft.endTime.slice(0, 5) && endTime > existingDraft.startTime.slice(0, 5);
+        if (!timeOverlaps) continue;
+        const exEnd = existingDraft.effectiveEndDate || '9999-12-31';
+        const datesOverlap = nextStartEff <= exEnd && nextEndEff >= (existingDraft.effectiveStartDate || getTodayIso());
+        if (!datesOverlap) continue;
+        if (existingDraft.professionalId === profId) {
+          const profName = professionals.find(p => p.id === profId)?.name || 'Este instrutor';
+          showToast(`${profName} já possui outro horário sobreposto (${existingDraft.startTime}–${existingDraft.endTime}) em um dos dias selecionados.`, 'error');
+          return;
+        }
+        if (roomId && existingDraft.roomId && existingDraft.roomId === roomId) {
+          const roomName = rooms.find(r => r.id === roomId)?.name || 'selecionada';
+          showToast(`A sala ${roomName} já está reservada em ${existingDraft.startTime}–${existingDraft.endTime} em um dos dias selecionados.`, 'error');
+          return;
+        }
+      }
       const nextDraft: DraftClassScheduleInput = {
         tempId: editingScheduleId || `draft-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         weekdays: [...selectedDays],
@@ -436,6 +475,39 @@ export const ClassScheduleSection: React.FC<ClassScheduleSectionProps> = ({
     });
   }, [schedules]);
 
+  const persistedSchedulesByDay = useMemo(() => {
+    const grouped: Array<{ day: typeof WEEKDAYS[number]; items: ClassScheduleItem[] }> = [];
+    for (const day of WEEKDAYS) {
+      const dayItems = sortedSchedules.filter(item => Number(item.day_of_week) === day.value);
+      if (dayItems.length > 0) {
+        grouped.push({ day, items: dayItems });
+      }
+    }
+    return grouped;
+  }, [sortedSchedules]);
+
+  const draftSchedulesByDay = useMemo(() => {
+    const grouped: Array<{
+      day: typeof WEEKDAYS[number];
+      entries: Array<{ startTime: string; endTime: string; profName: string; capacity: number }>;
+    }> = [];
+    for (const day of WEEKDAYS) {
+      const dayEntries = draftSchedules
+        .filter(d => d.weekdays.includes(day.value))
+        .map(d => ({
+          startTime: d.startTime.slice(0, 5),
+          endTime: d.endTime.slice(0, 5),
+          profName: professionals.find(p => p.id === d.professionalId)?.name || 'Instrutor',
+          capacity: Number(d.capacity) || 1
+        }))
+        .sort((a, b) => a.startTime.localeCompare(b.startTime));
+      if (dayEntries.length > 0) {
+        grouped.push({ day, entries: dayEntries });
+      }
+    }
+    return grouped;
+  }, [draftSchedules, professionals]);
+
   const draftWarnings = useMemo(() => {
     if (isPersisted || draftSchedules.length === 0) return [];
     const list: string[] = [];
@@ -489,9 +561,12 @@ export const ClassScheduleSection: React.FC<ClassScheduleSectionProps> = ({
           <button
             type="button"
             onClick={openAddForm}
+            data-testid="class-schedule-add-btn"
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-[11px] shadow-xs transition-colors cursor-pointer"
           >
-            + Adicionar Dia e Horário
+            {(isPersisted ? sortedSchedules.length > 0 : draftSchedules.length > 0)
+              ? '+ Adicionar outro horário'
+              : '+ Adicionar Dia e Horário'}
           </button>
         )}
       </div>
@@ -533,22 +608,18 @@ export const ClassScheduleSection: React.FC<ClassScheduleSectionProps> = ({
         </div>
       )}
 
-      {/* Resumo consolidado da Grade Semanal */}
-      {(isPersisted ? weeklySummary.length > 0 : draftSummaryLines.length > 0) && (
-        <div className="bg-white border border-teal-100 rounded-xl p-2.5 space-y-1">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-teal-700">Grade semanal</p>
-          {isPersisted
-            ? weeklySummary.map((line, idx) => (
-                <p key={idx} className="text-[11px] font-medium text-slate-700">
-                  • {line.weekdaysLabel} — {line.timeRange} ({line.professionalName} • {line.capacity} vagas
-                  {line.roomName ? ` • ${line.roomName}` : ''})
-                </p>
-              ))
-            : draftSummaryLines.map((line, idx) => (
-                <p key={idx} className="text-[11px] font-medium text-slate-700">
-                  • {line}
-                </p>
-              ))}
+      {/* Resumo consolidado por dia (somente em criação multi-dias quando útil, evitando duplicação na edição) */}
+      {!isPersisted && draftSchedulesByDay.length > 0 && (draftSchedules.length > 1 || draftSchedules.some(d => d.weekdays.length > 1)) && (
+        <div className="bg-white border border-teal-100 rounded-xl p-2.5 space-y-1.5" data-testid="draft-schedules-day-summary">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-teal-700">Resumo por dia da semana</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+            {draftSchedulesByDay.map(({ day, entries }) => (
+              <div key={day.value} className="text-[11px] text-slate-700 bg-slate-50/70 rounded-lg px-2 py-1 border border-slate-100">
+                <span className="font-bold text-slate-800">{day.full}:</span>{' '}
+                {entries.map(e => `${e.startTime}–${e.endTime} (${e.capacity}v)`).join(' · ')}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -793,116 +864,129 @@ export const ClassScheduleSection: React.FC<ClassScheduleSectionProps> = ({
             <span>Esta aula ainda não possui dias e horários cadastrados. Adicione pelo menos um horário para disponibilizá-la no agendamento online.</span>
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-2.5" data-testid="persisted-class-schedules-list">
             {activePersistedCount === 0 && (
               <div className="p-3 rounded-xl border border-dashed border-amber-300 bg-amber-50/70 text-amber-800 text-[11px] font-medium flex items-start gap-2">
                 <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
                 <span>Esta aula ainda não possui dias e horários cadastrados. Adicione pelo menos um horário para disponibilizá-la no agendamento online.</span>
               </div>
             )}
-            {sortedSchedules.map(item => {
-              const dayInfo = WEEKDAYS.find(w => w.value === item.day_of_week);
-              const isInactive = Number(item.active) === 0;
-              const itemDiag = diagnosticByScheduleId.get(item.id);
-              return (
-                <div
-                  key={item.id}
-                  className={`p-2.5 rounded-xl border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 transition-all ${
-                    isInactive
-                      ? 'bg-slate-100/80 border-slate-200 opacity-75'
-                      : 'bg-white border-slate-200 shadow-2xs'
-                  }`}
-                >
-                  <div className="space-y-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="px-2 py-0.5 rounded-md bg-teal-100 text-teal-800 font-bold text-[11px]">
-                        {dayInfo?.plural || `Dia ${item.day_of_week}`}
-                      </span>
-                      <span className="font-bold text-slate-900 inline-flex items-center gap-1">
-                        <Clock className="w-3 h-3 text-teal-600" />
-                        {item.start_time.slice(0, 5)} às {item.end_time.slice(0, 5)}
-                      </span>
-                      <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-semibold text-[10px]">
-                        {modalityLabel(item.modality)}
-                      </span>
-                      {isInactive ? (
-                        <span className="px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 font-bold text-[10px]">
-                          Inativo
-                        </span>
-                      ) : itemDiag && !itemDiag.publishable ? (
-                        <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-bold text-[10px]">
-                          Indisponível online
-                        </span>
-                      ) : (
-                        <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 font-bold text-[10px]">
-                          Público ativo
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
-                      <span className="font-medium text-slate-700">{item.professional_name || 'Instrutor'}</span>
-                      {Array.isArray(item.co_instructors) &&
-                        item.co_instructors.filter(ci => ci.role === 'co_instructor').length > 0 && (
-                          <span className="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 font-semibold text-[10px]">
-                            + Co: {item.co_instructors
-                              .filter(ci => ci.role === 'co_instructor')
-                              .map(ci => ci.professionalName)
-                              .join(', ')}
-                          </span>
-                        )}
-                      <span className="inline-flex items-center gap-1">
-                        <Users className="w-3 h-3 text-slate-400" />
-                        {item.capacity} vagas
-                      </span>
-                      {item.room_name && (
-                        <span className="inline-flex items-center gap-1">
-                          <MapPin className="w-3 h-3 text-slate-400" />
-                          {item.room_name}
-                        </span>
-                      )}
-                      {item.effective_end_date && (
-                        <span className="text-slate-400">
-                          até {item.effective_end_date.split('-').reverse().join('/')}
-                        </span>
-                      )}
-                    </div>
-                    {!isInactive && itemDiag && !itemDiag.publishable && itemDiag.reasons.length > 0 && (
-                      <p className="text-[10px] text-amber-700 font-medium">{itemDiag.reasons[0]}</p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0 self-end sm:self-center">
-                    <button
-                      type="button"
-                      onClick={() => openEditForm(item)}
-                      title="Editar horário"
-                      className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 cursor-pointer"
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleToggleActive(item)}
-                      title={isInactive ? 'Reativar horário' : 'Desativar horário'}
-                      className={`p-1.5 rounded-lg cursor-pointer ${
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="font-bold text-slate-800">Horários cadastrados</span>
+              <span className="text-slate-500 font-medium">
+                {sortedSchedules.length} horário{sortedSchedules.length === 1 ? '' : 's'}
+              </span>
+            </div>
+            {persistedSchedulesByDay.map(({ day, items }) => (
+              <div key={day.value} className="space-y-1.5" data-testid={`class-schedule-day-${day.value}`}>
+                <div className="text-[11px] font-bold text-teal-900 flex items-center justify-between px-0.5">
+                  <span>{day.full}</span>
+                  <span className="text-[10px] font-semibold text-slate-500">
+                    {items.length} turma{items.length === 1 ? '' : 's'}
+                  </span>
+                </div>
+                {items.map(item => {
+                  const isInactive = Number(item.active) === 0;
+                  const itemDiag = diagnosticByScheduleId.get(item.id);
+                  return (
+                    <div
+                      key={item.id}
+                      data-testid={`class-schedule-item-${item.id}`}
+                      className={`p-2.5 rounded-xl border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 transition-all ${
                         isInactive
-                          ? 'text-emerald-600 hover:bg-emerald-50'
-                          : 'text-amber-600 hover:bg-amber-50'
+                          ? 'bg-slate-100/80 border-slate-200 opacity-75'
+                          : 'bg-white border-slate-200 shadow-2xs'
                       }`}
                     >
-                      <Power className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleRemove(item)}
-                      title="Remover horário"
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 cursor-pointer"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+                      <div className="space-y-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="font-bold text-slate-900 inline-flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-teal-600" />
+                            {item.start_time.slice(0, 5)} às {item.end_time.slice(0, 5)}
+                          </span>
+                          <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-semibold text-[10px]">
+                            {modalityLabel(item.modality)}
+                          </span>
+                          {isInactive ? (
+                            <span className="px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 font-bold text-[10px]">
+                              Inativo
+                            </span>
+                          ) : itemDiag && !itemDiag.publishable ? (
+                            <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-bold text-[10px]">
+                              Indisponível online
+                            </span>
+                          ) : (
+                            <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 font-bold text-[10px]">
+                              Público ativo
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
+                          <span className="font-medium text-slate-700">{item.professional_name || 'Instrutor'}</span>
+                          {Array.isArray(item.co_instructors) &&
+                            item.co_instructors.filter(ci => ci.role === 'co_instructor').length > 0 && (
+                              <span className="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 font-semibold text-[10px]">
+                                + Co: {item.co_instructors
+                                  .filter(ci => ci.role === 'co_instructor')
+                                  .map(ci => ci.professionalName)
+                                  .join(', ')}
+                              </span>
+                            )}
+                          <span className="inline-flex items-center gap-1">
+                            <Users className="w-3 h-3 text-slate-400" />
+                            {item.capacity} vagas
+                          </span>
+                          {item.room_name && (
+                            <span className="inline-flex items-center gap-1">
+                              <MapPin className="w-3 h-3 text-slate-400" />
+                              {item.room_name}
+                            </span>
+                          )}
+                          {item.effective_end_date && (
+                            <span className="text-slate-400">
+                              até {item.effective_end_date.split('-').reverse().join('/')}
+                            </span>
+                          )}
+                        </div>
+                        {!isInactive && itemDiag && !itemDiag.publishable && itemDiag.reasons.length > 0 && (
+                          <p className="text-[10px] text-amber-700 font-medium">{itemDiag.reasons[0]}</p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0 self-end sm:self-center">
+                        <button
+                          type="button"
+                          onClick={() => openEditForm(item)}
+                          title="Editar horário"
+                          className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 cursor-pointer"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleActive(item)}
+                          title={isInactive ? 'Reativar horário' : 'Desativar horário'}
+                          className={`p-1.5 rounded-lg cursor-pointer ${
+                            isInactive
+                              ? 'text-emerald-600 hover:bg-emerald-50'
+                              : 'text-amber-600 hover:bg-amber-50'
+                          }`}
+                        >
+                          <Power className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRemove(item)}
+                          title="Remover horário"
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
           </div>
         )
       ) : (
@@ -912,7 +996,13 @@ export const ClassScheduleSection: React.FC<ClassScheduleSectionProps> = ({
             <span>Esta aula ainda não possui dias e horários cadastrados. Adicione pelo menos um horário para disponibilizá-la no agendamento online.</span>
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-2" data-testid="draft-class-schedules-list">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="font-bold text-slate-800">Horários cadastrados</span>
+              <span className="text-slate-500 font-medium">
+                {draftSchedules.length} bloco{draftSchedules.length === 1 ? '' : 's'}
+              </span>
+            </div>
             {draftSchedules.map(d => {
               const dayNames = WEEKDAYS.filter(w => d.weekdays.includes(w.value)).map(w => w.short).join(', ');
               const profName = professionals.find(p => p.id === d.professionalId)?.name || 'Instrutor';

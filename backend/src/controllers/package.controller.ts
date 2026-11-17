@@ -474,7 +474,8 @@ export class PackageController {
                duration_minutes, price, COALESCE(allow_recurrence, 1) as allow_recurrence,
                allowed_recurrence_frequencies_json, allowed_recurrence_weekdays_json, default_recurrence_frequency,
                custom_recurrence_intervals_json, default_recurrence_interval_json,
-               modality, modality_category, allowed_plan_durations_json, default_plan_duration, service_domain
+               modality, modality_category, allowed_plan_durations_json, default_plan_duration, service_domain,
+               clinical_module, COALESCE(availability_mode, 'professional_schedule') as availability_mode
         FROM services
         WHERE id = ? AND tenant_id = ? AND active = 1
       `).get(String(serviceId), tenant.id) as any;
@@ -708,6 +709,7 @@ export class PackageController {
         serviceId: srv.id,
         serviceKind: srv.service_kind,
         serviceModality: srv.modality || 'presential',
+        availabilityMode: (srv as any).availability_mode || 'professional_schedule',
         allowedModalities,
         defaultCapacity: srv.default_capacity || 1,
         allowRecurrence: recCfg.allowRecurrence,
@@ -998,7 +1000,8 @@ export class PackageController {
                  allowed_recurrence_frequencies_json, default_recurrence_frequency,
                  allowed_plan_durations_json, default_plan_duration,
                  custom_recurrence_intervals_json, default_recurrence_interval_json,
-                 service_domain, modality, clinical_module, billing_mode, default_billing_due_day
+                 service_domain, modality, clinical_module, billing_mode, default_billing_due_day,
+                 COALESCE(availability_mode, 'professional_schedule') as availability_mode
           FROM services WHERE id = ? AND tenant_id = ? AND active = 1
         `).get(item.serviceId, tenant.id) as any;
 

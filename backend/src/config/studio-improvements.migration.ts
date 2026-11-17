@@ -733,4 +733,29 @@ export function migrateStudioImprovements(rawDb: DatabaseSync): void {
   } catch (e) {
     console.warn('[StudioMigration] Aviso ao criar estrutura de Consumo dos Alunos:', e);
   }
+
+  // 9. Disponibilidade de horários específicos por serviço individual (Studio / Misto)
+  addColIfMissing('services', 'availability_mode', "TEXT NOT NULL DEFAULT 'professional_schedule'");
+  try {
+    rawDb.exec(`
+      CREATE TABLE IF NOT EXISTS service_availability_windows (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        service_id TEXT NOT NULL,
+        professional_id TEXT,
+        day_of_week INTEGER NOT NULL CHECK(day_of_week BETWEEN 0 AND 6),
+        start_time TEXT NOT NULL,
+        end_time TEXT NOT NULL,
+        active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_srv_avail_win_lookup
+        ON service_availability_windows (tenant_id, service_id, day_of_week, active);
+    `);
+  } catch (e) {
+    console.warn('[StudioMigration] Aviso ao criar tabela service_availability_windows:', e);
+  }
 }

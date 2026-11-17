@@ -1515,6 +1515,7 @@ export class TenantController {
                s.custom_recurrence_intervals_json, s.default_recurrence_interval_json,
                s.service_domain, s.clinical_module,
                s.billing_mode, s.periodic_price, s.pricing_rule, s.frequency_pricing_json, s.weekly_sessions_count,
+               COALESCE(s.availability_mode, 'professional_schedule') as availability_mode,
                s.modality_category, spec.name as specialty_name
         FROM services s LEFT JOIN specialties spec ON spec.id = s.specialty_id
         WHERE s.tenant_id = ? AND s.active = 1 AND EXISTS (
@@ -1585,6 +1586,7 @@ export class TenantController {
               service_kind: 'individual',
               default_capacity: null,
               service_domain: 'clinical',
+              availability_mode: 'professional_schedule',
               class_schedules: [],
               weekly_schedule_summary: []
             };

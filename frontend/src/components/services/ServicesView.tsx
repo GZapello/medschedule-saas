@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
-import { Service, Room, Specialty, Professional } from '../../types';
+import { Service, Room, Specialty, Professional, ServiceAvailabilityMode, ServiceAvailabilityWindow } from '../../types';
 import {
   Scissors,
   Plus,
@@ -27,6 +27,8 @@ import {
 import { PackageModal } from './PackageModal';
 import { ClassScheduleSection, DraftClassScheduleInput } from './ClassScheduleSection';
 import { ServiceRecurrenceConfigPanel } from './ServiceRecurrenceConfigPanel';
+import { ServiceAvailabilitySection, validateServiceAvailabilityWindows } from './ServiceAvailabilitySection';
+import { useProfessionalSchedules } from './useProfessionalSchedules';
 import { ServiceBillingConfigPanel } from './ServiceBillingConfigPanel';
 import { StudioPricingRule } from '../../utils/studioPricing';
 import { ServiceTemplatesConfigPanel } from './ServiceTemplatesConfigPanel';
@@ -384,6 +386,8 @@ export const ServicesView: React.FC = () => {
   const [linkedTemplateIds, setLinkedTemplateIds] = useState<string[]>([]);
   const [draftClassSchedules, setDraftClassSchedules] = useState<DraftClassScheduleInput[]>([]);
   const [hasPendingCreateScheduleForm, setHasPendingCreateScheduleForm] = useState<boolean>(false);
+  const [availabilityMode, setAvailabilityMode] = useState<ServiceAvailabilityMode>('professional_schedule');
+  const [availabilityWindows, setAvailabilityWindows] = useState<ServiceAvailabilityWindow[]>([]);
   const [description, setDescription] = useState<string>('');
   const [reminderEnabled, setReminderEnabled] = useState<boolean>(false);
   const [reminderValue, setReminderValue] = useState<number>(30);
@@ -425,22 +429,44 @@ export const ServicesView: React.FC = () => {
   const [editLinkedTemplateIds, setEditLinkedTemplateIds] = useState<string[]>([]);
   const [editDraftClassSchedules, setEditDraftClassSchedules] = useState<DraftClassScheduleInput[]>([]);
   const [hasPendingEditScheduleForm, setHasPendingEditScheduleForm] = useState<boolean>(false);
+  const [editAvailabilityMode, setEditAvailabilityMode] = useState<ServiceAvailabilityMode>('professional_schedule');
+  const [editAvailabilityWindows, setEditAvailabilityWindows] = useState<ServiceAvailabilityWindow[]>([]);
 
   const showCreateStudioConfig = isPureStudio || (isMixed && serviceDomain === 'studio');
   const showEditStudioConfig = isPureStudio || (isMixed && editServiceDomain === 'studio');
+  const createAvailProfIds = useMemo(
+    () => Array.from(new Set([professionalId, ...linkedProfessionalIds].filter(Boolean))),
+    [professionalId, linkedProfessionalIds]
+  );
+  const editAvailProfIds = useMemo(
+    () => Array.from(new Set([editProfessionalId, ...editLinkedProfessionalIds].filter(Boolean))),
+    [editProfessionalId, editLinkedProfessionalIds]
+  );
+  const { schedules: createProfSchedules, loading: createProfSchedulesLoading } = useProfessionalSchedules(
+    showServiceModal && showCreateStudioConfig && serviceKind === 'individual',
+    createAvailProfIds
+  );
+  const { schedules: editProfSchedules, loading: editProfSchedulesLoading } = useProfessionalSchedules(
+    Boolean(editingService) && showEditStudioConfig && editServiceKind === 'individual',
+    editAvailProfIds
+  );
   const individualMeetings = useIndividualFrequencyMeetings(showServiceModal && showCreateStudioConfig && serviceKind === 'individual', {
     professionalIds: [professionalId, ...linkedProfessionalIds].filter(Boolean),
     durationMinutes: Number(durationMinutes),
     bufferMinutes: Number(bufferMinutes),
     modality,
-    allowedWeekdays: allowedFrequencies.includes('custom_weekdays') ? allowedWeekdays : []
+    allowedWeekdays: allowedFrequencies.includes('custom_weekdays') ? allowedWeekdays : [],
+    availabilityMode,
+    availabilityWindows
   });
   const editIndividualMeetings = useIndividualFrequencyMeetings(Boolean(editingService) && showEditStudioConfig && editServiceKind === 'individual', {
     professionalIds: [editProfessionalId, ...editLinkedProfessionalIds].filter(Boolean),
     durationMinutes: Number(editDurationMinutes),
     bufferMinutes: Number(editBufferMinutes),
     modality: editModality,
-    allowedWeekdays: editAllowedFrequencies.includes('custom_weekdays') ? editAllowedWeekdays : []
+    allowedWeekdays: editAllowedFrequencies.includes('custom_weekdays') ? editAllowedWeekdays : [],
+    availabilityMode: editAvailabilityMode,
+    availabilityWindows: editAvailabilityWindows
   });
   const createGroupMeetings = offeredWeeklyMeetings(draftClassSchedules);
   const editGroupMeetings = offeredWeeklyMeetings(editingService?.service_kind === 'group' ? editingService.class_schedules || [] : editDraftClassSchedules);
@@ -458,7 +484,7 @@ export const ServicesView: React.FC = () => {
       const filtered = useCustom ? individualMeetings.filter(m => allowedWeekdays.includes(m.weekday)) : individualMeetings;
       return new Set(filtered.map(m => m.weekday)).size;
     }
-    return createGroupMeetings.length;
+    return Math.min(7, createGroupMeetings.length);
   }, [allowRecurrence, allowedFrequencies, allowedWeekdays, serviceKind, individualMeetings, createGroupMeetings]);
   const editContractableWeeklySessions = useMemo(() => {
     const useCustom = editAllowRecurrence && editAllowedFrequencies.includes('custom_weekdays') && editAllowedWeekdays.length > 0;
@@ -466,7 +492,7 @@ export const ServicesView: React.FC = () => {
       const filtered = useCustom ? editIndividualMeetings.filter(m => editAllowedWeekdays.includes(m.weekday)) : editIndividualMeetings;
       return new Set(filtered.map(m => m.weekday)).size;
     }
-    return editGroupMeetings.length;
+    return Math.min(7, editGroupMeetings.length);
   }, [editAllowRecurrence, editAllowedFrequencies, editAllowedWeekdays, editServiceKind, editIndividualMeetings, editGroupMeetings]);
 
   const [editDescription, setEditDescription] = useState<string>('');
@@ -671,6 +697,20 @@ export const ServicesView: React.FC = () => {
       showToast('Confirme ou cancele o horário aberto na grade semanal antes de salvar a aula.', 'error');
       return;
     }
+    if (showCreateStudioConfig && serviceKind === 'individual' && availabilityMode === 'custom_windows') {
+      const availCheck = validateServiceAvailabilityWindows({
+        mode: availabilityMode,
+        windows: availabilityWindows,
+        schedules: createProfSchedules,
+        schedulesLoaded: !createProfSchedulesLoading,
+        allowedWeekdays,
+        restrictWeekdays: allowRecurrence && allowedFrequencies.includes('custom_weekdays') && allowedWeekdays.length > 0
+      });
+      if (!availCheck.valid) {
+        showToast(availCheck.formError || 'Revise os horários específicos configurados para este serviço.', 'error');
+        return;
+      }
+    }
 
     try {
       const effectiveKind = showCreateStudioConfig ? serviceKind : 'individual';
@@ -716,7 +756,11 @@ export const ServicesView: React.FC = () => {
               defaultPackageId: billingMode === 'package' && defaultPackageId ? defaultPackageId : null,
               defaultBillingDueDay: isPeriodicCreate && defaultBillingDueDay.trim() !== '' ? Number(defaultBillingDueDay) : null,
               defaultTemplateId: defaultTemplateId || null,
-              linkedTemplateIds
+              linkedTemplateIds,
+              availabilityMode: effectiveKind === 'individual' ? availabilityMode : 'professional_schedule',
+              ...(effectiveKind === 'individual' && availabilityMode === 'custom_windows'
+                ? { availabilityWindows }
+                : {})
             }
           : {}),
         classSchedules: showCreateStudioConfig && effectiveKind === 'group' ? draftClassSchedules : undefined,
@@ -766,6 +810,8 @@ export const ServicesView: React.FC = () => {
       setDefaultTemplateId('');
       setLinkedTemplateIds([]);
       setDraftClassSchedules([]);
+      setAvailabilityMode('professional_schedule');
+      setAvailabilityWindows([]);
       setLinkedProfessionalIds(professionalId ? [professionalId] : []);
       setDescription('');
       setReminderEnabled(false);
@@ -860,6 +906,12 @@ export const ServicesView: React.FC = () => {
     setEditLinkedTemplateIds(Array.isArray(s.linked_template_ids) ? s.linked_template_ids : (s.default_template_id ? [s.default_template_id] : []));
     setEditDraftClassSchedules([]);
     setHasPendingEditScheduleForm(false);
+    setEditAvailabilityMode(
+      domain === 'studio' && s.service_kind !== 'group' && s.availability_mode === 'custom_windows'
+        ? 'custom_windows'
+        : 'professional_schedule'
+    );
+    setEditAvailabilityWindows(Array.isArray(s.availability_windows) ? s.availability_windows : []);
     setEditDescription(s.description || '');
     const existingEditLinked = Array.isArray(s.linked_professional_ids) && s.linked_professional_ids.length > 0
       ? s.linked_professional_ids
@@ -902,6 +954,20 @@ export const ServicesView: React.FC = () => {
     if (showEditStudioConfig && editServiceKind === 'group' && hasPendingEditScheduleForm) {
       showToast('Confirme ou cancele o horário aberto na grade semanal antes de salvar.', 'error');
       return;
+    }
+    if (showEditStudioConfig && editServiceKind === 'individual' && editAvailabilityMode === 'custom_windows') {
+      const editAvailCheck = validateServiceAvailabilityWindows({
+        mode: editAvailabilityMode,
+        windows: editAvailabilityWindows,
+        schedules: editProfSchedules,
+        schedulesLoaded: !editProfSchedulesLoading,
+        allowedWeekdays: editAllowedWeekdays,
+        restrictWeekdays: editAllowRecurrence && editAllowedFrequencies.includes('custom_weekdays') && editAllowedWeekdays.length > 0
+      });
+      if (!editAvailCheck.valid) {
+        showToast(editAvailCheck.formError || 'Revise os horários específicos configurados para este serviço.', 'error');
+        return;
+      }
     }
 
     try {
@@ -954,7 +1020,11 @@ export const ServicesView: React.FC = () => {
               defaultPackageId: editBillingMode === 'package' && editDefaultPackageId ? editDefaultPackageId : null,
               defaultBillingDueDay: isPeriodicEdit && editDefaultBillingDueDay.trim() !== '' ? Number(editDefaultBillingDueDay) : null,
               defaultTemplateId: editDefaultTemplateId || null,
-              linkedTemplateIds: editLinkedTemplateIds
+              linkedTemplateIds: editLinkedTemplateIds,
+              availabilityMode: effectiveEditKind === 'individual' ? editAvailabilityMode : 'professional_schedule',
+              ...(effectiveEditKind === 'individual' && editAvailabilityMode === 'custom_windows'
+                ? { availabilityWindows: editAvailabilityWindows }
+                : {})
             }
           : {}),
         ...(shouldSendEditDraftSchedules ? { classSchedules: editDraftClassSchedules } : {}),
@@ -1848,6 +1918,22 @@ export const ServicesView: React.FC = () => {
                         ? createGroupScheduledWeekdays
                         : Array.from(new Set(individualMeetings.map(m => m.weekday))).sort((a, b) => a - b)
                     }
+                    individualAvailabilitySlot={
+                      serviceKind === 'individual' ? (
+                        <ServiceAvailabilitySection
+                          mode={availabilityMode}
+                          windows={availabilityWindows}
+                          schedules={createProfSchedules}
+                          schedulesLoading={createProfSchedulesLoading}
+                          allowedWeekdays={allowedWeekdays}
+                          restrictWeekdays={allowRecurrence && allowedFrequencies.includes('custom_weekdays') && allowedWeekdays.length > 0}
+                          defaultProfessionalId={professionalId}
+                          onModeChange={setAvailabilityMode}
+                          onWindowsChange={setAvailabilityWindows}
+                          testIdPrefix="create-service-availability"
+                        />
+                      ) : null
+                    }
                     onChange={next => {
                       setAllowRecurrence(next.allowRecurrence);
                       setAllowedFrequencies(next.allowedFrequencies);
@@ -1877,7 +1963,7 @@ export const ServicesView: React.FC = () => {
                     defaultPackageId={defaultPackageId}
                     defaultBillingDueDay={defaultBillingDueDay}
                     availablePackages={packages}
-                    scheduleWeekdaysCount={draftClassSchedules.length}
+                    scheduleWeekdaysCount={serviceKind === 'group' ? createGroupScheduledWeekdays.length : undefined}
                     onChange={next => {
                       setBillingMode(next.billingMode);
                       setPeriodicPrice(next.periodicPrice);
@@ -2370,6 +2456,23 @@ export const ServicesView: React.FC = () => {
                         ? editGroupScheduledWeekdays
                         : Array.from(new Set(editIndividualMeetings.map(m => m.weekday))).sort((a, b) => a - b)
                     }
+                    individualAvailabilitySlot={
+                      editServiceKind === 'individual' ? (
+                        <ServiceAvailabilitySection
+                          mode={editAvailabilityMode}
+                          windows={editAvailabilityWindows}
+                          schedules={editProfSchedules}
+                          schedulesLoading={editProfSchedulesLoading}
+                          allowedWeekdays={editAllowedWeekdays}
+                          restrictWeekdays={editAllowRecurrence && editAllowedFrequencies.includes('custom_weekdays') && editAllowedWeekdays.length > 0}
+                          diagnostics={editingService?.availability_diagnostics || null}
+                          defaultProfessionalId={editProfessionalId}
+                          onModeChange={setEditAvailabilityMode}
+                          onWindowsChange={setEditAvailabilityWindows}
+                          testIdPrefix="edit-service-availability"
+                        />
+                      ) : null
+                    }
                     onChange={next => {
                       setEditAllowRecurrence(next.allowRecurrence);
                       setEditAllowedFrequencies(next.allowedFrequencies);
@@ -2399,7 +2502,7 @@ export const ServicesView: React.FC = () => {
                     defaultPackageId={editDefaultPackageId}
                     defaultBillingDueDay={editDefaultBillingDueDay}
                     availablePackages={packages}
-                    scheduleWeekdaysCount={editingService?.class_schedules?.filter(s => Number(s.active) !== 0).length || editDraftClassSchedules.length}
+                    scheduleWeekdaysCount={editServiceKind === 'group' ? editGroupScheduledWeekdays.length : undefined}
                     onChange={next => {
                       setEditBillingMode(next.billingMode);
                       setEditPeriodicPrice(next.periodicPrice);

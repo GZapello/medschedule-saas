@@ -1,4 +1,6 @@
 import { db } from '../config/database';
+import { getTenantEstablishmentProfile, resolveServiceDomain, supportsStudioFeatures } from './establishment-context';
+import { getServiceDayAvailabilitySegments, intersectIntervalLists, mergeAdjacentSegments, parseClockMinutes } from './service-availability';
 
 export interface AvailableSlot {
   time: string;           // '09:00'
@@ -50,7 +52,19 @@ const minutesToTime = (m: number): string => {
 
 export interface CalculateSlotsOptions {
   // Used only by the authenticated Studio service editor to preview an unsaved individual service.
-  serviceOverride?: { duration_minutes: number; buffer_minutes: number; modality: string; service_kind: 'individual'; active: number; min_lead_time_hours: number; max_advance_days: number };
+  serviceOverride?: {
+    duration_minutes: number;
+    buffer_minutes: number;
+    modality: string;
+    service_kind: 'individual';
+    active: number;
+    min_lead_time_hours: number;
+    max_advance_days: number;
+    service_domain?: string;
+    clinical_module?: string | null;
+    availability_mode?: 'professional_schedule' | 'custom_windows';
+    availability_windows?: Array<{ dayOfWeek: number; startTime: string; endTime: string }>;
+  };
   ignoreLeadTime?: boolean;
   ignoreAdvanceCap?: boolean;
 }
@@ -96,7 +110,9 @@ export function calculateAvailableSlots(
   const serviceStmt = db.prepare(`
     SELECT COALESCE(ps.custom_duration, s.duration_minutes) AS duration_minutes,
            s.buffer_minutes, s.min_lead_time_hours, s.max_advance_days, s.active,
-           s.modality, COALESCE(s.service_kind, 'individual') AS service_kind, s.default_capacity
+           s.modality, COALESCE(s.service_kind, 'individual') AS service_kind, s.default_capacity,
+           s.service_domain, s.clinical_module,
+           COALESCE(s.availability_mode, 'professional_schedule') AS availability_mode
     FROM services s LEFT JOIN professional_services ps ON ps.service_id = s.id AND ps.professional_id = ?
     WHERE s.id = ? AND s.tenant_id = ? AND s.active = 1
   `);
@@ -108,12 +124,27 @@ export function calculateAvailableSlots(
     modality?: string;
     service_kind: string;
     default_capacity: number | null;
+    service_domain?: string | null;
+    clinical_module?: string | null;
+    availability_mode?: string | null;
   } | undefined;
 
   if (!service) return [];
 
   const isGroupService = service.service_kind === 'group';
   const defaultGroupCapacity = isGroupService ? Math.max(1, Number(service.default_capacity) || 1) : 1;
+  const estProfile = getTenantEstablishmentProfile(tenantId);
+  const resolvedServiceDomain = resolveServiceDomain({
+    establishmentProfile: estProfile,
+    serviceDomain: service.service_domain,
+    serviceKind: service.service_kind,
+    clinicalModule: service.clinical_module
+  });
+  const useCustomServiceWindows =
+    !isGroupService &&
+    supportsStudioFeatures(estProfile) &&
+    resolvedServiceDomain === 'studio' &&
+    String(service.availability_mode || 'professional_schedule') === 'custom_windows';
 
   if (isGroupService) {
     // Quando a aula coletiva possui grade semanal configurada (class_schedules), a disponibilidade segue exclusivamente a grade.
@@ -401,6 +432,18 @@ export function calculateAvailableSlots(
   const currentMinutesInDay = spHour * 60 + spMin;
 
   const slotStep = totalSlotDuration > 0 ? totalSlotDuration : duration;
+  const customServiceDaySegments = useCustomServiceWindows
+    ? getServiceDayAvailabilitySegments({
+        tenantId,
+        serviceId,
+        dayOfWeek,
+        overrideWindows: options?.serviceOverride?.availability_windows
+      })
+    : [];
+
+  if (useCustomServiceWindows && customServiceDaySegments.length === 0) {
+    return [];
+  }
 
   // 8. Itera sobre cada período/turno de trabalho configurado para o profissional,
   // dividindo o expediente em sub-janelas ao redor dos intervalos de almoço/descanso
@@ -418,6 +461,10 @@ export function calculateAvailableSlots(
     let workingSegments = [{ start: effectiveStartMin, end: effectiveEndMin }];
     workingSegments = subtractBreakFromSegments(workingSegments, breakStartMin, breakEndMin);
     workingSegments = subtractBreakFromSegments(workingSegments, clinicBreakStartMin, clinicBreakEndMin);
+    if (useCustomServiceWindows) {
+      workingSegments = intersectIntervalLists(workingSegments, customServiceDaySegments);
+      if (workingSegments.length === 0) continue;
+    }
 
     for (const seg of workingSegments) {
       let current = seg.start;
@@ -593,6 +640,58 @@ export function explainEmptySlots(
       reasonCode: 'NO_SCHEDULE',
       message: 'O profissional não possui escala de atendimento configurada para este dia da semana.'
     };
+  }
+
+  const serviceMeta = options?.serviceOverride
+    ? options.serviceOverride
+    : (db.prepare(`
+        SELECT COALESCE(service_kind, 'individual') AS service_kind,
+               service_domain, clinical_module,
+               COALESCE(availability_mode, 'professional_schedule') AS availability_mode
+        FROM services
+        WHERE id = ? AND tenant_id = ? AND active = 1
+      `).get(serviceId, tenantId) as any);
+
+  if (serviceMeta) {
+    const estProfile = getTenantEstablishmentProfile(tenantId);
+    const resolvedDomain = resolveServiceDomain({
+      establishmentProfile: estProfile,
+      serviceDomain: serviceMeta.service_domain,
+      serviceKind: serviceMeta.service_kind,
+      clinicalModule: serviceMeta.clinical_module
+    });
+    const isGroupService = serviceMeta.service_kind === 'group';
+    const useCustomServiceWindows =
+      !isGroupService &&
+      supportsStudioFeatures(estProfile) &&
+      resolvedDomain === 'studio' &&
+      String(serviceMeta.availability_mode || 'professional_schedule') === 'custom_windows';
+
+    if (useCustomServiceWindows) {
+      const customSegments = getServiceDayAvailabilitySegments({
+        tenantId,
+        serviceId,
+        dayOfWeek,
+        overrideWindows: options?.serviceOverride?.availability_windows
+      });
+      if (customSegments.length === 0) {
+        return {
+          reasonCode: 'SERVICE_AVAILABILITY_CLOSED',
+          message: 'Este serviço não possui horários disponíveis configurados para este dia da semana.'
+        };
+      }
+      const scheduleSegments = activeSchedules.map(s => ({
+        start: timeToMinutes(s.start_time),
+        end: timeToMinutes(s.end_time)
+      }));
+      const intersected = intersectIntervalLists(scheduleSegments, customSegments);
+      if (intersected.length === 0) {
+        return {
+          reasonCode: 'SERVICE_AVAILABILITY_CLOSED',
+          message: 'Os horários configurados para este serviço não coincidem com a escala ativa do profissional neste dia.'
+        };
+      }
+    }
   }
 
   if (dateStr === todayStr) {

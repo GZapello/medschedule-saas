@@ -203,8 +203,27 @@ export interface StaffMember {
   specialty_name?: string;
 }
 
+export type ServiceAvailabilityMode = 'professional_schedule' | 'custom_windows';
+
+export interface ServiceAvailabilityWindow {
+  id?: string;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  professionalId?: string | null;
+}
+
+export interface ServiceAvailabilityDiagnostics {
+  hasIncompatibleWindows: boolean;
+  warnings: string[];
+  incompatibleWindowIds: string[];
+}
+
 export interface Service {
   frequency_pricing?: import('../utils/studioFrequencyPricing').FrequencyPricing | null;
+  availability_mode?: ServiceAvailabilityMode;
+  availability_windows?: ServiceAvailabilityWindow[];
+  availability_diagnostics?: ServiceAvailabilityDiagnostics | null;
   id: string;
   tenant_id: string;
   professional_id?: string;

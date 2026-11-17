@@ -32,7 +32,9 @@ export function quoteFrequencyPlan(params: {
   `).all(params.tenantId, params.serviceId) as any[];
   const individual = service.service_kind !== 'group';
   const available = individual ? individualStudioMeetings({ tenantId: params.tenantId, serviceId: params.serviceId, startDate: params.startDate, publicOnly: params.publicOnly }) : offeredWeeklyMeetings(rows);
-  const contractableLimit = individual ? new Set(available.map(m => m.weekday)).size : available.length;
+  const contractableLimit = individual
+    ? new Set(available.map(m => m.weekday)).size
+    : Math.min(7, available.length);
   const eligibleRows = individual ? available : rows.flatMap(row => offeredWeeklyMeetings([row]));
   const selected = new Map<string, typeof available[number]>();
   if (!params.slots.length) fail('Selecione os dias e horários da grade para contratar o plano por frequência.');

@@ -1,9 +1,16 @@
 import { useEffect, useState } from 'react';
 import { ApiClient } from '../../api/client';
 import { WeeklyMeeting } from '../../utils/studioFrequencyPricing';
+import { ServiceAvailabilityMode, ServiceAvailabilityWindow } from '../../types';
 
 export function useIndividualFrequencyMeetings(enabled: boolean, input: {
-  professionalIds: string[]; durationMinutes: number; bufferMinutes: number; modality: string; allowedWeekdays?: number[];
+  professionalIds: string[];
+  durationMinutes: number;
+  bufferMinutes: number;
+  modality: string;
+  allowedWeekdays?: number[];
+  availabilityMode?: ServiceAvailabilityMode;
+  availabilityWindows?: ServiceAvailabilityWindow[];
 }) {
   const [meetings, setMeetings] = useState<WeeklyMeeting[]>([]);
   const key = JSON.stringify(input);
