@@ -1,3 +1,5 @@
+import { BookingCancellationPolicyReader } from './BookingCancellationPolicy';
+import { publicBookingOutcome } from '../../utils/publicBookingOutcome';
 import { downloadBlob } from '../../utils/download';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -157,6 +159,7 @@ export const PublicBookingView: React.FC<Props> = ({
     notes: ''
   });
 
+  const outcome = publicBookingOutcome(result);
   const dateInput = useRef<HTMLInputElement>(null);
   const contextVersion = useRef(0);
   const slotVersion = useRef(0);
@@ -557,6 +560,7 @@ export const PublicBookingView: React.FC<Props> = ({
 
   return (
     <PublicBookingShell clinic={clinic}>
+      <BookingCancellationPolicyReader source={individual ? professional : clinic} />
       {onBackToApp && (
         <div className="mb-4">
           <button type="button" className={bookingSecondary} onClick={onBackToApp}>
@@ -1605,17 +1609,19 @@ export const PublicBookingView: React.FC<Props> = ({
           {step === 6 && result && (
             <section className="space-y-5">
               <div className="text-center">
-                <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-teal-50 text-teal-700 border border-teal-200">
-                  <CheckCircle2 aria-hidden="true" className="h-10 w-10 text-teal-700" />
+                <div className={`mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-2xl border ${outcome.confirmed ? 'bg-teal-50 text-teal-700 border-teal-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                  {outcome.confirmed ? <CheckCircle2 aria-hidden="true" className="h-10 w-10 text-teal-700" /> : <Clock aria-hidden="true" className="h-10 w-10 text-amber-700" />}
                 </div>
-                <h2 className="text-xl font-bold text-slate-900">Agendamento realizado</h2>
+                <h2 className="text-xl font-bold text-slate-900">{outcome.title}</h2>
                 <p className="mt-1 text-sm font-semibold text-teal-800">{result.appointmentNumber}</p>
                 <p className="mt-1 text-xs text-slate-500">
-                  Seu horário foi reservado com sucesso na agenda do profissional.
+                  {outcome.message}
                 </p>
               </div>
 
+              <p role="status" className={`text-center text-xs font-bold ${outcome.confirmed ? 'text-teal-700' : 'text-amber-700'}`}>{outcome.label}</p>
               {summary}
+              <p className="text-center text-xs text-slate-600">{outcome.next}</p>
 
               <div className="flex flex-wrap justify-center gap-3 pt-2">
                 <button type="button" className={bookingSecondary} onClick={downloadCalendar}>

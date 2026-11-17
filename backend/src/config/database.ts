@@ -233,6 +233,10 @@ export function initializeDatabase(): void {
     addColIfMissing('tenants', 'public_booking_enabled', 'INTEGER NOT NULL DEFAULT 0');
     addColIfMissing('tenants', 'public_booking_slug', 'TEXT');
     addColIfMissing('tenants', 'public_booking_sequence', 'INTEGER');
+    for (const table of ['tenants', 'professionals']) {
+      addColIfMissing(table, 'booking_cancellation_policy_enabled', 'INTEGER NOT NULL DEFAULT 0');
+      addColIfMissing(table, 'booking_cancellation_policy_text', "TEXT NOT NULL DEFAULT ''");
+    }
 
     // Colunas em tenants
     addColIfMissing('tenants', 'corporate_name', 'TEXT');

@@ -1,3 +1,4 @@
+import { publicBookingOutcome, bookingStatusLabel } from '../../utils/publicBookingOutcome';
 import { readFrequencyPricing, supportsFrequencyPricing, offeredWeeklyMeetings, countMeetingOccurrences } from '../../utils/studioFrequencyPricing';
 import { calculateStudioRecurringPrice, computeBillingCycleEndDate, getCycleMonthsForBillingMode } from '../../utils/studioPricing';
 import { SERVICE_BILLING_MODE_OPTIONS } from '../../utils/establishmentContext';
@@ -693,6 +694,8 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
     }
   };
 
+  const outcome = publicBookingOutcome(bookingResult);
+
   const downloadIcsFirst = () => {
     const first = bookingResult?.appointments?.[0];
     if (!first) return;
@@ -731,7 +734,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
     { num: 3, label: 'Horários' },
     { num: 4, label: 'Resumo' },
     { num: 5, label: 'Seus dados' },
-    { num: 6, label: 'Solicitado' }
+    { num: 6, label: 'Finalização' }
   ];
 
   return (
@@ -786,11 +789,11 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
           <div className="text-center space-y-1">
             <h2 className="text-xl font-bold text-slate-900">Como deseja agendar hoje?</h2>
             <p className="text-xs text-slate-500">
-              Escolha entre agendar uma aula avulsa / turma ou conhecer os pacotes do Studio.
+              {packages.length ? 'Escolha entre agendar uma aula avulsa / turma ou conhecer os pacotes do Studio.' : 'Escolha uma aula avulsa ou turma do Studio.'}
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className={`grid grid-cols-1 gap-4 ${packages.length ? 'sm:grid-cols-2' : 'max-w-lg mx-auto'}`}>
             <button
               type="button"
               onClick={() => {
@@ -812,9 +815,8 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
               </span>
             </button>
 
-            <button
+            {packages.length > 0 && <button
               type="button"
-              disabled={packages.length === 0}
               onClick={() => {
                 setObjective('package');
                 setError('');
@@ -840,7 +842,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                   Explorar pacotes <ArrowRight className="w-3.5 h-3.5" />
                 </span>
               )}
-            </button>
+            </button>}
           </div>
         </div>
       )}
@@ -1886,15 +1888,16 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
 
       {/* ETAPA 6: CONFIRMAÇÃO REAL (NUNCA EXIBE PAGAMENTO CONFIRMADO FALSO) */}
       {step === 6 && bookingResult && (
-        <div className="p-6 rounded-3xl bg-emerald-50/70 border border-emerald-200 text-center space-y-4">
-          <div className="w-14 h-14 rounded-full bg-emerald-600 text-white flex items-center justify-center mx-auto shadow-sm">
-            <CheckCircle2 className="w-8 h-8" />
+        <div className={`p-6 rounded-3xl border text-center space-y-4 ${outcome.confirmed ? 'bg-emerald-50/70 border-emerald-200' : 'bg-amber-50/70 border-amber-200'}`}>
+          <div className={`w-14 h-14 rounded-full text-white flex items-center justify-center mx-auto shadow-sm ${outcome.confirmed ? 'bg-emerald-600' : 'bg-amber-600'}`}>
+            {outcome.confirmed ? <CheckCircle2 className="w-8 h-8" /> : <Clock className="w-8 h-8" />}
           </div>
           <div className="space-y-1">
             <h3 className="text-lg font-extrabold text-slate-900">
-              {bookingResult.mode === 'package' ? 'Solicitação de Pacote Registrada!' : 'Horário Reservado!'}
+              {outcome.title}
             </h3>
-            <p className="text-xs text-slate-600 max-w-md mx-auto">{bookingResult.message}</p>
+            <p className="text-xs text-slate-600 max-w-md mx-auto">{outcome.message}</p>
+            <p role="status" className="text-xs font-bold text-slate-800">{outcome.label}</p>
           </div>
 
           {bookingResult.paymentPending && (
@@ -1905,12 +1908,14 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
 
           {Array.isArray(bookingResult.appointments) && bookingResult.appointments.length > 0 && (
             <div className="text-left max-w-md mx-auto bg-white p-4 rounded-2xl border border-emerald-100 space-y-2 text-xs">
-              <div className="font-bold text-slate-700 uppercase text-[10px]">Aulas reservadas</div>
+              <div className="font-bold text-slate-700 uppercase text-[10px]">Informações dos horários</div>
               {bookingResult.appointments.map((a: any) => (
                 <div key={a.id} className="flex items-center justify-between gap-2 border-b border-slate-100 last:border-0 pb-1.5">
                   <div>
                     <div className="font-bold text-slate-900">{a.serviceName}</div>
-                    <div className="text-slate-500">Prof. {a.professionalName}</div>
+                    <div className="text-slate-500">{a.professionalName ? `Prof. ${a.professionalName}` : ''}</div>
+                    <div className="text-slate-500">{a.modality ? modalityLabel(a.modality) : 'Modalidade não informada'}</div>
+                    <div className="text-slate-700 font-medium">{bookingStatusLabel(a.status ?? bookingResult.status)}</div>
                   </div>
                   <div className="text-right font-semibold text-teal-800">
                     {formatDateShort(a.startTime)} • {a.startTime.slice(11, 16)}
@@ -1920,6 +1925,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
             </div>
           )}
 
+          <p className="text-xs text-slate-600">{outcome.next}</p>
           <div className="flex flex-wrap justify-center gap-2 pt-2">
             {bookingResult.appointments?.length > 0 && (
               <button type="button" onClick={downloadIcsFirst} className={bookingSecondary}>

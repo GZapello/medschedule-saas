@@ -1,3 +1,4 @@
+import { parseBookingCancellationPolicy } from '../utils/booking-cancellation-policy';
 import { professionalBookingService, validBookingDate } from '../utils/public-booking';
 import { respondBillingError } from './billing.controller';
 import { requireCapacity, pendingBillingManager, BillingService } from '../services/billing.service';
@@ -29,7 +30,7 @@ export class ProfessionalController {
 
       const stmt = db.prepare(`
         SELECT 
-          p.id, p.tenant_id, p.user_id, p.name, p.slug, p.public_booking_enabled,
+          p.id, p.tenant_id, p.user_id, p.name, p.slug, p.public_booking_enabled, p.booking_cancellation_policy_enabled, p.booking_cancellation_policy_text,
           p.photo_url, p.profession_id, p.specialty_id, p.specialty_custom,
           p.registration_type, p.registration_number, p.bio, p.practice_areas, p.buffer_minutes, p.active,
           p.remuneration_type, p.commission_percentage, p.fixed_salary, p.payment_day,
@@ -104,7 +105,7 @@ export class ProfessionalController {
 
       const stmt = db.prepare(`
         SELECT 
-          p.id, p.tenant_id, p.user_id, p.name, p.slug, p.public_booking_enabled,
+          p.id, p.tenant_id, p.user_id, p.name, p.slug, p.public_booking_enabled, p.booking_cancellation_policy_enabled, p.booking_cancellation_policy_text,
           p.photo_url, p.profession_id, p.specialty_id, p.specialty_custom,
           p.registration_type, p.registration_number, p.bio, p.practice_areas, p.buffer_minutes, p.active,
           p.remuneration_type, p.commission_percentage, p.fixed_salary, p.payment_day,
@@ -199,7 +200,7 @@ export class ProfessionalController {
 
       // 1. Busca profissional atual para validação de existência e verificação da alteração única de profissão
       const currentProf = db.prepare(`
-        SELECT id, tenant_id, user_id, profession_id, practice_areas, profession_change_used
+        SELECT id, tenant_id, user_id, profession_id, practice_areas, profession_change_used, booking_cancellation_policy_text
         FROM professionals
         WHERE id = ? AND tenant_id = ?
       `).get(id, tenantId) as any;
@@ -209,7 +210,7 @@ export class ProfessionalController {
         return;
       }
 
-      if (publicBookingEnabled !== undefined) {
+      if (publicBookingEnabled !== undefined || req.body.bookingCancellationPolicy !== undefined) {
         const role = req.user?.role;
         const canManageBooking = role === 'clinic_admin' || role === 'superadmin' ||
           (role === 'professional' && currentProf.user_id === req.user?.userId);
@@ -217,6 +218,16 @@ export class ProfessionalController {
           res.status(403).json({ error: 'Você não tem permissão para alterar o agendamento público deste profissional.' });
           return;
         }
+      }
+
+      if (req.body.bookingCancellationPolicy !== undefined) {
+        let policy;
+        try { policy = parseBookingCancellationPolicy(req.body.bookingCancellationPolicy, currentProf.booking_cancellation_policy_text); }
+        catch (error: any) { res.status(400).json({ error: error.message }); return; }
+        db.prepare("UPDATE professionals SET booking_cancellation_policy_enabled = ?, booking_cancellation_policy_text = ?, updated_at = datetime('now') WHERE id = ? AND tenant_id = ?")
+          .run(policy.enabled, policy.text, id, tenantId);
+        res.json({ success: true, booking_cancellation_policy_enabled: policy.enabled, booking_cancellation_policy_text: policy.text });
+        return;
       }
 
       // Se for profissional, valida se está editando o próprio perfil
@@ -560,7 +571,8 @@ export class ProfessionalController {
 
         profRow = db.prepare(`
           SELECT 
-            p.id, p.tenant_id, p.name, p.slug, p.photo_url, p.bio,
+            p.id, p.tenant_id, p.name, p.slug, p.photo_url, p.bio, p.booking_cancellation_policy_enabled,
+            CASE WHEN p.booking_cancellation_policy_enabled = 1 THEN p.booking_cancellation_policy_text ELSE NULL END AS booking_cancellation_policy_text,
             p.registration_type, p.registration_number, p.practice_areas, p.gender,
             COALESCE(p.specialty_custom, spec.name, p.practice_areas, '') as specialty_name,
             prof.name as profession_name
@@ -576,7 +588,8 @@ export class ProfessionalController {
         // Fallback para rota pública legado /agendar/:slug
         profRow = db.prepare(`
           SELECT 
-            p.id, p.tenant_id, p.name, p.slug, p.photo_url, p.bio,
+            p.id, p.tenant_id, p.name, p.slug, p.photo_url, p.bio, p.booking_cancellation_policy_enabled,
+            CASE WHEN p.booking_cancellation_policy_enabled = 1 THEN p.booking_cancellation_policy_text ELSE NULL END AS booking_cancellation_policy_text,
             p.registration_type, p.registration_number, p.practice_areas, p.gender,
             COALESCE(p.specialty_custom, spec.name, p.practice_areas, '') as specialty_name,
             prof.name as profession_name

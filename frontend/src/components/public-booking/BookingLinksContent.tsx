@@ -1,3 +1,4 @@
+import { BookingCancellationPolicyEditor } from './BookingCancellationPolicy';
 import React, { useEffect, useState } from 'react';
 import {
   Copy,
@@ -320,6 +321,7 @@ export const BookingLinksContent: React.FC<BookingLinksContentProps> = ({ onClos
             )}
           </div>
         )}
+        {canManageClinicBooking && <BookingCancellationPolicyEditor key={effectiveTenant.id} source={effectiveTenant} endpoint="/v1/tenants/current" onSaved={value => setTenant((prev: any) => ({ ...prev, ...value }))} />}
       </div>
 
       {/* 2. Links Individuais dos Profissionais */}
@@ -441,6 +443,7 @@ export const BookingLinksContent: React.FC<BookingLinksContentProps> = ({ onClos
                     )}
                   </div>
                 )}
+                {canToggleProf && <BookingCancellationPolicyEditor source={p} endpoint={`/v1/professionals/${p.id}`} onSaved={value => setProfessionals(items => items.map(item => item.id === p.id ? { ...item, ...value } : item))} />}
               </div>
             );
           })}

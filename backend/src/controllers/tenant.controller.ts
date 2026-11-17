@@ -1,3 +1,4 @@
+import { parseBookingCancellationPolicy } from '../utils/booking-cancellation-policy';
 import { readFrequencyPricing } from '../utils/studio-frequency-pricing';
 import { clinicTeam } from '../services/clinic-team.service';
 import { canOperate } from '../services/billing.service';
@@ -1180,7 +1181,7 @@ export class TenantController {
       ensureClinicBookingIdentity(db, req.tenantId);
       const stmt = db.prepare(`
         SELECT 
-          t.id, t.slug, t.public_booking_enabled, t.public_booking_slug, t.public_booking_sequence, t.name, t.corporate_name, t.trade_name, t.person_type, t.cnpj_cpf,
+          t.id, t.slug, t.booking_cancellation_policy_enabled, t.booking_cancellation_policy_text, t.public_booking_enabled, t.public_booking_slug, t.public_booking_sequence, t.name, t.corporate_name, t.trade_name, t.person_type, t.cnpj_cpf,
           t.municipal_registration, t.state_registration, t.professional_board, t.professional_registry,
           t.manager_profession, t.manager_practice_areas,
           t.email, t.phone, t.mobile, t.whatsapp, t.website, t.description,
@@ -1240,6 +1241,18 @@ export class TenantController {
     try {
       if (!req.tenantId) {
         res.status(400).json({ error: 'Nenhum tenant associado' });
+        return;
+      }
+
+      if (req.body.bookingCancellationPolicy !== undefined) {
+        if (req.user?.role !== 'clinic_admin') { res.status(403).json({ error: 'Somente o administrador pode configurar agendamento online.' }); return; }
+        const current = db.prepare('SELECT booking_cancellation_policy_text FROM tenants WHERE id = ?').get(req.tenantId) as any;
+        let policy;
+        try { policy = parseBookingCancellationPolicy(req.body.bookingCancellationPolicy, current?.booking_cancellation_policy_text); }
+        catch (error: any) { res.status(400).json({ error: error.message }); return; }
+        db.prepare("UPDATE tenants SET booking_cancellation_policy_enabled = ?, booking_cancellation_policy_text = ?, updated_at = datetime('now') WHERE id = ?")
+          .run(policy.enabled, policy.text, req.tenantId);
+        res.json({ success: true, booking_cancellation_policy_enabled: policy.enabled, booking_cancellation_policy_text: policy.text });
         return;
       }
 
@@ -1439,7 +1452,7 @@ export class TenantController {
       logAudit(req, 'UPDATE_TENANT_SETTINGS', 'tenants', req.tenantId);
       const updatedTenant = db.prepare(`
         SELECT 
-          t.id, t.slug, t.public_booking_enabled, t.public_booking_slug, t.public_booking_sequence, t.name, t.corporate_name, t.trade_name, t.person_type, t.cnpj_cpf,
+          t.id, t.slug, t.booking_cancellation_policy_enabled, t.booking_cancellation_policy_text, t.public_booking_enabled, t.public_booking_slug, t.public_booking_sequence, t.name, t.corporate_name, t.trade_name, t.person_type, t.cnpj_cpf,
           t.municipal_registration, t.state_registration, t.professional_board, t.professional_registry,
           t.manager_profession, t.manager_practice_areas,
           t.email, t.phone, t.mobile, t.whatsapp, t.website, t.description,
@@ -1475,7 +1488,8 @@ export class TenantController {
         res.status(404).json({ code: 'BOOKING_UNAVAILABLE', error: 'O agendamento online desta clínica está indisponível no momento.' }); return;
       }
       const tenant = db.prepare(`
-        SELECT slug, name, trade_name, logo_url, city, state, COALESCE(establishment_profile, 'clinic') as establishment_profile
+        SELECT slug, name, trade_name, logo_url, city, state, booking_cancellation_policy_enabled,
+          CASE WHEN booking_cancellation_policy_enabled = 1 THEN booking_cancellation_policy_text ELSE NULL END AS booking_cancellation_policy_text, COALESCE(establishment_profile, 'clinic') as establishment_profile
         FROM tenants WHERE id = ?
       `).get(resolved.id) as any;
       // Profissionais ativos da clínica
