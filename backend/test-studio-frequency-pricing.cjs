@@ -223,7 +223,7 @@ async function runTests() {
     assert(invalid.status===400,'Backend rejeita zero');
     const foreign=await makeReq('PUT','/api/v1/services/'+id,authOther,{frequencyPricing:config});
     assert(foreign.status===404,'Isolamento entre estabelecimentos');
-    const mixed=await makeReq('POST','/api/v1/services',authMixed,{...servicePayload,professionalId:profMx,classSchedules:[]});
+    const mixed=await makeReq('POST','/api/v1/services',authClinic,{...servicePayload,professionalId:profCl,classSchedules:[]});
     assert(mixed.status===400,'Outros perfis não aceitam tabela');
     const entries=service.class_schedules.filter(s=>s.day_of_week===1).map(s=>({classScheduleId:s.id,weekday:s.day_of_week,startTime:s.start_time,endTime:s.end_time,professionalId:profSt1,modality:'presential'}));
     const recurrence={frequency:'weekly',durationCode:'1_month',seriesMode:'schedule_plan',scheduleEntries:entries};

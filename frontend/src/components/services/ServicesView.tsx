@@ -1,3 +1,4 @@
+import { useIndividualFrequencyMeetings } from './useIndividualFrequencyMeetings';
 import { FrequencyPricing, emptyFrequencyPricing, readFrequencyPricing, offeredWeeklyMeetings, supportsFrequencyPricing } from '../../utils/studioFrequencyPricing';
 import React, { useState, useEffect, useMemo } from 'react';
 import { ApiClient } from '../../api/client';
@@ -425,6 +426,9 @@ export const ServicesView: React.FC = () => {
 
   const showCreateStudioConfig = isPureStudio || (isMixed && serviceDomain === 'studio');
   const showEditStudioConfig = isPureStudio || (isMixed && editServiceDomain === 'studio');
+  const individualMeetings = useIndividualFrequencyMeetings(showServiceModal && showCreateStudioConfig && serviceKind === 'individual', { professionalIds: [professionalId, ...linkedProfessionalIds].filter(Boolean), durationMinutes: Number(durationMinutes), bufferMinutes: Number(bufferMinutes), modality });
+  const editIndividualMeetings = useIndividualFrequencyMeetings(Boolean(editingService) && showEditStudioConfig && editServiceKind === 'individual', { professionalIds: [editProfessionalId, ...editLinkedProfessionalIds].filter(Boolean), durationMinutes: Number(editDurationMinutes), bufferMinutes: Number(editBufferMinutes), modality: editModality });
+
   const [editDescription, setEditDescription] = useState<string>('');
   const [editReminderEnabled, setEditReminderEnabled] = useState<boolean>(false);
   const [editReminderValue, setEditReminderValue] = useState<number>(30);
@@ -662,7 +666,7 @@ export const ServicesView: React.FC = () => {
               isPriceCustomized: isPeriodicCreate ? isPriceCustomized : undefined,
               suggestedPrice: isPeriodicCreate ? suggestedPrice : undefined,
               weeklySessionsCount: isPeriodicCreate ? weeklySessionsCount : undefined,
-              ...(isPureStudio && (frequencyPricing.enabled || Object.keys(frequencyPricing.tables).length > 0) ? { frequencyPricing: { ...frequencyPricing, enabled: frequencyPricing.enabled && effectiveKind === 'group' && supportsFrequencyPricing(billingMode) } } : {}),
+              ...(showCreateStudioConfig && (frequencyPricing.enabled || Object.keys(frequencyPricing.tables).length > 0) ? { frequencyPricing: { ...frequencyPricing, enabled: frequencyPricing.enabled && supportsFrequencyPricing(billingMode) } } : {}),
               defaultPackageId: billingMode === 'package' && defaultPackageId ? defaultPackageId : null,
               defaultBillingDueDay: isPeriodicCreate && defaultBillingDueDay.trim() !== '' ? Number(defaultBillingDueDay) : null,
               defaultTemplateId: defaultTemplateId || null,
@@ -892,7 +896,7 @@ export const ServicesView: React.FC = () => {
               isPriceCustomized: isPeriodicEdit ? editIsPriceCustomized : undefined,
               suggestedPrice: isPeriodicEdit ? editSuggestedPrice : undefined,
               weeklySessionsCount: isPeriodicEdit ? editWeeklySessionsCount : undefined,
-              ...(isPureStudio && (editFrequencyPricing.enabled || Object.keys(editFrequencyPricing.tables).length > 0) ? { frequencyPricing: { ...editFrequencyPricing, enabled: editFrequencyPricing.enabled && effectiveEditKind === 'group' && supportsFrequencyPricing(editBillingMode) } } : {}),
+              ...(showEditStudioConfig && (editFrequencyPricing.enabled || Object.keys(editFrequencyPricing.tables).length > 0) ? { frequencyPricing: { ...editFrequencyPricing, enabled: editFrequencyPricing.enabled && supportsFrequencyPricing(editBillingMode) } } : {}),
               defaultPackageId: editBillingMode === 'package' && editDefaultPackageId ? editDefaultPackageId : null,
               defaultBillingDueDay: isPeriodicEdit && editDefaultBillingDueDay.trim() !== '' ? Number(editDefaultBillingDueDay) : null,
               defaultTemplateId: editDefaultTemplateId || null,
@@ -1522,7 +1526,7 @@ export const ServicesView: React.FC = () => {
           <StudioServicePresentation enabled={isPureStudio} title="Novo Serviço" onClose={() => setShowServiceModal(false)}
             values={{
               name, professionalId, serviceKind,
-              price, billingMode, periodicPrice, frequencyPricing, pricingRule,
+              price, billingMode, periodicPrice, frequencyPricing, pricingRule, individualMeetings,
               defaultBillingDueDay, weeklySessionsCount, includedSessionsCount,
               allowRecurrence, defaultFrequency, defaultCustomInterval,
               defaultPlanDuration, linkedTemplateIds, defaultTemplateId,
@@ -1813,9 +1817,9 @@ export const ServicesView: React.FC = () => {
                     isPriceCustomized={isPriceCustomized}
                     suggestedPrice={suggestedPrice}
                     weeklySessionsCount={weeklySessionsCount}
-                    allowFrequencyPricing={isPureStudio && serviceKind === 'group'}
+                    allowFrequencyPricing={showCreateStudioConfig}
                     frequencyPricing={frequencyPricing} onFrequencyPricingChange={setFrequencyPricing}
-                    offeredWeeklySessions={offeredWeeklyMeetings(draftClassSchedules).length}
+                    offeredWeeklySessions={serviceKind === 'individual' ? individualMeetings.length : offeredWeeklyMeetings(draftClassSchedules).length}
                     includedSessionsCount={includedSessionsCount}
                     defaultPackageId={defaultPackageId}
                     defaultBillingDueDay={defaultBillingDueDay}
@@ -1993,7 +1997,7 @@ export const ServicesView: React.FC = () => {
           <StudioServicePresentation enabled={isPureStudio} title="Editar Serviço" onClose={() => setEditingService(null)}
             values={{
               name: editName, professionalId: editProfessionalId, serviceKind: editServiceKind,
-              price: editPrice, billingMode: editBillingMode, periodicPrice: editPeriodicPrice, frequencyPricing: editFrequencyPricing, pricingRule: editPricingRule,
+              price: editPrice, billingMode: editBillingMode, periodicPrice: editPeriodicPrice, frequencyPricing: editFrequencyPricing, pricingRule: editPricingRule, individualMeetings: editIndividualMeetings,
               defaultBillingDueDay: editDefaultBillingDueDay, weeklySessionsCount: editWeeklySessionsCount, includedSessionsCount: editIncludedSessionsCount,
               allowRecurrence: editAllowRecurrence, defaultFrequency: editDefaultFrequency, defaultCustomInterval: editDefaultCustomInterval,
               defaultPlanDuration: editDefaultPlanDuration, linkedTemplateIds: editLinkedTemplateIds, defaultTemplateId: editDefaultTemplateId,
@@ -2327,9 +2331,9 @@ export const ServicesView: React.FC = () => {
                     isPriceCustomized={editIsPriceCustomized}
                     suggestedPrice={editSuggestedPrice}
                     weeklySessionsCount={editWeeklySessionsCount}
-                    allowFrequencyPricing={isPureStudio && editServiceKind === 'group'}
+                    allowFrequencyPricing={showEditStudioConfig}
                     frequencyPricing={editFrequencyPricing} onFrequencyPricingChange={setEditFrequencyPricing}
-                    offeredWeeklySessions={offeredWeeklyMeetings(editingService.service_kind === 'group' ? editingService.class_schedules || [] : editDraftClassSchedules).length}
+                    offeredWeeklySessions={editServiceKind === 'individual' ? editIndividualMeetings.length : offeredWeeklyMeetings(editingService.service_kind === 'group' ? editingService.class_schedules || [] : editDraftClassSchedules).length}
                     includedSessionsCount={editIncludedSessionsCount}
                     defaultPackageId={editDefaultPackageId}
                     defaultBillingDueDay={editDefaultBillingDueDay}

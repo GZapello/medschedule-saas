@@ -1,3 +1,4 @@
+import { Info } from 'lucide-react';
 import React, { useState } from 'react';
 import { FrequencyPricing, emptyFrequencyPricing, supportsFrequencyPricing } from '../../utils/studioFrequencyPricing';
 import { SERVICE_BILLING_MODE_OPTIONS } from '../../utils/establishmentContext';
@@ -21,6 +22,7 @@ export function ServiceFrequencyPricingPanel({ value, onChange, count, billingMo
     onChange({ ...config, tables: { ...config.tables, [key]: next } });
   };
   return <div className="space-y-3 text-xs">
+    {count < 2 && <p className="flex items-start gap-1.5 text-gray-500"><Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />Configure pelo menos duas aulas semanais na grade para habilitar preços personalizados por frequência.</p>}
     {count >= 2 && <button type="button" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}
       className="rounded-lg border border-emerald-300 bg-white px-3 py-2 font-semibold text-emerald-800 hover:bg-emerald-50">
       Personalizar preços por frequência
@@ -28,11 +30,11 @@ export function ServiceFrequencyPricingPanel({ value, onChange, count, billingMo
     {(expanded || config.enabled || stale) && <section className="rounded-xl border border-emerald-200 bg-white p-3 space-y-3">
       <div><h4 className="font-semibold text-gray-900">Preços personalizados por frequência semanal</h4>
         <p className="mt-1 text-gray-600">Defina valores diferentes para os planos conforme a quantidade de aulas semanais contratadas pelo aluno.</p></div>
-      <label className="flex items-center gap-2 font-medium"><input type="checkbox" checked={config.enabled}
+      <label className="flex items-center gap-2 font-medium"><input type="checkbox" checked={config.enabled} disabled={count < 2 && !config.enabled}
         onChange={event => onChange({ ...config, enabled: event.target.checked })} />Ativar preços por frequência</label>
       {count < 2 && <p role="status" className="text-amber-800">A grade possui {count} encontro(s) semanal(is). Apenas frequências disponíveis podem ser contratadas.</p>}
       {stale && <p role="status" className="text-amber-800">Há preços salvos para frequências acima da grade atual. Eles foram preservados, mas não serão oferecidos em novas contratações.</p>}
-      {(expanded || config.enabled) && <>
+      {count >= 2 && (expanded || config.enabled) && <>
         <label className="block font-medium">Modalidade do preço personalizado
           <select className="mt-1 w-full rounded-lg border border-gray-300 bg-white p-2" value={config.unit}
             onChange={event => onChange({ ...config, unit: event.target.value as FrequencyPricing['unit'] })}>

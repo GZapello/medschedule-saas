@@ -1,3 +1,5 @@
+import { individualStudioMeetings } from '../services/studio-individual-meetings.service';
+import { supportsStudioFeatures } from '../utils/establishment-context';
 import { normalizeFrequencyPricing, readFrequencyPricing, supportsFrequencyPricing } from '../utils/studio-frequency-pricing';
 import { ConsentService } from '../services/consent.service';
 import { Request, Response } from 'express';
@@ -17,11 +19,11 @@ import {
   ServiceDomain
 } from '../utils/establishment-context';
 
-function frequencyConfigForSave(raw: unknown, profile: string, kind: string, mode: unknown) {
+function frequencyConfigForSave(raw: unknown, profile: string, domain: string, mode: unknown) {
   try {
     const config = normalizeFrequencyPricing(raw);
-    if (config && profile !== 'studio') throw new Error('Preços por frequência estão disponíveis apenas no perfil Studio.');
-    if (config?.enabled && (kind !== 'group' || !supportsFrequencyPricing(mode))) throw new Error('Preços por frequência exigem aulas com grade e cobrança periódica compatível.');
+    if (config && (!supportsStudioFeatures(profile) || domain !== 'studio')) throw new Error('Preços por frequência estão disponíveis apenas no perfil Studio.');
+    if (config?.enabled && !supportsFrequencyPricing(mode)) throw new Error('Preços por frequência exigem aulas com grade e cobrança periódica compatível.');
     return config;
   } catch (error: any) { throw Object.assign(error, { status: 400 }); }
 }
@@ -379,6 +381,22 @@ function enrichServiceTemplates(srv: any, templatesMap: Map<string, LinkedTempla
 }
 
 export class ServiceController {
+  static frequencyMeetings(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId!;
+      const profile = getTenantEstablishmentProfile(tenantId);
+      const domain = resolveServiceDomain({ establishmentProfile: profile, serviceDomain: req.body.serviceDomain, serviceKind: 'individual' });
+      if (!supportsStudioFeatures(profile) || domain !== 'studio') { res.status(400).json({ error: 'Disponível somente para serviços Studio.' }); return; }
+      const duration = Number(req.body.durationMinutes), buffer = Number(req.body.bufferMinutes ?? 0);
+      if (!Number.isInteger(duration) || duration < 1 || duration > 1440 || !Number.isInteger(buffer) || buffer < 0 || buffer > 1440) { res.status(400).json({ error: 'Duração ou intervalo inválido.' }); return; }
+      const ids = Array.isArray(req.body.professionalIds) ? req.body.professionalIds.filter((id: unknown) => typeof id === 'string') : [];
+      const startDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date(Date.now() + 7 * 86400000));
+      const meetings = individualStudioMeetings({ tenantId, professionalIds: ids, startDate,
+        draft: { duration_minutes: duration, buffer_minutes: buffer, modality: req.body.modality || 'presential', service_kind: 'individual', active: 1, min_lead_time_hours: 0, max_advance_days: 60 } });
+      res.json({ meetings, startDate });
+    } catch (error: any) { res.status(400).json({ error: error.message }); }
+  }
+
   static list(req: Request, res: Response): void {
     try {
       const tenantId = req.tenantId;
@@ -542,7 +560,7 @@ export class ServiceController {
           is_price_customized: billConfig.isPriceCustomized ? 1 : 0,
           suggested_price: billConfig.suggestedPrice,
           weekly_sessions_count: billConfig.weeklySessionsCount,
-          frequency_pricing: establishmentProfile === 'studio' ? readFrequencyPricing(srv.frequency_pricing_json) : null,
+          frequency_pricing: isStudioCompat && resolvedDomain === 'studio' ? readFrequencyPricing(srv.frequency_pricing_json) : null,
           default_template_id: tplInfo.default_template_id,
           default_template_title: tplInfo.default_template_title,
           linked_template_ids: tplInfo.linked_template_ids,
@@ -761,7 +779,7 @@ export class ServiceController {
         return;
       }
 
-      const frequencyPricing = frequencyConfigForSave(req.body.frequencyPricing, establishmentProfile, resolvedKind, billNorm.billingMode);
+      const frequencyPricing = frequencyConfigForSave(req.body.frequencyPricing, establishmentProfile, resolvedDomain, billNorm.billingMode);
 
       const tplNorm = normalizeServiceTemplatesForSave({
         tenantId,
@@ -1320,7 +1338,7 @@ export class ServiceController {
 
       const frequencyPricing = req.body.frequencyPricing === undefined
         ? readFrequencyPricing(existing.frequency_pricing_json)
-        : frequencyConfigForSave(req.body.frequencyPricing, establishmentProfile, nextKind, nextBillingMode);
+        : frequencyConfigForSave(req.body.frequencyPricing, establishmentProfile, nextDomain, nextBillingMode);
 
       db.transaction(() => {
         updateStmt.run(
@@ -1443,7 +1461,7 @@ export class ServiceController {
             is_price_customized: isStudioCompat && updatedService.service_domain === 'studio' ? (updatedService.is_price_customized ?? 0) : 0,
             suggested_price: isStudioCompat && updatedService.service_domain === 'studio' ? (updatedService.suggested_price ?? null) : null,
             weekly_sessions_count: isStudioCompat && updatedService.service_domain === 'studio' ? (updatedService.weekly_sessions_count ?? 1) : 1,
-            frequency_pricing: establishmentProfile === 'studio' ? readFrequencyPricing(updatedService.frequency_pricing_json) : null,
+            frequency_pricing: isStudioCompat && updatedService.service_domain === 'studio' ? readFrequencyPricing(updatedService.frequency_pricing_json) : null,
             default_template_id: updTplInfo.default_template_id,
             default_template_title: updTplInfo.default_template_title,
             linked_template_ids: updTplInfo.linked_template_ids,

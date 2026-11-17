@@ -1570,7 +1570,7 @@ export class TenantController {
       const enrichedServices = (services as any[])
         .map(srv => {
           const scheds = publicSchedulesByService.get(srv.id) || [];
-          srv.frequency_pricing = establishmentProfile === 'studio' ? readFrequencyPricing(srv.frequency_pricing_json) : null;
+          srv.frequency_pricing = isStudioCompat && resolveServiceDomain({ establishmentProfile, serviceDomain: srv.service_domain, serviceKind: srv.service_kind, clinicalModule: srv.clinical_module }) === 'studio' ? readFrequencyPricing(srv.frequency_pricing_json) : null;
           delete srv.frequency_pricing_json;
           const resolvedDomain = resolveServiceDomain({
             establishmentProfile,

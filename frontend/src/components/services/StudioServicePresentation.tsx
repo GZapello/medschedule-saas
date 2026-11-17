@@ -1,4 +1,4 @@
-import { FrequencyPricing, supportsFrequencyPricing, offeredWeeklyMeetings } from '../../utils/studioFrequencyPricing';
+import { FrequencyPricing, WeeklyMeeting, supportsFrequencyPricing, offeredWeeklyMeetings } from '../../utils/studioFrequencyPricing';
 import { calculateStudioRecurringPrice, StudioPricingRule } from '../../utils/studioPricing';
 import React, { createContext, useContext, useEffect, useId, useRef, useState } from 'react';
 import { Calendar, ChevronDown, CreditCard, Dumbbell, FileText, SlidersHorizontal, Users } from 'lucide-react';
@@ -19,6 +19,7 @@ interface PresentationValues {
   billingMode: ServiceBillingMode;
   periodicPrice: string;
   frequencyPricing?: FrequencyPricing;
+  individualMeetings?: WeeklyMeeting[];
   pricingRule?: StudioPricingRule;
   defaultBillingDueDay: string;
   weeklySessionsCount: number;
@@ -66,9 +67,9 @@ const scheduleLines = (v: PresentationValues) => v.serviceKind !== 'group' ? [] 
   ...v.draftSchedules.map(s => `${s.weekdays.map(day => weekdays[day]).join(', ')} • ${s.startTime}–${s.endTime}`)
 ];
 
-const frequencyTotal = (v: PresentationValues) => v.serviceKind === 'group' && v.frequencyPricing?.enabled && supportsFrequencyPricing(v.billingMode) ? calculateStudioRecurringPrice({
+const frequencyTotal = (v: PresentationValues) => v.frequencyPricing?.enabled && supportsFrequencyPricing(v.billingMode) ? calculateStudioRecurringPrice({
   serviceName: v.name, sessionPrice: Number(v.price), billingMode: v.billingMode, pricingRule: v.pricingRule,
-  weeklySessionsCount: Math.max(1, Math.min(v.weeklySessionsCount, offeredWeeklyMeetings([...(v.schedules || []), ...v.draftSchedules]).length)), frequencyPricing: v.frequencyPricing
+  weeklySessionsCount: Math.max(1, Math.min(v.weeklySessionsCount, (v.serviceKind === 'individual' ? v.individualMeetings?.length || 0 : offeredWeeklyMeetings([...(v.schedules || []), ...v.draftSchedules]).length))), frequencyPricing: v.frequencyPricing
 }).effectivePrice.toFixed(2) : null;
 
 function sectionSummary(section: Section, v: PresentationValues) {

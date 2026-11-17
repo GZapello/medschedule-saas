@@ -1,3 +1,4 @@
+import { useIndividualFrequencyMeetings } from './useIndividualFrequencyMeetings';
 import { FrequencyPricing, emptyFrequencyPricing, readFrequencyPricing, offeredWeeklyMeetings, supportsFrequencyPricing } from '../../utils/studioFrequencyPricing';
 import React, { useState, useEffect, useMemo } from 'react';
 import { X, Plus, Edit3, Loader2, Users } from 'lucide-react';
@@ -92,6 +93,8 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
   const [loading, setLoading] = useState<boolean>(false);
 
   const showStudioConfig = isPureStudio || (isMixed && serviceDomain === 'studio');
+  const individualMeetings = useIndividualFrequencyMeetings(isOpen && showStudioConfig && serviceKind === 'individual', { professionalIds: [professionalId, ...linkedProfessionalIds].filter(Boolean), durationMinutes: Number(durationMinutes), bufferMinutes: Number(bufferMinutes), modality });
+
 
   useEffect(() => {
     if (isOpen && isStudioCompatible) {
@@ -290,7 +293,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
               isPriceCustomized: isPeriodicSave ? isPriceCustomized : undefined,
               suggestedPrice: isPeriodicSave ? suggestedPrice : undefined,
               weeklySessionsCount: isPeriodicSave ? weeklySessionsCount : undefined,
-              ...(isPureStudio && (frequencyPricing.enabled || Object.keys(frequencyPricing.tables).length > 0) ? { frequencyPricing: { ...frequencyPricing, enabled: frequencyPricing.enabled && effectiveKind === 'group' && supportsFrequencyPricing(billingMode) } } : {}),
+              ...(showStudioConfig && (frequencyPricing.enabled || Object.keys(frequencyPricing.tables).length > 0) ? { frequencyPricing: { ...frequencyPricing, enabled: frequencyPricing.enabled && supportsFrequencyPricing(billingMode) } } : {}),
               defaultPackageId: billingMode === 'package' && defaultPackageId ? defaultPackageId : null,
               defaultBillingDueDay: isPeriodicSave && defaultBillingDueDay.trim() !== '' ? Number(defaultBillingDueDay) : null,
               defaultTemplateId: defaultTemplateId || null,
@@ -579,9 +582,9 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
                 isPriceCustomized={isPriceCustomized}
                 suggestedPrice={suggestedPrice}
                 weeklySessionsCount={weeklySessionsCount}
-                allowFrequencyPricing={isPureStudio && serviceKind === 'group'}
+                allowFrequencyPricing={showStudioConfig}
                 frequencyPricing={frequencyPricing} onFrequencyPricingChange={setFrequencyPricing}
-                offeredWeeklySessions={offeredWeeklyMeetings(isEditing && serviceToEdit?.service_kind === 'group' ? savedSchedules : draftSchedules).length}
+                offeredWeeklySessions={serviceKind === 'individual' ? individualMeetings.length : offeredWeeklyMeetings(isEditing && serviceToEdit?.service_kind === 'group' ? savedSchedules : draftSchedules).length}
                 includedSessionsCount={includedSessionsCount}
                 defaultPackageId={defaultPackageId}
                 defaultBillingDueDay={defaultBillingDueDay}

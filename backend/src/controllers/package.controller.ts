@@ -1,3 +1,4 @@
+import { individualStudioMeetings } from '../services/studio-individual-meetings.service';
 import { BillingCycleService } from '../services/billing-cycle.service';
 import { quoteFrequencyPlan } from '../services/frequency-pricing.service';
 import { Request, Response } from 'express';
@@ -473,7 +474,7 @@ export class PackageController {
                duration_minutes, price, COALESCE(allow_recurrence, 1) as allow_recurrence,
                allowed_recurrence_frequencies_json, default_recurrence_frequency,
                custom_recurrence_intervals_json, default_recurrence_interval_json,
-               modality, modality_category
+               modality, modality_category, allowed_plan_durations_json, default_plan_duration, service_domain
         FROM services
         WHERE id = ? AND tenant_id = ? AND active = 1
       `).get(String(serviceId), tenant.id) as any;
@@ -705,6 +706,7 @@ export class PackageController {
         customRecurrenceIntervals: recCfg.customIntervals,
         defaultRecurrenceInterval: recCfg.defaultCustomInterval,
         professionals: allLinkedProfs,
+        weeklyMeetings: req.query.includeWeekly === '1' ? individualStudioMeetings({ tenantId: tenant.id, serviceId: srv.id, professionalIds: reqProfId && reqProfId !== 'any' ? [reqProfId] : undefined, startDate: wantDate || upcomingStart, publicOnly: true }) : [],
         weeklySchedules: [],
         weeklySummary: [],
         totalAvailable: mergedSlots.length,
@@ -824,7 +826,15 @@ export class PackageController {
         ignoreFirstLeadTime: false
       });
 
-      res.json(preview);
+      let pricing = null;
+      if (preview.valid && req.body.bookingIntent === 'recurring') {
+        const service = db.prepare('SELECT billing_mode FROM services WHERE id = ? AND tenant_id = ?').get(String(serviceId), tenant.id) as any;
+        const quote = quoteFrequencyPlan({ tenantId: tenant.id, serviceId: String(serviceId), billingFrequency: service?.billing_mode,
+          startDate: resolvedDate, endDate: resolvePlanDurationEndDate(resolvedDate, recurrence?.durationCode) || recurrence?.endDate || preview.occurrences.at(-1)?.date,
+          slots: preview.occurrences, cadence: preview.frequency, publicOnly: true, includeStandardPricing: true });
+        if (quote) pricing = { amount: quote.calculation.effectivePrice, weeklyCount: quote.weeklyCount, billingFrequency: quote.billingFrequency, referenceSessionsCount: quote.calculation.referenceSessionsCount };
+      }
+      res.json({ ...preview, ...(req.body.bookingIntent === 'recurring' ? { pricing } : {}) });
     } catch (err: any) {
       console.error('[PackageController.previewPublicStudioRecurrence] Erro:', err);
       const safeMessage = sanitizeBookingErrorMessage(
@@ -1463,7 +1473,7 @@ export class PackageController {
           (recurrence?.endDate ? String(recurrence.endDate).slice(0, 10) : resolvedSlots[resolvedSlots.length - 1].slotItem.startIso.slice(0, 10));
         const quote = recurrence && firstSlot.slotItem.recurrenceMeta ? quoteFrequencyPlan({
           tenantId: tenant.id, serviceId: String(serviceId), billingFrequency: firstSlot.slotItem.serviceRow.billing_mode,
-          startDate: planStart, endDate: planEnd, publicOnly: true, cadence: firstSlot.slotItem.recurrenceMeta.frequency,
+          startDate: planStart, endDate: planEnd, publicOnly: true, includeStandardPricing: req.body.bookingIntent === 'recurring', cadence: firstSlot.slotItem.recurrenceMeta.frequency,
           slots: resolvedSlots.map(({ slotItem, resolvedSlot }) => ({
             startTime: slotItem.startIso, endTime: slotItem.endIso,
             professionalId: resolvedSlot.professionalId, classScheduleId: resolvedSlot.classScheduleId

@@ -49,6 +49,8 @@ const minutesToTime = (m: number): string => {
 };
 
 export interface CalculateSlotsOptions {
+  // Used only by the authenticated Studio service editor to preview an unsaved individual service.
+  serviceOverride?: { duration_minutes: number; buffer_minutes: number; modality: string; service_kind: 'individual'; active: number; min_lead_time_hours: number; max_advance_days: number };
   ignoreLeadTime?: boolean;
   ignoreAdvanceCap?: boolean;
 }
@@ -98,7 +100,7 @@ export function calculateAvailableSlots(
     FROM services s LEFT JOIN professional_services ps ON ps.service_id = s.id AND ps.professional_id = ?
     WHERE s.id = ? AND s.tenant_id = ? AND s.active = 1
   `);
-  const service = serviceStmt.get(professionalId, serviceId, tenantId) as {
+  const service = (options?.serviceOverride || serviceStmt.get(professionalId, serviceId, tenantId)) as {
     duration_minutes: number;
     buffer_minutes: number;
     min_lead_time_hours: number;

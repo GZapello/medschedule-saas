@@ -699,7 +699,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
     return recurrenceWeekdays;
   }, [selectedScheduleEntriesPayload, recurrenceFrequency, recurrenceWeekdays, isRecurring, date]);
 
-  const enrollmentFrequencyPricing = isStudioTarget && currentTenant?.establishment_profile === 'studio' ? readFrequencyPricing(selectedServiceObj?.frequency_pricing) : null;
+  const enrollmentFrequencyPricing = isStudioTarget ? readFrequencyPricing(selectedServiceObj?.frequency_pricing) : null;
   const frequencyPricingActive = Boolean(enrollmentFrequencyPricing?.enabled && supportsFrequencyPricing(enrollFrequency) && (!isRecurring || ['weekly', 'custom_weekdays'].includes(recurrenceFrequency)));
   const activeEnrollWeeklyCount = useMemo(() => {
     if (frequencyPricingActive) {

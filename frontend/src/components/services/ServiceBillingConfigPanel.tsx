@@ -86,7 +86,7 @@ export const ServiceBillingConfigPanel: React.FC<ServiceBillingConfigPanelProps>
   const isPeriodic = isPeriodicBillingMode(billingMode);
   const selectedPkg = availablePackages.find((pkg) => pkg.id === defaultPackageId) || null;
 
-  const frequencyActive = Boolean(allowFrequencyPricing && frequencyPricing?.enabled && supportsFrequencyPricing(billingMode));
+  const frequencyActive = Boolean(allowFrequencyPricing && offeredWeeklySessions >= 2 && frequencyPricing?.enabled && supportsFrequencyPricing(billingMode));
   const weeklyLimit = frequencyActive ? Math.max(1, offeredWeeklySessions) : 7;
   const effectiveWeeklySessions = useMemo(() => {
     return Math.max(1, Math.min(weeklyLimit, Math.floor(weeklySessionsCount || 1)));
