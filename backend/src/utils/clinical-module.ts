@@ -1,6 +1,10 @@
 import { completeProfessionalProfile } from './professional-profile';
 import { db } from '../config/database';
-import { resolveProfessionModule, resolveCanonicalProfession } from './profession-module';
+import {
+  resolveProfessionModule,
+  resolveCanonicalProfession,
+  isGenericFallbackProfessionName
+} from './profession-module';
 import { CapabilityService } from '../services/capability.service';
 
 export const PRIMARY_CLINICAL_MODULES = [
@@ -39,11 +43,13 @@ export function resolveProfessionalCanonicalModule(professionalId: string | null
     if (!prof) return null;
 
     // 1. Resolução canônica pelo cadastro do profissional
+    const effectiveProfName = (!isGenericFallbackProfessionName(prof.pr_name) ? prof.pr_name : null) || prof.profession_name;
     const canonical = resolveCanonicalProfession({
       id: prof.profession_id,
-      name: prof.pr_name || prof.profession_name,
+      name: effectiveProfName,
       slug: prof.pr_slug,
-      registrationType: prof.registration_type
+      registrationType: prof.registration_type,
+      practiceAreas: prof.practice_areas
     });
     if (canonical.commercialModule && isPrimaryClinicalModule(canonical.commercialModule)) {
       return canonical.commercialModule;
@@ -52,7 +58,7 @@ export function resolveProfessionalCanonicalModule(professionalId: string | null
     // 2. Consulta complementar na tabela clinic_users se user_id estiver disponível
     if (prof.user_id) {
       const cu = db.prepare(`
-        SELECT profession_id, profession_name,
+        SELECT profession_id, profession_name, profession_custom, practice_areas,
                zemda_odonto_enabled, zemda_fisio_enabled, zemda_nutri_enabled, zemda_to_enabled,
                zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled,
                zemda_med_enabled, zemda_estetic_enabled
@@ -62,10 +68,12 @@ export function resolveProfessionalCanonicalModule(professionalId: string | null
       `).get(prof.user_id, tenantId) as any;
 
       if (cu) {
-        if (cu.profession_id || cu.profession_name) {
+        if (cu.profession_id || cu.profession_name || cu.profession_custom || cu.practice_areas) {
           const cuCanonical = resolveCanonicalProfession({
             id: cu.profession_id,
-            name: cu.profession_name
+            name: cu.profession_custom || cu.profession_name,
+            customProfession: cu.profession_custom,
+            practiceAreas: cu.practice_areas || prof.practice_areas
           });
           if (cuCanonical.commercialModule && isPrimaryClinicalModule(cuCanonical.commercialModule)) {
             return cuCanonical.commercialModule;
@@ -251,11 +259,20 @@ export function getAvailableModulesForProfessional(
     const moduleSet = new Set<string>();
 
     // 1. Módulo canônico da profissão principal
+    const nonGenericName =
+      (!isGenericFallbackProfessionName(prof.pr_name) ? prof.pr_name : null) ||
+      (!isGenericFallbackProfessionName(prof.profession_name) ? prof.profession_name : null) ||
+      (!isGenericFallbackProfessionName(cu?.profession_custom) ? cu?.profession_custom : null) ||
+      (!isGenericFallbackProfessionName(cu?.profession_name) ? cu?.profession_name : null) ||
+      (!isGenericFallbackProfessionName(u?.profession_name) ? u?.profession_name : null);
     const canonical = resolveCanonicalProfession({
       id: prof.profession_id || cu?.profession_id || u?.profession_id,
-      name: prof.pr_name || prof.profession_name || cu?.profession_name || u?.profession_name,
+      name: nonGenericName || prof.pr_name || prof.profession_name || cu?.profession_name || u?.profession_name,
       slug: prof.pr_slug,
-      registrationType: prof.registration_type
+      registrationType: prof.registration_type,
+      practiceAreas: [prof.practice_areas, prof.specialty_custom, cu?.practice_areas, u?.practice_areas].filter(Boolean).join(', '),
+      specialtyName: prof.specialty_custom,
+      customProfession: cu?.profession_custom
     });
 
     if (canonical.commercialModule && isPrimaryClinicalModule(canonical.commercialModule)) {

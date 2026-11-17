@@ -28,6 +28,8 @@ const {
   getAvailableModulesForProfessional
 } = require('./dist/utils/clinical-module');
 
+const { migrateStudioImprovements } = require('./dist/config/studio-improvements.migration');
+
 const express = require('express');
 const app = express();
 app.use(express.json());
@@ -637,6 +639,152 @@ async function runTests() {
       listRes.status === 200 && listAppt && listAppt.professional_clinical_module === 'ZemdaFono',
       'Agenda /v1/appointments expõe professional_clinical_module = ZemdaFono',
       { status: listRes.status, profMod: listAppt?.professional_clinical_module }
+    );
+
+    // -------------------------------------------------------------------
+    // 7. Reparo e reconhecimento de instrutores legados ("Outro profissional da saúde")
+    // -------------------------------------------------------------------
+    console.log('\n6. Reconhecimento e reparo não-destrutivo de Instrutores legados no Studio:');
+
+    // Caso A: Instrutor salvo em DB como prof-outro-saude com modalidades Pilates/Yoga antes do reparo
+    const legToken1 = seedProfAndUser({
+      tenantId: studioTenantId,
+      profId: 'p-st-leg1',
+      userId: 'u-st-leg1',
+      name: 'Lucas Instrutor Legado',
+      email: 'leg1@st.test',
+      professionId: 'prof-outro-saude',
+      regType: 'Certificação',
+      regNumber: '',
+      zemdaPersonalEnabled: 0
+    });
+    db.prepare(`UPDATE professionals SET profession_name = 'Outro profissional da saúde', practice_areas = 'Pilates, Yoga' WHERE id = 'p-st-leg1'`).run();
+
+    const meLeg1Before = await makeReq('GET', '/api/v1/auth/me', { Authorization: `Bearer ${legToken1}` });
+    assert(
+      meLeg1Before.status === 200 &&
+        meLeg1Before.data?.user?.commercialModule === 'ZemdaPersonal' &&
+        meLeg1Before.data?.user?.canonicalProfessionId === 'prof-instrutor' &&
+        meLeg1Before.data?.user?.zemdaPersonalEnabled === true &&
+        meLeg1Before.data?.user?.authorizedModules?.includes('ZemdaPersonal') &&
+        meLeg1Before.data?.user?.canonicalProfessionName !== 'Outro Profissional da Saúde',
+      'Runtime (/v1/auth/me) corrige instrutor legado em prof-outro-saude com Pilates/Yoga para Instrutor + ZemdaPersonal',
+      {
+        commercialModule: meLeg1Before.data?.user?.commercialModule,
+        canonicalId: meLeg1Before.data?.user?.canonicalProfessionId,
+        canonicalName: meLeg1Before.data?.user?.canonicalProfessionName,
+        zemdaPersonalEnabled: meLeg1Before.data?.user?.zemdaPersonalEnabled
+      }
+    );
+
+    const exLeg1 = await makeReq('GET', '/api/v1/personal/exercises', { Authorization: `Bearer ${legToken1}` });
+    assert(
+      exLeg1.status === 200,
+      'Instrutor legado em runtime acessa /v1/personal/exercises (HTTP 200)',
+      { status: exLeg1.status }
+    );
+
+    // Caso B: Instrutor com profession_id = NULL e clinic_users.profession_custom = 'Instrutor de Dança'
+    const legToken2 = seedProfAndUser({
+      tenantId: studioTenantId,
+      profId: 'p-st-leg2',
+      userId: 'u-st-leg2',
+      name: 'Paula Dança Legada',
+      email: 'leg2@st.test',
+      professionId: 'prof-outro-saude',
+      regType: 'Certificação',
+      regNumber: '',
+      zemdaPersonalEnabled: 0
+    });
+    db.prepare(`UPDATE professionals SET profession_id = NULL, profession_name = NULL, practice_areas = 'Dança, Ritmos' WHERE id = 'p-st-leg2'`).run();
+    db.prepare(`UPDATE clinic_users SET profession_custom = 'Instrutora de Dança' WHERE user_id = 'u-st-leg2'`).run();
+
+    // Executa migração idempotente de reparo e verifica persistência não-destrutiva
+    migrateStudioImprovements(db);
+
+    const repaired1 = db.prepare(`SELECT profession_id, profession_name, practice_areas, zemda_personal_enabled FROM professionals WHERE id = 'p-st-leg1'`).get();
+    const repaired2 = db.prepare(`SELECT profession_id, profession_name, practice_areas, zemda_personal_enabled FROM professionals WHERE id = 'p-st-leg2'`).get();
+    const untouchedFisio = db.prepare(`SELECT profession_id, zemda_personal_enabled FROM professionals WHERE id = 'p-st-fisio'`).get();
+
+    assert(
+      repaired1?.profession_id === 'prof-instrutor' &&
+        repaired1?.practice_areas === 'Pilates, Yoga' &&
+        repaired1?.zemda_personal_enabled === 1,
+      'Migração repara instrutor em prof-outro-saude para prof-instrutor + zemda_personal_enabled=1 preservando practice_areas',
+      repaired1
+    );
+    assert(
+      repaired2?.profession_id === 'prof-instrutor' &&
+        repaired2?.practice_areas === 'Dança, Ritmos' &&
+        repaired2?.zemda_personal_enabled === 1,
+      'Migração repara instrutora com profession_id=NULL + profession_custom para prof-instrutor preservando modalidades',
+      repaired2
+    );
+    assert(
+      untouchedFisio?.profession_id === 'prof-fisioterapeuta' && untouchedFisio?.zemda_personal_enabled === 0,
+      'Migração preserva módulos das demais profissões clínicas (Dr. Bruno Fisio permanece prof-fisioterapeuta)',
+      untouchedFisio
+    );
+
+    // Verifica que instrutor reparado lista corretamente em /v1/professionals e inicia/conclui aula normalmente
+    const profsRes = await makeReq('GET', '/api/v1/professionals', { Authorization: `Bearer ${legToken2}` });
+    const profRow2 = (Array.isArray(profsRes.data) ? profsRes.data : []).find((p) => p.id === 'p-st-leg2');
+    assert(
+      profsRes.status === 200 && profRow2?.profession_id === 'prof-instrutor' && profRow2?.profession_name !== 'Outro profissional da saúde',
+      'GET /v1/professionals exibe instrutor reparado sem "Outro profissional da saúde"',
+      { profId: profRow2?.profession_id, profName: profRow2?.profession_name }
+    );
+
+    db.prepare(
+      `INSERT INTO services (id, tenant_id, professional_id, name, duration_minutes, price, modality, service_domain, service_kind, clinical_module, default_capacity, active)
+       VALUES ('srv-leg2-danca', ?, 'p-st-leg2', 'Aula de Dança Legada', 50, 100, 'presential', 'studio', 'group', NULL, 8, 1)`
+    ).run(studioTenantId);
+
+    const legAppt = await makeReq(
+      'POST',
+      '/api/v1/appointments',
+      { Authorization: `Bearer ${legToken2}` },
+      {
+        patientId: patientStudioId,
+        professionalId: 'p-st-leg2',
+        serviceId: 'srv-leg2-danca',
+        startTime: `${futureDate2}T15:00:00`,
+        endTime: `${futureDate2}T15:50:00`,
+        modality: 'presential'
+      }
+    );
+    const legStart = await makeReq(
+      'PUT',
+      `/api/v1/appointments/${legAppt.data.id}/status`,
+      { Authorization: `Bearer ${legToken2}` },
+      { status: 'in_progress' }
+    );
+    const legFinish = await makeReq(
+      'POST',
+      `/api/v1/classes/occurrences/apt:${legAppt.data.id}/finish`,
+      { Authorization: `Bearer ${legToken2}` },
+      {}
+    );
+    assert(
+      legAppt.status === 201 && legStart.status === 200 && legFinish.status === 200,
+      'Instrutora reparada cria, inicia e conclui aula normalmente no Studio via ZemdaPersonal',
+      { create: legAppt.status, start: legStart.status, finish: legFinish.status }
+    );
+
+    // Verifica catálogo /v1/taxonomy/professions para Instrutor e Personal Trainer
+    const taxRes = await makeReq('GET', '/api/v1/taxonomy/professions');
+    const instOpt = (Array.isArray(taxRes.data) ? taxRes.data : []).find((p) => p.id === 'prof-instrutor');
+    const ptOpt = (Array.isArray(taxRes.data) ? taxRes.data : []).find((p) => p.id === 'prof-personal-trainer');
+    assert(
+      taxRes.status === 200 &&
+        instOpt &&
+        instOpt.module === 'ZemdaPersonal' &&
+        instOpt.administrative === false &&
+        ptOpt &&
+        ptOpt.module === 'ZemdaPersonal' &&
+        ptOpt.administrative === false,
+      '/v1/taxonomy/professions expõe prof-instrutor e prof-personal-trainer vinculados ao ZemdaPersonal e não administrativos',
+      { instOpt, ptOpt }
     );
   } finally {
     await new Promise((resolve) => server.close(resolve));

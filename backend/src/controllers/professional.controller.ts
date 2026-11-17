@@ -9,7 +9,13 @@ import { hashPassword } from '../utils/password';
 import { logAudit } from '../middlewares/audit.middleware';
 import { calculateAvailableSlots, buildPublicAvailabilityInsights, findNextAvailableDate } from '../utils/slot-calculator';
 import { createDefaultSchedules } from '../utils/schedule-defaults';
-import { resolveProfessionModule, cleanPracticeAreasForNewProfession } from '../utils/profession-module';
+import {
+  resolveProfessionModule,
+  cleanPracticeAreasForNewProfession,
+  resolveCanonicalProfession,
+  isGenericFallbackProfessionId,
+  isGenericFallbackProfessionName
+} from '../utils/profession-module';
 import { ProfessionTaxonomyService } from '../services/profession-taxonomy.service';
 import { REGISTRATION_PROFESSION_ALIASES } from '../types/registration-professions';
 import { getAvailableModulesForProfessional } from '../utils/clinical-module';
@@ -34,12 +40,13 @@ export class ProfessionalController {
           p.photo_url, p.profession_id, p.specialty_id, p.specialty_custom,
           p.registration_type, p.registration_number, p.bio, p.practice_areas, p.buffer_minutes, p.active,
           p.remuneration_type, p.commission_percentage, p.fixed_salary, p.payment_day,
-          p.profession_change_used, p.profession_changed_at,
+          p.profession_change_used, p.profession_changed_at, p.zemda_personal_enabled,
           u.email, u.phone,
           COALESCE(p.specialty_custom, spec.name, p.practice_areas, '') as specialty_name, spec.color as specialty_color,
-          COALESCE(prof.name, p.profession_name) as profession_name
+          COALESCE(NULLIF(NULLIF(prof.name, 'Outro profissional da saúde'), 'Outro Profissional'), p.profession_name, cu.profession_custom, prof.name) as profession_name
         FROM professionals p
         LEFT JOIN users u ON u.id = p.user_id
+        LEFT JOIN clinic_users cu ON cu.user_id = p.user_id AND cu.tenant_id = p.tenant_id
         LEFT JOIN specialties spec ON spec.id = p.specialty_id
         LEFT JOIN professions prof ON prof.id = p.profession_id
         WHERE p.tenant_id = ?
@@ -79,12 +86,31 @@ export class ProfessionalController {
         blockMap.get(b.professional_id)!.push(b);
       }
 
-      const result = professionals.map((p: any) => ({
-        ...p,
-        available_modules: getAvailableModulesForProfessional(p.id, tenantId),
-        schedules: schedMap.get(p.id) || [],
-        blockedTimes: blockMap.get(p.id) || []
-      }));
+      const result = professionals.map((p: any) => {
+        let professionId = p.profession_id;
+        let professionName = p.profession_name;
+        if (isGenericFallbackProfessionId(professionId) || isGenericFallbackProfessionName(professionName)) {
+          const res = resolveCanonicalProfession({
+            id: professionId,
+            name: professionName,
+            practiceAreas: p.practice_areas,
+            specialtyName: p.specialty_name,
+            registrationType: p.registration_type
+          });
+          if (res.commercialModule === 'ZemdaPersonal') {
+            professionId = res.canonicalId;
+            professionName = !isGenericFallbackProfessionName(p.profession_name) ? p.profession_name : res.canonicalName;
+          }
+        }
+        return {
+          ...p,
+          profession_id: professionId,
+          profession_name: professionName,
+          available_modules: getAvailableModulesForProfessional(p.id, tenantId),
+          schedules: schedMap.get(p.id) || [],
+          blockedTimes: blockMap.get(p.id) || []
+        };
+      });
 
       res.json(result);
     } catch (err: any) {
@@ -112,9 +138,10 @@ export class ProfessionalController {
           p.profession_change_used, p.profession_changed_at,
           u.email, u.phone,
           COALESCE(p.specialty_custom, spec.name, p.practice_areas, '') as specialty_name,
-          COALESCE(prof.name, p.profession_name) as profession_name
+          COALESCE(NULLIF(NULLIF(prof.name, 'Outro profissional da saúde'), 'Outro Profissional'), p.profession_name, cu.profession_custom, prof.name) as profession_name
         FROM professionals p
         LEFT JOIN users u ON u.id = p.user_id
+        LEFT JOIN clinic_users cu ON cu.user_id = p.user_id AND cu.tenant_id = p.tenant_id
         LEFT JOIN specialties spec ON spec.id = p.specialty_id
         LEFT JOIN professions prof ON prof.id = p.profession_id
         WHERE p.id = ? AND p.tenant_id = ?

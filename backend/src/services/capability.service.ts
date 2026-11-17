@@ -1,5 +1,12 @@
 import { db } from '../config/database';
-import { resolveProfessionModule, resolveCanonicalProfession, ZemdaModule } from '../utils/profession-module';
+import {
+  resolveProfessionModule,
+  resolveCanonicalProfession,
+  ZemdaModule,
+  isGenericFallbackProfessionId,
+  isGenericFallbackProfessionName,
+  hasClinicalProfessionSignal
+} from '../utils/profession-module';
 import { ComputedUserCapabilities } from '../types/capabilities';
 import { REGISTRATION_PROFESSION_ALIASES } from '../types/registration-professions';
 import { MedicalTreeService } from './medical-tree.service';
@@ -309,7 +316,7 @@ export class CapabilityService {
     // 1. Busca dados do usuário, profissional, vínculo de clínica e tenant
     const userRow = db.prepare(`
       SELECT u.id, u.tenant_id AS legacy_tenant_id, u.name as u_name, u.email as u_email, COALESCE(cu.role, u.role) as role,
-             u.profession_id as u_prof_id, u.profession_name as u_prof_name,
+             u.profession_id as u_prof_id, u.profession_name as u_prof_name, u.practice_areas as u_practice_areas,
              u.zemda_fono_enabled as u_fono, u.zemda_med_enabled as u_med,
              u.zemda_fisio_enabled as u_fisio, u.zemda_odonto_enabled as u_odonto,
              u.zemda_nutri_enabled as u_nutri, u.zemda_to_enabled as u_to,
@@ -317,14 +324,14 @@ export class CapabilityService {
              u.zemda_personal_enabled as u_personal,
              u.zemda_estetic_enabled as u_estetic,
              cu.profession_custom as cu_prof_custom, cu.profession_id as cu_prof_id,
-             cu.profession_name as cu_prof_name,
+             cu.profession_name as cu_prof_name, cu.practice_areas as cu_practice_areas,
              cu.zemda_fono_enabled as cu_fono, cu.zemda_med_enabled as cu_med,
              cu.zemda_fisio_enabled as cu_fisio, cu.zemda_odonto_enabled as cu_odonto,
              cu.zemda_nutri_enabled as cu_nutri, cu.zemda_to_enabled as cu_to,
              cu.zemda_pp_enabled as cu_pp, cu.zemda_psico_enabled as cu_psico,
              cu.zemda_personal_enabled as cu_personal,
              cu.zemda_estetic_enabled as cu_estetic,
-             p.profession_id as p_prof_id, p.profession_name as p_prof_name,
+             p.profession_id as p_prof_id, p.profession_name as p_prof_name, p.practice_areas as p_practice_areas,
              p.name as p_name, p.specialty_custom as p_spec_custom,
              p.zemda_fono_enabled as p_fono, p.zemda_med_enabled as p_med,
              p.zemda_fisio_enabled as p_fisio, p.zemda_odonto_enabled as p_odonto,
@@ -335,6 +342,7 @@ export class CapabilityService {
              prof.name as prof_name, prof.slug as prof_slug,
              t.manager_profession as t_manager_prof, t.name as t_name,
              t.trade_name as t_trade_name, t.description as t_description,
+             t.establishment_profile as t_profile,
              COALESCE(t.is_sandbox, 0) as t_is_sandbox
       FROM users u
       LEFT JOIN clinic_users cu ON cu.user_id = u.id AND cu.tenant_id = ?
@@ -396,32 +404,55 @@ export class CapabilityService {
 
     let rawProfId = isFonoSignal
       ? 'prof-fonoaudiologo'
-      : ((userRow?.p_prof_id && userRow?.p_prof_id !== 'prof-outro-saude')
+      : ((!isGenericFallbackProfessionId(userRow?.p_prof_id))
           ? userRow.p_prof_id
-          : (userRow?.u_prof_id && userRow?.u_prof_id !== 'prof-outro-saude')
+          : (!isGenericFallbackProfessionId(userRow?.u_prof_id))
           ? userRow.u_prof_id
-          : userRow?.cu_prof_id ||
-            userRow?.cu_prof_custom ||
-            userRow?.p_profession_name ||
-            userRow?.u_prof_name ||
-            userRow?.t_manager_prof ||
+          : (!isGenericFallbackProfessionId(userRow?.cu_prof_id))
+          ? userRow.cu_prof_id
+          : (!isGenericFallbackProfessionName(userRow?.cu_prof_custom) ? userRow?.cu_prof_custom : null) ||
+            (!isGenericFallbackProfessionName(userRow?.p_prof_name) ? userRow?.p_prof_name : null) ||
+            (!isGenericFallbackProfessionName(userRow?.u_prof_name) ? userRow?.u_prof_name : null) ||
+            (!isGenericFallbackProfessionName(userRow?.t_manager_prof) ? userRow?.t_manager_prof : null) ||
             userRow?.p_prof_id ||
             userRow?.u_prof_id ||
             'prof-outro-saude');
 
     let profName = isFonoSignal
       ? 'Fonoaudiólogo'
-      : (userRow?.prof_name ||
-         userRow?.p_prof_name ||
-         userRow?.cu_prof_name ||
-         userRow?.cu_prof_custom ||
-         userRow?.u_prof_name ||
-         userRow?.t_manager_prof ||
+      : ((!isGenericFallbackProfessionName(userRow?.prof_name) ? userRow?.prof_name : null) ||
+         (!isGenericFallbackProfessionName(userRow?.p_prof_name) ? userRow?.p_prof_name : null) ||
+         (!isGenericFallbackProfessionName(userRow?.cu_prof_name) ? userRow?.cu_prof_name : null) ||
+         (!isGenericFallbackProfessionName(userRow?.cu_prof_custom) ? userRow?.cu_prof_custom : null) ||
+         (!isGenericFallbackProfessionName(userRow?.u_prof_name) ? userRow?.u_prof_name : null) ||
+         (!isGenericFallbackProfessionName(userRow?.t_manager_prof) ? userRow?.t_manager_prof : null) ||
+         userRow?.prof_name ||
          '');
 
-    const resolution = resolveCanonicalProfession({ id: rawProfId, name: profName });
+    const combinedAreas = [
+      userRow?.p_practice_areas,
+      userRow?.cu_practice_areas,
+      userRow?.u_practice_areas
+    ].filter(Boolean).join(', ');
+
+    const resolution = resolveCanonicalProfession({
+      id: rawProfId,
+      name: profName,
+      practiceAreas: combinedAreas,
+      specialtyName: userRow?.p_spec_custom,
+      customProfession: userRow?.cu_prof_custom
+    });
     let canonicalProfId = resolution.canonicalId;
     let commercialModule = resolution.commercialModule || 'ZemdaGestao';
+
+    if (
+      isGenericFallbackProfessionId(canonicalProfId) &&
+      (userRow?.p_personal === 1 || userRow?.cu_personal === 1 || userRow?.u_personal === 1) &&
+      !hasClinicalProfessionSignal(`${profName} ${combinedAreas} ${userRow?.p_spec_custom || ''}`)
+    ) {
+      canonicalProfId = 'prof-instrutor';
+      commercialModule = 'ZemdaPersonal';
+    }
 
     // REGRA OBRIGATÓRIA: Qualquer usuário reconhecido como ZemdaFono converge na matriz para prof-fonoaudiologo
     if (commercialModule === 'ZemdaFono' || canonicalProfId === 'prof-fonoaudiologo' || isFonoSignal) {

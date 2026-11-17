@@ -174,7 +174,7 @@ export class TaxonomyController {
         const regOption = REGISTRATION_PROFESSIONS.find(opt => opt.id === p.id);
         const label = regOption?.label || p.name;
         const displayOption = `${label} — ${accessLabel}`;
-        const isAdministrative = resolution.taxonomyCategory === 'ADMINISTRATIVE' || p.category_is_clinical === 0 || p.category_id === 'cat-admin';
+        const isAdministrative = resolution.taxonomyCategory === 'ADMINISTRATIVE' || p.category_id === 'cat-admin';
         return {
           ...p,
           label,

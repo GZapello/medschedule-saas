@@ -9,7 +9,11 @@ import { logAudit } from '../middlewares/audit.middleware';
 import { hashPassword } from '../utils/password';
 import { createDefaultSchedules } from '../utils/schedule-defaults';
 import { ProfessionTaxonomyService } from '../services/profession-taxonomy.service';
-import { resolveCanonicalProfession } from '../utils/profession-module';
+import {
+  resolveCanonicalProfession,
+  isGenericFallbackProfessionId,
+  isGenericFallbackProfessionName
+} from '../utils/profession-module';
 import { REGISTRATION_PROFESSION_ALIASES } from '../types/registration-professions';
 import { getDefaultPermissionsForRole, DEFAULT_RECEPTIONIST_PERMISSIONS, DEFAULT_PROFESSIONAL_PERMISSIONS } from '../utils/role-permissions';
 
@@ -34,9 +38,9 @@ export class StaffController {
           COALESCE(cu.scheduled_deletion_at, u.scheduled_deletion_at) as scheduled_deletion_at,
           cu.is_manager, cu.permissions_json, cu.approved_at, cu.approved_by,
           cu.zemda_body_enabled, cu.zemda_personal_enabled,
-          COALESCE(cu.profession_custom, prof.name, u.role) as profession_name,
+          COALESCE(NULLIF(NULLIF(cu.profession_custom, 'Outro profissional da saúde'), 'Outro Profissional'), NULLIF(NULLIF(prof.name, 'Outro profissional da saúde'), 'Outro Profissional'), p.profession_name, cu.profession_name, prof.name, u.role) as profession_name,
           COALESCE(cu.practice_areas, p.practice_areas, p.bio) as practice_areas,
-          p.id as professional_id, p.registration_type, p.registration_number,
+          p.id as professional_id, p.profession_id, p.registration_type, p.registration_number,
           p.zemda_fisio_enabled, p.zemda_odonto_enabled,
           spec.name as specialty_name
         FROM users u
@@ -68,6 +72,21 @@ export class StaffController {
           s.permissions = Array.from(new Set([...s.permissions, ...DEFAULT_PROFESSIONAL_PERMISSIONS]));
         } else if (s.permissions.length === 0) {
           s.permissions = getDefaultPermissionsForRole(s.role);
+        }
+        if (isGenericFallbackProfessionId(s.profession_id) || isGenericFallbackProfessionName(s.profession_name)) {
+          const staffRes = resolveCanonicalProfession({
+            id: s.profession_id,
+            name: s.profession_name,
+            practiceAreas: s.practice_areas,
+            specialtyName: s.specialty_name,
+            registrationType: s.registration_type
+          });
+          if (staffRes.commercialModule === 'ZemdaPersonal') {
+            s.profession_id = staffRes.canonicalId;
+            if (isGenericFallbackProfessionName(s.profession_name)) {
+              s.profession_name = staffRes.canonicalName;
+            }
+          }
         }
       }
 
@@ -129,7 +148,7 @@ export class StaffController {
         res.status(403).json({ error: 'A conta está bloqueada ou inativa. A aprovação local não pode reativar a conta global.' }); return;
       }
       requireCapacity(tenantId!, 1, String(id));
-      const cu = db.prepare("SELECT role, permissions_json, profession_custom, practice_areas FROM clinic_users WHERE user_id = ? AND tenant_id = ?").get(id, tenantId) as any;
+      const cu = db.prepare("SELECT role, permissions_json, profession_id, profession_name, profession_custom, practice_areas, zemda_personal_enabled FROM clinic_users WHERE user_id = ? AND tenant_id = ?").get(id, tenantId) as any;
       let existingPerms: string[] = [];
       try { existingPerms = cu?.permissions_json ? JSON.parse(cu.permissions_json) : []; } catch {}
       const targetRole = cu?.role || user.role;
@@ -160,11 +179,36 @@ export class StaffController {
             db.prepare("UPDATE professionals SET user_id = ?, active = 1 WHERE id = ?").run(id, unlinked.id);
             createDefaultSchedules(db, tenantId!, unlinked.id);
           } else {
+            const approveRes = resolveCanonicalProfession({
+              id: cu?.profession_id,
+              name: cu?.profession_custom || cu?.profession_name,
+              practiceAreas: cu?.practice_areas,
+              customProfession: cu?.profession_custom
+            });
+            const approveProfId = !isGenericFallbackProfessionId(approveRes.canonicalId) ? approveRes.canonicalId : (cu?.profession_id || null);
+            const approveProfName = approveRes.commercialModule ? approveRes.canonicalName : (cu?.profession_custom || cu?.profession_name || null);
             const profId = 'pro-' + uuidv4().slice(0, 8);
             db.prepare(`
-              INSERT INTO professionals (id, tenant_id, user_id, name, registration_type, practice_areas, active)
-              VALUES (?, ?, ?, ?, 'Conselho', ?, 1)
-            `).run(profId, tenantId, id, user.name, cu?.practice_areas || null);
+              INSERT INTO professionals (
+                id, tenant_id, user_id, name, profession_id, profession_name, registration_type, practice_areas,
+                zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled,
+                zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled,
+                zemda_med_enabled, zemda_estetic_enabled, active
+              )
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+            `).run(
+              profId, tenantId, id, user.name, approveProfId, approveProfName, approveRes.boardLabel || 'Conselho', cu?.practice_areas || null,
+              approveRes.flags.zemda_fisio_enabled,
+              approveRes.flags.zemda_odonto_enabled,
+              approveRes.flags.zemda_nutri_enabled,
+              approveRes.flags.zemda_to_enabled,
+              approveRes.flags.zemda_fono_enabled,
+              approveRes.flags.zemda_pp_enabled,
+              approveRes.flags.zemda_psico_enabled,
+              approveRes.flags.zemda_personal_enabled || cu?.zemda_personal_enabled || 0,
+              approveRes.flags.zemda_med_enabled || 0,
+              approveRes.flags.zemda_estetic_enabled || 0
+            );
             createDefaultSchedules(db, tenantId!, profId);
           }
         }

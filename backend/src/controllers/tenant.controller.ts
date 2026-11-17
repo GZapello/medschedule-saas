@@ -19,7 +19,11 @@ import { EmailService } from '../services/email.service';
 import { AdminNotificationService } from '../services/admin-notification.service';
 import { CapabilityService } from '../services/capability.service';
 import { MedicalTreeService } from '../services/medical-tree.service';
-import { resolveProfessionModule, resolveCanonicalProfession } from '../utils/profession-module';
+import {
+  resolveProfessionModule,
+  resolveCanonicalProfession,
+  isGenericFallbackProfessionId
+} from '../utils/profession-module';
 import { REGISTRATION_PROFESSIONS } from '../types/professions';
 import { createDefaultSchedules } from '../utils/schedule-defaults';
 import { findNextAvailableDate } from '../utils/slot-calculator';
@@ -78,15 +82,16 @@ export class TenantController {
         matchedCatalogProf = REGISTRATION_PROFESSIONS.find(
           p => (p.id === 'prof-dentista' && (professionIdInput === 'prof-dentista' || rawProfession.toLowerCase() === 'dentista')) ||
                (p.id === 'prof-personal-trainer' && (professionIdInput === 'prof-personal-trainer' || rawProfession.toLowerCase() === 'personal trainer')) ||
+               (p.id === 'prof-instrutor' && (professionIdInput === 'prof-instrutor' || professionIdInput === 'prof-instrutor-pilates' || professionIdInput === 'pilates_instructor' || rawProfession.toLowerCase().startsWith('instrutor'))) ||
                (p.id === 'prof-outro-saude' && (professionIdInput === 'other_health' || rawProfession.toLowerCase() === 'outra profissão da saúde')) ||
                p.label.toLowerCase() === rawProfession.toLowerCase()
         );
       }
 
-      const resolvedProfId = matchedCatalogProf?.id || (professionIdInput ? professionIdInput : null);
-      const resolvedProfName = rawProfession || matchedCatalogProf?.label || null;
+      let resolvedProfId = matchedCatalogProf?.id || (professionIdInput ? professionIdInput : null);
+      let resolvedProfName = rawProfession || matchedCatalogProf?.label || null;
       const resolvedProfSlug = matchedCatalogProf?.slug || (resolvedProfName ? resolvedProfName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-') : null);
-      const resolvedBoardLabel = req.body.registrationType || req.body.managerRegistrationType || matchedCatalogProf?.boardLabel || 'Registro';
+      let resolvedBoardLabel = req.body.registrationType || req.body.managerRegistrationType || matchedCatalogProf?.boardLabel || 'Registro';
       const managerPracticeAreas = req.body.managerPracticeAreas || req.body.practiceAreas || null;
       const managerRegistrationNumber = req.body.managerRegistrationNumber || req.body.registrationNumber || null;
       const zemdaBodyEnabled = req.body.zemda360Enabled ?? req.body.zemdaBodyEnabled;
@@ -95,8 +100,14 @@ export class TenantController {
         id: resolvedProfId,
         name: resolvedProfName,
         slug: resolvedProfSlug,
+        practiceAreas: managerPracticeAreas,
         registrationType: resolvedBoardLabel
       });
+      if ((isGenericFallbackProfessionId(resolvedProfId) || !resolvedProfId) && professionResolution.commercialModule) {
+        resolvedProfId = professionResolution.canonicalId;
+        resolvedProfName = professionResolution.canonicalName;
+        resolvedBoardLabel = professionResolution.boardLabel || resolvedBoardLabel;
+      }
       const activeModule = professionResolution.commercialModule;
       const modFlags = professionResolution.flags;
 

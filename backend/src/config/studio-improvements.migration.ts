@@ -1,4 +1,10 @@
 import { DatabaseSync } from 'node:sqlite';
+import {
+  resolveCanonicalProfession,
+  isGenericFallbackProfessionId,
+  isGenericFallbackProfessionName,
+  hasClinicalProfessionSignal
+} from '../utils/profession-module';
 
 /**
  * Migração aditiva e idempotente para suportar as 7 melhorias integradas (Clinicas & Studios):
@@ -556,6 +562,121 @@ export function migrateStudioImprovements(rawDb: DatabaseSync): void {
       WHERE profession_id IN ('prof-instrutor', 'prof-instrutor-pilates', 'pilates_instructor')
         AND COALESCE(zemda_personal_enabled, 0) = 0;
     `);
+
+    // Reparo não-destrutivo para instrutores já cadastrados que caíram em prof-outro-saude / prof-outro / NULL:
+    // Preserva totalmente áreas, especialidades, agendamentos, treinos e jamais toca profissões clínicas.
+    try {
+      const legacyCandidates = rawDb.prepare(`
+        SELECT p.id as prof_id, p.tenant_id, p.user_id, p.profession_id, p.profession_name,
+               p.specialty_custom, p.practice_areas, p.bio, p.registration_type, p.zemda_personal_enabled,
+               p.zemda_fisio_enabled, p.zemda_odonto_enabled, p.zemda_nutri_enabled, p.zemda_to_enabled,
+               p.zemda_fono_enabled, p.zemda_pp_enabled, p.zemda_psico_enabled, p.zemda_med_enabled, p.zemda_estetic_enabled,
+               cu.role as cu_role, cu.profession_id as cu_prof_id, cu.profession_name as cu_prof_name,
+               cu.profession_custom as cu_prof_custom, cu.practice_areas as cu_practice_areas, cu.zemda_personal_enabled as cu_personal,
+               u.profession_id as u_prof_id, u.profession_name as u_prof_name, u.practice_areas as u_practice_areas, u.zemda_personal_enabled as u_personal,
+               t.establishment_profile, t.manager_profession, t.manager_practice_areas
+        FROM professionals p
+        LEFT JOIN users u ON u.id = p.user_id
+        LEFT JOIN clinic_users cu ON cu.user_id = p.user_id AND cu.tenant_id = p.tenant_id
+        LEFT JOIN tenants t ON t.id = p.tenant_id
+        WHERE p.profession_id IS NULL
+           OR TRIM(p.profession_id) = ''
+           OR LOWER(TRIM(p.profession_id)) IN ('prof-outro-saude', 'prof-outro', 'other_health')
+      `).all() as any[];
+
+      for (const row of legacyCandidates) {
+        const hasClinicalFlag = Boolean(
+          row.zemda_fisio_enabled || row.zemda_odonto_enabled || row.zemda_nutri_enabled ||
+          row.zemda_to_enabled || row.zemda_fono_enabled || row.zemda_pp_enabled ||
+          row.zemda_psico_enabled || row.zemda_med_enabled || row.zemda_estetic_enabled
+        );
+        if (hasClinicalFlag) continue;
+
+        const nonGenericName =
+          (!isGenericFallbackProfessionName(row.profession_name) ? row.profession_name : null) ||
+          (!isGenericFallbackProfessionName(row.cu_prof_custom) ? row.cu_prof_custom : null) ||
+          (!isGenericFallbackProfessionName(row.cu_prof_name) ? row.cu_prof_name : null) ||
+          (!isGenericFallbackProfessionName(row.u_prof_name) ? row.u_prof_name : null) ||
+          (row.cu_role === 'clinic_admin' && !isGenericFallbackProfessionName(row.manager_profession) ? row.manager_profession : null);
+
+        const combinedAreas = [
+          row.practice_areas,
+          row.specialty_custom,
+          row.bio,
+          row.cu_practice_areas,
+          row.u_practice_areas,
+          row.cu_role === 'clinic_admin' ? row.manager_practice_areas : null
+        ].filter(Boolean).join(', ');
+
+        if (hasClinicalProfessionSignal(`${nonGenericName || ''} ${combinedAreas}`)) continue;
+
+        const res = resolveCanonicalProfession({
+          id: (!isGenericFallbackProfessionId(row.cu_prof_id) ? row.cu_prof_id : null) ||
+              (!isGenericFallbackProfessionId(row.u_prof_id) ? row.u_prof_id : null) ||
+              row.profession_id,
+          name: nonGenericName || row.profession_name,
+          registrationType: row.registration_type,
+          practiceAreas: combinedAreas,
+          specialtyName: row.specialty_custom,
+          customProfession: row.cu_prof_custom
+        });
+
+        let targetId: string | null = null;
+        let targetName: string | null = null;
+
+        if (res.commercialModule === 'ZemdaPersonal') {
+          targetId = res.canonicalId;
+          targetName = nonGenericName || res.canonicalName;
+        } else if (
+          row.zemda_personal_enabled === 1 ||
+          row.cu_personal === 1 ||
+          row.u_personal === 1
+        ) {
+          targetId = 'prof-instrutor';
+          targetName = nonGenericName || 'Instrutor';
+        } else if (row.establishment_profile === 'studio') {
+          const hasClassLink = Boolean(
+            rawDb.prepare("SELECT 1 FROM services WHERE tenant_id = ? AND professional_id = ? AND active = 1 AND (COALESCE(service_kind, 'individual') = 'group' OR clinical_module = 'ZemdaPersonal') LIMIT 1").get(row.tenant_id, row.prof_id) ||
+            rawDb.prepare('SELECT 1 FROM class_schedules WHERE tenant_id = ? AND professional_id = ? AND active = 1 LIMIT 1').get(row.tenant_id, row.prof_id)
+          );
+          if (hasClassLink) {
+            targetId = 'prof-instrutor';
+            targetName = nonGenericName || 'Instrutor';
+          }
+        }
+
+        if (!targetId) continue;
+
+        rawDb.prepare(`
+          UPDATE professionals
+          SET profession_id = ?,
+              profession_name = CASE WHEN profession_name IS NULL OR TRIM(profession_name) = '' OR LOWER(TRIM(profession_name)) IN ('outro profissional da saúde', 'outro profissional da saude', 'outro profissional') THEN ? ELSE profession_name END,
+              zemda_personal_enabled = 1
+          WHERE id = ?
+        `).run(targetId, targetName, row.prof_id);
+
+        if (row.user_id) {
+          rawDb.prepare(`
+            UPDATE clinic_users
+            SET profession_id = CASE WHEN profession_id IS NULL OR TRIM(profession_id) = '' OR LOWER(TRIM(profession_id)) IN ('prof-outro-saude', 'prof-outro', 'other_health') THEN ? ELSE profession_id END,
+                profession_name = CASE WHEN profession_name IS NULL OR TRIM(profession_name) = '' OR LOWER(TRIM(profession_name)) IN ('outro profissional da saúde', 'outro profissional da saude', 'outro profissional') THEN ? ELSE profession_name END,
+                profession_custom = CASE WHEN profession_custom IS NULL OR TRIM(profession_custom) = '' OR LOWER(TRIM(profession_custom)) IN ('outro profissional da saúde', 'outro profissional da saude', 'outro profissional') THEN ? ELSE profession_custom END,
+                zemda_personal_enabled = 1
+            WHERE user_id = ? AND tenant_id = ?
+          `).run(targetId, targetName, targetName, row.user_id, row.tenant_id);
+
+          rawDb.prepare(`
+            UPDATE users
+            SET profession_id = CASE WHEN profession_id IS NULL OR TRIM(profession_id) = '' OR LOWER(TRIM(profession_id)) IN ('prof-outro-saude', 'prof-outro', 'other_health') THEN ? ELSE profession_id END,
+                profession_name = CASE WHEN profession_name IS NULL OR TRIM(profession_name) = '' OR LOWER(TRIM(profession_name)) IN ('outro profissional da saúde', 'outro profissional da saude', 'outro profissional') THEN ? ELSE profession_name END,
+                zemda_personal_enabled = 1
+            WHERE id = ?
+          `).run(targetId, targetName, row.user_id);
+        }
+      }
+    } catch (repairErr) {
+      console.warn('[StudioMigration] Aviso ao reparar instrutores legados:', repairErr);
+    }
   } catch (e) {
     console.warn('[StudioMigration] Aviso ao configurar catálogo Instrutor:', e);
   }

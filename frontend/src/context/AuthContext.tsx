@@ -514,7 +514,22 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       combinedProf.includes('dança') ||
       combinedProf.includes('danca') ||
       (combinedProf.includes('pilates') && !combinedProf.includes('fisio') && !combinedProf.includes('physio')) ||
-      regType === 'CREF'
+      regType === 'CREF' ||
+      ((!profId || profId === 'prof-outro-saude' || profId === 'prof-outro') && (() => {
+        const areaText = `${(currentUser as any)?.practiceAreas || ''} ${(currentUser as any)?.specialtyName || ''}`.toLowerCase();
+        if (!areaText.trim()) return false;
+        const hasClinicalArea =
+          areaText.includes('fisio') || areaText.includes('physio') || areaText.includes('fono') ||
+          areaText.includes('psic') || areaText.includes('nutri') || areaText.includes('terap') ||
+          areaText.includes('medic') || areaText.includes('médic') || areaText.includes('odonto') ||
+          areaText.includes('dent') || areaText.includes('estet');
+        return !hasClinicalArea && (
+          areaText.includes('instrutor') || areaText.includes('pilates') ||
+          areaText.includes('yoga') || areaText.includes('dança') || areaText.includes('danca') ||
+          areaText.includes('zumba') || areaText.includes('ritmos') ||
+          areaText.includes('funcional') || areaText.includes('personal')
+        );
+      })())
     ) {
       activeModule = 'ZemdaPersonal';
     } else if (

@@ -37,6 +37,112 @@ export interface ResolveProfessionInput {
   name?: string | null;
   slug?: string | null;
   registrationType?: string | null;
+  practiceAreas?: string | null;
+  specialtyName?: string | null;
+  customProfession?: string | null;
+}
+
+const GENERIC_PROFESSION_IDS = new Set([
+  '',
+  'prof-outro-saude',
+  'prof-outro',
+  'other_health',
+  'outro-saude',
+  'outro'
+]);
+
+const GENERIC_PROFESSION_NAMES = new Set([
+  '',
+  'outro profissional da saúde',
+  'outro profissional da saude',
+  'outra profissão da saúde',
+  'outra profissao da saude',
+  'outro profissional',
+  'profissional',
+  'outro',
+  'não informada',
+  'nao informada',
+  'profissão precisa ser atualizada',
+  'profissao precisa ser atualizada'
+]);
+
+export function isGenericFallbackProfessionId(id?: string | null): boolean {
+  return GENERIC_PROFESSION_IDS.has(String(id || '').trim().toLowerCase());
+}
+
+export function isGenericFallbackProfessionName(name?: string | null): boolean {
+  return GENERIC_PROFESSION_NAMES.has(String(name || '').trim().toLowerCase());
+}
+
+export function hasClinicalProfessionSignal(raw?: string | null): boolean {
+  const t = String(raw || '').trim().toLowerCase();
+  if (!t) return false;
+  return (
+    t.includes('fisio') ||
+    t.includes('physio') ||
+    t.includes('fono') ||
+    t.includes('psicolog') ||
+    t.includes('psicólog') ||
+    t.includes('psicanal') ||
+    t.includes('psicoterap') ||
+    t.includes('psicopedag') ||
+    t.includes('nutri') ||
+    t.includes('terapeuta ocupacional') ||
+    t.includes('terapia ocupacional') ||
+    (t.includes('medic') && !t.includes('biomedic')) ||
+    (t.includes('médic') && !t.includes('biomédic')) ||
+    t.includes('odonto') ||
+    t.includes('dentis') ||
+    t.includes('estetic') ||
+    t.includes('estétic') ||
+    t.includes('enferm') ||
+    t.includes('biomed') ||
+    t.includes('farmac') ||
+    t.includes('farmác') ||
+    t.includes('doula') ||
+    t.includes('acupunt') ||
+    t.includes('osteopat') ||
+    t.includes('quiroprax') ||
+    t.includes('podolog') ||
+    t.includes('assistente social') ||
+    t.includes('serviço social') ||
+    t.includes('servico social')
+  );
+}
+
+function isPersonalTrainerSignal(text: string): boolean {
+  return (
+    text.includes('personal trainer') ||
+    text.includes('personal-trainer') ||
+    text.includes('personal_trainer') ||
+    text.includes('educação física') ||
+    text.includes('educacao fisica') ||
+    text.includes('educador físico') ||
+    text.includes('educador fisico') ||
+    text.includes('treinamento físico') ||
+    text.includes('treinamento fisico') ||
+    text.includes('musculação') ||
+    text.includes('musculacao') ||
+    /\bpersonal\b/.test(text)
+  );
+}
+
+function isInstructorSignal(text: string): boolean {
+  return (
+    text.includes('instrutor') ||
+    text.includes('instrutora') ||
+    text.includes('pilates') ||
+    text.includes('yoga') ||
+    text.includes('dança') ||
+    text.includes('danca') ||
+    text.includes('zumba') ||
+    text.includes('ritmos') ||
+    text.includes('alongamento') ||
+    text.includes('ginástica') ||
+    text.includes('ginastica') ||
+    text.includes('treinamento funcional') ||
+    text.includes('funcional')
+  );
 }
 
 export type ProfessionTaxonomyCategory =
@@ -74,12 +180,15 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
     : (input || {});
 
   const pId = (normInput.id || '').trim().toLowerCase();
-  const pName = (normInput.name || '').trim().toLowerCase();
+  const rawName = (normInput.name || '').trim();
+  const customProf = (normInput.customProfession || '').trim();
+  const effectiveName = (!isGenericFallbackProfessionName(rawName) ? rawName : '') || (!isGenericFallbackProfessionName(customProf) ? customProf : '') || rawName;
+  const pName = effectiveName.toLowerCase();
   const pSlug = (normInput.slug || '').trim().toLowerCase();
   const regType = (normInput.registrationType || '').trim().toUpperCase();
 
-  const combined = `${pId} ${pName} ${pSlug}`.toLowerCase();
-  const hasExplicitId = Boolean(pId && pId !== 'prof-outro');
+  const combined = `${pId} ${pName} ${customProf.toLowerCase()} ${pSlug}`.toLowerCase();
+  const hasExplicitId = Boolean(pId && !isGenericFallbackProfessionId(pId));
 
   // =========================================================================
   // 0. PROFISSÕES E DOMÍNIOS DEFINITIVAMENTE FORA DO ESCOPO DE SAÚDE HUMANA
@@ -327,33 +436,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
     pSlug === 'instrutor-pilates' ||
     pSlug === 'instrutor-yoga' ||
     pSlug === 'instrutor-danca' ||
-    (!combined.includes('fisio') && !combined.includes('physio') && (
-      pName === 'instrutor' ||
-      pName === 'instrutora' ||
-      pName.startsWith('instrutor(a)') ||
-      pName.startsWith('instrutor ') ||
-      pName.startsWith('instrutora ') ||
-      pName.startsWith('professor de pilates') ||
-      pName.startsWith('professora de pilates') ||
-      pName.startsWith('professor de yoga') ||
-      pName.startsWith('professora de yoga') ||
-      pName.startsWith('professor de dança') ||
-      pName.startsWith('professora de dança') ||
-      pName.startsWith('professor de danca') ||
-      pName.startsWith('professora de danca') ||
-      pName === 'pilates' ||
-      pName === 'yoga' ||
-      pName === 'dança' ||
-      pName === 'danca' ||
-      combined.includes('instrutor de pilates') ||
-      combined.includes('instrutora de pilates') ||
-      combined.includes('instrutor de yoga') ||
-      combined.includes('instrutora de yoga') ||
-      combined.includes('instrutor de dança') ||
-      combined.includes('instrutora de dança') ||
-      combined.includes('instrutor de danca') ||
-      combined.includes('instrutora de danca')
-    ))
+    (!hasClinicalProfessionSignal(combined) && isInstructorSignal(combined))
   ) {
     return {
       canonicalId: 'prof-instrutor',
@@ -886,6 +969,44 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
       isSpecificAlias: false,
       flags: makeFlags('ZemdaOdonto')
     };
+  }
+
+  // =========================================================================
+  // 12B. INFERÊNCIA SEGURA POR ÁREAS/MODALIDADES DE STUDIO/ESPORTE
+  // Só roda após todas as profissões clínicas terem sido verificadas e descartadas
+  // =========================================================================
+  const supplementaryText = [
+    pName,
+    customProf.toLowerCase(),
+    (normInput.practiceAreas || '').trim().toLowerCase(),
+    (normInput.specialtyName || '').trim().toLowerCase()
+  ].filter(Boolean).join(' ');
+
+  if (supplementaryText && !hasClinicalProfessionSignal(supplementaryText)) {
+    if (isPersonalTrainerSignal(supplementaryText) || regType === 'CREF') {
+      return {
+        canonicalId: 'prof-personal-trainer',
+        canonicalName: 'Personal Trainer / Profissional de Educação Física',
+        commercialModule: 'ZemdaPersonal',
+        clinicalWorkspace: 'ZemdaPersonal',
+        boardLabel: 'CREF',
+        taxonomyCategory: 'CANONICAL',
+        isSpecificAlias: false,
+        flags: makeFlags('ZemdaPersonal')
+      };
+    }
+    if (isInstructorSignal(supplementaryText)) {
+      return {
+        canonicalId: 'prof-instrutor',
+        canonicalName: 'Instrutor',
+        commercialModule: 'ZemdaPersonal',
+        clinicalWorkspace: 'ZemdaPersonal',
+        boardLabel: 'Certificação',
+        taxonomyCategory: 'CANONICAL',
+        isSpecificAlias: false,
+        flags: makeFlags('ZemdaPersonal')
+      };
+    }
   }
 
   // =========================================================================

@@ -12,7 +12,11 @@ import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '../middlewares/audit.middleware';
-import { resolveCanonicalProfession } from '../utils/profession-module';
+import {
+  resolveCanonicalProfession,
+  isGenericFallbackProfessionId,
+  isGenericFallbackProfessionName
+} from '../utils/profession-module';
 import { isPhysiotherapistOrClinicManager } from './physiotherapy.controller';
 import { ClinicalRecordService } from '../services/clinical-record.service';
 import { createDefaultSchedules } from '../utils/schedule-defaults';
@@ -26,23 +30,35 @@ import { validateAndFormatBrazilianPhone } from '../utils/phone-validator';
  *        Outra profissão → não exibir e não permitir acesso (HTTP 403)
  */
 export function isUserPersonalTrainer(userId: string, tenantId: string): boolean {
-  // 1. Busca no registro do profissional
+  // 1. Busca no registro do profissional (com dados de clínica e áreas)
   const prof = db.prepare(`
-    SELECT p.id, p.profession_id, p.profession_name, p.practice_areas, p.registration_type,
-           prof.name as prof_name, prof.slug as prof_slug
+    SELECT p.id, p.profession_id, p.profession_name, p.specialty_custom, p.practice_areas, p.registration_type,
+           prof.name as prof_name, prof.slug as prof_slug,
+           cu.profession_custom as cu_profession_custom, cu.practice_areas as cu_practice_areas
     FROM professionals p
     LEFT JOIN professions prof ON prof.id = p.profession_id
+    LEFT JOIN clinic_users cu ON cu.user_id = p.user_id AND cu.tenant_id = p.tenant_id
     WHERE p.user_id = ? AND p.tenant_id = ?
     ORDER BY p.active DESC, p.id
     LIMIT 1
   `).get(userId, tenantId) as any;
 
   if (prof) {
+    const nonGenericProfName =
+      (!isGenericFallbackProfessionName(prof.prof_name) ? prof.prof_name : null) ||
+      (!isGenericFallbackProfessionName(prof.profession_name) ? prof.profession_name : null) ||
+      (!isGenericFallbackProfessionName(prof.cu_profession_custom) ? prof.cu_profession_custom : null) ||
+      prof.prof_name ||
+      prof.profession_name;
+
     const canonical = resolveCanonicalProfession({
       id: prof.profession_id,
-      name: prof.prof_name || prof.profession_name,
+      name: nonGenericProfName,
       slug: prof.prof_slug,
-      registrationType: prof.registration_type
+      registrationType: prof.registration_type,
+      practiceAreas: [prof.practice_areas, prof.cu_practice_areas].filter(Boolean).join(', '),
+      specialtyName: prof.specialty_custom,
+      customProfession: prof.cu_profession_custom
     });
 
     if (canonical.commercialModule === 'ZemdaPersonal') {
@@ -54,9 +70,8 @@ export function isUserPersonalTrainer(userId: string, tenantId: string): boolean
     }
 
     const pId = prof.profession_id || '';
-    const pName = (prof.prof_name || prof.profession_name || '').toLowerCase();
+    const pName = (nonGenericProfName || '').toLowerCase();
     const pSlug = (prof.prof_slug || '').toLowerCase();
-    const pAreas = (prof.practice_areas || '').toLowerCase();
     const rType = (prof.registration_type || '').toUpperCase();
 
     // Rejeição estrita de qualquer outra profissão cadastrada
@@ -84,6 +99,7 @@ export function isUserPersonalTrainer(userId: string, tenantId: string): boolean
       pName.includes('educacao fisica') ||
       pName === 'instrutor' ||
       pName.startsWith('instrutor ') ||
+      pName.startsWith('instrutora ') ||
       pName.startsWith('instrutor(a)') ||
       pSlug.includes('personal') ||
       pSlug.includes('educa') ||
@@ -93,14 +109,14 @@ export function isUserPersonalTrainer(userId: string, tenantId: string): boolean
       return true;
     }
 
-    if (pId && !pId.includes('personal') && !pId.includes('educa') && !pId.includes('instrutor') && !pId.includes('pilates')) {
+    if (pId && !isGenericFallbackProfessionId(pId) && !pId.includes('personal') && !pId.includes('educa') && !pId.includes('instrutor') && !pId.includes('pilates')) {
       return false;
     }
   }
 
   // 2. Busca em clinic_users e users
   const user = db.prepare(`
-    SELECT u.id, u.profession_id, u.profession_name, u.registration_type,
+    SELECT u.id, u.profession_id, u.profession_name, u.practice_areas as user_practice_areas, u.registration_type,
            cu.profession_custom, cu.practice_areas, cu.zemda_personal_enabled,
            t.manager_profession, t.manager_practice_areas
     FROM users u
@@ -115,7 +131,9 @@ export function isUserPersonalTrainer(userId: string, tenantId: string): boolean
     const userCanonical = resolveCanonicalProfession({
       id: user.profession_id,
       name: user.profession_name || user.profession_custom,
-      registrationType: user.registration_type
+      registrationType: user.registration_type,
+      practiceAreas: [user.practice_areas, user.user_practice_areas].filter(Boolean).join(', '),
+      customProfession: user.profession_custom
     });
 
     if (userCanonical.commercialModule === 'ZemdaPersonal') {

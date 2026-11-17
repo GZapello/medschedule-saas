@@ -2,7 +2,11 @@ import { BillingError } from '../services/billing.service';
 import { selectLoginClinic } from '../services/membership.service';
 import crypto from 'crypto';
 import { completeProfessionalProfile } from '../utils/professional-profile';
-import { resolveProfessionModule, resolveCanonicalProfession } from '../utils/profession-module';
+import {
+  resolveProfessionModule,
+  resolveCanonicalProfession,
+  isGenericFallbackProfessionId
+} from '../utils/profession-module';
 import { getAvailableModulesForProfessional } from '../utils/clinical-module';
 import { respondBillingError } from './billing.controller';
 import { requireCapacity, pendingBillingManager, BillingService, assertTrialEligibility } from '../services/billing.service';
@@ -40,6 +44,72 @@ function parseIsoDate(d: string | null | undefined): Date | null {
 }
 
 export class AuthController {
+  private static fetchRawProfDetails(user: any, tenantData: any): any {
+    if (user.role !== 'professional' && user.role !== 'clinic_admin') return null;
+
+    const profRow = db.prepare(`
+      SELECT
+        p.id as professional_id, p.active as professional_active, p.profession_id, p.specialty_id,
+        p.specialty_custom, p.registration_type, p.registration_number,
+        p.practice_areas, p.slug as professional_slug,
+        p.zemda_fisio_enabled, p.zemda_odonto_enabled, p.zemda_nutri_enabled, p.zemda_to_enabled,
+        p.zemda_fono_enabled, p.zemda_pp_enabled, p.zemda_psico_enabled, p.zemda_personal_enabled, p.zemda_estetic_enabled,
+        COALESCE(NULLIF(NULLIF(prof.name, 'Outro profissional da saúde'), 'Outro Profissional'), p.profession_name, prof.name) as profession_name,
+        prof.slug as profession_slug,
+        spec.name as specialty_name
+      FROM professionals p
+      LEFT JOIN professions prof ON prof.id = p.profession_id
+      LEFT JOIN specialties spec ON spec.id = p.specialty_id
+      WHERE p.user_id = ? AND p.tenant_id = ? ORDER BY p.active DESC, p.id
+    `).get(user.id, user.tenant_id);
+    if (profRow) return profRow;
+
+    if (user.role === 'clinic_admin') {
+      const cu = db.prepare(`
+        SELECT cu.profession_id, cu.profession_name as cu_profession_name, cu.profession_custom, cu.practice_areas,
+               cu.zemda_fisio_enabled, cu.zemda_odonto_enabled, cu.zemda_nutri_enabled, cu.zemda_to_enabled,
+               cu.zemda_fono_enabled, cu.zemda_pp_enabled, cu.zemda_psico_enabled, cu.zemda_personal_enabled, cu.zemda_estetic_enabled,
+               CASE WHEN u.tenant_id = cu.tenant_id THEN u.profession_name END as profession_name,
+               CASE WHEN u.tenant_id = cu.tenant_id THEN u.practice_areas END as user_practice_areas,
+               u.registration_type, u.registration_number
+        FROM clinic_users cu
+        LEFT JOIN users u ON u.id = cu.user_id
+        WHERE cu.user_id = ? AND cu.tenant_id = ?
+      `).get(user.id, user.tenant_id) as any;
+
+      const pName = cu?.cu_profession_name || cu?.profession_custom || cu?.profession_name || tenantData?.manager_profession || '';
+      const pAreas = cu?.practice_areas || cu?.user_practice_areas || tenantData?.manager_practice_areas || '';
+
+      if (pName || pAreas) {
+        const pSlug = pName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-');
+        const resolved = resolveCanonicalProfession({
+          id: cu?.profession_id,
+          name: pName,
+          slug: pSlug,
+          practiceAreas: pAreas,
+          registrationType: cu?.registration_type
+        });
+        return {
+          profession_id: cu?.profession_id || resolved.canonicalId,
+          profession_name: pName,
+          profession_slug: pSlug,
+          practice_areas: pAreas,
+          registration_type: cu?.registration_type,
+          registration_number: cu?.registration_number,
+          zemda_fisio_enabled: cu?.zemda_fisio_enabled ?? 0,
+          zemda_odonto_enabled: cu?.zemda_odonto_enabled ?? 0,
+          zemda_nutri_enabled: cu?.zemda_nutri_enabled ?? 0,
+          zemda_to_enabled: cu?.zemda_to_enabled ?? 0,
+          zemda_fono_enabled: cu?.zemda_fono_enabled ?? 0,
+          zemda_pp_enabled: cu?.zemda_pp_enabled ?? 0,
+          zemda_psico_enabled: cu?.zemda_psico_enabled ?? 0,
+          zemda_personal_enabled: cu?.zemda_personal_enabled ?? 0
+        };
+      }
+    }
+    return null;
+  }
+
   /** Busca os dados canônicos do estabelecimento ativo para login, sessão (/me) e troca de unidade. */
   static getAuthTenantById(tenantId: string | null | undefined): any {
     if (!tenantId) return null;
@@ -249,67 +319,7 @@ export class AuthController {
       } catch (_) {}
 
       // Busca dados profissionais se for professional ou se o clinic_admin atuar como profissional
-      let profDetails: any = null;
-      if (user.role === 'professional' || user.role === 'clinic_admin') {
-        profDetails = db.prepare(`
-          SELECT
-            p.id as professional_id, p.active as professional_active, p.profession_id, p.specialty_id, p.registration_type, p.registration_number,
-            p.practice_areas, p.slug as professional_slug, p.zemda_fisio_enabled, p.zemda_odonto_enabled, p.zemda_nutri_enabled, p.zemda_to_enabled, p.zemda_fono_enabled, p.zemda_pp_enabled, p.zemda_psico_enabled, p.zemda_personal_enabled, p.zemda_estetic_enabled,
-            prof.name as profession_name, prof.slug as profession_slug,
-            spec.name as specialty_name
-          FROM professionals p
-          LEFT JOIN professions prof ON prof.id = p.profession_id
-          LEFT JOIN specialties spec ON spec.id = p.specialty_id
-          WHERE p.user_id = ? AND p.tenant_id = ? ORDER BY p.active DESC, p.id
-        `).get(user.id, user.tenant_id);
-
-        // Se não houver registro formal em professionals, verifica clinic_users / users / tenant
-        if (!profDetails && user.role === 'clinic_admin') {
-          const cu = db.prepare(`
-            SELECT cu.profession_custom, cu.practice_areas, cu.zemda_fisio_enabled, cu.zemda_odonto_enabled, cu.zemda_pp_enabled, cu.zemda_psico_enabled, cu.zemda_personal_enabled, cu.zemda_estetic_enabled,
-                   u.profession_name, u.practice_areas as user_practice_areas,
-                   u.registration_type, u.registration_number
-            FROM clinic_users cu
-            LEFT JOIN users u ON u.id = cu.user_id
-            WHERE cu.user_id = ? AND cu.tenant_id = ?
-          `).get(user.id, user.tenant_id) as any;
-
-          const pName = cu?.profession_custom || cu?.profession_name || tenantData?.manager_profession || '';
-          const pAreas = cu?.practice_areas || cu?.user_practice_areas || tenantData?.manager_practice_areas || '';
-
-          if (pName || pAreas) {
-            const pSlug = pName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-');
-            let deducedProfId: string | undefined = undefined;
-            if (pName.toLowerCase().includes('psicopedag')) deducedProfId = 'prof-psicopedagogo';
-            else if (pName.toLowerCase().includes('psicolog') || pName.toLowerCase().includes('psicólog')) deducedProfId = 'prof-psicologo';
-            else if (pName.toLowerCase().includes('fisio')) deducedProfId = 'prof-fisioterapeuta';
-            else if (pName.toLowerCase().includes('odonto') || pName.toLowerCase().includes('dentis')) deducedProfId = 'prof-dentista';
-            else if (pName.toLowerCase().includes('nutri')) deducedProfId = 'prof-nutricionista';
-            else if (pName.toLowerCase().includes('ocupacional')) deducedProfId = 'prof-terapeuta-ocupacional';
-            else if (pName.toLowerCase().includes('fono')) deducedProfId = 'prof-fonoaudiologo';
-            else if (pName.toLowerCase().includes('personal')) deducedProfId = 'prof-personal-trainer';
-            else if (pName.toLowerCase().includes('instrutor')) deducedProfId = 'prof-instrutor';
-            else if (pName.toLowerCase().includes('estet')) deducedProfId = 'prof-esteticista';
-
-            profDetails = {
-              profession_id: deducedProfId,
-              profession_name: pName,
-              profession_slug: pSlug,
-              practice_areas: pAreas,
-              registration_type: cu?.registration_type,
-              registration_number: cu?.registration_number,
-              zemda_fisio_enabled: cu?.zemda_fisio_enabled ?? 0,
-              zemda_odonto_enabled: cu?.zemda_odonto_enabled ?? 0,
-              zemda_nutri_enabled: cu?.zemda_nutri_enabled ?? 0,
-              zemda_to_enabled: cu?.zemda_to_enabled ?? 0,
-              zemda_fono_enabled: cu?.zemda_fono_enabled ?? 0,
-              zemda_pp_enabled: cu?.zemda_pp_enabled ?? 0,
-              zemda_psico_enabled: cu?.zemda_psico_enabled ?? 0,
-              zemda_personal_enabled: cu?.zemda_personal_enabled ?? 0
-            };
-          }
-        }
-      }
+      let profDetails: any = AuthController.fetchRawProfDetails(user, tenantData);
 
       const needsOnboarding = user.role !== 'superadmin' && (isOnboardingPending || tenantData?.onboarding_status !== 'active');
 
@@ -343,7 +353,9 @@ export class AuthController {
         id: profDetails?.profession_id,
         name: profDetails?.profession_name,
         slug: profDetails?.profession_slug,
-        registrationType: profDetails?.registration_type
+        registrationType: profDetails?.registration_type,
+        practiceAreas: profDetails?.practice_areas,
+        specialtyName: profDetails?.specialty_name || profDetails?.specialty_custom
       });
       const modFlags = professionResolution.flags;
 
@@ -470,67 +482,7 @@ export class AuthController {
       name: user.name
     });
 
-    let profDetails: any = null;
-    if (user.role === 'professional' || user.role === 'clinic_admin') {
-      profDetails = db.prepare(`
-        SELECT
-          p.id as professional_id, p.active as professional_active, p.profession_id, p.specialty_id, p.registration_type, p.registration_number,
-          p.practice_areas, p.slug as professional_slug, p.zemda_fisio_enabled, p.zemda_odonto_enabled, p.zemda_nutri_enabled, p.zemda_to_enabled, p.zemda_fono_enabled, p.zemda_pp_enabled, p.zemda_psico_enabled, p.zemda_personal_enabled, p.zemda_estetic_enabled,
-          COALESCE(prof.name, p.profession_name) as profession_name, prof.slug as profession_slug,
-          spec.name as specialty_name
-        FROM professionals p
-        LEFT JOIN professions prof ON prof.id = p.profession_id
-        LEFT JOIN specialties spec ON spec.id = p.specialty_id
-        WHERE p.user_id = ? AND p.tenant_id = ? ORDER BY p.active DESC, p.id
-      `).get(user.id, user.tenant_id);
-
-      if (!profDetails && user.role === 'clinic_admin') {
-        const cu = db.prepare(`
-          SELECT cu.profession_id, cu.profession_name as cu_profession_name, cu.profession_custom, cu.practice_areas, cu.zemda_fisio_enabled, cu.zemda_odonto_enabled, cu.zemda_nutri_enabled, cu.zemda_to_enabled, cu.zemda_fono_enabled, cu.zemda_pp_enabled, cu.zemda_psico_enabled, cu.zemda_personal_enabled, cu.zemda_estetic_enabled,
-                 CASE WHEN u.tenant_id = cu.tenant_id THEN u.profession_name END as profession_name,
-                 CASE WHEN u.tenant_id = cu.tenant_id THEN u.practice_areas END as user_practice_areas,
-                 u.registration_type, u.registration_number
-          FROM clinic_users cu
-          LEFT JOIN users u ON u.id = cu.user_id
-          WHERE cu.user_id = ? AND cu.tenant_id = ?
-        `).get(user.id, user.tenant_id) as any;
-
-        const pName = cu?.cu_profession_name || cu?.profession_custom || cu?.profession_name || tenantData?.manager_profession || '';
-        const pAreas = cu?.practice_areas || cu?.user_practice_areas || tenantData?.manager_practice_areas || '';
-
-        if (pName || pAreas) {
-          const pSlug = pName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-');
-          let deducedProfId: string | undefined = cu?.profession_id || undefined;
-          if (pName.toLowerCase().includes('psicopedag')) deducedProfId = 'prof-psicopedagogo';
-          else if (pName.toLowerCase().includes('psicolog') || pName.toLowerCase().includes('psicólog')) deducedProfId = 'prof-psicologo';
-          else if (pName.toLowerCase().includes('fisio')) deducedProfId = 'prof-fisioterapeuta';
-          else if (pName.toLowerCase().includes('odonto') || pName.toLowerCase().includes('dentis')) deducedProfId = 'prof-dentista';
-          else if (pName.toLowerCase().includes('nutri')) deducedProfId = 'prof-nutricionista';
-          else if (pName.toLowerCase().includes('ocupacional')) deducedProfId = 'prof-terapeuta-ocupacional';
-          else if (pName.toLowerCase().includes('fono')) deducedProfId = 'prof-fonoaudiologo';
-          else if (pName.toLowerCase().includes('personal')) deducedProfId = 'prof-personal-trainer';
-          else if (pName.toLowerCase().includes('instrutor')) deducedProfId = 'prof-instrutor';
-          else if (pName.toLowerCase().includes('estet')) deducedProfId = 'prof-esteticista';
-
-          profDetails = {
-            profession_id: deducedProfId,
-            profession_name: pName,
-            profession_slug: pSlug,
-            practice_areas: pAreas,
-            registration_type: cu?.registration_type,
-            registration_number: cu?.registration_number,
-            zemda_fisio_enabled: cu?.zemda_fisio_enabled ?? 0,
-            zemda_odonto_enabled: cu?.zemda_odonto_enabled ?? 0,
-            zemda_nutri_enabled: cu?.zemda_nutri_enabled ?? 0,
-            zemda_to_enabled: cu?.zemda_to_enabled ?? 0,
-            zemda_fono_enabled: cu?.zemda_fono_enabled ?? 0,
-            zemda_pp_enabled: cu?.zemda_pp_enabled ?? 0,
-            zemda_psico_enabled: cu?.zemda_psico_enabled ?? 0,
-            zemda_personal_enabled: cu?.zemda_personal_enabled ?? 0
-          };
-        }
-      }
-    }
+    let profDetails: any = AuthController.fetchRawProfDetails(user, tenantData);
 
     const userOnboardingStatus = user.onboarding_status || 'active';
     const isOnboardingPending = userOnboardingStatus !== 'active';
@@ -565,7 +517,9 @@ export class AuthController {
       id: profDetails?.profession_id,
       name: profDetails?.profession_name,
       slug: profDetails?.profession_slug,
-      registrationType: profDetails?.registration_type
+      registrationType: profDetails?.registration_type,
+      practiceAreas: profDetails?.practice_areas,
+      specialtyName: profDetails?.specialty_name || profDetails?.specialty_custom
     });
     const modFlags = professionResolution.flags;
 
@@ -695,67 +649,7 @@ export class AuthController {
       const tenantData = AuthController.getAuthTenantById(user.tenant_id);
 
       // Busca dados profissionais se for professional ou se o clinic_admin atuar como profissional
-      let profDetails: any = null;
-      if (user.role === 'professional' || user.role === 'clinic_admin') {
-        profDetails = db.prepare(`
-          SELECT
-            p.id as professional_id, p.active as professional_active, p.profession_id, p.specialty_id, p.registration_type, p.registration_number,
-            p.practice_areas, p.slug as professional_slug, p.zemda_fisio_enabled, p.zemda_odonto_enabled, p.zemda_nutri_enabled, p.zemda_to_enabled, p.zemda_fono_enabled, p.zemda_pp_enabled, p.zemda_psico_enabled, p.zemda_personal_enabled, p.zemda_estetic_enabled,
-            COALESCE(prof.name, p.profession_name) as profession_name, prof.slug as profession_slug,
-            spec.name as specialty_name
-          FROM professionals p
-          LEFT JOIN professions prof ON prof.id = p.profession_id
-          LEFT JOIN specialties spec ON spec.id = p.specialty_id
-          WHERE p.user_id = ? AND p.tenant_id = ? ORDER BY p.active DESC, p.id
-        `).get(user.id, user.tenant_id);
-
-        if (!profDetails && user.role === 'clinic_admin') {
-          const cu = db.prepare(`
-            SELECT cu.profession_id, cu.profession_name as cu_profession_name, cu.profession_custom, cu.practice_areas, cu.zemda_fisio_enabled, cu.zemda_odonto_enabled, cu.zemda_nutri_enabled, cu.zemda_to_enabled, cu.zemda_fono_enabled, cu.zemda_pp_enabled, cu.zemda_psico_enabled, cu.zemda_personal_enabled, cu.zemda_estetic_enabled,
-                   CASE WHEN u.tenant_id = cu.tenant_id THEN u.profession_name END as profession_name,
-                   CASE WHEN u.tenant_id = cu.tenant_id THEN u.practice_areas END as user_practice_areas,
-                   u.registration_type, u.registration_number
-            FROM clinic_users cu
-            LEFT JOIN users u ON u.id = cu.user_id
-            WHERE cu.user_id = ? AND cu.tenant_id = ?
-          `).get(user.id, user.tenant_id) as any;
-
-          const pName = cu?.cu_profession_name || cu?.profession_custom || cu?.profession_name || tenantData?.manager_profession || '';
-          const pAreas = cu?.practice_areas || cu?.user_practice_areas || tenantData?.manager_practice_areas || '';
-
-          if (pName || pAreas) {
-            const pSlug = pName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-');
-            let deducedProfId: string | undefined = cu?.profession_id || undefined;
-            if (pName.toLowerCase().includes('psicopedag')) deducedProfId = 'prof-psicopedagogo';
-            else if (pName.toLowerCase().includes('psicolog') || pName.toLowerCase().includes('psicólog')) deducedProfId = 'prof-psicologo';
-            else if (pName.toLowerCase().includes('fisio')) deducedProfId = 'prof-fisioterapeuta';
-            else if (pName.toLowerCase().includes('odonto') || pName.toLowerCase().includes('dentis')) deducedProfId = 'prof-dentista';
-            else if (pName.toLowerCase().includes('nutri')) deducedProfId = 'prof-nutricionista';
-            else if (pName.toLowerCase().includes('ocupacional')) deducedProfId = 'prof-terapeuta-ocupacional';
-            else if (pName.toLowerCase().includes('fono')) deducedProfId = 'prof-fonoaudiologo';
-            else if (pName.toLowerCase().includes('personal')) deducedProfId = 'prof-personal-trainer';
-            else if (pName.toLowerCase().includes('instrutor')) deducedProfId = 'prof-instrutor';
-            else if (pName.toLowerCase().includes('estet')) deducedProfId = 'prof-esteticista';
-
-            profDetails = {
-              profession_id: deducedProfId,
-              profession_name: pName,
-              profession_slug: pSlug,
-              practice_areas: pAreas,
-              registration_type: cu?.registration_type,
-              registration_number: cu?.registration_number,
-              zemda_fisio_enabled: cu?.zemda_fisio_enabled ?? 0,
-              zemda_odonto_enabled: cu?.zemda_odonto_enabled ?? 0,
-              zemda_nutri_enabled: cu?.zemda_nutri_enabled ?? 0,
-              zemda_to_enabled: cu?.zemda_to_enabled ?? 0,
-              zemda_fono_enabled: cu?.zemda_fono_enabled ?? 0,
-              zemda_pp_enabled: cu?.zemda_pp_enabled ?? 0,
-              zemda_psico_enabled: cu?.zemda_psico_enabled ?? 0,
-              zemda_personal_enabled: cu?.zemda_personal_enabled ?? 0
-            };
-          }
-        }
-      }
+      let profDetails: any = AuthController.fetchRawProfDetails(user, tenantData);
 
       let userPermissions: string[] = [];
       let cuRow: any = null;
@@ -792,7 +686,9 @@ export class AuthController {
         id: profDetails?.profession_id,
         name: profDetails?.profession_name,
         slug: profDetails?.profession_slug,
-        registrationType: profDetails?.registration_type
+        registrationType: profDetails?.registration_type,
+        practiceAreas: profDetails?.practice_areas,
+        specialtyName: profDetails?.specialty_name || profDetails?.specialty_custom
       });
       const modFlags = professionResolution.flags;
 
@@ -1043,6 +939,15 @@ export class AuthController {
         profLower.includes('enferm') ||
         profLower.includes('biomed') ||
         profLower.includes('farmac') ||
+        profLower.includes('estet') ||
+        profLower.includes('personal') ||
+        profLower.includes('educa') ||
+        profLower.includes('instrut') ||
+        profLower.includes('pilates') ||
+        profLower.includes('yoga') ||
+        profLower.includes('danç') ||
+        profLower.includes('danca') ||
+        profLower.includes('zumba') ||
         profLower.includes('saúde')
       ) {
         userRole = 'professional';
@@ -1051,27 +956,60 @@ export class AuthController {
       }
 
       const defaultPerms = JSON.stringify(getDefaultPermissionsForRole(userRole));
+      const regResolution = (userRole === 'professional' || (userRole === 'clinic_admin' && professionName && professionName !== 'Gestor / Administrador'))
+        ? resolveCanonicalProfession({
+            id: req.body.professionId || null,
+            name: professionName || null,
+            practiceAreas: practiceAreas || null,
+            registrationType: registrationType || null
+          })
+        : null;
+      const regCanonicalId = regResolution && !isGenericFallbackProfessionId(regResolution.canonicalId)
+        ? regResolution.canonicalId
+        : (req.body.professionId || null);
+      const regCanonicalName = regResolution?.commercialModule ? regResolution.canonicalName : (professionName || null);
+      const regFlags = regResolution?.flags || {
+        zemda_fisio_enabled: 0,
+        zemda_odonto_enabled: 0,
+        zemda_nutri_enabled: 0,
+        zemda_to_enabled: 0,
+        zemda_fono_enabled: 0,
+        zemda_pp_enabled: 0,
+        zemda_psico_enabled: 0,
+        zemda_personal_enabled: 0,
+        zemda_med_enabled: 0,
+        zemda_estetic_enabled: 0
+      };
 
       // Insere na tabela users como PENDENTE de aprovação pelo gestor
       const insertStmt = db.prepare(`
         INSERT INTO users (
           id, tenant_id, name, email, password_hash, role, phone, status,
-          profession_name, practice_areas, registration_type, registration_number
+          profession_id, profession_name, practice_areas, registration_type, registration_number,
+          zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled,
+          zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled,
+          zemda_med_enabled, zemda_estetic_enabled
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       insertStmt.run(
         userId, tenantId, name, cleanEmail, hashedPassword, userRole, phone || null,
-        professionName || null, practiceAreas || null, registrationType || null, registrationNumber || null
+        regCanonicalId, regCanonicalName, practiceAreas || null, registrationType || regResolution?.boardLabel || null, registrationNumber || null,
+        regFlags.zemda_fisio_enabled, regFlags.zemda_odonto_enabled, regFlags.zemda_nutri_enabled, regFlags.zemda_to_enabled,
+        regFlags.zemda_fono_enabled, regFlags.zemda_pp_enabled, regFlags.zemda_psico_enabled, regFlags.zemda_personal_enabled,
+        regFlags.zemda_med_enabled || 0, regFlags.zemda_estetic_enabled || 0
       );
 
       // Insere na tabela clinic_users com a profissão estruturada e áreas de atuação livres
       db.prepare(`
         INSERT INTO clinic_users (
           id, tenant_id, user_id, role, status, is_manager, permissions_json,
-          profession_custom, practice_areas, created_at
+          profession_id, profession_name, profession_custom, practice_areas,
+          zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled,
+          zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled,
+          zemda_med_enabled, zemda_estetic_enabled, created_at
         )
-        VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?, datetime('now'))
+        VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
       `).run(
         'cu-' + uuidv4().slice(0, 8),
         tenantId,
@@ -1079,8 +1017,13 @@ export class AuthController {
         userRole,
         userRole === 'clinic_admin' ? 1 : 0,
         defaultPerms,
-        professionName || null,
-        practiceAreas || null
+        regCanonicalId,
+        regCanonicalName,
+        professionName || regCanonicalName || null,
+        practiceAreas || null,
+        regFlags.zemda_fisio_enabled, regFlags.zemda_odonto_enabled, regFlags.zemda_nutri_enabled, regFlags.zemda_to_enabled,
+        regFlags.zemda_fono_enabled, regFlags.zemda_pp_enabled, regFlags.zemda_psico_enabled, regFlags.zemda_personal_enabled,
+        regFlags.zemda_med_enabled || 0, regFlags.zemda_estetic_enabled || 0
       );
 
       // Se for profissional ou gestor com área de saúde informada, registra na tabela professionals com active = 0 (aguardando aprovação ou ativação)
@@ -1088,18 +1031,26 @@ export class AuthController {
         const profId = 'pro-' + uuidv4().slice(0, 8);
         db.prepare(`
           INSERT INTO professionals (
-            id, tenant_id, user_id, name, registration_type, registration_number,
-            practice_areas, bio, active
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
+            id, tenant_id, user_id, name, profession_id, profession_name, registration_type, registration_number,
+            practice_areas, bio, active,
+            zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled,
+            zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled,
+            zemda_med_enabled, zemda_estetic_enabled
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           profId,
           tenantId,
           userId,
           name,
-          registrationType || 'Registro',
+          regCanonicalId,
+          regCanonicalName,
+          registrationType || regResolution?.boardLabel || 'Registro',
           registrationNumber || null,
           practiceAreas || null,
-          practiceAreas || null
+          practiceAreas || null,
+          regFlags.zemda_fisio_enabled, regFlags.zemda_odonto_enabled, regFlags.zemda_nutri_enabled, regFlags.zemda_to_enabled,
+          regFlags.zemda_fono_enabled, regFlags.zemda_pp_enabled, regFlags.zemda_psico_enabled, regFlags.zemda_personal_enabled,
+          regFlags.zemda_med_enabled || 0, regFlags.zemda_estetic_enabled || 0
         );
 
         createDefaultSchedules(db, tenantId, profId);
@@ -1579,6 +1530,7 @@ export class AuthController {
         professionResolution = resolveCanonicalProfession({
           id: professionId,
           name: professionName,
+          practiceAreas,
           registrationType: registrationType
         });
         canonicalProfessionId = professionResolution.canonicalId;
@@ -2190,10 +2142,10 @@ export class AuthController {
           );
         }
 
-        const resolvedProfId = matchedCatalogProf?.id || (professionIdInput ? professionIdInput : null);
-        const resolvedProfName = rawProfession || matchedCatalogProf?.label || null;
+        let resolvedProfId = matchedCatalogProf?.id || (professionIdInput ? professionIdInput : null);
+        let resolvedProfName = rawProfession || matchedCatalogProf?.label || null;
         const resolvedProfSlug = matchedCatalogProf?.slug || (resolvedProfName ? resolvedProfName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-') : null);
-        const resolvedBoardLabel = additionalData.registrationType || additionalData.managerRegistrationType || matchedCatalogProf?.boardLabel || 'Registro';
+        let resolvedBoardLabel = additionalData.registrationType || additionalData.managerRegistrationType || matchedCatalogProf?.boardLabel || 'Registro';
         const managerPracticeAreas = additionalData.managerPracticeAreas || additionalData.practiceAreas || null;
         const managerRegistrationNumber = additionalData.managerRegistrationNumber || additionalData.registrationNumber || null;
 
@@ -2201,8 +2153,14 @@ export class AuthController {
           id: resolvedProfId,
           name: resolvedProfName,
           slug: resolvedProfSlug,
+          practiceAreas: managerPracticeAreas,
           registrationType: resolvedBoardLabel
         });
+        if ((isGenericFallbackProfessionId(resolvedProfId) || !resolvedProfId) && professionResolution.commercialModule) {
+          resolvedProfId = professionResolution.canonicalId;
+          resolvedProfName = professionResolution.canonicalName;
+          resolvedBoardLabel = professionResolution.boardLabel || resolvedBoardLabel;
+        }
         const modFlags = professionResolution.flags;
 
         // Gera slug único para o tenant

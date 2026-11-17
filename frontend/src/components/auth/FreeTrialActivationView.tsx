@@ -70,6 +70,7 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
     { id: 'prof-nutricionista', name: 'Nutricionista → ZemdaNutri' },
     { id: 'prof-fisioterapeuta', name: 'Fisioterapeuta → ZemdaFisio' },
     { id: 'prof-personal-trainer', name: 'Personal Trainer → ZemdaPersonal' },
+    { id: 'prof-instrutor', name: 'Instrutor (Pilates, Yoga, Dança) → ZemdaPersonal' },
     { id: 'prof-dentista', name: 'Cirurgião-Dentista → ZemdaOdonto' },
     { id: 'prof-medico', name: 'Médico(a) → ZemdaMed' },
     { id: 'prof-esteticista', name: 'Esteticista → ZemdaEstetic' },
