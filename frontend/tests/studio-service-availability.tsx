@@ -8,7 +8,9 @@ import { ProfessionalScheduleRow } from '../src/components/services/useProfessio
 
 const SCHEDULES: ProfessionalScheduleRow[] = [
   { id: 's1', professionalId: 'prof-1', day_of_week: 1, start_time: '08:00', end_time: '18:00', break_start: null, break_end: null, is_active: true },
+  { id: 's2', professionalId: 'prof-1', day_of_week: 2, start_time: '09:00', end_time: '12:00', break_start: null, break_end: null, is_active: true },
   { id: 's3', professionalId: 'prof-1', day_of_week: 3, start_time: '08:00', end_time: '18:00', break_start: '12:00', break_end: '14:00', is_active: true },
+  { id: 's4', professionalId: 'prof-1', day_of_week: 4, start_time: '08:00', end_time: '18:00', break_start: null, break_end: null, is_active: true },
   { id: 's5', professionalId: 'prof-1', day_of_week: 5, start_time: '08:00', end_time: '12:00', break_start: null, break_end: null, is_active: true }
 ];
 

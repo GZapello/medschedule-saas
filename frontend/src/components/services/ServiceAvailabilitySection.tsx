@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CalendarCheck2, Clock, Plus, Trash2 } from 'lucide-react';
 import {
   ServiceAvailabilityDiagnostics,
@@ -8,13 +8,13 @@ import {
 import { ProfessionalScheduleRow } from './useProfessionalSchedules';
 
 const WEEKDAYS: Array<{ value: number; short: string; full: string }> = [
-  { value: 0, short: 'Dom', full: 'Domingo' },
   { value: 1, short: 'Seg', full: 'Segunda-feira' },
   { value: 2, short: 'Ter', full: 'Terça-feira' },
   { value: 3, short: 'Qua', full: 'Quarta-feira' },
   { value: 4, short: 'Qui', full: 'Quinta-feira' },
   { value: 5, short: 'Sex', full: 'Sexta-feira' },
-  { value: 6, short: 'Sáb', full: 'Sábado' }
+  { value: 6, short: 'Sáb', full: 'Sábado' },
+  { value: 0, short: 'Dom', full: 'Domingo' }
 ];
 
 interface TimeSegment {
@@ -195,16 +195,37 @@ export const ServiceAvailabilitySection: React.FC<ServiceAvailabilitySectionProp
     return Array.from(set).sort((a, b) => a - b);
   }, [schedules]);
 
-  const visibleWeekdays = useMemo(() => {
-    if (restrictWeekdays && safeAllowedWeekdays.length > 0) {
-      const set = new Set<number>(safeAllowedWeekdays);
-      for (const w of windows) set.add(Number(w.dayOfWeek));
-      return WEEKDAYS.filter(d => set.has(d.value));
+  const [selectedDays, setSelectedDays] = useState<number[]>(() =>
+    Array.from(new Set((windows || []).map(w => Number(w.dayOfWeek))))
+  );
+
+  useEffect(() => {
+    const windowDays = Array.from(new Set((windows || []).map(w => Number(w.dayOfWeek))));
+    if (windowDays.length > 0) {
+      setSelectedDays(prev => {
+        const missing = windowDays.filter(d => !prev.includes(d));
+        return missing.length > 0 ? [...prev, ...missing] : prev;
+      });
     }
-    const set = new Set<number>(activeScheduleWeekdays);
+  }, [windows]);
+
+  const toggleDaySelection = (dow: number) => {
+    const isCurrentlySelected = selectedDays.includes(dow);
+    if (isCurrentlySelected) {
+      setSelectedDays(prev => prev.filter(d => d !== dow));
+      if (windows.some(w => Number(w.dayOfWeek) === dow)) {
+        onWindowsChange(windows.filter(w => Number(w.dayOfWeek) !== dow));
+      }
+    } else {
+      setSelectedDays(prev => [...prev, dow]);
+    }
+  };
+
+  const visibleWeekdays = useMemo(() => {
+    const set = new Set<number>(selectedDays);
     for (const w of windows) set.add(Number(w.dayOfWeek));
     return WEEKDAYS.filter(d => set.has(d.value));
-  }, [restrictWeekdays, safeAllowedWeekdays, activeScheduleWeekdays, windows]);
+  }, [selectedDays, windows]);
 
   const validation = useMemo(
     () =>
@@ -374,6 +395,54 @@ export const ServiceAvailabilitySection: React.FC<ServiceAvailabilitySectionProp
             )}
           </div>
 
+          <div className="space-y-1.5">
+            <div className="text-[10px] font-semibold text-slate-500">
+              1. Selecione os dias em que este serviço é oferecido:
+            </div>
+            <div
+              className="flex flex-wrap gap-1.5"
+              role="group"
+              aria-label="Selecionar dias de disponibilidade do serviço"
+              data-testid={`${testIdPrefix}-weekday-selector`}
+            >
+              {WEEKDAYS.map(wd => {
+                const isSelected = selectedDays.includes(wd.value) || windows.some(w => Number(w.dayOfWeek) === wd.value);
+                const hasProfScale = schedulesLoading || activeScheduleWeekdays.includes(wd.value);
+                const outsideAllowedRec =
+                  Boolean(restrictWeekdays && safeAllowedWeekdays.length > 0 && !safeAllowedWeekdays.includes(wd.value));
+                return (
+                  <button
+                    key={wd.value}
+                    type="button"
+                    aria-pressed={isSelected}
+                    aria-label={wd.full}
+                    data-testid={`${testIdPrefix}-toggle-day-${wd.value}`}
+                    title={
+                      !hasProfScale
+                        ? `${wd.full} (sem escala ativa do profissional)`
+                        : outsideAllowedRec
+                        ? `${wd.full} (fora dos dias específicos da recorrência)`
+                        : wd.full
+                    }
+                    onClick={() => toggleDaySelection(wd.value)}
+                    className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-bold transition-all cursor-pointer inline-flex items-center gap-1 ${
+                      isSelected
+                        ? 'bg-teal-600 text-white border-teal-600 shadow-xs'
+                        : !hasProfScale || outsideAllowedRec
+                        ? 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'
+                        : 'bg-white text-slate-700 border-slate-200 hover:border-teal-400'
+                    }`}
+                  >
+                    <span>{wd.short}</span>
+                    {!schedulesLoading && !hasProfScale && (
+                      <span className={`text-[9px] ${isSelected ? 'text-teal-100' : 'text-slate-400'}`}>•</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {hasOutOfSyncWarning && (
             <div
               className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 flex items-start gap-2"
@@ -394,8 +463,11 @@ export const ServiceAvailabilitySection: React.FC<ServiceAvailabilitySectionProp
           )}
 
           {!schedulesLoading && visibleWeekdays.length === 0 ? (
-            <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-slate-600">
-              O profissional selecionado ainda não possui dias ativos na escala geral. Configure a escala em Equipe & Acessos primeiro.
+            <div
+              className="p-2.5 rounded-xl bg-slate-50 border border-dashed border-slate-200 text-[11px] text-slate-600"
+              data-testid={`${testIdPrefix}-no-days-hint`}
+            >
+              Selecione os dias da semana acima para definir as faixas de horário deste serviço.
             </div>
           ) : (
             <div className="space-y-2">
@@ -444,7 +516,9 @@ export const ServiceAvailabilitySection: React.FC<ServiceAvailabilitySectionProp
 
                     {dayWindowEntries.length === 0 ? (
                       <div className="text-[10px] text-slate-500">
-                        Nenhum horário específico configurado para {wd.full}.
+                        {dayScheduleEntries.length === 0
+                          ? `O profissional não possui escala ativa na ${wd.full}.`
+                          : `Nenhum horário específico adicionado para ${wd.full}. Clique em "+ Adicionar horário".`}
                       </div>
                     ) : (
                       <div className="space-y-1.5">
