@@ -11,7 +11,7 @@ import { calculateAvailableSlots } from '../utils/slot-calculator';
 import { PackageService } from '../services/package.service';
 import { BillingCycleService } from '../services/billing-cycle.service';
 import { hasClinicalAccess } from './clinical.controller';
-import { isPrimaryClinicalModule, resolveClinicalModule } from '../utils/clinical-module';
+import { isPrimaryClinicalModule, resolveClinicalModule, resolveProfessionalCanonicalModule } from '../utils/clinical-module';
 import { syncReceptionStatusFromClinical } from './checkin.controller';
 import { createPreConsultationSubmissionForAppointment } from './pre-consultation.controller';
 import { Request, Response } from 'express';
@@ -22,6 +22,9 @@ import { logAudit } from '../middlewares/audit.middleware';
 import { GoogleCalendarService } from '../services/google-calendar.service';
 import { NotificationService } from '../services/notification.service';
 import { InternalNotificationService } from '../services/internal-notification.service';
+import { PublicBookingRequestService } from '../services/public-booking-request.service';
+import { validateClinicBusinessHours, validateProfessionalSchedule } from '../utils/booking-validators';
+export { validateClinicBusinessHours, validateProfessionalSchedule };
 import { WhatsAppService } from '../services/whatsapp.service';
 import { isValidPhoneNumber, normalizePhoneWithDDI, buildWhatsAppReminderMessage } from '../utils/phone.utils';
 import {
@@ -41,158 +44,6 @@ function validMeetingUrl(value: unknown): boolean {
   if (value === undefined || value === null || value === '') return true;
   if (typeof value !== 'string') return false;
   try { const url = new URL(value.trim()); return url.protocol === 'https:' && !url.username && !url.password; } catch { return false; }
-}
-
-export function validateClinicBusinessHours(tenantId: string, startTime: string, endTime: string): { valid: boolean; error?: string } {
-  try {
-    const tenantRow = db.prepare('SELECT business_hours_json FROM tenants WHERE id = ?').get(tenantId) as { business_hours_json?: string } | undefined;
-    if (!tenantRow?.business_hours_json) return { valid: true };
-
-    const bhList = JSON.parse(tenantRow.business_hours_json);
-    if (!Array.isArray(bhList) || bhList.length === 0) return { valid: true };
-
-    const normalizedStart = startTime.includes('T') ? startTime : startTime.replace(' ', 'T');
-    const datePart = normalizedStart.slice(0, 10);
-    const [y, m, d] = datePart.split('-').map(Number);
-    const dayOfWeek = (!isNaN(y) && !isNaN(m) && !isNaN(d))
-      ? new Date(Date.UTC(y, m - 1, d, 12, 0, 0)).getUTCDay()
-      : new Date(normalizedStart).getDay();
-    const dayConfig = bhList.find((bh: any) => Number(bh.dayOfWeek) === dayOfWeek);
-
-    if (!dayConfig) return { valid: true };
-
-    if (dayConfig.isOpen === false || dayConfig.active === false) {
-      return { valid: false, error: 'A clínica não realiza atendimentos neste dia da semana.' };
-    }
-
-    const timeOnly = (dStr: string) => {
-      const parts = dStr.split('T');
-      return parts[1]?.slice(0, 5) || '00:00';
-    };
-    const reqStartTime = timeOnly(startTime);
-    const reqEndTime = timeOnly(endTime);
-
-    if (dayConfig.startTime && reqStartTime < dayConfig.startTime) {
-      return { valid: false, error: `O horário solicitado (${reqStartTime}) é anterior ao início do expediente da clínica (${dayConfig.startTime}).` };
-    }
-    if (dayConfig.endTime && reqEndTime > dayConfig.endTime) {
-      return { valid: false, error: `O horário de término (${reqEndTime}) ultrapassa o expediente da clínica (${dayConfig.endTime}).` };
-    }
-    if (dayConfig.breakStart && dayConfig.breakEnd) {
-      if (
-        (reqStartTime >= dayConfig.breakStart && reqStartTime < dayConfig.breakEnd) ||
-        (reqEndTime > dayConfig.breakStart && reqEndTime <= dayConfig.breakEnd) ||
-        (reqStartTime <= dayConfig.breakStart && reqEndTime >= dayConfig.breakEnd)
-      ) {
-        return { valid: false, error: `O horário solicitado coincide com o intervalo da clínica (${dayConfig.breakStart} às ${dayConfig.breakEnd}).` };
-      }
-    }
-    return { valid: true };
-  } catch (e) {
-    return { valid: true };
-  }
-}
-
-export function validateProfessionalSchedule(tenantId: string, professionalId: string, startTime: string, endTime: string): { valid: boolean; error?: string } {
-  try {
-    const normalizedStart = startTime.includes('T') ? startTime : startTime.replace(' ', 'T');
-    const normalizedEnd = endTime.includes('T') ? endTime : endTime.replace(' ', 'T');
-    const datePart = normalizedStart.slice(0, 10);
-    const [y, m, d] = datePart.split('-').map(Number);
-    const dayOfWeek = (!isNaN(y) && !isNaN(m) && !isNaN(d))
-      ? new Date(Date.UTC(y, m - 1, d, 12, 0, 0)).getUTCDay()
-      : new Date(normalizedStart).getDay();
-    if (dayOfWeek === -1 || isNaN(dayOfWeek)) return { valid: false, error: 'Data de agendamento inválida.' };
-
-    const timeOnly = (dStr: string) => {
-      const parts = dStr.split('T');
-      return parts[1]?.slice(0, 5) || '00:00';
-    };
-    const reqStartTime = timeOnly(normalizedStart);
-    const reqEndTime = timeOnly(normalizedEnd);
-
-    // 1. Busca os turnos de trabalho ativos do profissional para esse dia da semana
-    const activeShifts = db.prepare(`
-      SELECT start_time, end_time, break_start, break_end
-      FROM schedules
-      WHERE tenant_id = ? AND professional_id = ? AND day_of_week = ? AND is_active = 1
-      ORDER BY start_time ASC
-    `).all(tenantId, professionalId, dayOfWeek) as {
-      start_time: string;
-      end_time: string;
-      break_start: string | null;
-      break_end: string | null;
-    }[];
-
-    if (!activeShifts || activeShifts.length === 0) {
-      return {
-        valid: false,
-        error: 'O profissional não possui escala de trabalho ativa neste dia da semana.'
-      };
-    }
-
-    // 2. Verifica se o horário solicitado cabe integralmente em algum turno ativo sem coincidir com pausa
-    let fitsInAnyShift = false;
-    let breakConflict = false;
-
-    for (const shift of activeShifts) {
-      const shiftStart = shift.start_time || '08:00';
-      const shiftEnd = shift.end_time || '18:00';
-      const breakStart = shift.break_start;
-      const breakEnd = shift.break_end;
-
-      const insideShift = reqStartTime >= shiftStart && reqEndTime <= shiftEnd;
-      let insideBreak = false;
-      if (breakStart && breakEnd) {
-        insideBreak = (reqStartTime >= breakStart && reqStartTime < breakEnd) ||
-                      (reqEndTime > breakStart && reqEndTime <= breakEnd) ||
-                      (reqStartTime <= breakStart && reqEndTime >= breakEnd);
-      }
-
-      if (insideBreak) {
-        breakConflict = true;
-      }
-
-      if (insideShift && !insideBreak) {
-        fitsInAnyShift = true;
-        break;
-      }
-    }
-
-    if (!fitsInAnyShift) {
-      if (breakConflict) {
-        return {
-          valid: false,
-          error: 'O horário solicitado coincide com o intervalo de descanso do profissional.'
-        };
-      }
-      return {
-        valid: false,
-        error: 'O horário solicitado está fora da escala de trabalho ativa do profissional.'
-      };
-    }
-
-    // 3. Verifica se não coincide com período de bloqueio / férias / ausência
-    const block = db.prepare(`
-      SELECT title FROM blocked_times
-      WHERE tenant_id = ?
-        AND (professional_id = ? OR professional_id IS NULL)
-        AND REPLACE(start_datetime, ' ', 'T') < ?
-        AND REPLACE(end_datetime, ' ', 'T') > ?
-      LIMIT 1
-    `).get(tenantId, professionalId, normalizedEnd, normalizedStart) as { title: string } | undefined;
-
-    if (block) {
-      return {
-        valid: false,
-        error: `O profissional possui um bloqueio de agenda neste horário: ${block.title || 'Ausência'}.`
-      };
-    }
-
-    return { valid: true };
-  } catch (e) {
-    return { valid: true };
-  }
 }
 
 export class AppointmentController {
@@ -314,11 +165,21 @@ export class AppointmentController {
       query += ' ORDER BY a.start_time ASC';
 
       const stmt = db.prepare(query);
+      const profModuleCache = new Map<string, string | null>();
+      const getProfModule = (pid?: string | null): string | null => {
+        if (!pid) return null;
+        if (profModuleCache.has(pid)) return profModuleCache.get(pid) || null;
+        const resolved = resolveProfessionalCanonicalModule(pid, tenantId);
+        profModuleCache.set(pid, resolved);
+        return resolved;
+      };
       const appointments = (stmt.all(...params) as any[]).map(row => {
+        const professionalClinicalModule = getProfModule(row.professional_id);
         const isColleagueView = isProfessionalRole && !ownProfessionalIds.includes(row.professional_id);
         if (isColleagueView) {
           return {
             ...row,
+            professional_clinical_module: professionalClinicalModule,
             internal_notes: null,
             patient_notes: null,
             patient_phone: null,
@@ -333,6 +194,7 @@ export class AppointmentController {
         }
         return {
           ...row,
+          professional_clinical_module: professionalClinicalModule,
           display_amount: row.payment_amount !== null && row.payment_amount !== undefined
             ? row.payment_amount
             : (row.service_price !== null && row.service_price !== undefined ? row.service_price : null),
@@ -442,7 +304,10 @@ export class AppointmentController {
             ? InstructorParticipationService.listParticipantsForOccurrence(tenantId, appointment.occurrence_id)
             : InstructorParticipationService.listParticipantsForAppointment(tenantId, appointment.id))
         : [];
-      res.json({ appointment:{...appointment,instructor_participants:instructorParticipants,display_amount:displayAmount,attendance_date:attendance.sessionDate,attendance_time:attendance.sessionTime,attendance_end_time:attendance.sessionEndTime ?? null}, statusHistory });
+      const professionalClinicalModule = tenantId && appointment.professional_id
+        ? resolveProfessionalCanonicalModule(appointment.professional_id, tenantId)
+        : null;
+      res.json({ appointment:{...appointment,professional_clinical_module:professionalClinicalModule,instructor_participants:instructorParticipants,display_amount:displayAmount,attendance_date:attendance.sessionDate,attendance_time:attendance.sessionTime,attendance_end_time:attendance.sessionEndTime ?? null}, statusHistory });
     } catch (err: any) {
       console.error('[AppointmentController.getById] Erro:', err);
       res.status(500).json({ error: 'Erro ao buscar agendamento' });
@@ -591,9 +456,21 @@ export class AppointmentController {
         ? modality
         : resolveConcreteModality({ serviceModality: serviceRow.modality, allowHome: true });
 
-      // Resolve ou cria o paciente
+      // Resolve ou cria o paciente (no fluxo público apenas consulta eventual cadastro em modo leitura; criação só na confirmação)
       let resolvedPatientId = patientId;
-      if (!resolvedPatientId && newPatientData) {
+      if (isPublic && !resolvedPatientId && newPatientData) {
+        const { fullName, phone, email } = newPatientData;
+        if (!fullName || !phone) {
+          res.status(400).json({ error: 'Nome e telefone do paciente são obrigatórios' });
+          return;
+        }
+        const existingPatient = db.prepare(`
+          SELECT id FROM patients WHERE tenant_id = ? AND (phone = ? OR (email IS NOT NULL AND email = ?))
+        `).get(tenantId, phone, email || '') as { id: string } | undefined;
+        if (existingPatient) {
+          resolvedPatientId = existingPatient.id;
+        }
+      } else if (!resolvedPatientId && newPatientData) {
         const { fullName, phone, email, isChild, guardianName, guardianPhone, notes } = newPatientData;
         if (!fullName || !phone) {
           res.status(400).json({ error: 'Nome e telefone do paciente são obrigatórios' });
@@ -623,14 +500,16 @@ export class AppointmentController {
         }
       }
 
-      if (!resolvedPatientId) {
+      if (!isPublic && !resolvedPatientId) {
         res.status(400).json({ error: 'Paciente não identificado' });
         return;
       }
 
-      const ownsPatient = db.prepare('SELECT 1 FROM patients WHERE id=? AND tenant_id=?').get(resolvedPatientId,tenantId);
-      if (!ownsPatient && (!req.user || !canAccessPatient(req.user.userId,tenantId,resolvedPatientId,'appointments'))) {
-        res.status(403).json({error:'Paciente não autorizado para agendamento nesta clínica.'}); return;
+      if (resolvedPatientId) {
+        const ownsPatient = db.prepare('SELECT 1 FROM patients WHERE id=? AND tenant_id=?').get(resolvedPatientId,tenantId);
+        if (!ownsPatient && (!req.user || !canAccessPatient(req.user.userId,tenantId,resolvedPatientId,'appointments'))) {
+          res.status(403).json({error:'Paciente não autorizado para agendamento nesta clínica.'}); return;
+        }
       }
 
 
@@ -715,7 +594,7 @@ export class AppointmentController {
       }
 
       // 2. Verifica concorrência do PACIENTE em toda a clínica (Regra do Item 9)
-      const patientConflict = db.prepare(`
+      const patientConflict = resolvedPatientId ? db.prepare(`
         SELECT a.id, a.service_id, a.occurrence_id, a.start_time, a.end_time, p.name as professional_name, s.name as service_name
         FROM appointments a
         JOIN professionals p ON p.id = a.professional_id
@@ -725,7 +604,7 @@ export class AppointmentController {
           AND a.status NOT IN ('cancelled')
           AND REPLACE(a.start_time, ' ', 'T') < ? AND REPLACE(a.end_time, ' ', 'T') > ?
         ORDER BY CASE WHEN a.service_id = ? THEN 0 ELSE 1 END ASC
-      `).get(tenantId, resolvedPatientId, normalizedEndTime, normalizedStartTime, serviceId) as any;
+      `).get(tenantId, resolvedPatientId, normalizedEndTime, normalizedStartTime, serviceId) as any : null;
 
       if (patientConflict) {
         const isSameGroupEnrollment = Boolean(
@@ -773,6 +652,55 @@ export class AppointmentController {
             }
           });
           return;
+        }
+      }
+
+      if (isPublic) {
+        try {
+          const matchedScheduleIdPublic = isGroupService
+            ? ((db.prepare(`
+                SELECT id FROM class_schedules
+                WHERE tenant_id = ? AND service_id = ? AND professional_id = ? AND day_of_week = ?
+                  AND start_time = ? AND end_time = ? AND active = 1
+                LIMIT 1
+              `).get(
+                tenantId,
+                serviceId,
+                professionalId,
+                getDayOfWeekFromYmd(normalizedStartTime.slice(0, 10)),
+                normalizedStartTime.slice(11, 16),
+                normalizedEndTime.slice(11, 16)
+              ) as { id: string } | undefined)?.id || null)
+            : null;
+
+          const catalogPriceSnap = Number(serviceRow.price) > 0
+            ? Number(serviceRow.price)
+            : (Number((serviceRow as any).periodic_price) > 0 ? Number((serviceRow as any).periodic_price) : Number(serviceRow.price || 0));
+
+          const pending = PublicBookingRequestService.createClinicPendingRequest({
+            tenantId,
+            professionalId,
+            serviceRow,
+            normalizedStartTime,
+            normalizedEndTime,
+            effectiveModality,
+            agreedAmount,
+            catalogPriceSnapshot: catalogPriceSnap,
+            patientNotes: patientNotes || null,
+            newPatientData,
+            matchedScheduleId: matchedScheduleIdPublic
+          });
+          res.status(201).json(pending);
+          return;
+        } catch (pubErr: any) {
+          if (pubErr && typeof pubErr.status === 'number') {
+            res.status(pubErr.status).json({
+              error: pubErr.message || 'Não foi possível registrar sua solicitação.',
+              ...(pubErr.code ? { code: pubErr.code } : {})
+            });
+            return;
+          }
+          throw pubErr;
         }
       }
 
@@ -840,11 +768,13 @@ export class AppointmentController {
           initialClinicalModule = resolvedModule;
         }
       }
+      let professionalCanonicalModule: string | null = null;
       if (professionalId) {
         const profRow = db.prepare('SELECT profession_id FROM professionals WHERE (id = ? OR user_id = ?) AND tenant_id = ?').get(professionalId, professionalId, tenantId) as { profession_id?: string } | undefined;
         if (profRow?.profession_id) {
           resolvedProfessionId = profRow.profession_id;
         }
+        professionalCanonicalModule = resolveProfessionalCanonicalModule(professionalId, tenantId);
       }
 
       const oldServicePrice = Math.round(Number(serviceRow.price ?? 0) * 100) / 100;
@@ -1217,7 +1147,9 @@ export class AppointmentController {
         attendance_expected_end_at: initialAttendanceExpectedEndAt,
         status: initialStatus,
         clinical_module: initialClinicalModule || (isRetroactive ? 'general' : null),
+        professional_clinical_module: professionalCanonicalModule,
         serviceKind: isGroupService ? 'group' : 'individual',
+        service_kind: isGroupService ? 'group' : 'individual',
         occurrenceId: groupMeta?.occurrenceId || null,
         capacity: groupMeta ? groupMeta.capacity : 1,
         remainingSpots: groupMeta ? groupMeta.remainingSpots : 0,
@@ -1378,14 +1310,18 @@ export class AppointmentController {
         resolvedProfessionId = (req.user as any).professionId;
       }
 
+      const professionalCanonicalModule = current.professional_id
+        ? resolveProfessionalCanonicalModule(current.professional_id, tenantId)
+        : null;
       const isStudioWorkflow = shouldUseStudioPersonalWorkflow({
         establishmentProfile: current.establishment_profile,
         serviceDomain: current.service_domain,
         serviceKind: current.service_kind_srv,
         appointmentServiceKind: current.service_kind,
         occurrenceId: current.occurrence_id,
-        appointmentClinicalModule: current.clinical_module,
-        serviceClinicalModule: current.service_clinical_module
+        appointmentClinicalModule: requestedModule || current.clinical_module,
+        serviceClinicalModule: current.service_clinical_module,
+        professionalClinicalModule: professionalCanonicalModule
       });
 
       const cancelledBy = req.user ? `${req.user.name} (${req.user.role})` : 'Usuário';

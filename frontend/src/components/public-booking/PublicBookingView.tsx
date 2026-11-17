@@ -1613,7 +1613,9 @@ export const PublicBookingView: React.FC<Props> = ({
                   {outcome.confirmed ? <CheckCircle2 aria-hidden="true" className="h-10 w-10 text-teal-700" /> : <Clock aria-hidden="true" className="h-10 w-10 text-amber-700" />}
                 </div>
                 <h2 className="text-xl font-bold text-slate-900">{outcome.title}</h2>
-                <p className="mt-1 text-sm font-semibold text-teal-800">{result.appointmentNumber}</p>
+                {(result.appointmentNumber || result.requestNumber) && (
+                  <p className="mt-1 text-sm font-semibold text-teal-800">{result.appointmentNumber || result.requestNumber}</p>
+                )}
                 <p className="mt-1 text-xs text-slate-500">
                   {outcome.message}
                 </p>
@@ -1624,10 +1626,12 @@ export const PublicBookingView: React.FC<Props> = ({
               <p className="text-center text-xs text-slate-600">{outcome.next}</p>
 
               <div className="flex flex-wrap justify-center gap-3 pt-2">
-                <button type="button" className={bookingSecondary} onClick={downloadCalendar}>
-                  <Calendar aria-hidden="true" className="h-4 w-4" />
-                  Adicionar ao calendário
-                </button>
+                {outcome.confirmed && (
+                  <button type="button" className={bookingSecondary} onClick={downloadCalendar}>
+                    <Calendar aria-hidden="true" className="h-4 w-4" />
+                    Adicionar ao calendário
+                  </button>
+                )}
                 <button type="button" className={bookingButton} onClick={reset}>
                   Novo agendamento
                 </button>

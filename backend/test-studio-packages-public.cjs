@@ -456,6 +456,7 @@ async function runTests() {
       'Slots públicos do Studio mostram instrutor e vagas restantes reais na turma (6 vagas)'
     );
 
+    const { PublicBookingRequestService } = require('./dist/services/public-booking-request.service');
     // Agendamento público de aula com recorrência semanal finita (2 semanas)
     const pubServiceBook = await makeReq('POST', '/api/v1/public/studio/bookings', {}, {
       tenantSlug: 'movimento-viva',
@@ -469,16 +470,23 @@ async function runTests() {
     assert(
       pubServiceBook.status === 201 &&
       pubServiceBook.data.appointments.length === 2 &&
-      pubServiceBook.data.paymentPending === true,
-      'Agendamento público Studio de aula coletiva recorrente (2 semanas) criado com paymentPending=true'
+      pubServiceBook.data.status === 'awaiting_confirmation' &&
+      pubServiceBook.data.paymentPending === false,
+      'Agendamento público Studio de aula coletiva recorrente (2 semanas) fica awaiting_confirmation sem exibir paymentPending'
     );
-    const lucasPays = db.prepare(`SELECT status FROM payments WHERE appointment_id = ?`).get(pubServiceBook.data.appointments[0].id);
-    assert(lucasPays?.status === 'pending', 'Cobrança gerada no agendamento público é pending (jamais marcada paga sem quitação)');
+    const pubServiceConf = await PublicBookingRequestService.confirmNotificationRequest({
+      tenantId: studioTenant,
+      notificationOrRequestId: pubServiceBook.data.requestId,
+      userId: adminStudioUser,
+      role: 'clinic_admin'
+    });
+    const lucasPays = db.prepare(`SELECT status FROM payments WHERE appointment_id = ?`).get(pubServiceConf.appointmentIds[0]);
+    assert(lucasPays?.status === 'pending', 'Cobrança gerada após confirmação do agendamento público é pending (jamais marcada paga sem quitação)');
 
     // Vaga na turma de quinta 14:00 caiu de 6 para 5
     const slotsDancaAfter = await makeReq('GET', `/api/v1/public/studio/slots?tenantSlug=movimento-viva&serviceId=${srvDanca}&date=${thursday1}&professionalId=any`);
     const slot14 = slotsDancaAfter.data.slots.find(s => s.time === '14:00');
-    assert(slot14 && slot14.remainingSpots === 5, 'Vagas restantes na turma diminuíram atomicamente de 6 para 5 após reserva online');
+    assert(slot14 && slot14.remainingSpots === 5, 'Vagas restantes na turma diminuíram atomicamente de 6 para 5 após confirmação online');
 
     // Solicitação pública de Pacote Multisserviços com aulas de Pilates (Carla) e Zumba (Marcos)
     const pubPkgBook = await makeReq('POST', '/api/v1/public/studio/bookings', {}, {
@@ -493,15 +501,27 @@ async function runTests() {
     });
     assert(
       pubPkgBook.status === 201 &&
-      pubPkgBook.data.contractStatus === 'requested' &&
-      pubPkgBook.data.paymentStatus === 'pending' &&
-      pubPkgBook.data.paymentPending === true &&
+      pubPkgBook.data.status === 'awaiting_confirmation' &&
+      pubPkgBook.data.paymentPending === false &&
       pubPkgBook.data.appointments.length === 2,
-      'Solicitação pública de pacote multissserviços registrou contrato requested/pending e reservou 2 horários com instrutores distintos'
+      'Solicitação pública de pacote multissserviços fica awaiting_confirmation até confirmação'
+    );
+    const pubPkgConf = await PublicBookingRequestService.confirmNotificationRequest({
+      tenantId: studioTenant,
+      notificationOrRequestId: pubPkgBook.data.requestId,
+      userId: adminStudioUser,
+      role: 'clinic_admin'
+    });
+    const pkgContractAfter = db.prepare(`SELECT contract_status, payment_status FROM student_package_contracts WHERE id = ?`).get(pubPkgConf.contractId);
+    assert(
+      pkgContractAfter?.contract_status === 'requested' &&
+      pkgContractAfter?.payment_status === 'pending' &&
+      pubPkgConf.appointmentIds.length === 2,
+      'Confirmação pública de pacote registrou contrato requested/pending e reservou 2 horários com instrutores distintos'
     );
     const marianaApptPays = db.prepare(`SELECT COUNT(*) as c FROM payments WHERE appointment_id IN (?, ?)`).get(
-      pubPkgBook.data.appointments[0].id,
-      pubPkgBook.data.appointments[1].id
+      pubPkgConf.appointmentIds[0],
+      pubPkgConf.appointmentIds[1]
     ).c;
     assert(marianaApptPays === 0, 'Solicitação pública via pacote NÃO gerou cobranças por sessão avulsa');
 

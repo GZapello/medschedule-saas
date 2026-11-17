@@ -2,6 +2,7 @@ import { dashboardWorklist } from '../services/dashboard-worklist.service';
 import { getClinicReceptionAvailability } from './checkin.controller';
 import { Request, Response } from 'express';
 import { db } from '../config/database';
+import { resolveProfessionalCanonicalModule } from '../utils/clinical-module';
 
 export class DashboardController {
   static getMetrics(req: Request, res: Response): void {
@@ -47,6 +48,7 @@ export class DashboardController {
           COALESCE(a.service_kind, COALESCE(s.service_kind, 'individual')) as service_kind,
           a.occurrence_id,
           a.series_id,
+          a.professional_id,
           s.service_domain,
           COALESCE(t.establishment_profile, 'clinic') as establishment_profile,
           s.clinical_module as service_clinical_module,
@@ -72,8 +74,17 @@ export class DashboardController {
         WHERE a.tenant_id = ? AND a.start_time LIKE ? ${profFilterToday}
         ORDER BY a.start_time ASC
       `);
+      const dashProfModuleCache = new Map<string, string | null>();
+      const getDashProfModule = (pid?: string | null): string | null => {
+        if (!pid) return null;
+        if (dashProfModuleCache.has(pid)) return dashProfModuleCache.get(pid) || null;
+        const resolved = resolveProfessionalCanonicalModule(pid, tenantId);
+        dashProfModuleCache.set(pid, resolved);
+        return resolved;
+      };
       const todayAppointments = (todayApptsStmt.all(...todayParams) as any[]).map(row => ({
         ...row,
+        professional_clinical_module: getDashProfModule(row.professional_id),
         display_amount: row.payment_amount !== null && row.payment_amount !== undefined
           ? row.payment_amount
           : (row.service_price !== null && row.service_price !== undefined ? row.service_price : null)

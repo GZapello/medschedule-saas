@@ -320,13 +320,39 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
   if (
     pId === 'prof-instrutor' ||
     pId === 'prof-instrutor-pilates' ||
+    pId === 'prof-instrutor-yoga' ||
+    pId === 'prof-instrutor-danca' ||
     pId === 'pilates_instructor' ||
     pSlug === 'instrutor' ||
     pSlug === 'instrutor-pilates' ||
-    (!hasExplicitId && (
+    pSlug === 'instrutor-yoga' ||
+    pSlug === 'instrutor-danca' ||
+    (!combined.includes('fisio') && !combined.includes('physio') && (
       pName === 'instrutor' ||
+      pName === 'instrutora' ||
       pName.startsWith('instrutor(a)') ||
-      pName.startsWith('instrutor de ')
+      pName.startsWith('instrutor ') ||
+      pName.startsWith('instrutora ') ||
+      pName.startsWith('professor de pilates') ||
+      pName.startsWith('professora de pilates') ||
+      pName.startsWith('professor de yoga') ||
+      pName.startsWith('professora de yoga') ||
+      pName.startsWith('professor de dança') ||
+      pName.startsWith('professora de dança') ||
+      pName.startsWith('professor de danca') ||
+      pName.startsWith('professora de danca') ||
+      pName === 'pilates' ||
+      pName === 'yoga' ||
+      pName === 'dança' ||
+      pName === 'danca' ||
+      combined.includes('instrutor de pilates') ||
+      combined.includes('instrutora de pilates') ||
+      combined.includes('instrutor de yoga') ||
+      combined.includes('instrutora de yoga') ||
+      combined.includes('instrutor de dança') ||
+      combined.includes('instrutora de dança') ||
+      combined.includes('instrutor de danca') ||
+      combined.includes('instrutora de danca')
     ))
   ) {
     return {

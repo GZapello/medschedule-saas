@@ -2470,7 +2470,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
         </form>
       )}
 
-      {/* ETAPA 6: CONFIRMAÇÃO REAL (NUNCA EXIBE PAGAMENTO CONFIRMADO FALSO) */}
+      {/* ETAPA 6: SOLICITAÇÃO RECEBIDA / CONFIRMAÇÃO */}
       {step === 6 && bookingResult && (
         <div className={`p-6 rounded-3xl border text-center space-y-4 ${outcome.confirmed ? 'bg-emerald-50/70 border-emerald-200' : 'bg-amber-50/70 border-amber-200'}`}>
           <div className={`w-14 h-14 rounded-full text-white flex items-center justify-center mx-auto shadow-sm ${outcome.confirmed ? 'bg-emerald-600' : 'bg-amber-600'}`}>
@@ -2480,13 +2480,69 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
             <h3 className="text-lg font-extrabold text-slate-900">
               {outcome.title}
             </h3>
+            {bookingResult.requestNumber && (
+              <p className="text-xs font-bold text-slate-700">{bookingResult.requestNumber}</p>
+            )}
             <p className="text-xs text-slate-600 max-w-md mx-auto">{outcome.message}</p>
-            <p role="status" className="text-xs font-bold text-slate-800">{outcome.label}</p>
+            <div className="pt-1">
+              <span
+                role="status"
+                className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold border ${
+                  outcome.confirmed
+                    ? 'bg-emerald-100/80 text-emerald-800 border-emerald-200'
+                    : 'bg-amber-100/80 text-amber-800 border-amber-200'
+                }`}
+              >
+                {outcome.label}
+              </span>
+            </div>
           </div>
 
-          {bookingResult.paymentPending && (
-            <div className="inline-block px-3.5 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold">
-              Status financeiro: Pagamento pendente no estabelecimento
+          {bookingResult.requestedSummary && (
+            <div className="text-left max-w-md mx-auto bg-white p-4 rounded-2xl border border-slate-200 space-y-1.5 text-xs">
+              <div className="font-bold text-slate-700 uppercase text-[10px]">Resumo da solicitação</div>
+              {bookingResult.requestedSummary.serviceName && (
+                <div className="text-slate-700">
+                  <span className="font-semibold text-slate-900">Aula / Plano:</span>{' '}
+                  {bookingResult.requestedSummary.serviceName}
+                </div>
+              )}
+              {bookingResult.requestedSummary.professionalNames && (
+                <div className="text-slate-700">
+                  <span className="font-semibold text-slate-900">Instrutor:</span>{' '}
+                  {bookingResult.requestedSummary.professionalNames}
+                </div>
+              )}
+              {bookingResult.requestedSummary.weekdaysLabel && (
+                <div className="text-slate-700">
+                  <span className="font-semibold text-slate-900">Dias:</span>{' '}
+                  {bookingResult.requestedSummary.weekdaysLabel}
+                </div>
+              )}
+              {bookingResult.requestedSummary.timeRangeLabel && (
+                <div className="text-slate-700">
+                  <span className="font-semibold text-slate-900">Horário:</span>{' '}
+                  {bookingResult.requestedSummary.timeRangeLabel}
+                </div>
+              )}
+              {bookingResult.requestedSummary.weeklyFrequency && (
+                <div className="text-slate-700">
+                  <span className="font-semibold text-slate-900">Frequência semanal:</span>{' '}
+                  {bookingResult.requestedSummary.weeklyFrequency}x por semana
+                </div>
+              )}
+              {bookingResult.requestedSummary.planDurationLabel && (
+                <div className="text-slate-700">
+                  <span className="font-semibold text-slate-900">Duração do plano:</span>{' '}
+                  {bookingResult.requestedSummary.planDurationLabel}
+                </div>
+              )}
+              {bookingResult.requestedSummary.modality && (
+                <div className="text-slate-700">
+                  <span className="font-semibold text-slate-900">Modalidade:</span>{' '}
+                  {modalityLabel(bookingResult.requestedSummary.modality)}
+                </div>
+              )}
             </div>
           )}
 
@@ -2511,7 +2567,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
 
           <p className="text-xs text-slate-600">{outcome.next}</p>
           <div className="flex flex-wrap justify-center gap-2 pt-2">
-            {bookingResult.appointments?.length > 0 && (
+            {outcome.confirmed && bookingResult.appointments?.length > 0 && (
               <button type="button" onClick={downloadIcsFirst} className={bookingSecondary}>
                 Adicionar ao calendário (.ics)
               </button>

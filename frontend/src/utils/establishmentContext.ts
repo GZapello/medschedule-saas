@@ -173,32 +173,67 @@ export function resolveServiceDomain(params: {
   return 'clinical';
 }
 
+const CLINICAL_SPECIALTY_MODULES = new Set([
+  'ZemdaMed',
+  'ZemdaFisio',
+  'ZemdaFono',
+  'ZemdaOdonto',
+  'ZemdaNutri',
+  'ZemdaTO',
+  'ZemdaPsico',
+  'ZemdaPP',
+  'ZemdaEstetic'
+]);
+
+export function isClinicalSpecialtyModuleName(value?: unknown): boolean {
+  return CLINICAL_SPECIALTY_MODULES.has(String(value || '').trim());
+}
+
 export function shouldRedirectAppointmentToZemdaPersonal(params: {
   establishmentProfile?: unknown;
   serviceDomain?: unknown;
   serviceKind?: unknown;
+  appointmentServiceKind?: unknown;
   occurrenceId?: unknown;
   appointmentClinicalModule?: unknown;
   serviceClinicalModule?: unknown;
+  professionalClinicalModule?: unknown;
 }): boolean {
   const profile = normalizeEstablishmentProfile(params.establishmentProfile);
   if (profile === 'clinic') return false;
-  if (profile === 'studio') return true;
-
-  if (String(params.serviceKind || '').trim().toLowerCase() === 'group' || Boolean(params.occurrenceId)) {
-    return true;
-  }
-  const explicit = String(params.serviceDomain || '').trim().toLowerCase();
-  if (explicit === 'studio') return true;
-  if (explicit === 'clinical') return false;
 
   if (
-    String(params.appointmentClinicalModule || '').trim() === 'ZemdaPersonal' ||
-    String(params.serviceClinicalModule || '').trim() === 'ZemdaPersonal'
+    String(params.appointmentServiceKind || '').trim().toLowerCase() === 'group' ||
+    String(params.serviceKind || '').trim().toLowerCase() === 'group' ||
+    Boolean(params.occurrenceId)
   ) {
     return true;
   }
-  return false;
+
+  const apptMod = String(params.appointmentClinicalModule || '').trim();
+  const srvMod = String(params.serviceClinicalModule || '').trim();
+  const profMod = String(params.professionalClinicalModule || '').trim();
+
+  if (apptMod === 'ZemdaPersonal') return true;
+  if (isClinicalSpecialtyModuleName(apptMod)) return false;
+  if (srvMod === 'ZemdaPersonal') return true;
+  if (isClinicalSpecialtyModuleName(srvMod)) return false;
+
+  if (profMod === 'ZemdaPersonal') return true;
+  if (isClinicalSpecialtyModuleName(profMod)) return false;
+
+  const explicit = String(params.serviceDomain || '').trim().toLowerCase();
+  if (profile === 'mixed') {
+    if (explicit === 'studio') return true;
+    if (explicit === 'clinical') return false;
+    return false;
+  }
+
+  if (profMod === 'general') {
+    return false;
+  }
+
+  return true;
 }
 
 export interface ParsedServiceRecurrenceConfig {
@@ -480,25 +515,10 @@ export function parseServiceRecurrenceConfig(service?: {
 
 export function isSidebarItemAllowedForProfile(itemId: string, profileRaw?: unknown): boolean {
   const profile = normalizeEstablishmentProfile(profileRaw);
-  if (profile === 'studio') {
-    const clinicOnlyItems = new Set([
-      'clinical',
-      'clinical-records',
-      'pending-exams',
-      'zemda-med',
-      'zemda-odonto',
-      'zemda-fisio',
-      'zemda-nutri',
-      'zemda-psico',
-      'zemda-fono',
-      'zemda-to',
-      'zemda-pp',
-      'zemda-estetic',
-      'zemda-body',
-      'zemda360'
-    ]);
-    return !clinicOnlyItems.has(itemId);
-  }
+  // Mesmo em estabelecimentos com perfil 'studio', profissionais clínicos (Fisio, Fono, Psico, Nutri, TO, Médicos, etc.)
+  // devem manter acesso aos seus módulos específicos e prontuário. A visibilidade por usuário é controlada pelo perfil profissional e permissões.
+  void itemId;
+  void profile;
   return true;
 }
 

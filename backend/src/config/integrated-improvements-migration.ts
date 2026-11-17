@@ -227,5 +227,79 @@ export function migrateIntegratedImprovements(rawDb: any): void {
 
     CREATE INDEX IF NOT EXISTS idx_internal_notifications_unread
       ON internal_notifications (tenant_id, recipient_user_id, read_at, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS public_booking_requests (
+      id TEXT PRIMARY KEY,
+      request_number TEXT NOT NULL,
+      tenant_id TEXT NOT NULL,
+      establishment_mode TEXT NOT NULL DEFAULT 'clinic',
+      mode TEXT NOT NULL DEFAULT 'single',
+      status TEXT NOT NULL DEFAULT 'awaiting_confirmation',
+      service_id TEXT,
+      professional_id TEXT,
+      patient_id TEXT,
+      package_id TEXT,
+      class_schedule_id TEXT,
+      modality TEXT,
+      start_time TEXT,
+      end_time TEXT,
+      booking_intent TEXT,
+      weekdays_label TEXT,
+      time_range_label TEXT,
+      start_date_label TEXT,
+      start_date_iso TEXT,
+      plan_duration_label TEXT,
+      weekly_frequency INTEGER,
+      sessions_count INTEGER NOT NULL DEFAULT 1,
+      recurrence_json TEXT,
+      schedules_json TEXT,
+      patient_snapshot_json TEXT,
+      payload_json TEXT NOT NULL,
+      summary_snapshot_json TEXT,
+      confirmed_appointment_id TEXT,
+      confirmed_appointment_ids_json TEXT,
+      confirmed_series_id TEXT,
+      confirmed_contract_id TEXT,
+      confirmed_billing_plan_id TEXT,
+      confirmed_by_user_id TEXT,
+      confirmed_at TEXT,
+      conflict_reason TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_public_booking_requests_tenant_status
+      ON public_booking_requests (tenant_id, status, created_at DESC);
   `);
+
+  addColIfMissing('public_booking_requests', 'patient_id', 'TEXT');
+  addColIfMissing('internal_notifications', 'request_id', 'TEXT');
+  addColIfMissing('internal_notifications', 'request_status', "TEXT NOT NULL DEFAULT 'confirmed'");
+  addColIfMissing('internal_notifications', 'confirmed_at', 'TEXT');
+  addColIfMissing('internal_notifications', 'confirmed_by_user_id', 'TEXT');
+  addColIfMissing('internal_notifications', 'expires_at', 'TEXT');
+  addColIfMissing('internal_notifications', 'whatsapp_phone', 'TEXT');
+  addColIfMissing('internal_notifications', 'establishment_name', 'TEXT');
+  addColIfMissing('internal_notifications', 'modality', 'TEXT');
+  addColIfMissing('internal_notifications', 'plan_duration_label', 'TEXT');
+  addColIfMissing('internal_notifications', 'weekly_frequency', 'INTEGER');
+
+  try {
+    rawDb.exec(`
+      CREATE INDEX IF NOT EXISTS idx_internal_notifications_request
+        ON internal_notifications (request_id, tenant_id);
+      CREATE INDEX IF NOT EXISTS idx_internal_notifications_active
+        ON internal_notifications (tenant_id, recipient_user_id, request_status, expires_at);
+      UPDATE internal_notifications
+      SET confirmed_at = COALESCE(confirmed_at, created_at),
+          expires_at = COALESCE(
+            expires_at,
+            strftime('%Y-%m-%dT%H:%M:%SZ', replace(substr(created_at, 1, 19), 'T', ' '), '+10 minutes')
+          )
+      WHERE request_id IS NULL
+        AND request_status = 'confirmed'
+        AND expires_at IS NULL
+        AND created_at IS NOT NULL;
+    `);
+  } catch (_) {}
 }

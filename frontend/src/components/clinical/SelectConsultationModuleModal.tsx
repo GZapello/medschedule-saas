@@ -298,7 +298,7 @@ export function getModuleForProfession(auth: {
   currentTenant?: any;
 }): 'ZemdaMed' | 'ZemdaFisio' | 'ZemdaFono' | 'ZemdaOdonto' | 'ZemdaNutri' | 'ZemdaTO' | 'ZemdaPsico' | 'ZemdaPP' | 'ZemdaPersonal' | 'ZemdaEstetic' | 'general' {
   // 1. Prioridade absoluta: commercialModule do usuário vindo do backend/AuthContext
-  const commModule = auth.currentUser?.commercialModule;
+  const commModule = (auth as any).commercialModule || auth.currentUser?.commercialModule;
   if (commModule && commModule in ALL_CLINICAL_MODULES) {
     return commModule as any;
   }
@@ -322,7 +322,17 @@ export function getModuleForProfession(auth: {
   if (profText.includes('psicolog') || profText.includes('psicólog') || profText.includes('crp')) return 'ZemdaPsico';
   if (profText.includes('fono') || profText.includes('crfa')) return 'ZemdaFono';
   if (profText.includes('psicopedag') || profText.includes('abpp')) return 'ZemdaPP';
-  if (profText.includes('personal') || profText.includes('muscula') || profText.includes('cref')) return 'ZemdaPersonal';
+  if (
+    profText.includes('personal') ||
+    profText.includes('muscula') ||
+    profText.includes('instrutor') ||
+    profText.includes('instrutora') ||
+    profText.includes('yoga') ||
+    profText.includes('dança') ||
+    profText.includes('danca') ||
+    (profText.includes('pilates') && !profText.includes('fisio') && !profText.includes('physio')) ||
+    profText.includes('cref')
+  ) return 'ZemdaPersonal';
   if (profText.includes('estet') || profText.includes('estétic')) return 'ZemdaEstetic';
   if (profText.includes('médic') || profText.includes('medic') || profText.includes('crm')) return 'ZemdaMed';
   if (profText.includes('ocupacional') || profText.includes('terapia ocupacional')) return 'ZemdaTO';
@@ -335,9 +345,19 @@ export function getModuleForProfession(auth: {
  */
 export function getCompatibleClinicalModules(auth: Parameters<typeof getModuleForProfession>[0] & {
   isClinicAdmin?: boolean;
+  authorizedModules?: string[];
 }): ClinicalModuleOption[] {
-  const modId = getModuleForProfession(auth);
-  return [ALL_CLINICAL_MODULES[modId] || ALL_CLINICAL_MODULES.general];
+  const authorized = Array.isArray(auth.authorizedModules) && auth.authorizedModules.length > 0
+    ? auth.authorizedModules
+    : Array.isArray(auth.currentUser?.authorizedModules)
+    ? auth.currentUser.authorizedModules
+    : [];
+  const primary = getModuleForProfession(auth);
+  const ids = Array.from(new Set([primary, ...authorized].filter((m) => Boolean(m && m in ALL_CLINICAL_MODULES))));
+  if (ids.length === 0) {
+    return [ALL_CLINICAL_MODULES.general];
+  }
+  return ids.map((id) => ALL_CLINICAL_MODULES[id as keyof typeof ALL_CLINICAL_MODULES]);
 }
 
 interface SelectConsultationModuleModalProps {

@@ -6,6 +6,7 @@ import { PackageService } from '../services/package.service';
 import { syncReceptionStatusFromClinical } from './checkin.controller';
 import { getClinicLocalNowIso, normalizeLocalDateTimeIso } from '../services/document-context.service';
 import { shouldUseStudioPersonalWorkflow } from '../utils/establishment-context';
+import { resolveProfessionalCanonicalModule } from '../utils/clinical-module';
 import { InstructorAttendanceStatus, InstructorParticipationService, InstructorRole } from '../services/instructor-participation.service';
 import { exerciseAnimation } from '../services/exercise-media';
 import { ensureExerciseLibrarySeeded } from '../config/exercise-library.seed';
@@ -1694,7 +1695,8 @@ export class ClassAttendanceController {
         appointmentServiceKind: r.service_kind,
         occurrenceId: r.occurrence_id,
         appointmentClinicalModule: r.clinical_module,
-        serviceClinicalModule: r.service_clinical_module
+        serviceClinicalModule: r.service_clinical_module,
+        professionalClinicalModule: r.professional_id ? resolveProfessionalCanonicalModule(r.professional_id, tenantId) : null
       }));
 
       if (!anyStudio) {

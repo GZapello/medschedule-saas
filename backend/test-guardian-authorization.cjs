@@ -164,6 +164,11 @@ const check = async (label, fn) => { await fn(); passed++; console.log(`  ✅ ${
         newPatientData: { fullName: 'Criança do Site', phone: '(11) 94444-0000', isChild: true, guardianName: 'Responsável do Site', guardianPhone: '(11) 94444-0001' }
       }, false);
       assert.equal(res.status, 201, JSON.stringify(res.data));
+      const listRes = await call('GET', '/v1/internal-notifications', null, true);
+      const pendingNotif = listRes.data.notifications.find(n => n.requestId === res.data.requestId);
+      assert(pendingNotif, 'Notificação gerada');
+      const confRes = await call('POST', `/v1/internal-notifications/${pendingNotif.id}/confirm`, {}, true);
+      assert.equal(confRes.status, 200, JSON.stringify(confRes.data));
       const patient = db.prepare("SELECT id FROM patients WHERE full_name = 'Criança do Site'").get();
       assert.equal(guardiansOf(patient.id)[0].authorization_signed, 0);
     });

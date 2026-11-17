@@ -299,7 +299,10 @@ async function runTests() {
       endTime: `${monIso}T08:50:00`,
       student: { fullName: 'Aluno Manhã 2', phone: '11988881002', email: 'm2@test.com' }
     });
+    const { PublicBookingRequestService } = require('./dist/services/public-booking-request.service');
     assert(bookMon08_1.status === 201 && bookMon08_2.status === 201, '5a. Dois alunos matriculados na mesma turma 08h sem instrutor bloquear o 2º aluno', { b1: bookMon08_1.data, b2: bookMon08_2.data });
+    await PublicBookingRequestService.confirmNotificationRequest({ tenantId: studioId, notificationOrRequestId: bookMon08_1.data.requestId, userId: admUser, role: 'clinic_admin' });
+    await PublicBookingRequestService.confirmNotificationRequest({ tenantId: studioId, notificationOrRequestId: bookMon08_2.data.requestId, userId: admUser, role: 'clinic_admin' });
 
     const pubMonSlots = await makeReq('GET', `/api/v1/public/studio/slots?tenantSlug=studio-yoga-multi&serviceId=${yogaId}&date=${monIso}`);
     assert(pubMonSlots.status === 200, '5b. Consulta pública retorna todas as turmas da segunda-feira', pubMonSlots.data);
@@ -364,7 +367,8 @@ async function runTests() {
       student: { fullName: 'Aluna Plano Yoga 2x', phone: '11988881009', email: 'rec2x@test.com' }
     });
     assert(recPlanBook.status === 201, '7a. Contratação recorrente pública combinando Seg 17h + Qua 08h funciona', recPlanBook.data);
-    const recPlanRow = db.prepare(`SELECT * FROM recurring_billing_plans WHERE id = ?`).get(recPlanBook.data.appointments[0].billingPlanId);
+    const recPlanConf = await PublicBookingRequestService.confirmNotificationRequest({ tenantId: studioId, notificationOrRequestId: recPlanBook.data.requestId, userId: admUser, role: 'clinic_admin' });
+    const recPlanRow = db.prepare(`SELECT * FROM recurring_billing_plans WHERE id = ?`).get(recPlanConf.billingPlanId);
     assert(recPlanRow.weekly_sessions_snapshot === 2 && recPlanRow.amount === 320, '7b. Precificação por frequência aplica 2x (R$ 320,00) mesmo havendo 6 turmas cadastradas', recPlanRow);
 
     // 7) Studio with 30 class_schedules across Mon-Fri (6/day) MUST NOT accept 30x weekly frequency!

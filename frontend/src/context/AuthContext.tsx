@@ -44,6 +44,7 @@ interface AuthContextType {
   isZemda360: boolean;
   isZemdaBody: boolean;
   commercialModule: string | null;
+  authorizedModules: string[];
   clinicalWorkspace: string | null;
   taxonomyCategory?: string;
   canonicalProfessionId?: string | null;
@@ -497,6 +498,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       profSlug === 'educacao-fisica' ||
       profSlug === 'instrutor' ||
       profSlug === 'instrutor-pilates' ||
+      profSlug === 'instrutor-yoga' ||
+      profSlug === 'instrutor-danca' ||
       combinedProf.includes('personal') ||
       combinedProf.includes('educação física') ||
       combinedProf.includes('educacao fisica') ||
@@ -505,9 +508,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       combinedProf.includes('treinamento físico') ||
       combinedProf.includes('musculação') ||
       combinedProf.includes('musculacao') ||
-      profName === 'instrutor' ||
-      profName.startsWith('instrutor ') ||
-      profName.startsWith('instrutor(a)') ||
+      combinedProf.includes('instrutor') ||
+      combinedProf.includes('instrutora') ||
+      combinedProf.includes('yoga') ||
+      combinedProf.includes('dança') ||
+      combinedProf.includes('danca') ||
+      (combinedProf.includes('pilates') && !combinedProf.includes('fisio') && !combinedProf.includes('physio')) ||
       regType === 'CREF'
     ) {
       activeModule = 'ZemdaPersonal';
@@ -653,6 +659,30 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const commercialModule = activeModule || currentUser?.commercialModule || null;
 
+  const authorizedModules = Array.from(
+    new Set(
+      [
+        ...(Array.isArray(currentUser?.authorizedModules) ? currentUser.authorizedModules : []),
+        ...(commercialModule && commercialModule !== 'general' ? [commercialModule] : []),
+        ...(isDoctor || isZemdaMed ? ['ZemdaMed'] : []),
+        ...(isPhysiotherapist || isZemdaFisio ? ['ZemdaFisio'] : []),
+        ...(isDentist || isZemdaOdonto ? ['ZemdaOdonto'] : []),
+        ...(isNutritionist || isZemdaNutri ? ['ZemdaNutri'] : []),
+        ...(isOccupationalTherapist || isZemdaTO ? ['ZemdaTO'] : []),
+        ...(isSpeechTherapist || isZemdaFono ? ['ZemdaFono'] : []),
+        ...(isPsychologist || isZemdaPsico ? ['ZemdaPsico'] : []),
+        ...(isPsychopedagogue || isZemdaPP ? ['ZemdaPP'] : []),
+        ...(isEsthetician || isZemdaEstetic ? ['ZemdaEstetic'] : []),
+        ...((
+          isPersonalTrainer ||
+          isZemdaPersonal ||
+          Boolean((currentUser as any)?.zemdaPersonalEnabled || (currentUser as any)?.zemda_personal_enabled) ||
+          userPermissions.includes('access_zemda_personal')
+        ) ? ['ZemdaPersonal'] : [])
+      ].filter((m): m is string => Boolean(m && m !== 'general'))
+    )
+  );
+
   const isSandboxSession = Boolean(
     currentUser?.isSandbox ||
     currentTenant?.isSandbox ||
@@ -722,6 +752,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         isZemda360,
         isZemdaBody,
         commercialModule,
+        authorizedModules,
         clinicalWorkspace: currentUser?.clinicalWorkspace ?? null,
         taxonomyCategory: currentUser?.taxonomyCategory,
         canonicalProfessionId: currentUser?.canonicalProfessionId || currentUser?.professionId || null,

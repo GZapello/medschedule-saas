@@ -589,7 +589,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
               return;
             }
             const autoModule = getModuleForProfession(auth);
-            const chosenModule = targetAppt.service_clinical_module || targetAppt.clinical_module || (autoModule && autoModule !== 'general' ? autoModule : 'general');
+            const chosenModule =
+              targetAppt.service_clinical_module ||
+              targetAppt.clinical_module ||
+              (targetAppt as any).professional_clinical_module ||
+              (autoModule && autoModule !== 'general' ? autoModule : 'general');
             setActiveConsultationModule(chosenModule);
             setActiveConsultationAppt({
               ...targetAppt,
@@ -615,6 +619,22 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
     if (selectedProfRef.current && selectedProfRef.current !== 'all') {
       fetchSelectedProfSchedule(selectedProfRef.current);
     }
+
+    try {
+      const savedFocus = sessionStorage.getItem('zemda_focus_appointment');
+      if (savedFocus) {
+        sessionStorage.removeItem('zemda_focus_appointment');
+        const parsedFocus = JSON.parse(savedFocus);
+        const rawDate = parsedFocus?.startTime || parsedFocus?.date;
+        if (rawDate) {
+          const datePart = String(rawDate).slice(0, 10);
+          const [y, m, d] = datePart.split('-').map(Number);
+          if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+            setCurrentDate(new Date(y, m - 1, d, 12, 0, 0));
+          }
+        }
+      }
+    } catch {}
 
     const handleRemoteUpdate = (e?: any) => {
       fetchCalendarData();
@@ -780,9 +800,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
       establishmentProfile: currentTenant?.establishment_profile,
       serviceDomain: appt?.service_domain,
       serviceKind: appt?.service_kind,
+      appointmentServiceKind: appt?.appointment_service_kind,
       occurrenceId: appt?.occurrence_id,
       appointmentClinicalModule: appt?.clinical_module,
-      serviceClinicalModule: appt?.service_clinical_module
+      serviceClinicalModule: appt?.service_clinical_module,
+      professionalClinicalModule: appt?.professional_clinical_module
     });
 
   const redirectAppointmentToZemdaPersonal = (appt: any) => {
@@ -833,7 +855,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
         return;
       }
 
-      const chosenModule = selectedModule || (appointment as any).service_clinical_module || (appointment as any).clinical_module || 'general';
+      const chosenModule = selectedModule || (appointment as any).service_clinical_module || (appointment as any).clinical_module || (appointment as any).professional_clinical_module || 'general';
       setAppointments(prev => (prev || []).map(a => a.id === appointment.id ? { ...a, status: 'in_progress' as any, clinical_module: chosenModule, attendance_start_at: nextRealStart, attendance_expected_end_at: nextExpectedEnd } : a));
       setActiveConsultationModule(chosenModule);
       setActiveConsultationAppt({
@@ -869,6 +891,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
     const autoModule = getModuleForProfession(auth);
     const serviceModule = (appointment as any).service_clinical_module;
     const existingModule = (appointment as any).clinical_module;
+    const professionalModule = (appointment as any).professional_clinical_module;
 
     // 1. Prioridade máxima: módulo clínico do serviço vinculado
     if (serviceModule && serviceModule !== 'general' && serviceModule !== 'ZemdaBody' && serviceModule !== 'Zemda360') {
@@ -882,7 +905,13 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
       return;
     }
 
-    // 3. Fallback: promove com segurança para o módulo da profissão do usuário logado
+    // 3. Módulo canônico do profissional responsável pelo agendamento
+    if (professionalModule && professionalModule !== 'general' && professionalModule !== 'ZemdaBody' && professionalModule !== 'Zemda360') {
+      executeStartConsultation(appointment, professionalModule);
+      return;
+    }
+
+    // 4. Fallback: promove com segurança para o módulo da profissão do usuário logado
     const chosenModule = (autoModule && autoModule !== 'general') ? autoModule : (existingModule || autoModule || 'general');
     executeStartConsultation(appointment, chosenModule);
   };

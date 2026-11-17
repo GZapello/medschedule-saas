@@ -306,9 +306,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       establishmentProfile: auth.currentTenant?.establishment_profile,
       serviceDomain: appt?.service_domain,
       serviceKind: appt?.service_kind,
+      appointmentServiceKind: appt?.appointment_service_kind,
       occurrenceId: appt?.occurrence_id,
       appointmentClinicalModule: appt?.clinical_module,
-      serviceClinicalModule: appt?.service_clinical_module
+      serviceClinicalModule: appt?.service_clinical_module,
+      professionalClinicalModule: appt?.professional_clinical_module
     });
 
   const executeStartConsultation = async (appointmentId: string, selectedModule?: string) => {
@@ -333,7 +335,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         return;
       }
 
-      const chosenModule = selectedModule || appt?.service_clinical_module || (appt?.clinical_module !== 'general' && appt?.clinical_module !== 'ZemdaBody' && appt?.clinical_module !== 'Zemda360' ? appt?.clinical_module : undefined) || 'general';
+      const chosenModule =
+        selectedModule ||
+        appt?.service_clinical_module ||
+        (appt?.clinical_module !== 'general' && appt?.clinical_module !== 'ZemdaBody' && appt?.clinical_module !== 'Zemda360' ? appt?.clinical_module : undefined) ||
+        appt?.professional_clinical_module ||
+        'general';
       setActiveConsultationModule(chosenModule);
       setQuickConsultAppt({
         ...appt,
@@ -375,6 +382,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         const autoModule = getModuleForProfession(auth);
         const serviceModule = appt?.service_clinical_module;
         const existingModule = appt?.clinical_module;
+        const professionalModule = appt?.professional_clinical_module;
 
         // 1. Prioridade máxima: módulo clínico do serviço vinculado
         if (serviceModule && serviceModule !== 'general' && serviceModule !== 'ZemdaBody' && serviceModule !== 'Zemda360') {
@@ -388,7 +396,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           return;
         }
 
-        // 3. Fallback: promove com segurança para o módulo da profissão do usuário logado
+        // 3. Módulo canônico do profissional responsável pelo agendamento
+        if (professionalModule && professionalModule !== 'general' && professionalModule !== 'ZemdaBody' && professionalModule !== 'Zemda360') {
+          executeStartConsultation(appointmentId, professionalModule);
+          return;
+        }
+
+        // 4. Fallback: promove com segurança para o módulo da profissão do usuário logado
         const chosenModule = (autoModule && autoModule !== 'general') ? autoModule : (existingModule || autoModule || 'general');
         executeStartConsultation(appointmentId, chosenModule);
         return;

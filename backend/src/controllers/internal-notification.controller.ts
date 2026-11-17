@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { InternalNotificationService } from '../services/internal-notification.service';
+import { PublicBookingRequestService } from '../services/public-booking-request.service';
 import { isUserReceptionOnly } from './report.controller';
 
 function canReceiveInternalBookingNotifications(req: Request, tenantId: string): boolean {
@@ -44,8 +45,8 @@ export class InternalNotificationController {
         return;
       }
 
-      const unreadCount = InternalNotificationService.getUnreadCountForUser(tenantId, userId);
-      res.json({ unreadCount });
+      const counts = InternalNotificationService.getBellCountsForUser(tenantId, userId);
+      res.json(counts);
     } catch (err: any) {
       console.error('[InternalNotificationController.unreadCount] Erro:', err);
       res.status(500).json({ error: 'Erro ao consultar notificações não lidas' });
@@ -102,6 +103,55 @@ export class InternalNotificationController {
     } catch (err: any) {
       console.error('[InternalNotificationController.markRead] Erro:', err);
       res.status(500).json({ error: 'Erro ao marcar notificações como visualizadas' });
+    }
+  }
+
+  static async confirm(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.tenantId as string;
+      const userId = req.user?.userId;
+      if (!tenantId || !userId) {
+        res.status(401).json({ error: 'Não autenticado' });
+        return;
+      }
+
+      if (!canReceiveInternalBookingNotifications(req, tenantId)) {
+        res.status(403).json({
+          error: 'Apenas gestores e profissionais vinculados autorizados podem confirmar agendamentos públicos.'
+        });
+        return;
+      }
+
+      const id = String(req.params.id || '').trim();
+      if (!id) {
+        res.status(400).json({ error: 'Identificador da solicitação é obrigatório.' });
+        return;
+      }
+
+      const confirmed = await PublicBookingRequestService.confirmNotificationRequest({
+        tenantId,
+        notificationOrRequestId: id,
+        userId,
+        role: String(req.user?.role || ''),
+        isSandboxSession: Boolean(req.isSandboxSession)
+      });
+
+      const counts = InternalNotificationService.getBellCountsForUser(tenantId, userId);
+      res.json({
+        success: true,
+        ...confirmed,
+        ...counts
+      });
+    } catch (err: any) {
+      if (err && typeof err.status === 'number') {
+        res.status(err.status).json({
+          error: err.message || 'Não foi possível confirmar a solicitação.',
+          ...(err.code ? { code: err.code } : {})
+        });
+        return;
+      }
+      console.error('[InternalNotificationController.confirm] Erro:', err);
+      res.status(500).json({ error: 'Erro ao confirmar solicitação de agendamento.' });
     }
   }
 }

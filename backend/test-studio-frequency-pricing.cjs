@@ -237,16 +237,24 @@ async function runTests() {
     assert(change.status===200,'Editar preços',change.data);
     assert(db.prepare('SELECT amount FROM recurring_billing_plans WHERE id=?').get(plan.id).amount===320,'Contrato anterior mantém snapshot');
     const publicBody={tenantSlug:'studio-zen-bil',mode:'service',serviceId:id,professionalId:profSt1,classScheduleId:entries[0].classScheduleId,startTime:startMon+'T08:00:00',endTime:startMon+'T09:00:00',modality:'presential',recurrence,student:{fullName:'Aluno Público Teste',phone:'11988776655',whatsapp:'11988776655',email:'public@frequency.test'}};
+    const { PublicBookingRequestService } = require('./dist/services/public-booking-request.service');
     const pub=await makeReq('POST','/api/v1/public/studio/bookings',{},publicBody);
     assert(pub.status===201,'Contratar pelo link público',pub.data);
-    const pubPlanId=pub.data.appointments[0].billingPlanId;
+    const duplicatePending=await makeReq('POST','/api/v1/public/studio/bookings',{},publicBody);
+    assert(duplicatePending.status===409,'Repetir reserva pendente bloqueia duplicidade',duplicatePending.data);
+    const pubConf = await PublicBookingRequestService.confirmNotificationRequest({
+      tenantId: studioId,
+      notificationOrRequestId: pub.data.requestId,
+      userId: 'usr-studio-admin',
+      role: 'clinic_admin'
+    });
+    const pubPlanId=pubConf.billingPlanId;
     const pubPlan=db.prepare('SELECT * FROM recurring_billing_plans WHERE id=?').get(pubPlanId);
     assert(pubPlan.amount===350 && pubPlan.weekly_sessions_snapshot===2,'Público usa tabela atual e dois encontros no mesmo dia',pubPlan);
     assert(db.prepare('SELECT COUNT(*) c FROM payments WHERE recurring_plan_id=?').get(pubPlanId).c===1,'Uma cobrança por plano público');
     assert(db.prepare('SELECT COUNT(*) c FROM payments WHERE patient_id=? AND appointment_id IS NOT NULL').get(pubPlan.patient_id).c===0,'Zero cobranças individuais públicas');
-    assert(pub.data.appointments.every(a=>a.price===0),'Resposta informa aulas cobertas');
     const duplicate=await makeReq('POST','/api/v1/public/studio/bookings',{},publicBody);
-    assert(duplicate.status===409,'Repetir reserva não duplica contrato/cobrança',duplicate.data);
+    assert(duplicate.status===409,'Repetir reserva após confirmação não duplica contrato/cobrança',duplicate.data);
     const before=JSON.stringify(db.prepare('SELECT * FROM recurring_billing_plans WHERE id=?').get(plan.id));
     db.prepare('UPDATE class_schedules SET active=0 WHERE id=? AND tenant_id=?').run(entries[1].classScheduleId,studioId);
     const {quoteFrequencyPlan}=require('./dist/services/frequency-pricing.service');
@@ -343,8 +351,14 @@ async function runTests() {
       },
       student: { fullName: 'Aluno Individual Recorrente', phone: '11977665544', whatsapp: '11977665544', email: 'ind.rec@test.com' }
     });
-    assert(indPublicBook.status === 201 && indPublicBook.data.appointments.length >= 16, 'Reserva pública recorrente individual 2x/sem por 2 meses cria série', indPublicBook.data);
-    const indPlan = db.prepare('SELECT * FROM recurring_billing_plans WHERE id = ?').get(indPublicBook.data.appointments[0].billingPlanId);
+    assert(indPublicBook.status === 201 && indPublicBook.data.appointments.length >= 16, 'Reserva pública recorrente individual 2x/sem por 2 meses cria solicitação', indPublicBook.data);
+    const indConf = await PublicBookingRequestService.confirmNotificationRequest({
+      tenantId: studioId,
+      notificationOrRequestId: indPublicBook.data.requestId,
+      userId: 'usr-studio-admin',
+      role: 'clinic_admin'
+    });
+    const indPlan = db.prepare('SELECT * FROM recurring_billing_plans WHERE id = ?').get(indConf.billingPlanId);
     assert(indPlan && indPlan.amount === 600 && indPlan.billing_frequency === 'monthly' && indPlan.weekly_sessions_snapshot === 2, 'Contrato recorrente individual registra mensalidade R$ 600 com 2x/sem', indPlan);
     assert(startWed > startMon, 'Sanidade de data');
   } catch(err) { console.error(err);failed++; }

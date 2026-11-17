@@ -155,35 +155,12 @@ export function hasPersonalAccess(req: Request): boolean {
 
   const isPT = isUserPersonalTrainer(req.user.userId, req.tenantId);
 
-  // 1. Se o profissional for de Educação Física / Personal Trainer -> ACESSO DIRETO E INTEGRAL
+  // 1. Se o profissional for de Educação Física / Personal Trainer / Instrutor -> ACESSO DIRETO E INTEGRAL
   if (isPT) {
     return true;
   }
 
-  // 1b. Em estabelecimentos configurados exclusivamente como Studio, instrutores e gestores possuem acesso aos templates e biblioteca
-  try {
-    const tenantProfile = (db.prepare('SELECT establishment_profile FROM tenants WHERE id = ?').get(req.tenantId) as any)?.establishment_profile;
-    if (String(tenantProfile || '').toLowerCase() === 'studio' && (req.user.role === 'clinic_admin' || req.user.role === 'professional')) {
-      return true;
-    }
-  } catch {}
-
-  // 2. Se for gestor/administrador da clínica
-  if (req.user.role === 'clinic_admin') {
-    const cu = db.prepare(`
-      SELECT cu.profession_custom, cu.practice_areas, t.manager_profession
-      FROM clinic_users cu
-      LEFT JOIN tenants t ON t.id = cu.tenant_id
-      WHERE cu.user_id = ? AND cu.tenant_id = ?
-    `).get(req.user.userId, req.tenantId) as any;
-    const text = [cu?.profession_custom, cu?.practice_areas, cu?.manager_profession].filter(Boolean).join(' ').toLowerCase();
-    const hasConflict = text.includes('médic') || text.includes('dentis') || text.includes('nutri') || text.includes('fisio') || text.includes('psicol');
-    if (!hasConflict) {
-      return true;
-    }
-  }
-
-  // 3. Se possuir permissão explícita ou flag legada concedida
+  // 2. Se possuir permissão explícita ou flag concedida para ZemdaPersonal no vínculo do estabelecimento
   try {
     const cu = db.prepare('SELECT permissions_json, zemda_personal_enabled FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, req.tenantId) as any;
     if (cu) {
@@ -195,8 +172,61 @@ export function hasPersonalAccess(req: Request): boolean {
         } catch {}
       }
     }
+
+    const profFlag = db.prepare(`
+      SELECT zemda_personal_enabled
+      FROM professionals
+      WHERE user_id = ? AND tenant_id = ? AND active = 1
+      ORDER BY id LIMIT 1
+    `).get(req.user.userId, req.tenantId) as any;
+    if (profFlag?.zemda_personal_enabled === 1) {
+      return true;
+    }
   } catch (err) {
     console.error('[hasPersonalAccess] Erro ao checar permissão:', err);
+  }
+
+  // 3. Se for gestor/administrador da clínica/studio sem profissão clínica conflitante
+  if (req.user.role === 'clinic_admin') {
+    const cu = db.prepare(`
+      SELECT cu.profession_id, cu.profession_name, cu.profession_custom, cu.practice_areas, t.manager_profession
+      FROM clinic_users cu
+      LEFT JOIN tenants t ON t.id = cu.tenant_id
+      WHERE cu.user_id = ? AND cu.tenant_id = ?
+    `).get(req.user.userId, req.tenantId) as any;
+    const profRow = db.prepare(`
+      SELECT profession_id, profession_name, practice_areas
+      FROM professionals
+      WHERE user_id = ? AND tenant_id = ? AND active = 1
+      ORDER BY id LIMIT 1
+    `).get(req.user.userId, req.tenantId) as any;
+
+    const canonical = resolveCanonicalProfession({
+      id: profRow?.profession_id || cu?.profession_id,
+      name: profRow?.profession_name || cu?.profession_name || cu?.profession_custom || cu?.manager_profession
+    });
+    if (canonical.commercialModule && canonical.commercialModule !== 'ZemdaPersonal') {
+      return false;
+    }
+
+    const text = [
+      cu?.profession_name,
+      cu?.profession_custom,
+      cu?.practice_areas,
+      cu?.manager_profession,
+      profRow?.profession_name,
+      profRow?.practice_areas
+    ].filter(Boolean).join(' ').toLowerCase();
+    const hasConflict =
+      text.includes('médic') || text.includes('medic') ||
+      text.includes('dentis') || text.includes('odonto') ||
+      text.includes('nutri') || text.includes('fisio') ||
+      text.includes('psicol') || text.includes('fono') ||
+      text.includes('ocupacional') || text.includes('psicopedag') ||
+      text.includes('estet') || text.includes('bioméd') || text.includes('biomed');
+    if (!hasConflict) {
+      return true;
+    }
   }
 
   return false;

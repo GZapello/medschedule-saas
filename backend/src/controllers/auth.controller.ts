@@ -3,6 +3,7 @@ import { selectLoginClinic } from '../services/membership.service';
 import crypto from 'crypto';
 import { completeProfessionalProfile } from '../utils/professional-profile';
 import { resolveProfessionModule, resolveCanonicalProfession } from '../utils/profession-module';
+import { getAvailableModulesForProfessional } from '../utils/clinical-module';
 import { respondBillingError } from './billing.controller';
 import { requireCapacity, pendingBillingManager, BillingService, assertTrialEligibility } from '../services/billing.service';
 import { Request, Response } from 'express';
@@ -353,7 +354,15 @@ export class AuthController {
       const zemdaFonoEnabled = isEligibleUser && modFlags.zemda_fono_enabled === 1;
       const zemdaPsicoEnabled = isEligibleUser && modFlags.zemda_psico_enabled === 1;
       const zemdaPPEnabled = isEligibleUser && modFlags.zemda_pp_enabled === 1;
-      const zemdaPersonalEnabled = isEligibleUser && modFlags.zemda_personal_enabled === 1;
+      const zemdaPersonalEnabled = isEligibleUser && (
+        modFlags.zemda_personal_enabled === 1 ||
+        cuRow?.zemda_personal_enabled === 1 ||
+        profDetails?.zemda_personal_enabled === 1 ||
+        userPermissions.includes('access_zemda_personal')
+      );
+      const authorizedModules = isEligibleUser && user.tenant_id
+        ? getAvailableModulesForProfessional(profDetails?.professional_id || user.id, user.tenant_id).map(m => m.code)
+        : [];
       const computedCaps = (user.tenant_id && user.role !== 'superadmin')
         ? CapabilityService.computeUserCapabilities(user.id, user.tenant_id)
         : null;
@@ -429,6 +438,7 @@ export class AuthController {
           zemdaBodyEnabled,
           commercialModule: professionResolution.commercialModule || computedCaps?.commercialModule || null,
           clinicalWorkspace: professionResolution.clinicalWorkspace || computedCaps?.clinicalWorkspace || null,
+          authorizedModules,
           taxonomyCategory: professionResolution.taxonomyCategory || computedCaps?.taxonomyCategory || null,
           capabilities: computedCaps?.activeCapabilities || [],
           practiceAreaIds: computedCaps?.practiceAreaIds || [],
@@ -566,7 +576,15 @@ export class AuthController {
     const zemdaFonoEnabled = isEligibleUser && modFlags.zemda_fono_enabled === 1;
     const zemdaPsicoEnabled = isEligibleUser && modFlags.zemda_psico_enabled === 1;
     const zemdaPPEnabled = isEligibleUser && modFlags.zemda_pp_enabled === 1;
-    const zemdaPersonalEnabled = isEligibleUser && modFlags.zemda_personal_enabled === 1;
+    const zemdaPersonalEnabled = isEligibleUser && (
+      modFlags.zemda_personal_enabled === 1 ||
+      cuRow?.zemda_personal_enabled === 1 ||
+      profDetails?.zemda_personal_enabled === 1 ||
+      userPermissions.includes('access_zemda_personal')
+    );
+    const authorizedModules = isEligibleUser && user.tenant_id
+      ? getAvailableModulesForProfessional(profDetails?.professional_id || user.id, user.tenant_id).map(m => m.code)
+      : [];
     const computedCaps = (user.tenant_id && user.role !== 'superadmin')
       ? CapabilityService.computeUserCapabilities(user.id, user.tenant_id)
       : null;
@@ -641,6 +659,7 @@ export class AuthController {
         zemdaBodyEnabled,
         commercialModule: professionResolution.commercialModule || computedCaps?.commercialModule || null,
         clinicalWorkspace: professionResolution.clinicalWorkspace || computedCaps?.clinicalWorkspace || null,
+        authorizedModules,
         taxonomyCategory: professionResolution.taxonomyCategory || computedCaps?.taxonomyCategory || null,
         capabilities: computedCaps?.activeCapabilities || [],
         practiceAreaIds: computedCaps?.practiceAreaIds || [],
@@ -784,7 +803,15 @@ export class AuthController {
       const zemdaFonoEnabled = isEligibleUser && modFlags.zemda_fono_enabled === 1;
       const zemdaPsicoEnabled = isEligibleUser && modFlags.zemda_psico_enabled === 1;
       const zemdaPPEnabled = isEligibleUser && modFlags.zemda_pp_enabled === 1;
-      const zemdaPersonalEnabled = isEligibleUser && modFlags.zemda_personal_enabled === 1;
+      const zemdaPersonalEnabled = isEligibleUser && (
+        modFlags.zemda_personal_enabled === 1 ||
+        cuRow?.zemda_personal_enabled === 1 ||
+        profDetails?.zemda_personal_enabled === 1 ||
+        userPermissions.includes('access_zemda_personal')
+      );
+      const authorizedModules = isEligibleUser && user.tenant_id
+        ? getAvailableModulesForProfessional(profDetails?.professional_id || user.id, user.tenant_id).map(m => m.code)
+        : [];
       const computedCaps = (user.tenant_id && user.role !== 'superadmin')
         ? CapabilityService.computeUserCapabilities(user.id, user.tenant_id)
         : null;
@@ -857,6 +884,7 @@ export class AuthController {
           zemdaBodyEnabled,
           commercialModule: professionResolution.commercialModule || computedCaps?.commercialModule || null,
           clinicalWorkspace: professionResolution.clinicalWorkspace || computedCaps?.clinicalWorkspace || null,
+          authorizedModules,
           taxonomyCategory: professionResolution.taxonomyCategory || computedCaps?.taxonomyCategory || null,
           capabilities: computedCaps?.activeCapabilities || [],
           practiceAreaIds: computedCaps?.practiceAreaIds || [],

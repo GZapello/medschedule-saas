@@ -36,7 +36,7 @@ const root = path.resolve(__dirname, '..'), out = fs.mkdtempSync(path.join(os.tm
       await page.goto(base + '?individual=1'); await page.getByRole('button', { name: 'Ver política de cancelamento', exact: true }).click(); assert.ok((await page.getByRole('dialog').textContent()).includes('Política exclusiva da Ana.')); assert.ok(!(await page.getByRole('dialog').textContent()).includes(policy));
 
       await page.goto(base + '?view=admin&role=reception'); await page.getByText(/Dicas rápidas/).waitFor(); assert.equal(await page.getByRole('switch').count(), 0);
-      for (const [status, title] of [['pending', 'Solicitação enviada!'], ['confirmed', 'Agendamento confirmado!'], ['', 'Solicitação recebida!']]) {
+      for (const [status, title] of [['pending', 'Solicitação recebida!'], ['confirmed', 'Agendamento confirmado!'], ['', 'Solicitação recebida!']]) {
         await page.goto(base + '?status=' + status); await page.getByRole('button', { name: /^Agendar uma aula/ }).click(); await page.getByRole('button', { name: /Pilates/ }).click();
         await page.getByRole('button', { name: /08:00/ }).first().click(); await page.getByRole('button', { name: 'Continuar', exact: true }).click();
         await page.getByRole('button', { name: /Informar meus dados/ }).click();

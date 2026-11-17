@@ -47,6 +47,7 @@ export interface User {
   zemda360Enabled?: boolean;
   zemdaBodyEnabled?: boolean;
   commercialModule?: string;
+  authorizedModules?: string[];
   clinicalWorkspace?: string | null;
   taxonomyCategory?: string;
   capabilities?: string[];
@@ -521,12 +522,14 @@ export interface Appointment {
   cancellation_reason?: string;
   clinical_module?: string;
   service_clinical_module?: string;
+  professional_clinical_module?: string | null;
   service_domain?: 'clinical' | 'studio';
   payment_status?: 'paid' | 'pending' | 'partial' | 'cancelled';
   payment_amount?: number;
   payment_method?: string;
   display_amount?: number;
   service_kind?: 'individual' | 'group';
+  appointment_service_kind?: 'individual' | 'group';
   occurrence_id?: string | null;
   series_id?: string | null;
   attendance_status?: 'pending' | 'present' | 'absent' | 'cancelled';

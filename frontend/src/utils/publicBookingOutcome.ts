@@ -16,12 +16,12 @@ export function publicBookingOutcome(result: any) {
   const pending = statuses.some(status => ['pending', 'pending_confirmation', 'awaiting_confirmation', 'requested'].includes(status));
   return {
     confirmed,
-    title: confirmed ? 'Agendamento confirmado!' : pending ? 'Solicitação enviada!' : 'Solicitação recebida!',
+    title: confirmed ? 'Agendamento confirmado!' : 'Solicitação recebida!',
     label: confirmed ? 'Confirmado' : pending ? 'Aguardando confirmação' : statuses.every(status => status === statuses[0]) ? bookingStatusLabel(statuses[0]) : 'Confirmação não informada',
     message: confirmed
       ? 'Seu agendamento foi confirmado com sucesso. Confira abaixo as informações do seu atendimento.'
       : pending
-        ? 'Recebemos sua solicitação de agendamento. O estabelecimento deverá confirmar a disponibilidade do horário. Aguarde a confirmação antes de considerar seu atendimento agendado.'
+        ? 'Recebemos sua solicitação de agendamento. O estabelecimento deverá confirmar a disponibilidade do horário antes de adicioná-lo à agenda definitiva.'
         : 'Recebemos sua solicitação. A resposta do estabelecimento não informa a confirmação do horário. Consulte o estabelecimento antes de considerar seu atendimento confirmado.',
     next: confirmed ? 'Compareça ou acesse o atendimento no horário marcado, conforme a modalidade.' : 'Aguarde a confirmação do estabelecimento.'
   };

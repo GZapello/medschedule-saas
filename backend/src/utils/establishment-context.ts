@@ -191,9 +191,26 @@ export function resolveServiceDomain(params: {
   return 'clinical';
 }
 
+const CLINICAL_SPECIALTY_MODULES = new Set([
+  'ZemdaMed',
+  'ZemdaFisio',
+  'ZemdaFono',
+  'ZemdaOdonto',
+  'ZemdaNutri',
+  'ZemdaTO',
+  'ZemdaPsico',
+  'ZemdaPP',
+  'ZemdaEstetic'
+]);
+
+export function isClinicalSpecialtyModuleName(value?: unknown): boolean {
+  return CLINICAL_SPECIALTY_MODULES.has(String(value || '').trim());
+}
+
 /**
  * Resolve o domínio de execução de um agendamento ('clinical' | 'studio').
  * Usado para decidir entre atendimento clínico tradicional vs ZemdaPersonal / Studio.
+ * Respeita a profissão/módulo clínico do serviço e do profissional responsável mesmo dentro de um Studio.
  */
 export function resolveAppointmentWorkflowDomain(params: {
   establishmentProfile?: unknown;
@@ -203,12 +220,12 @@ export function resolveAppointmentWorkflowDomain(params: {
   occurrenceId?: unknown;
   appointmentClinicalModule?: unknown;
   serviceClinicalModule?: unknown;
+  professionalClinicalModule?: unknown;
 }): ServiceDomain {
   const profile = normalizeEstablishmentProfile(params.establishmentProfile);
   if (profile === 'clinic') return 'clinical';
-  if (profile === 'studio') return 'studio';
 
-  // Estabelecimento misto: respeita turma coletiva, domínio explícito do serviço e módulo ZemdaPersonal
+  // Aulas coletivas / turmas permanecem sempre no fluxo de turma/ZemdaPersonal
   if (
     String(params.appointmentServiceKind || '').trim().toLowerCase() === 'group' ||
     String(params.serviceKind || '').trim().toLowerCase() === 'group' ||
@@ -217,18 +234,45 @@ export function resolveAppointmentWorkflowDomain(params: {
     return 'studio';
   }
 
-  const explicit = String(params.serviceDomain || '').trim().toLowerCase();
-  if (explicit === 'studio' || explicit === 'clinical') {
-    return explicit as ServiceDomain;
-  }
-
   const apptMod = String(params.appointmentClinicalModule || '').trim();
   const srvMod = String(params.serviceClinicalModule || '').trim();
-  if (apptMod === 'ZemdaPersonal' || srvMod === 'ZemdaPersonal') {
+  const profMod = String(params.professionalClinicalModule || '').trim();
+
+  // Prioridade do módulo explícito no agendamento/serviço (suporta profissionais multimódulo)
+  if (apptMod === 'ZemdaPersonal') {
     return 'studio';
   }
+  if (isClinicalSpecialtyModuleName(apptMod)) {
+    return 'clinical';
+  }
+  if (srvMod === 'ZemdaPersonal') {
+    return 'studio';
+  }
+  if (isClinicalSpecialtyModuleName(srvMod)) {
+    return 'clinical';
+  }
 
-  return 'clinical';
+  // Fallback pela profissão/módulo canônico do profissional responsável
+  if (profMod === 'ZemdaPersonal') {
+    return 'studio';
+  }
+  if (isClinicalSpecialtyModuleName(profMod)) {
+    return 'clinical';
+  }
+
+  const explicit = String(params.serviceDomain || '').trim().toLowerCase();
+  if (profile === 'mixed') {
+    if (explicit === 'studio' || explicit === 'clinical') {
+      return explicit as ServiceDomain;
+    }
+    return 'clinical';
+  }
+
+  if (profMod === 'general') {
+    return 'clinical';
+  }
+
+  return 'studio';
 }
 
 export function shouldUseStudioPersonalWorkflow(params: {
@@ -239,6 +283,7 @@ export function shouldUseStudioPersonalWorkflow(params: {
   occurrenceId?: unknown;
   appointmentClinicalModule?: unknown;
   serviceClinicalModule?: unknown;
+  professionalClinicalModule?: unknown;
 }): boolean {
   return resolveAppointmentWorkflowDomain(params) === 'studio';
 }

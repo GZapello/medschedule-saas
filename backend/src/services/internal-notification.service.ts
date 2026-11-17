@@ -17,12 +17,25 @@ export interface StudioBookingSessionInput {
   serviceKind?: string | null;
 }
 
+export type NotificationRequestStatus = 'awaiting_confirmation' | 'confirmed' | 'conflict' | 'cancelled';
+
 export interface InternalNotificationRecord {
   id: string;
   tenantId: string;
   recipientUserId: string;
   category: string;
   establishmentMode: NotificationEstablishmentMode;
+  requestId: string | null;
+  requestStatus: NotificationRequestStatus;
+  confirmed: boolean;
+  confirmedAt: string | null;
+  confirmedByUserId: string | null;
+  expiresAt: string | null;
+  whatsappPhone: string | null;
+  establishmentName: string | null;
+  modality: string | null;
+  planDurationLabel: string | null;
+  weeklyFrequency: number | null;
   title: string;
   summary: string;
   studentOrPatientName: string;
@@ -41,6 +54,14 @@ export interface InternalNotificationRecord {
   readAt: string | null;
   createdAt: string;
   createdAtLabel: string;
+}
+
+export const CONFIRMATION_NOTIFICATION_TTL_MINUTES = 10;
+
+export function addMinutesToIso(isoStr: string, minutes: number): string {
+  const baseMs = Date.parse(isoStr);
+  const effectiveMs = Number.isNaN(baseMs) ? Date.now() : baseMs;
+  return new Date(effectiveMs + minutes * 60 * 1000).toISOString();
 }
 
 const WEEKDAY_SHORT_NAMES: Record<number, string> = {
@@ -63,7 +84,7 @@ const WEEKDAY_FULL_NAMES: Record<number, string> = {
   6: 'sábado'
 };
 
-function getWeekdayNumber(ymd: string): number | null {
+export function getWeekdayNumber(ymd: string): number | null {
   const clean = String(ymd || '').slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(clean)) return null;
   const [y, m, d] = clean.split('-').map(Number);
@@ -71,21 +92,21 @@ function getWeekdayNumber(ymd: string): number | null {
   return Number.isNaN(dt.getTime()) ? null : dt.getUTCDay();
 }
 
-function formatDateBr(ymd?: string | null): string {
+export function formatDateBr(ymd?: string | null): string {
   const clean = String(ymd || '').slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(clean)) return clean;
   const [y, m, d] = clean.split('-');
   return `${d}/${m}/${y}`;
 }
 
-function formatClockBr(hhmm?: string | null): string {
+export function formatClockBr(hhmm?: string | null): string {
   const clean = String(hhmm || '').trim().slice(0, 5);
   if (!/^\d{2}:\d{2}$/.test(clean)) return clean;
   const [hh, mm] = clean.split(':');
   return mm === '00' ? `${hh}h` : `${hh}h${mm}`;
 }
 
-function formatTimeRange(startIso?: string | null, endIso?: string | null): string {
+export function formatTimeRange(startIso?: string | null, endIso?: string | null): string {
   const startClock = String(startIso || '').replace(' ', 'T').slice(11, 16);
   const endClock = String(endIso || '').replace(' ', 'T').slice(11, 16);
   const startBr = formatClockBr(startClock);
@@ -96,7 +117,7 @@ function formatTimeRange(startIso?: string | null, endIso?: string | null): stri
   return startBr || '';
 }
 
-function formatWeekdaysList(dayNumbers: number[]): string {
+export function formatWeekdaysList(dayNumbers: number[]): string {
   const order = [1, 2, 3, 4, 5, 6, 0];
   const unique = Array.from(new Set(dayNumbers.filter(d => d >= 0 && d <= 6))).sort(
     (a, b) => order.indexOf(a) - order.indexOf(b)
@@ -299,6 +320,16 @@ export class InternalNotificationService {
     tenantId: string;
     recipientUserIds: string[];
     establishmentMode: NotificationEstablishmentMode;
+    requestId?: string | null;
+    requestStatus?: NotificationRequestStatus;
+    confirmedAt?: string | null;
+    confirmedByUserId?: string | null;
+    expiresAt?: string | null;
+    whatsappPhone?: string | null;
+    establishmentName?: string | null;
+    modality?: string | null;
+    planDurationLabel?: string | null;
+    weeklyFrequency?: number | null;
     title: string;
     summary: string;
     studentOrPatientName: string;
@@ -321,15 +352,25 @@ export class InternalNotificationService {
     if (uniqueRecipients.length === 0) return;
 
     const nowIso = new Date().toISOString();
+    const effectiveStatus: NotificationRequestStatus = params.requestStatus || 'confirmed';
+    const effectiveConfirmedAt =
+      effectiveStatus === 'confirmed' ? (params.confirmedAt || nowIso) : null;
+    const effectiveExpiresAt =
+      effectiveStatus === 'confirmed'
+        ? (params.expiresAt || addMinutesToIso(effectiveConfirmedAt || nowIso, CONFIRMATION_NOTIFICATION_TTL_MINUTES))
+        : null;
+
     const stmt = db.prepare(`
       INSERT OR IGNORE INTO internal_notifications (
         id, tenant_id, recipient_user_id, category, establishment_mode,
+        request_id, request_status, confirmed_at, confirmed_by_user_id, expires_at,
+        whatsapp_phone, establishment_name, modality, plan_duration_label, weekly_frequency,
         title, summary, student_or_patient_name, service_or_class_name,
         weekdays_label, time_range_label, start_date_label, start_date_iso,
         professional_names, class_group_label, sessions_count,
         appointment_id, occurrence_id, series_id, package_contract_id,
         idempotency_key, metadata_json, read_at, created_at
-      ) VALUES (?, ?, ?, 'public_booking', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
+      ) VALUES (?, ?, ?, 'public_booking', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
     `);
 
     const metadataJson = params.metadata ? JSON.stringify(params.metadata) : null;
@@ -339,6 +380,16 @@ export class InternalNotificationService {
         params.tenantId,
         userId,
         params.establishmentMode,
+        params.requestId || null,
+        effectiveStatus,
+        effectiveConfirmedAt,
+        params.confirmedByUserId || null,
+        effectiveExpiresAt,
+        params.whatsappPhone || null,
+        params.establishmentName || null,
+        params.modality || null,
+        params.planDurationLabel || null,
+        params.weeklyFrequency ?? null,
         params.title,
         params.summary,
         params.studentOrPatientName,
@@ -359,6 +410,131 @@ export class InternalNotificationService {
         nowIso
       );
     }
+  }
+
+  /**
+   * Gera notificação interna consolidada para uma nova solicitação pública aguardando confirmação.
+   */
+  static notifyPublicBookingRequestPending(params: {
+    tenantId: string;
+    requestId: string;
+    establishmentMode: NotificationEstablishmentMode;
+    professionalIds: string[];
+    recipientUserIds?: string[];
+    title?: string;
+    summary: string;
+    studentOrPatientName: string;
+    serviceOrClassName: string;
+    weekdaysLabel: string | null;
+    timeRangeLabel: string | null;
+    startDateLabel: string | null;
+    startDateIso: string | null;
+    professionalNames: string | null;
+    classGroupLabel: string | null;
+    sessionsCount: number;
+    whatsappPhone: string | null;
+    establishmentName: string | null;
+    modality: string | null;
+    planDurationLabel?: string | null;
+    weeklyFrequency?: number | null;
+    metadata?: Record<string, unknown>;
+  }): void {
+    const managerIds = this.resolveEstablishmentManagerUserIds(params.tenantId);
+    const profUsers = this.resolveActiveProfessionalUsers(params.tenantId, params.professionalIds);
+    const recipientUserIds = Array.from(
+      new Set([
+        ...managerIds,
+        ...profUsers.map(p => p.userId),
+        ...(Array.isArray(params.recipientUserIds) ? params.recipientUserIds : [])
+      ])
+    );
+
+    this.insertNotificationForRecipients({
+      tenantId: params.tenantId,
+      recipientUserIds,
+      establishmentMode: params.establishmentMode,
+      requestId: params.requestId,
+      requestStatus: 'awaiting_confirmation',
+      confirmedAt: null,
+      confirmedByUserId: null,
+      expiresAt: null,
+      whatsappPhone: params.whatsappPhone,
+      establishmentName: params.establishmentName,
+      modality: params.modality,
+      planDurationLabel: params.planDurationLabel || null,
+      weeklyFrequency: params.weeklyFrequency ?? null,
+      title: params.title || 'Nova solicitação de agendamento',
+      summary: params.summary,
+      studentOrPatientName: params.studentOrPatientName,
+      serviceOrClassName: params.serviceOrClassName,
+      weekdaysLabel: params.weekdaysLabel,
+      timeRangeLabel: params.timeRangeLabel,
+      startDateLabel: params.startDateLabel,
+      startDateIso: params.startDateIso,
+      professionalNames: params.professionalNames,
+      classGroupLabel: params.classGroupLabel,
+      sessionsCount: params.sessionsCount,
+      appointmentId: null,
+      occurrenceId: null,
+      seriesId: null,
+      packageContractId: null,
+      idempotencyKey: `pending-req:${params.requestId}`,
+      metadata: params.metadata
+    });
+  }
+
+  /**
+   * Atualiza TODAS as notificações dos destinatários vinculados a um request_id para confirmado,
+   * iniciando a janela de exibição de 10 minutos a partir de confirmedAtIso.
+   */
+  static markRequestConfirmedNotificationsTx(params: {
+    tenantId: string;
+    requestId: string;
+    confirmedByUserId: string;
+    confirmedAtIso: string;
+    expiresAtIso: string;
+    appointmentId: string | null;
+    occurrenceId?: string | null;
+    seriesId?: string | null;
+    packageContractId?: string | null;
+    startDateIso?: string | null;
+    startDateLabel?: string | null;
+    timeRangeLabel?: string | null;
+    professionalNames?: string | null;
+  }): number {
+    const info = db
+      .prepare(`
+        UPDATE internal_notifications
+        SET request_status = 'confirmed',
+            confirmed_at = ?,
+            confirmed_by_user_id = ?,
+            expires_at = ?,
+            appointment_id = ?,
+            occurrence_id = COALESCE(?, occurrence_id),
+            series_id = COALESCE(?, series_id),
+            package_contract_id = COALESCE(?, package_contract_id),
+            start_date_iso = COALESCE(?, start_date_iso),
+            start_date_label = COALESCE(?, start_date_label),
+            time_range_label = COALESCE(?, time_range_label),
+            professional_names = COALESCE(?, professional_names)
+        WHERE tenant_id = ? AND request_id = ?
+      `)
+      .run(
+        params.confirmedAtIso,
+        params.confirmedByUserId,
+        params.expiresAtIso,
+        params.appointmentId,
+        params.occurrenceId || null,
+        params.seriesId || null,
+        params.packageContractId || null,
+        params.startDateIso || null,
+        params.startDateLabel || null,
+        params.timeRangeLabel || null,
+        params.professionalNames || null,
+        params.tenantId,
+        params.requestId
+      );
+    return Number(info?.changes || 0);
   }
 
   /**
@@ -634,39 +810,65 @@ export class InternalNotificationService {
     }
   }
 
-  static getUnreadCountForUser(tenantId: string, userId: string): number {
-    if (!tenantId || !userId) return 0;
+  static getBellCountsForUser(
+    tenantId: string,
+    userId: string,
+    nowIso: string = new Date().toISOString()
+  ): { unreadCount: number; activeCount: number; pendingCount: number } {
+    if (!tenantId || !userId) return { unreadCount: 0, activeCount: 0, pendingCount: 0 };
     const row = db
       .prepare(`
-        SELECT COUNT(*) as total
+        SELECT
+          SUM(CASE WHEN read_at IS NULL THEN 1 ELSE 0 END) as unread_total,
+          COUNT(*) as active_total,
+          SUM(CASE WHEN COALESCE(request_status, 'confirmed') = 'awaiting_confirmation' THEN 1 ELSE 0 END) as pending_total
         FROM internal_notifications
-        WHERE tenant_id = ? AND recipient_user_id = ? AND read_at IS NULL
+        WHERE tenant_id = ?
+          AND recipient_user_id = ?
+          AND (
+            COALESCE(request_status, 'confirmed') = 'awaiting_confirmation'
+            OR (
+              COALESCE(request_status, 'confirmed') = 'confirmed'
+              AND expires_at IS NOT NULL
+              AND expires_at > ?
+            )
+          )
       `)
-      .get(tenantId, userId) as { total: number } | undefined;
-    return Number(row?.total || 0);
+      .get(tenantId, userId, nowIso) as {
+        unread_total: number | null;
+        active_total: number | null;
+        pending_total: number | null;
+      } | undefined;
+    return {
+      unreadCount: Number(row?.unread_total || 0),
+      activeCount: Number(row?.active_total || 0),
+      pendingCount: Number(row?.pending_total || 0)
+    };
   }
 
-  static listForUser(tenantId: string, userId: string, limit = 30): {
-    notifications: InternalNotificationRecord[];
-    unreadCount: number;
-  } {
-    const safeLimit = Math.min(Math.max(Number(limit) || 30, 1), 100);
-    const rows = db
-      .prepare(`
-        SELECT *
-        FROM internal_notifications
-        WHERE tenant_id = ? AND recipient_user_id = ?
-        ORDER BY created_at DESC, rowid DESC
-        LIMIT ?
-      `)
-      .all(tenantId, userId, safeLimit) as any[];
+  static getUnreadCountForUser(tenantId: string, userId: string, nowIso?: string): number {
+    return this.getBellCountsForUser(tenantId, userId, nowIso).unreadCount;
+  }
 
-    const notifications: InternalNotificationRecord[] = rows.map(r => ({
+  static mapRowToRecord(r: any): InternalNotificationRecord {
+    const reqStatus = (r.request_status || 'confirmed') as NotificationRequestStatus;
+    return {
       id: r.id,
       tenantId: r.tenant_id,
       recipientUserId: r.recipient_user_id,
       category: r.category,
       establishmentMode: r.establishment_mode === 'studio' ? 'studio' : 'clinic',
+      requestId: r.request_id || null,
+      requestStatus: reqStatus,
+      confirmed: reqStatus === 'confirmed',
+      confirmedAt: r.confirmed_at || null,
+      confirmedByUserId: r.confirmed_by_user_id || null,
+      expiresAt: r.expires_at || null,
+      whatsappPhone: r.whatsapp_phone || null,
+      establishmentName: r.establishment_name || null,
+      modality: r.modality || null,
+      planDurationLabel: r.plan_duration_label || null,
+      weeklyFrequency: r.weekly_frequency != null ? Number(r.weekly_frequency) : null,
       title: r.title,
       summary: r.summary,
       studentOrPatientName: r.student_or_patient_name,
@@ -685,11 +887,51 @@ export class InternalNotificationService {
       readAt: r.read_at || null,
       createdAt: r.created_at,
       createdAtLabel: formatCreatedAtBr(r.created_at)
-    }));
+    };
+  }
+
+  static listForUser(
+    tenantId: string,
+    userId: string,
+    limit = 30,
+    nowIso: string = new Date().toISOString()
+  ): {
+    notifications: InternalNotificationRecord[];
+    unreadCount: number;
+    activeCount: number;
+    pendingCount: number;
+  } {
+    const safeLimit = Math.min(Math.max(Number(limit) || 30, 1), 100);
+    const rows = db
+      .prepare(`
+        SELECT *
+        FROM internal_notifications
+        WHERE tenant_id = ?
+          AND recipient_user_id = ?
+          AND (
+            COALESCE(request_status, 'confirmed') = 'awaiting_confirmation'
+            OR (
+              COALESCE(request_status, 'confirmed') = 'confirmed'
+              AND expires_at IS NOT NULL
+              AND expires_at > ?
+            )
+          )
+        ORDER BY
+          CASE WHEN COALESCE(request_status, 'confirmed') = 'awaiting_confirmation' THEN 0 ELSE 1 END ASC,
+          created_at DESC,
+          rowid DESC
+        LIMIT ?
+      `)
+      .all(tenantId, userId, nowIso, safeLimit) as any[];
+
+    const notifications: InternalNotificationRecord[] = rows.map(r => this.mapRowToRecord(r));
+    const counts = this.getBellCountsForUser(tenantId, userId, nowIso);
 
     return {
       notifications,
-      unreadCount: this.getUnreadCountForUser(tenantId, userId)
+      unreadCount: counts.unreadCount,
+      activeCount: counts.activeCount,
+      pendingCount: counts.pendingCount
     };
   }
 
@@ -697,8 +939,8 @@ export class InternalNotificationService {
     tenantId: string,
     userId: string,
     options: { notificationIds?: string[]; markAll?: boolean }
-  ): { updated: number; unreadCount: number } {
-    if (!tenantId || !userId) return { updated: 0, unreadCount: 0 };
+  ): { updated: number; unreadCount: number; activeCount: number; pendingCount: number } {
+    if (!tenantId || !userId) return { updated: 0, unreadCount: 0, activeCount: 0, pendingCount: 0 };
     const nowIso = new Date().toISOString();
     let updated = 0;
 
@@ -728,9 +970,10 @@ export class InternalNotificationService {
       }
     }
 
+    const counts = this.getBellCountsForUser(tenantId, userId, nowIso);
     return {
       updated,
-      unreadCount: this.getUnreadCountForUser(tenantId, userId)
+      ...counts
     };
   }
 }

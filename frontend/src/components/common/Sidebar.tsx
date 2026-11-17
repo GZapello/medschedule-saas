@@ -93,23 +93,41 @@ export const Sidebar: React.FC<SidebarProps> = ({
     hasPermission,
     isZemdaBody,
     commercialModule,
+    authorizedModules,
+    userPermissions,
     clinicalWorkspace,
     clientTermLabel
   } = useAuth();
 
   const isEligibleClinical = isClinicAdmin || isProfessional;
 
+  const hasClinicalSpecialtyModule = isEligibleClinical && Boolean(
+    (isDoctor || isZemdaMed || commercialModule === 'ZemdaMed' || authorizedModules.includes('ZemdaMed')) ||
+    (isPhysiotherapist || isZemdaFisio || commercialModule === 'ZemdaFisio' || authorizedModules.includes('ZemdaFisio')) ||
+    (isDentist || isZemdaOdonto || commercialModule === 'ZemdaOdonto' || authorizedModules.includes('ZemdaOdonto')) ||
+    (isEsthetician || isZemdaEstetic || commercialModule === 'ZemdaEstetic' || authorizedModules.includes('ZemdaEstetic')) ||
+    (isNutritionist || isZemdaNutri || commercialModule === 'ZemdaNutri' || authorizedModules.includes('ZemdaNutri')) ||
+    (isOccupationalTherapist || isZemdaTO || commercialModule === 'ZemdaTO' || authorizedModules.includes('ZemdaTO')) ||
+    (isSpeechTherapist || isZemdaFono || commercialModule === 'ZemdaFono' || authorizedModules.includes('ZemdaFono')) ||
+    (isPsychologist || isZemdaPsico || commercialModule === 'ZemdaPsico' || authorizedModules.includes('ZemdaPsico')) ||
+    (isPsychopedagogue || isZemdaPP || commercialModule === 'ZemdaPP' || authorizedModules.includes('ZemdaPP'))
+  );
+
+  const hasExplicitZemdaPersonalAccess = isEligibleClinical && Boolean(
+    isPersonalTrainer ||
+    isZemdaPersonal ||
+    commercialModule === 'ZemdaPersonal' ||
+    Boolean((currentUser as any)?.zemdaPersonalEnabled || (currentUser as any)?.zemda_personal_enabled) ||
+    userPermissions.includes('access_zemda_personal') ||
+    authorizedModules.includes('ZemdaPersonal') ||
+    hasCapability('TRAINING_PRESCRIBE') ||
+    hasCapability('PHYSICAL_ASSESSMENT') ||
+    (isStudioProfile(currentTenant?.establishment_profile) && isClinicAdmin && !hasClinicalSpecialtyModule)
+  );
+
   const hasSpecializedProfessionalModule = isEligibleClinical && Boolean(
-    (isDoctor || isZemdaMed || commercialModule === 'ZemdaMed') ||
-    (isPhysiotherapist || isZemdaFisio || commercialModule === 'ZemdaFisio') ||
-    (isDentist || isZemdaOdonto || commercialModule === 'ZemdaOdonto') ||
-    (isEsthetician || isZemdaEstetic || commercialModule === 'ZemdaEstetic') ||
-    (isNutritionist || isZemdaNutri || commercialModule === 'ZemdaNutri') ||
-    (isOccupationalTherapist || isZemdaTO || commercialModule === 'ZemdaTO') ||
-    (isSpeechTherapist || isZemdaFono || commercialModule === 'ZemdaFono') ||
-    (isPsychologist || isZemdaPsico || commercialModule === 'ZemdaPsico') ||
-    (isPsychopedagogue || isZemdaPP || commercialModule === 'ZemdaPP') ||
-    (isPersonalTrainer || isZemdaPersonal || commercialModule === 'ZemdaPersonal')
+    hasClinicalSpecialtyModule ||
+    hasExplicitZemdaPersonalAccess
   );
 
   const hasZemda360Access = Boolean(isClinicAdmin || isZemdaBody);
@@ -140,13 +158,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
             ? 'Atendimento Clínico'
             : 'Prontuário & Evolução',
           icon: FileText,
-          visible: isEligibleClinical
+          visible: isEligibleClinical && !(isStudioProfile(currentTenant?.establishment_profile) && !isClinicAdmin && hasExplicitZemdaPersonalAccess && !hasClinicalSpecialtyModule)
         },
         {
           id: 'zemda-med',
           label: 'ZemdaMed (Medicina)',
           icon: Stethoscope,
-          visible: isEligibleClinical && (isDoctor || isZemdaMed || commercialModule === 'ZemdaMed')
+          visible: isEligibleClinical && (isDoctor || isZemdaMed || commercialModule === 'ZemdaMed' || authorizedModules.includes('ZemdaMed'))
         },
         {
           id: 'zemda-body',
@@ -158,55 +176,55 @@ export const Sidebar: React.FC<SidebarProps> = ({
           id: 'zemda-fisio',
           label: 'ZemdaFisio (Fisioterapia)',
           icon: Activity,
-          visible: isEligibleClinical && (isPhysiotherapist || isZemdaFisio || commercialModule === 'ZemdaFisio')
+          visible: isEligibleClinical && (isPhysiotherapist || isZemdaFisio || commercialModule === 'ZemdaFisio' || authorizedModules.includes('ZemdaFisio'))
         },
         {
           id: 'zemda-odonto',
           label: 'ZemdaOdonto (Odontologia)',
           icon: Smile,
-          visible: isEligibleClinical && (isDentist || isZemdaOdonto || commercialModule === 'ZemdaOdonto')
+          visible: isEligibleClinical && (isDentist || isZemdaOdonto || commercialModule === 'ZemdaOdonto' || authorizedModules.includes('ZemdaOdonto'))
         },
         {
           id: 'zemda-estetic',
           label: 'ZemdaEstetic (Estética)',
           icon: Sparkles,
-          visible: isEligibleClinical && (isEsthetician || isZemdaEstetic || commercialModule === 'ZemdaEstetic')
+          visible: isEligibleClinical && (isEsthetician || isZemdaEstetic || commercialModule === 'ZemdaEstetic' || authorizedModules.includes('ZemdaEstetic'))
         },
         {
           id: 'zemda-nutri',
           label: 'ZemdaNutri (Nutrição)',
           icon: Apple,
-          visible: isEligibleClinical && (isNutritionist || isZemdaNutri || commercialModule === 'ZemdaNutri')
+          visible: isEligibleClinical && (isNutritionist || isZemdaNutri || commercialModule === 'ZemdaNutri' || authorizedModules.includes('ZemdaNutri'))
         },
         {
           id: 'zemda-to',
           label: 'ZemdaTO (Terapia Ocupacional)',
           icon: Hand,
-          visible: isEligibleClinical && (isOccupationalTherapist || isZemdaTO || commercialModule === 'ZemdaTO')
+          visible: isEligibleClinical && (isOccupationalTherapist || isZemdaTO || commercialModule === 'ZemdaTO' || authorizedModules.includes('ZemdaTO'))
         },
         {
           id: 'zemda-fono',
           label: 'ZemdaFono (Fonoaudiologia)',
           icon: Mic,
-          visible: isEligibleClinical && (isSpeechTherapist || isZemdaFono || commercialModule === 'ZemdaFono')
+          visible: isEligibleClinical && (isSpeechTherapist || isZemdaFono || commercialModule === 'ZemdaFono' || authorizedModules.includes('ZemdaFono'))
         },
         {
           id: 'zemda-psico',
           label: 'ZemdaPsico (Psicologia)',
           icon: Brain,
-          visible: isEligibleClinical && (isPsychologist || isZemdaPsico || commercialModule === 'ZemdaPsico')
+          visible: isEligibleClinical && (isPsychologist || isZemdaPsico || commercialModule === 'ZemdaPsico' || authorizedModules.includes('ZemdaPsico'))
         },
         {
           id: 'zemda-pp',
           label: 'ZemdaPP (Psicopedagogia)',
           icon: GraduationCap,
-          visible: isEligibleClinical && (isPsychopedagogue || isZemdaPP || commercialModule === 'ZemdaPP')
+          visible: isEligibleClinical && (isPsychopedagogue || isZemdaPP || commercialModule === 'ZemdaPP' || authorizedModules.includes('ZemdaPP'))
         },
         {
           id: 'zemda-personal',
           label: 'ZemdaPersonal (Treinamento)',
           icon: Dumbbell,
-          visible: isEligibleClinical && (isPersonalTrainer || isZemdaPersonal || commercialModule === 'ZemdaPersonal' || isStudioProfile(currentTenant?.establishment_profile))
+          visible: hasExplicitZemdaPersonalAccess
         },
         {
           id: 'pending-exams',

@@ -924,6 +924,7 @@ api.post('/v1/notifications/:id/retry', requireTenant, requireRole('clinic_admin
 api.get('/v1/internal-notifications/unread-count', requireTenant, requireRole('clinic_admin', 'professional'), InternalNotificationController.unreadCount);
 api.get('/v1/internal-notifications', requireTenant, requireRole('clinic_admin', 'professional'), InternalNotificationController.list);
 api.post('/v1/internal-notifications/mark-read', requireTenant, requireRole('clinic_admin', 'professional'), InternalNotificationController.markRead);
+api.post('/v1/internal-notifications/:id/confirm', requireTenant, requireRole('clinic_admin', 'professional'), InternalNotificationController.confirm);
 
 // Financeiro & Pagamentos
 api.get('/v1/payments', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), PaymentController.list);

@@ -1261,9 +1261,11 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
           establishmentProfile: currentTenant?.establishment_profile,
           serviceDomain: enrichedCreatedAppt.service_domain,
           serviceKind: enrichedCreatedAppt.service_kind,
+          appointmentServiceKind: enrichedCreatedAppt.appointment_service_kind,
           occurrenceId: enrichedCreatedAppt.occurrence_id,
           appointmentClinicalModule: enrichedCreatedAppt.clinical_module,
-          serviceClinicalModule: enrichedCreatedAppt.service_clinical_module
+          serviceClinicalModule: enrichedCreatedAppt.service_clinical_module,
+          professionalClinicalModule: enrichedCreatedAppt.professional_clinical_module
         });
         if (isStudioRetro) {
           writeActiveStudioSession(buildActiveStudioSessionFromAppointment(enrichedCreatedAppt, currentTenant?.id));
@@ -1274,7 +1276,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
           return;
         }
         try {
-          sessionStorage.setItem('zemda_open_retroactive_appt', JSON.stringify(createdAppt));
+          sessionStorage.setItem('zemda_open_retroactive_appt', JSON.stringify(enrichedCreatedAppt));
         } catch (_) {}
         showToast('Atendimento registrado! Abrindo atendimento clínico...', 'success');
       } else {
