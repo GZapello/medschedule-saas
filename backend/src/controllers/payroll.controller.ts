@@ -3,6 +3,7 @@ import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '../middlewares/audit.middleware';
 import { BillingCycleService, FREQUENCY_PT_LABELS, normalizePeriodicFrequency } from '../services/billing-cycle.service';
+import { PayrollReceiptService, buildPayrollReceiptFilename } from '../services/payroll-receipt.service';
 
 export class PayrollController {
   // Lista pagamentos / folha do mês para a equipe
@@ -1120,14 +1121,25 @@ export class PayrollController {
       }
 
       const finalPaidDate = status === 'paid' ? (paidDate || new Date().toISOString().split('T')[0]) : null;
+      const existing = db.prepare('SELECT id, status FROM professional_payrolls WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
 
-      db.prepare(`
-        UPDATE professional_payrolls SET
-          status = ?,
-          paid_date = ?,
-          updated_at = datetime('now')
-        WHERE id = ? AND tenant_id = ?
-      `).run(status, finalPaidDate, id, tenantId);
+      db.transaction(() => {
+        db.prepare(`
+          UPDATE professional_payrolls SET
+            status = ?,
+            paid_date = ?,
+            updated_at = datetime('now')
+          WHERE id = ? AND tenant_id = ?
+        `).run(status, finalPaidDate, id, tenantId);
+
+        if (tenantId && existing?.status === 'paid' && status !== 'paid') {
+          PayrollReceiptService.markReceiptsReversedForPayrollTx(
+            String(tenantId),
+            String(id),
+            `Pagamento alterado de Pago para ${status}`
+          );
+        }
+      })();
 
       logAudit(req, 'UPDATE_PAYROLL_STATUS', 'professional_payrolls', id, { status, paidDate: finalPaidDate });
       const updated = db.prepare('SELECT * FROM professional_payrolls WHERE id = ? AND tenant_id = ?').get(id, tenantId);
@@ -1143,25 +1155,144 @@ export class PayrollController {
     try {
       const { id } = req.params;
       const tenantId = req.tenantId;
-      const { paidDate, notes } = req.body;
+      const { paidDate, notes, paymentMethod } = req.body;
 
       const finalPaidDate = paidDate || new Date().toISOString().split('T')[0];
+      const cleanPaymentMethod = typeof paymentMethod === 'string' && paymentMethod.trim()
+        ? paymentMethod.trim()
+        : null;
 
       db.prepare(`
         UPDATE professional_payrolls SET
           status = 'paid',
           paid_date = ?,
           notes = COALESCE(?, notes),
+          payment_method = COALESCE(?, payment_method),
           updated_at = datetime('now')
         WHERE id = ? AND tenant_id = ?
-      `).run(finalPaidDate, notes || null, id, tenantId);
+      `).run(finalPaidDate, notes || null, cleanPaymentMethod, id, tenantId);
 
-      logAudit(req, 'MARK_PAYROLL_PAID', 'professional_payrolls', id, { paidDate: finalPaidDate });
+      logAudit(req, 'MARK_PAYROLL_PAID', 'professional_payrolls', id, { paidDate: finalPaidDate, paymentMethod: cleanPaymentMethod });
       const updated = db.prepare('SELECT * FROM professional_payrolls WHERE id = ? AND tenant_id = ?').get(id, tenantId);
       res.json({ success: true, message: 'Pagamento registrado com sucesso!', status: 'paid', paidDate: finalPaidDate, payroll: updated });
     } catch (err: any) {
       console.error('[PayrollController.markPaid] Erro:', err);
       res.status(500).json({ success: false, error: 'Erro ao registrar pagamento' });
+    }
+  }
+
+  // Consulta recibo ativo e histórico de recibos do lançamento
+  static getReceipt(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      const userId = req.user?.userId;
+      if (!tenantId || !userId) {
+        res.status(401).json({ error: 'Não autenticado' });
+        return;
+      }
+
+      const data = PayrollReceiptService.getReceiptForPayroll({
+        tenantId,
+        payrollId: String(req.params.id || ''),
+        userId,
+        role: String(req.user?.role || '')
+      });
+
+      res.json({
+        ...data,
+        filename: data.activeReceipt ? buildPayrollReceiptFilename(data.activeReceipt.snapshot) : null
+      });
+    } catch (err: any) {
+      if (err && typeof err.status === 'number') {
+        res.status(err.status).json({ error: err.message, ...(err.code ? { code: err.code } : {}) });
+        return;
+      }
+      console.error('[PayrollController.getReceipt] Erro:', err);
+      res.status(500).json({ error: 'Erro ao consultar recibo do pagamento.' });
+    }
+  }
+
+  // Emite ou recupera de forma idempotente o recibo oficial de quitação
+  static issueReceipt(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      const userId = req.user?.userId;
+      if (!tenantId || !userId) {
+        res.status(401).json({ error: 'Não autenticado' });
+        return;
+      }
+
+      const issued = PayrollReceiptService.issueOrGetReceipt({
+        tenantId,
+        payrollId: String(req.params.id || ''),
+        userId,
+        userName: String(req.user?.name || 'Gestor'),
+        role: String(req.user?.role || '')
+      });
+
+      if (!issued.alreadyIssued) {
+        logAudit(req, 'ISSUE_PAYROLL_RECEIPT', 'payroll_receipts', issued.receipt.id, {
+          payrollId: issued.receipt.payrollId,
+          receiptNumber: issued.receipt.receiptNumber,
+          periodMonth: issued.receipt.periodMonth,
+          totalPaid: issued.receipt.snapshot.values.totalPaid
+        });
+      }
+
+      res.status(issued.alreadyIssued ? 200 : 201).json({
+        success: true,
+        ...issued,
+        filename: buildPayrollReceiptFilename(issued.receipt.snapshot)
+      });
+    } catch (err: any) {
+      if (err && typeof err.status === 'number') {
+        res.status(err.status).json({
+          error: err.message,
+          ...(err.code ? { code: err.code } : {}),
+          ...(err.history ? { history: err.history } : {})
+        });
+        return;
+      }
+      console.error('[PayrollController.issueReceipt] Erro:', err);
+      res.status(500).json({ error: 'Erro ao emitir recibo do pagamento.' });
+    }
+  }
+
+  // Gera e envia o PDF oficial do recibo de pagamento ao profissional
+  static async downloadReceiptPdf(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.tenantId;
+      const userId = req.user?.userId;
+      if (!tenantId || !userId) {
+        res.status(401).json({ error: 'Não autenticado' });
+        return;
+      }
+
+      const requestedReceiptId = req.query.receiptId ? String(req.query.receiptId) : null;
+      const issued = PayrollReceiptService.issueOrGetReceipt({
+        tenantId,
+        payrollId: String(req.params.id || ''),
+        userId,
+        userName: String(req.user?.name || 'Gestor'),
+        role: String(req.user?.role || ''),
+        requestedReceiptId
+      });
+
+      const pdfBuffer = await PayrollReceiptService.renderPayrollReceiptPdfBuffer(issued.receipt);
+      const filename = buildPayrollReceiptFilename(issued.receipt.snapshot);
+      const disposition = req.query.disposition === 'inline' ? 'inline' : 'attachment';
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `${disposition}; filename="${filename}"`);
+      res.setHeader('Cache-Control', 'no-store');
+      res.send(pdfBuffer);
+    } catch (err: any) {
+      if (err && typeof err.status === 'number') {
+        res.status(err.status).json({ error: err.message, ...(err.code ? { code: err.code } : {}) });
+        return;
+      }
+      console.error('[PayrollController.downloadReceiptPdf] Erro:', err);
+      res.status(500).json({ error: 'Erro ao gerar PDF do recibo.' });
     }
   }
 

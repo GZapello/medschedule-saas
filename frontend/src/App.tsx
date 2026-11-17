@@ -1548,7 +1548,7 @@ const AppContent: React.FC = () => {
 
           {currentView === 'zemda-med' && (
             (isDoctor || isZemdaMed || commercialModule === 'ZemdaMed' || authorizedModules.includes('ZemdaMed') || hasCapability('MEDICAL_BASE') || hasCapability('medical_consultations') || isSuperAdmin) ? (
-              <ZemdaMedWorkspace />
+              <ZemdaMedWorkspace initialPatientId={subRouteId || undefined} />
             ) : (
               <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
                 <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mb-4">
@@ -1593,7 +1593,7 @@ const AppContent: React.FC = () => {
 
           {currentView === 'zemda-fisio' && (
             (isPhysiotherapist || isZemdaFisio || commercialModule === 'ZemdaFisio' || authorizedModules.includes('ZemdaFisio') || hasCapability('MOBILITY_ASSESSMENT') || isSuperAdmin) ? (
-              <PhysiotherapyWorkspace />
+              <PhysiotherapyWorkspace initialPatientId={subRouteId || undefined} />
             ) : (
               <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
                 <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mb-4">
@@ -1609,7 +1609,7 @@ const AppContent: React.FC = () => {
 
           {currentView === 'zemda-odonto' && (
             (isDentist || isZemdaOdonto || commercialModule === 'ZemdaOdonto' || authorizedModules.includes('ZemdaOdonto') || hasCapability('ODONTOGRAM') || isSuperAdmin) ? (
-              <DentistryWorkspace />
+              <DentistryWorkspace initialPatientId={subRouteId || undefined} />
             ) : (
               <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
                 <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mb-4">
@@ -1650,7 +1650,7 @@ const AppContent: React.FC = () => {
 
           {(currentView === 'zemda-nutri' || currentView === 'nutrition-workspace') && (
             (isNutritionist || isZemdaNutri || commercialModule === 'ZemdaNutri' || authorizedModules.includes('ZemdaNutri') || hasCapability('DIET_PRESCRIBE') || isSuperAdmin) ? (
-              <NutritionWorkspace />
+              <NutritionWorkspace initialPatientId={subRouteId || undefined} />
             ) : (
               <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
                 <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mb-4">
@@ -1666,7 +1666,7 @@ const AppContent: React.FC = () => {
 
           {(currentView === 'zemda-to' || currentView === 'occupational-therapy-workspace') && (
             (isOccupationalTherapist || isZemdaTO || commercialModule === 'ZemdaTO' || authorizedModules.includes('ZemdaTO') || hasCapability('SENSORY_INTEGRATION') || isSuperAdmin) ? (
-              <OccupationalTherapyWorkspace />
+              <OccupationalTherapyWorkspace initialPatientId={subRouteId || undefined} />
             ) : (
               <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
                 <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mb-4">
@@ -1682,7 +1682,7 @@ const AppContent: React.FC = () => {
 
           {(currentView === 'zemda-fono' || currentView === 'speech-therapy-workspace') && (
             (isSpeechTherapist || isZemdaFono || commercialModule === 'ZemdaFono' || authorizedModules.includes('ZemdaFono') || hasCapability('AUDIOMETRY') || isSuperAdmin) ? (
-              <SpeechTherapyWorkspace />
+              <SpeechTherapyWorkspace initialPatientId={subRouteId || undefined} />
             ) : (
               <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
                 <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mb-4">
@@ -1698,7 +1698,7 @@ const AppContent: React.FC = () => {
 
           {currentView === 'zemda-psico' && (
             (isPsychologist || isZemdaPsico || commercialModule === 'ZemdaPsico' || authorizedModules.includes('ZemdaPsico') || hasCapability('BEHAVIORAL_TRACKING') || isSuperAdmin) ? (
-              <PsychologyWorkspace />
+              <PsychologyWorkspace initialPatientId={subRouteId || undefined} />
             ) : (
               <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
                 <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mb-4">
@@ -1714,7 +1714,7 @@ const AppContent: React.FC = () => {
 
           {(currentView === 'zemda-pp' || currentView === 'psychopedagogy-workspace') && (
             (isPsychopedagogue || isZemdaPP || commercialModule === 'ZemdaPP' || authorizedModules.includes('ZemdaPP') || hasCapability('LEARNING_ASSESSMENT') || isSuperAdmin) ? (
-              <PsychopedagogyWorkspace />
+              <PsychopedagogyWorkspace initialPatientId={subRouteId || undefined} />
             ) : (
               <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
                 <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mb-4">

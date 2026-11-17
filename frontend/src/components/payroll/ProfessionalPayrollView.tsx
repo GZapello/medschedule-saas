@@ -21,9 +21,11 @@ import {
   AlertCircle,
   AlertTriangle,
   Eye,
-  Users
+  Users,
+  FileText
 } from 'lucide-react';
 import { ProfessionalPayroll, Professional } from '../../types';
+import { PayrollReceiptModal } from './PayrollReceiptModal';
 
 export const ProfessionalPayrollView: React.FC = () => {
   const { showToast } = useToast();
@@ -46,7 +48,9 @@ export const ProfessionalPayrollView: React.FC = () => {
   // Modais
   const [payingRecord, setPayingRecord] = useState<ProfessionalPayroll | null>(null);
   const [payDate, setPayDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [payMethod, setPayMethod] = useState<string>('');
   const [payNotes, setPayNotes] = useState<string>('');
+  const [receiptRecord, setReceiptRecord] = useState<ProfessionalPayroll | null>(null);
 
   const [adjustingRecord, setAdjustingRecord] = useState<ProfessionalPayroll | null>(null);
   const [adjustmentValue, setAdjustmentValue] = useState<number>(0);
@@ -181,10 +185,12 @@ export const ProfessionalPayrollView: React.FC = () => {
     try {
       await ApiClient.patch(`/v1/payroll/${payingRecord.id}/pay`, {
         paidDate: payDate,
+        paymentMethod: payMethod || undefined,
         notes: payNotes.trim() || null
       });
       showToast('Pagamento registrado com sucesso!', 'success');
       setPayingRecord(null);
+      setPayMethod('');
       fetchPayrolls();
     } catch (err: any) {
       showToast(err.message || 'Erro ao registrar pagamento', 'error');
@@ -481,11 +487,23 @@ export const ProfessionalPayrollView: React.FC = () => {
                             <Eye className="w-3 h-3" />
                             <span>Detalhar</span>
                           </button>
-                          {!isPaid && (
+                          {isPaid ? (
+                            <button
+                              type="button"
+                              onClick={() => setReceiptRecord(pay)}
+                              data-testid={`payroll-generate-receipt-${pay.id}`}
+                              className="inline-flex items-center gap-1 px-3 py-1 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl text-[11px] shadow-xs transition-all cursor-pointer"
+                              title="Visualizar, baixar PDF ou imprimir recibo de pagamento"
+                            >
+                              <FileText className="w-3 h-3" />
+                              <span>Gerar Recibo</span>
+                            </button>
+                          ) : (
                             <button
                               onClick={() => {
                                 setPayingRecord(pay);
                                 setPayDate(new Date().toISOString().split('T')[0]);
+                                setPayMethod('');
                                 setPayNotes('');
                               }}
                               className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-[11px] shadow-xs transition-all cursor-pointer"
@@ -531,6 +549,21 @@ export const ProfessionalPayrollView: React.FC = () => {
                   onChange={e => setPayDate(e.target.value)}
                   className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
                 />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Forma de Pagamento (opcional)</label>
+                <select
+                  value={payMethod}
+                  onChange={e => setPayMethod(e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white"
+                >
+                  <option value="">Não informado</option>
+                  <option value="pix">PIX</option>
+                  <option value="bank_transfer">Transferência Bancária / TED</option>
+                  <option value="cash">Dinheiro</option>
+                  <option value="deposit">Depósito Bancário</option>
+                </select>
               </div>
 
               <div>
@@ -767,6 +800,12 @@ export const ProfessionalPayrollView: React.FC = () => {
           </div>
         </div>
       )}
+      {/* Modal de Recibo em PDF */}
+      <PayrollReceiptModal
+        isOpen={Boolean(receiptRecord)}
+        payroll={receiptRecord}
+        onClose={() => setReceiptRecord(null)}
+      />
     </div>
   );
 };

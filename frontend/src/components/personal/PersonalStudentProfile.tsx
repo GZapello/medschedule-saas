@@ -41,6 +41,7 @@ import { PersonalAssessmentComparisonModal } from './PersonalAssessmentCompariso
 import { ExternalTestsManager } from '../common/ExternalTestsManager';
 import { MeasurableGoalsManager } from '../common/MeasurableGoalsManager';
 import { PersonalStudentLinkModal } from './PersonalStudentLinkModal';
+import { consumePendingDraftResume } from '../../utils/draftResumeContext';
 
 const AssessmentEditor = lazy(() => import('./PersonalAssessmentModal').then(module => ({default:module.PersonalAssessmentModal})));
 
@@ -276,14 +277,33 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
         ApiClient.get<AttendanceStats>(`/v1/personal/students/${studentId}/attendance`)
       ]);
 
+      const loadedWorkouts = studentRes.workouts || [];
       setStudent(studentRes.student);
-      setWorkouts(studentRes.workouts || []);
+      setWorkouts(loadedWorkouts);
       setAssessments(assessRes.assessments || []);
       setEvolutionHistory(evolutionRes.history || []);
       setPhotos(photosRes.photos || []);
       setLogs(logsRes.logs || []);
       setRecords(recordsRes.records || []);
       setAttendance(attendanceRes);
+
+      if (loadedWorkouts.length > 0) {
+        const pendingWorkout = consumePendingDraftResume(
+          intent =>
+            intent.resolvedModule === 'ZemdaPersonal' &&
+            intent.draftSubtype === 'workout' &&
+            intent.patientId === studentId
+        );
+        if (pendingWorkout) {
+          const targetWorkout =
+            (pendingWorkout.appointmentId
+              ? loadedWorkouts.find(w => w.id === pendingWorkout.appointmentId)
+              : null) || loadedWorkouts[0];
+          if (targetWorkout) {
+            setSelectedWorkoutForExecution(targetWorkout);
+          }
+        }
+      }
     } catch (err) {
       console.error('Erro ao carregar dados completos do aluno:', err);
       showToast('Erro ao carregar dados do aluno', 'error');

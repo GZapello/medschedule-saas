@@ -25,11 +25,13 @@ import { Activity, FileText, Stethoscope, ChevronLeft, Dumbbell, Sparkles, X, Ca
 export function AppointmentConsultation({
   appointment,
   initialModuleType,
+  initialActiveTab,
   onClose,
   onFinished
 }: {
   appointment: any;
   initialModuleType?: string;
+  initialActiveTab?: 'records' | 'specialized' | 'zemda_body';
   onClose: () => void;
   onFinished: () => void;
 }) {
@@ -107,8 +109,8 @@ export function AppointmentConsultation({
 
   const effectiveModuleType = resolvedModule.id;
 
-  // FLUXO DE ATENDIMENTO: "Iniciar atendimento" DEVE SEMPRE abrir o Prontuário / Evolução Clínica primeiro ('records')
-  const [activeTab, setActiveTab] = useState<'records' | 'specialized' | 'zemda_body'>('records');
+  // FLUXO DE ATENDIMENTO: "Iniciar atendimento" DEVE SEMPRE abrir o Prontuário / Evolução Clínica primeiro ('records'), salvo quando retomado diretamente em aba específica
+  const [activeTab, setActiveTab] = useState<'records' | 'specialized' | 'zemda_body'>(initialActiveTab || 'records');
   const [returnWorkspaceTab, setReturnWorkspaceTab] = useState<'resumo' | 'evolucao' | 'modulo' | 'documentos' | 'finalizacao'>('evolucao');
 
   useEffect(() => {

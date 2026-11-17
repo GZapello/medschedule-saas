@@ -2,22 +2,39 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { ApiClient } from '../../api/client';
-import { Clock, FileText, Stethoscope, AlertTriangle, PhoneCall, Check, X, Search, MessageCircle, Calendar } from 'lucide-react';
+import { Clock, FileText, Stethoscope, AlertTriangle, PhoneCall, Check, X, Search, MessageCircle, Calendar, PlayCircle, RotateCcw, User, Layers } from 'lucide-react';
 import { ServiceReminder } from '../../types';
 import { UniversalWhatsAppModal } from '../common/UniversalWhatsAppModal';
 import { WhatsAppIcon } from '../common/WhatsAppReminderModal';
 import { buildServiceReminderWhatsAppMessage, isValidPhoneNumber, openManualWhatsApp } from '../../utils/phone.utils';
 import { isStudioProfile } from '../../utils/establishmentContext';
+import { formatWorklistDateTime } from '../../utils/draftResumeContext';
 
-export function TodayWorklist({ data, onNavigate, onPatient, onUpdate }: {
-  data: any; onNavigate: (view: string) => void; onPatient: (id: string) => void; onUpdate?: () => void;
+export function TodayWorklist({
+  data,
+  onNavigate,
+  onPatient,
+  onUpdate,
+  onContinueAttendance,
+  onResumeDraft,
+  canPerformClinicalAttendance
+}: {
+  data: any;
+  onNavigate: (view: string, subId?: string | null) => void;
+  onPatient: (id: string) => void;
+  onUpdate?: () => void;
+  onContinueAttendance?: (item: any) => void | Promise<void>;
+  onResumeDraft?: (item: any) => void | Promise<void>;
+  canPerformClinicalAttendance?: boolean;
 }) {
+  const [busyWorklistItemId, setBusyWorklistItemId] = useState<string | null>(null);
   const [returnFilter, setReturnFilter] = useState<'7d' | '30d' | 'all' | 'overdue'>('30d');
   const [concludingReturn, setConcludingReturn] = useState<any | null>(null);
   const [returnResolutionStatus, setReturnResolutionStatus] = useState<string>('COMPARECEU');
   const [returnResolutionNotes, setReturnResolutionNotes] = useState<string>('');
   const [isSavingResolution, setIsSavingResolution] = useState<boolean>(false);
-  const { currentTenant, isClinicAdmin, hasCapability, hasPermission } = useAuth();
+  const { currentTenant, isClinicAdmin, isProfessional, isReceptionist, hasCapability, hasPermission } = useAuth();
+  const canActOnWorklist = canPerformClinicalAttendance ?? ((isProfessional || isClinicAdmin) && !isReceptionist);
   const { showToast } = useToast();
   const canViewExams = !isStudioProfile(currentTenant?.establishment_profile) && (isClinicAdmin || hasCapability('CORE_EXAMS_RECEIVED') || hasCapability('CORE_EXAM_REQUEST') || hasPermission('view_exams'));
 
@@ -259,43 +276,224 @@ export function TodayWorklist({ data, onNavigate, onPatient, onUpdate }: {
       <section aria-label="Pendências de hoje" className={`grid ${gridColsClass} gap-2.5 items-start`}>
         {/* 1. Atendimentos e rascunhos (renderiza apenas se houver itens pendentes) */}
         {hasUnfinishedOrDrafts && (
-          <article className={`bg-white rounded-xl border border-slate-200 p-3 shadow-2xs flex flex-col justify-between ${isWideDrafts ? 'col-span-full' : ''}`}>
+          <article
+            data-testid="worklist-attendances-drafts"
+            className={`bg-white rounded-xl border border-slate-200 p-3 shadow-2xs flex flex-col justify-between ${isWideDrafts ? 'col-span-full' : ''}`}
+          >
             <div>
-              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                <div className="flex items-center gap-1.5">
-                  <FileText className="w-3.5 h-3.5 text-teal-600" />
-                  <h3 className="font-bold text-slate-800 text-xs tracking-tight">Atendimentos e rascunhos</h3>
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100 gap-2">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <FileText className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                  <h3 className="font-bold text-slate-800 text-xs tracking-tight truncate">Atendimentos e rascunhos</h3>
                 </div>
-                <span className="text-[11px] font-bold text-teal-700 bg-teal-50 border border-teal-100 px-2 py-0.5 rounded-full">
-                  {unfinishedList.length + draftsList.length}
-                </span>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {unfinishedList.length > 0 && (
+                    <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold text-teal-700 bg-teal-50 border border-teal-100 px-1.5 py-0.5 rounded-full">
+                      <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse" />
+                      {unfinishedList.length} em andamento
+                    </span>
+                  )}
+                  {draftsList.length > 0 && (
+                    <span className="hidden sm:inline-flex items-center text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded-full">
+                      {draftsList.length} {draftsList.length === 1 ? 'rascunho' : 'rascunhos'}
+                    </span>
+                  )}
+                  <span className="text-[11px] font-bold text-teal-700 bg-teal-50 border border-teal-100 px-2 py-0.5 rounded-full">
+                    {unfinishedList.length + draftsList.length}
+                  </span>
+                </div>
               </div>
 
-              <div className={`overflow-y-auto overflow-x-hidden pr-1.5 my-2 [scrollbar-width:thin] [scrollbar-color:#cbd5e1_transparent] ${
-                isWideDrafts ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-[220px]' : 'space-y-1.5 max-h-[192px]'
-              }`}>
-                {unfinishedList.map((row: any) => (
-                  <div key={row.id} className="text-xs bg-slate-50/80 hover:bg-slate-50 p-2 rounded-lg transition-colors border border-slate-100 flex flex-col justify-between">
-                    <div className="truncate font-semibold">{patient(row)}</div>
-                    <div className="flex items-center justify-between mt-1 text-[11px] text-slate-500">
-                      <span className="inline-flex items-center gap-1 text-teal-600 font-medium">
-                        <Stethoscope className="w-3 h-3" /> Em andamento
-                      </span>
-                      <span>{date(row.start_time)}</span>
+              <div
+                className={`overflow-y-auto overflow-x-hidden pr-1.5 my-2 [scrollbar-width:thin] [scrollbar-color:#cbd5e1_transparent] ${
+                  isWideDrafts
+                    ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 max-h-[300px]'
+                    : 'space-y-2 max-h-[300px]'
+                }`}
+              >
+                {unfinishedList.map((row: any) => {
+                  const itemKey = `att-${row.id}`;
+                  const isBusy = busyWorklistItemId === itemKey;
+                  const moduleLabel = row.module_label || row.resolved_module || row.clinical_module || 'Prontuário Clínico';
+                  const startFormatted = formatWorklistDateTime(row.reference_at, row.attendance_start_at || row.start_time);
+                  const isGroupClass = row.service_kind === 'group' || Boolean(row.occurrence_id);
+
+                  return (
+                    <div
+                      key={itemKey}
+                      data-testid={`worklist-card-attendance-${row.id}`}
+                      className="text-xs bg-slate-50/90 hover:bg-white p-2.5 rounded-xl transition-all border border-slate-200/80 hover:border-teal-300 flex flex-col justify-between gap-2 shadow-2xs"
+                    >
+                      <div className="space-y-1.5 min-w-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            {canActOnWorklist ? (
+                              patient(row)
+                            ) : (
+                              <span className="font-bold text-slate-800 text-xs truncate block">{row.patient_name}</span>
+                            )}
+                          </div>
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-teal-50 text-teal-800 border border-teal-200 text-[10px] font-bold shrink-0">
+                            <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse" />
+                            <span>Em andamento</span>
+                          </span>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-1">
+                          <span
+                            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold border ${
+                              row.is_studio_session || moduleLabel === 'ZemdaPersonal'
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                : 'bg-slate-100 text-slate-700 border-slate-200'
+                            }`}
+                          >
+                            <Layers className="w-2.5 h-2.5 shrink-0" />
+                            <span>{moduleLabel}</span>
+                          </span>
+                          {isGroupClass && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                              Turma Coletiva
+                            </span>
+                          )}
+                          {row.elapsed_label && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                              <Clock className="w-2.5 h-2.5 shrink-0" />
+                              <span>{row.elapsed_label}</span>
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="space-y-0.5 text-[11px] text-slate-600">
+                          {row.service_name && (
+                            <div className="flex items-center gap-1.5 truncate" title={row.service_name}>
+                              <Stethoscope className="w-3 h-3 text-slate-400 shrink-0" />
+                              <span className="truncate font-medium text-slate-700">{row.service_name}</span>
+                            </div>
+                          )}
+                          {row.professional_name && (
+                            <div className="flex items-center gap-1.5 truncate" title={row.professional_name}>
+                              <User className="w-3 h-3 text-slate-400 shrink-0" />
+                              <span className="truncate">{row.professional_name}</span>
+                            </div>
+                          )}
+                          <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
+                            <Calendar className="w-3 h-3 text-slate-400 shrink-0" />
+                            <span>Início: {startFormatted}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {canActOnWorklist && onContinueAttendance && (
+                        <button
+                          type="button"
+                          disabled={isBusy}
+                          data-testid={`worklist-continue-${row.id}`}
+                          onClick={async () => {
+                            try {
+                              setBusyWorklistItemId(itemKey);
+                              await onContinueAttendance(row);
+                            } finally {
+                              setBusyWorklistItemId(null);
+                            }
+                          }}
+                          className="w-full py-1.5 px-2.5 rounded-lg bg-teal-600 hover:bg-teal-700 disabled:opacity-60 text-white text-[11px] font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                        >
+                          <PlayCircle className="w-3.5 h-3.5 shrink-0" />
+                          <span>{isBusy ? 'Abrindo...' : 'Continuar atendimento'}</span>
+                        </button>
+                      )}
                     </div>
-                  </div>
-                ))}
-                {draftsList.map((row: any, i: number) => (
-                  <div key={i} className="text-xs bg-slate-50/80 hover:bg-slate-50 p-2 rounded-lg transition-colors border border-slate-100 flex flex-col justify-between">
-                    <div className="truncate font-semibold">{patient(row)}</div>
-                    <div className="flex items-center justify-between mt-1 text-[11px] text-slate-500">
-                      <span className="inline-flex items-center gap-1 text-indigo-600 font-medium">
-                        <Clock className="w-3 h-3" /> {row.module_type || 'Rascunho'}
-                      </span>
-                      <span>{date(row.updated_at)}</span>
+                  );
+                })}
+
+                {draftsList.map((row: any, i: number) => {
+                  const itemKey = `draft-${row.id || `${row.patient_id}-${row.module_type}-${i}`}`;
+                  const isBusy = busyWorklistItemId === itemKey;
+                  const moduleLabel = row.module_label || row.resolved_module || row.module_type || 'Rascunho';
+                  const updatedFormatted = formatWorklistDateTime(row.reference_at, row.updated_at);
+
+                  return (
+                    <div
+                      key={itemKey}
+                      data-testid={`worklist-card-draft-${row.id || i}`}
+                      className="text-xs bg-slate-50/90 hover:bg-white p-2.5 rounded-xl transition-all border border-slate-200/80 hover:border-indigo-300 flex flex-col justify-between gap-2 shadow-2xs"
+                    >
+                      <div className="space-y-1.5 min-w-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            {canActOnWorklist ? (
+                              patient(row)
+                            ) : (
+                              <span className="font-bold text-slate-800 text-xs truncate block">{row.patient_name}</span>
+                            )}
+                          </div>
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-800 border border-indigo-200 text-[10px] font-bold shrink-0">
+                            <Clock className="w-2.5 h-2.5 shrink-0" />
+                            <span>Rascunho</span>
+                          </span>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-1">
+                          <span
+                            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold border ${
+                              row.is_studio_session || row.resolved_module === 'ZemdaPersonal'
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                : 'bg-indigo-50/70 text-indigo-700 border-indigo-200'
+                            }`}
+                          >
+                            <Layers className="w-2.5 h-2.5 shrink-0" />
+                            <span>{moduleLabel}</span>
+                          </span>
+                          {row.elapsed_label && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                              <Clock className="w-2.5 h-2.5 shrink-0" />
+                              <span>{row.elapsed_label}</span>
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="space-y-0.5 text-[11px] text-slate-600">
+                          {row.service_name && (
+                            <div className="flex items-center gap-1.5 truncate" title={row.service_name}>
+                              <Stethoscope className="w-3 h-3 text-slate-400 shrink-0" />
+                              <span className="truncate font-medium text-slate-700">{row.service_name}</span>
+                            </div>
+                          )}
+                          {row.professional_name && (
+                            <div className="flex items-center gap-1.5 truncate" title={row.professional_name}>
+                              <User className="w-3 h-3 text-slate-400 shrink-0" />
+                              <span className="truncate">{row.professional_name}</span>
+                            </div>
+                          )}
+                          <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
+                            <Calendar className="w-3 h-3 text-slate-400 shrink-0" />
+                            <span>Atualizado: {updatedFormatted}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {canActOnWorklist && onResumeDraft && (
+                        <button
+                          type="button"
+                          disabled={isBusy}
+                          data-testid={`worklist-resume-${row.id || i}`}
+                          onClick={async () => {
+                            try {
+                              setBusyWorklistItemId(itemKey);
+                              await onResumeDraft(row);
+                            } finally {
+                              setBusyWorklistItemId(null);
+                            }
+                          }}
+                          className="w-full py-1.5 px-2.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 disabled:opacity-60 text-indigo-800 border border-indigo-200 text-[11px] font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5 shrink-0" />
+                          <span>{isBusy ? 'Abrindo...' : 'Retomar rascunho'}</span>
+                        </button>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 

@@ -1134,6 +1134,12 @@ api.post('/v1/payroll', requireTenant, requireRole('clinic_admin'), PayrollContr
 api.post('/v1/payrolls', requireTenant, requireRole('clinic_admin'), PayrollController.save);
 api.patch('/v1/payroll/:id/pay', requireTenant, requireRole('clinic_admin'), PayrollController.markPaid);
 api.patch('/v1/payrolls/:id/pay', requireTenant, requireRole('clinic_admin'), PayrollController.markPaid);
+api.get('/v1/payroll/:id/receipt', requireTenant, requireRole('clinic_admin', 'professional'), PayrollController.getReceipt);
+api.get('/v1/payrolls/:id/receipt', requireTenant, requireRole('clinic_admin', 'professional'), PayrollController.getReceipt);
+api.post('/v1/payroll/:id/receipt', requireTenant, requireRole('clinic_admin', 'professional'), PayrollController.issueReceipt);
+api.post('/v1/payrolls/:id/receipt', requireTenant, requireRole('clinic_admin', 'professional'), PayrollController.issueReceipt);
+api.get('/v1/payroll/:id/receipt/pdf', requireTenant, requireRole('clinic_admin', 'professional'), PayrollController.downloadReceiptPdf);
+api.get('/v1/payrolls/:id/receipt/pdf', requireTenant, requireRole('clinic_admin', 'professional'), PayrollController.downloadReceiptPdf);
 api.put('/v1/payroll/:id/status', requireTenant, requireRole('clinic_admin'), PayrollController.updateStatus);
 api.put('/v1/payrolls/:id/status', requireTenant, requireRole('clinic_admin'), PayrollController.updateStatus);
 api.patch('/v1/payroll/:id/status', requireTenant, requireRole('clinic_admin'), PayrollController.updateStatus);

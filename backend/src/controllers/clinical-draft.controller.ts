@@ -75,6 +75,8 @@ export function validateModuleAccess(req: Request, moduleType: string, patientId
     case 'pp':
       return hasPsychopedagogyAccess(req, patientId);
     case 'personal':
+    case 'personal_assessment':
+    case 'personal_workout':
       return req.user.role === 'clinic_admin' || isUserPersonalTrainer(req.user.userId, req.tenantId);
     default:
       return hasClinicalAccess(req, patientId);

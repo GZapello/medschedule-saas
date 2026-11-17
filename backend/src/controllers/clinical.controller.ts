@@ -1208,15 +1208,17 @@ export class ClinicalController {
           ? todayAppt.clinical_module
           : effectiveModule;
 
+        const startStamp = todayAppt.attendance_start_at || getClinicLocalNowIso();
         db.prepare(`
           UPDATE appointments 
-          SET status = 'in_progress', clinical_module = ?, updated_at = datetime('now')
+          SET status = 'in_progress', clinical_module = ?, attendance_start_at = COALESCE(attendance_start_at, ?), updated_at = datetime('now')
           WHERE id = ? AND tenant_id = ?
-        `).run(targetModule, todayAppt.id, tenantId);
+        `).run(targetModule, startStamp, todayAppt.id, tenantId);
         syncReceptionStatusFromClinical(tenantId, todayAppt.id, 'in_progress');
 
         todayAppt.status = 'in_progress';
         todayAppt.clinical_module = targetModule;
+        todayAppt.attendance_start_at = todayAppt.attendance_start_at || startStamp;
 
         logAudit(req, 'START_CONSULTATION', 'appointments', todayAppt.id, { patientId, moduleType: targetModule });
 
@@ -1243,6 +1245,7 @@ export class ClinicalController {
 
       const now = new Date();
       const startTime = now.toISOString();
+      const attendanceStartAt = getClinicLocalNowIso(now);
       const endTime = new Date(now.getTime() + 50 * 60000).toISOString();
       const apptId = 'apt-' + uuidv4().slice(0, 8);
       const apptNumber = `AT-${now.getFullYear()}-${uuidv4().slice(0, 6).toUpperCase()}`;
@@ -1250,12 +1253,12 @@ export class ClinicalController {
       db.prepare(`
         INSERT INTO appointments (
           id, tenant_id, appointment_number, patient_id, professional_id,
-          service_id, start_time, end_time, status, clinical_module,
+          service_id, start_time, end_time, attendance_start_at, status, clinical_module,
           created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'in_progress', ?, datetime('now'), datetime('now'))
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'in_progress', ?, datetime('now'), datetime('now'))
       `).run(
         apptId, tenantId, apptNumber, patientId, profId,
-        serviceId, startTime, endTime, effectiveModule
+        serviceId, startTime, endTime, attendanceStartAt, effectiveModule
       );
       syncReceptionStatusFromClinical(tenantId, apptId, 'in_progress');
 

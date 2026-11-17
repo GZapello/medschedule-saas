@@ -272,7 +272,35 @@ export function migrateIntegratedImprovements(rawDb: any): void {
       ON public_booking_requests (tenant_id, status, created_at DESC);
   `);
 
+  addColIfMissing('professional_payrolls', 'payment_method', 'TEXT');
   addColIfMissing('public_booking_requests', 'patient_id', 'TEXT');
+
+  rawDb.exec(`
+    CREATE TABLE IF NOT EXISTS payroll_receipts (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      payroll_id TEXT NOT NULL,
+      professional_id TEXT NOT NULL,
+      receipt_number TEXT NOT NULL,
+      sequence_number INTEGER NOT NULL,
+      period_month TEXT NOT NULL,
+      receipt_status TEXT NOT NULL DEFAULT 'active' CHECK(receipt_status IN ('active', 'superseded', 'reversed')),
+      status_reason TEXT,
+      snapshot_hash TEXT NOT NULL,
+      snapshot_json TEXT NOT NULL,
+      issued_by_user_id TEXT,
+      issued_by_name TEXT,
+      issued_at TEXT NOT NULL DEFAULT (datetime('now')),
+      superseded_at TEXT,
+      UNIQUE(tenant_id, receipt_number)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_payroll_receipts_payroll
+      ON payroll_receipts (tenant_id, payroll_id, sequence_number DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_payroll_receipts_prof
+      ON payroll_receipts (tenant_id, professional_id, period_month);
+  `);
   addColIfMissing('internal_notifications', 'request_id', 'TEXT');
   addColIfMissing('internal_notifications', 'request_status', "TEXT NOT NULL DEFAULT 'confirmed'");
   addColIfMissing('internal_notifications', 'confirmed_at', 'TEXT');

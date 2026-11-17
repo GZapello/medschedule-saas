@@ -30,12 +30,14 @@ import {
   Phone
 } from 'lucide-react';
 import { AppointmentConsultation } from '../clinical/AppointmentConsultation';
+import { GeneralClinicalWorkspace } from '../clinical/GeneralClinicalWorkspace';
 import { PrintableDocumentModal } from '../clinical/PrintableDocumentModal';
 import { PatientProfileModal } from '../patients/PatientProfileModal';
 import { SelectConsultationModuleModal, getCompatibleClinicalModules, getModuleForProfession } from '../clinical/SelectConsultationModuleModal';
 import { WhatsAppReminderModal, WhatsAppIcon } from '../common/WhatsAppReminderModal';
 import { AppointmentEditModal } from '../calendar/AppointmentEditModal';
 import { isValidPhoneNumber, openManualWhatsApp } from '../../utils/phone.utils';
+import { resolveWorkspaceViewForModule, writePendingDraftResume } from '../../utils/draftResumeContext';
 import { GoogleIcon } from '../auth/GoogleAuthButton';
 import { useGoogleCalendarStatus } from '../../hooks/useGoogleCalendarStatus';
 import {
@@ -78,6 +80,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [loading, setLoading] = useState<boolean>(true);
   const [metrics, setMetrics] = useState<any>(null);
   const [quickConsultAppt, setQuickConsultAppt] = useState<any | null>(null);
+  const [quickConsultInitialTab, setQuickConsultInitialTab] = useState<'records' | 'specialized' | 'zemda_body'>('records');
+  const [standaloneGeneralDraftPatientId, setStandaloneGeneralDraftPatientId] = useState<string | null>(null);
   const [selectingModuleAppt, setSelectingModuleAppt] = useState<any | null>(null);
   const [compatibleModules, setCompatibleModules] = useState<any[]>([]);
   const [activeConsultationModule, setActiveConsultationModule] = useState<string | undefined>(undefined);
@@ -299,6 +303,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     };
     window.addEventListener('zemda-appointment-updated', handleRemoteUpdate);
     window.addEventListener('zemda-checkin-updated', handleRemoteUpdate);
+    window.addEventListener('zemda-draft-updated', handleRemoteUpdate);
+    return () => {
+      window.removeEventListener('zemda-appointment-updated', handleRemoteUpdate);
+      window.removeEventListener('zemda-checkin-updated', handleRemoteUpdate);
+      window.removeEventListener('zemda-draft-updated', handleRemoteUpdate);
+    };
   }, [auth.currentTenant?.id, auth.currentTenant?.establishment_profile]);
 
   const isStudioSessionAppointment = (appt: any) =>
@@ -312,6 +322,131 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       serviceClinicalModule: appt?.service_clinical_module,
       professionalClinicalModule: appt?.professional_clinical_module
     });
+
+  const handleContinueWorklistAttendance = async (item: any) => {
+    if (!canPerformClinicalAttendance || !item?.id) return;
+    try {
+      const studioRedirect = Boolean(item.is_studio_session) || isStudioSessionAppointment(item);
+      if (studioRedirect) {
+        writeActiveStudioSession(buildActiveStudioSessionFromAppointment(item, auth.currentTenant?.id));
+        const isGroup = item.service_kind === 'group' || Boolean(item.occurrence_id);
+        onNavigate('zemda-personal', isGroup ? null : item.patient_id);
+        return;
+      }
+
+      const res = await ApiClient.get<any>(`/v1/appointments/${item.id}`).catch(() => null);
+      const freshAppt = res?.appointment ? { ...item, ...res.appointment } : item;
+
+      if (['completed', 'cancelled', 'no_show'].includes(String(freshAppt?.status || ''))) {
+        showToast('Este atendimento já foi encerrado ou cancelado.', 'info');
+        fetchMetrics();
+        return;
+      }
+
+      if (isStudioSessionAppointment(freshAppt)) {
+        writeActiveStudioSession(buildActiveStudioSessionFromAppointment(freshAppt, auth.currentTenant?.id));
+        const isGroup = freshAppt.service_kind === 'group' || Boolean(freshAppt.occurrence_id);
+        onNavigate('zemda-personal', isGroup ? null : freshAppt.patient_id);
+        return;
+      }
+
+      const chosenModule =
+        (item.resolved_module && item.resolved_module !== 'general' ? item.resolved_module : null) ||
+        freshAppt?.service_clinical_module ||
+        (freshAppt?.clinical_module && freshAppt.clinical_module !== 'general' && freshAppt.clinical_module !== 'ZemdaBody' && freshAppt.clinical_module !== 'Zemda360'
+          ? freshAppt.clinical_module
+          : null) ||
+        freshAppt?.professional_clinical_module ||
+        'general';
+
+      const targetTab: 'records' | 'specialized' =
+        chosenModule !== 'general' || Boolean(item.has_draft) ? 'specialized' : 'records';
+
+      setActiveConsultationModule(chosenModule);
+      setQuickConsultInitialTab(targetTab);
+      setQuickConsultAppt({
+        ...freshAppt,
+        clinical_module: chosenModule
+      });
+    } catch (err: any) {
+      showToast(err?.message || 'Erro ao continuar atendimento.', 'error');
+    }
+  };
+
+  const handleResumeWorklistDraft = async (item: any) => {
+    if (!canPerformClinicalAttendance || !item?.patient_id) return;
+    try {
+      const resolvedModule = item.resolved_module || 'general';
+
+      if (item.appointment_id && item.draft_subtype !== 'workout') {
+        const res = await ApiClient.get<any>(`/v1/appointments/${item.appointment_id}`).catch(() => null);
+        const appt = res?.appointment;
+        if (!appt) {
+          showToast('O agendamento vinculado a este rascunho não foi encontrado.', 'error');
+          fetchMetrics();
+          return;
+        }
+        if (['completed', 'cancelled', 'no_show'].includes(String(appt.status || ''))) {
+          showToast('O agendamento deste rascunho já foi finalizado ou cancelado.', 'info');
+          fetchMetrics();
+          return;
+        }
+
+        if (Boolean(item.is_studio_session) || resolvedModule === 'ZemdaPersonal' || isStudioSessionAppointment(appt)) {
+          writeActiveStudioSession(buildActiveStudioSessionFromAppointment(appt, auth.currentTenant?.id));
+          if (item.draft_subtype === 'assessment') {
+            writePendingDraftResume({
+              patientId: item.patient_id,
+              resolvedModule: 'ZemdaPersonal',
+              appointmentId: item.appointment_id,
+              draftSubtype: 'assessment',
+              tenantId: auth.currentTenant?.id
+            });
+          }
+          const isGroup = appt.service_kind === 'group' || Boolean(appt.occurrence_id);
+          onNavigate('zemda-personal', isGroup ? null : item.patient_id);
+          return;
+        }
+
+        setActiveConsultationModule(resolvedModule);
+        setQuickConsultInitialTab('specialized');
+        setQuickConsultAppt({
+          ...appt,
+          clinical_module: resolvedModule
+        });
+        return;
+      }
+
+      if (resolvedModule === 'ZemdaPersonal') {
+        if (item.draft_subtype === 'assessment' || item.draft_subtype === 'workout') {
+          writePendingDraftResume({
+            patientId: item.patient_id,
+            resolvedModule: 'ZemdaPersonal',
+            appointmentId: item.appointment_id || null,
+            draftSubtype: item.draft_subtype,
+            tenantId: auth.currentTenant?.id
+          });
+        }
+        onNavigate('zemda-personal', item.patient_id);
+        return;
+      }
+
+      if (resolvedModule === 'general') {
+        setStandaloneGeneralDraftPatientId(item.patient_id);
+        return;
+      }
+
+      const targetView = resolveWorkspaceViewForModule(resolvedModule);
+      if (targetView) {
+        onNavigate(targetView, item.patient_id);
+        return;
+      }
+
+      showToast('Módulo do rascunho não identificado.', 'error');
+    } catch (err: any) {
+      showToast(err?.message || 'Erro ao retomar rascunho.', 'error');
+    }
+  };
 
   const executeStartConsultation = async (appointmentId: string, selectedModule?: string) => {
     try {
@@ -669,7 +804,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </>}
       </div>
 
-      <TodayWorklist data={metrics?.worklist} onNavigate={onNavigate} onPatient={setViewPatientId} onUpdate={fetchMetrics} />
+      <TodayWorklist
+        data={metrics?.worklist}
+        onNavigate={onNavigate}
+        onPatient={setViewPatientId}
+        onUpdate={fetchMetrics}
+        onContinueAttendance={handleContinueWorklistAttendance}
+        onResumeDraft={handleResumeWorklistDraft}
+        canPerformClinicalAttendance={canPerformClinicalAttendance}
+      />
 
       {isStudioCompatible && collectionsSummary && collectionsSummary.scope !== 'restricted' && (
         <div className="bg-white rounded-xl border border-slate-200 px-3.5 py-2.5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
@@ -1329,13 +1472,37 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             clinical_module: quickConsultAppt.clinical_module || activeConsultationModule
           }}
           initialModuleType={activeConsultationModule || quickConsultAppt.clinical_module}
-          onClose={() => setQuickConsultAppt(null)}
+          initialActiveTab={quickConsultInitialTab}
+          onClose={() => {
+            setQuickConsultAppt(null);
+            setQuickConsultInitialTab('records');
+            fetchMetrics();
+          }}
           onFinished={() => {
             setQuickConsultAppt(null);
+            setQuickConsultInitialTab('records');
             fetchMetrics();
             notifyAppointmentChange();
           }}
         />
+      )}
+
+      {/* Retomada de Rascunho Geral Avulso */}
+      {standaloneGeneralDraftPatientId && (
+        <div className="clinical-screen clinical-workspace fixed inset-0 z-50 bg-slate-50 overflow-auto mobile-modal" role="dialog" aria-modal="true" aria-label="Retomar rascunho clínico">
+          <GeneralClinicalWorkspace
+            initialPatientId={standaloneGeneralDraftPatientId}
+            onClose={() => {
+              setStandaloneGeneralDraftPatientId(null);
+              fetchMetrics();
+            }}
+            onFinishConsultation={() => {
+              setStandaloneGeneralDraftPatientId(null);
+              fetchMetrics();
+              notifyAppointmentChange();
+            }}
+          />
+        </div>
       )}
 
       {/* Modal de Impressão Rápida / Visualização / Download PDF */}

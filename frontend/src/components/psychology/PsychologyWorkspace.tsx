@@ -497,6 +497,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
       setLastSavedTime(timeStr);
       setAutosaveStatus('saved');
       setIsDirty(false);
+      window.dispatchEvent(new CustomEvent('zemda-draft-updated', { detail: { moduleType: 'ZemdaPsico', patientId: selectedPatientId, appointmentId: initialAppointmentId || null } }));
     } catch (err: any) {
       console.warn('[PsychologyWorkspace] Erro no autosave do backend:', err);
       if (!navigator.onLine || err?.message?.includes('conectar') || err?.message?.includes('Failed to fetch')) {

@@ -36,6 +36,7 @@ import {
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { ActiveStudioSession } from '../../utils/establishmentContext';
+import { consumePendingDraftResume } from '../../utils/draftResumeContext';
 import { Student, Workout, WorkoutTemplate } from './types';
 import { PersonalDashboard } from './PersonalDashboard';
 import { PersonalStudentProfile } from './PersonalStudentProfile';
@@ -358,6 +359,21 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
   const [isWorkoutBuilderOpen, setIsWorkoutBuilderOpen] = useState(false);
   const [workoutToEdit, setWorkoutToEdit] = useState<Workout | null>(null);
   const [isAssessmentModalOpen, setIsAssessmentModalOpen] = useState(false);
+
+  useEffect(() => {
+    const targetStudentId = initialStudentId || studioSession?.patientId;
+    if (!targetStudentId) return;
+    const pending = consumePendingDraftResume(
+      intent =>
+        intent.resolvedModule === 'ZemdaPersonal' &&
+        intent.draftSubtype === 'assessment' &&
+        intent.patientId === targetStudentId
+    );
+    if (pending) {
+      setSelectedStudentId(targetStudentId);
+      setIsAssessmentModalOpen(true);
+    }
+  }, [initialStudentId, studioSession?.patientId]);
   const [isAIAssistantOpen, setIsAIAssistantOpen] = useState(false);
   const [isNewStudentModalOpen, setIsNewStudentModalOpen] = useState(false);
 

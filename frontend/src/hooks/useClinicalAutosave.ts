@@ -224,6 +224,7 @@ export function useClinicalAutosave({
       setLastSavedTime(timeStr);
       setAutosaveStatus('saved');
       setIsDirty(false);
+      window.dispatchEvent(new CustomEvent('zemda-draft-updated', { detail: { moduleType, patientId, appointmentId: resolvedAppId } }));
       return true;
     } catch (err: any) {
       if (patientVersionRef.current !== activeVersion || currentPatientRef.current !== activePatientId) {
@@ -359,6 +360,7 @@ export function useClinicalAutosave({
       try {
         const query = resolvedAppId ? `?appointment_id=${resolvedAppId}` : '';
         await ApiClient.delete(`/v1/clinical/draft/${moduleType}/${patientId}${query}`);
+        window.dispatchEvent(new CustomEvent('zemda-draft-updated', { detail: { moduleType, patientId, appointmentId: resolvedAppId, deleted: true } }));
       } catch {}
     }
     setIsDirty(false);
