@@ -41,9 +41,11 @@ import {
   ChevronUp,
   Lock,
   Eye,
-  Package
+  Package,
+  ShoppingBag
 } from 'lucide-react';
 import { PatientPackagesTab } from './PatientPackagesTab';
+import { supportsStudioFeatures } from '../../utils/establishmentContext';
 import { ZemdaBodyModal } from '../zemda-body/ZemdaBodyModal';
 import { PrintableDocumentModal } from '../clinical/PrintableDocumentModal';
 import { EditPatientModal } from './EditPatientModal';
@@ -66,6 +68,10 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
 }) => {
   const {
     currentUser,
+    currentTenant,
+    isClinicAdmin,
+    isSuperAdmin,
+    hasPermission,
     isPhysiotherapist,
     isZemdaFisio,
     isDentist,
@@ -79,10 +85,24 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
   } = useAuth();
   const { showToast } = useToast();
 
+  const isStudioSupported = supportsStudioFeatures(currentTenant?.establishment_profile);
+  const canViewStudentConsumptions = Boolean(
+    isStudioSupported &&
+    (isClinicAdmin || isSuperAdmin || hasPermission('view_financial') || hasPermission('create_student_consumption'))
+  );
+
   const [activeTab, setActiveTab] = useState<
-    'overview' | 'timeline' | 'packages' | 'allergies_meds' | 'records' | 'physiotherapy' | 'dentistry' | 'nutrition' | 'occupational_therapy' | 'speech_therapy' | 'anamnesis' | 'exams' | 'insurances' | 'consents'
+    'overview' | 'timeline' | 'packages' | 'consumptions' | 'allergies_meds' | 'records' | 'physiotherapy' | 'dentistry' | 'nutrition' | 'occupational_therapy' | 'speech_therapy' | 'anamnesis' | 'exams' | 'insurances' | 'consents'
   >(initialTab || 'overview');
   const [showPackagesTab, setShowPackagesTab] = useState<boolean>(false);
+  const [studentConsumptionsData, setStudentConsumptionsData] = useState<{
+    consumptions: any[];
+    pendingProductsCents: number;
+    paidProductsCents: number;
+    pendingTuitionsCents: number;
+    consolidatedPendingCents: number;
+  } | null>(null);
+  const [loadingStudentConsumptions, setLoadingStudentConsumptions] = useState<boolean>(false);
 
   const tabScroll = useHorizontalTabScroll(activeTab);
   const { tabScrollProps } = tabScroll;
@@ -369,6 +389,19 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
     }
   };
 
+  const loadStudentConsumptions = async () => {
+    if (!canViewStudentConsumptions) return;
+    try {
+      setLoadingStudentConsumptions(true);
+      const data = await ApiClient.get<any>(`/v1/studio/consumptions/student/${patientId}`);
+      setStudentConsumptionsData(data || null);
+    } catch {
+      setStudentConsumptionsData(null);
+    } finally {
+      setLoadingStudentConsumptions(false);
+    }
+  };
+
   useEffect(() => {
     loadPatientBase();
     loadAllergiesAndMeds();
@@ -376,6 +409,7 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
 
   useEffect(() => {
     if (activeTab === 'timeline') loadTimeline();
+    if (activeTab === 'consumptions') loadStudentConsumptions();
     if (activeTab === 'allergies_meds') loadAllergiesAndMeds();
     if (activeTab === 'records') loadRecords();
     if (activeTab === 'physiotherapy') loadPhysiotherapyData();
@@ -669,6 +703,9 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
                 ...(showPackagesTab
                   ? [{ id: 'packages', label: 'Pacotes', icon: Package }]
                   : []),
+                ...(canViewStudentConsumptions
+                  ? [{ id: 'consumptions', label: 'Consumos', icon: ShoppingBag }]
+                  : []),
                 { id: 'allergies_meds', label: 'Alergias & Remédios', icon: AlertTriangle },
                 { id: 'records', label: 'Prontuário & Evolução', icon: FileText },
                 ...(isPhysiotherapist
@@ -940,6 +977,81 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
               patientId={patientId}
               patientName={patientData?.patient?.full_name || patientData?.patient?.name}
             />
+          )}
+
+          {/* TAB: CONSUMO FINANCEIRO DO ALUNO (STUDIO) */}
+          {activeTab === 'consumptions' && canViewStudentConsumptions && (
+            <div className="space-y-4 text-xs">
+              {studentConsumptionsData && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200">
+                    <span className="text-[10px] font-bold uppercase text-slate-500 block">Mensalidades / Aulas pendentes</span>
+                    <strong className="text-base font-extrabold text-slate-900">
+                      {(studentConsumptionsData.pendingTuitionsCents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    </strong>
+                  </div>
+                  <div className="p-3.5 rounded-2xl bg-amber-50/70 border border-amber-200">
+                    <span className="text-[10px] font-bold uppercase text-amber-800 block">Consumos pendentes</span>
+                    <strong className="text-base font-extrabold text-amber-700">
+                      {(studentConsumptionsData.pendingProductsCents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    </strong>
+                  </div>
+                  <div className="p-3.5 rounded-2xl bg-indigo-50/70 border border-indigo-200">
+                    <span className="text-[10px] font-bold uppercase text-indigo-800 block">Total consolidado a receber</span>
+                    <strong className="text-base font-extrabold text-indigo-700">
+                      {(studentConsumptionsData.consolidatedPendingCents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    </strong>
+                  </div>
+                </div>
+              )}
+
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+                <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+                  <div>
+                    <h4 className="font-bold text-slate-900 text-sm">Histórico de Consumo de Produtos</h4>
+                    <p className="text-[11px] text-slate-500">Registros administrativos e financeiros deste aluno, sem vínculo clínico.</p>
+                  </div>
+                </div>
+                {loadingStudentConsumptions ? (
+                  <div className="py-10 text-center text-slate-400">Carregando histórico de consumos...</div>
+                ) : !studentConsumptionsData || studentConsumptionsData.consumptions.length === 0 ? (
+                  <div className="py-10 text-center text-slate-400">Nenhum consumo de produto registrado para este aluno.</div>
+                ) : (
+                  <div className="divide-y divide-slate-100">
+                    {studentConsumptionsData.consumptions.map((c: any) => {
+                      const statusLabel =
+                        c.payment_status === 'paid' ? 'Pago' :
+                        c.payment_status === 'pending' ? 'Pendente' :
+                        c.payment_status === 'refunded' ? 'Estornado' :
+                        c.payment_status === 'cancelled' ? 'Cancelado' : c.payment_status;
+                      const statusCls =
+                        c.payment_status === 'paid' ? 'bg-emerald-100 text-emerald-700' :
+                        c.payment_status === 'pending' ? 'bg-amber-100 text-amber-800' :
+                        c.payment_status === 'refunded' ? 'bg-slate-100 text-slate-600' :
+                        'bg-rose-100 text-rose-700';
+                      return (
+                        <div key={c.id} className="p-3.5 flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <div className="font-bold text-slate-900">{c.product_name_snapshot}</div>
+                            <div className="text-[11px] text-slate-500">
+                              {String(c.created_at || '').slice(0, 10).split('-').reverse().join('/')} · {c.quantity} {c.sale_unit_snapshot}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2.5">
+                            <strong className="text-slate-900">
+                              {(Number(c.total_amount_cents || 0) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            </strong>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${statusCls}`}>
+                              {statusLabel}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
           )}
 
           {/* TAB 3: ALERGIAS & MEDICAMENTOS */}

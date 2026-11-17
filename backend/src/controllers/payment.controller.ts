@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '../middlewares/audit.middleware';
+import { StudentConsumptionService } from '../services/student-consumption.service';
 
 export class PaymentController {
   static list(req: Request, res: Response): void {
@@ -20,13 +21,19 @@ export class PaymentController {
           pay.service_id, pay.base_amount, pay.additional_amount, pay.additional_reason,
           pay.discount_amount, pay.discount_reason,
           pay.payment_method, pay.status, pay.transaction_id, pay.payment_date, pay.notes, pay.created_at,
+          pay.source_type, pay.source_id,
           pat.full_name as patient_name, pat.phone as patient_phone,
           a.appointment_number,
           p.name as professional_name,
-          COALESCE(s.name, s_direct.name) as service_name
+          COALESCE(
+            CASE WHEN sc.id IS NOT NULL THEN 'Consumo: ' || sc.product_name_snapshot || ' (' || sc.quantity || ' ' || sc.sale_unit_snapshot || ')' ELSE NULL END,
+            s.name,
+            s_direct.name
+          ) as service_name
         FROM payments pay
         JOIN patients pat ON pat.id = pay.patient_id
         LEFT JOIN appointments a ON a.id = pay.appointment_id
+        LEFT JOIN student_consumptions sc ON sc.payment_id = pay.id AND sc.tenant_id = pay.tenant_id
         LEFT JOIN professionals p ON p.id = a.professional_id
         LEFT JOIN services s ON s.id = a.service_id
         LEFT JOIN services s_direct ON s_direct.id = pay.service_id
@@ -228,6 +235,16 @@ export class PaymentController {
         id,
         tenantId
       );
+
+      if (tenantId && status) {
+        StudentConsumptionService.syncFromPaymentUpdate(
+          tenantId,
+          String(id),
+          String(status),
+          paymentMethod ? String(paymentMethod) : null,
+          req.user?.userId || null
+        );
+      }
 
       logAudit(req, 'UPDATE_PAYMENT_STATUS', 'payments', id, { status, paymentMethod, cashRegisterId: activeRegisterId });
       res.json({ message: 'Status do pagamento atualizado com sucesso' });

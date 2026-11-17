@@ -102,14 +102,18 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
     allowedWeekdays: allowedFrequencies.includes('custom_weekdays') ? allowedWeekdays : []
   });
   const groupWeeklyMeetings = offeredWeeklyMeetings(isEditing && serviceToEdit?.service_kind === 'group' ? savedSchedules : draftSchedules);
+  const groupScheduledWeekdays = useMemo(
+    () => Array.from(new Set(groupWeeklyMeetings.map(m => m.weekday))).sort((a, b) => a - b),
+    [groupWeeklyMeetings]
+  );
   const contractableWeeklySessions = useMemo(() => {
     const useCustomDays = allowRecurrence && allowedFrequencies.includes('custom_weekdays') && allowedWeekdays.length > 0;
     if (serviceKind === 'individual') {
       const filtered = useCustomDays ? individualMeetings.filter(m => allowedWeekdays.includes(m.weekday)) : individualMeetings;
       return new Set(filtered.map(m => m.weekday)).size;
     }
-    const filtered = useCustomDays ? groupWeeklyMeetings.filter(m => allowedWeekdays.includes(m.weekday)) : groupWeeklyMeetings;
-    return filtered.length;
+    // Aulas coletivas usam diretamente os encontros cadastrados em Dias e Horários das Aulas
+    return groupWeeklyMeetings.length;
   }, [allowRecurrence, allowedFrequencies, allowedWeekdays, serviceKind, individualMeetings, groupWeeklyMeetings]);
 
 
@@ -301,7 +305,12 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
         ...(showStudioConfig
           ? {
               allowedRecurrenceFrequencies: allowRecurrence ? allowedFrequencies : [],
-              allowedRecurrenceWeekdays: allowRecurrence && allowedFrequencies.includes('custom_weekdays') ? allowedWeekdays : [],
+              allowedRecurrenceWeekdays:
+                allowRecurrence
+                  ? (effectiveKind === 'group'
+                      ? (allowedFrequencies.includes('custom_weekdays') || allowedFrequencies.includes('weekly') ? groupScheduledWeekdays : [])
+                      : (allowedFrequencies.includes('custom_weekdays') ? allowedWeekdays : []))
+                  : [],
               defaultRecurrenceFrequency: allowRecurrence ? defaultFrequency : null,
               customRecurrenceIntervals: allowRecurrence && allowedFrequencies.includes('custom_interval') ? customIntervals : [],
               defaultRecurrenceInterval: allowRecurrence && allowedFrequencies.includes('custom_interval') ? defaultCustomInterval : null,

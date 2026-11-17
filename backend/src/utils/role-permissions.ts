@@ -81,6 +81,7 @@ export const DEFAULT_CLINIC_ADMIN_PERMISSIONS: string[] = [
   'manage_budgets',
   'view_inventory',
   'manage_inventory',
+  'create_student_consumption',
   'view_reports',
   'manage_professionals',
   'manage_staff',

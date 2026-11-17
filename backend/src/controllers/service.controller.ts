@@ -900,6 +900,15 @@ export class ServiceController {
             if (out.warnings?.length) scheduleWarnings.push(...out.warnings);
           }
           createdSchedules = ClassScheduleService.listForService(tenantId, id, { includeInactive: true });
+          const derivedGroupWeekdays = Array.from(
+            new Set(createdSchedules.filter(cs => Number(cs.active) !== 0).map(cs => Number(cs.day_of_week)))
+          ).filter(n => Number.isInteger(n) && n >= 0 && n <= 6).sort((a, b) => a - b);
+          if (recNorm.allowRecurrenceInt === 1 && derivedGroupWeekdays.length > 0) {
+            const derivedJson = JSON.stringify(derivedGroupWeekdays);
+            recNorm.allowedWeekdaysJson = derivedJson;
+            db.prepare('UPDATE services SET allowed_recurrence_weekdays_json = ? WHERE id = ? AND tenant_id = ?')
+              .run(derivedJson, id, tenantId);
+          }
         }
       })();
 
@@ -907,6 +916,7 @@ export class ServiceController {
 
       const parsedCreatedRec = isStudioCompat
         ? parseServiceRecurrenceConfig({
+            service_kind: resolvedKind,
             allow_recurrence: recNorm.allowRecurrenceInt,
             allowed_recurrence_frequencies_json: recNorm.allowedJson,
             allowed_recurrence_weekdays_json: resolvedDomain === 'studio' ? recNorm.allowedWeekdaysJson : null,
@@ -1426,6 +1436,18 @@ export class ServiceController {
           for (const item of rawClassSchedules) {
             const out = ClassScheduleService.createSchedules(tenantId, String(id), item, req.user?.userId || '');
             if (out.warnings?.length) scheduleWarnings.push(...out.warnings);
+          }
+        }
+        if (isStudioCompat && nextDomain === 'studio' && nextKind === 'group' && nextAllowRec === 1) {
+          const activeGroupRows = ClassScheduleService.listForService(tenantId, String(id), { includeInactive: false });
+          if (activeGroupRows.length > 0) {
+            const derivedGroupWeekdays = Array.from(
+              new Set(activeGroupRows.map(cs => Number(cs.day_of_week)))
+            ).filter(n => Number.isInteger(n) && n >= 0 && n <= 6).sort((a, b) => a - b);
+            const derivedJson = derivedGroupWeekdays.length > 0 ? JSON.stringify(derivedGroupWeekdays) : null;
+            nextAllowedWeekdaysJson = derivedJson;
+            db.prepare('UPDATE services SET allowed_recurrence_weekdays_json = ? WHERE id = ? AND tenant_id = ?')
+              .run(derivedJson, String(id), tenantId);
           }
         }
       })();

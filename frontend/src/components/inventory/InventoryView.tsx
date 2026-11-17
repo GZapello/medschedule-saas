@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
+import { supportsStudioFeatures } from '../../utils/establishmentContext';
 import {
   Package,
   Plus,
@@ -41,7 +42,8 @@ interface InventoryViewProps {
 
 export const InventoryView: React.FC<InventoryViewProps> = ({ onNavigate }) => {
   const { showToast } = useToast();
-  const { isClinicAdmin, isReceptionist, hasPermission, canAccessInventory } = useAuth();
+  const { currentTenant, isClinicAdmin, isReceptionist, hasPermission, canAccessInventory } = useAuth();
+  const studioProductsSupported = supportsStudioFeatures(currentTenant?.establishment_profile);
   const formatCurrency = (val: number) => (val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -113,6 +115,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ onNavigate }) => {
   const [itemBatch, setItemBatch] = useState<string>('');
   const [itemExpiration, setItemExpiration] = useState<string>('');
   const [itemNotes, setItemNotes] = useState<string>('');
+  const [itemAvailableForSale, setItemAvailableForSale] = useState<boolean>(false);
+  const [itemSalePrice, setItemSalePrice] = useState<number>(0);
+  const [itemSaleUnit, setItemSaleUnit] = useState<string>('un');
   const [savingItem, setSavingItem] = useState<boolean>(false);
 
   // Form states da Movimentação
@@ -212,7 +217,14 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ onNavigate }) => {
         supplier: itemSupplier.trim() || null,
         batchNumber: itemBatch.trim() || null,
         expirationDate: itemExpiration || null,
-        notes: itemNotes.trim() || null
+        notes: itemNotes.trim() || null,
+        ...(studioProductsSupported
+          ? {
+              availableForSale: itemAvailableForSale,
+              salePrice: itemAvailableForSale ? Number(itemSalePrice) || 0 : 0,
+              saleUnit: itemAvailableForSale ? (itemSaleUnit || itemUnit || 'un') : null
+            }
+          : {})
       };
 
       if (editingItem) {
@@ -287,6 +299,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ onNavigate }) => {
     setItemBatch('');
     setItemExpiration('');
     setItemNotes('');
+    setItemAvailableForSale(false);
+    setItemSalePrice(0);
+    setItemSaleUnit('un');
     setShowItemModal(true);
   };
 
@@ -304,6 +319,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ onNavigate }) => {
     setItemBatch(item.batch_number || '');
     setItemExpiration(item.expiration_date || '');
     setItemNotes(item.notes || '');
+    setItemAvailableForSale(Boolean(Number(item.available_for_sale) === 1));
+    setItemSalePrice(Number(item.sale_price || 0));
+    setItemSaleUnit(item.sale_unit || item.unit || 'un');
     setShowItemModal(true);
   };
 
@@ -775,7 +793,14 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ onNavigate }) => {
                       return (
                         <tr key={item.id} className="hover:bg-slate-50/50 transition-all">
                           <td className="p-4">
-                            <div className="font-bold text-slate-900">{item.name}</div>
+                            <div className="font-bold text-slate-900 flex items-center gap-1.5 flex-wrap">
+                              <span>{item.name}</span>
+                              {studioProductsSupported && Number(item.available_for_sale) === 1 && (
+                                <span className="px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[9px] font-bold">
+                                  Venda Studio · {formatCurrency(Number(item.sale_price || 0))} / {item.sale_unit || item.unit || 'un'}
+                                </span>
+                              )}
+                            </div>
                             <div className="text-[10px] text-slate-400 mt-0.5">
                               {item.brand ? `${item.brand} • ` : ''}
                               {item.presentation || 'Unidade'}
@@ -1125,6 +1150,63 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ onNavigate }) => {
                   className="w-full border border-slate-200 rounded-xl p-2.5 text-xs"
                 />
               </div>
+
+              {studioProductsSupported && (
+                <div className="p-3.5 rounded-2xl border border-teal-200 bg-teal-50/40 space-y-3">
+                  <label className="flex items-center justify-between gap-2 cursor-pointer">
+                    <div>
+                      <span className="font-bold text-slate-900 block">Disponível para venda aos alunos</span>
+                      <span className="text-[11px] text-slate-500">
+                        Habilita este produto no modal "Lançar Consumo" do Studio.
+                      </span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={itemAvailableForSale}
+                      onChange={e => {
+                        const checked = e.target.checked;
+                        setItemAvailableForSale(checked);
+                        if (checked && !itemSaleUnit) setItemSaleUnit(itemUnit || 'un');
+                      }}
+                      className="w-4 h-4 rounded text-teal-600 border-slate-300"
+                    />
+                  </label>
+
+                  {itemAvailableForSale && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                      <div>
+                        <label className="block font-semibold text-slate-700 mb-1">Preço de venda (R$) *</label>
+                        <input
+                          type="number"
+                          min={0}
+                          step={0.01}
+                          value={itemSalePrice}
+                          onChange={e => setItemSalePrice(Number(e.target.value))}
+                          className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-semibold text-slate-700 mb-1">Unidade de comercialização</label>
+                        <select
+                          value={itemSaleUnit || itemUnit || 'un'}
+                          onChange={e => setItemSaleUnit(e.target.value)}
+                          className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white font-medium"
+                        >
+                          <option value="un">un (Unidade)</option>
+                          <option value="garrafa">garrafa</option>
+                          <option value="lata">lata</option>
+                          <option value="barra">barra</option>
+                          <option value="cx">cx (Caixa)</option>
+                          <option value="frasco">frasco</option>
+                          <option value="pacote">pct (Pacote)</option>
+                          <option value="ml">ml</option>
+                          <option value="par">par</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
                 <button

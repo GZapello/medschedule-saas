@@ -3,6 +3,7 @@ import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '../middlewares/audit.middleware';
 import { InvoiceParserService } from '../services/invoice-parser.service';
+import { getTenantEstablishmentProfile, supportsStudioFeatures } from '../utils/establishment-context';
 
 export class InventoryController {
   // Lista itens de estoque com status de alertas (baixo, zerado, validade próxima)
@@ -20,7 +21,7 @@ export class InventoryController {
         SELECT
           id, tenant_id, name, category, product_type, brand, presentation, volume_ml,
           quantity, unit, batch_number, expiration_date, unit_cost, supplier, min_stock,
-          notes, active, created_at, updated_at
+          notes, available_for_sale, sale_price, sale_unit, active, created_at, updated_at
         FROM inventory_items
         WHERE tenant_id = ? AND active = 1
       `;
@@ -106,13 +107,22 @@ export class InventoryController {
 
       const {
         name, category, productType, brand, presentation, volumeMl,
-        quantity, unit, batchNumber, expirationDate, unitCost, supplier, minStock, notes
+        quantity, unit, batchNumber, expirationDate, unitCost, supplier, minStock, notes,
+        availableForSale, available_for_sale, salePrice, sale_price, saleUnit, sale_unit
       } = req.body;
 
       if (!name) {
         res.status(400).json({ error: 'Nome do item/produto é obrigatório' });
         return;
       }
+
+      const studioSupported = supportsStudioFeatures(getTenantEstablishmentProfile(tenantId));
+      const rawAvail = availableForSale !== undefined ? availableForSale : available_for_sale;
+      const isAvailForSale = studioSupported && (rawAvail === true || rawAvail === 1 || rawAvail === '1') ? 1 : 0;
+      const rawSalePrice = salePrice !== undefined ? salePrice : sale_price;
+      const resolvedSalePrice = isAvailForSale ? Math.max(0, Number(rawSalePrice) || 0) : 0;
+      const rawSaleUnit = saleUnit !== undefined ? saleUnit : sale_unit;
+      const resolvedSaleUnit = isAvailForSale ? (String(rawSaleUnit || '').trim() || unit || 'un') : null;
 
       const itemId = 'inv-' + uuidv4().slice(0, 8);
       const initialQty = Number(quantity) || 0;
@@ -121,9 +131,9 @@ export class InventoryController {
         INSERT INTO inventory_items (
           id, tenant_id, name, category, product_type, brand, presentation, volume_ml,
           quantity, unit, batch_number, expiration_date, unit_cost, supplier, min_stock,
-          notes, active, created_at, updated_at
+          notes, available_for_sale, sale_price, sale_unit, active, created_at, updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, datetime('now'), datetime('now'))
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, datetime('now'), datetime('now'))
       `).run(
         itemId,
         tenantId,
@@ -140,7 +150,10 @@ export class InventoryController {
         unitCost !== undefined ? Number(unitCost) : 0,
         supplier || null,
         minStock !== undefined ? Number(minStock) : 5,
-        notes || null
+        notes || null,
+        isAvailForSale,
+        resolvedSalePrice,
+        resolvedSaleUnit
       );
 
       // Se cadastrou com quantidade inicial maior que zero, registra movimentação inicial
@@ -167,13 +180,32 @@ export class InventoryController {
     try {
       const { id } = req.params;
       const tenantId = req.tenantId;
-      if (!db.prepare('SELECT id FROM inventory_items WHERE id=? AND tenant_id=?').get(id, tenantId)) {
+      const existingItem = db.prepare('SELECT id, unit, available_for_sale, sale_price, sale_unit FROM inventory_items WHERE id=? AND tenant_id=?').get(id, tenantId) as any;
+      if (!existingItem) {
         res.status(404).json({ error: 'Item de estoque não encontrado' }); return;
       }
       const {
         name, category, productType, brand, presentation, volumeMl,
-        unit, batchNumber, expirationDate, unitCost, supplier, minStock, notes
+        unit, batchNumber, expirationDate, unitCost, supplier, minStock, notes,
+        availableForSale, available_for_sale, salePrice, sale_price, saleUnit, sale_unit
       } = req.body;
+
+      const studioSupported = supportsStudioFeatures(getTenantEstablishmentProfile(tenantId!));
+      const rawAvail = availableForSale !== undefined ? availableForSale : available_for_sale;
+      const nextAvailForSale =
+        rawAvail !== undefined
+          ? (studioSupported && (rawAvail === true || rawAvail === 1 || rawAvail === '1') ? 1 : 0)
+          : (existingItem.available_for_sale ?? 0);
+      const rawSalePrice = salePrice !== undefined ? salePrice : sale_price;
+      const nextSalePrice =
+        rawSalePrice !== undefined
+          ? Math.max(0, Number(rawSalePrice) || 0)
+          : (existingItem.sale_price ?? 0);
+      const rawSaleUnit = saleUnit !== undefined ? saleUnit : sale_unit;
+      const nextSaleUnit =
+        rawSaleUnit !== undefined
+          ? (String(rawSaleUnit || '').trim() || unit || existingItem.unit || 'un')
+          : (existingItem.sale_unit ?? null);
 
       db.prepare(`
         UPDATE inventory_items SET
@@ -190,6 +222,9 @@ export class InventoryController {
           supplier = COALESCE(?, supplier),
           min_stock = COALESCE(?, min_stock),
           notes = COALESCE(?, notes),
+          available_for_sale = ?,
+          sale_price = ?,
+          sale_unit = ?,
           updated_at = datetime('now')
         WHERE id = ? AND tenant_id = ?
       `).run(
@@ -206,6 +241,9 @@ export class InventoryController {
         supplier || null,
         minStock !== undefined ? Number(minStock) : null,
         notes !== undefined ? notes : null,
+        nextAvailForSale,
+        nextSalePrice,
+        nextSaleUnit,
         id,
         tenantId
       );

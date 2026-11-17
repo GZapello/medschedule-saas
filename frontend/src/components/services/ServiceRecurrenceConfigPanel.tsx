@@ -77,9 +77,18 @@ export const ServiceRecurrenceConfigPanel: React.FC<ServiceRecurrenceConfigPanel
   const [draftValue, setDraftValue] = useState<number>(defaultCustomInterval?.intervalValue || customIntervals[0]?.intervalValue || 3);
   const [draftUnit, setDraftUnit] = useState<RecurrenceIntervalUnit>(defaultCustomInterval?.intervalUnit || customIntervals[0]?.intervalUnit || 'days');
 
+  const safeScheduledWeekdays = Array.from(
+    new Set((scheduledWeekdays || []).map(Number).filter(n => Number.isInteger(n) && n >= 0 && n <= 6))
+  ).sort((a, b) => a - b);
+
   const safeAllowedWeekdays = Array.from(
     new Set((allowedWeekdays || []).map(Number).filter(n => Number.isInteger(n) && n >= 0 && n <= 6))
   ).sort((a, b) => a - b);
+
+  const isGroupService = serviceKind === 'group';
+  const visibleCadenceFrequencies: RecurrenceFrequency[] = isGroupService
+    ? STUDIO_CADENCE_FREQUENCIES.filter(f => f !== 'custom_weekdays')
+    : STUDIO_CADENCE_FREQUENCIES;
 
   const safeAllowedDurations: ConcretePlanDurationCode[] =
     allowedPlanDurations && allowedPlanDurations.length > 0 ? allowedPlanDurations : [...ALL_PLAN_DURATIONS];
@@ -97,15 +106,19 @@ export const ServiceRecurrenceConfigPanel: React.FC<ServiceRecurrenceConfigPanel
     defaultPlanDuration?: ConcretePlanDurationCode;
   }) => {
     const hasCustom = next.allowedFrequencies.includes('custom_interval');
-    const cleanWeekdays = next.allowedFrequencies.includes('custom_weekdays')
-      ? Array.from(
-          new Set(
-            (next.allowedWeekdays !== undefined ? next.allowedWeekdays : safeAllowedWeekdays)
-              .map(Number)
-              .filter(n => Number.isInteger(n) && n >= 0 && n <= 6)
-          )
-        ).sort((a, b) => a - b)
-      : [];
+    const cleanWeekdays = isGroupService
+      ? (next.allowedFrequencies.includes('custom_weekdays') || next.allowedFrequencies.includes('weekly')
+          ? safeScheduledWeekdays
+          : [])
+      : (next.allowedFrequencies.includes('custom_weekdays')
+          ? Array.from(
+              new Set(
+                (next.allowedWeekdays !== undefined ? next.allowedWeekdays : safeAllowedWeekdays)
+                  .map(Number)
+                  .filter(n => Number.isInteger(n) && n >= 0 && n <= 6)
+              )
+            ).sort((a, b) => a - b)
+          : []);
     const cleanIntervals = hasCustom
       ? dedupeCustomIntervals(
           next.customIntervals && next.customIntervals.length > 0
@@ -160,10 +173,25 @@ export const ServiceRecurrenceConfigPanel: React.FC<ServiceRecurrenceConfigPanel
   };
 
   const toggleFrequency = (freq: RecurrenceFrequency) => {
-    const exists = allowedFrequencies.includes(freq);
-    const nextAllowed = exists
-      ? allowedFrequencies.filter(f => f !== freq)
-      : ALL_RECURRENCE_FREQUENCIES.filter(f => allowedFrequencies.includes(f) || f === freq);
+    const isCheckedNow =
+      isGroupService && freq === 'weekly'
+        ? allowedFrequencies.includes('weekly') || allowedFrequencies.includes('custom_weekdays')
+        : allowedFrequencies.includes(freq);
+
+    let nextAllowed: RecurrenceFrequency[];
+    if (isGroupService && freq === 'weekly') {
+      if (isCheckedNow) {
+        nextAllowed = allowedFrequencies.filter(f => f !== 'weekly' && f !== 'custom_weekdays');
+      } else {
+        const added = new Set<RecurrenceFrequency>([...allowedFrequencies, 'weekly']);
+        if (safeScheduledWeekdays.length > 0) added.add('custom_weekdays');
+        nextAllowed = ALL_RECURRENCE_FREQUENCIES.filter(f => added.has(f));
+      }
+    } else {
+      nextAllowed = isCheckedNow
+        ? allowedFrequencies.filter(f => f !== freq)
+        : ALL_RECURRENCE_FREQUENCIES.filter(f => allowedFrequencies.includes(f) || f === freq);
+    }
 
     if (nextAllowed.length === 0) {
       emitChange({
@@ -176,13 +204,19 @@ export const ServiceRecurrenceConfigPanel: React.FC<ServiceRecurrenceConfigPanel
       return;
     }
 
-    const nextDefault = nextAllowed.includes(defaultFrequency) ? defaultFrequency : nextAllowed[0];
+    const nextDefault = nextAllowed.includes(defaultFrequency)
+      ? defaultFrequency
+      : nextAllowed.includes('weekly')
+        ? 'weekly'
+        : nextAllowed[0];
     const nextCustomList = nextAllowed.includes('custom_interval')
       ? (customIntervals.length > 0 ? customIntervals : [{ intervalValue: draftValue || 3, intervalUnit: draftUnit }])
       : [];
-    const nextWeekdays = nextAllowed.includes('custom_weekdays')
-      ? (safeAllowedWeekdays.length > 0 ? safeAllowedWeekdays : (Array.isArray(scheduledWeekdays) ? scheduledWeekdays : []))
-      : [];
+    const nextWeekdays = isGroupService
+      ? safeScheduledWeekdays
+      : nextAllowed.includes('custom_weekdays')
+        ? (safeAllowedWeekdays.length > 0 ? safeAllowedWeekdays : safeScheduledWeekdays)
+        : [];
     emitChange({
       allowRecurrence: true,
       allowedFrequencies: nextAllowed,
@@ -272,14 +306,19 @@ export const ServiceRecurrenceConfigPanel: React.FC<ServiceRecurrenceConfigPanel
     });
   };
 
-  const customWeekdaysEnabled = allowRecurrence && allowedFrequencies.includes('custom_weekdays');
+  const customWeekdaysEnabled = !isGroupService && allowRecurrence && allowedFrequencies.includes('custom_weekdays');
   const customEnabled = allowRecurrence && allowedFrequencies.includes('custom_interval');
   const activeUnitBounds = RECURRENCE_INTERVAL_BOUNDS[draftUnit];
-  const scheduledSet = Array.isArray(scheduledWeekdays) ? new Set(scheduledWeekdays) : null;
-  const missingGroupScheduleDays =
-    serviceKind === 'group' && scheduledSet
-      ? safeAllowedWeekdays.filter(d => !scheduledSet.has(d))
-      : [];
+  const scheduledSet = Array.isArray(scheduledWeekdays) ? new Set(safeScheduledWeekdays) : null;
+  const selectableDefaultFrequencies = isGroupService
+    ? allowedFrequencies.filter(f => f !== 'custom_weekdays')
+    : allowedFrequencies;
+  const effectiveDefaultSelectValue =
+    isGroupService && defaultFrequency === 'custom_weekdays' && selectableDefaultFrequencies.includes('weekly')
+      ? 'weekly'
+      : selectableDefaultFrequencies.includes(defaultFrequency)
+        ? defaultFrequency
+        : (selectableDefaultFrequencies[0] || allowedFrequencies[0] || 'weekly');
 
   return (
     <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-2.5">
@@ -324,8 +363,11 @@ export const ServiceRecurrenceConfigPanel: React.FC<ServiceRecurrenceConfigPanel
           <div className="space-y-1.5">
             <div className="text-[11px] font-bold text-slate-700">1. Frequência das aulas (ritmo na semana/intervalo):</div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-1.5">
-              {STUDIO_CADENCE_FREQUENCIES.map(freq => {
-                const checked = allowedFrequencies.includes(freq);
+              {visibleCadenceFrequencies.map(freq => {
+                const checked =
+                  isGroupService && freq === 'weekly'
+                    ? allowedFrequencies.includes('weekly') || allowedFrequencies.includes('custom_weekdays')
+                    : allowedFrequencies.includes(freq);
                 return (
                   <label
                     key={freq}
@@ -341,11 +383,45 @@ export const ServiceRecurrenceConfigPanel: React.FC<ServiceRecurrenceConfigPanel
                       onChange={() => toggleFrequency(freq)}
                       className="w-3.5 h-3.5 rounded text-teal-600 border-slate-300"
                     />
-                    <span>{RECURRENCE_FREQUENCY_LABELS[freq]}</span>
+                    <span>
+                      {isGroupService && freq === 'weekly' ? 'Semanal (conforme grade da turma)' : RECURRENCE_FREQUENCY_LABELS[freq]}
+                    </span>
                   </label>
                 );
               })}
             </div>
+
+            {isGroupService && (
+              <div className="p-2.5 bg-teal-50/40 border border-teal-200/80 rounded-xl space-y-1.5" data-testid="group-derived-weekdays-summary">
+                <div className="flex flex-wrap items-center justify-between gap-1">
+                  <span className="text-[11px] font-bold text-teal-950">
+                    Dias e horários reconhecidos automaticamente
+                  </span>
+                  {safeScheduledWeekdays.length > 0 && (
+                    <span className="text-[10px] font-semibold text-teal-800">
+                      {safeScheduledWeekdays.length} dia{safeScheduledWeekdays.length === 1 ? '' : 's'} na grade semanal
+                    </span>
+                  )}
+                </div>
+                {safeScheduledWeekdays.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {WEEKDAY_OPTIONS.filter(wd => safeScheduledWeekdays.includes(wd.value)).map(wd => (
+                      <span
+                        key={wd.value}
+                        className="px-2 py-0.5 rounded-md bg-teal-600 text-white text-[10px] font-bold"
+                      >
+                        {wd.short}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+                <p className="text-[10px] text-teal-900/80">
+                  {safeScheduledWeekdays.length > 0
+                    ? 'Os dias oferecidos, encontros semanais e frequências contratáveis vêm diretamente da seção Dias e Horários das Aulas.'
+                    : 'Cadastre os horários em Dias e Horários das Aulas para que os dias oferecidos e encontros contratáveis sejam reconhecidos automaticamente.'}
+                </p>
+              </div>
+            )}
 
             {/* Opções de intervalo legado mantidas somente se já estiverem configuradas ou para compatibilidade */}
             {ALL_RECURRENCE_FREQUENCIES.some(f => !STUDIO_CADENCE_FREQUENCIES.includes(f) && allowedFrequencies.includes(f)) && (
@@ -405,7 +481,7 @@ export const ServiceRecurrenceConfigPanel: React.FC<ServiceRecurrenceConfigPanel
                       {scheduledSet && !hasSched && (
                         <span
                           className={`text-[9px] font-normal ${selected ? 'text-teal-100' : 'text-slate-400'}`}
-                          title={serviceKind === 'group' ? 'Sem horário na grade de turmas' : 'Sem horário livre na agenda do instrutor'}
+                          title="Sem horário livre na agenda do instrutor"
                         >
                           •
                         </span>
@@ -414,17 +490,9 @@ export const ServiceRecurrenceConfigPanel: React.FC<ServiceRecurrenceConfigPanel
                   );
                 })}
               </div>
-              {missingGroupScheduleDays.length > 0 ? (
-                <p className="text-[10px] text-amber-800">
-                  Adicione horários na grade de turmas para os dias marcados que ainda não possuem turma cadastrada.
-                </p>
-              ) : (
-                <p className="text-[10px] text-teal-800/80">
-                  {serviceKind === 'group'
-                    ? 'Integra-se diretamente à grade semanal de turmas e alimenta as frequências contratáveis.'
-                    : 'Filtra os dias em que esta aula é oferecida respeitando os horários reais do instrutor.'}
-                </p>
-              )}
+              <p className="text-[10px] text-teal-800/80">
+                Filtra os dias em que esta aula individual é oferecida respeitando a disponibilidade real do instrutor e limites comerciais, sem exigir turmas coletivas.
+              </p>
             </div>
           )}
 
@@ -523,7 +591,7 @@ export const ServiceRecurrenceConfigPanel: React.FC<ServiceRecurrenceConfigPanel
                   Frequência padrão
                 </label>
                 <select
-                  value={allowedFrequencies.includes(defaultFrequency) ? defaultFrequency : allowedFrequencies[0]}
+                  value={effectiveDefaultSelectValue}
                   onChange={e =>
                     emitChange({
                       allowRecurrence: true,
@@ -535,9 +603,9 @@ export const ServiceRecurrenceConfigPanel: React.FC<ServiceRecurrenceConfigPanel
                   }
                   className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-slate-50 font-semibold text-slate-800"
                 >
-                  {allowedFrequencies.map(freq => (
+                  {(selectableDefaultFrequencies.length > 0 ? selectableDefaultFrequencies : allowedFrequencies).map(freq => (
                     <option key={freq} value={freq}>
-                      {RECURRENCE_FREQUENCY_LABELS[freq]}
+                      {isGroupService && freq === 'weekly' ? 'Semanal (conforme grade da turma)' : RECURRENCE_FREQUENCY_LABELS[freq]}
                     </option>
                   ))}
                 </select>

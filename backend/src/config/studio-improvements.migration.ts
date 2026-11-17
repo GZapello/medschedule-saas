@@ -676,4 +676,61 @@ export function migrateStudioImprovements(rawDb: DatabaseSync): void {
   } catch (e) {
     console.warn('[StudioMigration] Aviso ao criar tabelas/índices de integração Studio:', e);
   }
+
+  // 8. Consumo dos Alunos integrado ao Estoque e Financeiro (Studio / Misto)
+  addColIfMissing('inventory_items', 'available_for_sale', 'INTEGER NOT NULL DEFAULT 0');
+  addColIfMissing('inventory_items', 'sale_price', 'REAL DEFAULT 0');
+  addColIfMissing('inventory_items', 'sale_unit', 'TEXT');
+  addColIfMissing('payments', 'source_type', 'TEXT');
+  addColIfMissing('payments', 'source_id', 'TEXT');
+
+  try {
+    rawDb.exec(`
+      CREATE TABLE IF NOT EXISTS student_consumptions (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        inventory_item_id TEXT NOT NULL,
+        product_name_snapshot TEXT NOT NULL,
+        sale_unit_snapshot TEXT NOT NULL,
+        quantity REAL NOT NULL,
+        unit_price_cents INTEGER NOT NULL,
+        total_amount_cents INTEGER NOT NULL,
+        paid_amount_cents INTEGER NOT NULL DEFAULT 0,
+        payment_id TEXT,
+        inventory_movement_id TEXT,
+        reversal_inventory_movement_id TEXT,
+        cash_register_id TEXT,
+        payment_status TEXT NOT NULL CHECK(payment_status IN ('pending', 'paid', 'partial', 'cancelled', 'refunded')),
+        payment_method TEXT,
+        payment_date TEXT,
+        notes TEXT,
+        idempotency_key TEXT,
+        created_by_user_id TEXT NOT NULL,
+        created_by_name TEXT,
+        settled_by_user_id TEXT,
+        settled_at TEXT,
+        cancelled_by_user_id TEXT,
+        cancelled_by_name TEXT,
+        cancelled_at TEXT,
+        cancellation_reason TEXT,
+        stock_reverted INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id),
+        FOREIGN KEY (inventory_item_id) REFERENCES inventory_items(id)
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_student_consumptions_idemp
+        ON student_consumptions (tenant_id, idempotency_key) WHERE idempotency_key IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_student_consumptions_tenant_date
+        ON student_consumptions (tenant_id, created_at);
+      CREATE INDEX IF NOT EXISTS idx_student_consumptions_patient
+        ON student_consumptions (tenant_id, patient_id, created_at);
+      CREATE INDEX IF NOT EXISTS idx_payments_source
+        ON payments (tenant_id, source_type, source_id);
+    `);
+  } catch (e) {
+    console.warn('[StudioMigration] Aviso ao criar estrutura de Consumo dos Alunos:', e);
+  }
 }

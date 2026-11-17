@@ -324,6 +324,7 @@ function parseAllowedWeekdaysInput(raw: unknown): number[] {
 }
 
 export function parseServiceRecurrenceConfig(service?: {
+  service_kind?: string | null;
   allow_recurrence?: number | boolean | null;
   allowed_recurrence_frequencies?: string[] | null;
   allowed_recurrence_frequencies_json?: string | null;
@@ -450,11 +451,12 @@ export function parseServiceRecurrenceConfig(service?: {
     const defaultFrequency = isValidRecurrenceFrequency(rawDefault) && parsedList.includes(rawDefault)
       ? rawDefault
       : parsedList[0];
+    const isGroupService = String(service?.service_kind || '').trim().toLowerCase() === 'group';
     return {
       allowRecurrence: true,
       allowedFrequencies: parsedList,
       defaultFrequency,
-      allowedWeekdays: parsedList.includes('custom_weekdays') ? allowedWeekdays : [],
+      allowedWeekdays: (parsedList.includes('custom_weekdays') || isGroupService) ? allowedWeekdays : [],
       customIntervals: parsedList.includes('custom_interval') ? customIntervals : [],
       defaultCustomInterval: parsedList.includes('custom_interval') ? effectiveDefaultInterval : null,
       allowedPlanDurations,

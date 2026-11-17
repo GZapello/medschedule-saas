@@ -251,7 +251,8 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
           modality: srcRow?.modality || null
         };
       });
-      return restrictDays ? offered.filter(m => restrictDays.has(m.weekday)) : offered;
+      // Aulas coletivas usam a grade de turmas como fonte principal de dias e horários
+      return offered;
     }
     const indList = (weeklyMeetingsFromApi || [])
       .filter((m: any) => selectedProfFilter === 'any' || m.professionalId === selectedProfFilter)
@@ -272,16 +273,27 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
   const togglePlanMeetingSelection = (meeting: any) => {
     const key = resolveMeetingKey(meeting);
     const isGroup = selectedService?.service_kind === 'group';
+    const individualCommercialCap =
+      !isGroup &&
+      !frequencyPlanActive &&
+      Boolean(selectedService?.is_price_customized) &&
+      Number(selectedService?.weekly_sessions_count) > 0
+        ? Math.max(1, Number(selectedService.weekly_sessions_count))
+        : null;
     setFrequencyScheduleIds(prev => {
       if (prev.includes(key)) {
         return prev.filter(id => id !== key);
       }
       if (!isGroup) {
-        // Em aula individual, permite selecionar 1 horário por dia da semana desejado
+        // Em aula individual, permite selecionar 1 horário por dia da semana desejado, respeitando eventual limite comercial configurado
         const sameWeekdayKeys = new Set(
           planMeetings.filter(m => m.weekday === meeting.weekday).map(m => resolveMeetingKey(m))
         );
-        return [...prev.filter(id => !sameWeekdayKeys.has(id)), key];
+        const withoutSameWeekday = prev.filter(id => !sameWeekdayKeys.has(id));
+        if (individualCommercialCap && withoutSameWeekday.length >= individualCommercialCap) {
+          return prev;
+        }
+        return [...withoutSameWeekday, key];
       }
       return [...prev, key];
     });

@@ -494,6 +494,11 @@ export const CollectionsModal: React.FC<CollectionsModalProps> = ({
                                 Mensalidade {item.competence_month || ''}
                               </span>
                             )}
+                            {item.source_type === 'student_consumption' && (
+                              <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-teal-50 text-teal-700 border border-teal-200">
+                                Consumo de Produto
+                              </span>
+                            )}
                           </div>
                           <div className="text-xs text-slate-600 flex flex-wrap items-center gap-x-2 gap-y-0.5">
                             <span className="font-medium text-slate-700">

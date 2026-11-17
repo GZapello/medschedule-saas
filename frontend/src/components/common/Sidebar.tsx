@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
-import { isSidebarItemAllowedForProfile, isStudioProfile } from '../../utils/establishmentContext';
+import { isSidebarItemAllowedForProfile, isStudioProfile, supportsStudioFeatures } from '../../utils/establishmentContext';
 import {
   LayoutDashboard,
   Calendar,
@@ -224,7 +224,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
           id: 'financial',
           label: 'Financeiro',
           icon: DollarSign,
-          visible: isClinicAdmin || hasPermission('view_financial')
+          visible:
+            isClinicAdmin ||
+            hasPermission('view_financial') ||
+            (supportsStudioFeatures(currentTenant?.establishment_profile) && hasPermission('create_student_consumption'))
         },
         {
           id: 'inventory',

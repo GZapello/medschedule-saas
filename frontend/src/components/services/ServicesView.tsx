@@ -444,14 +444,21 @@ export const ServicesView: React.FC = () => {
   });
   const createGroupMeetings = offeredWeeklyMeetings(draftClassSchedules);
   const editGroupMeetings = offeredWeeklyMeetings(editingService?.service_kind === 'group' ? editingService.class_schedules || [] : editDraftClassSchedules);
+  const createGroupScheduledWeekdays = useMemo(
+    () => Array.from(new Set(createGroupMeetings.map(m => m.weekday))).sort((a, b) => a - b),
+    [createGroupMeetings]
+  );
+  const editGroupScheduledWeekdays = useMemo(
+    () => Array.from(new Set(editGroupMeetings.map(m => m.weekday))).sort((a, b) => a - b),
+    [editGroupMeetings]
+  );
   const createContractableWeeklySessions = useMemo(() => {
     const useCustom = allowRecurrence && allowedFrequencies.includes('custom_weekdays') && allowedWeekdays.length > 0;
     if (serviceKind === 'individual') {
       const filtered = useCustom ? individualMeetings.filter(m => allowedWeekdays.includes(m.weekday)) : individualMeetings;
       return new Set(filtered.map(m => m.weekday)).size;
     }
-    const filtered = useCustom ? createGroupMeetings.filter(m => allowedWeekdays.includes(m.weekday)) : createGroupMeetings;
-    return filtered.length;
+    return createGroupMeetings.length;
   }, [allowRecurrence, allowedFrequencies, allowedWeekdays, serviceKind, individualMeetings, createGroupMeetings]);
   const editContractableWeeklySessions = useMemo(() => {
     const useCustom = editAllowRecurrence && editAllowedFrequencies.includes('custom_weekdays') && editAllowedWeekdays.length > 0;
@@ -459,8 +466,7 @@ export const ServicesView: React.FC = () => {
       const filtered = useCustom ? editIndividualMeetings.filter(m => editAllowedWeekdays.includes(m.weekday)) : editIndividualMeetings;
       return new Set(filtered.map(m => m.weekday)).size;
     }
-    const filtered = useCustom ? editGroupMeetings.filter(m => editAllowedWeekdays.includes(m.weekday)) : editGroupMeetings;
-    return filtered.length;
+    return editGroupMeetings.length;
   }, [editAllowRecurrence, editAllowedFrequencies, editAllowedWeekdays, editServiceKind, editIndividualMeetings, editGroupMeetings]);
 
   const [editDescription, setEditDescription] = useState<string>('');
@@ -689,7 +695,12 @@ export const ServicesView: React.FC = () => {
         ...(showCreateStudioConfig
           ? {
               allowedRecurrenceFrequencies: allowRecurrence ? allowedFrequencies : [],
-              allowedRecurrenceWeekdays: allowRecurrence && allowedFrequencies.includes('custom_weekdays') ? allowedWeekdays : [],
+              allowedRecurrenceWeekdays:
+                allowRecurrence
+                  ? (effectiveKind === 'group'
+                      ? (allowedFrequencies.includes('custom_weekdays') || allowedFrequencies.includes('weekly') ? createGroupScheduledWeekdays : [])
+                      : (allowedFrequencies.includes('custom_weekdays') ? allowedWeekdays : []))
+                  : [],
               defaultRecurrenceFrequency: allowRecurrence ? defaultFrequency : null,
               customRecurrenceIntervals: allowRecurrence && allowedFrequencies.includes('custom_interval') ? customIntervals : [],
               defaultRecurrenceInterval: allowRecurrence && allowedFrequencies.includes('custom_interval') ? defaultCustomInterval : null,
@@ -922,7 +933,12 @@ export const ServicesView: React.FC = () => {
         ...(showEditStudioConfig
           ? {
               allowedRecurrenceFrequencies: editAllowRecurrence ? editAllowedFrequencies : [],
-              allowedRecurrenceWeekdays: editAllowRecurrence && editAllowedFrequencies.includes('custom_weekdays') ? editAllowedWeekdays : [],
+              allowedRecurrenceWeekdays:
+                editAllowRecurrence
+                  ? (effectiveEditKind === 'group'
+                      ? (editAllowedFrequencies.includes('custom_weekdays') || editAllowedFrequencies.includes('weekly') ? editGroupScheduledWeekdays : [])
+                      : (editAllowedFrequencies.includes('custom_weekdays') ? editAllowedWeekdays : []))
+                  : [],
               defaultRecurrenceFrequency: editAllowRecurrence ? editDefaultFrequency : null,
               customRecurrenceIntervals: editAllowRecurrence && editAllowedFrequencies.includes('custom_interval') ? editCustomIntervals : [],
               defaultRecurrenceInterval: editAllowRecurrence && editAllowedFrequencies.includes('custom_interval') ? editDefaultCustomInterval : null,
@@ -1803,32 +1819,6 @@ export const ServicesView: React.FC = () => {
                   )}
                   </ServiceFormSection>
                   <ServiceFormSection section="recurrence">
-                  <ServiceRecurrenceConfigPanel
-                    allowRecurrence={allowRecurrence}
-                    allowedFrequencies={allowedFrequencies}
-                    allowedWeekdays={allowedWeekdays}
-                    defaultFrequency={defaultFrequency}
-                    customIntervals={customIntervals}
-                    defaultCustomInterval={defaultCustomInterval}
-                    allowedPlanDurations={allowedPlanDurations}
-                    defaultPlanDuration={defaultPlanDuration}
-                    serviceKind={serviceKind}
-                    scheduledWeekdays={
-                      serviceKind === 'group'
-                        ? Array.from(new Set(createGroupMeetings.map(m => m.weekday))).sort((a, b) => a - b)
-                        : Array.from(new Set(individualMeetings.map(m => m.weekday))).sort((a, b) => a - b)
-                    }
-                    onChange={next => {
-                      setAllowRecurrence(next.allowRecurrence);
-                      setAllowedFrequencies(next.allowedFrequencies);
-                      setAllowedWeekdays(next.allowedWeekdays);
-                      setDefaultFrequency(next.defaultFrequency);
-                      setCustomIntervals(next.customIntervals);
-                      setDefaultCustomInterval(next.defaultCustomInterval);
-                      setAllowedPlanDurations(next.allowedPlanDurations);
-                      setDefaultPlanDuration(next.defaultPlanDuration);
-                    }}
-                  />
                   {serviceKind === 'group' && (
                     <ClassScheduleSection
                       serviceId={null}
@@ -1843,6 +1833,32 @@ export const ServicesView: React.FC = () => {
                       onFormOpenChange={setHasPendingCreateScheduleForm}
                     />
                   )}
+                  <ServiceRecurrenceConfigPanel
+                    allowRecurrence={allowRecurrence}
+                    allowedFrequencies={allowedFrequencies}
+                    allowedWeekdays={allowedWeekdays}
+                    defaultFrequency={defaultFrequency}
+                    customIntervals={customIntervals}
+                    defaultCustomInterval={defaultCustomInterval}
+                    allowedPlanDurations={allowedPlanDurations}
+                    defaultPlanDuration={defaultPlanDuration}
+                    serviceKind={serviceKind}
+                    scheduledWeekdays={
+                      serviceKind === 'group'
+                        ? createGroupScheduledWeekdays
+                        : Array.from(new Set(individualMeetings.map(m => m.weekday))).sort((a, b) => a - b)
+                    }
+                    onChange={next => {
+                      setAllowRecurrence(next.allowRecurrence);
+                      setAllowedFrequencies(next.allowedFrequencies);
+                      setAllowedWeekdays(next.allowedWeekdays);
+                      setDefaultFrequency(next.defaultFrequency);
+                      setCustomIntervals(next.customIntervals);
+                      setDefaultCustomInterval(next.defaultCustomInterval);
+                      setAllowedPlanDurations(next.allowedPlanDurations);
+                      setDefaultPlanDuration(next.defaultPlanDuration);
+                    }}
+                  />
                   </ServiceFormSection>
                   <ServiceFormSection section="billing">
                   <ServiceBillingConfigPanel
@@ -2301,32 +2317,6 @@ export const ServicesView: React.FC = () => {
                   )}
                   </ServiceFormSection>
                   <ServiceFormSection section="recurrence">
-                  <ServiceRecurrenceConfigPanel
-                    allowRecurrence={editAllowRecurrence}
-                    allowedFrequencies={editAllowedFrequencies}
-                    allowedWeekdays={editAllowedWeekdays}
-                    defaultFrequency={editDefaultFrequency}
-                    customIntervals={editCustomIntervals}
-                    defaultCustomInterval={editDefaultCustomInterval}
-                    allowedPlanDurations={editAllowedPlanDurations}
-                    defaultPlanDuration={editDefaultPlanDuration}
-                    serviceKind={editServiceKind}
-                    scheduledWeekdays={
-                      editServiceKind === 'group'
-                        ? Array.from(new Set(editGroupMeetings.map(m => m.weekday))).sort((a, b) => a - b)
-                        : Array.from(new Set(editIndividualMeetings.map(m => m.weekday))).sort((a, b) => a - b)
-                    }
-                    onChange={next => {
-                      setEditAllowRecurrence(next.allowRecurrence);
-                      setEditAllowedFrequencies(next.allowedFrequencies);
-                      setEditAllowedWeekdays(next.allowedWeekdays);
-                      setEditDefaultFrequency(next.defaultFrequency);
-                      setEditCustomIntervals(next.customIntervals);
-                      setEditDefaultCustomInterval(next.defaultCustomInterval);
-                      setEditAllowedPlanDurations(next.allowedPlanDurations);
-                      setEditDefaultPlanDuration(next.defaultPlanDuration);
-                    }}
-                  />
                   {editServiceKind === 'group' && editingService && (
                     <ClassScheduleSection
                       serviceId={editingService.service_kind === 'group' ? editingService.id : null}
@@ -2365,6 +2355,32 @@ export const ServicesView: React.FC = () => {
                       }}
                     />
                   )}
+                  <ServiceRecurrenceConfigPanel
+                    allowRecurrence={editAllowRecurrence}
+                    allowedFrequencies={editAllowedFrequencies}
+                    allowedWeekdays={editAllowedWeekdays}
+                    defaultFrequency={editDefaultFrequency}
+                    customIntervals={editCustomIntervals}
+                    defaultCustomInterval={editDefaultCustomInterval}
+                    allowedPlanDurations={editAllowedPlanDurations}
+                    defaultPlanDuration={editDefaultPlanDuration}
+                    serviceKind={editServiceKind}
+                    scheduledWeekdays={
+                      editServiceKind === 'group'
+                        ? editGroupScheduledWeekdays
+                        : Array.from(new Set(editIndividualMeetings.map(m => m.weekday))).sort((a, b) => a - b)
+                    }
+                    onChange={next => {
+                      setEditAllowRecurrence(next.allowRecurrence);
+                      setEditAllowedFrequencies(next.allowedFrequencies);
+                      setEditAllowedWeekdays(next.allowedWeekdays);
+                      setEditDefaultFrequency(next.defaultFrequency);
+                      setEditCustomIntervals(next.customIntervals);
+                      setEditDefaultCustomInterval(next.defaultCustomInterval);
+                      setEditAllowedPlanDurations(next.allowedPlanDurations);
+                      setEditDefaultPlanDuration(next.defaultPlanDuration);
+                    }}
+                  />
                   </ServiceFormSection>
                   <ServiceFormSection section="billing">
                   <ServiceBillingConfigPanel

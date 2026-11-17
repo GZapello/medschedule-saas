@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '../middlewares/audit.middleware';
 import { getUserPermissions } from '../middlewares/rbac.middleware';
 import { PackageService } from '../services/package.service';
+import { StudentConsumptionService } from '../services/student-consumption.service';
 import {
   addMonthsPreserveDay,
   BillingCycleService,
@@ -238,6 +239,8 @@ export class BillingCenterController {
           pay.due_date,
           pay.recurring_plan_id,
           pay.package_contract_id,
+          pay.source_type,
+          pay.source_id,
           pay.competence_month,
           pay.billing_cycle_key,
           pay.billing_cycle_start,
@@ -252,7 +255,13 @@ export class BillingCenterController {
           pat.whatsapp as patient_whatsapp,
           COALESCE(NULLIF(TRIM(pat.whatsapp), ''), pat.phone) as patient_contact_phone,
           spc.package_name_snapshot as package_name,
-          COALESCE(spc.package_name_snapshot, s.name, rbp.title, 'Cobrança avulsa') as service_name,
+          COALESCE(
+            CASE WHEN sc.id IS NOT NULL THEN 'Consumo: ' || sc.product_name_snapshot || ' (' || sc.quantity || ' ' || sc.sale_unit_snapshot || ')' ELSE NULL END,
+            spc.package_name_snapshot,
+            s.name,
+            rbp.title,
+            'Cobrança avulsa'
+          ) as service_name,
           COALESCE(s.modality_category, '') as modality_category,
           COALESCE(p.name, '') as professional_name,
           a.appointment_number,
@@ -265,6 +274,7 @@ export class BillingCenterController {
         LEFT JOIN appointments a ON a.id = pay.appointment_id AND a.tenant_id = pay.tenant_id
         LEFT JOIN recurring_billing_plans rbp ON rbp.id = pay.recurring_plan_id AND rbp.tenant_id = pay.tenant_id
         LEFT JOIN student_package_contracts spc ON spc.id = pay.package_contract_id AND spc.tenant_id = pay.tenant_id
+        LEFT JOIN student_consumptions sc ON sc.payment_id = pay.id AND sc.tenant_id = pay.tenant_id
         LEFT JOIN services s ON s.id = COALESCE(pay.service_id, a.service_id, rbp.service_id)
         LEFT JOIN professionals p ON p.id = COALESCE(pay.professional_id, a.professional_id, rbp.professional_id)
         WHERE pay.tenant_id = ?
@@ -387,6 +397,7 @@ export class BillingCenterController {
       `).run(method, cashRegisterId, notes || null, notes || '', notes || '', paymentId, tenantId);
 
       PackageService.activateContractOnPaymentSettled(tenantId, paymentId, req.user?.userId || 'system');
+      StudentConsumptionService.syncFromPaymentUpdate(tenantId, paymentId, 'paid', method, req.user?.userId || null);
 
       logAudit(req, 'COLLECTION_MARK_PAID', 'payments', paymentId, { paymentMethod: method });
 

@@ -75,6 +75,7 @@ const AVAILABLE_PERMISSIONS = [
   { id: 'manage_budgets', label: 'Criar e gerenciar orçamentos', group: 'budgets' },
   { id: 'view_inventory', label: 'Visualizar estoque de insumos', group: 'inventory' },
   { id: 'manage_inventory', label: 'Movimentar e cadastrar itens no estoque', group: 'inventory' },
+  { id: 'create_student_consumption', label: 'Lançar consumo de produtos para alunos', group: 'inventory' },
   { id: 'manage_professionals', label: 'Gerenciar profissionais', group: 'admin' },
   { id: 'manage_staff', label: 'Gerenciar equipe e funcionários', group: 'admin' },
   { id: 'manage_services', label: 'Gerenciar catálogo de serviços e salas', group: 'admin' },

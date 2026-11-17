@@ -77,6 +77,7 @@ import { SandboxController } from '../controllers/sandbox.controller';
 import { EsteticController } from '../controllers/estetic.controller';
 import { ServiceReminderController } from '../controllers/service-reminder.controller';
 import { PackageController } from '../controllers/package.controller';
+import { StudentConsumptionController } from '../controllers/student-consumption.controller';
 
 import { authMiddleware, onboardingGate, whatsappUpdateAuthMiddleware } from '../middlewares/auth.middleware';
 import { tenantMiddleware, requireTenant } from '../middlewares/tenant.middleware';
@@ -941,6 +942,14 @@ api.post('/v1/financial/recurring-plans/:id/renew', requireTenant, requireStudio
 api.post('/v1/financial/recurring-plans/:id/reschedule', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist', 'professional'), BillingCenterController.rescheduleContractClasses);
 api.get('/v1/financial/recurring-plans/:id/history', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist', 'professional'), BillingCenterController.getContractHistory);
 api.post('/v1/financial/recurring-plans/generate', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist', 'professional'), BillingCenterController.generateMonthlyBills);
+
+// Consumo dos Alunos integrado ao Financeiro e Estoque (Studio / Misto)
+api.get('/v1/studio/consumptions/sellable-products', requireTenant, requireStudioEstablishment, StudentConsumptionController.listSellableProducts);
+api.get('/v1/studio/consumptions/student/:patientId', requireTenant, requireStudioEstablishment, StudentConsumptionController.studentSummary);
+api.get('/v1/studio/consumptions', requireTenant, requireStudioEstablishment, StudentConsumptionController.list);
+api.post('/v1/studio/consumptions', requireTenant, requireStudioEstablishment, StudentConsumptionController.create);
+api.post('/v1/studio/consumptions/:id/settle', requireTenant, requireStudioEstablishment, StudentConsumptionController.settle);
+api.post('/v1/studio/consumptions/:id/cancel', requireTenant, requireStudioEstablishment, StudentConsumptionController.cancel);
 
 // Contas a Pagar & Compras de Fornecedores
 api.get('/v1/accounts-payable', requireTenant, requireRole('clinic_admin', 'receptionist'), AccountsPayableController.list);

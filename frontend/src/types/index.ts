@@ -576,6 +576,8 @@ export interface Payment {
   transaction_id?: string;
   payment_date?: string;
   notes?: string;
+  source_type?: string | null;
+  source_id?: string | null;
   created_at: string;
 }
 
@@ -664,6 +666,9 @@ export interface InventoryItem {
   supplier?: string;
   min_stock: number;
   notes?: string;
+  available_for_sale?: number;
+  sale_price?: number;
+  sale_unit?: string | null;
   active: number;
   is_low_stock?: boolean;
   is_zero_stock?: boolean;

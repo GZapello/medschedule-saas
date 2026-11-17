@@ -530,11 +530,12 @@ export function parseServiceRecurrenceConfig(serviceRow: any): ParsedServiceRecu
         const defaultPlanDuration = isValidPlanDurationCode(rawDefPlanDuration) && planDurations.includes(rawDefPlanDuration)
           ? rawDefPlanDuration
           : planDurations[0] || null;
+        const isGroupService = String(serviceRow?.service_kind || '').trim().toLowerCase() === 'group';
         return {
           allowRecurrence: true,
           allowedFrequencies: filtered,
           defaultFrequency,
-          allowedWeekdays: filtered.includes('custom_weekdays') ? allowedWeekdays : [],
+          allowedWeekdays: (filtered.includes('custom_weekdays') || isGroupService) ? allowedWeekdays : [],
           allowedPlanDurations: planDurations,
           defaultPlanDuration,
           customIntervals: filtered.includes('custom_interval') ? normalizedCustomIntervals : [],

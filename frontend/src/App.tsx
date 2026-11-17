@@ -21,7 +21,8 @@ import {
   clearActiveStudioSession,
   isSidebarItemAllowedForProfile,
   isStudioProfile,
-  readActiveStudioSession
+  readActiveStudioSession,
+  supportsStudioFeatures
 } from './utils/establishmentContext';
 const Navbar = lazyWithRetry(() => import('./components/common/Navbar').then(module => ({ default: module.Navbar })), 'Navbar');
 const Sidebar = lazyWithRetry(() => import('./components/common/Sidebar').then(module => ({ default: module.Sidebar })), 'Sidebar');
@@ -345,7 +346,7 @@ const AppContent: React.FC = () => {
       return null;
     }
   });
-  const [financialInitialTab, setFinancialInitialTab] = useState<'transactions' | 'payables' | 'cash_register'>('transactions');
+  const [financialInitialTab, setFinancialInitialTab] = useState<'transactions' | 'payables' | 'cash_register' | 'student_consumption'>('transactions');
   const [importInitialTab, setImportInitialTab] = useState<string | null>(null);
 
   const handleNavigateView = (view: string, subId?: string | null, forceOrTab?: boolean | string, tabParam?: string) => {
@@ -1803,7 +1804,7 @@ const AppContent: React.FC = () => {
           )}
 
           {currentView === 'financial' && (
-            (isClinicAdmin || hasPermission('view_financial')) ? (
+            (isClinicAdmin || hasPermission('view_financial') || (supportsStudioFeatures(currentTenant?.establishment_profile) && hasPermission('create_student_consumption'))) ? (
               <FinancialView initialTab={financialInitialTab} onNavigate={handleNavigateView} />
             ) : (
               <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
