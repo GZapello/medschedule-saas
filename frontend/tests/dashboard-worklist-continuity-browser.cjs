@@ -263,7 +263,7 @@ createRoot(document.getElementById('root')!).render(<Harness />);
       page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
       page.setDefaultTimeout(10000);
 
-      // 1. Standalone TodayWorklist checks: metadata, priority order, compact responsive cards, action callbacks
+      // 1. Standalone TodayWorklist checks: ultra-compact single-line rows showing ONLY patient name, status & action button
       await page.goto(`${base}?mode=worklist&w=${width}`);
       const cardSection = page.getByTestId('worklist-attendances-drafts');
       await cardSection.waitFor();
@@ -271,32 +271,39 @@ createRoot(document.getElementById('root')!).render(<Harness />);
       const text = await cardSection.textContent();
       assert.ok(text.includes('Atendimentos e rascunhos'));
       assert.ok(text.includes('Aluna Beatriz Moura'));
-      assert.ok(text.includes('Pilates Studio Coletivo'));
-      assert.ok(text.includes('Instrutor Rodrigo Lima'));
-      assert.ok(text.includes('ZemdaPersonal'));
-      assert.ok(text.includes('Turma Coletiva'));
-      assert.ok(text.includes('há 35 min'));
-
       assert.ok(text.includes('Paciente Carlos Eduardo'));
-      assert.ok(text.includes('Sessão de Fisioterapia'));
-      assert.ok(text.includes('Dra. Sofia Fisio'));
-      assert.ok(text.includes('ZemdaFisio'));
-      assert.ok(text.includes('há 2h 15min'));
-
       assert.ok(text.includes('Paciente Fernanda Dias'));
-      assert.ok(text.includes('Psicoterapia Individual'));
-      assert.ok(text.includes('Dr. Bruno Psico'));
-      assert.ok(text.includes('ZemdaPsico'));
+      assert.ok(text.includes('Em andamento'));
       assert.ok(text.includes('Rascunho'));
-      assert.ok(text.includes('há 4h 50min'));
+      assert.ok(text.includes('Continuar atendimento'));
+      assert.ok(text.includes('Retomar rascunho'));
 
-      // Em andamento cards appear BEFORE Rascunho cards
+      // Verify omitted detail clutter (module, service, professional, dates, elapsed time, "Abrir agenda")
+      assert.equal(text.includes('Pilates Studio Coletivo'), false);
+      assert.equal(text.includes('Instrutor Rodrigo Lima'), false);
+      assert.equal(text.includes('ZemdaPersonal'), false);
+      assert.equal(text.includes('Sessão de Fisioterapia'), false);
+      assert.equal(text.includes('Dra. Sofia Fisio'), false);
+      assert.equal(text.includes('ZemdaFisio'), false);
+      assert.equal(text.includes('Psicoterapia Individual'), false);
+      assert.equal(text.includes('Dr. Bruno Psico'), false);
+      assert.equal(text.includes('ZemdaPsico'), false);
+      assert.equal(text.includes('há 35 min'), false);
+      assert.equal(text.includes('há 2h 15min'), false);
+      assert.equal(text.includes('há 4h 50min'), false);
+      assert.equal(text.includes('Início:'), false);
+      assert.equal(text.includes('Atualizado:'), false);
+
+      // Verify compact single-line row heights and horizontal alignment (no wrapping)
+      const rowBox = await page.getByTestId('worklist-card-attendance-apt-stu-1').boundingBox();
+      const maxHeight = width >= 640 ? 42 : 58;
+      assert.ok(rowBox && rowBox.height <= maxHeight, `Compact single-line row height <= ${maxHeight}px at ${width}px (got ${rowBox?.height})`);
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `No horizontal overflow at ${width}px`);
+
+      // Em andamento rows appear BEFORE Rascunho rows
       const attPos = text.indexOf('Paciente Carlos Eduardo');
       const drfPos = text.indexOf('Paciente Fernanda Dias');
       assert.ok(attPos > -1 && drfPos > attPos, 'Em andamento prioritized before Rascunho');
-
-      // Responsive layout check
-      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `No horizontal overflow at ${width}px`);
 
       // Click Continuar atendimento & Retomar rascunho
       await page.getByTestId('worklist-continue-apt-stu-1').click();
