@@ -31,6 +31,8 @@ import { DocumentsController } from '../controllers/documents.controller';
 import { CashRegisterController } from '../controllers/cash-register.controller';
 import { InsuranceController } from '../controllers/insurance.controller';
 import { ImportController } from '../controllers/import.controller';
+import { StudioCatalogImportController } from '../controllers/studio-catalog-import.controller';
+import rateLimit from 'express-rate-limit';
 import { NotificationController } from '../controllers/notification.controller';
 import { InternalNotificationController } from '../controllers/internal-notification.controller';
 import { ReferralController } from '../controllers/referral.controller';
@@ -1080,6 +1082,19 @@ api.get('/v1/ai/psychology/diarization-status', requireTenant, requireRole('clin
 
 // Importação Inteligente de Dados (Word .docx, Planilhas .xlsx/.csv/.txt, Heurística e Lotes)
 api.post('/v1/import/parse-file', requireTenant, requirePermissionOrRole('can_import_data', 'clinic_admin'), ImportController.parseFile);
+const studioCatalogImportAccess = [
+  requireTenant, requireStudioEstablishment, requirePermissionOrRole('manage_services', 'clinic_admin')
+];
+const studioCatalogAnalysisLimit = rateLimit({
+  windowMs: 15 * 60_000, limit: 8,
+  keyGenerator: req => String(req.tenantId),
+  message: { error: 'Limite de análises atingido. Tente novamente em alguns minutos.' }
+});
+api.get('/v1/studio/catalog-imports', ...studioCatalogImportAccess, StudioCatalogImportController.list);
+api.get('/v1/studio/catalog-imports/:id', ...studioCatalogImportAccess, StudioCatalogImportController.get);
+api.post('/v1/studio/catalog-imports/analyze', ...studioCatalogImportAccess, studioCatalogAnalysisLimit, StudioCatalogImportController.analyze);
+api.put('/v1/studio/catalog-imports/:id', ...studioCatalogImportAccess, StudioCatalogImportController.save);
+api.post('/v1/studio/catalog-imports/:id/confirm', ...studioCatalogImportAccess, StudioCatalogImportController.confirm);
 api.post('/v1/import/execute', requireTenant, requirePermissionOrRole('can_import_data', 'clinic_admin'), ImportController.executeImport);
 api.get('/v1/import/batches', requireTenant, requirePermissionOrRole('can_import_data', 'clinic_admin'), ImportController.listBatches);
 api.post('/v1/import/batches/:id/rollback', requireTenant, requireRole('clinic_admin'), ImportController.rollbackBatch);

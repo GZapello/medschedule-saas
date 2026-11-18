@@ -7,7 +7,8 @@ export function logAudit(
   action: string,
   entity: string,
   entityId?: string | string[],
-  details?: Record<string, any>
+  details?: Record<string, any>,
+  options?: { required?: boolean }
 ): void {
   try {
     const id = uuidv4();
@@ -25,6 +26,7 @@ export function logAudit(
 
     stmt.run(id, tenantId, userId, action, entity, normalizedEntityId, ipAddress, userAgent, detailsJson);
   } catch (err) {
+    if (options?.required) throw err;
     console.error('[AuditLog] Erro ao registrar log de auditoria:', err);
   }
 }

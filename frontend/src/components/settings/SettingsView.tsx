@@ -11,6 +11,8 @@ import { UnifiedTeamManagement } from './UnifiedTeamManagement';
 import { ServicesView } from '../services/ServicesView';
 import { ProfileSpecialties } from '../profile/ProfileSpecialties';
 import { ImportDataView } from '../import/ImportDataView';
+import { StudioCatalogImportView } from '../import/StudioCatalogImportView';
+import { supportsStudioFeatures } from '../../utils/establishmentContext';
 import { ProfessionalPayrollView } from '../payroll/ProfessionalPayrollView';
 import { ClinicalExportModal } from '../clinical/ClinicalExportModal';
 import {
@@ -88,7 +90,7 @@ export interface SettingsViewProps {
 }
 
 type AccountTab = 'profile' | 'professional' | 'connected_accounts' | 'privacy' | 'billing';
-type DataTransferTab = 'import' | 'export';
+type DataTransferTab = 'import' | 'export' | 'studio-import';
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, initialTab, onNavigateView }) => {
   const { currentUser, currentTenant, isClinicAdmin, isReceptionist, isProfessional, isSuperAdmin, isSandboxSession, exitSandboxSession, refreshTenant, reloadSession, hasPermission } = useAuth();
@@ -98,7 +100,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, init
 
   const canImportData = isClinicAdmin || hasPermission('can_import_data');
   const canExportData = isClinicAdmin || isProfessional || hasPermission('can_export_records');
-  const canAccessDataTransfer = canImportData || canExportData;
+  const canImportStudio = supportsStudioFeatures(currentTenant?.establishment_profile) &&
+    (isClinicAdmin || hasPermission('manage_services'));
+  const canAccessDataTransfer = canImportData || canExportData || canImportStudio;
+  const defaultDataTransferTab: DataTransferTab = canImportData ? 'import' : canExportData ? 'export' : 'studio-import';
   const canAccessGoogleCalendar = !isReceptionist && (isProfessional || isClinicAdmin);
   const canAccessSubscription =
     isClinicAdmin ||
@@ -142,16 +147,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, init
 
     if (['import', 'importar-dados'].includes(section)) {
       if (!canAccessDataTransfer) return { section: 'hub' };
-      return { section: 'data_transfer', dataTransferTab: canImportData ? 'import' : 'export' };
+      return { section: 'data_transfer', dataTransferTab: defaultDataTransferTab };
     }
     if (['export', 'export_clinical', 'exportar-prontuarios'].includes(section)) {
       if (!canAccessDataTransfer) return { section: 'hub' };
-      return { section: 'data_transfer', dataTransferTab: canExportData ? 'export' : 'import' };
+      return { section: 'data_transfer', dataTransferTab: canExportData ? 'export' : defaultDataTransferTab };
     }
     if (section === 'data_transfer') {
       if (!canAccessDataTransfer) return { section: 'hub' };
       const resolvedTransferTab: DataTransferTab =
-        tab === 'export' && canExportData ? 'export' : (canImportData ? 'import' : 'export');
+        tab === 'studio-import' && canImportStudio ? 'studio-import' :
+          tab === 'export' && canExportData ? 'export' : defaultDataTransferTab;
       return { section: 'data_transfer', dataTransferTab: resolvedTransferTab };
     }
 
@@ -178,7 +184,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, init
   const [activeSection, setActiveSection] = useState<string>(initialResolved.section);
   const [accountTab, setAccountTab] = useState<AccountTab>(initialResolved.accountTab || 'profile');
   const [dataTransferTab, setDataTransferTab] = useState<DataTransferTab>(
-    initialResolved.dataTransferTab || (canImportData ? 'import' : 'export')
+    initialResolved.dataTransferTab || defaultDataTransferTab
   );
 
   const [hubSearchTerm, setHubSearchTerm] = useState<string>('');
@@ -204,7 +210,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, init
     canShowProfessionalProfile,
     canAccessDataTransfer,
     canImportData,
-    canExportData
+    canExportData,
+    canImportStudio
   ]);
   useAndroidSectionBack(activeSection !== 'hub', () => setActiveSection('hub'));
 
@@ -862,17 +869,21 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, init
   const dataTransferCard = {
     id: 'data_transfer',
     title: 'Importação & Exportação',
-    desc: 'Importe dados de pacientes e agendas ou exporte prontuários e documentos clínicos em múltiplos formatos.',
+    desc: canImportStudio
+      ? 'Importe serviços, planos e horários do Academia & Studio a partir de arquivos.'
+      : 'Importe dados de pacientes e agendas ou exporte prontuários e documentos clínicos em múltiplos formatos.',
     icon: ArrowLeftRight,
     iconBg: 'bg-amber-50',
     iconColor: 'text-amber-600',
     tags: [
       ...(canImportData ? ['Importar', 'Planilhas'] : []),
-      ...(canExportData ? ['Exportar', 'Prontuários'] : [])
+      ...(canExportData ? ['Exportar', 'Prontuários'] : []),
+      ...(canImportStudio ? ['Serviços com IA'] : [])
     ],
     searchKeywords: [
       canImportData ? 'importação importar dados planilhas excel csv docx fotos pacientes agendamentos migração' : '',
-      canExportData ? 'exportação exportar prontuários documentos clínicos word docx oficial pdf json zip histórico 360 laudos' : ''
+      canExportData ? 'exportação exportar prontuários documentos clínicos word docx oficial pdf json zip histórico 360 laudos' : '',
+      canImportStudio ? 'studio academia serviços planos preços horários importar ia catálogo' : ''
     ].filter(Boolean).join(' ')
   };
 
@@ -956,8 +967,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, init
   })();
 
   const effectiveDataTransferTab: DataTransferTab = (() => {
-    if (dataTransferTab === 'export') return canExportData ? 'export' : 'import';
-    return canImportData ? 'import' : 'export';
+    if (dataTransferTab === 'studio-import' && canImportStudio) return 'studio-import';
+    if (dataTransferTab === 'export' && canExportData) return 'export';
+    return defaultDataTransferTab;
   })();
 
   return (
@@ -1024,7 +1036,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, init
                     if (card.id === 'account') {
                       setAccountTab('profile');
                     } else if (card.id === 'data_transfer') {
-                      setDataTransferTab(canImportData ? 'import' : 'export');
+                      setDataTransferTab(defaultDataTransferTab);
                     }
                     if ((card as any).defaultTab) setActiveTab((card as any).defaultTab as any);
                   }}
@@ -1102,6 +1114,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, init
       {activeSection === 'data_transfer' && canAccessDataTransfer && (
         <div className="space-y-4">
           <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-2xl text-xs font-bold flex-wrap">
+            {canImportStudio && (
+              <button type="button" onClick={() => setDataTransferTab('studio-import')}
+                className={`px-3.5 py-1.5 rounded-xl cursor-pointer flex items-center gap-1.5 ${effectiveDataTransferTab === 'studio-import' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}>
+                <Sparkles className="w-3.5 h-3.5" />Importar Serviços com IA
+              </button>
+            )}
             {canImportData && (
               <button
                 type="button"
@@ -1127,6 +1145,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, init
               </button>
             )}
           </div>
+
+          {canImportStudio && effectiveDataTransferTab === 'studio-import' && <StudioCatalogImportView key={currentTenant?.id} />}
 
           {canImportData && (
             <div className={effectiveDataTransferTab === 'import' ? '' : 'hidden'}>

@@ -1388,7 +1388,10 @@ export const ServicesView: React.FC = () => {
                                   ? `${formatCurrencyBRL(Number(s.periodic_price))} / ${(SERVICE_BILLING_MODE_LABELS[s.billing_mode] || s.billing_mode).toLowerCase()}`
                                   : isStudioCompatible && s.billing_mode === 'package'
                                     ? 'Via Pacote'
-                                    : formatCurrencyBRL(Number(s.price))}
+                                    : s.service_domain === 'studio' && Number(s.price) === 0 &&
+                                      s.commercial_price_options?.some(option => option.active)
+                                      ? 'Opções comerciais'
+                                      : formatCurrencyBRL(Number(s.price))}
                               </span>
                               {isStudioCompatible && s.billing_mode && s.billing_mode !== 'per_session' && (
                                 <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded inline-block mt-0.5">

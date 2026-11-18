@@ -319,6 +319,10 @@ export class BillingCycleService {
     initialPaymentStatus?: 'pending' | 'paid';
   }): { generatedIds: string[]; skippedCount: number } {
     const { tenantId, plan } = params;
+    // Matrículas de Academia & Studio geram à vista e parcelas na contratação.
+    if (plan.payment_periodicity === 'one_time' || plan.payment_periodicity === 'installments') {
+      return { generatedIds: [], skippedCount: 1 };
+    }
     const { frequency, cycleMonths } = normalizePeriodicFrequency(
       plan.billing_frequency || plan.billing_cycle,
       plan.cycle_months

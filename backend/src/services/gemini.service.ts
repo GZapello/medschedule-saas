@@ -48,12 +48,17 @@ async function generateWithCascade(
   contents: Content[],
   config: { temperature: number; topP: number; maxOutputTokens: number; responseMimeType?: string },
   timeoutMs: number = 8000,
-  sanitizedErrors: boolean = false
+  sanitizedErrors: boolean = false,
+  totalTimeoutMs?: number
 ): Promise<{ text: string; modelUsed: string } | null> {
   const ai = getGenAI();
   if (!ai) return null;
 
+  const deadline = totalTimeoutMs ? Date.now() + totalTimeoutMs : Infinity;
   for (const modelName of CANDIDATE_MODELS) {
+    const attemptTimeout = Math.min(timeoutMs, deadline - Date.now());
+    if (attemptTimeout <= 0) break;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       const model = ai.getGenerativeModel({ model: modelName });
       const apiCall = model.generateContent({
@@ -65,11 +70,11 @@ async function generateWithCascade(
           maxOutputTokens: config.maxOutputTokens,
           ...(config.responseMimeType ? { responseMimeType: config.responseMimeType } : {})
         }
-      });
+      }, totalTimeoutMs ? { timeout: attemptTimeout } : undefined);
 
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error(`Timeout de ${timeoutMs}ms excedido na chamada do modelo ${modelName}`)), timeoutMs)
-      );
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`Timeout de ${attemptTimeout}ms excedido na chamada do modelo ${modelName}`)), attemptTimeout);
+      });
 
       const result = await Promise.race([apiCall, timeoutPromise]);
       const text = result?.response?.text();
@@ -79,6 +84,8 @@ async function generateWithCascade(
     } catch (err: any) {
       console.warn(`[GeminiService] Falha no modelo ${modelName}:`, sanitizedErrors ? 'Falha do provedor' : err?.message || err);
       // Continua para o próximo modelo candidato
+    } finally {
+      if (timer) clearTimeout(timer);
     }
   }
 
@@ -319,6 +326,24 @@ function sanitizeContents(rawContents: Content[]): Content[] {
 }
 
 export class GeminiService {
+  static async extractStudioCatalog(
+    instruction: string,
+    files: Array<{ mimeType: string; base64?: string; text?: string; fileName: string }>
+  ): Promise<unknown> {
+    const parts: Content['parts'] = [{ text: 'Extraia o catálogo comercial dos arquivos enumerados abaixo.' }];
+    files.forEach((file, index) => {
+      parts.push({ text: `Fonte ${index + 1}: ${file.fileName}` });
+      if (file.text) parts.push({ text: file.text });
+      else if (file.base64) parts.push({ inlineData: { mimeType: file.mimeType, data: file.base64 } });
+    });
+    const result = await generateWithCascade(
+      instruction, [{ role: 'user', parts }],
+      { temperature: 0.1, topP: 0.8, maxOutputTokens: 16384, responseMimeType: 'application/json' },
+      25000, true, 45_000
+    );
+    if (!result) return null;
+    try { return JSON.parse(result.text); } catch { return null; }
+  }
 
   /**
    * Verifica se a API do Gemini está disponível (chave configurada)

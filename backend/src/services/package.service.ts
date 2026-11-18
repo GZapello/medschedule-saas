@@ -1,7 +1,7 @@
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { BillingCycleService, normalizePeriodicFrequency } from './billing-cycle.service';
-import { PeriodicBillingFrequency } from '../utils/establishment-context';
+import { PeriodicBillingFrequency, resolvePlanDurationEndDate } from '../utils/establishment-context';
 import { normalizeStudioAccessConfig, normalizeStudioServiceType } from '../utils/studio-access-and-commercial';
 
 export interface PackageItemInput {
@@ -704,7 +704,7 @@ export class PackageService {
     const validityDays = Number(pkg.validity_days || 30);
     const endDate = input.endDate !== undefined
       ? (input.endDate ? String(input.endDate).slice(0, 10) : null)
-      : addDaysIso(startDate, Math.max(1, validityDays) - 1);
+      : (resolvePlanDurationEndDate(startDate, pkg.contract_duration_code) || addDaysIso(startDate, Math.max(1, validityDays) - 1));
 
     const dueDay = Math.max(1, Math.min(28, Math.floor(Number(input.dueDay || pkg.due_day || 10))));
     const contractedPrice = Math.round(Number(pkg.price || 0) * 100) / 100;

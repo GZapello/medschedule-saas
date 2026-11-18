@@ -374,7 +374,8 @@ export function calculateCommercialOptionBreakdown(
     ? option.frequencyCount * 4
     : (option.frequencyType === 'monthly' && option.frequencyCount ? option.frequencyCount : 1);
   const sessionsPerMonth = Math.max(1, Math.floor(Number(context?.sessionsPerMonth || defaultSessionsPerMonth)));
-  const sessionsInContract = Math.max(1, Math.floor(Number(context?.sessionsInContract || (sessionsPerMonth * contractMonths))));
+  const configuredSessions = option.frequencyType === 'fixed_count' ? option.frequencyCount : null;
+  const sessionsInContract = Math.max(1, Math.floor(Number(context?.sessionsInContract || configuredSessions || (sessionsPerMonth * contractMonths))));
 
   let totalContractAmountCents = option.amountCents;
   let cycleAmountCents = option.amountCents;

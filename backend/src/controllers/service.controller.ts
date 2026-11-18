@@ -129,6 +129,7 @@ function validateAndSyncLinkedInstructorsTx(params: {
   price: number | null;
   durationMinutes: number | null;
   isUpdate: boolean;
+  preserveExistingTerms?: boolean;
 }): void {
   const {
     tenantId,
@@ -139,7 +140,8 @@ function validateAndSyncLinkedInstructorsTx(params: {
     serviceDomain,
     price,
     durationMinutes,
-    isUpdate
+    isUpdate,
+    preserveExistingTerms
   } = params;
 
   const existingLinkedRows = db
@@ -167,6 +169,7 @@ function validateAndSyncLinkedInstructorsTx(params: {
   } else if (!isUpdate && primaryProfId) {
     desiredIds = [primaryProfId];
   } else if (isUpdate && primaryProfId) {
+    if (preserveExistingTerms && existingSet.has(primaryProfId)) return;
     // Se não enviou linkedProfessionalIds explicitamente no PUT, garante o responsável na tabela sem remover extras existentes
     db.prepare(`
       INSERT INTO professional_services (id, professional_id, service_id, custom_price, custom_duration)
@@ -252,6 +255,7 @@ function validateAndSyncLinkedInstructorsTx(params: {
   }
 
   for (const pid of desiredIds) {
+    if (preserveExistingTerms && existingSet.has(pid)) continue;
     db.prepare(`
       INSERT INTO professional_services (id, professional_id, service_id, custom_price, custom_duration)
       VALUES (?, ?, ?, ?, ?)
@@ -395,6 +399,11 @@ function enrichServiceTemplates(srv: any, templatesMap: Map<string, LinkedTempla
     linked_template_ids: validIds,
     linked_templates: validTemplates
   };
+}
+
+export interface ServiceSaveResponse {
+  status(code: number): ServiceSaveResponse;
+  json(body: any): unknown;
 }
 
 export class ServiceController {
@@ -697,6 +706,10 @@ export class ServiceController {
   }
 
   static create(req: Request, res: Response): void {
+    ServiceController.createService(req, res);
+  }
+
+  static createService(req: Request, res: ServiceSaveResponse, preserveZeroSessionPrice = false): void {
     try {
       const tenantId = req.tenantId;
       if (!tenantId) {
@@ -966,7 +979,7 @@ export class ServiceController {
 
       const rawPriceNum = price !== undefined && price !== null && price !== '' ? Number(price) : 0;
       const effectiveCreatePrice =
-        rawPriceNum > 0
+        rawPriceNum > 0 || (preserveZeroSessionPrice && rawPriceNum === 0)
           ? rawPriceNum
           : (billNorm.periodicPrice && billNorm.periodicPrice > 0
               ? Number(billNorm.periodicPrice)
@@ -1245,6 +1258,10 @@ export class ServiceController {
   }
 
   static update(req: Request, res: Response): void {
+    ServiceController.updateService(req, res);
+  }
+
+  static updateService(req: Request, res: ServiceSaveResponse, preserveExistingTerms = false): void {
     try {
       const { id } = req.params;
       const tenantId = req.tenantId;
@@ -1593,7 +1610,7 @@ export class ServiceController {
       const hasExplicitPrice = price !== undefined && price !== null && price !== '';
       const rawUpdPriceNum = hasExplicitPrice ? Number(price) : Number(existing.price || 0);
       const effectiveUpdatePrice =
-        rawUpdPriceNum > 0
+        rawUpdPriceNum > 0 || (preserveExistingTerms && !hasExplicitPrice)
           ? rawUpdPriceNum
           : (nextPeriodicPrice && nextPeriodicPrice > 0 ? Number(nextPeriodicPrice) : 0);
 
@@ -1814,7 +1831,8 @@ export class ServiceController {
           serviceDomain: nextDomain,
           price: nextCustomPrice,
           durationMinutes: nextCustomDuration,
-          isUpdate: true
+          isUpdate: true,
+          preserveExistingTerms
         });
 
         if (isStudioCompat && nextKind === 'group' && rawClassSchedules.length > 0 && PackageService.isStudioCompatible(tenantId)) {

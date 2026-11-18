@@ -401,6 +401,22 @@ export class StudioAccessService {
     const matchedOption = input.commercialOptionId
       ? commercialOptions.find(o => o.id === input.commercialOptionId && o.active)
       : null;
+    if (input.commercialOptionId && !matchedOption) {
+      throw Object.assign(new Error('A opção comercial não está disponível para este serviço.'), { status: 400 });
+    }
+    if (contractKind === 'access_plan' && matchedOption && matchedOption.accessType !== 'scheduled') {
+      if (input.accessMode === undefined) mergedAccessCfg.accessMode = matchedOption.accessType;
+      if (matchedOption.accessType === 'limited' && matchedOption.frequencyCount) {
+        if (matchedOption.frequencyType === 'weekly' && input.maxEntriesPerWeek === undefined) {
+          mergedAccessCfg.maxEntriesPerWeek = matchedOption.frequencyCount;
+          mergedAccessCfg.countPeriod = 'weekly';
+        }
+        if (matchedOption.frequencyType === 'monthly' && input.maxEntriesPerMonth === undefined) {
+          mergedAccessCfg.maxEntriesPerMonth = matchedOption.frequencyCount;
+          mergedAccessCfg.countPeriod = 'monthly';
+        }
+      }
+    }
     const optionBreakdown = matchedOption ? calculateCommercialOptionBreakdown(matchedOption) : null;
 
     const startDate = input.startDate ? String(input.startDate).slice(0, 10) : todayIso;
@@ -486,7 +502,7 @@ export class StudioAccessService {
     const weeklyFrequencySnapshot =
       contractKind === 'access_plan'
         ? (mergedAccessCfg.accessMode === 'limited' ? (mergedAccessCfg.maxEntriesPerWeek || null) : null)
-        : (matchedOption?.frequencyCount || srv.weekly_sessions_count || 1);
+        : (matchedOption ? (matchedOption.frequencyType === 'weekly' ? matchedOption.frequencyCount : null) : srv.weekly_sessions_count || 1);
 
     const commercialSnapshot = {
       serviceId: srv.id,
@@ -494,6 +510,7 @@ export class StudioAccessService {
       studioServiceType: srvStudioType,
       contractKind,
       commercialOptionId: matchedOption?.id || null,
+      ...(matchedOption ? { frequencyType: matchedOption.frequencyType, frequencyCount: matchedOption.frequencyCount } : {}),
       optionBreakdown,
       contractDurationCode: durationCode,
       paymentPeriodicity,
@@ -511,7 +528,7 @@ export class StudioAccessService {
         id, tenant_id, patient_id, service_id, professional_id,
         title, amount, billing_cycle, billing_frequency, cycle_months, covers_sessions,
         due_day, start_date, end_date, payment_method, notes, status,
-        plan_duration_code, weekly_frequency, weekly_sessions_snapshot,
+        plan_duration_code, weekly_frequency, weekly_sessions_snapshot, included_sessions,
         contract_kind, contract_status, payment_periodicity, total_contract_amount,
         installments_count, fidelity_months, grace_period_days, auto_renew,
         access_mode_snapshot, access_rules_snapshot_json, commercial_snapshot_json, origin,
@@ -520,7 +537,7 @@ export class StudioAccessService {
         ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?, ?,
-        ?, ?, ?,
+        ?, ?, ?, ?,
         ?, ?, ?, ?,
         ?, ?, ?, ?,
         ?, ?, ?, ?,
@@ -547,6 +564,7 @@ export class StudioAccessService {
       durationCode,
       weeklyFrequencySnapshot,
       weeklyFrequencySnapshot,
+      contractKind === 'scheduled_plan' && matchedOption?.frequencyType === 'fixed_count' ? matchedOption.frequencyCount : null,
       contractKind,
       contractStatus,
       paymentPeriodicity,

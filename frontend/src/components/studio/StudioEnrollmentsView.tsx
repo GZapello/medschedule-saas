@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
-import { formatCurrencyBRL } from '../../utils/establishmentContext';
+import { formatCurrencyBRL, PLAN_DURATION_LABELS } from '../../utils/establishmentContext';
+import { calculateCommercialOptionBreakdown, PAYMENT_PERIODICITY_LABELS, StudioCommercialPriceOption } from '../../utils/studioAccessAndCommercial';
 import {
   KeyRound,
   Plus,
@@ -52,6 +53,7 @@ export const StudioEnrollmentsView: React.FC = () => {
   const [selectedStudentId, setSelectedStudentId] = useState('');
   const [selectedServiceId, setSelectedServiceId] = useState('');
   const [selectedPackageId, setSelectedPackageId] = useState('');
+  const [commercialOptionId, setCommercialOptionId] = useState('');
   const [contractDurationCode, setContractDurationCode] = useState('1_month');
   const [paymentPeriodicity, setPaymentPeriodicity] = useState('monthly');
   const [accessMode, setAccessMode] = useState<'unlimited' | 'limited'>('unlimited');
@@ -129,9 +131,14 @@ export const StudioEnrollmentsView: React.FC = () => {
     () => services.find(s => s.id === selectedServiceId) || null,
     [services, selectedServiceId]
   );
+  const commercialOptions: StudioCommercialPriceOption[] =
+    selectedServiceObj?.commercial_price_options?.filter((option: StudioCommercialPriceOption) => option.active) || [];
+  const commercialOption = commercialOptions.find(option => option.id === commercialOptionId);
+  const commercialQuote = commercialOption ? calculateCommercialOptionBreakdown(commercialOption) : null;
 
   useEffect(() => {
     if (selectedServiceObj) {
+      setCommercialOptionId('');
       const defPrice = Number(selectedServiceObj.periodic_price) > 0
         ? selectedServiceObj.periodic_price
         : selectedServiceObj.price;
@@ -159,23 +166,29 @@ export const StudioEnrollmentsView: React.FC = () => {
       showToast('Selecione o pacote combinado.', 'error');
       return;
     }
+    if (enrollTargetType === 'service' && commercialOptions.length && !commercialOption) {
+      showToast('Selecione uma opção comercial do serviço.', 'error');
+      return;
+    }
 
     try {
       setCreating(true);
       const isAccessSrv = selectedServiceObj?.studio_service_type === 'facility_access';
+      const useOption = enrollTargetType === 'service' && Boolean(commercialOption);
       await ApiClient.post('/v1/studio/enrollments', {
         studentId: selectedStudentId,
         serviceId: enrollTargetType === 'service' ? selectedServiceId : null,
         packageId: enrollTargetType === 'package' ? selectedPackageId : null,
         contractKind: enrollTargetType === 'package'
           ? 'combined_package'
-          : (isAccessSrv ? 'access_plan' : 'scheduled_plan'),
-        contractDurationCode,
-        paymentPeriodicity,
-        accessMode: isAccessSrv ? accessMode : undefined,
-        maxEntriesPerWeek: isAccessSrv && accessMode === 'limited' && maxEntriesPerWeek ? Number(maxEntriesPerWeek) : null,
-        maxEntriesPerMonth: isAccessSrv && accessMode === 'limited' && maxEntriesPerMonth ? Number(maxEntriesPerMonth) : null,
-        amount: customAmount !== '' ? Number(customAmount.replace(',', '.')) : undefined,
+          : (isAccessSrv ? 'access_plan' : selectedServiceObj?.studio_service_type === 'non_scheduled' ? 'deliverable' : 'scheduled_plan'),
+        commercialOptionId: useOption ? commercialOption?.id : undefined,
+        contractDurationCode: useOption ? undefined : contractDurationCode,
+        paymentPeriodicity: useOption ? undefined : paymentPeriodicity,
+        accessMode: !useOption && isAccessSrv ? accessMode : undefined,
+        maxEntriesPerWeek: useOption ? undefined : isAccessSrv && accessMode === 'limited' && maxEntriesPerWeek ? Number(maxEntriesPerWeek) : null,
+        maxEntriesPerMonth: useOption ? undefined : isAccessSrv && accessMode === 'limited' && maxEntriesPerMonth ? Number(maxEntriesPerMonth) : null,
+        amount: !useOption && customAmount !== '' ? Number(customAmount.replace(',', '.')) : undefined,
         dueDay,
         paymentMethod,
         initialPaymentStatus,
@@ -685,7 +698,32 @@ export const StudioEnrollmentsView: React.FC = () => {
                     </select>
                   </div>
 
-                  {selectedServiceObj?.studio_service_type === 'facility_access' && (
+                  {commercialOptions.length > 0 && <div className="space-y-2 rounded-xl border border-indigo-100 bg-indigo-50/50 p-3">
+                    <label className="block space-y-1 font-semibold text-slate-700">
+                      <span>Opção comercial *</span>
+                      <select required value={commercialOptionId} onChange={e => setCommercialOptionId(e.target.value)}
+                        className="w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2">
+                        <option value="">Selecione um plano ou preço</option>
+                        {commercialOptions.map(option => <option key={option.id} value={option.id}>
+                          {[
+                            option.label,
+                            option.frequencyType === 'unlimited' ? 'Acesso livre' :
+                              option.frequencyCount + (option.frequencyType === 'weekly' ? '× por semana' : option.frequencyType === 'monthly' ? '× por mês' : ' unidades'),
+                            PLAN_DURATION_LABELS[option.contractDurationCode],
+                            PAYMENT_PERIODICITY_LABELS[option.paymentPeriodicity]
+                          ].filter(Boolean).join(' · ')}
+                        </option>)}
+                      </select>
+                    </label>
+                    {commercialQuote && <p className="text-sm font-medium text-indigo-900">
+                      {commercialQuote.paymentPeriodicity === 'installments'
+                        ? commercialQuote.installmentsCount + ' parcelas de ' + formatCurrencyBRL(commercialQuote.installmentAmountReais)
+                        : formatCurrencyBRL(commercialQuote.cycleAmountReais) + ' por cobrança'}
+                      {' · Total do contrato: ' + formatCurrencyBRL(commercialQuote.totalContractAmountReais)}
+                    </p>}
+                  </div>}
+
+                  {commercialOptions.length === 0 && selectedServiceObj?.studio_service_type === 'facility_access' && (
                     <div className="p-3 rounded-xl bg-indigo-50/50 border border-indigo-100 space-y-2.5">
                       <div className="font-bold text-indigo-950">Regras de Entrada do Aluno</div>
                       <div className="grid grid-cols-2 gap-2">
@@ -738,7 +776,7 @@ export const StudioEnrollmentsView: React.FC = () => {
                     </div>
                   )}
 
-                  <div className="grid grid-cols-2 gap-3">
+                  {commercialOptions.length === 0 && <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block font-semibold text-slate-700 mb-1">Duração do Contrato</label>
                       <select
@@ -767,10 +805,10 @@ export const StudioEnrollmentsView: React.FC = () => {
                         <option value="one_time">À vista (Único)</option>
                       </select>
                     </div>
-                  </div>
+                  </div>}
 
                   <div className="grid grid-cols-2 gap-3">
-                    <div>
+                    {commercialOptions.length === 0 && <div>
                       <label className="block font-semibold text-slate-700 mb-1">Valor por Ciclo (R$)</label>
                       <input
                         type="number"
@@ -780,7 +818,7 @@ export const StudioEnrollmentsView: React.FC = () => {
                         onChange={e => setCustomAmount(e.target.value)}
                         className="w-full border border-slate-200 rounded-xl px-3 py-2 font-bold text-teal-800"
                       />
-                    </div>
+                    </div>}
                     <div>
                       <label className="block font-semibold text-slate-700 mb-1">Dia de Vencimento</label>
                       <input
