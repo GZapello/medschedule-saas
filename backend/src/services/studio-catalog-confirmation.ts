@@ -3,6 +3,7 @@ import { Request } from 'express';
 import { db } from '../config/database';
 import { ServiceController, ServiceSaveResponse } from '../controllers/service.controller';
 import { getTenantEstablishmentProfile, PLAN_DURATION_MONTHS, resolveServiceDomain } from '../utils/establishment-context';
+import { isProfessionalEligibleForAddonService, listTenantAddonProfessionalsDetailed } from '../utils/studio-addon-eligibility';
 import { checkProfessionalScheduleCoverage, getProfessionalScheduleSegmentsForDay, parseClockMinutes, WEEKDAY_NAMES_PT } from '../utils/service-availability';
 import {
   getPaymentPeriodicityCycleMonths,
@@ -23,6 +24,9 @@ import type {
   CatalogWorkShift,
   ImportAlert,
   ImportDiagnostics,
+  ImportIgnoredItem,
+  ImportReceipt,
+  ImportReceiptItem,
   ProposedPackage,
   ProposedPrice,
   ProposedService,
@@ -33,7 +37,9 @@ import type {
 type CatalogService = {
   id: string; name: string; price: number; professional_id: string | null; default_capacity: number | null;
   duration_minutes: number; service_domain: string | null; service_kind: string; studio_service_type: string;
-  clinical_module: string | null; active: number; commercial_price_options_json: string | null;
+  clinical_module: string | null; modality_category?: string | null; requires_appointment?: number;
+  allow_public_booking?: number;
+  active: number; commercial_price_options_json: string | null;
   pricing_adjustments_json: string | null; access_config_json: string | null; availability_mode: string | null;
   optional_addons_json?: string | null;
 };
@@ -46,16 +52,11 @@ export function readStudioImportCatalog(tenantId: string) {
     .filter(s => resolveServiceDomain({
       establishmentProfile: profile, serviceDomain: s.service_domain, serviceKind: s.service_kind, clinicalModule: s.clinical_module
     }) === 'studio');
-  const packages = db.prepare('SELECT id, name, active FROM service_packages WHERE tenant_id = ? ORDER BY name').all(tenantId) as
-    { id: string; name: string; active: number }[];
-  const profRows = db.prepare(`
-    SELECT id, name, profession_name, COALESCE(public_booking_enabled, 1) as public_booking_enabled
-    FROM professionals
-    WHERE tenant_id = ? AND active = 1
-    ORDER BY name
-  `).all(tenantId) as Array<{ id: string; name: string; profession_name: string | null; public_booking_enabled: number }>;
+  const packages = db.prepare('SELECT id, name, active, COALESCE(allow_public_booking, 1) as allow_public_booking FROM service_packages WHERE tenant_id = ? ORDER BY name').all(tenantId) as
+    { id: string; name: string; active: number; allow_public_booking?: number }[];
+  const profDetails = listTenantAddonProfessionalsDetailed(tenantId).filter(p => p.active);
 
-  const professionals: CatalogProfessionalSummary[] = profRows.map(p => {
+  const professionals: CatalogProfessionalSummary[] = profDetails.map(p => {
     const workShifts: CatalogWorkShift[] = [];
     const summaryParts: string[] = [];
     for (let dow = 0; dow <= 6; dow++) {
@@ -67,11 +68,19 @@ export function readStudioImportCatalog(tenantId: string) {
         summaryParts.push(`${WEEKDAY_SHORT[dow]} ${segs.map(s => `${minutesToHHMM(s.start)}–${minutesToHHMM(s.end)}`).join(', ')}`);
       }
     }
+    const hasActiveSchedule = p.hasActiveSchedule || workShifts.length > 0;
+    const isStudioEligible = !p.isAdminManager && !p.isClinicalOnlyWithoutFitness;
     return {
       id: p.id,
       name: p.name,
-      professionName: p.profession_name,
-      publicBookingEnabled: Number(p.public_booking_enabled) === 1,
+      professionId: p.professionId,
+      professionName: p.professionName,
+      availableModules: p.availableModules,
+      linkedServiceIds: p.linkedServiceIds,
+      hasActiveSchedule,
+      isAdminManager: p.isAdminManager,
+      isStudioEligible,
+      publicBookingEnabled: p.publicBookingEnabled,
       workShifts,
       scheduleSummary: summaryParts.length > 0 ? summaryParts.join(' · ') : 'Sem escala semanal ativa'
     };
@@ -564,19 +573,27 @@ export function buildProposalDiagnostics(
             message: `${row.name || 'Serviço'} · Complemento "${ao.label || ao.addonServiceName}": ${ao.ambiguousReason || 'Confirme se é complemento opcional ou pacote obrigatório.'}`
           });
         }
-        const resolvedRef = ao.addonServiceRef
-          ? (ao.addonServiceRef.startsWith('existing:')
-              ? catalog.services.find(s => s.active && s.id === ao.addonServiceRef.slice(9))?.id
-              : proposal.services.find(ps => ps.key === ao.addonServiceRef && ps.action !== 'ignore')?.key)
-          : (() => {
-              const targetKey = nameKey(ao.addonServiceName || ao.label);
-              if (!targetKey) return null;
-              const propMatches = proposal.services.filter(ps => ps.key !== row.key && ps.action !== 'ignore' && nameKey(ps.name) === targetKey);
-              if (propMatches.length === 1) return propMatches[0].key;
-              const catMatches = catalog.services.filter(cs => cs.active && nameKey(cs.name) === targetKey);
-              if (catMatches.length === 1) return catMatches[0].id;
-              return null;
-            })();
+        const resolvedExisting = ao.addonServiceRef && ao.addonServiceRef.startsWith('existing:')
+          ? catalog.services.find(s => s.active && s.id === ao.addonServiceRef.slice(9))
+          : (!ao.addonServiceRef
+              ? (() => {
+                  const targetKey = nameKey(ao.addonServiceName || ao.label);
+                  if (!targetKey) return undefined;
+                  const catMatches = catalog.services.filter(cs => cs.active && nameKey(cs.name) === targetKey);
+                  return catMatches.length === 1 ? catMatches[0] : undefined;
+                })()
+              : undefined);
+        const resolvedProposed = ao.addonServiceRef && !ao.addonServiceRef.startsWith('existing:')
+          ? proposal.services.find(ps => ps.key === ao.addonServiceRef && ps.action !== 'ignore')
+          : (!ao.addonServiceRef
+              ? (() => {
+                  const targetKey = nameKey(ao.addonServiceName || ao.label);
+                  if (!targetKey) return undefined;
+                  const propMatches = proposal.services.filter(ps => ps.key !== row.key && ps.action !== 'ignore' && nameKey(ps.name) === targetKey);
+                  return propMatches.length === 1 ? propMatches[0] : undefined;
+                })()
+              : undefined);
+        const resolvedRef = resolvedExisting?.id || resolvedProposed?.key || null;
         if (!resolvedRef) {
           hasServiceIssue = true;
           alerts.push({
@@ -587,6 +604,20 @@ export function buildProposalDiagnostics(
             section: 'addons',
             severity: addonSeverity,
             message: `${row.name || 'Serviço'} · Complemento "${ao.label || ai + 1}": vincule a um serviço ativo existente ou incluído nesta importação.`
+          });
+        } else if (
+          (resolvedExisting && normalizeStudioServiceType(resolvedExisting.studio_service_type, resolvedExisting.service_kind) === 'facility_access') ||
+          (resolvedProposed && (resolvedProposed.type === 'access_unlimited' || resolvedProposed.type === 'access_limited'))
+        ) {
+          hasServiceIssue = true;
+          alerts.push({
+            id: `addon-access-target-${row.key}-${ai}`,
+            scope: 'service',
+            recordKey: row.key,
+            recordName: row.name || 'Serviço',
+            section: 'addons',
+            severity: addonSeverity,
+            message: `${row.name || 'Serviço'} · Complemento "${ao.label || ai + 1}": um plano de acesso livre/limitado não pode ser usado como complemento. Selecione um serviço agendável (ex.: Personal Trainer).`
           });
         }
         if (ao.additionalPriceCents === null || ao.additionalPriceCents < 0) {
@@ -613,17 +644,30 @@ export function buildProposalDiagnostics(
             message: `${row.name || 'Serviço'} · Complemento "${ao.label || ai + 1}": informe a capacidade de vagas por horário (mínimo 2 para atendimento em grupo).`
           });
         }
-        if (Array.isArray(ao.enabledProfessionalIds) && ao.enabledProfessionalIds.length > 0 && !ao.enabledProfessionalIds.some(pid => profById.has(pid))) {
-          hasServiceIssue = true;
-          alerts.push({
-            id: `addon-prof-${row.key}-${ai}`,
-            scope: 'service',
-            recordKey: row.key,
-            recordName: row.name || 'Serviço',
-            section: 'addons',
-            severity: addonSeverity,
-            message: `${row.name || 'Serviço'} · Complemento "${ao.label || ai + 1}": selecione profissionais ativos válidos ou libere todos os habilitados.`
+        if (Array.isArray(ao.enabledProfessionalIds) && ao.enabledProfessionalIds.length > 0) {
+          const invalidPros = ao.enabledProfessionalIds.filter((pid) => {
+            const p = profById.get(pid);
+            if (!p) return true;
+            if (p.isStudioEligible === false && !resolvedExisting?.id) return true;
+            if (p.isAdminManager && !p.hasActiveSchedule && !p.isStudioEligible) return true;
+            if (resolvedExisting && normalizeStudioServiceType(resolvedExisting.studio_service_type, resolvedExisting.service_kind) !== 'non_scheduled') {
+              const linked = Array.isArray(p.linkedServiceIds) ? p.linkedServiceIds.includes(resolvedExisting.id) : true;
+              if (!linked) return true;
+            }
+            return false;
           });
+          if (invalidPros.length > 0) {
+            hasServiceIssue = true;
+            alerts.push({
+              id: `addon-prof-${row.key}-${ai}`,
+              scope: 'service',
+              recordKey: row.key,
+              recordName: row.name || 'Serviço',
+              section: 'addons',
+              severity: addonSeverity,
+              message: `${row.name || 'Serviço'} · Complemento "${ao.label || ai + 1}": há profissionais selecionados sem vínculo ou habilitação válida para o serviço complementar.`
+            });
+          }
         }
       }
     }
@@ -922,15 +966,26 @@ function packagePrice(price: ProposedPrice | null) {
   };
 }
 
-export function applyStudioCatalog(req: Request, proposal: StudioProposal) {
+export function applyStudioCatalog(req: Request, proposal: StudioProposal): ImportReceipt {
   const tenantId = req.tenantId!;
   const catalog = readStudioImportCatalog(tenantId);
-  const services: { key: string; id: string; name: string; action: string }[] = [];
-  const packages: typeof services = [];
+  const services: ImportReceiptItem[] = [];
+  const packages: ImportReceiptItem[] = [];
+  const createdServiceIds: string[] = [];
+  const updatedServiceIds: string[] = [];
+  const linkedServiceIds: string[] = [];
+  const createdPriceOptionIds: string[] = [];
+  const createdPackageIds: string[] = [];
+  const linkedPackageIds: string[] = [];
+  const ignoredServices: ImportIgnoredItem[] = [];
+  const ignoredPackages: ImportIgnoredItem[] = [];
   const references = new Map(catalog.services.filter(s => s.active).map(s => ['existing:' + s.id, s.id]));
 
   for (const row of proposal.services) {
-    if (row.action === 'ignore') continue;
+    if (row.action === 'ignore') {
+      ignoredServices.push({ key: row.key, name: row.name || 'Serviço' });
+      continue;
+    }
     try {
       if (!row.reviewed) throw catalogError('Marque a revisão como concluída.');
       const target = catalog.services.find(s => s.active && s.id === row.existingId);
@@ -938,7 +993,14 @@ export function applyStudioCatalog(req: Request, proposal: StudioProposal) {
       if (!isCreate && !target) throw catalogError('Selecione um serviço ativo do catálogo de Studio.');
       if (row.action === 'link') {
         references.set(row.key, target!.id);
-        services.push({ key: row.key, id: target!.id, name: target!.name, action: row.action });
+        linkedServiceIds.push(target!.id);
+        services.push({
+          key: row.key,
+          id: target!.id,
+          name: target!.name,
+          action: row.action,
+          published: Number(target!.allow_public_booking ?? 1) !== 0
+        });
         continue;
       }
       const current = isCreate ? undefined : target;
@@ -1002,19 +1064,30 @@ export function applyStudioCatalog(req: Request, proposal: StudioProposal) {
           throw catalogError(`Informe a capacidade de vagas por horário (mínimo 2) para o complemento em grupo "${ao.label || ao.addonServiceName}".`);
         }
         const rawRef = String(ao.addonServiceRef || '').trim();
-        const hasPlannedTarget =
-          (rawRef.startsWith('existing:') && catalog.services.some(s => s.active && s.id === rawRef.slice(9))) ||
-          proposal.services.some(ps => ps.key !== row.key && ps.action !== 'ignore' && ps.key === rawRef) ||
-          (() => {
-            const targetKey = nameKey(ao.addonServiceName || ao.label);
-            if (!targetKey) return false;
-            return (
-              proposal.services.some(ps => ps.key !== row.key && ps.action !== 'ignore' && nameKey(ps.name) === targetKey) ||
-              catalog.services.some(cs => cs.active && cs.id !== current?.id && nameKey(cs.name) === targetKey)
-            );
-          })();
+        const existingTarget = rawRef.startsWith('existing:')
+          ? catalog.services.find(s => s.active && s.id === rawRef.slice(9))
+          : undefined;
+        const proposedTarget = !existingTarget && rawRef
+          ? proposal.services.find(ps => ps.key !== row.key && ps.action !== 'ignore' && ps.key === rawRef)
+          : undefined;
+        const fallbackNameKey = !existingTarget && !proposedTarget ? nameKey(ao.addonServiceName || ao.label) : '';
+        const matchedProposedByName = fallbackNameKey
+          ? proposal.services.find(ps => ps.key !== row.key && ps.action !== 'ignore' && nameKey(ps.name) === fallbackNameKey)
+          : undefined;
+        const matchedCatalogByName = fallbackNameKey && !matchedProposedByName
+          ? catalog.services.find(cs => cs.active && cs.id !== current?.id && nameKey(cs.name) === fallbackNameKey)
+          : undefined;
+        const hasPlannedTarget = Boolean(existingTarget || proposedTarget || matchedProposedByName || matchedCatalogByName);
         if (!hasPlannedTarget) {
           throw catalogError(`Vincule um serviço complementar distinto e ativo para "${ao.label || ao.addonServiceName}".`);
+        }
+        const checkTargetExisting = existingTarget || matchedCatalogByName;
+        const checkTargetProposed = proposedTarget || matchedProposedByName;
+        if (
+          (checkTargetExisting && normalizeStudioServiceType(checkTargetExisting.studio_service_type, checkTargetExisting.service_kind) === 'facility_access') ||
+          (checkTargetProposed && (checkTargetProposed.type === 'access_unlimited' || checkTargetProposed.type === 'access_limited'))
+        ) {
+          throw catalogError(`O serviço "${ao.addonServiceName || ao.label}" é de acesso livre/limitado e não pode ser vinculado como complemento opcional.`);
         }
       }
 
@@ -1054,8 +1127,29 @@ export function applyStudioCatalog(req: Request, proposal: StudioProposal) {
       Object.assign(body, schedPayload);
       const id = saveService(req, body, current?.id);
       references.set(row.key, id);
-      services.push({ key: row.key, id, name: identity ? row.name : current!.name, action: row.action });
-      const saved = db.prepare('SELECT * FROM services WHERE tenant_id = ? AND id = ?').get(tenantId, id) as CatalogService;
+      const saved = db.prepare('SELECT * FROM services WHERE tenant_id = ? AND id = ?').get(tenantId, id) as CatalogService | undefined;
+      if (!saved) {
+        throw catalogError('Falha ao verificar a gravação do serviço no catálogo oficial.', 500);
+      }
+      const savedOptions = normalizeCommercialPriceOptions(saved.commercial_price_options_json);
+      const addedOptionIds = prices?.options
+        ? prices.options.map(o => o.id).filter(oid => savedOptions.some(so => so.id === oid))
+        : [];
+      createdPriceOptionIds.push(...addedOptionIds);
+      const createdSchedulesCount = Array.isArray((schedPayload as any).classSchedules)
+        ? (schedPayload as any).classSchedules.length
+        : (Array.isArray((schedPayload as any).availabilityWindows) ? (schedPayload as any).availabilityWindows.length : 0);
+      if (isCreate) createdServiceIds.push(id);
+      else updatedServiceIds.push(id);
+      services.push({
+        key: row.key,
+        id,
+        name: identity ? row.name : current!.name,
+        action: row.action,
+        published: Number(saved.allow_public_booking ?? 1) !== 0,
+        priceOptionsCreated: addedOptionIds.length,
+        schedulesCreated: createdSchedulesCount
+      });
       if (current) Object.assign(current, saved);
       else catalog.services.push(saved);
     } catch (error) {
@@ -1110,7 +1204,11 @@ export function applyStudioCatalog(req: Request, proposal: StudioProposal) {
 
         const targetSrv =
           catalog.services.find(s => s.id === targetId) ||
-          (db.prepare('SELECT id, name, studio_service_type, service_kind FROM services WHERE id = ? AND tenant_id = ?').get(targetId, tenantId) as { id: string; name: string; studio_service_type: string | null; service_kind: string | null } | undefined);
+          (db.prepare('SELECT id, name, studio_service_type, service_kind, clinical_module, modality_category, COALESCE(requires_appointment, 1) as requires_appointment FROM services WHERE id = ? AND tenant_id = ?').get(targetId, tenantId) as CatalogService | undefined);
+        const targetType = targetSrv ? normalizeStudioServiceType(targetSrv.studio_service_type, targetSrv.service_kind) : 'individual';
+        if (targetType === 'facility_access') {
+          throw catalogError(`O serviço "${targetSrv?.name || ao.label}" é de acesso à academia e não pode ser vinculado como complemento opcional.`);
+        }
         const freqType = ao.frequencyType || 'weekly';
         const freqCount = freqType === 'unlimited' ? null : (ao.frequencyCount || 1);
         const creditsPerCycle = freqType === 'unlimited'
@@ -1118,7 +1216,6 @@ export function applyStudioCatalog(req: Request, proposal: StudioProposal) {
           : (ao.creditsPerCycle !== null && ao.creditsPerCycle !== undefined
               ? ao.creditsPerCycle
               : resolveDefaultAddonCreditsPerCycle(freqType, freqCount, 1));
-        const targetType = targetSrv ? normalizeStudioServiceType(targetSrv.studio_service_type, targetSrv.service_kind) : 'individual';
         const attendanceFormat = ao.attendanceFormat || 'match_service';
         const sessionCapacity =
           attendanceFormat === 'individual'
@@ -1128,9 +1225,26 @@ export function applyStudioCatalog(req: Request, proposal: StudioProposal) {
               : attendanceFormat === 'group'
                 ? Number(ao.sessionCapacity)
                 : null;
+        const detailedPros = listTenantAddonProfessionalsDetailed(tenantId);
+        const detailedById = new Map(detailedPros.map(p => [p.id, p]));
         const validProIds = Array.isArray(ao.enabledProfessionalIds)
-          ? ao.enabledProfessionalIds.filter(pid => catalog.professionals.some(p => p.id === pid))
+          ? ao.enabledProfessionalIds.filter((pid) => {
+              const dp = detailedById.get(pid);
+              if (!dp || !dp.active) return false;
+              if (!targetSrv) return !dp.isAdminManager && !dp.isClinicalOnlyWithoutFitness;
+              return isProfessionalEligibleForAddonService(dp, {
+                id: targetSrv.id,
+                name: targetSrv.name,
+                studio_service_type: targetType,
+                requires_appointment: targetType === 'non_scheduled' ? 0 : Number(targetSrv.requires_appointment ?? 1),
+                clinical_module: targetSrv.clinical_module || null,
+                modality_category: targetSrv.modality_category || null
+              });
+            })
           : [];
+        if (Array.isArray(ao.enabledProfessionalIds) && ao.enabledProfessionalIds.length > 0 && validProIds.length === 0) {
+          throw catalogError(`Nenhum dos profissionais selecionados no complemento "${ao.label || targetSrv?.name}" possui vínculo ou habilitação compatível com "${targetSrv?.name || ao.label}".`);
+        }
         const validWeekdays = Array.isArray(ao.allowedWeekdays)
           ? [...new Set(ao.allowedWeekdays.map(Number).filter(d => Number.isInteger(d) && d >= 0 && d <= 6))].sort((a, b) => a - b)
           : [];
@@ -1154,7 +1268,7 @@ export function applyStudioCatalog(req: Request, proposal: StudioProposal) {
           billingPeriodicity: ao.billingPeriodicity || 'monthly',
           durationMode: ao.durationMode || 'match_base',
           autoRenew: null,
-          scheduleTiming: targetType === 'facility_access' || targetType === 'non_scheduled' ? 'not_applicable' : (ao.scheduleTiming || 'after_confirmation'),
+          scheduleTiming: targetType === 'non_scheduled' ? 'not_applicable' : (ao.scheduleTiming || 'after_confirmation'),
           enabledProfessionalIds: validProIds,
           professionalSelectionMode: ao.professionalSelectionMode || 'student_picks',
           attendanceFormat,
@@ -1187,13 +1301,23 @@ export function applyStudioCatalog(req: Request, proposal: StudioProposal) {
   }
 
   for (const row of proposal.packages) {
-    if (row.action === 'ignore') continue;
+    if (row.action === 'ignore') {
+      ignoredPackages.push({ key: row.key, name: row.name || 'Pacote' });
+      continue;
+    }
     try {
       if (!row.reviewed) throw catalogError('Marque a revisão como concluída.');
       if (row.action === 'link') {
         const target = catalog.packages.find(p => p.active && p.id === row.existingId);
         if (!target) throw catalogError('Selecione um pacote ativo deste estabelecimento.');
-        packages.push({ key: row.key, id: target.id, name: target.name, action: row.action });
+        linkedPackageIds.push(target.id);
+        packages.push({
+          key: row.key,
+          id: target.id,
+          name: target.name,
+          action: row.action,
+          published: Number((target as any).allow_public_booking ?? 1) !== 0
+        });
         continue;
       }
       nonempty(row.name, 'Informe o nome do pacote.');
@@ -1217,14 +1341,46 @@ export function applyStudioCatalog(req: Request, proposal: StudioProposal) {
         name: row.name, description: asDescription(row), ...packagePrice(row.price), items, allowPublicBooking: row.allowPublicBooking !== false
       }, req.user!.userId);
       if (!created?.id) throw catalogError('Falha ao gravar o pacote.', 500);
-      packages.push({ key: row.key, id: created.id, name: row.name, action: row.action });
+      createdPackageIds.push(created.id);
+      packages.push({
+        key: row.key,
+        id: created.id,
+        name: row.name,
+        action: row.action,
+        published: Number((created as any).allow_public_booking ?? (row.allowPublicBooking !== false ? 1 : 0)) !== 0
+      });
       catalog.packages.push(created);
     } catch (error) {
       throw catalogError((row.name || 'Pacote sem nome') + ' — ' + (error as Error).message, (error as { status?: number }).status || 500);
     }
   }
   if (!services.length && !packages.length) throw catalogError('Selecione ao menos um registro para importar.');
-  return { services, packages };
+
+  const allPersistedServiceIds = [...new Set([...createdServiceIds, ...updatedServiceIds, ...linkedServiceIds])];
+  const allPersistedPackageIds = [...new Set([...createdPackageIds, ...linkedPackageIds])];
+  const verifiedSrvCount = allPersistedServiceIds.length > 0
+    ? Number((db.prepare(`SELECT COUNT(*) as cnt FROM services WHERE tenant_id = ? AND id IN (${allPersistedServiceIds.map(() => '?').join(',')})`).get(tenantId, ...allPersistedServiceIds) as any)?.cnt || 0)
+    : 0;
+  const verifiedPkgCount = allPersistedPackageIds.length > 0
+    ? Number((db.prepare(`SELECT COUNT(*) as cnt FROM service_packages WHERE tenant_id = ? AND id IN (${allPersistedPackageIds.map(() => '?').join(',')})`).get(tenantId, ...allPersistedPackageIds) as any)?.cnt || 0)
+    : 0;
+  if (verifiedSrvCount !== allPersistedServiceIds.length || verifiedPkgCount !== allPersistedPackageIds.length) {
+    throw catalogError('Falha ao verificar todos os registros no catálogo oficial após gravação.', 500);
+  }
+
+  return {
+    services,
+    packages,
+    createdServiceIds,
+    updatedServiceIds,
+    linkedServiceIds,
+    createdPriceOptionIds,
+    createdPackageIds,
+    linkedPackageIds,
+    ignoredServices,
+    ignoredPackages,
+    verifiedCatalogCount: verifiedSrvCount + verifiedPkgCount
+  };
 }
 
 function currentServiceType(service: CatalogService) {

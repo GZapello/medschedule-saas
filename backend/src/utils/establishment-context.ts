@@ -180,11 +180,10 @@ export function resolveServiceDomain(params: {
   if (explicit === 'studio' || explicit === 'clinical') {
     return explicit as ServiceDomain;
   }
-
-  if (String(params.serviceKind || '').trim().toLowerCase() === 'group') {
+  if (String(params.clinicalModule || '').trim() === 'ZemdaPersonal') {
     return 'studio';
   }
-  if (String(params.clinicalModule || '').trim() === 'ZemdaPersonal') {
+  if (String(params.serviceKind || '').trim().toLowerCase() === 'group') {
     return 'studio';
   }
 

@@ -133,7 +133,13 @@ export interface CatalogWorkShift {
 export interface CatalogProfessionalSummary {
   id: string;
   name: string;
+  professionId?: string | null;
   professionName?: string | null;
+  availableModules?: string[];
+  linkedServiceIds?: string[];
+  hasActiveSchedule?: boolean;
+  isAdminManager?: boolean;
+  isStudioEligible?: boolean;
   publicBookingEnabled?: boolean;
   workShifts: CatalogWorkShift[];
   scheduleSummary: string;
@@ -209,9 +215,33 @@ export interface ImportSource {
   fileSize?: number;
 }
 
+export interface ImportReceiptItem {
+  key: string;
+  id: string;
+  name: string;
+  action: 'create' | 'update' | 'link' | string;
+  published?: boolean;
+  priceOptionsCreated?: number;
+  schedulesCreated?: number;
+}
+
+export interface ImportIgnoredItem {
+  key: string;
+  name: string;
+}
+
 export interface ImportReceipt {
-  services: { key: string; id: string; name: string; action: string }[];
-  packages: { key: string; id: string; name: string; action: string }[];
+  services: ImportReceiptItem[];
+  packages: ImportReceiptItem[];
+  createdServiceIds?: string[];
+  updatedServiceIds?: string[];
+  linkedServiceIds?: string[];
+  createdPriceOptionIds?: string[];
+  createdPackageIds?: string[];
+  linkedPackageIds?: string[];
+  ignoredServices?: ImportIgnoredItem[];
+  ignoredPackages?: ImportIgnoredItem[];
+  verifiedCatalogCount?: number;
 }
 
 export type CatalogImportBatchStatus = 'queued' | 'processing' | 'failed' | 'cancelled' | 'ready' | 'completed';

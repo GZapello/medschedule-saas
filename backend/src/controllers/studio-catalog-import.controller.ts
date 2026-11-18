@@ -699,11 +699,13 @@ export class StudioCatalogImportController {
       const files = [...new Map(uploads.map(file => [file.fingerprint, file])).values()];
       const fingerprint = hash(files.map(file => file.fingerprint).sort().join('|'));
       const lockKey = `${tenantId}:${actorId}:${fingerprint}`;
-      const lookup = db.prepare('SELECT * FROM studio_catalog_imports WHERE tenant_id = ? AND actor_id = ? AND fingerprint = ?');
+      const reanalyze = req.body?.reanalyze === true || req.query.reanalyze === '1' || req.query.reanalyze === 'true';
+      // Busca apenas rascunhos em aberto (result_json IS NULL): importações já confirmadas NUNCA pulam a revisão ao reenviar arquivos.
+      const lookup = db.prepare('SELECT * FROM studio_catalog_imports WHERE tenant_id = ? AND actor_id = ? AND fingerprint = ? AND result_json IS NULL');
       const saved = lookup.get(tenantId, actorId, fingerprint) as Draft | undefined;
 
-      if (saved && (saved.result_json || saved.status === 'ready' || saved.status === 'completed')) {
-        res.json(responseFor(tenantId, saved));
+      if (!reanalyze && saved && saved.status === 'ready' && !saved.result_json) {
+        res.json({ ...responseFor(tenantId, saved), reusedPendingDraft: true });
         return;
       }
 
@@ -780,7 +782,7 @@ export class StudioCatalogImportController {
                     temp_expires_at = ?,
                     temp_purged_at = NULL,
                     updated_at = datetime('now')
-                WHERE id = ? AND tenant_id = ? AND actor_id = ?
+                WHERE id = ? AND tenant_id = ? AND actor_id = ? AND result_json IS NULL
               `).run(JSON.stringify(sources), initialDiagJson, requestId, expiresAtIso, existing.id, tenantId, actorId);
             } else {
               db.prepare(`
@@ -872,7 +874,7 @@ export class StudioCatalogImportController {
 
           const draft = db.transaction(() => {
             const previous = lookup.get(tenantId, actorId, fingerprint) as Draft | undefined;
-            if (previous && (previous.status === 'ready' || previous.status === 'completed' || previous.result_json)) {
+            if (!reanalyze && previous && previous.status === 'ready' && !previous.result_json) {
               return previous;
             }
             if (previous) {
@@ -888,7 +890,7 @@ export class StudioCatalogImportController {
                     retryable = 0,
                     temp_purged_at = datetime('now'),
                     updated_at = datetime('now')
-                WHERE id = ? AND tenant_id = ? AND actor_id = ?
+                WHERE id = ? AND tenant_id = ? AND actor_id = ? AND result_json IS NULL
               `).run(JSON.stringify(sources), JSON.stringify(proposal), requestId, previous.id, tenantId, actorId);
             } else {
               db.prepare(`
@@ -932,7 +934,10 @@ export class StudioCatalogImportController {
 
     try {
       const current = getDraft(req);
-      if (current.result_json || current.status === 'ready' || current.status === 'completed') {
+      if (current.result_json || current.status === 'completed') {
+        throw catalogError('Esta importação já foi confirmada. Envie os arquivos novamente para iniciar uma nova análise e revisão.', 409);
+      }
+      if (current.status === 'ready') {
         res.json(responseFor(tenantId, current));
         return;
       }
@@ -1078,14 +1083,27 @@ function reviewedProposal(req: Request, draft: Draft) {
   if (req.body?.revision !== draft.revision) throw catalogError('Este rascunho foi alterado. Abra a versão mais recente antes de continuar.', 409);
   const proposal = normalizeProposal(req.body?.proposal, JSON.parse(draft.sources_json).length, false);
   const original = JSON.parse(draft.proposal_json) as StudioProposal;
-  if (original.services.length !== proposal.services.length || original.packages.length !== proposal.packages.length) {
-    throw catalogError('Para excluir uma proposta da importação, marque-a como Ignorar.');
+  const origServicesByKey = new Map(original.services.map(s => [s.key, s]));
+  const origPackagesByKey = new Map(original.packages.map(p => [p.key, p]));
+  for (const orig of original.services) {
+    if (!proposal.services.some(s => s.key === orig.key)) {
+      throw catalogError('Para excluir uma proposta da importação, marque-a como Ignorar.');
+    }
   }
-  for (const kind of ['services', 'packages'] as const) {
-    proposal[kind].forEach((row, i) => {
-      row.sources = original[kind][i].sources;
-      row.issues = original[kind][i].issues;
-    });
+  for (const orig of original.packages) {
+    if (!proposal.packages.some(p => p.key === orig.key)) {
+      throw catalogError('Para excluir uma proposta da importação, marque-a como Ignorar.');
+    }
   }
+  proposal.services.forEach((row) => {
+    const matched = origServicesByKey.get(row.key);
+    row.sources = matched ? matched.sources : [];
+    row.issues = matched ? matched.issues : [];
+  });
+  proposal.packages.forEach((row) => {
+    const matched = origPackagesByKey.get(row.key);
+    row.sources = matched ? matched.sources : [];
+    row.issues = matched ? matched.issues : [];
+  });
   return proposal;
 }

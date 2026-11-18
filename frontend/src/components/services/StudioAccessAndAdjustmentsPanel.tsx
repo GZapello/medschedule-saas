@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, Suspense } from 'react';
 import {
   KeyRound,
   User,
@@ -8,8 +8,10 @@ import {
   ShieldAlert,
   Plus,
   Trash2,
-  Sparkles
+  Sparkles,
+  RefreshCw
 } from 'lucide-react';
+import { ApiClient } from '../../api/client';
 import {
   StudioServiceType,
   StudioAccessConfig,
@@ -29,6 +31,10 @@ import {
 } from '../../utils/studioAccessAndCommercial';
 import { PLAN_DURATION_LABELS } from '../../utils/establishmentContext';
 
+const LazyNewServiceModal = React.lazy(() =>
+  import('./NewServiceModal').then(m => ({ default: m.NewServiceModal }))
+);
+
 export interface AddonCandidateService {
   id: string;
   name: string;
@@ -36,17 +42,94 @@ export interface AddonCandidateService {
   studio_service_type?: string;
   service_kind?: string;
   requires_appointment?: number | boolean;
+  is_schedulable?: boolean;
   service_domain?: string;
   professional_id?: string | null;
   linked_professional_ids?: string[];
+  eligible_professional_ids?: string[];
+  eligible_professionals?: Array<{
+    id: string;
+    name: string;
+    profession_name?: string | null;
+    public_booking_enabled?: boolean | number;
+    has_active_schedule?: boolean;
+  }>;
 }
 
 export interface AddonCandidateProfessional {
   id: string;
   name: string;
+  profession_id?: string | null;
   profession_name?: string | null;
+  available_modules?: Array<{ code: string; label?: string }>;
+  practice_areas?: string;
   active?: number | boolean;
   public_booking_enabled?: number | boolean;
+  has_active_schedule?: boolean;
+}
+
+export function validateAndPrepareOptionalAddonsForSave(cfg: StudioOptionalAddonsConfig): {
+  valid: boolean;
+  error?: string;
+  config: StudioOptionalAddonsConfig;
+} {
+  if (!cfg.enabled) {
+    const cleanedOptions = (cfg.options || []).filter(o => Boolean(o.addonServiceId && String(o.addonServiceId).trim()));
+    return {
+      valid: true,
+      config: {
+        ...cfg,
+        enabled: false,
+        options: cleanedOptions
+      }
+    };
+  }
+  const options = Array.isArray(cfg.options) ? cfg.options : [];
+  if (options.length === 0) {
+    return {
+      valid: false,
+      error: 'Adicione ao menos um serviço complementar vinculado antes de salvar (ou desative os complementos opcionais).',
+      config: cfg
+    };
+  }
+  for (let i = 0; i < options.length; i++) {
+    const opt = options[i];
+    if (!opt.addonServiceId || !String(opt.addonServiceId).trim()) {
+      return {
+        valid: false,
+        error: `Selecione ou crie o serviço vinculado para o Complemento #${i + 1} (ou remova a opção incompleta).`,
+        config: cfg
+      };
+    }
+  }
+  return { valid: true, config: cfg };
+}
+
+function isClientStudioQualifiedProfessional(pro: AddonCandidateProfessional): boolean {
+  if (!pro || pro.active === false || pro.active === 0) return false;
+  const mods = Array.isArray(pro.available_modules) ? pro.available_modules.map(m => m.code) : [];
+  const pName = String(pro.profession_name || '').toLowerCase();
+  const pId = String(pro.profession_id || '').toLowerCase();
+  const areas = String(pro.practice_areas || '').toLowerCase();
+  const hasPersonal =
+    mods.includes('ZemdaPersonal') ||
+    pId.includes('personal') ||
+    pId.includes('educacao-fisica') ||
+    pId.includes('instrutor') ||
+    pName.includes('personal') ||
+    pName.includes('educador f') ||
+    pName.includes('educação f') ||
+    pName.includes('instrutor') ||
+    pName.includes('pilates') ||
+    areas.includes('personal') ||
+    areas.includes('musculaç');
+  const isPureAdmin =
+    !hasPersonal &&
+    (pName === 'gestor' || pName === 'administrador' || pName === 'administradora' || pName === 'admin' || pName === 'gerente');
+  if (isPureAdmin) return false;
+  const clinicalOnly = mods.filter(c => c !== 'ZemdaPersonal' && c !== 'general');
+  if (clinicalOnly.length > 0 && !hasPersonal) return false;
+  return true;
 }
 
 interface StudioAccessAndAdjustmentsPanelProps {
@@ -67,6 +150,8 @@ interface StudioAccessAndAdjustmentsPanelProps {
   onDefaultCapacityChange?: (nextCap: number) => void;
   allowPublicBooking?: boolean;
   onAllowPublicBookingChange?: (allow: boolean) => void;
+  disableFacilityAccessOption?: boolean;
+  hideOptionalAddons?: boolean;
 }
 
 const WEEKDAY_SHORT = [
@@ -96,7 +181,9 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
   defaultCapacity,
   onDefaultCapacityChange,
   allowPublicBooking = true,
-  onAllowPublicBookingChange
+  onAllowPublicBookingChange,
+  disableFacilityAccessOption = false,
+  hideOptionalAddons = false
 }) => {
   const [newWindowStart, setNewWindowStart] = useState('06:00');
   const [newWindowEnd, setNewWindowEnd] = useState('22:00');
@@ -106,15 +193,72 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
   const [showOptionalAddons, setShowOptionalAddons] = useState(
     Boolean(effectiveOptionalAddons.enabled || effectiveOptionalAddons.options.length > 0)
   );
-  const candidateAddonServices = availableAddonServices.filter(
-    (s) =>
-      s &&
-      s.id !== currentServiceId &&
-      s.active !== false &&
-      s.active !== 0 &&
-      (!s.service_domain || s.service_domain === 'studio')
+  const [remoteAddonCandidates, setRemoteAddonCandidates] = useState<AddonCandidateService[] | null>(null);
+  const [optimisticAddonServices, setOptimisticAddonServices] = useState<AddonCandidateService[]>([]);
+  const [loadingCandidates, setLoadingCandidates] = useState(false);
+  const [addonCreatorState, setAddonCreatorState] = useState<{ open: boolean; targetOptionIndex: number | null }>({
+    open: false,
+    targetOptionIndex: null
+  });
+
+  const loadAddonCandidates = useCallback(async () => {
+    if (!onOptionalAddonsChange || hideOptionalAddons) return;
+    try {
+      setLoadingCandidates(true);
+      const query = currentServiceId ? `?excludeServiceId=${encodeURIComponent(currentServiceId)}` : '';
+      const res = await ApiClient.get<{ services?: AddonCandidateService[] }>(`/v1/services/addon-candidates${query}`);
+      if (Array.isArray(res?.services)) {
+        setRemoteAddonCandidates(res.services);
+      }
+    } catch {
+      // Fallback para lista recebida via props caso o endpoint ainda não esteja acessível
+    } finally {
+      setLoadingCandidates(false);
+    }
+  }, [currentServiceId, onOptionalAddonsChange, hideOptionalAddons]);
+
+  useEffect(() => {
+    if (!onOptionalAddonsChange || hideOptionalAddons) return;
+    if (showOptionalAddons || effectiveOptionalAddons.enabled) {
+      loadAddonCandidates();
+    }
+  }, [showOptionalAddons, effectiveOptionalAddons.enabled, loadAddonCandidates, onOptionalAddonsChange, hideOptionalAddons]);
+
+  useEffect(() => {
+    if (!onOptionalAddonsChange || hideOptionalAddons) return;
+    const handleCatalogUpdated = () => {
+      loadAddonCandidates();
+    };
+    window.addEventListener('zemda-catalog-updated', handleCatalogUpdated);
+    return () => {
+      window.removeEventListener('zemda-catalog-updated', handleCatalogUpdated);
+    };
+  }, [loadAddonCandidates, onOptionalAddonsChange, hideOptionalAddons]);
+
+  const candidateAddonServices = useMemo(() => {
+    const baseList = remoteAddonCandidates !== null ? remoteAddonCandidates : availableAddonServices;
+    const mergedMap = new Map<string, AddonCandidateService>();
+    for (const s of [...baseList, ...optimisticAddonServices]) {
+      if (!s || !s.id) continue;
+      if (currentServiceId && s.id === currentServiceId) continue;
+      if (s.active === false || s.active === 0) continue;
+      if (s.service_domain && s.service_domain !== 'studio') continue;
+      if (s.studio_service_type === 'facility_access') continue;
+      const existing = mergedMap.get(s.id);
+      mergedMap.set(s.id, existing ? { ...existing, ...s } : s);
+    }
+    return Array.from(mergedMap.values()).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+  }, [remoteAddonCandidates, availableAddonServices, optimisticAddonServices, currentServiceId]);
+
+  const activeProfessionals = useMemo(
+    () => professionals.filter(p => p && p.active !== false && p.active !== 0),
+    [professionals]
   );
-  const activeProfessionals = professionals.filter(p => p && p.active !== false && p.active !== 0);
+
+  const studioEligibleFallbackPros = useMemo(
+    () => activeProfessionals.filter(isClientStudioQualifiedProfessional),
+    [activeProfessionals]
+  );
 
   const patchOptionalAddons = (patch: Partial<StudioOptionalAddonsConfig>) => {
     if (!onOptionalAddonsChange) return;
@@ -295,23 +439,25 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={() => onStudioServiceTypeChange('facility_access')}
-            className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-2.5 ${
-              studioServiceType === 'facility_access'
-                ? 'border-teal-600 bg-white ring-2 ring-teal-500/20 shadow-2xs'
-                : 'border-slate-200 bg-white/80 hover:bg-white'
-            }`}
-          >
-            <KeyRound className={`w-4 h-4 mt-0.5 shrink-0 ${studioServiceType === 'facility_access' ? 'text-teal-600' : 'text-slate-400'}`} />
-            <div>
-              <div className="font-bold text-slate-900">Tipo A — Acesso ao Estabelecimento</div>
-              <div className="text-[10px] text-slate-500 mt-0.5">
-                Musculação, academia livre ou limitada (2x, 3x, 5x/sem). Não ocupa agenda de instrutores.
+          {!disableFacilityAccessOption && (
+            <button
+              type="button"
+              onClick={() => onStudioServiceTypeChange('facility_access')}
+              className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-2.5 ${
+                studioServiceType === 'facility_access'
+                  ? 'border-teal-600 bg-white ring-2 ring-teal-500/20 shadow-2xs'
+                  : 'border-slate-200 bg-white/80 hover:bg-white'
+              }`}
+            >
+              <KeyRound className={`w-4 h-4 mt-0.5 shrink-0 ${studioServiceType === 'facility_access' ? 'text-teal-600' : 'text-slate-400'}`} />
+              <div>
+                <div className="font-bold text-slate-900">Tipo A — Acesso ao Estabelecimento</div>
+                <div className="text-[10px] text-slate-500 mt-0.5">
+                  Musculação, academia livre ou limitada (2x, 3x, 5x/sem). Não ocupa agenda de instrutores.
+                </div>
               </div>
-            </div>
-          </button>
+            </button>
+          )}
 
           <button
             type="button"
@@ -349,23 +495,25 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
             </div>
           </button>
 
-          <button
-            type="button"
-            onClick={() => onStudioServiceTypeChange('non_scheduled')}
-            className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-2.5 ${
-              studioServiceType === 'non_scheduled'
-                ? 'border-teal-600 bg-white ring-2 ring-teal-500/20 shadow-2xs'
-                : 'border-slate-200 bg-white/80 hover:bg-white'
-            }`}
-          >
-            <FileCheck2 className={`w-4 h-4 mt-0.5 shrink-0 ${studioServiceType === 'non_scheduled' ? 'text-teal-600' : 'text-slate-400'}`} />
-            <div>
-              <div className="font-bold text-slate-900">Tipo D — Serviço Entregável</div>
-              <div className="text-[10px] text-slate-500 mt-0.5">
-                Montagem de treino ou consultoria sem necessidade de reservar horário na agenda.
+          {!disableFacilityAccessOption && (
+            <button
+              type="button"
+              onClick={() => onStudioServiceTypeChange('non_scheduled')}
+              className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-2.5 ${
+                studioServiceType === 'non_scheduled'
+                  ? 'border-teal-600 bg-white ring-2 ring-teal-500/20 shadow-2xs'
+                  : 'border-slate-200 bg-white/80 hover:bg-white'
+              }`}
+            >
+              <FileCheck2 className={`w-4 h-4 mt-0.5 shrink-0 ${studioServiceType === 'non_scheduled' ? 'text-teal-600' : 'text-slate-400'}`} />
+              <div>
+                <div className="font-bold text-slate-900">Tipo D — Serviço Entregável</div>
+                <div className="text-[10px] text-slate-500 mt-0.5">
+                  Montagem de treino ou consultoria sem necessidade de reservar horário na agenda.
+                </div>
               </div>
-            </div>
-          </button>
+            </button>
+          )}
         </div>
 
         {/* Atalho rápido para Dupla (2 vagas) vs Turma quando Tipo C */}
@@ -875,7 +1023,7 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
         </div>
       )}
 
-      {onOptionalAddonsChange && (
+      {onOptionalAddonsChange && !hideOptionalAddons && (
         <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-2.5">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div>
@@ -978,8 +1126,20 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
               </div>
 
               {candidateAddonServices.length === 0 && (
-                <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-[11px] text-amber-800">
-                  Cadastre primeiro o serviço complementar (ex.: Acompanhamento Personal) no catálogo para vinculá-lo aqui.
+                <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-[11px] text-amber-900 flex flex-wrap items-center justify-between gap-2">
+                  <span>
+                    {loadingCandidates
+                      ? 'Buscando serviços complementares agendáveis no catálogo...'
+                      : 'Nenhum serviço complementar agendável disponível ainda (ex.: Personal Trainer individual ou em dupla; planos de acesso livre/limitado não são listados).'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setAddonCreatorState({ open: true, targetOptionIndex: null })}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-teal-600 text-white font-bold hover:bg-teal-700 cursor-pointer shrink-0"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Criar serviço complementar
+                  </button>
                 </div>
               )}
 
@@ -1002,6 +1162,13 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
                     selectedTarget.requires_appointment === false)
                     ? false
                     : true;
+                const targetEligiblePros: AddonCandidateProfessional[] = selectedTarget?.eligible_professionals
+                  ? selectedTarget.eligible_professionals
+                  : selectedTarget?.linked_professional_ids?.length
+                    ? studioEligibleFallbackPros.filter(p => selectedTarget.linked_professional_ids!.includes(p.id))
+                    : selectedTarget?.professional_id
+                      ? studioEligibleFallbackPros.filter(p => p.id === selectedTarget.professional_id)
+                      : studioEligibleFallbackPros;
                 const enabledPros = Array.isArray(opt.enabledProfessionalIds) ? opt.enabledProfessionalIds : [];
                 const allowedDays = Array.isArray(opt.allowedWeekdays) ? opt.allowedWeekdays : [];
                 const attendanceFormat: AddonAttendanceFormat = opt.attendanceFormat || 'match_service';
@@ -1054,11 +1221,34 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <div>
-                        <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Serviço vinculado</label>
+                        <div className="flex items-center justify-between gap-2 mb-0.5">
+                          <label className="block text-[11px] font-semibold text-slate-600">Serviço vinculado</label>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={loadAddonCandidates}
+                              className="text-[10px] font-semibold text-slate-500 hover:text-slate-800 inline-flex items-center gap-0.5 cursor-pointer"
+                              title="Atualizar lista de serviços"
+                            >
+                              <RefreshCw className={`w-3 h-3 ${loadingCandidates ? 'animate-spin' : ''}`} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setAddonCreatorState({ open: true, targetOptionIndex: idx })}
+                              className="text-[11px] font-bold text-teal-700 hover:text-teal-900 cursor-pointer"
+                            >
+                              + Criar serviço complementar
+                            </button>
+                          </div>
+                        </div>
                         <select
                           value={opt.addonServiceId}
                           onChange={e => {
                             const nextId = e.target.value;
+                            if (nextId === '__create_addon__') {
+                              setAddonCreatorState({ open: true, targetOptionIndex: idx });
+                              return;
+                            }
                             const nextTarget = candidateAddonServices.find(s => s.id === nextId);
                             const reqAppt =
                               nextTarget &&
@@ -1068,10 +1258,19 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
                                 nextTarget.requires_appointment === false)
                                 ? false
                                 : true;
+                            const nextEligibleIds = new Set(
+                              nextTarget?.eligible_professional_ids ||
+                              nextTarget?.linked_professional_ids ||
+                              (nextTarget?.professional_id ? [nextTarget.professional_id] : [])
+                            );
+                            const nextSelectedPros = nextEligibleIds.size > 0
+                              ? (opt.enabledProfessionalIds || []).filter(pid => nextEligibleIds.has(pid))
+                              : [];
                             updateOptionalAddonOption(idx, {
                               addonServiceId: nextId,
                               addonServiceName: nextTarget?.name || null,
                               label: opt.label || (nextTarget ? nextTarget.name : ''),
+                              enabledProfessionalIds: nextSelectedPros,
                               scheduleTiming: reqAppt ? (opt.scheduleTiming === 'not_applicable' ? 'after_confirmation' : opt.scheduleTiming) : 'not_applicable',
                               studentCanChooseSchedule: reqAppt ? (opt.scheduleTiming === 'during_purchase') : false
                             });
@@ -1080,8 +1279,16 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
                         >
                           <option value="">Selecione um serviço...</option>
                           {candidateAddonServices.map(cs => (
-                            <option key={cs.id} value={cs.id}>{cs.name}</option>
+                            <option key={cs.id} value={cs.id}>
+                              {cs.name}
+                              {cs.studio_service_type === 'non_scheduled'
+                                ? ' (Avaliação / sem agenda)'
+                                : cs.service_kind === 'group'
+                                  ? ' (Turma / Dupla)'
+                                  : ' (Individual)'}
+                            </option>
                           ))}
+                          <option value="__create_addon__">+ Criar serviço complementar</option>
                         </select>
                       </div>
                       <div>
@@ -1319,36 +1526,48 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
                       </div>
                     )}
 
-                    {targetRequiresAppt && activeProfessionals.length > 0 && (
+                    {targetRequiresAppt && (
                       <div className="pt-1 border-t border-slate-200/80">
                         <span className="block text-[11px] font-semibold text-slate-600 mb-1">
-                          Profissionais habilitados neste complemento (deixe vazio para usar os vinculados ao serviço-alvo):
+                          Profissionais elegíveis neste complemento (deixe vazio para usar os vinculados ao serviço-alvo):
                         </span>
-                        <div className="flex flex-wrap gap-1.5">
-                          {activeProfessionals.map(pro => {
-                            const selected = enabledPros.includes(pro.id);
-                            return (
-                              <button
-                                key={pro.id}
-                                type="button"
-                                onClick={() => {
-                                  const nextPros = selected
-                                    ? enabledPros.filter(id => id !== pro.id)
-                                    : [...enabledPros, pro.id];
-                                  updateOptionalAddonOption(idx, { enabledProfessionalIds: nextPros });
-                                }}
-                                className={`px-2 py-0.5 rounded-full text-[11px] border font-semibold cursor-pointer ${
-                                  selected
-                                    ? 'bg-indigo-600 text-white border-indigo-600'
-                                    : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'
-                                }`}
-                              >
-                                {pro.name}
-                                {Number(pro.public_booking_enabled ?? 1) === 0 ? ' (agenda pública off)' : ''}
-                              </button>
-                            );
-                          })}
-                        </div>
+                        {!selectedTarget ? (
+                          <div className="text-[11px] text-slate-500">
+                            Selecione ou crie um serviço complementar para exibir apenas os profissionais elegíveis e vinculados a ele.
+                          </div>
+                        ) : targetEligiblePros.length === 0 ? (
+                          <div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+                            Nenhum profissional elegível encontrado para "{selectedTarget.name}". Vincule um Personal Trainer ou instrutor compatível ao serviço complementar.
+                          </div>
+                        ) : (
+                          <div className="flex flex-wrap gap-1.5">
+                            {targetEligiblePros.map(pro => {
+                              const selected = enabledPros.includes(pro.id);
+                              return (
+                                <button
+                                  key={pro.id}
+                                  type="button"
+                                  onClick={() => {
+                                    const nextPros = selected
+                                      ? enabledPros.filter(id => id !== pro.id)
+                                      : [...enabledPros, pro.id];
+                                    updateOptionalAddonOption(idx, { enabledProfessionalIds: nextPros });
+                                  }}
+                                  className={`px-2 py-0.5 rounded-full text-[11px] border font-semibold cursor-pointer ${
+                                    selected
+                                      ? 'bg-indigo-600 text-white border-indigo-600'
+                                      : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'
+                                  }`}
+                                >
+                                  {pro.name}
+                                  {pro.profession_name ? ` · ${pro.profession_name}` : ''}
+                                  {Number(pro.public_booking_enabled ?? 1) === 0 ? ' (agenda pública off)' : ''}
+                                  {pro.has_active_schedule === false ? ' (sem escala ativa)' : ''}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -1419,16 +1638,126 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
                 );
               })}
 
-              <button
-                type="button"
-                onClick={addOptionalAddonOption}
-                className="inline-flex items-center gap-1 text-xs font-semibold text-teal-700 hover:text-teal-900 cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" /> Adicionar complemento opcional
-              </button>
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={addOptionalAddonOption}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-teal-700 hover:text-teal-900 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Adicionar complemento opcional
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAddonCreatorState({ open: true, targetOptionIndex: null })}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-700 hover:text-indigo-900 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Criar serviço complementar
+                </button>
+              </div>
             </div>
           )}
         </div>
+      )}
+
+      {addonCreatorState.open && (
+        <Suspense fallback={null}>
+          <LazyNewServiceModal
+            isOpen={addonCreatorState.open}
+            onClose={() => setAddonCreatorState({ open: false, targetOptionIndex: null })}
+            zIndex="z-[85]"
+            professionals={professionals as any[]}
+            initialServiceDomain="studio"
+            initialStudioServiceType="individual"
+            forceStudioSchedulable={true}
+            hideOptionalAddons={true}
+            onSuccess={(created) => {
+              const createdLinkedIds = Array.isArray(created?.linked_professional_ids)
+                ? created.linked_professional_ids
+                : (created?.professional_id ? [created.professional_id] : []);
+              const eligibleFromProps = activeProfessionals
+                .filter(p => createdLinkedIds.includes(p.id) && isClientStudioQualifiedProfessional(p))
+                .map(p => ({
+                  id: p.id,
+                  name: p.name,
+                  profession_name: p.profession_name || null,
+                  public_booking_enabled: Number(p.public_booking_enabled ?? 1) !== 0,
+                  has_active_schedule: true
+                }));
+              const optimisticItem: AddonCandidateService = {
+                id: created.id,
+                name: created.name,
+                active: 1,
+                service_domain: 'studio',
+                studio_service_type: created.studio_service_type || created.studioServiceType || 'individual',
+                service_kind: created.service_kind || created.serviceKind || 'individual',
+                requires_appointment: created.requires_appointment === 0 || created.requiresAppointment === false ? 0 : 1,
+                is_schedulable: created.requires_appointment !== 0,
+                professional_id: created.professional_id || created.professionalId || null,
+                linked_professional_ids: createdLinkedIds,
+                eligible_professional_ids: eligibleFromProps.map(p => p.id),
+                eligible_professionals: eligibleFromProps
+              };
+              setOptimisticAddonServices(prev => [...prev.filter(x => x.id !== created.id), optimisticItem]);
+              loadAddonCandidates();
+              const isReqAppt = optimisticItem.requires_appointment !== 0;
+              const targetIdx = addonCreatorState.targetOptionIndex;
+              if (onOptionalAddonsChange) {
+                if (targetIdx !== null && effectiveOptionalAddons.options[targetIdx]) {
+                  const currentOpt = effectiveOptionalAddons.options[targetIdx];
+                  const updatedOpts = effectiveOptionalAddons.options.map((optItem, i) =>
+                    i === targetIdx
+                      ? {
+                          ...optItem,
+                          addonServiceId: created.id,
+                          addonServiceName: created.name,
+                          label: optItem.label?.trim() ? optItem.label : created.name,
+                          enabledProfessionalIds: [],
+                          scheduleTiming: (isReqAppt ? (optItem.scheduleTiming === 'not_applicable' ? 'after_confirmation' : optItem.scheduleTiming) : 'not_applicable') as any,
+                          studentCanChooseSchedule: isReqAppt ? optItem.scheduleTiming === 'during_purchase' : false
+                        }
+                      : optItem
+                  );
+                  onOptionalAddonsChange({ ...effectiveOptionalAddons, enabled: true, options: updatedOpts });
+                } else {
+                  const newOpt: StudioOptionalAddonOption = {
+                    id: `addon-${Date.now()}-${effectiveOptionalAddons.options.length + 1}`,
+                    addonServiceId: created.id,
+                    addonServiceName: created.name,
+                    label: `${created.name} (1x/semana)`,
+                    description: null,
+                    active: true,
+                    allowPublicBooking: true,
+                    acceptedBaseOptionIds: [],
+                    enabledProfessionalIds: [],
+                    professionalSelectionMode: 'student_picks',
+                    attendanceFormat: 'match_service',
+                    sessionCapacity: null,
+                    allowedWeekdays: [],
+                    studentCanChooseSchedule: false,
+                    frequencyType: isReqAppt ? 'weekly' : 'unlimited',
+                    frequencyCount: isReqAppt ? 1 : null,
+                    creditsPerCycle: isReqAppt ? 4 : null,
+                    additionalPriceCents: 0,
+                    comboDiscountType: 'none',
+                    comboDiscountValue: 0,
+                    billingPeriodicity: 'monthly',
+                    durationMode: 'match_base',
+                    autoRenew: null,
+                    scheduleTiming: isReqAppt ? 'after_confirmation' : 'not_applicable',
+                    displayOrder: effectiveOptionalAddons.options.length
+                  };
+                  onOptionalAddonsChange({
+                    ...effectiveOptionalAddons,
+                    enabled: true,
+                    options: [...effectiveOptionalAddons.options, newOpt]
+                  });
+                }
+                setShowOptionalAddons(true);
+              }
+              setAddonCreatorState({ open: false, targetOptionIndex: null });
+            }}
+          />
+        </Suspense>
       )}
     </div>
   );

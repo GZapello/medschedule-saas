@@ -14,7 +14,7 @@ import { ServiceBillingConfigPanel, ServicePackageOption } from './ServiceBillin
 import { StudioPricingRule } from '../../utils/studioPricing';
 import { ServiceTemplatesConfigPanel } from './ServiceTemplatesConfigPanel';
 import { LinkedInstructorsSelector } from './LinkedInstructorsSelector';
-import { StudioAccessAndAdjustmentsPanel } from './StudioAccessAndAdjustmentsPanel';
+import { StudioAccessAndAdjustmentsPanel, validateAndPrepareOptionalAddonsForSave } from './StudioAccessAndAdjustmentsPanel';
 import {
   DEFAULT_STUDIO_ACCESS_CONFIG,
   getDefaultOptionalAddonsConfig,
@@ -53,6 +53,36 @@ interface NewServiceModalProps {
   professionals?: Professional[];
   serviceToEdit?: Service | null;
   zIndex?: string;
+  initialServiceDomain?: ServiceDomain;
+  initialStudioServiceType?: StudioServiceType;
+  initialName?: string;
+  forceStudioSchedulable?: boolean;
+  hideOptionalAddons?: boolean;
+}
+
+function isStudioPersonalOrInstructor(prof: Professional | undefined | null): boolean {
+  if (!prof) return false;
+  const mods = Array.isArray(prof.available_modules) ? prof.available_modules.map(m => m.code) : [];
+  if (mods.includes('ZemdaPersonal')) return true;
+  const pName = String(prof.profession_name || '').toLowerCase();
+  const pId = String(prof.profession_id || '').toLowerCase();
+  return (
+    pId.includes('personal') ||
+    pId.includes('educacao-fisica') ||
+    pId.includes('instrutor') ||
+    pName.includes('personal') ||
+    pName.includes('educador f') ||
+    pName.includes('educação f') ||
+    pName.includes('instrutor') ||
+    pName.includes('pilates')
+  );
+}
+
+function isPurePersonalProfessional(prof: Professional | undefined | null): boolean {
+  if (!prof) return false;
+  const mods = (prof.available_modules || []).map(m => m.code).filter(c => c !== 'general');
+  if (mods.includes('ZemdaPersonal') && mods.every(c => c === 'ZemdaPersonal')) return true;
+  return isStudioPersonalOrInstructor(prof) && mods.length === 0;
 }
 
 export const NewServiceModal: React.FC<NewServiceModalProps> = ({
@@ -62,7 +92,12 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
   initialProfessionalId,
   professionals = [],
   serviceToEdit = null,
-  zIndex = 'z-[60]'
+  zIndex = 'z-[60]',
+  initialServiceDomain,
+  initialStudioServiceType,
+  initialName,
+  forceStudioSchedulable = false,
+  hideOptionalAddons = false
 }) => {
   const { showToast } = useToast();
   const { currentTenant } = useAuth();
@@ -236,20 +271,34 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
           : (editPrimaryId ? [editPrimaryId] : []);
         setLinkedProfessionalIds(Array.from(new Set([editPrimaryId, ...existingLinked].filter(Boolean))));
       } else {
-        setName('');
+        let defaultProf = '';
+        if (initialProfessionalId && professionals.some(p => p.id === initialProfessionalId)) {
+          defaultProf = initialProfessionalId;
+        } else if (forceStudioSchedulable || initialServiceDomain === 'studio' || isPureStudio) {
+          const preferred = professionals.find(isStudioPersonalOrInstructor) || professionals[0];
+          defaultProf = preferred?.id || '';
+        } else if (professionals.length > 0) {
+          defaultProf = professionals[0].id;
+        }
+        const selectedDefaultProf = professionals.find(p => p.id === defaultProf);
+        const startDomain: ServiceDomain = forceStudioSchedulable
+          ? 'studio'
+          : (initialServiceDomain || (isPureStudio || (isMixed && isPurePersonalProfessional(selectedDefaultProf)) ? 'studio' : 'clinical'));
+        const startStudioType: StudioServiceType = initialStudioServiceType || 'individual';
+        setName(initialName || '');
         setPrice('150');
         setDurationMinutes(50);
         setBufferMinutes(0);
         setModality('both');
-        setServiceDomain(isPureStudio ? 'studio' : 'clinical');
-        setServiceKind('individual');
-        setStudioServiceType('individual');
+        setServiceDomain(startDomain);
+        setServiceKind(startStudioType === 'group' ? 'group' : 'individual');
+        setStudioServiceType(startStudioType);
         setAccessConfig(DEFAULT_STUDIO_ACCESS_CONFIG);
         setPricingAdjustments([]);
         setCommercialPriceOptions([]);
         setOptionalAddons(getDefaultOptionalAddonsConfig());
         setAllowPublicBooking(true);
-        setDefaultCapacity(10);
+        setDefaultCapacity(startStudioType === 'group' ? 6 : 10);
         setAllowRecurrence(true);
         setAllowedFrequencies(['weekly']);
         setAllowedWeekdays([]);
@@ -264,7 +313,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
         setIsPriceCustomized(false);
         setSuggestedPrice(null);
         setWeeklySessionsCount(1);
-      setFrequencyPricing(emptyFrequencyPricing());
+        setFrequencyPricing(emptyFrequencyPricing());
         setIncludedSessionsCount(8);
         setDefaultPackageId('');
         setDefaultBillingDueDay('');
@@ -273,17 +322,11 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
         setAvailabilityMode('professional_schedule');
         setAvailabilityWindows([]);
         setDescription('');
-        let defaultProf = '';
-        if (initialProfessionalId && professionals.some(p => p.id === initialProfessionalId)) {
-          defaultProf = initialProfessionalId;
-        } else if (professionals.length > 0) {
-          defaultProf = professionals[0].id;
-        }
         setProfessionalId(defaultProf);
         setLinkedProfessionalIds(defaultProf ? [defaultProf] : []);
       }
     }
-  }, [isOpen, initialProfessionalId, professionals, serviceToEdit]);
+  }, [isOpen, initialProfessionalId, initialServiceDomain, initialStudioServiceType, initialName, forceStudioSchedulable, professionals, serviceToEdit, isPureStudio, isMixed]);
 
   const selectableScheduleProfessionals = useMemo(() => {
     const activeIds = new Set([professionalId, ...linkedProfessionalIds].filter(Boolean));
@@ -358,6 +401,16 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
       }
     }
 
+    let preparedOptionalAddons = optionalAddons;
+    if (showStudioConfig && !hideOptionalAddons) {
+      const addonPrep = validateAndPrepareOptionalAddonsForSave(optionalAddons);
+      if (!addonPrep.valid) {
+        showToast(addonPrep.error || 'Revise os complementos opcionais antes de salvar.', 'error');
+        return;
+      }
+      preparedOptionalAddons = addonPrep.config;
+    }
+
     try {
       setLoading(true);
       const effectiveKind = showStudioConfig ? (studioServiceType === 'group' ? 'group' : 'individual') : 'individual';
@@ -390,7 +443,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
               accessConfig: studioServiceType === 'facility_access' ? accessConfig : null,
               pricingAdjustments,
               commercialPriceOptions,
-              optionalAddons,
+              optionalAddons: hideOptionalAddons ? undefined : preparedOptionalAddons,
               allowedRecurrenceFrequencies: allowRecurrence ? allowedFrequencies : [],
               allowedRecurrenceWeekdays:
                 allowRecurrence
@@ -446,6 +499,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
       if (Array.isArray(res?.schedule_warnings) && res.schedule_warnings.length > 0) {
         showToast(res.schedule_warnings[0], 'info');
       }
+      window.dispatchEvent(new CustomEvent('zemda-catalog-updated', { detail: { serviceId: savedData?.id } }));
       onSuccess(savedData);
       onClose();
     } catch (err: any) {
@@ -496,6 +550,12 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
                 setProfessionalId(nextPrimary);
                 if (nextPrimary) {
                   setLinkedProfessionalIds(prev => Array.from(new Set([nextPrimary, ...prev])));
+                  if (isMixed && !isEditing && !forceStudioSchedulable) {
+                    const matchedProf = professionals.find(p => p.id === nextPrimary);
+                    if (isPurePersonalProfessional(matchedProf)) {
+                      setServiceDomain('studio');
+                    }
+                  }
                 }
               }}
               className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium"
@@ -590,7 +650,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
             </select>
           </div>
 
-          {isMixed && (
+          {isMixed && !forceStudioSchedulable && (
             <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
               <div className="font-bold text-slate-800">Segmento do Serviço</div>
               <div className="grid grid-cols-2 gap-2">
@@ -665,6 +725,8 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
                 onDefaultCapacityChange={setDefaultCapacity}
                 allowPublicBooking={allowPublicBooking}
                 onAllowPublicBookingChange={setAllowPublicBooking}
+                disableFacilityAccessOption={forceStudioSchedulable}
+                hideOptionalAddons={hideOptionalAddons}
               />
               {studioServiceType !== 'facility_access' && studioServiceType !== 'non_scheduled' && (
                 <div className="grid grid-cols-2 gap-2">

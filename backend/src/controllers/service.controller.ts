@@ -27,6 +27,11 @@ import {
   ServiceDomain
 } from '../utils/establishment-context';
 import {
+  isProfessionalEligibleForAddonService,
+  listAddonCandidateServicesForTenant,
+  listTenantAddonProfessionalsDetailed
+} from '../utils/studio-addon-eligibility';
+import {
   addonAppliesToBaseOption,
   buildFallbackBaseCommercialOption,
   calculateCommercialOptionBreakdown,
@@ -65,21 +70,33 @@ function validateAndHydrateOptionalAddonsForSave(params: {
     return { config: null, configJson: null };
   }
 
-  if (!parsed.enabled && parsed.options.length === 0) {
-    return { config: parsed, configJson: null };
+  // Se complementos foram desativados, descartar rascunhos incompletos (sem addonServiceId) para não bloquear salvamento
+  if (!parsed.enabled) {
+    parsed.options = parsed.options.filter((opt) => Boolean(opt.addonServiceId && String(opt.addonServiceId).trim()));
+    if (parsed.options.length === 0) {
+      return { config: parsed, configJson: null };
+    }
+  } else if (parsed.options.length === 0) {
+    return {
+      error: 'Adicione ao menos um serviço complementar vinculado antes de ativar os complementos opcionais (ou desative a opção).',
+      config: null,
+      configJson: null
+    };
   }
 
   const lookupStmt = db.prepare(`
-    SELECT id, name, active, service_kind, service_domain, clinical_module,
+    SELECT id, name, active, service_kind, service_domain, clinical_module, modality_category,
            COALESCE(studio_service_type, CASE WHEN COALESCE(service_kind, 'individual') = 'group' THEN 'group' ELSE 'individual' END) as studio_service_type,
            COALESCE(requires_appointment, 1) as requires_appointment
     FROM services
     WHERE id = ? AND tenant_id = ?
   `);
+  const tenantProsDetailed = listTenantAddonProfessionalsDetailed(tenantId);
+  const detailedProById = new Map(tenantProsDetailed.map((pro) => [pro.id, pro]));
 
   for (const opt of parsed.options) {
     if (!opt.addonServiceId) {
-      return { error: `Selecione o serviço vinculado para o complemento "${opt.label}".`, config: null, configJson: null };
+      return { error: `Selecione o serviço vinculado para o complemento "${opt.label}", crie um serviço complementar ou remova a opção incompleta.`, config: null, configJson: null };
     }
     if (selfServiceId && opt.addonServiceId === selfServiceId) {
       return { error: 'Um serviço não pode ser configurado como complemento opcional de si mesmo.', config: null, configJson: null };
@@ -94,15 +111,23 @@ function validateAndHydrateOptionalAddonsForSave(params: {
       serviceKind: targetSrv.service_kind,
       clinicalModule: targetSrv.clinical_module
     });
-    if (targetDomain !== 'studio') {
+    const isTargetPersonalModule = String(targetSrv.clinical_module || '').trim() === 'ZemdaPersonal';
+    if (targetDomain !== 'studio' && !isTargetPersonalModule) {
       return { error: `Somente serviços do domínio Academia & Studio podem ser vinculados como complemento opcional (${targetSrv.name}).`, config: null, configJson: null };
     }
     if (parsed.enabled && opt.active && Number(targetSrv.active) === 0) {
       return { error: `O serviço complementar "${targetSrv.name}" está inativo. Ative-o antes de habilitá-lo como complemento.`, config: null, configJson: null };
     }
     const targetStudioType = normalizeStudioServiceType(targetSrv.studio_service_type, targetSrv.service_kind);
+    if (targetStudioType === 'facility_access') {
+      return {
+        error: `O serviço "${targetSrv.name}" é de acesso à academia e não pode ser vinculado como complemento opcional. Vincule um serviço agendável ou avaliação.`,
+        config: null,
+        configJson: null
+      };
+    }
     const targetRequiresAppt =
-      targetStudioType === 'facility_access' || targetStudioType === 'non_scheduled'
+      targetStudioType === 'non_scheduled'
         ? 0
         : Number(targetSrv.requires_appointment ?? 1);
     opt.addonServiceName = targetSrv.name;
@@ -128,12 +153,40 @@ function validateAndHydrateOptionalAddonsForSave(params: {
       };
     }
     if (Array.isArray(opt.enabledProfessionalIds) && opt.enabledProfessionalIds.length > 0) {
-      const checkProfStmt = db.prepare(`SELECT id, active FROM professionals WHERE id = ? AND tenant_id = ?`);
+      const targetEligibilityRef = {
+        id: targetSrv.id,
+        name: targetSrv.name,
+        studio_service_type: targetStudioType,
+        requires_appointment: targetRequiresAppt,
+        clinical_module: targetSrv.clinical_module || null,
+        modality_category: targetSrv.modality_category || null
+      };
       for (const pid of opt.enabledProfessionalIds) {
-        const proRow = checkProfStmt.get(pid, tenantId) as { id: string; active: number } | undefined;
-        if (!proRow) {
+        const proDetail = detailedProById.get(pid);
+        if (!proDetail) {
           return {
             error: `Um dos profissionais selecionados no complemento "${opt.label}" não pertence a este estabelecimento.`,
+            config: null,
+            configJson: null
+          };
+        }
+        if (!proDetail.active) {
+          return {
+            error: `O profissional "${proDetail.name}" está inativo e não pode ser habilitado no complemento "${opt.label}".`,
+            config: null,
+            configJson: null
+          };
+        }
+        if (!isProfessionalEligibleForAddonService(proDetail, targetEligibilityRef)) {
+          const reason = proDetail.isAdminManager
+            ? `O usuário administrativo "${proDetail.name}" não está habilitado como instrutor para "${targetSrv.name}".`
+            : proDetail.isClinicalOnlyWithoutFitness
+              ? `O profissional clínico "${proDetail.name}" não possui habilitação compatível com "${targetSrv.name}".`
+              : !proDetail.linkedServiceIds.includes(targetSrv.id)
+                ? `O profissional "${proDetail.name}" não está vinculado ao serviço "${targetSrv.name}". Vincule-o ao serviço complementar primeiro.`
+                : `O profissional "${proDetail.name}" não é elegível para "${targetSrv.name}".`;
+          return {
+            error: reason,
             config: null,
             configJson: null
           };
@@ -883,6 +936,25 @@ export class ServiceController {
     } catch (err: any) {
       console.error('[ServiceController.list] Erro:', err);
       res.status(err.status || 500).json({ error: err.status ? err.message : 'Erro ao listar serviços' });
+    }
+  }
+
+  static listAddonCandidates(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      if (!tenantId) {
+        res.status(400).json({ error: 'Tenant não informado' });
+        return;
+      }
+      const excludeServiceId =
+        typeof req.query.excludeServiceId === 'string' && req.query.excludeServiceId.trim()
+          ? req.query.excludeServiceId.trim()
+          : null;
+      const result = listAddonCandidateServicesForTenant(tenantId, { excludeServiceId });
+      res.json(result);
+    } catch (err: any) {
+      console.error('[ServiceController.listAddonCandidates] Erro:', err);
+      res.status(err.status || 500).json({ error: err.status ? err.message : 'Erro ao listar serviços elegíveis para complementos opcionais' });
     }
   }
 

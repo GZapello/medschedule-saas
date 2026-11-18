@@ -191,7 +191,8 @@ function ServiceEditor({
   activeTab,
   onToggleOpen,
   onTabChange,
-  onChange
+  onChange,
+  onCreateCompanionAddonService
 }: {
   row: ProposedService;
   draft: ImportDraft;
@@ -200,6 +201,7 @@ function ServiceEditor({
   onToggleOpen: (open: boolean) => void;
   onTabChange: (tab: ServiceSectionTab) => void;
   onChange: (patch: Partial<ProposedService>) => void;
+  onCreateCompanionAddonService: (addonIndex: number, suggestedName?: string) => void;
 }) {
   const [bulkDurationMin, setBulkDurationMin] = useState<number>(row.durationMinutes || 50);
   const [bulkCapacityVal, setBulkCapacityVal] = useState<number>(row.capacity || 10);
@@ -207,14 +209,22 @@ function ServiceEditor({
   const [bulkPriceUnit, setBulkPriceUnit] = useState<'per_month' | 'per_session' | 'per_participant' | 'contract_total'>('per_month');
 
   const scheduled = ['individual', 'duo', 'group'].includes(row.type || '');
-  const profOptions = draft.catalog.professionals.map(p => [p.id, `${p.name} (${p.scheduleSummary})`] as const);
+  const eligibleCatalogPros = draft.catalog.professionals.filter(
+    p => p.isStudioEligible !== false && (!p.isAdminManager || p.hasActiveSchedule)
+  );
+  const selectablePros = eligibleCatalogPros.length > 0 ? eligibleCatalogPros : draft.catalog.professionals;
+  const profOptions = selectablePros.map(p => [p.id, `${p.name}${p.professionName ? ` · ${p.professionName}` : ''} (${p.scheduleSummary})`] as const);
   const responsibleId = row.action === 'update' ? draft.catalog.services.find(s => s.id === row.existingId)?.professionalId : row.professionalId;
   const responsible = draft.catalog.professionals.find(p => p.id === responsibleId);
   const matches = draft.matches.services[row.key] || [];
   const linked = draft.catalog.services.filter(s => s.active).map(s => [s.id, s.name] as const);
   const addonTargets = [
-    ...draft.proposal.services.filter(s => s.key !== row.key && s.action !== 'ignore').map(s => [s.key, `${s.name || 'Serviço sem nome'} (desta importação)`] as const),
-    ...draft.catalog.services.filter(s => s.active && s.id !== row.existingId).map(s => ['existing:' + s.id, `${s.name} (catálogo)`] as const)
+    ...draft.proposal.services
+      .filter(s => s.key !== row.key && s.action !== 'ignore' && s.type !== 'access_unlimited' && s.type !== 'access_limited')
+      .map(s => [s.key, `${s.name || 'Serviço sem nome'} (desta importação)`] as const),
+    ...draft.catalog.services
+      .filter(s => s.active && s.id !== row.existingId && s.type !== 'access_unlimited' && s.type !== 'access_limited')
+      .map(s => ['existing:' + s.id, `${s.name} (catálogo)`] as const)
   ];
   const useExisting = row.action === 'link' || row.action === 'update';
   const edit = (field: string) => row.action !== 'update' || row.apply.includes(field);
@@ -779,7 +789,19 @@ function ServiceEditor({
                   max={20}
                   emptyMessage="Nenhum complemento opcional vinculado a este serviço base."
                   onChange={optionalAddons => onChange({ optionalAddons })}
-                  render={(addon, change) => (
+                  render={(addon, change, addonIdx) => {
+                    const addonProfCandidates = selectablePros.filter((prof) => {
+                      const ref = String(addon.addonServiceRef || '');
+                      if (ref.startsWith('existing:')) {
+                        const existingId = ref.slice(9);
+                        const existingCatSrv = draft.catalog.services.find(s => s.id === existingId);
+                        if (existingCatSrv && existingCatSrv.type !== 'deliverable' && Array.isArray(prof.linkedServiceIds)) {
+                          return prof.linkedServiceIds.includes(existingId);
+                        }
+                      }
+                      return true;
+                    });
+                    return (
                     <div className="space-y-3">
                       {evidence(addon)}
                       {addon.mandatoryUnclear && (
@@ -799,7 +821,21 @@ function ServiceEditor({
                       )}
                       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                         <TextField label="Rótulo exibido ao aluno" value={addon.label} onChange={label => change({ label })} placeholder="Ex: Personal 1x/semana" />
-                        <SelectField label="Serviço complementar vinculado" options={addonTargets} value={addon.addonServiceRef || null} onChange={addonServiceRef => change({ addonServiceRef: addonServiceRef || '' })} />
+                        <div className="space-y-1">
+                          <SelectField
+                            label="Serviço complementar vinculado"
+                            options={addonTargets}
+                            value={addon.addonServiceRef || null}
+                            onChange={addonServiceRef => change({ addonServiceRef: addonServiceRef || '', enabledProfessionalIds: [] })}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => onCreateCompanionAddonService(addonIdx, addon.addonServiceName || addon.label)}
+                            className="text-[11px] font-bold text-teal-700 hover:underline cursor-pointer"
+                          >
+                            + Criar serviço complementar agendável nesta importação
+                          </button>
+                        </div>
                         <NumberField
                           label="Valor adicional (R$)"
                           value={addon.additionalPriceCents !== null ? Math.round(addon.additionalPriceCents) / 100 : null}
@@ -894,13 +930,13 @@ function ServiceEditor({
                         />
                       </div>
 
-                      {draft.catalog.professionals.length > 0 && (
+                      {addonProfCandidates.length > 0 ? (
                         <div className="space-y-1">
                           <div className="text-[11px] font-semibold text-slate-600">
-                            Profissionais habilitados (vazio = todos do serviço vinculado)
+                            Profissionais elegíveis neste complemento (vazio = todos os vinculados ao serviço-alvo)
                           </div>
                           <div className="flex flex-wrap gap-1.5">
-                            {draft.catalog.professionals.map(prof => {
+                            {addonProfCandidates.map(prof => {
                               const selected = Array.isArray(addon.enabledProfessionalIds) && addon.enabledProfessionalIds.includes(prof.id);
                               return (
                                 <button
@@ -919,11 +955,15 @@ function ServiceEditor({
                                       : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
                                   }`}
                                 >
-                                  {prof.name}
+                                  {prof.name}{prof.professionName ? ` · ${prof.professionName}` : ''}
                                 </button>
                               );
                             })}
                           </div>
+                        </div>
+                      ) : (
+                        <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+                          Nenhum instrutor elegível vinculado diretamente ao serviço escolhido ainda. Deixe em branco para usar a equipe compatível ou crie um serviço complementar.
                         </div>
                       )}
 
@@ -966,7 +1006,8 @@ function ServiceEditor({
                         )}
                       </div>
                     </div>
-                  )}
+                    );
+                  }}
                 />
               )}
             </>
@@ -1340,6 +1381,80 @@ export function StudioCatalogImportReview({ draft, onChange }: { draft: ImportDr
               ...proposal,
               services: proposal.services.map(item => (item.key === row.key ? { ...item, reviewed: false, ...patch } : item))
             })}
+            onCreateCompanionAddonService={(addonIndex, suggestedName) => {
+              const cleanName = String(suggestedName || '').trim() || 'Acompanhamento Personal Trainer';
+              const newKey = `svc-companion-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+              const eligiblePros = draft.catalog.professionals.filter(
+                p => p.isStudioEligible !== false && (!p.isAdminManager || p.hasActiveSchedule)
+              );
+              const preferredPro = eligiblePros[0] || draft.catalog.professionals[0];
+              const companionService: ProposedService = {
+                key: newKey,
+                name: cleanName,
+                activity: 'Personal Trainer',
+                description: 'Serviço complementar agendável criado durante a revisão da importação.',
+                notes: '',
+                sources: [...row.sources],
+                issues: [],
+                reviewed: true,
+                existingId: '',
+                allowPublicBooking: true,
+                type: 'individual',
+                modality: 'presential',
+                capacity: 1,
+                durationMinutes: 60,
+                weeklyLimit: null,
+                monthlyLimit: null,
+                professionalNames: preferredPro ? [preferredPro.name] : [],
+                professionalId: preferredPro?.id || '',
+                suggestedProfessionalId: preferredPro?.id || '',
+                deferSchedules: false,
+                action: 'create',
+                apply: ['identity', 'prices', 'schedules'],
+                prices: [
+                  {
+                    label: 'Sessão Avulsa',
+                    unit: 'per_session',
+                    duration: null,
+                    frequencyType: null,
+                    frequencyCount: null,
+                    paymentPeriod: 'one_time',
+                    installments: null,
+                    participants: 1,
+                    amountCents: row.optionalAddons?.[addonIndex]?.additionalPriceCents ?? 15000,
+                    sources: [...row.sources],
+                    evidence: ''
+                  }
+                ],
+                schedules: [],
+                adjustments: [],
+                optionalAddons: []
+              };
+              const updatedServices = proposal.services.map(item => {
+                if (item.key !== row.key) return item;
+                const currentAddons = Array.isArray(item.optionalAddons) ? item.optionalAddons : [];
+                return {
+                  ...item,
+                  reviewed: false,
+                  optionalAddons: currentAddons.map((ao, ai) =>
+                    ai === addonIndex
+                      ? {
+                          ...ao,
+                          addonServiceRef: newKey,
+                          addonServiceName: cleanName,
+                          mandatoryUnclear: false,
+                          scheduleTiming: ao.scheduleTiming === 'not_applicable' ? 'after_confirmation' : ao.scheduleTiming
+                        }
+                      : ao
+                  )
+                };
+              });
+              setOpenKeys(prev => ({ ...prev, [newKey]: true }));
+              onChange({
+                ...proposal,
+                services: [...updatedServices, companionService]
+              });
+            }}
           />
         ))}
       </section>

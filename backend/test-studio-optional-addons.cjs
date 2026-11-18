@@ -1072,7 +1072,282 @@ async function run() {
     assert.equal(gymAddonsCfg.options[0].sessionCapacity, 4);
     assert.deepEqual(gymAddonsCfg.options[0].allowedWeekdays, [1, 3, 5]);
 
-    console.log('ALL 17 OPTIONAL ADDONS COMPREHENSIVE SCENARIOS PASSED!');
+    console.log('18. Testando /v1/services/addon-candidates, elegibilidade de profissionais e salvamento desativado...');
+    const mixedElig = seedTenant('ten-mixed-elig', 'mixed', 'academia-mista-elig');
+    const mixedAdminHeaders = { Authorization: `Bearer ${mixedElig.adminToken}`, 'x-tenant-id': 'ten-mixed-elig' };
+    // Criar usuário/profissional Gestor puro (administrativo, sem módulo fitness), Fisioterapeuta clínica pura e Personal Trainer
+    db.prepare(`INSERT INTO users (id, tenant_id, name, email, password_hash, role, status, onboarding_status, email_verified) VALUES (?, ?, 'Gestor Puro', 'gestor-m@test.invalid', 'x', 'clinic_admin', 'active', 'active', 1)`).run('usr-gest-m', 'ten-mixed-elig');
+    db.prepare(`INSERT INTO clinic_users (id, tenant_id, user_id, role, status, is_manager) VALUES (?, ?, 'usr-gest-m', 'clinic_admin', 'active', 1)`).run('mem-gest-m', 'ten-mixed-elig');
+    db.prepare(`INSERT INTO professionals (id, tenant_id, user_id, name, slug, profession_id, profession_name, active, public_booking_enabled) VALUES (?, ?, 'usr-gest-m', 'Bruno Gestor', 'bruno-gestor', 'prof-gestor', 'Gestor', 1, 1)`).run('prof-gestor-m', 'ten-mixed-elig');
+
+    db.prepare(`INSERT INTO users (id, tenant_id, name, email, password_hash, role, status, onboarding_status, email_verified) VALUES (?, ?, 'Dra Ana Fisio', 'fisio-m@test.invalid', 'x', 'professional', 'active', 'active', 1)`).run('usr-fisio-m', 'ten-mixed-elig');
+    db.prepare(`INSERT INTO clinic_users (id, tenant_id, user_id, role, status, is_manager) VALUES (?, ?, 'usr-fisio-m', 'professional', 'active', 0)`).run('mem-fisio-m', 'ten-mixed-elig');
+    db.prepare(`INSERT INTO professionals (id, tenant_id, user_id, name, slug, profession_id, profession_name, active, public_booking_enabled) VALUES (?, ?, 'usr-fisio-m', 'Dra Ana Fisio', 'ana-fisio', 'prof-fisioterapeuta', 'Fisioterapeuta', 1, 1)`).run('prof-fisio-m', 'ten-mixed-elig');
+
+    // Inserir serviço Personal legado salvo com service_domain='clinical' em estabelecimento misto + clínica Fisio + plano Academia + Zumba
+    const mixedMuscRes = await req(server, 'POST', '/v1/services', mixedAdminHeaders, {
+      name: 'Musculação Mista Livre',
+      serviceDomain: 'studio',
+      studioServiceType: 'facility_access',
+      requiresAppointment: false,
+      allowPublicBooking: true,
+      billingMode: 'monthly',
+      periodicPrice: 120,
+      accessConfig: { accessMode: 'unlimited' }
+    });
+    assert.equal(mixedMuscRes.status, 201);
+    const mixedMuscId = mixedMuscRes.data.id;
+
+    const mixedZumbaRes = await req(server, 'POST', '/v1/services', mixedAdminHeaders, {
+      name: 'Zumba Coletiva',
+      serviceDomain: 'studio',
+      studioServiceType: 'group',
+      serviceKind: 'group',
+      defaultCapacity: 15,
+      professionalId: mixedElig.profId,
+      durationMinutes: 50,
+      price: 90
+    });
+    assert.equal(mixedZumbaRes.status, 201);
+    const mixedZumbaId = mixedZumbaRes.data.id;
+
+    const mixedLegacyPersonalRes = await req(server, 'POST', '/v1/services', mixedAdminHeaders, {
+      name: 'Acompanhamento Personal Trainer',
+      professionalId: mixedElig.profId,
+      clinicalModule: 'ZemdaPersonal',
+      serviceDomain: 'clinical', // Simula bug histórico que salvava ZemdaPersonal como 'clinical' no misto
+      durationMinutes: 60,
+      price: 150
+    });
+    assert.equal(mixedLegacyPersonalRes.status, 201);
+    const mixedPersonalId = mixedLegacyPersonalRes.data.id;
+
+    const mixedFisioSrvRes = await req(server, 'POST', '/v1/services', mixedAdminHeaders, {
+      name: 'Sessão Fisioterapia Ortopédica',
+      professionalId: 'prof-fisio-m',
+      clinicalModule: 'ZemdaFisio',
+      serviceDomain: 'clinical',
+      durationMinutes: 50,
+      price: 180
+    });
+    assert.equal(mixedFisioSrvRes.status, 201);
+    const mixedFisioSrvId = mixedFisioSrvRes.data.id;
+
+    // 18a: GET /v1/services/addon-candidates inclui Personal legado e Zumba, exclui facility_access, serviço clínico e self
+    const candRes = await req(server, 'GET', `/v1/services/addon-candidates?excludeServiceId=${encodeURIComponent(mixedMuscId)}`, mixedAdminHeaders);
+    assert.equal(candRes.status, 200);
+    const candIds = candRes.data.services.map(s => s.id);
+    assert.ok(candIds.includes(mixedPersonalId), 'Serviço ZemdaPersonal em misto deve aparecer como candidato complementar');
+    assert.ok(candIds.includes(mixedZumbaId), 'Aula coletiva agendável deve aparecer como candidata complementar');
+    assert.ok(!candIds.includes(mixedMuscId), 'excludeServiceId não pode listar a si mesmo');
+    assert.ok(!candIds.includes(mixedFisioSrvId), 'Serviço clínico puro (ZemdaFisio) deve ser excluído dos complementos');
+    assert.ok(candRes.data.services.every(s => s.studio_service_type !== 'facility_access'), 'facility_access nunca pode aparecer como candidato complementar');
+
+    // 18b: Profissionais elegíveis do Personal incluem Personal Trainer vinculado, excluem Gestor e Fisioterapeuta
+    const personalCand = candRes.data.services.find(s => s.id === mixedPersonalId);
+    assert.ok(personalCand.eligible_professional_ids.includes(mixedElig.profId), 'Personal vinculado é elegível');
+    assert.ok(!personalCand.eligible_professional_ids.includes('prof-gestor-m'), 'Gestor sem habilitação não pode aparecer como elegível');
+    assert.ok(!personalCand.eligible_professional_ids.includes('prof-fisio-m'), 'Fisioterapeuta clínico não vinculado não pode aparecer como elegível');
+
+    // 18c: Tentativa direta no backend de vincular Gestor ou Fisioterapeuta no complemento retorna HTTP 400
+    const badGestorRes = await req(server, 'PUT', `/v1/services/${mixedMuscId}`, mixedAdminHeaders, {
+      optionalAddons: {
+        enabled: true,
+        options: [{ id: 'try-gestor', addonServiceId: mixedPersonalId, label: 'Personal', additionalPriceCents: 15000, enabledProfessionalIds: ['prof-gestor-m'] }]
+      }
+    });
+    assert.equal(badGestorRes.status, 400, 'Backend deve bloquear Gestor não habilitado em enabledProfessionalIds');
+
+    const badFisioRes = await req(server, 'PUT', `/v1/services/${mixedMuscId}`, mixedAdminHeaders, {
+      optionalAddons: {
+        enabled: true,
+        options: [{ id: 'try-fisio', addonServiceId: mixedPersonalId, label: 'Personal', additionalPriceCents: 15000, enabledProfessionalIds: ['prof-fisio-m'] }]
+      }
+    });
+    assert.equal(badFisioRes.status, 400, 'Backend deve bloquear Fisioterapeuta não vinculado em enabledProfessionalIds');
+
+    // 18d: Tentativa de vincular facility_access como complemento retorna HTTP 400
+    const badFacilityAddonRes = await req(server, 'PUT', `/v1/services/${mixedZumbaId}`, mixedAdminHeaders, {
+      optionalAddons: {
+        enabled: true,
+        options: [{ id: 'try-fac', addonServiceId: mixedMuscId, label: 'Acesso', additionalPriceCents: 5000 }]
+      }
+    });
+    assert.equal(badFacilityAddonRes.status, 400, 'facility_access não pode ser vinculado como complemento');
+
+    // 18e: Desativar complementos com rascunho vazio incompleto NÃO pode bloquear salvamento
+    const disabledIncompleteRes = await req(server, 'PUT', `/v1/services/${mixedMuscId}`, mixedAdminHeaders, {
+      optionalAddons: {
+        enabled: false,
+        options: [{ id: 'draft-incompleto', addonServiceId: '', label: '', additionalPriceCents: 0 }]
+      }
+    });
+    assert.equal(disabledIncompleteRes.status, 200, 'Salvar com complementos Desativado deve descartar rascunho incompleto sem erro');
+    assert.equal(disabledIncompleteRes.data.optional_addons_json ?? null, null);
+
+    // 18f: Vincular Personal elegível ao plano Musculação Mista funciona com sucesso
+    const validMixedAddonRes = await req(server, 'PUT', `/v1/services/${mixedMuscId}`, mixedAdminHeaders, {
+      optionalAddons: {
+        enabled: true,
+        options: [{
+          id: 'ok-pers-m',
+          addonServiceId: mixedPersonalId,
+          label: 'Personal 1x/sem',
+          additionalPriceCents: 18000,
+          enabledProfessionalIds: [mixedElig.profId],
+          scheduleTiming: 'during_purchase'
+        }]
+      }
+    });
+    assert.equal(validMixedAddonRes.status, 200);
+    const mixedListRes = await req(server, 'GET', '/v1/services', mixedAdminHeaders);
+    const mixedMuscAfter = mixedListRes.data.find(s => s.id === mixedMuscId);
+    assert.equal(mixedMuscAfter.optional_addons?.enabled, true);
+
+    console.log('19. Testando Importação IA: NUNCA pular revisão após confirmação/exclusão, companion service e receipt...');
+    const { GeminiService } = require('./dist/services/gemini.service');
+    const origIsConf = GeminiService.isConfigured;
+    const origExtractCatalog = GeminiService.extractStudioCatalog;
+    let mockExtractCalls = 0;
+    GeminiService.isConfigured = () => true;
+    GeminiService.extractStudioCatalog = async () => {
+      mockExtractCalls++;
+      return {
+        services: [
+          {
+            name: 'Zumba Turbo Importada',
+            type: 'group',
+            modality: 'presential',
+            capacity: 20,
+            durationMinutes: 50,
+            prices: [{ label: 'Mensal', unit: 'per_month', duration: '1_month', frequencyType: 'weekly', frequencyCount: 2, paymentPeriod: 'monthly', amountCents: 11000 }],
+            schedules: []
+          },
+          {
+            name: 'Plano Ignorado Teste',
+            type: 'access_unlimited',
+            prices: [{ label: 'Mensal', unit: 'per_month', duration: '1_month', frequencyType: 'unlimited', paymentPeriod: 'monthly', amountCents: 9900 }]
+          }
+        ],
+        packages: []
+      };
+    };
+    try {
+      const tinyPngB64 = Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        'base64'
+      ).toString('base64');
+      const analyzeFirst = await req(server, 'POST', '/v1/studio/catalog-imports/analyze', mixedAdminHeaders, {
+        files: [{ fileName: 'zumba-flyer.png', mimeType: 'image/png', base64: tinyPngB64 }]
+      });
+      assert.equal(analyzeFirst.status, 200);
+      assert.equal(analyzeFirst.data.status, 'ready', '1ª análise deve parar em ready (Revisão), nunca completed');
+      assert.equal(analyzeFirst.data.result, null, '1ª análise jamais retorna result preenchido');
+      const b1Id = analyzeFirst.data.id;
+
+      // Tentar confirmar sem marcação explícita ou com todos ignorados deve bloquear
+      const propAllIgnored = JSON.parse(JSON.stringify(analyzeFirst.data.proposal));
+      propAllIgnored.services.forEach(s => { s.action = 'ignore'; s.reviewed = true; });
+      const badAllIgnored = await req(server, 'POST', `/v1/studio/catalog-imports/${b1Id}/confirm`, mixedAdminHeaders, {
+        confirmed: true,
+        revision: analyzeFirst.data.revision,
+        proposal: propAllIgnored
+      });
+      assert.equal(badAllIgnored.status, 400, 'Confirmar quando todos os itens estão Ignorados deve falhar com HTTP 400');
+
+      // Revisar: marcar Zumba como Não publicado + companion Personal criado inline na revisão, ignorar segundo serviço
+      const propReviewed = JSON.parse(JSON.stringify(analyzeFirst.data.proposal));
+      propReviewed.services[0].action = 'create';
+      propReviewed.services[0].reviewed = true;
+      propReviewed.services[0].allowPublicBooking = false; // testa badge Cadastrado — Não publicado!
+      propReviewed.services[0].deferSchedules = true;
+      propReviewed.services[0].professionalId = mixedElig.profId;
+      propReviewed.services[0].optionalAddons = [{
+        label: 'Personal Extra IA',
+        addonServiceName: 'Personal Extra IA',
+        addonServiceRef: 'svc-companion-ia-1',
+        frequencyType: 'weekly',
+        frequencyCount: 1,
+        creditsPerCycle: 4,
+        additionalPriceCents: 19000,
+        comboDiscountType: 'none',
+        comboDiscountValue: 0,
+        billingPeriodicity: 'monthly',
+        durationMode: 'match_base',
+        scheduleTiming: 'after_confirmation',
+        active: true,
+        allowPublicBooking: true,
+        sources: [1],
+        evidence: ''
+      }];
+      propReviewed.services[1].action = 'ignore';
+      propReviewed.services[1].reviewed = true;
+      propReviewed.services.push({
+        key: 'svc-companion-ia-1',
+        name: 'Personal Extra IA',
+        activity: 'Personal Trainer',
+        description: 'Criado na revisão',
+        notes: '',
+        sources: [],
+        issues: [],
+        reviewed: true,
+        existingId: '',
+        allowPublicBooking: true,
+        type: 'individual',
+        modality: 'presential',
+        capacity: 1,
+        durationMinutes: 60,
+        weeklyLimit: null,
+        monthlyLimit: null,
+        professionalNames: [],
+        professionalId: mixedElig.profId,
+        action: 'create',
+        apply: ['identity', 'prices'],
+        prices: [{ label: 'Avulso', unit: 'per_session', paymentPeriod: 'one_time', amountCents: 19000, sources: [], evidence: '' }],
+        schedules: [],
+        adjustments: [],
+        optionalAddons: []
+      });
+
+      const confirmFirst = await req(server, 'POST', `/v1/studio/catalog-imports/${b1Id}/confirm`, mixedAdminHeaders, {
+        confirmed: true,
+        revision: analyzeFirst.data.revision,
+        proposal: propReviewed
+      });
+      assert.equal(confirmFirst.status, 200, JSON.stringify(confirmFirst.data));
+      assert.equal(confirmFirst.data.status, 'completed');
+      const zumbaCreatedItem = confirmFirst.data.result.services.find(s => s.name === 'Zumba Turbo Importada');
+      const companionCreatedItem = confirmFirst.data.result.services.find(s => s.name === 'Personal Extra IA');
+      assert.ok(zumbaCreatedItem, 'Zumba deve estar no receipt');
+      assert.equal(zumbaCreatedItem.published, false, 'allowPublicBooking=false deve aparecer como published=false no receipt');
+      assert.ok(companionCreatedItem, 'Serviço complementar adicionado na revisão deve persistir e aparecer no receipt');
+      assert.equal(companionCreatedItem.published, true);
+      assert.equal(confirmFirst.data.result.ignoredServices?.length, 1);
+      assert.equal(confirmFirst.data.result.ignoredServices[0].name, 'Plano Ignorado Teste');
+      assert.ok((confirmFirst.data.result.verifiedCatalogCount || 0) >= 2, 'verifiedCatalogCount deve confirmar registros reais no DB');
+
+      // Verificar no GET /v1/services oficial
+      const officialList = await req(server, 'GET', '/v1/services', mixedAdminHeaders);
+      assert.ok(officialList.data.some(s => s.id === zumbaCreatedItem.id), 'Zumba importada visível no catálogo oficial');
+      assert.ok(officialList.data.some(s => s.id === companionCreatedItem.id), 'Complemento criado na revisão visível no catálogo oficial');
+
+      // Reenviar EXATAMENTE A MESMA imagem após confirmação e exclusão -> NÃO PODE PULAR REVISÃO!
+      await req(server, 'DELETE', `/v1/services/${zumbaCreatedItem.id}`, mixedAdminHeaders);
+      const callsBeforeReupload = mockExtractCalls;
+      const reuploadSameImage = await req(server, 'POST', '/v1/studio/catalog-imports/analyze', mixedAdminHeaders, {
+        files: [{ fileName: 'zumba-flyer.png', mimeType: 'image/png', base64: tinyPngB64 }]
+      });
+      assert.equal(reuploadSameImage.status, 200, JSON.stringify(reuploadSameImage.data));
+      assert.notEqual(reuploadSameImage.data.id, b1Id, 'Reenvio após lote confirmado deve gerar novo batchId em aberto');
+      assert.equal(reuploadSameImage.data.status, 'ready', 'Reenvio da mesma imagem JAMAIS pode retornar status=completed');
+      assert.equal(reuploadSameImage.data.result, null, 'Reenvio da mesma imagem JAMAIS pode pular para result preenchido');
+      assert.ok(mockExtractCalls > callsBeforeReupload, 'Reenvio deve executar nova análise IA em vez de reciclar resultado concluído');
+    } finally {
+      GeminiService.isConfigured = origIsConf;
+      GeminiService.extractStudioCatalog = origExtractCatalog;
+    }
+
+    console.log('ALL 19 OPTIONAL ADDONS + IMPORT REVIEW ENFORCEMENT SCENARIOS PASSED!');
   } finally {
     server.close();
   }

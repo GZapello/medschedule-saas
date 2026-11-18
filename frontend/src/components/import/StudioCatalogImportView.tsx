@@ -113,9 +113,12 @@ type Activity =
   | 'retrying'
   | 'cancelling'
   | 'opening'
+  | 'opening_history'
   | 'saving'
   | 'confirming'
   | 'deleting';
+
+type ImportWizardStage = 'files' | 'review' | 'completed' | 'history_view';
 
 const activityLabels: Record<Activity, string> = {
   reading: 'Preparando e otimizando os arquivos…',
@@ -123,6 +126,7 @@ const activityLabels: Record<Activity, string> = {
   retrying: 'Reenfileirando análise com os arquivos temporários…',
   cancelling: 'Cancelando análise e removendo arquivos temporários…',
   opening: 'Abrindo rascunho…',
+  opening_history: 'Carregando registro histórico…',
   saving: 'Salvando progresso do rascunho…',
   confirming: 'Validando e cadastrando no catálogo oficial…',
   deleting: 'Descartando lote e removendo arquivos temporários…'
@@ -239,6 +243,8 @@ export function StudioCatalogImportView() {
   const [files, setFiles] = useState<File[]>([]);
   const [allRecords, setAllRecords] = useState<DraftListItem[]>([]);
   const [draft, setDraft] = useState<ImportDraft | null>(null);
+  const [wizardStage, setWizardStage] = useState<ImportWizardStage>('files');
+  const [catalogVerifiedCount, setCatalogVerifiedCount] = useState<number | null>(null);
   const [activeJob, setActiveJob] = useState<DraftListItem | null>(null);
   const [pollFailureCount, setPollFailureCount] = useState(0);
   const [activity, setActivity] = useState<Activity | null>(null);
@@ -294,14 +300,38 @@ export function StudioCatalogImportView() {
   const checkJobStatusNow = useCallback(async (jobId: string, signal?: AbortSignal) => {
     const res = await ApiClient.get<ImportDraft | DraftListItem>(endpoint + '/' + jobId, { signal });
     setPollFailureCount(0);
-    if (hasProposal(res) && (res.status === 'ready' || res.status === 'completed' || !res.status)) {
-      setActiveJob(null);
-      setDraft(res);
-      setError('');
-      setErrorDetails(null);
-      setMessage('Análise concluída com sucesso. Os arquivos originais temporários já foram excluídos.');
-      void refreshDrafts();
-      return 'done';
+    if (hasProposal(res)) {
+      if (res.result || res.status === 'completed') {
+        // Nunca pular a etapa de revisão automaticamente durante uma análise ativa
+        setActiveJob(null);
+        setDraft(null);
+        setWizardStage('files');
+        setConfirming(false);
+        setError('A análise retornou um lote já concluído anteriormente. Reenvie os arquivos para iniciar uma nova revisão.');
+        void refreshDrafts();
+        return 'stopped';
+      }
+      const extractedTotal = (res.proposal.services?.length || 0) + (res.proposal.packages?.length || 0);
+      if (extractedTotal === 0) {
+        setActiveJob(null);
+        setDraft(null);
+        setWizardStage('files');
+        setConfirming(false);
+        setError('Análise concluída sem serviços ou pacotes identificados nos arquivos enviados. Revise o material e tente novamente.');
+        void refreshDrafts();
+        return 'stopped';
+      }
+      if (res.status === 'ready' || !res.status) {
+        setActiveJob(null);
+        setDraft(res);
+        setConfirming(false);
+        setWizardStage('review');
+        setError('');
+        setErrorDetails(null);
+        setMessage('Análise concluída. Revise os serviços e planos abaixo e clique em Confirmar para cadastrar no catálogo.');
+        void refreshDrafts();
+        return 'done';
+      }
     }
     const statusRes = res as DraftListItem;
     setActiveJob(statusRes);
@@ -371,20 +401,73 @@ export function StudioCatalogImportView() {
       const next = await operation();
       if (!next) {
         setDraft(null);
+        setWizardStage('files');
       } else if (hasProposal(next)) {
         setActiveJob(null);
-        setDraft(next);
-        if (success) setMessage(success);
+        if (task === 'confirming') {
+          const totalPersisted = (next.result?.services?.length || 0) + (next.result?.packages?.length || 0);
+          if (!next.result || totalPersisted === 0) {
+            throw new Error('A confirmação não retornou itens gravados no catálogo oficial. Sua revisão foi preservada para nova tentativa.');
+          }
+          window.dispatchEvent(new CustomEvent('zemda-catalog-updated', { detail: { source: 'studio_catalog_import', receipt: next.result } }));
+          let liveCount: number | null = null;
+          try {
+            const officialServices = await ApiClient.get<Array<{ id: string }>>('/v1/services');
+            if (Array.isArray(officialServices)) {
+              const idSet = new Set(officialServices.map(s => s.id));
+              liveCount = next.result.services.filter(s => idSet.has(s.id)).length;
+            }
+          } catch {
+            liveCount = next.result.verifiedCatalogCount ?? null;
+          }
+          setCatalogVerifiedCount(liveCount);
+          setDraft(next);
+          setConfirming(false);
+          setWizardStage('completed');
+          setMessage(success || 'Importação gravada e verificada no catálogo oficial.');
+        } else if (task === 'opening_history' && next.result) {
+          setCatalogVerifiedCount(next.result.verifiedCatalogCount ?? null);
+          setDraft(next);
+          setConfirming(false);
+          setWizardStage('history_view');
+        } else if (next.result || next.status === 'completed') {
+          // Proteção rigorosa: análise ou reabertura de rascunho nunca avança automaticamente para "Concluído"
+          setDraft(null);
+          setConfirming(false);
+          setWizardStage('files');
+          setError('Este lote já constava como concluído anteriormente e não pôde ir direto para revisão. Reenvie os arquivos para iniciar uma nova análise.');
+        } else {
+          const extractedCount = (next.proposal.services?.length || 0) + (next.proposal.packages?.length || 0);
+          if (extractedCount === 0) {
+            setDraft(null);
+            setConfirming(false);
+            setWizardStage('files');
+            setError('Análise concluída sem serviços ou pacotes identificados nos arquivos enviados.');
+          } else {
+            setCatalogVerifiedCount(null);
+            setDraft(next);
+            setConfirming(false);
+            setWizardStage('review');
+            if (success) setMessage(success);
+            else if (task === 'reading' || task === 'analyzing') {
+              setMessage('Análise concluída! Revise todos os registros abaixo antes de confirmar a importação.');
+            }
+          }
+        }
       } else {
         setDraft(null);
+        setWizardStage('files');
+        setConfirming(false);
         setActiveJob(next);
         setPollFailureCount(0);
       }
-      setConfirming(false);
+      if (task !== 'confirming') setConfirming(false);
       void refreshDrafts();
     } catch (err) {
       setErrorFromException(err, 'Falha ao processar a importação.');
-      setConfirming(false);
+      if (task === 'confirming') {
+        setConfirming(false);
+      }
       void refreshDrafts();
     } finally {
       submitLockRef.current = false;
@@ -403,8 +486,18 @@ export function StudioCatalogImportView() {
       const res = await postJsonWithTimeout<ImportDraft | DraftListItem>(endpoint + '/' + id + '/retry', {}, 30_000);
       if (hasProposal(res)) {
         setActiveJob(null);
-        setDraft(res);
+        if (res.result || res.status === 'completed') {
+          setDraft(null);
+          setWizardStage('files');
+          setError('Este lote já foi finalizado anteriormente. Envie os arquivos novamente para uma nova análise.');
+        } else {
+          setDraft(res);
+          setConfirming(false);
+          setWizardStage('review');
+        }
       } else {
+        setDraft(null);
+        setWizardStage('files');
         setActiveJob(res);
         setPollFailureCount(0);
       }
@@ -446,7 +539,11 @@ export function StudioCatalogImportView() {
     setErrorDetails(null);
     try {
       await ApiClient.delete(endpoint + '/' + id);
-      if (draft?.id === id) setDraft(null);
+      if (draft?.id === id) {
+        setDraft(null);
+        setWizardStage('files');
+        setConfirming(false);
+      }
       if (activeJob?.id === id) setActiveJob(null);
       await refreshDrafts();
     } catch (err) {
@@ -509,10 +606,11 @@ export function StudioCatalogImportView() {
           </p>
         </div>
       </div>
-      <div className="flex items-center gap-1.5 text-[11px] font-bold">
-        <span className={`rounded-full px-2.5 py-1 ${!draft ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-700'}`}>1. Arquivos</span>
-        <span className={`rounded-full px-2.5 py-1 ${draft && !draft.result ? 'bg-indigo-600 text-white' : draft?.result ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-100 text-slate-500'}`}>2. Revisão</span>
-        <span className={`rounded-full px-2.5 py-1 ${draft?.result ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500'}`}>3. Concluído</span>
+      <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-bold">
+        <span className={`rounded-full px-2.5 py-1 ${wizardStage === 'files' ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-700'}`}>1. Arquivos</span>
+        <span className={`rounded-full px-2.5 py-1 ${wizardStage === 'review' && !confirming ? 'bg-indigo-600 text-white' : wizardStage === 'completed' || wizardStage === 'history_view' || (wizardStage === 'review' && confirming) ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-100 text-slate-500'}`}>2. Revisão</span>
+        <span className={`rounded-full px-2.5 py-1 ${wizardStage === 'review' && confirming ? 'bg-indigo-600 text-white' : wizardStage === 'completed' || wizardStage === 'history_view' ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-100 text-slate-500'}`}>3. Confirmação</span>
+        <span className={`rounded-full px-2.5 py-1 ${wizardStage === 'completed' || wizardStage === 'history_view' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500'}`}>4. Concluído</span>
       </div>
     </div>
 
@@ -532,7 +630,7 @@ export function StudioCatalogImportView() {
 
     {message && <p role="status" className="rounded-xl bg-emerald-50 border border-emerald-200 p-3 text-sm font-medium text-emerald-800">{message}</p>}
 
-    {!draft && activeJob && (
+    {wizardStage === 'files' && !draft && activeJob && (
       <div className={`rounded-2xl border p-4 space-y-3 ${
         isJobRunning
           ? 'border-indigo-200 bg-indigo-50/70 text-indigo-950'
@@ -615,7 +713,7 @@ export function StudioCatalogImportView() {
       </div>
     )}
 
-    {!draft && <>
+    {wizardStage === 'files' && !draft && <>
       <div
         ref={dropzoneRef}
         onDragOver={e => e.preventDefault()}
@@ -657,7 +755,7 @@ export function StudioCatalogImportView() {
         <button type="button" className={primary} disabled={!!activity || isJobRunning || files.length === 0} onClick={() => void run('reading', async () => {
           const encoded = await Promise.all(files.map(encode));
           setActivity('analyzing');
-          const analyzed = await postJsonWithTimeout<ImportDraft | DraftListItem>(endpoint + '/analyze', { files: encoded, async: true }, 30_000);
+          const analyzed = await postJsonWithTimeout<ImportDraft | DraftListItem>(endpoint + '/analyze', { files: encoded, async: true, reanalyze: true }, 30_000);
           setFiles([]);
           return analyzed;
         })}><Sparkles aria-hidden="true" className="h-4 w-4" />Analisar catálogo com IA</button>
@@ -723,7 +821,7 @@ export function StudioCatalogImportView() {
         <ul className="mt-2 space-y-1.5">
           {completedHistory.map(item => (
             <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white border border-slate-200 px-3 py-2">
-              <button type="button" disabled={!!activity} onClick={() => void run('opening', () => ApiClient.get<ImportDraft>(endpoint + '/' + item.id))}
+              <button type="button" disabled={!!activity} onClick={() => void run('opening_history', () => ApiClient.get<ImportDraft>(endpoint + '/' + item.id))}
                 className="font-semibold text-slate-800 hover:text-indigo-700 text-left truncate cursor-pointer">
                 {item.sources.map(s => s.fileName).join(', ')}
               </button>
@@ -736,18 +834,63 @@ export function StudioCatalogImportView() {
       </details>}
     </>}
 
-    {draft?.result && <div className="space-y-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-950">
-      <h3 className="flex items-center gap-2 font-bold text-base"><CheckCircle2 aria-hidden="true" className="h-5 w-5 text-emerald-600" />Importação concluída no catálogo oficial</h3>
-      <ul className="grid gap-1.5 sm:grid-cols-2 text-sm">{[...draft.result.services, ...draft.result.packages].map(row =>
-        <li key={row.key} className="rounded-xl bg-white/80 border border-emerald-200 px-3 py-1.5 font-medium">
-          {row.name} · <span className="font-bold text-emerald-700">{row.action === 'link' ? 'Vinculado' : row.action === 'update' ? 'Atualizado' : 'Cadastrado'}</span>
-        </li>)}</ul>
-      <div className="pt-1">
-        <button type="button" className={secondary} onClick={() => { setDraft(null); setMessage(''); }}>Nova importação</button>
+    {(wizardStage === 'completed' || wizardStage === 'history_view') && draft?.result && <div className="space-y-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-950">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="flex items-center gap-2 font-bold text-base">
+          <CheckCircle2 aria-hidden="true" className="h-5 w-5 text-emerald-600" />
+          {wizardStage === 'history_view' ? 'Resumo de importação anterior' : 'Importação concluída e verificada no catálogo oficial'}
+        </h3>
+        {(catalogVerifiedCount !== null || draft.result.verifiedCatalogCount !== undefined) && (
+          <span className="rounded-full bg-white border border-emerald-300 px-2.5 py-0.5 text-[11px] font-bold text-emerald-800">
+            {catalogVerifiedCount !== null
+              ? `${catalogVerifiedCount} serviço(s) verificado(s) no catálogo ativo`
+              : `${draft.result.verifiedCatalogCount} registro(s) verificado(s) no banco`}
+          </span>
+        )}
+      </div>
+      <ul className="grid gap-2 sm:grid-cols-2 text-sm">
+        {[...draft.result.services, ...draft.result.packages].map(row => {
+          const actionLabel = row.action === 'link'
+            ? 'Vinculado ao existente'
+            : row.action === 'update'
+              ? (row.published === false ? 'Atualizado — Não publicado' : 'Atualizado e publicado')
+              : (row.published === false ? 'Cadastrado — Não publicado' : 'Cadastrado e publicado');
+          return (
+            <li key={row.key} className="rounded-xl bg-white/90 border border-emerald-200 px-3 py-2 font-medium flex flex-wrap items-center justify-between gap-1.5">
+              <span>{row.name}</span>
+              <span className="flex flex-wrap items-center gap-1.5 text-xs">
+                <span className={`font-bold ${row.published === false ? 'text-amber-700' : 'text-emerald-700'}`}>
+                  {actionLabel}
+                </span>
+                {Number(row.priceOptionsCreated || 0) > 0 && (
+                  <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-700">
+                    +{row.priceOptionsCreated} plano(s)
+                  </span>
+                )}
+                {Number(row.schedulesCreated || 0) > 0 && (
+                  <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-700">
+                    +{row.schedulesCreated} horário(s)
+                  </span>
+                )}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+      {((draft.result.ignoredServices?.length || 0) > 0 || (draft.result.ignoredPackages?.length || 0) > 0) && (
+        <div className="rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-xs text-slate-700">
+          <span className="font-bold text-slate-800">Ignorados na revisão (não cadastrados): </span>
+          {[...(draft.result.ignoredServices || []), ...(draft.result.ignoredPackages || [])].map(i => i.name).join(', ')}
+        </div>
+      )}
+      <div className="pt-1 flex flex-wrap gap-2">
+        <button type="button" className={secondary} onClick={() => { setDraft(null); setWizardStage('files'); setCatalogVerifiedCount(null); setMessage(''); setError(''); }}>
+          Nova importação
+        </button>
       </div>
     </div>}
 
-    {draft && !draft.result && <>
+    {wizardStage === 'review' && draft && !draft.result && <>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="space-y-0.5">
           <div className="flex flex-wrap items-center gap-2">
@@ -799,14 +942,14 @@ export function StudioCatalogImportView() {
           <button type="button" className={secondary} disabled={!!activity} onClick={() => {
             if (confirming) { setConfirming(false); return; }
             if (!window.confirm('Voltar à lista de arquivos? Salve o rascunho antes se fez alterações recentes.')) return;
-            setDraft(null); setError(''); setErrorDetails(null); setMessage('');
+            setDraft(null); setWizardStage('files'); setConfirming(false); setError(''); setErrorDetails(null); setMessage('');
           }}>{confirming ? 'Voltar à edição' : 'Voltar aos arquivos'}</button>
         </div>
         {!ready && (
           <p className="text-[11px] font-medium text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
             {selected.length === 0
-              ? 'Selecione ao menos 1 serviço ou pacote para Criar, Atualizar ou Vincular (ou use "Selecionar & aprovar itens prontos").'
-              : `Ainda falta marcar "Revisado" em ${selected.filter(r => !r.reviewed).length} item(ns) selecionado(s) para liberar a prévia de importação.`}
+              ? 'Todos os registros foram ignorados; nenhum cadastro será realizado. Selecione Criar, Atualizar ou Vincular em ao menos 1 item para importar.'
+              : `Ainda falta marcar "Revisado" em ${selected.filter(r => !r.reviewed).length} item(ns) selecionado(s) para liberar a confirmação de importação.`}
           </p>
         )}
       </div>

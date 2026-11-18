@@ -34,7 +34,7 @@ import { StudioPricingRule } from '../../utils/studioPricing';
 import { ServiceTemplatesConfigPanel } from './ServiceTemplatesConfigPanel';
 import { LinkedInstructorsSelector } from './LinkedInstructorsSelector';
 import { ServiceFormBody, ServiceFormSection, StudioServiceIndicators, StudioServicePresentation } from './StudioServicePresentation';
-import { StudioAccessAndAdjustmentsPanel } from './StudioAccessAndAdjustmentsPanel';
+import { StudioAccessAndAdjustmentsPanel, validateAndPrepareOptionalAddonsForSave } from './StudioAccessAndAdjustmentsPanel';
 import {
   DEFAULT_STUDIO_ACCESS_CONFIG,
   getDefaultOptionalAddonsConfig,
@@ -618,12 +618,14 @@ export const ServicesView: React.FC = () => {
 
   useEffect(() => {
     fetchData();
-    const handleAppointmentUpdated = () => {
+    const handleCatalogRefresh = () => {
       fetchData();
     };
-    window.addEventListener('zemda-appointment-updated', handleAppointmentUpdated);
+    window.addEventListener('zemda-appointment-updated', handleCatalogRefresh);
+    window.addEventListener('zemda-catalog-updated', handleCatalogRefresh);
     return () => {
-      window.removeEventListener('zemda-appointment-updated', handleAppointmentUpdated);
+      window.removeEventListener('zemda-appointment-updated', handleCatalogRefresh);
+      window.removeEventListener('zemda-catalog-updated', handleCatalogRefresh);
     };
   }, [currentTenant?.id, establishmentProfile]);
 
@@ -644,6 +646,9 @@ export const ServicesView: React.FC = () => {
       newMod = mods[0].code;
     }
     setClinicalModule(newMod);
+    if (isMixed && newMod === 'ZemdaPersonal' && mods.every(m => m.code === 'ZemdaPersonal')) {
+      setServiceDomain('studio');
+    }
 
     const compatSpecs = getCompatibleSpecialties(specialties, prof, newMod);
     if (!compatSpecs.some(s => s.id === specialtyId)) {
@@ -741,6 +746,16 @@ export const ServicesView: React.FC = () => {
       }
     }
 
+    let preparedCreateAddons = optionalAddons;
+    if (showCreateStudioConfig) {
+      const addonCheck = validateAndPrepareOptionalAddonsForSave(optionalAddons);
+      if (!addonCheck.valid) {
+        showToast(addonCheck.error || 'Revise os complementos opcionais antes de salvar.', 'error');
+        return;
+      }
+      preparedCreateAddons = addonCheck.config;
+    }
+
     try {
       const effectiveKind = showCreateStudioConfig ? (studioServiceType === 'group' ? 'group' : 'individual') : 'individual';
       const normalizedCreateLinked = showCreateStudioConfig
@@ -775,7 +790,7 @@ export const ServicesView: React.FC = () => {
               accessConfig: studioServiceType === 'facility_access' ? accessConfig : null,
               pricingAdjustments,
               commercialPriceOptions,
-              optionalAddons,
+              optionalAddons: preparedCreateAddons,
               allowedRecurrenceFrequencies: allowRecurrence ? allowedFrequencies : [],
               allowedRecurrenceWeekdays:
                 allowRecurrence
@@ -826,6 +841,7 @@ export const ServicesView: React.FC = () => {
       if (Array.isArray(createdRes?.schedule_warnings) && createdRes.schedule_warnings.length > 0) {
         showToast(createdRes.schedule_warnings[0], 'info');
       }
+      window.dispatchEvent(new CustomEvent('zemda-catalog-updated'));
       setShowServiceModal(false);
       setName('');
       setServiceDomain(isPureStudio ? 'studio' : 'clinical');
@@ -1026,6 +1042,16 @@ export const ServicesView: React.FC = () => {
       }
     }
 
+    let preparedEditAddons = editOptionalAddons;
+    if (showEditStudioConfig) {
+      const addonCheck = validateAndPrepareOptionalAddonsForSave(editOptionalAddons);
+      if (!addonCheck.valid) {
+        showToast(addonCheck.error || 'Revise os complementos opcionais antes de salvar.', 'error');
+        return;
+      }
+      preparedEditAddons = addonCheck.config;
+    }
+
     try {
       setUpdating(true);
       const effectiveEditKind = showEditStudioConfig ? (editStudioServiceType === 'group' ? 'group' : 'individual') : 'individual';
@@ -1066,7 +1092,7 @@ export const ServicesView: React.FC = () => {
               accessConfig: editStudioServiceType === 'facility_access' ? editAccessConfig : null,
               pricingAdjustments: editPricingAdjustments,
               commercialPriceOptions: editCommercialPriceOptions,
-              optionalAddons: editOptionalAddons,
+              optionalAddons: preparedEditAddons,
               allowedRecurrenceFrequencies: editAllowRecurrence ? editAllowedFrequencies : [],
               allowedRecurrenceWeekdays:
                 editAllowRecurrence
@@ -1116,6 +1142,7 @@ export const ServicesView: React.FC = () => {
         showToast('Serviço atualizado com sucesso!', 'success');
       }
       setEditingService(null);
+      window.dispatchEvent(new CustomEvent('zemda-catalog-updated'));
       fetchData();
     } catch (err: any) {
       showToast(err.message || 'Erro ao atualizar serviço', 'error');

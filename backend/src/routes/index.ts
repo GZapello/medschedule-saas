@@ -369,6 +369,7 @@ api.delete('/v1/professionals/:id/service-commissions/:serviceId', requireTenant
 
 // Serviços e Salas
 api.get('/v1/services', requireTenant, ServiceController.list);
+api.get('/v1/services/addon-candidates', requireTenant, ServiceController.listAddonCandidates);
 api.post('/v1/services/frequency-meetings', requireTenant, requirePermissionOrRole('manage_services', 'clinic_admin'), ServiceController.frequencyMeetings);
 api.post('/v1/services/quote-commercial', requireTenant, ServiceController.quoteCommercial);
 api.post('/v1/services/:id/quote-commercial', requireTenant, ServiceController.quoteCommercial);
