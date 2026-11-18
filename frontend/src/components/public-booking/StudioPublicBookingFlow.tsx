@@ -34,6 +34,15 @@ import {
   resolvePlanDurationEndDate
 } from '../../utils/establishmentContext';
 import { RecurrencePreviewBox, RecurrencePreviewData } from '../common/RecurrencePreviewBox';
+import {
+  addonAppliesToBaseOption,
+  buildFallbackBaseCommercialOption,
+  calculatePlanWithAddonsBreakdown,
+  normalizeOptionalAddonsConfig
+} from '../../utils/studioAccessAndCommercial';
+import { OptionalAddonsSelector } from '../studio/OptionalAddonsSelector';
+import { PlanWithAddonsBreakdownCard } from '../studio/PlanWithAddonsBreakdownCard';
+import { AddonSchedulePickerBlock, SelectedAddonSchedule } from '../studio/AddonSchedulePickerBlock';
 
 type ConcreteModality = 'presential' | 'online' | 'home';
 
@@ -48,6 +57,7 @@ interface StudioPublicBookingFlowProps {
   tenantSlug?: string;
   bookingSequence?: number;
   services: any[];
+  addonServices?: any[];
   professionals: any[];
   packages: any[];
   onSwitchClinical?: () => void;
@@ -164,6 +174,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
   tenantSlug,
   bookingSequence,
   services,
+  addonServices = [],
   professionals,
   packages,
   onSwitchClinical
@@ -209,6 +220,8 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
   const [step, setStep] = useState<number>(1);
   const [objective, setObjective] = useState<'plan' | 'service' | 'package'>('service');
   const [selectedCommercialOptionId, setSelectedCommercialOptionId] = useState<string>('');
+  const [selectedAddonOptionIds, setSelectedAddonOptionIds] = useState<string[]>([]);
+  const [addonScheduleSelections, setAddonScheduleSelections] = useState<Record<string, SelectedAddonSchedule>>({});
 
   // Service booking state
   const [selectedServiceId, setSelectedServiceId] = useState<string>('');
@@ -753,6 +766,67 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
     [activeCommercialOptions, selectedCommercialOptionId]
   );
 
+  const optionalAddonsConfig = useMemo(
+    () => normalizeOptionalAddonsConfig(selectedService?.optional_addons),
+    [selectedService]
+  );
+
+  const availableOptionalAddons = useMemo(() => {
+    if (!optionalAddonsConfig.enabled) return [];
+    return optionalAddonsConfig.options.filter(opt =>
+      addonAppliesToBaseOption(opt, selectedCommercialOption?.id || null)
+    );
+  }, [optionalAddonsConfig, selectedCommercialOption]);
+
+  useEffect(() => {
+    setSelectedAddonOptionIds(prev => {
+      const validIds = new Set(availableOptionalAddons.map(a => a.id));
+      const filtered = prev.filter(id => validIds.has(id));
+      return optionalAddonsConfig.allowMultiple ? filtered : filtered.slice(0, 1);
+    });
+  }, [selectedServiceId, selectedCommercialOption?.id, availableOptionalAddons, optionalAddonsConfig.allowMultiple]);
+
+  useEffect(() => {
+    setAddonScheduleSelections({});
+  }, [selectedServiceId]);
+
+  const selectedAddonOptions = useMemo(
+    () => availableOptionalAddons.filter(opt => selectedAddonOptionIds.includes(opt.id)),
+    [availableOptionalAddons, selectedAddonOptionIds]
+  );
+
+  const addonTargetMetaMap = useMemo(() => {
+    const m = new Map<string, any>();
+    for (const s of [...addonServices, ...services]) {
+      if (s?.id && !m.has(s.id)) m.set(s.id, s);
+    }
+    return m;
+  }, [addonServices, services]);
+
+  const duringPurchaseScheduledAddons = useMemo(
+    () =>
+      selectedAddonOptions.filter((opt) => {
+        if (opt.scheduleTiming !== 'during_purchase') return false;
+        const meta = addonTargetMetaMap.get(opt.addonServiceId);
+        return !meta || Number(meta.requires_appointment ?? 1) !== 0;
+      }),
+    [selectedAddonOptions, addonTargetMetaMap]
+  );
+
+  const missingDuringPurchaseAddon = useMemo(
+    () => duringPurchaseScheduledAddons.find(opt => !addonScheduleSelections[opt.id]) || null,
+    [duringPurchaseScheduledAddons, addonScheduleSelections]
+  );
+
+  const planWithAddonsBreakdown = useMemo(() => {
+    if (!selectedService || selectedAddonOptions.length === 0) return null;
+    const baseOpt = selectedCommercialOption || buildFallbackBaseCommercialOption(selectedService);
+    return calculatePlanWithAddonsBreakdown({
+      baseOption: baseOpt,
+      selectedAddons: selectedAddonOptions
+    });
+  }, [selectedService, selectedCommercialOption, selectedAddonOptions]);
+
   const isSelectedServiceAccessPlan = Boolean(
     selectedService &&
     (objective === 'plan' ||
@@ -1055,11 +1129,24 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
           : objective === 'plan' || isSelectedServiceAccessPlan
           ? (() => {
               const optSummary = selectedCommercialOption ? formatCommercialOptionSummary(selectedCommercialOption) : null;
-              const resolvedAmount = optSummary
-                ? optSummary.cycleAmount
-                : (Number(selectedService?.periodic_price) > 0
-                    ? Number(selectedService.periodic_price)
-                    : Number(selectedService?.price || 0));
+              const resolvedAmount = planWithAddonsBreakdown
+                ? planWithAddonsBreakdown.firstChargeDueCents / 100
+                : (optSummary
+                    ? optSummary.cycleAmount
+                    : (Number(selectedService?.periodic_price) > 0
+                        ? Number(selectedService.periodic_price)
+                        : Number(selectedService?.price || 0)));
+              const selectedAddonSchedulesList = duringPurchaseScheduledAddons
+                .map(opt => addonScheduleSelections[opt.id])
+                .filter(Boolean)
+                .map(sch => ({
+                  serviceId: sch.serviceId,
+                  professionalId: sch.professionalId,
+                  classScheduleId: sch.classScheduleId || null,
+                  modality: sch.modality,
+                  startTime: sch.startTime,
+                  endTime: sch.endTime
+                }));
               return {
                 tenantSlug: tenantSlug || clinic?.slug,
                 bookingSequence,
@@ -1067,6 +1154,8 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                 mode: 'access_plan',
                 serviceId: selectedServiceId,
                 commercialOptionId: selectedCommercialOption?.id || undefined,
+                ...(selectedAddonOptionIds.length > 0 ? { selectedAddonOptionIds } : {}),
+                ...(selectedAddonSchedulesList.length > 0 ? { addonSchedules: selectedAddonSchedulesList } : {}),
                 startDate: planStartDate || todayIso(),
                 contractDurationCode: selectedCommercialOption?.contractDurationCode || recurrenceDurationCode || '1_month',
                 paymentPeriodicity: selectedCommercialOption?.paymentPeriodicity || 'monthly',
@@ -1094,12 +1183,26 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
             })()
           : (() => {
               const targetSlot = useRecurrence ? effectiveRecurrenceAnchorSlot : selectedSlot;
+              const selectedAddonSchedulesList = duringPurchaseScheduledAddons
+                .map(opt => addonScheduleSelections[opt.id])
+                .filter(Boolean)
+                .map(sch => ({
+                  serviceId: sch.serviceId,
+                  professionalId: sch.professionalId,
+                  classScheduleId: sch.classScheduleId || null,
+                  modality: sch.modality,
+                  startTime: sch.startTime,
+                  endTime: sch.endTime
+                }));
               return {
                 tenantSlug: tenantSlug || clinic?.slug,
                 bookingSequence,
                 bookingIntent: useRecurrence ? 'recurring' : 'single',
                 mode: 'service',
                 serviceId: selectedServiceId,
+                ...(selectedCommercialOption?.id ? { commercialOptionId: selectedCommercialOption.id } : {}),
+                ...(selectedAddonOptionIds.length > 0 ? { selectedAddonOptionIds } : {}),
+                ...(selectedAddonSchedulesList.length > 0 ? { addonSchedules: selectedAddonSchedulesList } : {}),
                 professionalId:
                   selectedProfFilter === 'any' ? targetSlot?.professionalId || 'any' : selectedProfFilter,
                 classScheduleId: isRealClassScheduleId(targetSlot?.classScheduleId) ? targetSlot.classScheduleId : null,
@@ -1194,11 +1297,63 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
     setBookingModeChoice(null);
     setUseRecurrence(false);
     setFrequencyScheduleIds([]);
+    setSelectedAddonOptionIds([]);
+    setAddonScheduleSelections({});
     setSelectedDate('');
     setPkgDate('');
     setPkgSelectedItems([]);
     setError('');
     setStep(1);
+  };
+
+  const renderOptionalAddonsFlow = () => {
+    if (!optionalAddonsConfig.enabled || availableOptionalAddons.length === 0) {
+      return null;
+    }
+    const slugVal = String(tenantSlug || clinic?.slug || '');
+    return (
+      <div className="space-y-3">
+        <OptionalAddonsSelector
+          config={optionalAddonsConfig}
+          availableOptions={availableOptionalAddons}
+          selectedIds={selectedAddonOptionIds}
+          onChange={setSelectedAddonOptionIds}
+        />
+
+        {duringPurchaseScheduledAddons.length > 0 && (
+          <div className="space-y-2.5">
+            {duringPurchaseScheduledAddons.map((addon) => (
+              <AddonSchedulePickerBlock
+                key={addon.id}
+                tenantSlug={slugVal}
+                bookingSequence={bookingSequence}
+                addon={addon}
+                targetServiceMeta={addonTargetMetaMap.get(addon.addonServiceId)}
+                value={addonScheduleSelections[addon.id] || null}
+                onChange={(next) => {
+                  setAddonScheduleSelections((prev) => {
+                    const clone = { ...prev };
+                    if (!next) {
+                      delete clone[addon.id];
+                    } else {
+                      clone[addon.id] = next;
+                    }
+                    return clone;
+                  });
+                }}
+              />
+            ))}
+          </div>
+        )}
+
+        {planWithAddonsBreakdown && selectedService && (
+          <PlanWithAddonsBreakdownCard
+            breakdown={planWithAddonsBreakdown}
+            baseName={selectedService.name}
+          />
+        )}
+      </div>
+    );
   };
 
   const stepLabels = [
@@ -1729,13 +1884,26 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                 <strong>Condições de pagamento:</strong> {paymentDisplay} (cobrança gerada após aprovação do estabelecimento)
               </div>
               <p className="text-[11px] text-slate-500 pt-1">
-                Não é necessário escolher dia, horário ou instrutor. Sua solicitação seguirá para análise e aprovação do estabelecimento.
+                Não é necessário escolher dia, horário ou instrutor para o plano-base. Sua solicitação seguirá para análise e aprovação do estabelecimento.
               </p>
             </div>
           </div>
 
+          {renderOptionalAddonsFlow()}
+
+          {missingDuringPurchaseAddon && (
+            <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800 font-medium">
+              Escolha o horário de início para o complemento "{missingDuringPurchaseAddon.label}" acima antes de continuar.
+            </div>
+          )}
+
           <div className="flex justify-end pt-2">
-            <button type="button" onClick={() => setStep(4)} className={bookingButton}>
+            <button
+              type="button"
+              disabled={Boolean(missingDuringPurchaseAddon)}
+              onClick={() => setStep(4)}
+              className={bookingButton}
+            >
               Continuar <ArrowRight className="w-4 h-4 inline ml-1" />
             </button>
           </div>
@@ -2404,10 +2572,19 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
             </div>
           )}
 
+          {renderOptionalAddonsFlow()}
+
+          {missingDuringPurchaseAddon && (
+            <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800 font-medium">
+              Escolha o horário de início para o complemento "{missingDuringPurchaseAddon.label}" antes de continuar.
+            </div>
+          )}
+
           <div className="flex justify-end pt-2">
             <button
               type="button"
               disabled={
+                Boolean(missingDuringPurchaseAddon) ||
                 (canUseRecurringPlan && bookingModeChoice === null) ||
                 (isWeeklySchedulePlan
                   ? !effectiveRecurrenceAnchorSlot || selectedPlanMeetings.length === 0
@@ -2926,6 +3103,26 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                 </div>
               );
             })() : null}
+
+            {planWithAddonsBreakdown && selectedService && (
+              <div className="pt-3 border-t border-slate-200 space-y-2.5">
+                <PlanWithAddonsBreakdownCard
+                  breakdown={planWithAddonsBreakdown}
+                  baseName={selectedService.name}
+                  compact
+                />
+                {Object.values(addonScheduleSelections).length > 0 && (
+                  <div className="p-3 rounded-xl bg-white border border-teal-200 space-y-1 text-[11px] text-slate-700">
+                    <div className="font-bold text-slate-900">Horários escolhidos para complementos:</div>
+                    {Object.values(addonScheduleSelections).map((sch) => (
+                      <div key={sch.optionId}>
+                        <strong>{sch.addonLabel}:</strong> {formatDateShort(sch.startTime)} às {sch.startTime.slice(11, 16)} ({sch.professionalName})
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="flex justify-end">
@@ -3071,6 +3268,15 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                 <div className="text-slate-700">
                   <span className="font-semibold text-slate-900">Modalidade:</span>{' '}
                   {modalityLabel(bookingResult.requestedSummary.modality)}
+                </div>
+              )}
+              {bookingResult.requestedSummary.planWithAddonsBreakdown && (
+                <div className="pt-2">
+                  <PlanWithAddonsBreakdownCard
+                    breakdown={bookingResult.requestedSummary.planWithAddonsBreakdown}
+                    baseName={bookingResult.requestedSummary.serviceName || 'Plano-base'}
+                    compact
+                  />
                 </div>
               )}
             </div>

@@ -20,14 +20,18 @@ REGRAS INEGOCIAVEIS DE FIDELIDADE:
    - "R$ 120 mensais" / "R$ 200/mês" -> unit: "per_month", paymentPeriod: "monthly".
    - "Semestral - valor total R$ 870" ou "Anual R$ 1.620 total" -> unit: "contract_total", paymentPeriod: "one_time" (ou "installments" se o parcelamento estiver explícito). Se a tabela também citar "equivalente a R$ 145/mês", guarde 14500 em "equivalentMonthlyCents" sem substituir o total de 87000!
    - VALOR EQUIVALENTE / AMBÍGUO: Se o plano for Trimestral/Semestral/Anual e o valor parecer mensal (ex.: "Trimestral R$ 185 (em até 3x no cartão)" sem dizer explicitamente "valor total"), defina isMonthlyEquivalent: true, guarde maxInstallments se citado (ex.: 3), e deixe unit: null ou paymentPeriod: null se não houver certeza absoluta se R$ 185 é por mês equivalente (total R$ 555) ou valor do ciclo/total — registre a dúvida em "issues" com a citação exata em "evidence"!
-   - MENSALIDADE SEPARADA: Se uma observação disser "mensalidade da academia cobrada à parte / separadamente", preserve essa condição em "notes" e NÃO some ao preço do serviço base.
+   - MENSALIDADE SEPARADA / COMPLEMENTOS OPCIONAIS ("optionalAddons[]"):
+     * Se uma observação disser "mensalidade da academia cobrada à parte / separadamente", preserve essa condição em "notes" e NÃO some o valor da mensalidade ao outro serviço.
+     * Se o material oferecer um serviço principal/base (ex.: Musculação) com um complemento opcional contratado no mesmo fluxo (ex.: "Deseja adicionar Acompanhamento Personal?", "Personal 1x/semana por +R$ 180/mês", "Desconto combo de R$ 20", "Avaliação física avulsa"), registre essas ofertas em "optionalAddons[]" NO SERVIÇO BASE e extraia o serviço complementar como serviço próprio (ou permita vinculação ao catálogo existente), SEM criar serviços duplicados e SEM embutir o valor do complemento no plano-base.
+     * Se ficar ambíguo se o item extra é obrigatório (um pacote/combo único) ou opcional (um complemento selecionável), registre em "optionalAddons[]" com "mandatoryUnclear: true" e descreva a dúvida em "ambiguousReason" e "issues".
    - ADICIONAIS POR HORÁRIO: Taxas de horário de pico (ex.: "+R$ 10 das 18h às 21h") vão em "adjustments", nunca somadas em todos os preços. Se não estiver claro se é por aluno ou por sessão, deixe incidence: null e registre em issues.
 6. HORÁRIOS INCOMPLETOS E PROFISSIONAIS:
    - Cada item em "schedules": {dayOfWeek (0=Dom..6=Sab), startTime ("HH:mm"), endTime ("HH:mm" ou "" se o término não foi informado!), capacity (ou null se não informado), professionalName (ou "" se não informado), evidence, sources:[]}.
    - NUNCA invente duração (como 50 ou 60 min), término de aula, número de vagas de turma coletiva ou nome de instrutor que não conste nos arquivos.
 7. PACOTES / COMBOS ("packages"):
-   - Combinações vendidas em uma única contratação (ex.: Avaliação + Treino Personalizado + 1h Personal + Vídeo). NÃO crie pacotes para simples variações de duração de um mesmo serviço.
-   - Campos de serviço: {name, activity, description, notes, type: ${SERVICE_TYPES.join('|')}, modality: ${MODALITIES.join('|')}, durationMinutes, capacity, weeklyLimit, monthlyLimit, professionalNames:[], prices:[], schedules:[], adjustments:[], sources:[], issues:[]}.
+   - Combinações vendidas em uma única contratação obrigatória (ex.: Avaliação + Treino Personalizado + 1h Personal + Vídeo). NÃO crie pacotes para simples variações de duração de um mesmo serviço, nem quando o segundo serviço é opcional (use optionalAddons).
+   - Campos de serviço: {name, activity, description, notes, type: ${SERVICE_TYPES.join('|')}, modality: ${MODALITIES.join('|')}, durationMinutes, capacity, weeklyLimit, monthlyLimit, professionalNames:[], prices:[], schedules:[], adjustments:[], optionalAddons:[], sources:[], issues:[]}.
+   - Campos de complemento opcional: {label, addonServiceName, frequencyType: ${FREQUENCIES.join('|')}|null, frequencyCount, creditsPerCycle, additionalPriceCents, comboDiscountType: "none"|"fixed_cents"|"percentage", comboDiscountValue, billingPeriodicity: "monthly"|"per_cycle"|"one_time"|"bimonthly"|"quarterly"|"semiannual"|"annual", durationMode: "match_base"|${DURATIONS.join('|')}, scheduleTiming: "during_purchase"|"after_confirmation"|"not_applicable", mandatoryUnclear, ambiguousReason, evidence, sources:[]}.
    - Campos de preço: {label, amountCents (centavos inteiros BRL), unit: ${UNITS.join('|')}|null, paymentPeriod: ${PERIODS.join('|')}|null, duration: ${DURATIONS.join('|')}|null, frequencyType: ${FREQUENCIES.join('|')}|null, frequencyCount, installments, maxInstallments, participants, isMonthlyEquivalent, equivalentMonthlyCents, ambiguousReason, evidence, sources:[]}.
    - Campos de pacote: {name, description, notes, price, items:[{serviceName, includedCredits, weeklyFrequency, monthlyLimit, mandatory}], sources:[], issues:[]}.
    - Limites: 40 serviços, 20 pacotes, 30 preços ou horários por serviço.
@@ -183,7 +187,7 @@ export function normalizeProposal(value: unknown, sourceCount: number, extracted
     suggestedProfessionalId: extracted ? undefined : str(row.suggestedProfessionalId, 100) || undefined,
     deferSchedules: !extracted && row.deferSchedules === true,
     action: (extracted ? null : choice(row.action, ['create', 'link', 'update', 'ignore'] as const)) || 'ignore',
-    apply: extracted ? [] : strings(row.apply, 4, 30).filter(x => ['identity', 'prices', 'schedules', 'adjustments'].includes(x)),
+    apply: extracted ? [] : strings(row.apply, 5, 30).filter(x => ['identity', 'prices', 'schedules', 'adjustments', 'addons'].includes(x)),
     prices: list(row.prices, 30, price),
     schedules: list(row.schedules, 30, s => ({
       ...evidence(s), dayOfWeek: integer(s.dayOfWeek, 0, 6), startTime: clock(s.startTime), endTime: clock(s.endTime),
@@ -197,6 +201,25 @@ export function normalizeProposal(value: unknown, sourceCount: number, extracted
       amount: typeof a.amount === 'number' && Number.isFinite(a.amount) && a.amount > 0 && a.amount <= 1_000_000 ? a.amount : null,
       incidence: choice(a.incidence, ['per_student', 'per_session'] as const),
       weekdays: indexes(a.weekdays, 0, 6), startTime: clock(a.startTime), endTime: clock(a.endTime)
+    })),
+    optionalAddons: list(row.optionalAddons, 20, a => ({
+      ...evidence(a),
+      id: str(a.id, 60) || undefined,
+      label: str(a.label),
+      addonServiceName: str(a.addonServiceName || a.label),
+      addonServiceRef: extracted ? '' : str(a.addonServiceRef, 110),
+      frequencyType: choice(a.frequencyType, FREQUENCIES) || 'weekly',
+      frequencyCount: integer(a.frequencyCount, 1, 200),
+      creditsPerCycle: integer(a.creditsPerCycle, 0, 500),
+      additionalPriceCents: integer(a.additionalPriceCents, 0, 100_000_000),
+      comboDiscountType: choice(a.comboDiscountType, ['none', 'fixed_cents', 'percentage'] as const) || 'none',
+      comboDiscountValue: integer(a.comboDiscountValue, 0, 100_000_000),
+      billingPeriodicity: choice(a.billingPeriodicity, ['monthly', 'per_cycle', 'one_time', 'bimonthly', 'quarterly', 'semiannual', 'annual'] as const) || 'monthly',
+      durationMode: choice(a.durationMode, ['match_base', ...DURATIONS] as const) || 'match_base',
+      scheduleTiming: choice(a.scheduleTiming, ['during_purchase', 'after_confirmation', 'not_applicable'] as const) || 'after_confirmation',
+      mandatoryUnclear: a.mandatoryUnclear === true,
+      ambiguousReason: str(a.ambiguousReason, 300),
+      active: a.active !== false
     }))
   }));
 
@@ -252,6 +275,7 @@ export function normalizeProposal(value: unknown, sourceCount: number, extracted
     target.prices.push(...row.prices);
     target.schedules.push(...row.schedules);
     target.adjustments.push(...row.adjustments);
+    target.optionalAddons = [...(target.optionalAddons || []), ...(row.optionalAddons || [])];
     target.notes = [...new Set([target.notes, row.notes].filter(Boolean))].join('\n').slice(0, 2000);
     target.description ||= row.description;
     target.activity ||= row.activity;
@@ -270,7 +294,14 @@ export function normalizeProposal(value: unknown, sourceCount: number, extracted
       }
       row.schedules = mergeEvidence(row.schedules, s => JSON.stringify([s.dayOfWeek, s.startTime, s.endTime, nameKey(s.professionalName), s.capacity])).slice(0, 30);
       row.adjustments = mergeEvidence(row.adjustments, a => JSON.stringify([a.adjustmentType, a.valueType, a.amount, a.incidence, a.weekdays, a.startTime, a.endTime])).slice(0, 20);
-      row.sources = [...new Set([...row.sources, ...[...row.prices, ...row.schedules, ...row.adjustments].flatMap(item => item.sources)])].sort((a, b) => a - b);
+      row.optionalAddons = mergeEvidence(
+        row.optionalAddons || [],
+        a => JSON.stringify([nameKey(a.addonServiceName || a.label), a.frequencyType, a.frequencyCount, a.billingPeriodicity, a.additionalPriceCents ?? a.evidence])
+      ).slice(0, 20);
+      row.sources = [...new Set([
+        ...row.sources,
+        ...[...row.prices, ...row.schedules, ...row.adjustments, ...(row.optionalAddons || [])].flatMap(item => item.sources)
+      ])].sort((a, b) => a - b);
 
       // Validações semânticas iniciais (sem inventar dados ausentes)
       if (!row.name || !row.type) row.issues.push('Confirme o nome e o tipo de funcionamento.');
@@ -286,6 +317,9 @@ export function normalizeProposal(value: unknown, sourceCount: number, extracted
       }
       if (row.adjustments.some(a => !a.incidence)) {
         row.issues.push('Confirme se o adicional/desconto incide por aluno ou por sessão.');
+      }
+      if ((row.optionalAddons || []).some(a => a.mandatoryUnclear || a.additionalPriceCents === null)) {
+        row.issues.push('Um complemento opcional exige confirmar se é opcional/obrigatório e seu valor.');
       }
       row.issues = [...new Set(row.issues)];
       mergedServices.push(row);

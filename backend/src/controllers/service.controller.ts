@@ -27,14 +27,98 @@ import {
   ServiceDomain
 } from '../utils/establishment-context';
 import {
+  addonAppliesToBaseOption,
+  buildFallbackBaseCommercialOption,
   calculateCommercialOptionBreakdown,
+  calculatePlanWithAddonsBreakdown,
   evaluateStudioPriceAdjustments,
+  getDefaultOptionalAddonsConfig,
+  hydrateOptionalAddonsConfig,
   normalizeCommercialPriceOptions,
+  normalizeOptionalAddonsConfig,
   normalizeStudioAccessConfig,
   normalizeStudioPriceAdjustments,
   normalizeStudioServiceType,
+  OptionalAddonTargetSummary,
+  StudioOptionalAddonsConfig,
   StudioServiceType
 } from '../utils/studio-access-and-commercial';
+
+function validateAndHydrateOptionalAddonsForSave(params: {
+  tenantId: string;
+  establishmentProfile: string;
+  isStudioCompat: boolean;
+  serviceDomain: ServiceDomain;
+  selfServiceId?: string | null;
+  rawOptionalAddons: unknown;
+}): { error?: string; config: StudioOptionalAddonsConfig | null; configJson: string | null } {
+  const { tenantId, establishmentProfile, isStudioCompat, serviceDomain, selfServiceId, rawOptionalAddons } = params;
+  if (rawOptionalAddons === undefined) {
+    return { config: null, configJson: null };
+  }
+
+  const parsed = normalizeOptionalAddonsConfig(rawOptionalAddons);
+  if (!isStudioCompat || serviceDomain !== 'studio') {
+    if (parsed.enabled || parsed.options.length > 0) {
+      return { error: 'Complementos opcionais de planos estão disponíveis apenas para serviços do domínio Academia & Studio.', config: null, configJson: null };
+    }
+    return { config: null, configJson: null };
+  }
+
+  if (!parsed.enabled && parsed.options.length === 0) {
+    return { config: parsed, configJson: null };
+  }
+
+  const lookupStmt = db.prepare(`
+    SELECT id, name, active, service_kind, service_domain, clinical_module,
+           COALESCE(studio_service_type, CASE WHEN COALESCE(service_kind, 'individual') = 'group' THEN 'group' ELSE 'individual' END) as studio_service_type,
+           COALESCE(requires_appointment, 1) as requires_appointment
+    FROM services
+    WHERE id = ? AND tenant_id = ?
+  `);
+
+  for (const opt of parsed.options) {
+    if (!opt.addonServiceId) {
+      return { error: `Selecione o serviço vinculado para o complemento "${opt.label}".`, config: null, configJson: null };
+    }
+    if (selfServiceId && opt.addonServiceId === selfServiceId) {
+      return { error: 'Um serviço não pode ser configurado como complemento opcional de si mesmo.', config: null, configJson: null };
+    }
+    const targetSrv = lookupStmt.get(opt.addonServiceId, tenantId) as any;
+    if (!targetSrv) {
+      return { error: `Serviço complementar vinculado (${opt.label}) não encontrado neste estabelecimento.`, config: null, configJson: null };
+    }
+    const targetDomain = resolveServiceDomain({
+      establishmentProfile,
+      serviceDomain: targetSrv.service_domain,
+      serviceKind: targetSrv.service_kind,
+      clinicalModule: targetSrv.clinical_module
+    });
+    if (targetDomain !== 'studio') {
+      return { error: `Somente serviços do domínio Academia & Studio podem ser vinculados como complemento opcional (${targetSrv.name}).`, config: null, configJson: null };
+    }
+    if (parsed.enabled && opt.active && Number(targetSrv.active) === 0) {
+      return { error: `O serviço complementar "${targetSrv.name}" está inativo. Ative-o antes de habilitá-lo como complemento.`, config: null, configJson: null };
+    }
+    const targetStudioType = normalizeStudioServiceType(targetSrv.studio_service_type, targetSrv.service_kind);
+    const targetRequiresAppt =
+      targetStudioType === 'facility_access' || targetStudioType === 'non_scheduled'
+        ? 0
+        : Number(targetSrv.requires_appointment ?? 1);
+    opt.addonServiceName = targetSrv.name;
+    opt.addonServiceType = targetStudioType;
+    if (targetRequiresAppt === 0) {
+      opt.scheduleTiming = 'not_applicable';
+    } else if (opt.scheduleTiming === 'not_applicable') {
+      opt.scheduleTiming = 'after_confirmation';
+    }
+  }
+
+  return {
+    config: parsed,
+    configJson: JSON.stringify(parsed)
+  };
+}
 
 function frequencyConfigForSave(raw: unknown, profile: string, domain: string, mode: unknown, studioServiceType?: StudioServiceType) {
   try {
@@ -511,6 +595,7 @@ export class ServiceController {
           s.access_config_json,
           s.pricing_adjustments_json,
           s.commercial_price_options_json,
+          s.optional_addons_json,
           COALESCE(s.availability_mode, 'professional_schedule') as availability_mode,
           s.modality_category,
           s.min_lead_time_hours, s.max_advance_days, s.cancellation_policy,
@@ -550,6 +635,40 @@ export class ServiceController {
       const availWindowsByService = isStudioCompat
         ? listServiceAvailabilityWindowsGrouped(tenantId)
         : new Map();
+      const addonTargetsById = new Map<string, OptionalAddonTargetSummary>();
+      if (isStudioCompat) {
+        const targetSourceRows = professionalId
+          ? (db.prepare(`
+              SELECT s.id, s.name, s.active, COALESCE(s.service_kind, 'individual') as service_kind,
+                     COALESCE(s.studio_service_type, CASE WHEN COALESCE(s.service_kind, 'individual') = 'group' THEN 'group' ELSE 'individual' END) as studio_service_type,
+                     COALESCE(s.requires_appointment, 1) as requires_appointment,
+                     s.professional_id
+              FROM services s
+              WHERE s.tenant_id = ?
+            `).all(tenantId) as any[])
+          : services;
+        const targetPrimaryMap = new Map<string, string | null>(targetSourceRows.map(r => [r.id, r.professional_id || null]));
+        const targetLinkedMap = professionalId ? getLinkedProfessionalsMap(tenantId, targetPrimaryMap) : linkedByService;
+        for (const r of targetSourceRows) {
+          const stType = normalizeStudioServiceType(r.studio_service_type, r.service_kind);
+          const reqAppt = stType === 'facility_access' || stType === 'non_scheduled' ? false : Number(r.requires_appointment ?? 1) !== 0;
+          const isGroup = (r.service_kind || 'individual') === 'group' && reqAppt;
+          const tLinked = targetLinkedMap.get(r.id) || [];
+          const hasInst = tLinked.length > 0 || Boolean(r.professional_id);
+          const tScheds = schedulesByService.get(r.id) || [];
+          const activeScheds = tScheds.filter((sc: any) => Number(sc.active) !== 0);
+          addonTargetsById.set(r.id, {
+            id: r.id,
+            name: r.name,
+            active: Number(r.active) !== 0,
+            studioServiceType: stType,
+            requiresAppointment: reqAppt,
+            isGroup,
+            hasInstructor: hasInst,
+            hasSchedule: !isGroup || activeScheds.length > 0
+          });
+        }
+      }
 
       const enriched = services.map(srv => {
         const resolvedDomain = resolveServiceDomain({
@@ -572,6 +691,7 @@ export class ServiceController {
             access_config: null,
             pricing_adjustments: [],
             commercial_price_options: [],
+            optional_addons: null,
             default_capacity: null,
             service_domain: 'clinical',
             billing_mode: 'per_session',
@@ -624,6 +744,10 @@ export class ServiceController {
           resolvedDomain === 'studio'
             ? normalizeCommercialPriceOptions(srv.commercial_price_options_json)
             : [];
+        const optionalAddons =
+          resolvedDomain === 'studio'
+            ? hydrateOptionalAddonsConfig(srv.optional_addons_json, addonTargetsById)
+            : null;
         const billConfig = resolvedDomain === 'studio'
           ? parseServiceBillingConfig(srv)
           : {
@@ -669,6 +793,7 @@ export class ServiceController {
           access_config: accessConfig,
           pricing_adjustments: pricingAdjustments,
           commercial_price_options: commercialPriceOptions,
+          optional_addons: optionalAddons,
           billing_mode: billConfig.billingMode,
           periodic_price: billConfig.periodicPrice,
           billing_cycle_months: billConfig.billingCycleMonths,
@@ -786,6 +911,7 @@ export class ServiceController {
       const rawAccessConfig = req.body?.accessConfig !== undefined ? req.body.accessConfig : req.body?.access_config;
       const rawPricingAdjustments = req.body?.pricingAdjustments !== undefined ? req.body.pricingAdjustments : req.body?.pricing_adjustments;
       const rawCommercialOptions = req.body?.commercialPriceOptions !== undefined ? req.body.commercialPriceOptions : req.body?.commercial_price_options;
+      const rawOptionalAddons = req.body?.optionalAddons !== undefined ? req.body.optionalAddons : req.body?.optional_addons;
       const rawRequiresActiveContract = req.body?.requiresActiveContract !== undefined ? req.body.requiresActiveContract : req.body?.requires_active_contract;
       const rawAllowPublicBooking = req.body?.allowPublicBooking !== undefined ? req.body.allowPublicBooking : req.body?.allow_public_booking;
       const rawEffectiveStartDate = req.body?.effectiveStartDate !== undefined ? req.body.effectiveStartDate : req.body?.effective_start_date;
@@ -799,6 +925,7 @@ export class ServiceController {
           rawAccessConfig !== undefined ||
           rawPricingAdjustments !== undefined ||
           rawCommercialOptions !== undefined ||
+          rawOptionalAddons !== undefined ||
           (rawCapacity !== undefined && rawCapacity !== null && rawCapacity !== '') ||
           rawClassSchedules.length > 0 ||
           String(rawRequestedDomain || '').trim().toLowerCase() === 'studio' ||
@@ -951,6 +1078,18 @@ export class ServiceController {
         isStudioCompat && resolvedDomain === 'studio'
           ? normalizeCommercialPriceOptions(rawCommercialOptions)
           : [];
+      const addonsValidation = validateAndHydrateOptionalAddonsForSave({
+        tenantId,
+        establishmentProfile,
+        isStudioCompat,
+        serviceDomain: resolvedDomain,
+        rawOptionalAddons
+      });
+      if (addonsValidation.error) {
+        res.status(400).json({ error: addonsValidation.error });
+        return;
+      }
+      const normalizedOptionalAddonsJson = addonsValidation.configJson;
       const resolvedRequiresAppointment =
         isStudioCompat && resolvedDomain === 'studio' && (resolvedStudioType === 'facility_access' || resolvedStudioType === 'non_scheduled')
           ? 0
@@ -1099,7 +1238,8 @@ export class ServiceController {
               effective_end_date = ?,
               access_config_json = ?,
               pricing_adjustments_json = ?,
-              commercial_price_options_json = ?
+              commercial_price_options_json = ?,
+              optional_addons_json = ?
           WHERE id = ? AND tenant_id = ?
         `).run(
           frequencyPricing ? JSON.stringify(frequencyPricing) : null,
@@ -1114,6 +1254,7 @@ export class ServiceController {
           normalizedAccessConfig ? JSON.stringify(normalizedAccessConfig) : null,
           normalizedPricingAdjustments.length > 0 ? JSON.stringify(normalizedPricingAdjustments) : null,
           normalizedCommercialOptions.length > 0 ? JSON.stringify(normalizedCommercialOptions) : null,
+          normalizedOptionalAddonsJson,
           id,
           tenantId
         );
@@ -1286,7 +1427,7 @@ export class ServiceController {
                COALESCE(requires_active_contract, 0) as requires_active_contract,
                COALESCE(allow_public_booking, 1) as allow_public_booking,
                effective_start_date, effective_end_date,
-               access_config_json, pricing_adjustments_json, commercial_price_options_json,
+               access_config_json, pricing_adjustments_json, commercial_price_options_json, optional_addons_json,
                COALESCE(availability_mode, 'professional_schedule') as availability_mode
         FROM services WHERE id = ? AND tenant_id = ?
       `).get(id, tenantId) as any;
@@ -1334,6 +1475,7 @@ export class ServiceController {
       const rawAccessConfig = req.body?.accessConfig !== undefined ? req.body.accessConfig : req.body?.access_config;
       const rawPricingAdjustments = req.body?.pricingAdjustments !== undefined ? req.body.pricingAdjustments : req.body?.pricing_adjustments;
       const rawCommercialOptions = req.body?.commercialPriceOptions !== undefined ? req.body.commercialPriceOptions : req.body?.commercial_price_options;
+      const rawOptionalAddons = req.body?.optionalAddons !== undefined ? req.body.optionalAddons : req.body?.optional_addons;
       const rawRequiresActiveContract = req.body?.requiresActiveContract !== undefined ? req.body.requiresActiveContract : req.body?.requires_active_contract;
       const rawAllowPublicBooking = req.body?.allowPublicBooking !== undefined ? req.body.allowPublicBooking : req.body?.allow_public_booking;
       const rawEffectiveStartDate = req.body?.effectiveStartDate !== undefined ? req.body.effectiveStartDate : req.body?.effective_start_date;
@@ -1369,6 +1511,7 @@ export class ServiceController {
           rawAccessConfig !== undefined ||
           rawPricingAdjustments !== undefined ||
           rawCommercialOptions !== undefined ||
+          rawOptionalAddons !== undefined ||
           (rawCapacity !== undefined && rawCapacity !== null && rawCapacity !== '') ||
           String(rawRequestedDomain || '').trim().toLowerCase() === 'studio' ||
           String(rawAvailabilityMode || '').trim().toLowerCase() === 'custom_windows' ||
@@ -1739,6 +1882,23 @@ export class ServiceController {
         isStudioCompat && nextDomain === 'studio'
           ? normalizeCommercialPriceOptions(rawCommercialOptions !== undefined ? rawCommercialOptions : existing.commercial_price_options_json)
           : [];
+      let nextOptionalAddonsJson: string | null =
+        isStudioCompat && nextDomain === 'studio' ? (existing.optional_addons_json || null) : null;
+      if (rawOptionalAddons !== undefined) {
+        const addonsValidation = validateAndHydrateOptionalAddonsForSave({
+          tenantId,
+          establishmentProfile,
+          isStudioCompat,
+          serviceDomain: nextDomain,
+          selfServiceId: String(id),
+          rawOptionalAddons
+        });
+        if (addonsValidation.error) {
+          res.status(400).json({ error: addonsValidation.error });
+          return;
+        }
+        nextOptionalAddonsJson = addonsValidation.configJson;
+      }
 
       db.transaction(() => {
         updateStmt.run(
@@ -1803,7 +1963,8 @@ export class ServiceController {
               effective_end_date = ?,
               access_config_json = ?,
               pricing_adjustments_json = ?,
-              commercial_price_options_json = ?
+              commercial_price_options_json = ?,
+              optional_addons_json = ?
           WHERE id = ? AND tenant_id = ?
         `).run(
           frequencyPricing ? JSON.stringify(frequencyPricing) : null,
@@ -1818,6 +1979,7 @@ export class ServiceController {
           nextAccessConfig ? JSON.stringify(nextAccessConfig) : null,
           nextPricingAdjustments.length > 0 ? JSON.stringify(nextPricingAdjustments) : null,
           nextCommercialOptions.length > 0 ? JSON.stringify(nextCommercialOptions) : null,
+          nextOptionalAddonsJson,
           req.params.id,
           tenantId
         );
@@ -1996,11 +2158,29 @@ export class ServiceController {
         ? options.find(o => o.id === requestedOptionId && o.active)
         : (options.find(o => o.active) || null);
 
+      const effectiveBaseOption = selectedOption || buildFallbackBaseCommercialOption(srv);
       const optionBreakdown = selectedOption
         ? calculateCommercialOptionBreakdown(selectedOption, {
             participantsCount: req.body?.participantsCount ? Number(req.body.participantsCount) : undefined,
             sessionsInContract: req.body?.sessionsInContract ? Number(req.body.sessionsInContract) : undefined,
             sessionsPerMonth: req.body?.sessionsPerMonth ? Number(req.body.sessionsPerMonth) : undefined
+          })
+        : null;
+
+      const requestedAddonIds = Array.isArray(req.body?.addonOptionIds)
+        ? req.body.addonOptionIds.map((v: any) => String(v))
+        : (Array.isArray(req.body?.selectedAddonOptionIds) ? req.body.selectedAddonOptionIds.map((v: any) => String(v)) : []);
+      const addonsCfg = normalizeOptionalAddonsConfig(srv.optional_addons_json);
+      const selectedAddons = requestedAddonIds.length > 0 && addonsCfg.enabled
+        ? addonsCfg.options.filter(
+            (opt) => requestedAddonIds.includes(opt.id) && addonAppliesToBaseOption(opt, selectedOption?.id || null)
+          )
+        : [];
+      const planWithAddonsBreakdown = selectedAddons.length > 0
+        ? calculatePlanWithAddonsBreakdown({
+            baseOption: effectiveBaseOption,
+            selectedAddons,
+            participantsCount: req.body?.participantsCount ? Number(req.body.participantsCount) : undefined
           })
         : null;
 

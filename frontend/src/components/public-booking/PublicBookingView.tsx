@@ -130,6 +130,7 @@ export const PublicBookingView: React.FC<Props> = ({
   const [clinic, setClinic] = useState<any>(null);
   const [professionals, setProfessionals] = useState<any[]>([]);
   const [services, setServices] = useState<any[]>([]);
+  const [addonServices, setAddonServices] = useState<any[]>([]);
   const [packages, setPackages] = useState<any[]>([]);
   const [mixedFlowChoice, setMixedFlowChoice] = useState<'choose' | 'studio' | 'clinical'>('choose');
   const [area, setArea] = useState('');
@@ -224,6 +225,7 @@ export const PublicBookingView: React.FC<Props> = ({
         if (!active) return;
         setClinic(data.tenant);
         setServices(data.services || []);
+        setAddonServices(data.addon_services || []);
         setPackages(data.packages || []);
         setMixedFlowChoice('choose');
         if (individual) {
@@ -583,6 +585,7 @@ export const PublicBookingView: React.FC<Props> = ({
           tenantSlug={tenantSlug}
           bookingSequence={bookingSequence}
           services={services}
+          addonServices={addonServices}
           professionals={professionals}
           packages={packages}
         />
@@ -638,6 +641,7 @@ export const PublicBookingView: React.FC<Props> = ({
           tenantSlug={tenantSlug}
           bookingSequence={bookingSequence}
           services={services}
+          addonServices={addonServices}
           professionals={professionals}
           packages={packages}
           onSwitchClinical={() => setMixedFlowChoice('clinical')}

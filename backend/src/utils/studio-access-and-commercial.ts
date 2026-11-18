@@ -617,3 +617,666 @@ export function evaluateStudioPriceAdjustments(params: {
     appliedRules
   };
 }
+
+// ============================================================================
+// COMPLEMENTOS OPCIONAIS DOS PLANOS DO ACADEMIA & STUDIO
+// ============================================================================
+
+export type AddonScheduleTiming = 'during_purchase' | 'after_confirmation' | 'not_applicable';
+export type AddonComboDiscountType = 'none' | 'fixed_cents' | 'percentage';
+export type AddonBillingPeriodicity =
+  | 'monthly'
+  | 'per_cycle'
+  | 'one_time'
+  | 'bimonthly'
+  | 'quarterly'
+  | 'semiannual'
+  | 'annual';
+export type AddonDurationMode =
+  | 'match_base'
+  | '1_month'
+  | '2_months'
+  | '3_months'
+  | '6_months'
+  | '12_months'
+  | '24_months';
+
+export interface StudioOptionalAddonOption {
+  id: string;
+  addonServiceId: string;
+  addonServiceName?: string | null;
+  addonServiceType?: StudioServiceType | null;
+  label: string;
+  description?: string | null;
+  active: boolean;
+  /** Lista vazia = válido para qualquer plano-base ativo do serviço; preenchida = restrito aos IDs de commercialPriceOptions listados. */
+  acceptedBaseOptionIds: string[];
+  frequencyType: CommercialFrequencyType;
+  frequencyCount: number | null;
+  creditsPerCycle: number | null;
+  additionalPriceCents: number;
+  comboDiscountType: AddonComboDiscountType;
+  comboDiscountValue: number;
+  billingPeriodicity: AddonBillingPeriodicity;
+  durationMode: AddonDurationMode;
+  /** null = segue autoRenew do plano-base; boolean = regra própria */
+  autoRenew: boolean | null;
+  scheduleTiming: AddonScheduleTiming;
+  displayOrder: number;
+  /** Preenchido dinamicamente nas consultas públicas/administrativas ao validar o serviço vinculado. */
+  availabilityStatus?: 'available' | 'needs_professional' | 'needs_schedule' | 'inactive_service';
+  availabilityMessage?: string | null;
+}
+
+export interface StudioOptionalAddonsConfig {
+  enabled: boolean;
+  allowMultiple: boolean;
+  promptTitle: string;
+  noAddonLabel: string;
+  options: StudioOptionalAddonOption[];
+}
+
+export const DEFAULT_STUDIO_OPTIONAL_ADDONS_PROMPT = 'Deseja adicionar acompanhamento personalizado?';
+export const DEFAULT_STUDIO_OPTIONAL_ADDONS_NONE_LABEL = 'Não adicionar';
+
+export function getDefaultOptionalAddonsConfig(): StudioOptionalAddonsConfig {
+  return {
+    enabled: false,
+    allowMultiple: false,
+    promptTitle: DEFAULT_STUDIO_OPTIONAL_ADDONS_PROMPT,
+    noAddonLabel: DEFAULT_STUDIO_OPTIONAL_ADDONS_NONE_LABEL,
+    options: []
+  };
+}
+
+export const ADDON_BILLING_PERIODICITY_LABELS: Record<AddonBillingPeriodicity, string> = {
+  monthly: 'Mensal',
+  per_cycle: 'Por ciclo do plano-base',
+  one_time: 'Pagamento único',
+  bimonthly: 'Bimestral',
+  quarterly: 'Trimestral',
+  semiannual: 'Semestral',
+  annual: 'Anual'
+};
+
+export const ADDON_SCHEDULE_TIMING_LABELS: Record<AddonScheduleTiming, string> = {
+  during_purchase: 'Escolher horários durante a contratação',
+  after_confirmation: 'Agendar após aprovação/confirmação da matrícula',
+  not_applicable: 'Sem necessidade de agendamento'
+};
+
+export function resolveDefaultAddonCreditsPerCycle(
+  frequencyType: CommercialFrequencyType,
+  frequencyCount: number | null,
+  cycleMonths = 1
+): number | null {
+  if (frequencyType === 'unlimited') return null;
+  const count = frequencyCount && frequencyCount > 0 ? frequencyCount : 1;
+  if (frequencyType === 'weekly') {
+    return count * 4 * Math.max(1, Math.round(cycleMonths));
+  }
+  if (frequencyType === 'monthly') {
+    return count * Math.max(1, Math.round(cycleMonths));
+  }
+  return count;
+}
+
+export function normalizeOptionalAddonsConfig(raw: any): StudioOptionalAddonsConfig {
+  let obj = raw;
+  if (typeof raw === 'string') {
+    try {
+      obj = JSON.parse(raw);
+    } catch {
+      obj = null;
+    }
+  }
+  if (!obj || typeof obj !== 'object') {
+    return getDefaultOptionalAddonsConfig();
+  }
+
+  const promptTitle = String(obj.promptTitle || '').trim() || DEFAULT_STUDIO_OPTIONAL_ADDONS_PROMPT;
+  const noAddonLabel = String(obj.noAddonLabel || '').trim() || DEFAULT_STUDIO_OPTIONAL_ADDONS_NONE_LABEL;
+  const rawOptions = Array.isArray(obj.options) ? obj.options : [];
+  const seenIds = new Set<string>();
+  const options: StudioOptionalAddonOption[] = [];
+
+  for (let i = 0; i < rawOptions.length; i++) {
+    const item = rawOptions[i];
+    if (!item || typeof item !== 'object') continue;
+
+    let id = String(item.id || `addon-${i + 1}`).trim() || `addon-${i + 1}`;
+    while (seenIds.has(id)) {
+      id = `${id}-${i + 1}`;
+    }
+    seenIds.add(id);
+
+    const addonServiceId = String(item.addonServiceId || '').trim();
+    const label = String(item.label || item.addonServiceName || '').trim() || `Complemento ${i + 1}`;
+
+    const frequencyType: CommercialFrequencyType =
+      item.frequencyType && ['weekly', 'monthly', 'unlimited', 'fixed_count'].includes(String(item.frequencyType))
+        ? (item.frequencyType as CommercialFrequencyType)
+        : 'weekly';
+    const rawFreqCount = Number(item.frequencyCount);
+    const frequencyCount =
+      frequencyType === 'unlimited'
+        ? null
+        : (Number.isInteger(rawFreqCount) && rawFreqCount > 0 ? Math.min(200, rawFreqCount) : 1);
+
+    const billingPeriodicity: AddonBillingPeriodicity =
+      item.billingPeriodicity && ['monthly', 'per_cycle', 'one_time', 'bimonthly', 'quarterly', 'semiannual', 'annual'].includes(String(item.billingPeriodicity))
+        ? (item.billingPeriodicity as AddonBillingPeriodicity)
+        : 'monthly';
+
+    const rawCredits = item.creditsPerCycle !== undefined && item.creditsPerCycle !== null ? Number(item.creditsPerCycle) : NaN;
+    const creditsPerCycle =
+      frequencyType === 'unlimited'
+        ? null
+        : (Number.isInteger(rawCredits) && rawCredits >= 0
+            ? Math.min(500, rawCredits)
+            : resolveDefaultAddonCreditsPerCycle(
+                frequencyType,
+                frequencyCount,
+                billingPeriodicity === 'per_cycle' || billingPeriodicity === 'one_time'
+                  ? 1
+                  : getPaymentPeriodicityCycleMonths(billingPeriodicity as PaymentPeriodicityCode)
+              ));
+
+    const additionalPriceCents = Math.max(0, Math.min(100_000_000, Math.round(Number(item.additionalPriceCents) || 0)));
+
+    const comboDiscountType: AddonComboDiscountType =
+      item.comboDiscountType && ['none', 'fixed_cents', 'percentage'].includes(String(item.comboDiscountType))
+        ? (item.comboDiscountType as AddonComboDiscountType)
+        : 'none';
+    const rawDiscountVal = Number(item.comboDiscountValue);
+    const comboDiscountValue =
+      comboDiscountType === 'percentage'
+        ? Math.max(0, Math.min(100, Math.round(Number.isFinite(rawDiscountVal) ? rawDiscountVal : 0)))
+        : (comboDiscountType === 'fixed_cents'
+            ? Math.max(0, Math.min(additionalPriceCents, Math.round(Number.isFinite(rawDiscountVal) ? rawDiscountVal : 0)))
+            : 0);
+
+    const durationMode: AddonDurationMode =
+      item.durationMode && ['match_base', '1_month', '2_months', '3_months', '6_months', '12_months', '24_months'].includes(String(item.durationMode))
+        ? (item.durationMode as AddonDurationMode)
+        : 'match_base';
+
+    const autoRenew: boolean | null =
+      item.autoRenew === null || item.autoRenew === undefined || item.autoRenew === ''
+        ? null
+        : Boolean(item.autoRenew);
+
+    const scheduleTiming: AddonScheduleTiming =
+      item.scheduleTiming && ['during_purchase', 'after_confirmation', 'not_applicable'].includes(String(item.scheduleTiming))
+        ? (item.scheduleTiming as AddonScheduleTiming)
+        : 'after_confirmation';
+
+    const acceptedBaseOptionIds = Array.isArray(item.acceptedBaseOptionIds)
+      ? Array.from(new Set<string>(item.acceptedBaseOptionIds.map((v: any) => String(v || '').trim()).filter(Boolean)))
+      : [];
+
+    const addonServiceType =
+      item.addonServiceType && ['scheduled_class', 'individual_appointment', 'facility_access', 'hybrid'].includes(String(item.addonServiceType))
+        ? (item.addonServiceType as StudioServiceType)
+        : null;
+
+    options.push({
+      id,
+      addonServiceId,
+      addonServiceName: item.addonServiceName ? String(item.addonServiceName).trim() : null,
+      addonServiceType,
+      label,
+      description: item.description ? String(item.description).trim() : null,
+      active: item.active !== false && item.active !== 0,
+      acceptedBaseOptionIds,
+      frequencyType,
+      frequencyCount,
+      creditsPerCycle,
+      additionalPriceCents,
+      comboDiscountType,
+      comboDiscountValue,
+      billingPeriodicity,
+      durationMode,
+      autoRenew,
+      scheduleTiming,
+      displayOrder: Number.isFinite(Number(item.displayOrder)) ? Number(item.displayOrder) : i,
+      ...(item.availabilityStatus ? { availabilityStatus: item.availabilityStatus } : {}),
+      ...(item.availabilityMessage ? { availabilityMessage: String(item.availabilityMessage) } : {})
+    });
+  }
+
+  options.sort((a, b) => a.displayOrder - b.displayOrder);
+
+  return {
+    enabled: Boolean(obj.enabled),
+    allowMultiple: Boolean(obj.allowMultiple),
+    promptTitle,
+    noAddonLabel,
+    options
+  };
+}
+
+export function addonAppliesToBaseOption(
+  addon: StudioOptionalAddonOption,
+  baseOptionId?: string | null
+): boolean {
+  if (!addon.active) return false;
+  if (!Array.isArray(addon.acceptedBaseOptionIds) || addon.acceptedBaseOptionIds.length === 0) {
+    return true;
+  }
+  if (!baseOptionId) return true;
+  return addon.acceptedBaseOptionIds.includes(baseOptionId);
+}
+
+export interface AddonItemFinancialBreakdown {
+  optionId: string;
+  addonServiceId: string;
+  addonServiceName: string | null;
+  label: string;
+  frequencyType: CommercialFrequencyType;
+  frequencyCount: number | null;
+  creditsPerCycle: number | null;
+  totalCreditsInDuration: number | null;
+  scheduleTiming: AddonScheduleTiming;
+  billingPeriodicity: AddonBillingPeriodicity;
+  effectivePeriodicity: PaymentPeriodicityCode;
+  effectivePeriodicityLabel: string;
+  effectiveCycleMonths: number;
+  durationMonths: number;
+  billingCyclesCount: number;
+  autoRenew: boolean;
+  grossPriceCents: number;
+  discountCents: number;
+  netPriceCents: number;
+  totalContractCents: number;
+  alignedWithBaseCycle: boolean;
+}
+
+export interface RecurringScheduleGroup {
+  periodicity: PaymentPeriodicityCode;
+  periodicityLabel: string;
+  cycleMonths: number;
+  baseAmountCents: number;
+  addonsAmountCents: number;
+  totalCycleAmountCents: number;
+  isBasePeriodicity: boolean;
+  itemLabels: string[];
+}
+
+export interface OneTimeAddonChargeItem {
+  optionId: string;
+  label: string;
+  grossCents: number;
+  discountCents: number;
+  netCents: number;
+}
+
+export interface PlanWithAddonsBreakdown {
+  base: CommercialOptionBreakdown & { label?: string | null; autoRenew: boolean };
+  addons: AddonItemFinancialBreakdown[];
+  recurringSchedules: RecurringScheduleGroup[];
+  oneTimeCharges: OneTimeAddonChargeItem[];
+  oneTimeAddonsTotalCents: number;
+  totalAddonDiscountCents: number;
+  /** Preenchido apenas quando plano-base e ao menos um complemento compartilham periodicidade mensal. */
+  consolidatedMonthlyCents: number | null;
+  /** Total por ciclo na periodicidade do plano-base (inclui somente complementos no mesmo ciclo). */
+  consolidatedBaseCycleCents: number;
+  hasMixedPeriodicities: boolean;
+  allDurationsAligned: boolean;
+  firstChargeDueCents: number;
+  totalContractAmountCents: number;
+}
+
+export function calculateAddonItemBreakdown(
+  addon: StudioOptionalAddonOption,
+  baseBreakdown: CommercialOptionBreakdown,
+  baseAutoRenew: boolean
+): AddonItemFinancialBreakdown {
+  const grossPriceCents = Math.max(0, Math.round(Number(addon.additionalPriceCents) || 0));
+  let discountCents = 0;
+  if (addon.comboDiscountType === 'fixed_cents') {
+    discountCents = Math.min(grossPriceCents, Math.max(0, Math.round(Number(addon.comboDiscountValue) || 0)));
+  } else if (addon.comboDiscountType === 'percentage') {
+    const pct = Math.max(0, Math.min(100, Number(addon.comboDiscountValue) || 0));
+    discountCents = Math.min(grossPriceCents, Math.round((grossPriceCents * pct) / 100));
+  }
+  const netPriceCents = Math.max(0, grossPriceCents - discountCents);
+
+  const durationMonths =
+    addon.durationMode === 'match_base'
+      ? Math.max(1, baseBreakdown.contractMonths)
+      : Math.max(1, PLAN_DURATION_MONTHS[addon.durationMode] || baseBreakdown.contractMonths);
+
+  let effectivePeriodicity: PaymentPeriodicityCode;
+  if (addon.billingPeriodicity === 'per_cycle') {
+    effectivePeriodicity =
+      baseBreakdown.paymentPeriodicity === 'installments'
+        ? 'installments'
+        : baseBreakdown.paymentPeriodicity === 'one_time'
+          ? 'one_time'
+          : baseBreakdown.paymentPeriodicity;
+  } else if (addon.billingPeriodicity === 'one_time') {
+    effectivePeriodicity = 'one_time';
+  } else {
+    effectivePeriodicity = addon.billingPeriodicity as PaymentPeriodicityCode;
+  }
+
+  const effectiveCycleMonths =
+    addon.billingPeriodicity === 'per_cycle'
+      ? Math.max(1, baseBreakdown.paymentCycleMonths)
+      : effectivePeriodicity === 'one_time'
+        ? durationMonths
+        : getPaymentPeriodicityCycleMonths(effectivePeriodicity);
+
+  const billingCyclesCount =
+    effectivePeriodicity === 'one_time' || effectivePeriodicity === 'installments'
+      ? 1
+      : Math.max(1, Math.round(durationMonths / effectiveCycleMonths));
+
+  const totalContractCents =
+    effectivePeriodicity === 'one_time' || effectivePeriodicity === 'installments'
+      ? netPriceCents
+      : netPriceCents * billingCyclesCount;
+
+  const baseIsRecurringCycle =
+    baseBreakdown.paymentPeriodicity !== 'one_time' &&
+    baseBreakdown.paymentPeriodicity !== 'installments';
+  const alignedWithBaseCycle =
+    baseIsRecurringCycle && effectivePeriodicity === baseBreakdown.paymentPeriodicity;
+
+  const resolvedCreditsPerCycle =
+    addon.frequencyType === 'unlimited'
+      ? null
+      : (addon.creditsPerCycle !== null && addon.creditsPerCycle !== undefined && addon.creditsPerCycle >= 0
+          ? addon.creditsPerCycle
+          : resolveDefaultAddonCreditsPerCycle(
+              addon.frequencyType,
+              addon.frequencyCount,
+              effectivePeriodicity === 'one_time' ? durationMonths : effectiveCycleMonths
+            ));
+
+  const totalCreditsInDuration =
+    resolvedCreditsPerCycle === null
+      ? null
+      : addon.frequencyType === 'fixed_count'
+        ? resolvedCreditsPerCycle
+        : resolvedCreditsPerCycle * billingCyclesCount;
+
+  return {
+    optionId: addon.id,
+    addonServiceId: addon.addonServiceId,
+    addonServiceName: addon.addonServiceName || addon.label,
+    label: addon.label,
+    frequencyType: addon.frequencyType,
+    frequencyCount: addon.frequencyCount,
+    creditsPerCycle: resolvedCreditsPerCycle,
+    totalCreditsInDuration,
+    scheduleTiming: addon.scheduleTiming,
+    billingPeriodicity: addon.billingPeriodicity,
+    effectivePeriodicity,
+    effectivePeriodicityLabel: PAYMENT_PERIODICITY_LABELS[effectivePeriodicity] || effectivePeriodicity,
+    effectiveCycleMonths,
+    durationMonths,
+    billingCyclesCount,
+    autoRenew: addon.autoRenew !== null && addon.autoRenew !== undefined ? Boolean(addon.autoRenew) : Boolean(baseAutoRenew),
+    grossPriceCents,
+    discountCents,
+    netPriceCents,
+    totalContractCents,
+    alignedWithBaseCycle
+  };
+}
+
+export function calculatePlanWithAddonsBreakdown(params: {
+  baseOption: StudioCommercialPriceOption;
+  selectedAddons: StudioOptionalAddonOption[];
+  participantsCount?: number;
+}): PlanWithAddonsBreakdown {
+  const baseBreakdown = calculateCommercialOptionBreakdown(params.baseOption, {
+    participantsCount: params.participantsCount
+  });
+  const baseAutoRenew = Boolean(params.baseOption.autoRenew);
+
+  const addons = (params.selectedAddons || [])
+    .filter((a) => a && a.active && Boolean(a.addonServiceId))
+    .map((addon) => calculateAddonItemBreakdown(addon, baseBreakdown, baseAutoRenew));
+
+  const recurringMap = new Map<PaymentPeriodicityCode, RecurringScheduleGroup>();
+  const baseIsRecurring =
+    baseBreakdown.paymentPeriodicity !== 'one_time' &&
+    baseBreakdown.paymentPeriodicity !== 'installments';
+
+  if (baseIsRecurring) {
+    recurringMap.set(baseBreakdown.paymentPeriodicity, {
+      periodicity: baseBreakdown.paymentPeriodicity,
+      periodicityLabel: PAYMENT_PERIODICITY_LABELS[baseBreakdown.paymentPeriodicity],
+      cycleMonths: baseBreakdown.paymentCycleMonths,
+      baseAmountCents: baseBreakdown.cycleAmountCents,
+      addonsAmountCents: 0,
+      totalCycleAmountCents: baseBreakdown.cycleAmountCents,
+      isBasePeriodicity: true,
+      itemLabels: [params.baseOption.label || 'Plano-base']
+    });
+  }
+
+  const oneTimeCharges: OneTimeAddonChargeItem[] = [];
+  let oneTimeAddonsTotalCents = 0;
+  let totalAddonDiscountCents = 0;
+  let addonsTotalContractCents = 0;
+
+  for (const addon of addons) {
+    totalAddonDiscountCents += addon.discountCents * addon.billingCyclesCount;
+    addonsTotalContractCents += addon.totalContractCents;
+
+    if (addon.effectivePeriodicity === 'one_time' || addon.effectivePeriodicity === 'installments') {
+      oneTimeCharges.push({
+        optionId: addon.optionId,
+        label: addon.label,
+        grossCents: addon.grossPriceCents,
+        discountCents: addon.discountCents,
+        netCents: addon.netPriceCents
+      });
+      oneTimeAddonsTotalCents += addon.netPriceCents;
+      continue;
+    }
+
+    const existing = recurringMap.get(addon.effectivePeriodicity);
+    if (existing) {
+      existing.addonsAmountCents += addon.netPriceCents;
+      existing.totalCycleAmountCents += addon.netPriceCents;
+      existing.itemLabels.push(addon.label);
+    } else {
+      recurringMap.set(addon.effectivePeriodicity, {
+        periodicity: addon.effectivePeriodicity,
+        periodicityLabel: addon.effectivePeriodicityLabel,
+        cycleMonths: addon.effectiveCycleMonths,
+        baseAmountCents: 0,
+        addonsAmountCents: addon.netPriceCents,
+        totalCycleAmountCents: addon.netPriceCents,
+        isBasePeriodicity: false,
+        itemLabels: [addon.label]
+      });
+    }
+  }
+
+  const recurringSchedules = Array.from(recurringMap.values());
+  const baseSchedule = baseIsRecurring ? recurringMap.get(baseBreakdown.paymentPeriodicity) : undefined;
+  const consolidatedBaseCycleCents = baseSchedule
+    ? baseSchedule.totalCycleAmountCents
+    : baseBreakdown.cycleAmountCents;
+
+  const monthlySchedule = recurringMap.get('monthly');
+  const consolidatedMonthlyCents =
+    baseBreakdown.paymentPeriodicity === 'monthly' && monthlySchedule && addons.some((a) => a.effectivePeriodicity === 'monthly')
+      ? monthlySchedule.totalCycleAmountCents
+      : null;
+
+  const hasMixedPeriodicities =
+    recurringSchedules.length > 1 ||
+    (baseIsRecurring && oneTimeCharges.length > 0) ||
+    (!baseIsRecurring && recurringSchedules.length > 0);
+
+  const allDurationsAligned = addons.every((a) => a.durationMonths === baseBreakdown.contractMonths);
+
+  const baseFirstChargeCents =
+    baseBreakdown.paymentPeriodicity === 'installments'
+      ? baseBreakdown.installmentAmountCents
+      : baseBreakdown.cycleAmountCents;
+  const addonsFirstChargeCents = addons.reduce((acc, a) => acc + a.netPriceCents, 0);
+  const firstChargeDueCents = baseFirstChargeCents + addonsFirstChargeCents;
+  const totalContractAmountCents = baseBreakdown.totalContractAmountCents + addonsTotalContractCents;
+
+  return {
+    base: {
+      ...baseBreakdown,
+      label: params.baseOption.label || null,
+      autoRenew: baseAutoRenew
+    },
+    addons,
+    recurringSchedules,
+    oneTimeCharges,
+    oneTimeAddonsTotalCents,
+    totalAddonDiscountCents,
+    consolidatedMonthlyCents,
+    consolidatedBaseCycleCents,
+    hasMixedPeriodicities,
+    allDurationsAligned,
+    firstChargeDueCents,
+    totalContractAmountCents
+  };
+}
+
+export function buildFallbackBaseCommercialOption(srv: {
+  id?: string;
+  name?: string;
+  billing_mode?: string | null;
+  billingMode?: string | null;
+  periodic_price?: number | null;
+  periodicPrice?: number | null;
+  price?: number | null;
+  weekly_sessions_count?: number | null;
+  weeklySessionsCount?: number | null;
+  studio_service_type?: string | null;
+  studioServiceType?: string | null;
+  billing_cycle_months?: number | null;
+  billingCycleMonths?: number | null;
+  default_plan_duration?: string | null;
+}): StudioCommercialPriceOption {
+  const billingMode = String(srv.billing_mode ?? srv.billingMode ?? 'per_session').toLowerCase();
+  const periodicPrice = Number(srv.periodic_price ?? srv.periodicPrice ?? 0);
+  const basePrice = Number(srv.price ?? 0);
+  const amountReais = periodicPrice > 0 ? periodicPrice : basePrice;
+  const amountCents = Math.max(0, Math.round(amountReais * 100));
+  const studioType = String(srv.studio_service_type ?? srv.studioServiceType ?? 'individual');
+  const periodicityMap: Record<string, PaymentPeriodicityCode> = {
+    monthly: 'monthly',
+    quarterly: 'quarterly',
+    semiannual: 'semiannual',
+    annual: 'annual'
+  };
+  const paymentPeriodicity: PaymentPeriodicityCode = periodicityMap[billingMode] || 'monthly';
+  const durationMap: Record<PaymentPeriodicityCode, PlanDurationCode> = {
+    one_time: '1_month',
+    monthly: '1_month',
+    bimonthly: '2_months',
+    quarterly: '3_months',
+    semiannual: '6_months',
+    annual: '12_months',
+    installments: '1_month'
+  };
+  const contractDurationCode: PlanDurationCode =
+    srv.default_plan_duration && PLAN_DURATION_MONTHS[srv.default_plan_duration as PlanDurationCode]
+      ? (srv.default_plan_duration as PlanDurationCode)
+      : durationMap[paymentPeriodicity];
+  const weeklyCount = Number(srv.weekly_sessions_count ?? srv.weeklySessionsCount ?? 0);
+  return {
+    id: 'default',
+    label: srv.name ? String(srv.name) : 'Plano padrão',
+    modality: 'any',
+    accessType: studioType === 'facility_access' ? 'unlimited' : 'scheduled',
+    frequencyType: studioType === 'facility_access' ? 'unlimited' : (weeklyCount > 0 ? 'weekly' : 'monthly'),
+    frequencyCount: studioType === 'facility_access' ? null : (weeklyCount > 0 ? weeklyCount : 1),
+    contractDurationCode,
+    paymentPeriodicity: billingMode === 'per_session' ? 'one_time' : paymentPeriodicity,
+    participantsCount: 1,
+    commercialUnit: billingMode === 'per_session' ? 'contract_total' : 'per_cycle',
+    amountCents,
+    installmentsCount: 1,
+    fidelityMonths: 0,
+    gracePeriodDays: 0,
+    autoRenew: billingMode !== 'per_session',
+    active: true
+  };
+}
+
+export interface OptionalAddonTargetSummary {
+  id: string;
+  name: string;
+  active: boolean;
+  studioServiceType: StudioServiceType;
+  requiresAppointment: boolean;
+  isGroup: boolean;
+  hasInstructor: boolean;
+  hasSchedule: boolean;
+}
+
+export function hydrateOptionalAddonsConfig(
+  raw: any,
+  targetsById: Map<string, OptionalAddonTargetSummary>,
+  options?: { publicOnly?: boolean }
+): StudioOptionalAddonsConfig {
+  const cfg = normalizeOptionalAddonsConfig(raw);
+  const publicOnly = Boolean(options?.publicOnly);
+  const hydratedOptions: StudioOptionalAddonOption[] = [];
+
+  for (const opt of cfg.options) {
+    if (!opt.addonServiceId) continue;
+    const target = targetsById.get(opt.addonServiceId);
+    let availabilityStatus: StudioOptionalAddonOption['availabilityStatus'] = 'available';
+    let availabilityMessage: string | null = null;
+    let effectiveTiming = opt.scheduleTiming;
+
+    if (!target || !target.active) {
+      availabilityStatus = 'inactive_service';
+      availabilityMessage = 'Serviço vinculado inativo ou não encontrado.';
+    } else {
+      if (!target.requiresAppointment) {
+        effectiveTiming = 'not_applicable';
+      } else if (effectiveTiming === 'not_applicable') {
+        effectiveTiming = 'after_confirmation';
+      }
+
+      if (target.requiresAppointment) {
+        if (target.isGroup && !target.hasSchedule) {
+          availabilityStatus = 'needs_schedule';
+          availabilityMessage = 'Serviço coletivo vinculado ainda sem horários/turmas ativos.';
+        } else if (!target.isGroup && !target.hasInstructor) {
+          availabilityStatus = 'needs_professional';
+          availabilityMessage = 'Serviço vinculado sem instrutor ativo disponível.';
+        }
+      }
+    }
+
+    if (publicOnly) {
+      if (!opt.active || availabilityStatus !== 'available') {
+        continue;
+      }
+    }
+
+    hydratedOptions.push({
+      ...opt,
+      addonServiceName: target?.name || opt.addonServiceName || opt.label,
+      addonServiceType: target?.studioServiceType || opt.addonServiceType || null,
+      scheduleTiming: effectiveTiming,
+      availabilityStatus,
+      availabilityMessage
+    });
+  }
+
+  return {
+    ...cfg,
+    enabled: cfg.enabled && (!publicOnly || hydratedOptions.length > 0),
+    options: hydratedOptions
+  };
+}

@@ -23,9 +23,15 @@ import {
 import { ClassScheduleService, getDayOfWeekFromYmd, todayBrazilYmd } from './class-schedule.service';
 import { StudioAccessService } from './studio-access.service';
 import {
+  addonAppliesToBaseOption,
+  buildFallbackBaseCommercialOption,
   calculateCommercialOptionBreakdown,
+  calculatePlanWithAddonsBreakdown,
   normalizeCommercialPriceOptions,
-  normalizeStudioAccessConfig
+  normalizeOptionalAddonsConfig,
+  normalizeStudioAccessConfig,
+  normalizeStudioServiceType,
+  StudioOptionalAddonOption
 } from '../utils/studio-access-and-commercial';
 import { resolveConcreteModality, sanitizeBookingErrorMessage } from '../utils/modality-resolver';
 import {
@@ -466,6 +472,270 @@ function checkDuplicatePendingRequest(params: {
     } catch {}
   }
   return false;
+}
+
+function parsePublicAddonOptionIds(rawBody: any): string[] {
+  const fromArray = (arr: any) =>
+    Array.isArray(arr)
+      ? arr.map((v) => (typeof v === 'string' ? v : String(v?.optionId || v?.id || ''))).map((s) => s.trim()).filter(Boolean)
+      : [];
+  return Array.from(
+    new Set([
+      ...fromArray(rawBody?.selectedAddonOptionIds),
+      ...fromArray(rawBody?.addonOptionIds),
+      ...fromArray(rawBody?.addons)
+    ])
+  );
+}
+
+function resolvePublicAddonsForBooking(params: {
+  tenantId: string;
+  baseServiceRow: any;
+  baseOption: any;
+  rawBody: any;
+}): {
+  selectedAddonIds: string[];
+  selectedAddons: StudioOptionalAddonOption[];
+  rawAddonSchedules: any[];
+  expandedAddonSlots: ExpandedStudioSlotItem[];
+  breakdown: ReturnType<typeof calculatePlanWithAddonsBreakdown> | null;
+} {
+  const { tenantId, baseServiceRow, baseOption, rawBody } = params;
+  const selectedAddonIds = parsePublicAddonOptionIds(rawBody);
+  if (selectedAddonIds.length === 0) {
+    return {
+      selectedAddonIds: [],
+      selectedAddons: [],
+      rawAddonSchedules: [],
+      expandedAddonSlots: [],
+      breakdown: null
+    };
+  }
+
+  const addonsCfg = normalizeOptionalAddonsConfig(baseServiceRow?.optional_addons_json);
+  if (!addonsCfg.enabled || addonsCfg.options.length === 0) {
+    throw Object.assign(new Error('Complementos opcionais não estão habilitados para este plano.'), { status: 400 });
+  }
+  if (!addonsCfg.allowMultiple && selectedAddonIds.length > 1) {
+    throw Object.assign(new Error('Este plano permite selecionar apenas um complemento opcional por contratação.'), { status: 400 });
+  }
+
+  const establishmentProfile = getTenantEstablishmentProfile(tenantId);
+  const lookupSrv = db.prepare(`
+    SELECT id, name, active, service_kind, service_domain, clinical_module,
+           COALESCE(studio_service_type, CASE WHEN COALESCE(service_kind, 'individual') = 'group' THEN 'group' ELSE 'individual' END) as studio_service_type,
+           COALESCE(requires_appointment, 1) as requires_appointment
+    FROM services WHERE id = ? AND tenant_id = ?
+  `);
+
+  const selectedAddons: StudioOptionalAddonOption[] = [];
+  const targetSrvByOptionId = new Map<string, { srv: any; requiresAppointment: boolean }>();
+
+  for (const optId of selectedAddonIds) {
+    const opt = addonsCfg.options.find((o) => o.id === optId && o.active);
+    if (!opt) {
+      throw Object.assign(new Error('Complemento opcional selecionado não está ativo ou não existe neste plano.'), { status: 400 });
+    }
+    if (!addonAppliesToBaseOption(opt, baseOption?.id || null)) {
+      throw Object.assign(new Error(`O complemento "${opt.label}" não se aplica ao plano-base selecionado.`), { status: 400 });
+    }
+    const targetSrv = lookupSrv.get(opt.addonServiceId, tenantId) as any;
+    if (!targetSrv || Number(targetSrv.active) === 0) {
+      throw Object.assign(new Error(`O serviço complementar "${opt.label}" está temporariamente indisponível.`), { status: 400 });
+    }
+    const domain = resolveServiceDomain({
+      establishmentProfile,
+      serviceDomain: targetSrv.service_domain,
+      serviceKind: targetSrv.service_kind,
+      clinicalModule: targetSrv.clinical_module
+    });
+    if (domain !== 'studio') {
+      throw Object.assign(new Error(`Complemento "${opt.label}" inválido para agendamento online.`), { status: 400 });
+    }
+    const stType = normalizeStudioServiceType(targetSrv.studio_service_type, targetSrv.service_kind);
+    const reqAppt = stType === 'facility_access' || stType === 'non_scheduled' ? false : Number(targetSrv.requires_appointment ?? 1) !== 0;
+    selectedAddons.push({
+      ...opt,
+      addonServiceName: targetSrv.name,
+      addonServiceType: stType
+    });
+    targetSrvByOptionId.set(opt.id, { srv: targetSrv, requiresAppointment: reqAppt });
+  }
+
+  const rawAddonSchedules = Array.isArray(rawBody?.addonSchedules)
+    ? rawBody.addonSchedules
+    : (Array.isArray(rawBody?.schedules)
+        ? rawBody.schedules.filter((s: any) => selectedAddons.some((a) => a.addonServiceId === String(s?.serviceId || '')))
+        : []);
+
+  const duringPurchaseAddons = selectedAddons.filter((a) => {
+    const meta = targetSrvByOptionId.get(a.id);
+    return a.scheduleTiming === 'during_purchase' && meta?.requiresAppointment;
+  });
+
+  const allowedScheduleServiceIds = new Set(duringPurchaseAddons.map((a) => a.addonServiceId));
+  const sanitizedSchedules = rawAddonSchedules.filter(
+    (s: any) => s && s.serviceId && s.startTime && allowedScheduleServiceIds.has(String(s.serviceId))
+  );
+
+  for (const dp of duringPurchaseAddons) {
+    const hasMatch = sanitizedSchedules.some((s: any) => String(s.serviceId) === dp.addonServiceId);
+    if (!hasMatch) {
+      throw Object.assign(
+        new Error(`Selecione o horário para o complemento "${dp.label}" durante a contratação.`),
+        { status: 400, code: 'ADDON_SCHEDULE_REQUIRED' }
+      );
+    }
+  }
+
+  const expandedAddonSlots: ExpandedStudioSlotItem[] = [];
+  for (const sch of sanitizedSchedules) {
+    expandedAddonSlots.push(...expandStudioScheduleItem(tenantId, {
+      serviceId: String(sch.serviceId),
+      professionalId: sch.professionalId ? String(sch.professionalId) : 'any',
+      classScheduleId: sch.classScheduleId ? String(sch.classScheduleId) : null,
+      modality: sch.modality,
+      startTime: String(sch.startTime),
+      endTime: sch.endTime ? String(sch.endTime) : undefined,
+      recurrence: sch.recurrence || undefined
+    }));
+  }
+
+  const breakdown = calculatePlanWithAddonsBreakdown({
+    baseOption,
+    selectedAddons
+  });
+
+  return {
+    selectedAddonIds,
+    selectedAddons,
+    rawAddonSchedules: sanitizedSchedules,
+    expandedAddonSlots,
+    breakdown
+  };
+}
+
+function insertScheduledAddonAppointmentsTx(params: {
+  tenantId: string;
+  contractId: string;
+  resolvedStudentId: string;
+  expandedAddonSlots: ExpandedStudioSlotItem[];
+  studioExtBusyMap: Map<string, Array<{ startMin: number; endMin: number }>>;
+  studentNotes?: string | null;
+  userId: string;
+  gcalSyncTargets: Array<{ appointmentId: string; professionalId: string; isGroupService: boolean; isFirstEnrollment: boolean }>;
+}): { createdIds: string[]; firstOccId: string | null } {
+  const { tenantId, contractId, resolvedStudentId, expandedAddonSlots, studioExtBusyMap, studentNotes, userId, gcalSyncTargets } = params;
+  if (expandedAddonSlots.length === 0) return { createdIds: [], firstOccId: null };
+
+  const countRow = db.prepare('SELECT COUNT(*) as c FROM appointments WHERE tenant_id = ?').get(tenantId) as { c: number };
+  let seq = (countRow?.c || 0) + 1;
+  const year = new Date().getFullYear();
+  const createdIds: string[] = [];
+  let firstOccId: string | null = null;
+
+  for (const item of expandedAddonSlots) {
+    const studentOverlap = db.prepare(`
+      SELECT id FROM appointments
+      WHERE tenant_id = ? AND patient_id = ? AND status != 'cancelled'
+        AND REPLACE(start_time, ' ', 'T') < ? AND REPLACE(end_time, ' ', 'T') > ?
+    `).get(tenantId, resolvedStudentId, item.endIso, item.startIso);
+    if (studentOverlap) {
+      throw Object.assign(
+        new Error(`O aluno já possui horário reservado em ${item.startIso.slice(0, 10)} às ${item.startIso.slice(11, 16)}.`),
+        { status: 409, code: 'PATIENT_APPOINTMENT_CONFLICT' }
+      );
+    }
+
+    const resolvedSlot = resolveStudioPublicSlot(tenantId, item, resolvedStudentId, studioExtBusyMap);
+    const concreteProfId = resolvedSlot.professionalId;
+    const concreteModality = resolvedSlot.modality;
+    const profMeta = db.prepare(`SELECT name, profession_id FROM professionals WHERE id = ? AND tenant_id = ?`).get(concreteProfId, tenantId) as any;
+
+    const isGroup = item.serviceRow.service_kind === 'group';
+    const capacity = isGroup ? resolvedSlot.capacity : 1;
+
+    let occurrenceId: string | null = null;
+    let isFirstEnrollment = true;
+    if (isGroup) {
+      const occ = resolveOrCreateGroupOccurrenceTx({
+        tenantId,
+        serviceId: item.serviceRow.id,
+        serviceName: item.serviceRow.name,
+        professionalId: concreteProfId,
+        roomId: resolvedSlot.roomId,
+        classScheduleId: resolvedSlot.classScheduleId,
+        startTime: item.startIso,
+        endTime: item.endIso,
+        defaultCapacity: capacity,
+        modality: concreteModality,
+        patientId: resolvedStudentId,
+        coInstructorIds: resolvedSlot.coInstructorIds
+      });
+      occurrenceId = occ.occurrenceId;
+      isFirstEnrollment = occ.isFirstEnrollment;
+      if (!firstOccId) firstOccId = occurrenceId;
+    }
+
+    let clinicalModule: string | null = null;
+    if (item.serviceRow.clinical_module && isPrimaryClinicalModule(item.serviceRow.clinical_module)) {
+      clinicalModule = item.serviceRow.clinical_module;
+    } else {
+      const mod = resolveClinicalModule({ professional_id: concreteProfId, service_id: item.serviceRow.id }, tenantId);
+      if (isPrimaryClinicalModule(mod)) clinicalModule = mod;
+    }
+
+    const apptId = 'apt-' + uuidv4().slice(0, 8);
+    const apptNumber = `AG-${year}-${seq.toString().padStart(4, '0')}`;
+    seq += 1;
+
+    db.prepare(`
+      INSERT INTO appointments (
+        id, tenant_id, appointment_number, patient_id, professional_id, service_id,
+        start_time, end_time, status, modality, patient_notes, clinical_module, profession_id,
+        occurrence_id, service_kind, attendance_status,
+        package_contract_id, is_package_covered, created_by
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?, 'pending', ?, 1, ?)
+    `).run(
+      apptId,
+      tenantId,
+      apptNumber,
+      resolvedStudentId,
+      concreteProfId,
+      item.serviceRow.id,
+      item.startIso,
+      item.endIso,
+      concreteModality,
+      studentNotes || null,
+      clinicalModule,
+      profMeta?.profession_id || null,
+      occurrenceId,
+      isGroup ? 'group' : 'individual',
+      contractId,
+      userId
+    );
+
+    const resv = PackageService.reservePackageRightTx({
+      tenantId,
+      contractId,
+      studentId: resolvedStudentId,
+      serviceId: item.serviceRow.id,
+      appointmentId: apptId,
+      startTime: item.startIso,
+      createdBy: userId
+    });
+    db.prepare(`UPDATE appointments SET package_entitlement_id = ? WHERE id = ? AND tenant_id = ?`).run(resv.entitlementId, apptId, tenantId);
+    db.prepare(`
+      INSERT INTO appointment_status_history (id, appointment_id, previous_status, new_status, changed_by, reason)
+      VALUES (?, ?, NULL, 'scheduled', ?, 'Agendamento de complemento opcional confirmado')
+    `).run(uuidv4(), apptId, userId);
+
+    NotificationService.scheduleAppointmentReminder(apptId);
+    gcalSyncTargets.push({ appointmentId: apptId, professionalId: concreteProfId, isGroupService: isGroup, isFirstEnrollment });
+    createdIds.push(apptId);
+  }
+
+  return { createdIds, firstOccId };
 }
 
 export class PublicBookingRequestService {
@@ -933,7 +1203,8 @@ export class PublicBookingRequestService {
                  COALESCE(studio_service_type, 'individual') as studio_service_type,
                  COALESCE(requires_appointment, 1) as requires_appointment,
                  COALESCE(allow_public_booking, 1) as allow_public_booking,
-                 default_plan_duration, access_config_json, frequency_pricing_json, commercial_price_options_json
+                 default_plan_duration, access_config_json, frequency_pricing_json, commercial_price_options_json,
+                 optional_addons_json
           FROM services WHERE id = ? AND tenant_id = ? AND active = 1
         `).get(String(serviceId), tenant.id) as any)
       : null;
@@ -992,25 +1263,74 @@ export class PublicBookingRequestService {
         );
       }
 
-      const resolvedAmount = optionBreakdown
-        ? optionBreakdown.cycleAmountReais
-        : (rawBody?.amount !== undefined && !Number.isNaN(Number(rawBody.amount)) ? Number(rawBody.amount) : undefined);
+      const effectiveBaseOptionForAddons = matchedOption || buildFallbackBaseCommercialOption(targetSrvRow);
+      const addonsResolved = resolvePublicAddonsForBooking({
+        tenantId: tenant.id,
+        baseServiceRow: targetSrvRow,
+        baseOption: effectiveBaseOptionForAddons,
+        rawBody
+      });
+
+      const addonProfIdSet = new Set<string>();
+      const previewAddonAppointments: any[] = [];
+      if (addonsResolved.expandedAddonSlots.length > 0) {
+        const addonExtBusyMap = await prefetchStudioExternalBusy(tenant.id, addonsResolved.expandedAddonSlots);
+        for (let i = 0; i < addonsResolved.expandedAddonSlots.length; i++) {
+          const item = addonsResolved.expandedAddonSlots[i];
+          if (existingStudentId) {
+            const patientConflict = db.prepare(`
+              SELECT id FROM appointments
+              WHERE tenant_id = ? AND patient_id = ? AND status != 'cancelled'
+                AND REPLACE(start_time, ' ', 'T') < ? AND REPLACE(end_time, ' ', 'T') > ?
+            `).get(tenant.id, existingStudentId, item.endIso, item.startIso);
+            if (patientConflict) {
+              throw Object.assign(
+                new Error(`Você já possui horário reservado em ${item.startIso.slice(0, 10)} às ${item.startIso.slice(11, 16)}.`),
+                { status: 409, code: 'PATIENT_APPOINTMENT_CONFLICT' }
+              );
+            }
+          }
+          const resolvedSlot = resolveStudioPublicSlot(tenant.id, item, existingStudentId, addonExtBusyMap);
+          addonProfIdSet.add(resolvedSlot.professionalId);
+          for (const co of resolvedSlot.coInstructorIds || []) addonProfIdSet.add(co);
+          const profMeta = db.prepare(`SELECT name FROM professionals WHERE id = ? AND tenant_id = ?`).get(resolvedSlot.professionalId, tenant.id) as any;
+          previewAddonAppointments.push({
+            id: `req-addon-slot-${i + 1}`,
+            status: 'awaiting_confirmation',
+            serviceId: item.serviceRow.id,
+            serviceName: item.serviceRow.name,
+            professionalId: resolvedSlot.professionalId,
+            professionalName: profMeta?.name || 'Instrutor',
+            modality: resolvedSlot.modality,
+            startTime: item.startIso,
+            endTime: item.endIso
+          });
+        }
+      }
+
+      const resolvedAmount = addonsResolved.breakdown
+        ? addonsResolved.breakdown.firstChargeDueCents / 100
+        : (optionBreakdown
+            ? optionBreakdown.cycleAmountReais
+            : (rawBody?.amount !== undefined && !Number.isNaN(Number(rawBody.amount)) ? Number(rawBody.amount) : undefined));
 
       const requestId = 'pbr-' + uuidv4().slice(0, 8);
       const requestNumber = generateRequestNumber(tenant.id);
       const startDateLabel = formatDateBr(requestedStartDate);
       const planDurationLabel = formatPlanDurationLabelPt(contractDurationCode, recurrence) || 'Mensal';
-      const accessLabel = isDeliverable
+      const baseAccessLabel = isDeliverable
         ? (matchedOption?.label || 'Sem horário marcado')
         : (requestedAccessMode === 'limited'
             ? (requestedWeeklyLimit ? `${requestedWeeklyLimit}x/semana` : (requestedMonthlyLimit ? `${requestedMonthlyLimit}x/mês` : 'Frequência limitada'))
             : 'Uso livre');
+      const addonsTitleList = addonsResolved.selectedAddons.map(a => a.label).join(' + ');
+      const accessLabel = addonsTitleList ? `${baseAccessLabel} + ${addonsTitleList}` : baseAccessLabel;
       const timeWindowLabel = isDeliverable
         ? 'Conforme entrega combinada'
         : (accCfg.allowedTimeWindows.length > 0
             ? accCfg.allowedTimeWindows.map(w => `${w.startTime} às ${w.endTime}`).join(', ')
             : 'Horário de funcionamento');
-      const summary = `${fullName} solicitou contratação do plano ${targetSrvRow.name} (${accessLabel} • ${planDurationLabel}) a partir de ${startDateLabel}`;
+      const summary = `${fullName} solicitou contratação do plano ${targetSrvRow.name}${addonsTitleList ? ` + Complementos: ${addonsTitleList}` : ''} (${baseAccessLabel} • ${planDurationLabel}) a partir de ${startDateLabel}`;
 
       const payload = {
         type: 'studio_access_plan',
@@ -1020,6 +1340,9 @@ export class PublicBookingRequestService {
         contractKind,
         serviceId: targetSrvRow.id,
         commercialOptionId: matchedOption?.id || null,
+        selectedAddonOptionIds: addonsResolved.selectedAddonIds,
+        addonSchedules: addonsResolved.rawAddonSchedules,
+        planWithAddonsBreakdown: addonsResolved.breakdown,
         startDate: requestedStartDate,
         contractDurationCode,
         paymentPeriodicity,
@@ -1045,7 +1368,7 @@ export class PublicBookingRequestService {
             weekdays_label, time_range_label, start_date_label, start_date_iso,
             plan_duration_label, weekly_frequency, sessions_count,
             patient_snapshot_json, payload_json, summary_snapshot_json
-          ) VALUES (?, ?, ?, 'studio', 'access_plan', 'awaiting_confirmation', ?, 'presential', ?, 'access_plan', ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
+          ) VALUES (?, ?, ?, 'studio', 'access_plan', 'awaiting_confirmation', ?, 'presential', ?, 'access_plan', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           requestId,
           requestNumber,
@@ -1058,16 +1381,19 @@ export class PublicBookingRequestService {
           requestedStartDate,
           planDurationLabel,
           requestedWeeklyLimit || null,
+          previewAddonAppointments.length,
           JSON.stringify(payload.student),
           JSON.stringify(payload),
           JSON.stringify({
             serviceName: targetSrvRow.name,
-            professionalNames: '',
+            professionalNames: Array.from(new Set(previewAddonAppointments.map(p => p.professionalName).filter(Boolean))).join(', '),
             modality: 'presential',
             establishmentName,
             planDurationLabel,
             weeklyFrequency: requestedWeeklyLimit || null,
-            accessLabel
+            accessLabel,
+            addons: addonsResolved.breakdown?.addons || [],
+            planWithAddonsBreakdown: addonsResolved.breakdown
           })
         );
 
@@ -1075,18 +1401,18 @@ export class PublicBookingRequestService {
           tenantId: tenant.id,
           requestId,
           establishmentMode: 'studio',
-          professionalIds: [],
-          title: 'Nova solicitação de plano de acesso',
+          professionalIds: Array.from(addonProfIdSet),
+          title: addonsTitleList ? 'Nova solicitação de plano com complementos' : 'Nova solicitação de plano de acesso',
           summary,
           studentOrPatientName: fullName,
-          serviceOrClassName: targetSrvRow.name,
+          serviceOrClassName: addonsTitleList ? `${targetSrvRow.name} + ${addonsTitleList}` : targetSrvRow.name,
           weekdaysLabel: accessLabel,
           timeRangeLabel: timeWindowLabel,
           startDateLabel,
           startDateIso: requestedStartDate,
-          professionalNames: null,
-          classGroupLabel: `Plano de Acesso • ${accessLabel}`,
-          sessionsCount: 0,
+          professionalNames: Array.from(new Set(previewAddonAppointments.map(p => p.professionalName).filter(Boolean))).join(', ') || null,
+          classGroupLabel: `${addonsTitleList ? 'Plano + Complementos' : 'Plano de Acesso'} • ${accessLabel}`,
+          sessionsCount: previewAddonAppointments.length,
           whatsappPhone: validWhatsapp,
           establishmentName,
           modality: 'presential',
@@ -1101,6 +1427,7 @@ export class PublicBookingRequestService {
             planDurationLabel,
             weeklyFrequency: requestedWeeklyLimit || null,
             accessLabel,
+            addons: addonsResolved.breakdown?.addons || [],
             whatsappPhone: validWhatsapp
           }
         });
@@ -1114,19 +1441,21 @@ export class PublicBookingRequestService {
         status: 'awaiting_confirmation',
         requiresConfirmation: true,
         paymentPending: false,
-        appointments: [],
+        appointments: previewAddonAppointments,
         requestedSummary: {
           serviceName: targetSrvRow.name,
-          professionalNames: '',
+          addons: addonsResolved.breakdown?.addons || [],
+          planWithAddonsBreakdown: addonsResolved.breakdown,
+          professionalNames: Array.from(new Set(previewAddonAppointments.map(p => p.professionalName).filter(Boolean))).join(', '),
           weekdaysLabel: accessLabel,
           timeRangeLabel: timeWindowLabel,
           startDateLabel,
           weeklyFrequency: requestedWeeklyLimit || null,
           planDurationLabel,
           modality: 'presential',
-          sessionsCount: 0
+          sessionsCount: previewAddonAppointments.length
         },
-        message: 'Solicitação de matrícula recebida! Aguarde a confirmação do estabelecimento para ativar seu acesso.'
+        message: 'Solicitação de matrícula recebida! Aguarde a confirmação do estabelecimento para ativar seu contrato.'
       };
     }
 
@@ -1251,9 +1580,44 @@ export class PublicBookingRequestService {
       }
     }
 
+    const svcRequestedAddonIds = parsePublicAddonOptionIds(rawBody);
+    let svcAddonsResolved: ReturnType<typeof resolvePublicAddonsForBooking> = {
+      selectedAddonIds: [],
+      selectedAddons: [],
+      rawAddonSchedules: [],
+      expandedAddonSlots: [],
+      breakdown: null
+    };
+    if (svcRequestedAddonIds.length > 0) {
+      const baseCommOptions = normalizeCommercialPriceOptions(firstPair.slotItem.serviceRow.commercial_price_options_json);
+      const baseMatchedOpt = rawBody?.commercialOptionId
+        ? baseCommOptions.find(o => o.id === String(rawBody.commercialOptionId) && o.active) || null
+        : null;
+      const baseOptForAddons = baseMatchedOpt || {
+        ...buildFallbackBaseCommercialOption(firstPair.slotItem.serviceRow),
+        ...(quote?.calculation?.effectivePrice > 0
+          ? { amountCents: Math.round(Number(quote.calculation.effectivePrice) * 100) }
+          : {})
+      };
+      svcAddonsResolved = resolvePublicAddonsForBooking({
+        tenantId: tenant.id,
+        baseServiceRow: firstPair.slotItem.serviceRow,
+        baseOption: baseOptForAddons,
+        rawBody
+      });
+      if (svcAddonsResolved.expandedAddonSlots.length > 0) {
+        const addonExtBusy = await prefetchStudioExternalBusy(tenant.id, svcAddonsResolved.expandedAddonSlots);
+        for (const item of svcAddonsResolved.expandedAddonSlots) {
+          const resolvedSlot = resolveStudioPublicSlot(tenant.id, item, existingStudentId, addonExtBusy);
+          profIdSet.add(resolvedSlot.professionalId);
+          for (const co of resolvedSlot.coInstructorIds || []) profIdSet.add(co);
+        }
+      }
+    }
+
     const requestId = 'pbr-' + uuidv4().slice(0, 8);
     const requestNumber = generateRequestNumber(tenant.id);
-    const sessionsCount = expandedServiceSlots.length;
+    const sessionsCount = expandedServiceSlots.length + svcAddonsResolved.expandedAddonSlots.length;
     const isGroup = firstPair.slotItem.serviceRow.service_kind === 'group';
     const dayNumbers = expandedServiceSlots
       .map(s => getWeekdayNumber(s.startIso.slice(0, 10)))
@@ -1268,14 +1632,15 @@ export class PublicBookingRequestService {
     const planDurationLabel = formatPlanDurationLabelPt(firstPair.slotItem.recurrenceMeta?.durationCode, recurrence);
     const weeklyFrequency = quote?.weeklyCount || (firstPair.slotItem.recurrenceMeta ? Array.from(new Set(dayNumbers)).length : null);
     const serviceName = String(firstPair.slotItem.serviceRow.name || 'Aula');
+    const svcAddonNames = svcAddonsResolved.selectedAddons.map(a => a.label).join(' + ');
 
     const classGroupLabel = sessionsCount > 1
       ? `${isGroup ? 'Turma' : 'Plano'} • ${sessionsCount} aulas${planDurationLabel ? ` (${planDurationLabel})` : ''}`
       : (isGroup ? 'Turma coletiva • 1 aula' : 'Aula avulsa');
 
     const summary = sessionsCount > 1
-      ? `${fullName} solicitou ${serviceName} (${weeklyFrequency ? `${weeklyFrequency}x/semana` : `${sessionsCount} aulas`}${planDurationLabel ? ` • ${planDurationLabel}` : ''})`
-      : `${fullName} solicitou ${serviceName} (${formatModalityLabelPt(modalityValue)}) — ${startDateLabel} às ${timeRangeLabel}`;
+      ? `${fullName} solicitou ${serviceName}${svcAddonNames ? ` + Complementos: ${svcAddonNames}` : ''} (${weeklyFrequency ? `${weeklyFrequency}x/semana` : `${sessionsCount} aulas`}${planDurationLabel ? ` • ${planDurationLabel}` : ''})`
+      : `${fullName} solicitou ${serviceName}${svcAddonNames ? ` + ${svcAddonNames}` : ''} (${formatModalityLabelPt(modalityValue)}) — ${startDateLabel} às ${timeRangeLabel}`;
 
     const payload = {
       type: 'studio_service',
@@ -1283,6 +1648,10 @@ export class PublicBookingRequestService {
       bookingIntent: bookingIntent || (sessionsCount > 1 ? 'recurring' : 'single'),
       mode: 'service',
       serviceId: String(serviceId),
+      commercialOptionId: rawBody?.commercialOptionId ? String(rawBody.commercialOptionId) : null,
+      selectedAddonOptionIds: svcAddonsResolved.selectedAddonIds,
+      addonSchedules: svcAddonsResolved.rawAddonSchedules,
+      planWithAddonsBreakdown: svcAddonsResolved.breakdown,
       professionalId: professionalId ? String(professionalId) : 'any',
       classScheduleId: classScheduleId ? String(classScheduleId) : null,
       modality: modality ?? modalityValue,
@@ -1531,6 +1900,7 @@ export class PublicBookingRequestService {
     let studioExtBusyMap = new Map<string, Array<{ startMin: number; endMin: number }>>();
     let expandedPackageSlots: ExpandedStudioSlotItem[] = [];
     let expandedServiceSlots: ExpandedStudioSlotItem[] = [];
+    let expandedAddonSlots: ExpandedStudioSlotItem[] = [];
 
     if (requestRow.mode === 'single') {
       try {
@@ -1539,6 +1909,14 @@ export class PublicBookingRequestService {
         clinicExtBusy = busy.map(b => ({ startMin: b.startMin, endMin: b.endMin }));
       } catch {
         clinicExtBusy = undefined;
+      }
+    } else if (requestRow.mode === 'access_plan' || payload.type === 'studio_access_plan') {
+      const rawAddonSchedules = Array.isArray(payload.addonSchedules) ? payload.addonSchedules : [];
+      for (const sch of rawAddonSchedules) {
+        expandedAddonSlots.push(...expandStudioScheduleItem(tenantId, sch));
+      }
+      if (expandedAddonSlots.length > 0) {
+        studioExtBusyMap = await prefetchStudioExternalBusy(tenantId, expandedAddonSlots);
       }
     } else if (requestRow.mode === 'package') {
       const rawSchedules = Array.isArray(payload.schedules) ? payload.schedules : [];
@@ -1556,7 +1934,11 @@ export class PublicBookingRequestService {
         endTime: payload.endTime ? String(payload.endTime) : undefined,
         recurrence: payload.recurrence || undefined
       });
-      studioExtBusyMap = await prefetchStudioExternalBusy(tenantId, expandedServiceSlots);
+      const rawAddonSchedules = Array.isArray(payload.addonSchedules) ? payload.addonSchedules : [];
+      for (const sch of rawAddonSchedules) {
+        expandedAddonSlots.push(...expandStudioScheduleItem(tenantId, sch));
+      }
+      studioExtBusyMap = await prefetchStudioExternalBusy(tenantId, expandedServiceSlots.concat(expandedAddonSlots));
     }
 
     const gcalSyncTargets: Array<{ appointmentId: string; professionalId: string; isGroupService: boolean; isFirstEnrollment: boolean }> = [];
@@ -1844,6 +2226,7 @@ export class PublicBookingRequestService {
           serviceId: String(payload.serviceId || requestRow.service_id),
           contractKind: payload.contractKind === 'deliverable' ? 'deliverable' : 'access_plan',
           commercialOptionId: payload.commercialOptionId || null,
+          selectedAddonOptionIds: Array.isArray(payload.selectedAddonOptionIds) ? payload.selectedAddonOptionIds : undefined,
           contractDurationCode: payload.contractDurationCode || '1_month',
           paymentPeriodicity: payload.paymentPeriodicity || 'monthly',
           startDate: payload.startDate || todayBrazilYmd(),
@@ -1860,17 +2243,52 @@ export class PublicBookingRequestService {
           createdBy: userId
         });
 
+        const isCombinedContract = enrollment.contractSource === 'package_contract';
+        const confirmedContractId = isCombinedContract ? enrollment.contractId : null;
+        const confirmedBillingPlanId = isCombinedContract
+          ? (enrollment.recurringPlanId || null)
+          : enrollment.contractId;
+
+        const addonApptRes =
+          isCombinedContract && expandedAddonSlots.length > 0
+            ? insertScheduledAddonAppointmentsTx({
+                tenantId,
+                contractId: enrollment.contractId,
+                resolvedStudentId,
+                expandedAddonSlots,
+                studioExtBusyMap,
+                studentNotes: payload.student?.notes || null,
+                userId,
+                gcalSyncTargets
+              })
+            : { createdIds: [] as string[], firstOccId: null as string | null };
+
+        const firstAddonApptId = addonApptRes.createdIds[0] || null;
+
         db.prepare(`
           UPDATE public_booking_requests
           SET status = 'confirmed',
               patient_id = ?,
+              confirmed_appointment_id = ?,
+              confirmed_appointment_ids_json = ?,
+              confirmed_contract_id = ?,
               confirmed_billing_plan_id = ?,
               confirmed_by_user_id = ?,
               confirmed_at = ?,
               conflict_reason = NULL,
               updated_at = datetime('now')
           WHERE id = ? AND tenant_id = ?
-        `).run(resolvedStudentId, enrollment.contractId, userId, confirmedAtIso, requestRow.id, tenantId);
+        `).run(
+          resolvedStudentId,
+          firstAddonApptId,
+          addonApptRes.createdIds.length > 0 ? JSON.stringify(addonApptRes.createdIds) : null,
+          confirmedContractId,
+          confirmedBillingPlanId,
+          userId,
+          confirmedAtIso,
+          requestRow.id,
+          tenantId
+        );
 
         InternalNotificationService.markRequestConfirmedNotificationsTx({
           tenantId,
@@ -1878,16 +2296,17 @@ export class PublicBookingRequestService {
           confirmedByUserId: userId,
           confirmedAtIso,
           expiresAtIso,
-          appointmentId: null,
-          occurrenceId: null
+          appointmentId: firstAddonApptId,
+          occurrenceId: addonApptRes.firstOccId,
+          packageContractId: confirmedContractId
         });
 
         return {
-          appointmentId: null,
-          appointmentIds: [],
+          appointmentId: firstAddonApptId,
+          appointmentIds: addonApptRes.createdIds,
           seriesId: null,
-          contractId: null,
-          billingPlanId: enrollment.contractId,
+          contractId: confirmedContractId,
+          billingPlanId: confirmedBillingPlanId,
           confirmedAtIso,
           expiresAtIso
         };
@@ -2147,8 +2566,30 @@ export class PublicBookingRequestService {
           })
         : null;
 
+      const hasServiceAddons = Array.isArray(payload.selectedAddonOptionIds) && payload.selectedAddonOptionIds.length > 0;
+      let combinedAddonEnrollment: any = null;
       let frequencyPlan: any = null;
-      if (quote) {
+
+      if (hasServiceAddons) {
+        combinedAddonEnrollment = StudioAccessService.createEnrollmentTx({
+          tenantId,
+          studentId: resolvedStudentId,
+          serviceId: String(payload.serviceId),
+          professionalId: firstSlot.resolvedSlot.professionalId,
+          commercialOptionId: payload.commercialOptionId || null,
+          selectedAddonOptionIds: payload.selectedAddonOptionIds,
+          contractDurationCode: firstSlot.slotItem.recurrenceMeta?.durationCode || undefined,
+          startDate: planStart,
+          paymentMethod: 'pix',
+          initialPaymentStatus: 'pending',
+          contractStatus: 'active',
+          amount: quote?.calculation?.effectivePrice !== undefined ? Number(quote.calculation.effectivePrice) : undefined,
+          origin: 'admin',
+          notes: payload.student?.notes || 'Plano com complementos contratado via link público e confirmado',
+          generateInitialCharge: true,
+          createdBy: userId
+        });
+      } else if (quote) {
         const existingCoverage = BillingCycleService.resolveActivePlanCoverage({
           tenantId,
           patientId: resolvedStudentId,
@@ -2274,11 +2715,28 @@ export class PublicBookingRequestService {
           VALUES (?, ?, NULL, 'scheduled', ?, 'Solicitação pública do Studio confirmada pelo estabelecimento')
         `).run(uuidv4(), apptId, userId);
 
-        if (frequencyPlan) {
+        if (combinedAddonEnrollment) {
+          db.prepare("UPDATE appointments SET package_contract_id = ?, is_package_covered = 1, recurring_plan_id = ? WHERE id = ? AND tenant_id = ?")
+            .run(combinedAddonEnrollment.contractId, combinedAddonEnrollment.recurringPlanId || null, apptId, tenantId);
+          try {
+            const resv = PackageService.reservePackageRightTx({
+              tenantId,
+              contractId: combinedAddonEnrollment.contractId,
+              studentId: resolvedStudentId,
+              serviceId: slotItem.serviceRow.id,
+              appointmentId: apptId,
+              startTime: slotItem.startIso,
+              createdBy: userId
+            });
+            db.prepare(`UPDATE appointments SET package_entitlement_id = ? WHERE id = ? AND tenant_id = ?`).run(resv.entitlementId, apptId, tenantId);
+          } catch (_) {
+            // Plano-base agendável sem limite rígido de créditos ainda mantém o vínculo contratual para cobertura financeira.
+          }
+        } else if (frequencyPlan) {
           db.prepare("UPDATE appointments SET recurring_plan_id = ?, billing_coverage_type = 'periodic_plan' WHERE id = ? AND tenant_id = ?")
             .run(frequencyPlan.id, apptId, tenantId);
         }
-        const unitPrice = frequencyPlan ? 0 : Math.round(Number(slotItem.serviceRow.price || 0) * 100) / 100;
+        const unitPrice = (frequencyPlan || combinedAddonEnrollment) ? 0 : Math.round(Number(slotItem.serviceRow.price || 0) * 100) / 100;
         if (unitPrice > 0) {
           db.prepare(`
             INSERT INTO payments (
@@ -2303,7 +2761,27 @@ export class PublicBookingRequestService {
         createdIds.push(apptId);
       }
 
+      if (combinedAddonEnrollment && expandedAddonSlots.length > 0) {
+        const addonRes = insertScheduledAddonAppointmentsTx({
+          tenantId,
+          contractId: combinedAddonEnrollment.contractId,
+          resolvedStudentId,
+          expandedAddonSlots,
+          studioExtBusyMap,
+          studentNotes: payload.student?.notes || null,
+          userId,
+          gcalSyncTargets
+        });
+        createdIds.push(...addonRes.createdIds);
+        if (!firstOccId && addonRes.firstOccId) firstOccId = addonRes.firstOccId;
+      }
+
       const firstApptId = createdIds[0] || null;
+      const confirmedSvcContractId = combinedAddonEnrollment?.contractId || null;
+      const confirmedSvcBillingPlanId = combinedAddonEnrollment
+        ? (combinedAddonEnrollment.recurringPlanId || null)
+        : (frequencyPlan?.id || null);
+
       db.prepare(`
         UPDATE public_booking_requests
         SET status = 'confirmed',
@@ -2311,6 +2789,7 @@ export class PublicBookingRequestService {
             confirmed_appointment_id = ?,
             confirmed_appointment_ids_json = ?,
             confirmed_series_id = ?,
+            confirmed_contract_id = ?,
             confirmed_billing_plan_id = ?,
             confirmed_by_user_id = ?,
             confirmed_at = ?,
@@ -2322,7 +2801,8 @@ export class PublicBookingRequestService {
         firstApptId,
         JSON.stringify(createdIds),
         seriesId,
-        frequencyPlan?.id || null,
+        confirmedSvcContractId,
+        confirmedSvcBillingPlanId,
         userId,
         confirmedAtIso,
         requestRow.id,
@@ -2337,15 +2817,16 @@ export class PublicBookingRequestService {
         expiresAtIso,
         appointmentId: firstApptId,
         occurrenceId: firstOccId,
-        seriesId
+        seriesId,
+        packageContractId: confirmedSvcContractId
       });
 
       return {
         appointmentId: firstApptId,
         appointmentIds: createdIds,
         seriesId,
-        contractId: null,
-        billingPlanId: frequencyPlan?.id || null,
+        contractId: confirmedSvcContractId,
+        billingPlanId: confirmedSvcBillingPlanId,
         confirmedAtIso,
         expiresAtIso
       };

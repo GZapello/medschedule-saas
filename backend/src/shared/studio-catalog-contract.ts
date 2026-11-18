@@ -59,6 +59,25 @@ export interface ProposedAdjustment extends ProposalEvidence {
   endTime: string;
 }
 
+export interface ProposedAddonOption extends ProposalEvidence {
+  id?: string;
+  label: string;
+  addonServiceName: string;
+  addonServiceRef: string;
+  frequencyType: typeof FREQUENCIES[number] | null;
+  frequencyCount: number | null;
+  creditsPerCycle: number | null;
+  additionalPriceCents: number | null;
+  comboDiscountType: 'none' | 'fixed_cents' | 'percentage';
+  comboDiscountValue: number | null;
+  billingPeriodicity: 'monthly' | 'per_cycle' | 'one_time' | 'bimonthly' | 'quarterly' | 'semiannual' | 'annual';
+  durationMode: 'match_base' | typeof DURATIONS[number];
+  scheduleTiming: 'during_purchase' | 'after_confirmation' | 'not_applicable';
+  mandatoryUnclear?: boolean;
+  ambiguousReason?: string;
+  active: boolean;
+}
+
 export interface ProposedService extends ReviewableRecord {
   activity: string;
   type: typeof SERVICE_TYPES[number] | null;
@@ -76,6 +95,7 @@ export interface ProposedService extends ReviewableRecord {
   prices: ProposedPrice[];
   schedules: ProposedSchedule[];
   adjustments: ProposedAdjustment[];
+  optionalAddons?: ProposedAddonOption[];
 }
 
 export interface ProposedPackageItem {
@@ -136,7 +156,7 @@ export interface ImportAlert {
   scope: 'service' | 'package';
   recordKey: string;
   recordName: string;
-  section: 'general' | 'prices' | 'schedules' | 'adjustments' | 'items';
+  section: 'general' | 'prices' | 'schedules' | 'adjustments' | 'addons' | 'items';
   severity: 'blocking' | 'warning';
   message: string;
 }

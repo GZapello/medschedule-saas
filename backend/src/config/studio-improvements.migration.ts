@@ -892,6 +892,7 @@ export function migrateStudioImprovements(rawDb: DatabaseSync): void {
   addColIfMissing('services', 'access_config_json', 'TEXT');
   addColIfMissing('services', 'pricing_adjustments_json', 'TEXT');
   addColIfMissing('services', 'commercial_price_options_json', 'TEXT');
+  addColIfMissing('services', 'optional_addons_json', 'TEXT');
 
   addColIfMissing('service_package_items', 'item_type', "TEXT NOT NULL DEFAULT 'scheduled_service'");
   addColIfMissing('service_package_items', 'access_mode', 'TEXT');
@@ -908,6 +909,9 @@ export function migrateStudioImprovements(rawDb: DatabaseSync): void {
   addColIfMissing('service_packages', 'auto_renew', 'INTEGER NOT NULL DEFAULT 0');
 
   addColIfMissing('student_package_entitlements', 'entitlement_type', "TEXT NOT NULL DEFAULT 'scheduled_service'");
+  addColIfMissing('student_package_entitlements', 'entitlement_role', "TEXT NOT NULL DEFAULT 'primary'");
+  addColIfMissing('student_package_entitlements', 'addon_option_id', 'TEXT');
+  addColIfMissing('student_package_entitlements', 'addon_pricing_json', 'TEXT');
   addColIfMissing('student_package_entitlements', 'access_mode_snapshot', 'TEXT');
   addColIfMissing('student_package_entitlements', 'monthly_limit_snapshot', 'INTEGER');
   addColIfMissing('student_package_entitlements', 'access_rules_snapshot_json', 'TEXT');
@@ -915,6 +919,7 @@ export function migrateStudioImprovements(rawDb: DatabaseSync): void {
   addColIfMissing('student_package_entitlements', 'delivered_at', 'TEXT');
   addColIfMissing('student_package_entitlements', 'delivered_by', 'TEXT');
 
+  addColIfMissing('student_package_contracts', 'base_service_id', 'TEXT');
   addColIfMissing('student_package_contracts', 'contract_duration_code', 'TEXT');
   addColIfMissing('student_package_contracts', 'payment_periodicity_snapshot', 'TEXT');
   addColIfMissing('student_package_contracts', 'total_contract_amount', 'REAL');

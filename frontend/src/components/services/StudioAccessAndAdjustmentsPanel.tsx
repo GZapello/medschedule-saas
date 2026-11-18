@@ -15,10 +15,27 @@ import {
   StudioAccessConfig,
   StudioPriceAdjustmentRule,
   StudioCommercialPriceOption,
+  StudioOptionalAddonsConfig,
+  StudioOptionalAddonOption,
   DEFAULT_STUDIO_ACCESS_CONFIG,
   PAYMENT_PERIODICITY_LABELS,
-  COMMERCIAL_UNIT_LABELS
+  COMMERCIAL_UNIT_LABELS,
+  ADDON_BILLING_PERIODICITY_LABELS,
+  ADDON_SCHEDULE_TIMING_LABELS,
+  getDefaultOptionalAddonsConfig,
+  resolveDefaultAddonCreditsPerCycle
 } from '../../utils/studioAccessAndCommercial';
+import { PLAN_DURATION_LABELS } from '../../utils/establishmentContext';
+
+export interface AddonCandidateService {
+  id: string;
+  name: string;
+  active?: number | boolean;
+  studio_service_type?: string;
+  service_kind?: string;
+  requires_appointment?: number | boolean;
+  service_domain?: string;
+}
 
 interface StudioAccessAndAdjustmentsPanelProps {
   studioServiceType: StudioServiceType;
@@ -29,6 +46,10 @@ interface StudioAccessAndAdjustmentsPanelProps {
   onPricingAdjustmentsChange: (nextRules: StudioPriceAdjustmentRule[]) => void;
   commercialPriceOptions?: StudioCommercialPriceOption[];
   onCommercialPriceOptionsChange?: (nextOptions: StudioCommercialPriceOption[]) => void;
+  optionalAddons?: StudioOptionalAddonsConfig;
+  onOptionalAddonsChange?: (nextConfig: StudioOptionalAddonsConfig) => void;
+  availableAddonServices?: AddonCandidateService[];
+  currentServiceId?: string | null;
   defaultCapacity: number;
   onDefaultCapacityChange?: (nextCap: number) => void;
   allowPublicBooking?: boolean;
@@ -54,6 +75,10 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
   onPricingAdjustmentsChange,
   commercialPriceOptions = [],
   onCommercialPriceOptionsChange,
+  optionalAddons,
+  onOptionalAddonsChange,
+  availableAddonServices = [],
+  currentServiceId = null,
   defaultCapacity,
   onDefaultCapacityChange,
   allowPublicBooking = true,
@@ -63,6 +88,79 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
   const [newWindowEnd, setNewWindowEnd] = useState('22:00');
   const [showAdjustments, setShowAdjustments] = useState(pricingAdjustments.length > 0);
   const [showCommercialOptions, setShowCommercialOptions] = useState(commercialPriceOptions.length > 0);
+  const effectiveOptionalAddons: StudioOptionalAddonsConfig = optionalAddons || getDefaultOptionalAddonsConfig();
+  const [showOptionalAddons, setShowOptionalAddons] = useState(
+    Boolean(effectiveOptionalAddons.enabled || effectiveOptionalAddons.options.length > 0)
+  );
+  const candidateAddonServices = availableAddonServices.filter(
+    (s) =>
+      s &&
+      s.id !== currentServiceId &&
+      s.active !== false &&
+      s.active !== 0 &&
+      (!s.service_domain || s.service_domain === 'studio')
+  );
+
+  const patchOptionalAddons = (patch: Partial<StudioOptionalAddonsConfig>) => {
+    if (!onOptionalAddonsChange) return;
+    onOptionalAddonsChange({ ...effectiveOptionalAddons, ...patch });
+  };
+
+  const addOptionalAddonOption = () => {
+    if (!onOptionalAddonsChange) return;
+    const defaultTarget = candidateAddonServices[0] || null;
+    const defaultReqAppt =
+      defaultTarget &&
+      (defaultTarget.studio_service_type === 'facility_access' ||
+        defaultTarget.studio_service_type === 'non_scheduled' ||
+        defaultTarget.requires_appointment === 0 ||
+        defaultTarget.requires_appointment === false)
+        ? false
+        : true;
+    const nextOption: StudioOptionalAddonOption = {
+      id: `addon-${Date.now()}-${effectiveOptionalAddons.options.length + 1}`,
+      addonServiceId: defaultTarget?.id || '',
+      addonServiceName: defaultTarget?.name || null,
+      label: defaultTarget ? `${defaultTarget.name} (1x/semana)` : '',
+      description: null,
+      active: true,
+      acceptedBaseOptionIds: [],
+      frequencyType: defaultReqAppt ? 'weekly' : 'unlimited',
+      frequencyCount: defaultReqAppt ? 1 : null,
+      creditsPerCycle: defaultReqAppt ? 4 : null,
+      additionalPriceCents: 0,
+      comboDiscountType: 'none',
+      comboDiscountValue: 0,
+      billingPeriodicity: 'monthly',
+      durationMode: 'match_base',
+      autoRenew: null,
+      scheduleTiming: defaultReqAppt ? 'after_confirmation' : 'not_applicable',
+      displayOrder: effectiveOptionalAddons.options.length
+    };
+    onOptionalAddonsChange({
+      ...effectiveOptionalAddons,
+      enabled: true,
+      options: [...effectiveOptionalAddons.options, nextOption]
+    });
+    setShowOptionalAddons(true);
+  };
+
+  const updateOptionalAddonOption = (idx: number, patch: Partial<StudioOptionalAddonOption>) => {
+    if (!onOptionalAddonsChange) return;
+    onOptionalAddonsChange({
+      ...effectiveOptionalAddons,
+      options: effectiveOptionalAddons.options.map((o, i) => (i === idx ? { ...o, ...patch } : o))
+    });
+  };
+
+  const removeOptionalAddonOption = (idx: number) => {
+    if (!onOptionalAddonsChange) return;
+    const nextOpts = effectiveOptionalAddons.options.filter((_, i) => i !== idx);
+    onOptionalAddonsChange({
+      ...effectiveOptionalAddons,
+      options: nextOpts
+    });
+  };
 
   const addCommercialOption = () => {
     if (!onCommercialPriceOptionsChange) return;
@@ -749,6 +847,394 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
                 className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-700 hover:text-indigo-900 cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" /> Adicionar outra opção comercial
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {onOptionalAddonsChange && (
+        <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-2.5">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div>
+              <div className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-teal-600" />
+                Complementos opcionais
+              </div>
+              <p className="text-[11px] text-slate-500">
+                Ofereça serviços vinculados (ex.: Personal, Pilates, Avaliação) sem duplicar cadastros.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowOptionalAddons(prev => !prev)}
+              className="text-xs font-semibold text-teal-700 hover:text-teal-900 cursor-pointer"
+            >
+              {showOptionalAddons
+                ? 'Ocultar complementos'
+                : effectiveOptionalAddons.options.length > 0
+                  ? `Gerenciar (${effectiveOptionalAddons.options.length})`
+                  : '+ Configurar complementos'}
+            </button>
+          </div>
+
+          {showOptionalAddons && (
+            <div className="space-y-3 pt-2 border-t border-slate-100">
+              <div className="flex flex-wrap items-center gap-4">
+                <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={effectiveOptionalAddons.enabled}
+                    onChange={e => patchOptionalAddons({ enabled: e.target.checked })}
+                  />
+                  Habilitar oferta de complementos neste plano
+                </label>
+                <label className="inline-flex items-center gap-2 text-xs text-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={effectiveOptionalAddons.allowMultiple}
+                    onChange={e => patchOptionalAddons({ allowMultiple: e.target.checked })}
+                  />
+                  Permitir combinar múltiplos complementos
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">
+                    Pergunta exibida ao aluno no agendamento público
+                  </label>
+                  <input
+                    type="text"
+                    value={effectiveOptionalAddons.promptTitle}
+                    onChange={e => patchOptionalAddons({ promptTitle: e.target.value })}
+                    placeholder="Deseja adicionar acompanhamento personalizado?"
+                    className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">
+                    Texto da opção sem complemento
+                  </label>
+                  <input
+                    type="text"
+                    value={effectiveOptionalAddons.noAddonLabel}
+                    onChange={e => patchOptionalAddons({ noAddonLabel: e.target.value })}
+                    placeholder="Não adicionar"
+                    className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white"
+                  />
+                </div>
+              </div>
+
+              {candidateAddonServices.length === 0 && (
+                <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-[11px] text-amber-800">
+                  Cadastre primeiro o serviço complementar (ex.: Acompanhamento Personal) no catálogo para vinculá-lo aqui.
+                </div>
+              )}
+
+              {effectiveOptionalAddons.options.map((opt, idx) => {
+                const netCents = Math.max(
+                  0,
+                  opt.additionalPriceCents -
+                    (opt.comboDiscountType === 'fixed_cents'
+                      ? Math.min(opt.additionalPriceCents, opt.comboDiscountValue)
+                      : opt.comboDiscountType === 'percentage'
+                        ? Math.round((opt.additionalPriceCents * Math.min(100, opt.comboDiscountValue)) / 100)
+                        : 0)
+                );
+                const selectedTarget = candidateAddonServices.find(s => s.id === opt.addonServiceId);
+                const targetRequiresAppt =
+                  selectedTarget &&
+                  (selectedTarget.studio_service_type === 'facility_access' ||
+                    selectedTarget.studio_service_type === 'non_scheduled' ||
+                    selectedTarget.requires_appointment === 0 ||
+                    selectedTarget.requires_appointment === false)
+                    ? false
+                    : true;
+
+                return (
+                  <div key={opt.id} className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-bold text-slate-700">
+                        Complemento #{idx + 1}
+                        {opt.comboDiscountType !== 'none' && opt.comboDiscountValue > 0 && (
+                          <span className="ml-2 text-[11px] font-semibold text-emerald-700">
+                            (Líquido: R$ {(netCents / 100).toFixed(2).replace('.', ',')})
+                          </span>
+                        )}
+                      </span>
+                      <div className="flex items-center gap-3">
+                        <label className="inline-flex items-center gap-1 text-[11px] text-slate-700 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={opt.active !== false}
+                            onChange={e => updateOptionalAddonOption(idx, { active: e.target.checked })}
+                          />
+                          Ativo
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => removeOptionalAddonOption(idx)}
+                          className="text-slate-400 hover:text-rose-600 cursor-pointer"
+                          title="Remover complemento"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {opt.availabilityStatus && opt.availabilityStatus !== 'available' && opt.availabilityMessage && (
+                      <div className="px-2.5 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-[11px] text-amber-800 font-medium">
+                        {opt.availabilityMessage}
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Serviço vinculado</label>
+                        <select
+                          value={opt.addonServiceId}
+                          onChange={e => {
+                            const nextId = e.target.value;
+                            const nextTarget = candidateAddonServices.find(s => s.id === nextId);
+                            const reqAppt =
+                              nextTarget &&
+                              (nextTarget.studio_service_type === 'facility_access' ||
+                                nextTarget.studio_service_type === 'non_scheduled' ||
+                                nextTarget.requires_appointment === 0 ||
+                                nextTarget.requires_appointment === false)
+                                ? false
+                                : true;
+                            updateOptionalAddonOption(idx, {
+                              addonServiceId: nextId,
+                              addonServiceName: nextTarget?.name || null,
+                              label: opt.label || (nextTarget ? nextTarget.name : ''),
+                              scheduleTiming: reqAppt ? (opt.scheduleTiming === 'not_applicable' ? 'after_confirmation' : opt.scheduleTiming) : 'not_applicable'
+                            });
+                          }}
+                          className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white font-semibold"
+                        >
+                          <option value="">Selecione um serviço...</option>
+                          {candidateAddonServices.map(cs => (
+                            <option key={cs.id} value={cs.id}>{cs.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Nome da opção (para o aluno)</label>
+                        <input
+                          type="text"
+                          value={opt.label}
+                          onChange={e => updateOptionalAddonOption(idx, { label: e.target.value })}
+                          placeholder="Ex: Personal 1 vez por semana"
+                          className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Frequência</label>
+                        <select
+                          value={opt.frequencyType}
+                          onChange={e => {
+                            const nextFreq = e.target.value as any;
+                            const nextCount = nextFreq === 'unlimited' ? null : (opt.frequencyCount || 1);
+                            updateOptionalAddonOption(idx, {
+                              frequencyType: nextFreq,
+                              frequencyCount: nextCount,
+                              creditsPerCycle: resolveDefaultAddonCreditsPerCycle(nextFreq, nextCount, 1)
+                            });
+                          }}
+                          className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white"
+                        >
+                          <option value="weekly">Por semana</option>
+                          <option value="monthly">Por mês</option>
+                          <option value="fixed_count">Qtd. fixa</option>
+                          <option value="unlimited">Ilimitado</option>
+                        </select>
+                      </div>
+                      {opt.frequencyType !== 'unlimited' && (
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Qtd. freq.</label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={200}
+                            value={opt.frequencyCount ?? 1}
+                            onChange={e => {
+                              const nextCount = Math.max(1, Number(e.target.value) || 1);
+                              updateOptionalAddonOption(idx, {
+                                frequencyCount: nextCount,
+                                creditsPerCycle: resolveDefaultAddonCreditsPerCycle(opt.frequencyType, nextCount, 1)
+                              });
+                            }}
+                            className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white text-center font-semibold"
+                          />
+                        </div>
+                      )}
+                      {opt.frequencyType !== 'unlimited' && (
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Aulas/créditos por ciclo</label>
+                          <input
+                            type="number"
+                            min={0}
+                            max={500}
+                            value={opt.creditsPerCycle ?? 0}
+                            onChange={e => updateOptionalAddonOption(idx, { creditsPerCycle: Math.max(0, Number(e.target.value) || 0) })}
+                            className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white text-center font-semibold"
+                          />
+                        </div>
+                      )}
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Valor adicional (R$)</label>
+                        <input
+                          type="number"
+                          min={0}
+                          step={0.01}
+                          value={(opt.additionalPriceCents / 100).toFixed(2)}
+                          onChange={e => updateOptionalAddonOption(idx, { additionalPriceCents: Math.max(0, Math.round((Number(e.target.value) || 0) * 100)) })}
+                          className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white font-bold"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Desconto combo</label>
+                        <select
+                          value={opt.comboDiscountType}
+                          onChange={e => updateOptionalAddonOption(idx, { comboDiscountType: e.target.value as any, comboDiscountValue: 0 })}
+                          className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white"
+                        >
+                          <option value="none">Sem desconto</option>
+                          <option value="fixed_cents">Desconto fixo (R$)</option>
+                          <option value="percentage">Percentual (%)</option>
+                        </select>
+                      </div>
+                      {opt.comboDiscountType !== 'none' && (
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">
+                            {opt.comboDiscountType === 'percentage' ? 'Desconto (%)' : 'Valor desconto (R$)'}
+                          </label>
+                          <input
+                            type="number"
+                            min={0}
+                            max={opt.comboDiscountType === 'percentage' ? 100 : opt.additionalPriceCents / 100}
+                            step={opt.comboDiscountType === 'percentage' ? 1 : 0.01}
+                            value={opt.comboDiscountType === 'percentage' ? opt.comboDiscountValue : (opt.comboDiscountValue / 100).toFixed(2)}
+                            onChange={e => {
+                              const rawNum = Number(e.target.value) || 0;
+                              updateOptionalAddonOption(idx, {
+                                comboDiscountValue:
+                                  opt.comboDiscountType === 'percentage'
+                                    ? Math.max(0, Math.min(100, Math.round(rawNum)))
+                                    : Math.max(0, Math.round(rawNum * 100))
+                              });
+                            }}
+                            className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white"
+                          />
+                        </div>
+                      )}
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Cobrança do complemento</label>
+                        <select
+                          value={opt.billingPeriodicity}
+                          onChange={e => updateOptionalAddonOption(idx, { billingPeriodicity: e.target.value as any })}
+                          className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white"
+                        >
+                          {Object.entries(ADDON_BILLING_PERIODICITY_LABELS).map(([k, lbl]) => (
+                            <option key={k} value={k}>{lbl}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Duração do complemento</label>
+                        <select
+                          value={opt.durationMode}
+                          onChange={e => updateOptionalAddonOption(idx, { durationMode: e.target.value as any })}
+                          className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white"
+                        >
+                          <option value="match_base">Seguir duração do plano-base</option>
+                          {(['1_month', '2_months', '3_months', '6_months', '12_months', '24_months'] as const).map(code => (
+                            <option key={code} value={code}>{PLAN_DURATION_LABELS[code]}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Renovação do complemento</label>
+                        <select
+                          value={opt.autoRenew === null ? 'inherit' : opt.autoRenew ? 'yes' : 'no'}
+                          onChange={e => {
+                            const v = e.target.value;
+                            updateOptionalAddonOption(idx, { autoRenew: v === 'inherit' ? null : v === 'yes' });
+                          }}
+                          className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white"
+                        >
+                          <option value="inherit">Seguir renovação do plano-base</option>
+                          <option value="yes">Renovação automática ativada</option>
+                          <option value="no">Sem renovação automática</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Escolha de horários</label>
+                        <select
+                          value={targetRequiresAppt ? opt.scheduleTiming : 'not_applicable'}
+                          disabled={!targetRequiresAppt}
+                          onChange={e => updateOptionalAddonOption(idx, { scheduleTiming: e.target.value as any })}
+                          className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white disabled:bg-slate-100"
+                        >
+                          {Object.entries(ADDON_SCHEDULE_TIMING_LABELS).map(([k, lbl]) => (
+                            <option key={k} value={k}>{lbl}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {commercialPriceOptions.length > 0 && (
+                      <div className="pt-1 border-t border-slate-200/80">
+                        <span className="block text-[11px] font-semibold text-slate-600 mb-1">
+                          Planos-base que aceitam este complemento (deixe todos desmarcados para aceitar qualquer opção):
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {commercialPriceOptions.filter(bo => bo.active).map(bo => {
+                            const checked = opt.acceptedBaseOptionIds.includes(bo.id);
+                            return (
+                              <button
+                                key={bo.id}
+                                type="button"
+                                onClick={() => {
+                                  const nextIds = checked
+                                    ? opt.acceptedBaseOptionIds.filter(id => id !== bo.id)
+                                    : [...opt.acceptedBaseOptionIds, bo.id];
+                                  updateOptionalAddonOption(idx, { acceptedBaseOptionIds: nextIds });
+                                }}
+                                className={`px-2 py-0.5 rounded-full text-[11px] border font-semibold cursor-pointer ${
+                                  checked
+                                    ? 'bg-teal-600 text-white border-teal-600'
+                                    : 'bg-white text-slate-600 border-slate-200 hover:border-teal-300'
+                                }`}
+                              >
+                                {bo.label || PAYMENT_PERIODICITY_LABELS[bo.paymentPeriodicity] || bo.id}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              <button
+                type="button"
+                onClick={addOptionalAddonOption}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-teal-700 hover:text-teal-900 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" /> Adicionar complemento opcional
               </button>
             </div>
           )}

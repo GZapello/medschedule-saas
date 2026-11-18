@@ -34,7 +34,10 @@ import {
   normalizeStudioServiceType,
   normalizeStudioAccessConfig,
   normalizeCommercialPriceOptions,
-  normalizeStudioPriceAdjustments
+  normalizeStudioPriceAdjustments,
+  normalizeOptionalAddonsConfig,
+  hydrateOptionalAddonsConfig,
+  OptionalAddonTargetSummary
 } from '../utils/studio-access-and-commercial';
 
 
@@ -1540,7 +1543,8 @@ export class TenantController {
                COALESCE(s.requires_active_contract, 0) as requires_active_contract,
                COALESCE(s.allow_public_booking, 1) as allow_public_booking,
                s.effective_start_date, s.effective_end_date,
-               s.access_config_json, s.pricing_adjustments_json, s.commercial_price_options_json
+               s.access_config_json, s.pricing_adjustments_json, s.commercial_price_options_json,
+               s.optional_addons_json
         FROM services s LEFT JOIN specialties spec ON spec.id = s.specialty_id
         WHERE s.tenant_id = ? AND s.active = 1 AND COALESCE(s.allow_public_booking, 1) = 1 AND (
           EXISTS (
@@ -1621,7 +1625,8 @@ export class TenantController {
         }
       }
 
-      const enrichedServices = (services as any[])
+      const rawAddonsJsonByServiceId = new Map<string, any>();
+      const baseEnrichedServices = (services as any[])
         .map(srv => {
           const scheds = publicSchedulesByService.get(srv.id) || [];
           const resolvedDomain = resolveServiceDomain({
@@ -1636,6 +1641,7 @@ export class TenantController {
             delete srv.access_config_json;
             delete srv.pricing_adjustments_json;
             delete srv.commercial_price_options_json;
+            delete srv.optional_addons_json;
             return {
               ...srv,
               studio_service_type: 'individual',
@@ -1645,7 +1651,8 @@ export class TenantController {
               service_domain: 'clinical',
               availability_mode: 'professional_schedule',
               class_schedules: [],
-              weekly_schedule_summary: []
+              weekly_schedule_summary: [],
+              optional_addons: null
             };
           }
           const studioServiceType = resolvedDomain === 'studio'
@@ -1663,9 +1670,13 @@ export class TenantController {
           const commercialPriceOptions = resolvedDomain === 'studio'
             ? normalizeCommercialPriceOptions(srv.commercial_price_options_json)
             : [];
+          if (resolvedDomain === 'studio' && srv.optional_addons_json) {
+            rawAddonsJsonByServiceId.set(srv.id, srv.optional_addons_json);
+          }
           delete srv.access_config_json;
           delete srv.pricing_adjustments_json;
           delete srv.commercial_price_options_json;
+          delete srv.optional_addons_json;
 
           const recCfg = parseServiceRecurrenceConfig(srv);
           const isGroup = (srv.service_kind || 'individual') === 'group' && requiresAppointment === 1;
@@ -1725,6 +1736,151 @@ export class TenantController {
           };
         })
         .filter(srv => !isStudioCompat || srv.requires_appointment === 0 || srv.service_kind !== 'group' || srv.active_schedules_count > 0 || srv.is_publicly_available);
+
+      const addonServicesList: any[] = [];
+      const enrichedServices = isStudioCompat
+        ? (() => {
+            const addonTargetsById = new Map<string, OptionalAddonTargetSummary>();
+            const referencedIds = new Set<string>();
+            for (const rawJson of rawAddonsJsonByServiceId.values()) {
+              const cfg = normalizeOptionalAddonsConfig(rawJson);
+              for (const opt of cfg.options) {
+                if (opt.active && opt.addonServiceId) referencedIds.add(opt.addonServiceId);
+              }
+            }
+            const publicById = new Map<string, any>(baseEnrichedServices.map((s: any) => [s.id, s]));
+            for (const targetId of referencedIds) {
+              const inCatalog = publicById.get(targetId);
+              if (inCatalog) {
+                const reqAppt = inCatalog.requires_appointment !== 0;
+                const isGroup = (inCatalog.service_kind || 'individual') === 'group' && reqAppt;
+                addonTargetsById.set(targetId, {
+                  id: inCatalog.id,
+                  name: inCatalog.name,
+                  active: true,
+                  studioServiceType: inCatalog.studio_service_type,
+                  requiresAppointment: reqAppt,
+                  isGroup,
+                  hasInstructor: Array.isArray(inCatalog.linked_professionals) && inCatalog.linked_professionals.length > 0,
+                  hasSchedule: !isGroup || Boolean(inCatalog.is_publicly_available && inCatalog.has_public_schedules)
+                });
+                addonServicesList.push({
+                  id: inCatalog.id,
+                  name: inCatalog.name,
+                  description: inCatalog.description,
+                  duration_minutes: inCatalog.duration_minutes,
+                  modality: inCatalog.modality,
+                  service_kind: inCatalog.service_kind,
+                  studio_service_type: inCatalog.studio_service_type,
+                  requires_appointment: inCatalog.requires_appointment,
+                  default_capacity: inCatalog.default_capacity,
+                  availability_mode: inCatalog.availability_mode,
+                  linked_professionals: inCatalog.linked_professionals,
+                  class_schedules: inCatalog.class_schedules,
+                  weekly_schedule_summary: inCatalog.weekly_schedule_summary
+                });
+                continue;
+              }
+
+              const row = db.prepare(`
+                SELECT s.id, s.name, s.description, s.duration_minutes, s.modality, s.active,
+                       COALESCE(s.service_kind, 'individual') as service_kind,
+                       s.default_capacity, s.professional_id, s.service_domain, s.clinical_module,
+                       COALESCE(s.studio_service_type, CASE WHEN COALESCE(s.service_kind, 'individual') = 'group' THEN 'group' ELSE 'individual' END) as studio_service_type,
+                       COALESCE(s.requires_appointment, 1) as requires_appointment,
+                       COALESCE(s.availability_mode, 'professional_schedule') as availability_mode
+                FROM services s
+                WHERE s.id = ? AND s.tenant_id = ?
+              `).get(targetId, resolved.id) as any;
+              if (!row) continue;
+
+              const targetDomain = resolveServiceDomain({
+                establishmentProfile,
+                serviceDomain: row.service_domain,
+                serviceKind: row.service_kind,
+                clinicalModule: row.clinical_module
+              });
+              if (targetDomain !== 'studio') continue;
+
+              const stType = normalizeStudioServiceType(row.studio_service_type, row.service_kind);
+              const reqAppt = stType === 'facility_access' || stType === 'non_scheduled' ? false : Number(row.requires_appointment ?? 1) !== 0;
+              const isGroup = (row.service_kind || 'individual') === 'group' && reqAppt;
+              const publicProfs = publicLinkedByService.get(row.id) || [];
+              const anyActiveProf = reqAppt && !isGroup
+                ? db.prepare(`
+                    SELECT p.id, p.name, COALESCE(prof.name, p.profession_name) as profession_name,
+                           COALESCE(p.public_booking_enabled, 1) as public_booking_enabled
+                    FROM professionals p
+                    LEFT JOIN professions prof ON prof.id = p.profession_id
+                    WHERE p.tenant_id = ? AND p.active = 1 AND (
+                      p.id = ? OR EXISTS (SELECT 1 FROM professional_services ps WHERE ps.service_id = ? AND ps.professional_id = p.id)
+                    )
+                    ORDER BY p.name ASC
+                  `).all(resolved.id, row.professional_id || '', row.id) as any[]
+                : [];
+              const pubScheds = publicSchedulesByService.get(row.id) || [];
+              const allScheds = allSchedulesByService.get(row.id) || [];
+              const diag = isGroup ? ClassScheduleService.diagnoseServiceSchedules(resolved.id, row.id, allScheds) : null;
+
+              addonTargetsById.set(row.id, {
+                id: row.id,
+                name: row.name,
+                active: Number(row.active) !== 0,
+                studioServiceType: stType,
+                requiresAppointment: reqAppt,
+                isGroup,
+                hasInstructor: publicProfs.length > 0 || anyActiveProf.length > 0,
+                hasSchedule: !isGroup || Boolean(diag && diag.publishableCount > 0 && pubScheds.length > 0)
+              });
+
+              if (Number(row.active) !== 0) {
+                const publicSelectableProfs = publicProfs.length > 0
+                  ? publicProfs
+                  : anyActiveProf.filter((ap: any) => Number(ap.public_booking_enabled ?? 1) === 1);
+                addonServicesList.push({
+                  id: row.id,
+                  name: row.name,
+                  description: row.description,
+                  duration_minutes: row.duration_minutes,
+                  modality: row.modality,
+                  service_kind: row.service_kind,
+                  studio_service_type: stType,
+                  requires_appointment: reqAppt ? 1 : 0,
+                  default_capacity: row.default_capacity,
+                  availability_mode: row.availability_mode,
+                  linked_professionals: publicSelectableProfs,
+                  class_schedules: pubScheds,
+                  weekly_schedule_summary: buildWeeklyScheduleSummary(pubScheds)
+                });
+              }
+            }
+
+            return baseEnrichedServices.map((srv: any) => {
+              const rawAddonsJson = rawAddonsJsonByServiceId.get(srv.id);
+              if (!rawAddonsJson || srv.service_domain !== 'studio') {
+                return { ...srv, optional_addons: null };
+              }
+              const hydrated = hydrateOptionalAddonsConfig(rawAddonsJson, addonTargetsById, { publicOnly: true });
+              const filteredOpts = hydrated.options.filter((opt) => {
+                if (opt.scheduleTiming !== 'during_purchase') return true;
+                const meta = addonServicesList.find((m) => m.id === opt.addonServiceId);
+                if (!meta || meta.requires_appointment === 0) return true;
+                if (meta.service_kind === 'group') {
+                  return Array.isArray(meta.class_schedules) && meta.class_schedules.length > 0;
+                }
+                return Array.isArray(meta.linked_professionals) && meta.linked_professionals.length > 0;
+              });
+              return {
+                ...srv,
+                optional_addons: {
+                  ...hydrated,
+                  enabled: hydrated.enabled && filteredOpts.length > 0,
+                  options: filteredOpts
+                }
+              };
+            });
+          })()
+        : baseEnrichedServices;
       const rawPackages = isStudioCompat
         ? PackageService.listCatalogPackages(resolved.id, { publicOnly: true })
         : [];
@@ -1752,7 +1908,8 @@ export class TenantController {
         tenant,
         professionals: publicProfessionals,
         services: enrichedServices,
-        packages
+        packages,
+        addon_services: addonServicesList
       });
     } catch (err: any) {
       if (respondBillingError(res, err)) return;

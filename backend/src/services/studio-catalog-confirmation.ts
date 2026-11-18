@@ -4,7 +4,15 @@ import { db } from '../config/database';
 import { ServiceController, ServiceSaveResponse } from '../controllers/service.controller';
 import { getTenantEstablishmentProfile, PLAN_DURATION_MONTHS, resolveServiceDomain } from '../utils/establishment-context';
 import { checkProfessionalScheduleCoverage, getProfessionalScheduleSegmentsForDay, parseClockMinutes, WEEKDAY_NAMES_PT } from '../utils/service-availability';
-import { getPaymentPeriodicityCycleMonths, normalizeCommercialPriceOptions, normalizeStudioPriceAdjustments, normalizeStudioServiceType } from '../utils/studio-access-and-commercial';
+import {
+  getPaymentPeriodicityCycleMonths,
+  normalizeCommercialPriceOptions,
+  normalizeOptionalAddonsConfig,
+  normalizeStudioPriceAdjustments,
+  normalizeStudioServiceType,
+  resolveDefaultAddonCreditsPerCycle,
+  StudioOptionalAddonOption
+} from '../utils/studio-access-and-commercial';
 import { PackageService } from './package.service';
 import { minutesToHHMM, todayBrazilYmd } from './class-schedule.service';
 import { catalogError } from './studio-catalog-files';
@@ -27,6 +35,7 @@ type CatalogService = {
   duration_minutes: number; service_domain: string | null; service_kind: string; studio_service_type: string;
   clinical_module: string | null; active: number; commercial_price_options_json: string | null;
   pricing_adjustments_json: string | null; access_config_json: string | null; availability_mode: string | null;
+  optional_addons_json?: string | null;
 };
 
 const WEEKDAY_SHORT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -534,6 +543,67 @@ export function buildProposalDiagnostics(
       }
     }
 
+    if (
+      Array.isArray(row.optionalAddons) &&
+      row.optionalAddons.length > 0 &&
+      (row.action === 'create' || (row.action === 'update' && row.apply.includes('addons')) || row.action === 'ignore')
+    ) {
+      const addonSeverity = severityFor(row.action === 'create' || (row.action === 'update' && row.apply.includes('addons')));
+      for (let ai = 0; ai < row.optionalAddons.length; ai++) {
+        const ao = row.optionalAddons[ai];
+        if (!ao.active) continue;
+        if (ao.mandatoryUnclear) {
+          hasServiceIssue = true;
+          alerts.push({
+            id: `addon-unclear-${row.key}-${ai}`,
+            scope: 'service',
+            recordKey: row.key,
+            recordName: row.name || 'Serviço',
+            section: 'addons',
+            severity: addonSeverity,
+            message: `${row.name || 'Serviço'} · Complemento "${ao.label || ao.addonServiceName}": ${ao.ambiguousReason || 'Confirme se é complemento opcional ou pacote obrigatório.'}`
+          });
+        }
+        const resolvedRef = ao.addonServiceRef
+          ? (ao.addonServiceRef.startsWith('existing:')
+              ? catalog.services.find(s => s.active && s.id === ao.addonServiceRef.slice(9))?.id
+              : proposal.services.find(ps => ps.key === ao.addonServiceRef && ps.action !== 'ignore')?.key)
+          : (() => {
+              const targetKey = nameKey(ao.addonServiceName || ao.label);
+              if (!targetKey) return null;
+              const propMatches = proposal.services.filter(ps => ps.key !== row.key && ps.action !== 'ignore' && nameKey(ps.name) === targetKey);
+              if (propMatches.length === 1) return propMatches[0].key;
+              const catMatches = catalog.services.filter(cs => cs.active && nameKey(cs.name) === targetKey);
+              if (catMatches.length === 1) return catMatches[0].id;
+              return null;
+            })();
+        if (!resolvedRef) {
+          hasServiceIssue = true;
+          alerts.push({
+            id: `addon-ref-${row.key}-${ai}`,
+            scope: 'service',
+            recordKey: row.key,
+            recordName: row.name || 'Serviço',
+            section: 'addons',
+            severity: addonSeverity,
+            message: `${row.name || 'Serviço'} · Complemento "${ao.label || ai + 1}": vincule a um serviço ativo existente ou incluído nesta importação.`
+          });
+        }
+        if (ao.additionalPriceCents === null || ao.additionalPriceCents < 0) {
+          hasServiceIssue = true;
+          alerts.push({
+            id: `addon-prc-${row.key}-${ai}`,
+            scope: 'service',
+            recordKey: row.key,
+            recordName: row.name || 'Serviço',
+            section: 'addons',
+            severity: addonSeverity,
+            message: `${row.name || 'Serviço'} · Complemento "${ao.label || ai + 1}": confirme o valor adicional do complemento.`
+          });
+        }
+      }
+    }
+
     const slotBlocking = rowChecks.some(c => c.status !== 'ok' && c.status !== 'not_schedulable') && !row.deferSchedules;
     if (hasServiceIssue || slotBlocking || row.issues.length > 0) servicesPending++;
     else servicesReady++;
@@ -894,6 +964,33 @@ export function applyStudioCatalog(req: Request, proposal: StudioProposal) {
         ? scheduleInput(row, type, professional || '', capacity, duration || 0, tenantId, catalog.professionals, current)
         : {};
 
+      const applyAddonsOnRow = (isCreate || row.apply.includes('addons')) && Array.isArray(row.optionalAddons)
+        ? row.optionalAddons.filter(a => a && a.active !== false)
+        : [];
+      for (const ao of applyAddonsOnRow) {
+        if (ao.mandatoryUnclear) {
+          throw catalogError(`Confirme se o item "${ao.label || ao.addonServiceName}" é complemento opcional ou pacote obrigatório antes de aplicar.`);
+        }
+        if (ao.additionalPriceCents === null || ao.additionalPriceCents < 0) {
+          throw catalogError(`Informe o valor adicional do complemento "${ao.label || ao.addonServiceName}".`);
+        }
+        const rawRef = String(ao.addonServiceRef || '').trim();
+        const hasPlannedTarget =
+          (rawRef.startsWith('existing:') && catalog.services.some(s => s.active && s.id === rawRef.slice(9))) ||
+          proposal.services.some(ps => ps.key !== row.key && ps.action !== 'ignore' && ps.key === rawRef) ||
+          (() => {
+            const targetKey = nameKey(ao.addonServiceName || ao.label);
+            if (!targetKey) return false;
+            return (
+              proposal.services.some(ps => ps.key !== row.key && ps.action !== 'ignore' && nameKey(ps.name) === targetKey) ||
+              catalog.services.some(cs => cs.active && cs.id !== current?.id && nameKey(cs.name) === targetKey)
+            );
+          })();
+        if (!hasPlannedTarget) {
+          throw catalogError(`Vincule um serviço complementar distinto e ativo para "${ao.label || ao.addonServiceName}".`);
+        }
+      }
+
       const body: Record<string, unknown> = { serviceDomain: 'studio' };
       if (identity) Object.assign(body, { name: row.name, description: asDescription(row), modalityCategory: row.activity || null });
       const effectiveAllowPublic =
@@ -932,6 +1029,103 @@ export function applyStudioCatalog(req: Request, proposal: StudioProposal) {
       const saved = db.prepare('SELECT * FROM services WHERE tenant_id = ? AND id = ?').get(tenantId, id) as CatalogService;
       if (current) Object.assign(current, saved);
       else catalog.services.push(saved);
+    } catch (error) {
+      throw catalogError((row.name || 'Serviço sem nome') + ' — ' + (error as Error).message, (error as { status?: number }).status || 500);
+    }
+  }
+
+  // Segunda passagem: vincula complementos opcionais após todos os serviços da importação terem ID definido
+  for (const row of proposal.services) {
+    if (row.action === 'ignore' || row.action === 'link') continue;
+    if (row.action === 'update' && !row.apply.includes('addons')) continue;
+    const rawAddons = Array.isArray(row.optionalAddons) ? row.optionalAddons.filter(a => a && a.active !== false) : [];
+    if (rawAddons.length === 0) continue;
+
+    try {
+      const baseId = references.get(row.key);
+      if (!baseId) continue;
+      const baseRow = catalog.services.find(s => s.id === baseId);
+      const existingCfg = normalizeOptionalAddonsConfig(baseRow?.optional_addons_json);
+      const mergedOptions: StudioOptionalAddonOption[] = row.action === 'update' ? [...existingCfg.options] : [];
+      const sig = (o: StudioOptionalAddonOption) =>
+        JSON.stringify([o.addonServiceId, o.frequencyType, o.frequencyCount, o.billingPeriodicity, o.durationMode]);
+      const seenSig = new Set(mergedOptions.map(sig));
+
+      for (let ai = 0; ai < rawAddons.length; ai++) {
+        const ao = rawAddons[ai];
+        if (ao.mandatoryUnclear) {
+          throw catalogError(`Confirme se o item "${ao.label || ao.addonServiceName}" é complemento opcional ou pacote obrigatório antes de aplicar.`);
+        }
+        if (ao.additionalPriceCents === null || ao.additionalPriceCents < 0) {
+          throw catalogError(`Informe o valor adicional do complemento "${ao.label || ao.addonServiceName}".`);
+        }
+
+        let targetId = ao.addonServiceRef ? (references.get(ao.addonServiceRef) || '') : '';
+        if (!targetId) {
+          const targetKey = nameKey(ao.addonServiceName || ao.label);
+          if (targetKey) {
+            const matchedProp = proposal.services.filter(ps => ps.key !== row.key && ps.action !== 'ignore' && nameKey(ps.name) === targetKey);
+            if (matchedProp.length === 1) targetId = references.get(matchedProp[0].key) || '';
+            if (!targetId) {
+              const matchedCat = catalog.services.filter(cs => cs.active && cs.id !== baseId && nameKey(cs.name) === targetKey);
+              if (matchedCat.length === 1) targetId = matchedCat[0].id;
+            }
+          }
+        }
+        if (!targetId || targetId === baseId) {
+          throw catalogError(`Vincule um serviço complementar distinto e ativo para "${ao.label || ao.addonServiceName}".`);
+        }
+
+        const targetSrv = catalog.services.find(s => s.id === targetId);
+        const freqType = ao.frequencyType || 'weekly';
+        const freqCount = freqType === 'unlimited' ? null : (ao.frequencyCount || 1);
+        const creditsPerCycle = freqType === 'unlimited'
+          ? null
+          : (ao.creditsPerCycle !== null && ao.creditsPerCycle !== undefined
+              ? ao.creditsPerCycle
+              : resolveDefaultAddonCreditsPerCycle(freqType, freqCount, 1));
+        const targetType = targetSrv ? normalizeStudioServiceType(targetSrv.studio_service_type, targetSrv.service_kind) : 'individual';
+
+        const newOpt: StudioOptionalAddonOption = {
+          id: ao.id || `addon-${randomUUID().slice(0, 8)}`,
+          addonServiceId: targetId,
+          addonServiceName: targetSrv?.name || ao.addonServiceName || ao.label,
+          addonServiceType: targetType,
+          label: ao.label || targetSrv?.name || `Complemento ${ai + 1}`,
+          description: null,
+          active: true,
+          acceptedBaseOptionIds: [],
+          frequencyType: freqType,
+          frequencyCount: freqCount,
+          creditsPerCycle,
+          additionalPriceCents: ao.additionalPriceCents,
+          comboDiscountType: ao.comboDiscountType || 'none',
+          comboDiscountValue: ao.comboDiscountValue || 0,
+          billingPeriodicity: ao.billingPeriodicity || 'monthly',
+          durationMode: ao.durationMode || 'match_base',
+          autoRenew: null,
+          scheduleTiming: targetType === 'facility_access' || targetType === 'non_scheduled' ? 'not_applicable' : (ao.scheduleTiming || 'after_confirmation'),
+          displayOrder: mergedOptions.length
+        };
+
+        const key = sig(newOpt);
+        if (!seenSig.has(key)) {
+          mergedOptions.push(newOpt);
+          seenSig.add(key);
+        }
+      }
+
+      if (mergedOptions.length > 0) {
+        saveService(req, {
+          optionalAddons: {
+            enabled: true,
+            allowMultiple: existingCfg.allowMultiple || mergedOptions.length > 1,
+            promptTitle: existingCfg.promptTitle || 'Deseja adicionar acompanhamento personalizado?',
+            noAddonLabel: existingCfg.noAddonLabel || 'Não adicionar',
+            options: mergedOptions
+          }
+        }, baseId);
+      }
     } catch (error) {
       throw catalogError((row.name || 'Serviço sem nome') + ' — ' + (error as Error).message, (error as { status?: number }).status || 500);
     }

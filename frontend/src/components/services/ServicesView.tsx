@@ -37,12 +37,15 @@ import { ServiceFormBody, ServiceFormSection, StudioServiceIndicators, StudioSer
 import { StudioAccessAndAdjustmentsPanel } from './StudioAccessAndAdjustmentsPanel';
 import {
   DEFAULT_STUDIO_ACCESS_CONFIG,
+  getDefaultOptionalAddonsConfig,
   normalizeCommercialPriceOptions,
+  normalizeOptionalAddonsConfig,
   normalizeStudioAccessConfig,
   normalizeStudioPriceAdjustments,
   normalizeStudioServiceType,
   StudioAccessConfig,
   StudioCommercialPriceOption,
+  StudioOptionalAddonsConfig,
   StudioPriceAdjustmentRule,
   StudioServiceType
 } from '../../utils/studioAccessAndCommercial';
@@ -379,6 +382,7 @@ export const ServicesView: React.FC = () => {
   const [accessConfig, setAccessConfig] = useState<StudioAccessConfig>(DEFAULT_STUDIO_ACCESS_CONFIG);
   const [pricingAdjustments, setPricingAdjustments] = useState<StudioPriceAdjustmentRule[]>([]);
   const [commercialPriceOptions, setCommercialPriceOptions] = useState<StudioCommercialPriceOption[]>([]);
+  const [optionalAddons, setOptionalAddons] = useState<StudioOptionalAddonsConfig>(getDefaultOptionalAddonsConfig());
   const [allowPublicBooking, setAllowPublicBooking] = useState<boolean>(true);
   const [defaultCapacity, setDefaultCapacity] = useState<number>(10);
   const [allowRecurrence, setAllowRecurrence] = useState<boolean>(true);
@@ -427,6 +431,7 @@ export const ServicesView: React.FC = () => {
   const [editAccessConfig, setEditAccessConfig] = useState<StudioAccessConfig>(DEFAULT_STUDIO_ACCESS_CONFIG);
   const [editPricingAdjustments, setEditPricingAdjustments] = useState<StudioPriceAdjustmentRule[]>([]);
   const [editCommercialPriceOptions, setEditCommercialPriceOptions] = useState<StudioCommercialPriceOption[]>([]);
+  const [editOptionalAddons, setEditOptionalAddons] = useState<StudioOptionalAddonsConfig>(getDefaultOptionalAddonsConfig());
   const [editAllowPublicBooking, setEditAllowPublicBooking] = useState<boolean>(true);
   const [editDefaultCapacity, setEditDefaultCapacity] = useState<number>(10);
   const [editAllowRecurrence, setEditAllowRecurrence] = useState<boolean>(true);
@@ -763,6 +768,7 @@ export const ServicesView: React.FC = () => {
               accessConfig: studioServiceType === 'facility_access' ? accessConfig : null,
               pricingAdjustments,
               commercialPriceOptions,
+              optionalAddons,
               allowedRecurrenceFrequencies: allowRecurrence ? allowedFrequencies : [],
               allowedRecurrenceWeekdays:
                 allowRecurrence
@@ -840,6 +846,7 @@ export const ServicesView: React.FC = () => {
       setLinkedTemplateIds([]);
       setDraftClassSchedules([]);
       setCommercialPriceOptions([]);
+      setOptionalAddons(getDefaultOptionalAddonsConfig());
       setPricingAdjustments([]);
       setAvailabilityMode('professional_schedule');
       setAvailabilityWindows([]);
@@ -916,6 +923,7 @@ export const ServicesView: React.FC = () => {
     setEditAccessConfig(normalizeStudioAccessConfig(s.access_config));
     setEditPricingAdjustments(normalizeStudioPriceAdjustments(s.pricing_adjustments));
     setEditCommercialPriceOptions(normalizeCommercialPriceOptions(s.commercial_price_options));
+    setEditOptionalAddons(normalizeOptionalAddonsConfig(s.optional_addons));
     setEditAllowPublicBooking(s.allow_public_booking !== 0 && s.allow_public_booking !== false);
     setEditDefaultCapacity(Number(s.default_capacity) || 10);
     setEditAllowRecurrence(recCfg.allowRecurrence);
@@ -1044,6 +1052,7 @@ export const ServicesView: React.FC = () => {
               accessConfig: editStudioServiceType === 'facility_access' ? editAccessConfig : null,
               pricingAdjustments: editPricingAdjustments,
               commercialPriceOptions: editCommercialPriceOptions,
+              optionalAddons: editOptionalAddons,
               allowedRecurrenceFrequencies: editAllowRecurrence ? editAllowedFrequencies : [],
               allowedRecurrenceWeekdays:
                 editAllowRecurrence
@@ -1405,6 +1414,11 @@ export const ServicesView: React.FC = () => {
                               {isStudioCompatible && s.billing_mode && s.billing_mode !== 'per_session' && (
                                 <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded inline-block mt-0.5">
                                   {SERVICE_BILLING_MODE_LABELS[s.billing_mode] || s.billing_mode}
+                                </span>
+                              )}
+                              {isStudioCompatible && s.optional_addons?.enabled && (s.optional_addons.options?.filter(o => o.active).length || 0) > 0 && (
+                                <span className="text-[10px] font-semibold text-teal-700 bg-teal-50 border border-teal-200 px-1.5 py-0.5 rounded inline-block mt-0.5 ml-1">
+                                  + {s.optional_addons.options.filter(o => o.active).length} complemento(s)
                                 </span>
                               )}
                             </div>
@@ -1955,6 +1969,9 @@ export const ServicesView: React.FC = () => {
                     onPricingAdjustmentsChange={setPricingAdjustments}
                     commercialPriceOptions={commercialPriceOptions}
                     onCommercialPriceOptionsChange={setCommercialPriceOptions}
+                    optionalAddons={optionalAddons}
+                    onOptionalAddonsChange={setOptionalAddons}
+                    availableAddonServices={services}
                     defaultCapacity={defaultCapacity}
                     onDefaultCapacityChange={setDefaultCapacity}
                     allowPublicBooking={allowPublicBooking}
@@ -2511,6 +2528,10 @@ export const ServicesView: React.FC = () => {
                     onPricingAdjustmentsChange={setEditPricingAdjustments}
                     commercialPriceOptions={editCommercialPriceOptions}
                     onCommercialPriceOptionsChange={setEditCommercialPriceOptions}
+                    optionalAddons={editOptionalAddons}
+                    onOptionalAddonsChange={setEditOptionalAddons}
+                    availableAddonServices={services}
+                    currentServiceId={editingService?.id || null}
                     defaultCapacity={editDefaultCapacity}
                     onDefaultCapacityChange={setEditDefaultCapacity}
                     allowPublicBooking={editAllowPublicBooking}

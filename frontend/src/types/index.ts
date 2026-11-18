@@ -256,6 +256,7 @@ export interface Service {
   access_config?: import('../utils/studioAccessAndCommercial').StudioAccessConfig | null;
   pricing_adjustments?: import('../utils/studioAccessAndCommercial').StudioPriceAdjustmentRule[];
   commercial_price_options?: import('../utils/studioAccessAndCommercial').StudioCommercialPriceOption[];
+  optional_addons?: import('../utils/studioAccessAndCommercial').StudioOptionalAddonsConfig | null;
   default_capacity?: number | null;
   allow_recurrence?: number;
   allowed_recurrence_frequencies?: (

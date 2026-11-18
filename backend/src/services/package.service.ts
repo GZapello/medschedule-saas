@@ -1159,15 +1159,21 @@ export class PackageService {
       try {
         if (e.allowed_service_ids_json) allowedServiceIds = JSON.parse(e.allowed_service_ids_json);
       } catch (_) {}
+      let addonPricing: any = null;
+      try {
+        if (e.addon_pricing_json) addonPricing = JSON.parse(e.addon_pricing_json);
+      } catch (_) {}
       const entType = e.entitlement_type || 'scheduled_service';
       const isUnlimitedAccess = entType === 'facility_access' && e.access_mode_snapshot === 'unlimited';
-      const remaining = isUnlimitedAccess
+      const remaining = isUnlimitedAccess || addonPricing?.frequencyType === 'unlimited'
         ? null
         : Math.max(0, Number(e.credits_total || 0) - Number(e.credits_reserved || 0) - Number(e.credits_used || 0));
       return {
         ...e,
         entitlement_type: entType,
+        entitlement_role: e.entitlement_role || 'primary',
         allowed_service_ids: allowedServiceIds,
+        addon_pricing: addonPricing,
         credits_remaining: remaining,
         access_rules: e.access_rules_snapshot_json ? normalizeStudioAccessConfig(e.access_rules_snapshot_json) : null
       };
@@ -1374,7 +1380,9 @@ export class PackageService {
       SELECT * FROM student_package_entitlements WHERE contract_id = ? AND tenant_id = ?
     `).all(params.contractId, params.tenantId) as any[];
 
-    let targetEnt = entitlements.find(e => e.service_id === params.serviceId);
+    let targetEnt =
+      entitlements.find(e => e.service_id === params.serviceId && (e.entitlement_type || 'scheduled_service') === 'scheduled_service') ||
+      entitlements.find(e => e.service_id === params.serviceId);
     if (!targetEnt && contract.credit_mode_snapshot === 'shared_pool') {
       targetEnt = entitlements.find(e => {
         if (!e.allowed_service_ids_json) return false;
@@ -1394,8 +1402,21 @@ export class PackageService {
       throw err;
     }
 
+    if (targetEnt.entitlement_type === 'facility_access' || targetEnt.entitlement_type === 'deliverable') {
+      const err: any = new Error('Este benefício contratual não exige ou não consome créditos de agendamento.');
+      err.status = 400;
+      err.code = 'ENTITLEMENT_NOT_SCHEDULABLE';
+      throw err;
+    }
+
+    let addonPricingSnap: any = null;
+    try {
+      if (targetEnt.addon_pricing_json) addonPricingSnap = JSON.parse(targetEnt.addon_pricing_json);
+    } catch (_) {}
+    const isUnlimitedScheduled = addonPricingSnap?.frequencyType === 'unlimited';
+
     const remaining = Number(targetEnt.credits_total || 0) - Number(targetEnt.credits_reserved || 0) - Number(targetEnt.credits_used || 0);
-    if (remaining < 1) {
+    if (!isUnlimitedScheduled && remaining < 1) {
       const err: any = new Error('Saldo de aulas do pacote esgotado para esta modalidade/período.');
       err.status = 409;
       err.code = 'PACKAGE_CREDITS_EXHAUSTED';

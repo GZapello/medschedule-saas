@@ -21,6 +21,7 @@ import type {
   ImportAlert,
   ImportDraft,
   ImportSource,
+  ProposedAddonOption,
   ProposedPackage,
   ProposedPackageItem,
   ProposedPrice,
@@ -30,19 +31,42 @@ import type {
 import {
   Checkbox,
   days,
+  durations,
   DURATION_MONTHS,
   Editors,
   emptyAdjustment,
   emptyPrice,
   emptySchedule,
   formatMoneyBrl,
+  frequencies,
   modalities,
   NumberField,
+  periodicities,
   PriceFields,
   SelectField,
   TextField,
   types
 } from './StudioCatalogImportFields';
+
+const emptyAddon: ProposedAddonOption = {
+  label: '',
+  addonServiceName: '',
+  addonServiceRef: '',
+  frequencyType: 'weekly',
+  frequencyCount: 1,
+  creditsPerCycle: 4,
+  additionalPriceCents: null,
+  comboDiscountType: 'none',
+  comboDiscountValue: null,
+  billingPeriodicity: 'monthly',
+  durationMode: 'match_base',
+  scheduleTiming: 'after_confirmation',
+  mandatoryUnclear: false,
+  ambiguousReason: '',
+  active: true,
+  sources: [],
+  evidence: ''
+};
 
 const WEEKDAY_SHORT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
@@ -152,7 +176,7 @@ function Evidence({ ids, excerpt, files }: { ids: number[]; excerpt?: string; fi
   </div>;
 }
 
-type ServiceSectionTab = 'general' | 'prices' | 'schedules' | 'adjustments';
+type ServiceSectionTab = 'general' | 'prices' | 'schedules' | 'adjustments' | 'addons';
 
 function ServiceEditor({
   row,
@@ -182,6 +206,10 @@ function ServiceEditor({
   const responsible = draft.catalog.professionals.find(p => p.id === responsibleId);
   const matches = draft.matches.services[row.key] || [];
   const linked = draft.catalog.services.filter(s => s.active).map(s => [s.id, s.name] as const);
+  const addonTargets = [
+    ...draft.proposal.services.filter(s => s.key !== row.key && s.action !== 'ignore').map(s => [s.key, `${s.name || 'Serviço sem nome'} (desta importação)`] as const),
+    ...draft.catalog.services.filter(s => s.active && s.id !== row.existingId).map(s => ['existing:' + s.id, `${s.name} (catálogo)`] as const)
+  ];
   const useExisting = row.action === 'link' || row.action === 'update';
   const edit = (field: string) => row.action !== 'update' || row.apply.includes(field);
   const evidence = (item: { sources: number[]; evidence: string }) => <Evidence ids={item.sources} excerpt={item.evidence} files={draft.sources} />;
@@ -193,7 +221,8 @@ function ServiceEditor({
 
   const hasPendingSchedules = !row.deferSchedules && slotChecks.some(c => !c.ok);
   const hasPendingPrices = row.prices.some(p => !p.amountCents || !p.unit || Boolean(p.ambiguousReason));
-  const needsConfirmation = row.issues.length > 0 || hasPendingSchedules || hasPendingPrices;
+  const hasPendingAddons = (row.optionalAddons || []).some(a => a.active && (Boolean(a.mandatoryUnclear) || a.additionalPriceCents === null || (!a.addonServiceRef && !a.addonServiceName)));
+  const needsConfirmation = row.issues.length > 0 || hasPendingSchedules || hasPendingPrices || hasPendingAddons;
   const hasIncompleteEndTimes = row.schedules.some(s => Boolean(s.startTime) && !s.endTime);
 
   const applyBulkDuration = () => {
@@ -396,7 +425,7 @@ function ServiceEditor({
           {row.action === 'update' && (
             <fieldset className="flex flex-wrap gap-x-4 gap-y-1 rounded-xl bg-slate-50 border border-slate-200 p-3">
               <legend className="text-xs font-semibold text-slate-700 px-1">Informações a atualizar no serviço existente</legend>
-              {([['identity', 'Nome, atividade e descrição'], ['prices', 'Adicionar opções comerciais'], ['schedules', 'Aplicar horários à grade'], ['adjustments', 'Adicionar ajustes']] as const).map(([id, label]) => (
+              {([['identity', 'Nome, atividade e descrição'], ['prices', 'Adicionar opções comerciais'], ['schedules', 'Aplicar horários à grade'], ['adjustments', 'Adicionar ajustes'], ['addons', 'Adicionar complementos']] as const).map(([id, label]) => (
                 <Checkbox key={id} label={label} checked={row.apply.includes(id)}
                   onChange={checked => onChange({ apply: checked ? [...row.apply, id] : row.apply.filter(value => value !== id) })} />
               ))}
@@ -449,6 +478,18 @@ function ServiceEditor({
                     }`}
                   >
                     Adicionais/Descontos ({row.adjustments.length})
+                  </button>
+                )}
+                {edit('addons') && (
+                  <button
+                    type="button"
+                    onClick={() => onTabChange('addons')}
+                    className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold cursor-pointer transition-all ${
+                      activeTab === 'addons' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    Complementos ({(row.optionalAddons || []).length})
+                    {hasPendingAddons && <span className="h-2 w-2 rounded-full bg-amber-400" />}
                   </button>
                 )}
               </div>
@@ -715,6 +756,96 @@ function ServiceEditor({
                     </fieldset>
                   </>} />
               )}
+
+              {activeTab === 'addons' && edit('addons') && (
+                <Editors<ProposedAddonOption>
+                  title="Complementos opcionais vinculados ao plano"
+                  noun="Complemento"
+                  rows={row.optionalAddons || []}
+                  blank={emptyAddon}
+                  max={20}
+                  emptyMessage="Nenhum complemento opcional vinculado a este serviço base."
+                  onChange={optionalAddons => onChange({ optionalAddons })}
+                  render={(addon, change) => (
+                    <div className="space-y-3">
+                      {evidence(addon)}
+                      {addon.mandatoryUnclear && (
+                        <div className="rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900 space-y-1.5">
+                          <div className="font-semibold">
+                            {addon.ambiguousReason || 'Obrigatoriedade ambígua: confirme se este item deve ser oferecido como complemento opcional.'}
+                          </div>
+                          <Checkbox
+                            label="Confirmado como complemento opcional (não é pacote obrigatório)"
+                            checked={!addon.mandatoryUnclear}
+                            onChange={checked => change({ mandatoryUnclear: !checked })}
+                          />
+                        </div>
+                      )}
+                      {addon.addonServiceName && (
+                        <p className="text-xs text-slate-600">Lido no material: <strong>{addon.addonServiceName}</strong></p>
+                      )}
+                      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                        <TextField label="Rótulo exibido ao aluno" value={addon.label} onChange={label => change({ label })} placeholder="Ex: Personal 1x/semana" />
+                        <SelectField label="Serviço complementar vinculado" options={addonTargets} value={addon.addonServiceRef || null} onChange={addonServiceRef => change({ addonServiceRef: addonServiceRef || '' })} />
+                        <NumberField
+                          label="Valor adicional (R$)"
+                          value={addon.additionalPriceCents !== null ? Math.round(addon.additionalPriceCents) / 100 : null}
+                          min={0}
+                          step={0.01}
+                          onChange={val => change({ additionalPriceCents: val === null ? null : Math.round(val * 100) })}
+                        />
+                        <SelectField label="Frequência" options={frequencies} value={addon.frequencyType} onChange={frequencyType => change({ frequencyType })} />
+                        {addon.frequencyType !== 'unlimited' && (
+                          <NumberField label="Qtd. frequência" value={addon.frequencyCount} min={1} max={200} onChange={frequencyCount => change({ frequencyCount })} />
+                        )}
+                        {addon.frequencyType !== 'unlimited' && (
+                          <NumberField label="Créditos/aulas por ciclo" value={addon.creditsPerCycle} min={0} max={500} onChange={creditsPerCycle => change({ creditsPerCycle })} />
+                        )}
+                        <SelectField
+                          label="Periodicidade de cobrança"
+                          options={[['monthly', 'Mensal'], ['per_cycle', 'Por ciclo do plano-base'], ['one_time', 'Pagamento único'], ['bimonthly', 'Bimestral'], ['quarterly', 'Trimestral'], ['semiannual', 'Semestral'], ['annual', 'Anual']] as const}
+                          value={addon.billingPeriodicity}
+                          onChange={billingPeriodicity => billingPeriodicity && change({ billingPeriodicity })}
+                        />
+                        <SelectField
+                          label="Duração"
+                          options={[['match_base', 'Seguir plano-base'], ...durations] as const}
+                          value={addon.durationMode}
+                          onChange={durationMode => durationMode && change({ durationMode })}
+                        />
+                        <SelectField
+                          label="Escolha de horários"
+                          options={[['during_purchase', 'Durante a contratação'], ['after_confirmation', 'Após aprovação da matrícula'], ['not_applicable', 'Sem agendamento']] as const}
+                          value={addon.scheduleTiming}
+                          onChange={scheduleTiming => scheduleTiming && change({ scheduleTiming })}
+                        />
+                        <SelectField
+                          label="Desconto de combinação"
+                          options={[['none', 'Sem desconto'], ['fixed_cents', 'Desconto fixo (R$)'], ['percentage', 'Percentual (%)']] as const}
+                          value={addon.comboDiscountType}
+                          onChange={comboDiscountType => comboDiscountType && change({ comboDiscountType })}
+                        />
+                        {addon.comboDiscountType !== 'none' && (
+                          <NumberField
+                            label={addon.comboDiscountType === 'percentage' ? 'Desconto (%)' : 'Desconto (R$)'}
+                            value={addon.comboDiscountValue !== null ? (addon.comboDiscountType === 'percentage' ? addon.comboDiscountValue : addon.comboDiscountValue / 100) : null}
+                            min={0}
+                            max={addon.comboDiscountType === 'percentage' ? 100 : 1000000}
+                            step={addon.comboDiscountType === 'percentage' ? 1 : 0.01}
+                            onChange={val => change({ comboDiscountValue: val === null ? 0 : (addon.comboDiscountType === 'percentage' ? Math.round(val) : Math.round(val * 100)) })}
+                          />
+                        )}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-4">
+                        <Checkbox label="Complemento ativo para seleção" checked={addon.active !== false} onChange={active => change({ active })} />
+                        {addon.mandatoryUnclear === true ? null : (
+                          <Checkbox label="Marcar obrigatoriedade como ambígua" checked={false} onChange={checked => change({ mandatoryUnclear: checked })} />
+                        )}
+                      </div>
+                    </div>
+                  )}
+                />
+              )}
             </>
           )}
 
@@ -863,6 +994,7 @@ export function StudioCatalogImportReview({ draft, onChange }: { draft: ImportDr
         prices: 'prices',
         schedules: 'schedules',
         adjustments: 'adjustments',
+        addons: 'addons',
         items: 'general'
       };
       setTab(alert.recordKey, tabMap[alert.section] || 'general');

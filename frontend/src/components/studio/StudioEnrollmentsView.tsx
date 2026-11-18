@@ -3,7 +3,17 @@ import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { formatCurrencyBRL, PLAN_DURATION_LABELS, PlanDurationCode } from '../../utils/establishmentContext';
-import { calculateCommercialOptionBreakdown, PAYMENT_PERIODICITY_LABELS, StudioCommercialPriceOption } from '../../utils/studioAccessAndCommercial';
+import {
+  addonAppliesToBaseOption,
+  buildFallbackBaseCommercialOption,
+  calculateCommercialOptionBreakdown,
+  calculatePlanWithAddonsBreakdown,
+  normalizeOptionalAddonsConfig,
+  PAYMENT_PERIODICITY_LABELS,
+  StudioCommercialPriceOption
+} from '../../utils/studioAccessAndCommercial';
+import { OptionalAddonsSelector } from './OptionalAddonsSelector';
+import { PlanWithAddonsBreakdownCard } from './PlanWithAddonsBreakdownCard';
 import {
   KeyRound,
   Plus,
@@ -170,6 +180,7 @@ export const StudioEnrollmentsView: React.FC = () => {
   const [selectedServiceId, setSelectedServiceId] = useState('');
   const [selectedPackageId, setSelectedPackageId] = useState('');
   const [commercialOptionId, setCommercialOptionId] = useState('');
+  const [selectedAddonOptionIds, setSelectedAddonOptionIds] = useState<string[]>([]);
   const [contractDurationCode, setContractDurationCode] = useState('1_month');
   const [paymentPeriodicity, setPaymentPeriodicity] = useState('monthly');
   const [accessMode, setAccessMode] = useState<'unlimited' | 'limited'>('unlimited');
@@ -290,10 +301,36 @@ export const StudioEnrollmentsView: React.FC = () => {
     selectedServiceObj?.commercial_price_options?.filter((option: StudioCommercialPriceOption) => option.active) || [];
   const commercialOption = commercialOptions.find(option => option.id === commercialOptionId);
   const commercialQuote = commercialOption ? calculateCommercialOptionBreakdown(commercialOption) : null;
+  const enrollAddonsCfg = useMemo(
+    () => normalizeOptionalAddonsConfig(selectedServiceObj?.optional_addons),
+    [selectedServiceObj]
+  );
+  const availableEnrollAddons = useMemo(() => {
+    if (!enrollAddonsCfg.enabled) return [];
+    return enrollAddonsCfg.options.filter(opt => addonAppliesToBaseOption(opt, commercialOption?.id || null));
+  }, [enrollAddonsCfg, commercialOption]);
+  const selectedEnrollAddons = useMemo(
+    () => availableEnrollAddons.filter(opt => selectedAddonOptionIds.includes(opt.id)),
+    [availableEnrollAddons, selectedAddonOptionIds]
+  );
+  const enrollWithAddonsBreakdown = useMemo(() => {
+    if (!selectedServiceObj || selectedEnrollAddons.length === 0) return null;
+    const baseOpt = commercialOption || {
+      ...buildFallbackBaseCommercialOption(selectedServiceObj),
+      contractDurationCode: contractDurationCode as any,
+      paymentPeriodicity: paymentPeriodicity as any,
+      ...(customAmount !== '' ? { amountCents: Math.max(0, Math.round(Number(customAmount.replace(',', '.')) * 100) || 0) } : {})
+    };
+    return calculatePlanWithAddonsBreakdown({
+      baseOption: baseOpt,
+      selectedAddons: selectedEnrollAddons
+    });
+  }, [selectedServiceObj, commercialOption, selectedEnrollAddons, contractDurationCode, paymentPeriodicity, customAmount]);
 
   useEffect(() => {
     if (selectedServiceObj) {
       setCommercialOptionId('');
+      setSelectedAddonOptionIds([]);
       const defPrice = Number(selectedServiceObj.periodic_price) > 0
         ? selectedServiceObj.periodic_price
         : selectedServiceObj.price;
@@ -306,6 +343,14 @@ export const StudioEnrollmentsView: React.FC = () => {
       }
     }
   }, [selectedServiceObj]);
+
+  useEffect(() => {
+    setSelectedAddonOptionIds(prev => {
+      const validIds = new Set(availableEnrollAddons.map(a => a.id));
+      const filtered = prev.filter(id => validIds.has(id));
+      return enrollAddonsCfg.allowMultiple ? filtered : filtered.slice(0, 1);
+    });
+  }, [commercialOptionId, availableEnrollAddons, enrollAddonsCfg.allowMultiple]);
 
   const handleCreateEnrollment = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -338,6 +383,7 @@ export const StudioEnrollmentsView: React.FC = () => {
           ? 'combined_package'
           : (isAccessSrv ? 'access_plan' : selectedServiceObj?.studio_service_type === 'non_scheduled' ? 'deliverable' : 'scheduled_plan'),
         commercialOptionId: useOption ? commercialOption?.id : undefined,
+        ...(enrollTargetType === 'service' && selectedAddonOptionIds.length > 0 ? { selectedAddonOptionIds } : {}),
         contractDurationCode: useOption ? undefined : contractDurationCode,
         paymentPeriodicity: useOption ? undefined : paymentPeriodicity,
         accessMode: !useOption && isAccessSrv ? accessMode : undefined,
@@ -351,6 +397,7 @@ export const StudioEnrollmentsView: React.FC = () => {
       });
       showToast('Matrícula registrada com sucesso!', 'success');
       setShowCreateModal(false);
+      setSelectedAddonOptionIds([]);
       setNotes('');
       fetchEnrollments();
     } catch (err: any) {
@@ -798,21 +845,37 @@ export const StudioEnrollmentsView: React.FC = () => {
                     </div>
                   )}
 
-                  {/* Entregáveis / Benefícios do Pacote Combinado */}
+                  {/* Entregáveis / Benefícios do Plano Combinado ou Pacote */}
                   {Array.isArray(enr.entitlements) && enr.entitlements.length > 0 && (
                     <div className="space-y-1.5">
                       <div className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">
-                        Benefícios do Pacote Combinado
+                        {enr.hasAddons ? 'Benefícios do Contrato (Plano-base e Complementos)' : 'Benefícios do Pacote Combinado'}
                       </div>
                       <div className="flex flex-wrap gap-1.5">
                         {enr.entitlements.map((ent: any) => {
                           const isDeliv = ent.entitlement_type === 'deliverable';
                           const isFac = ent.entitlement_type === 'facility_access';
+                          const isAddon = ent.entitlement_role === 'addon';
+                          const isBaseRole = ent.entitlement_role === 'base';
                           return (
                             <div
                               key={ent.id}
-                              className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-[11px] flex items-center gap-2"
+                              className={`px-2.5 py-1 rounded-lg border text-[11px] flex items-center gap-2 ${
+                                isAddon
+                                  ? 'border-teal-200 bg-teal-50/50'
+                                  : 'border-slate-200 bg-white'
+                              }`}
                             >
+                              {isBaseRole && (
+                                <span className="text-[9px] uppercase font-extrabold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">
+                                  Base
+                                </span>
+                              )}
+                              {isAddon && (
+                                <span className="text-[9px] uppercase font-extrabold px-1.5 py-0.5 rounded bg-teal-100 text-teal-800">
+                                  Complemento
+                                </span>
+                              )}
                               <span className="font-semibold text-slate-800">{ent.service_name_snapshot}:</span>
                               {isFac ? (
                                 <span className="text-teal-700 font-bold">
@@ -1176,6 +1239,25 @@ export const StudioEnrollmentsView: React.FC = () => {
                       />
                     </div>
                   </div>
+
+                  {enrollAddonsCfg.enabled && availableEnrollAddons.length > 0 && (
+                    <div className="space-y-2.5 pt-1">
+                      <OptionalAddonsSelector
+                        config={enrollAddonsCfg}
+                        availableOptions={availableEnrollAddons}
+                        selectedIds={selectedAddonOptionIds}
+                        onChange={setSelectedAddonOptionIds}
+                        compact
+                      />
+                      {enrollWithAddonsBreakdown && selectedServiceObj && (
+                        <PlanWithAddonsBreakdownCard
+                          breakdown={enrollWithAddonsBreakdown}
+                          baseName={selectedServiceObj.name}
+                          compact
+                        />
+                      )}
+                    </div>
+                  )}
                 </>
               ) : (
                 <div>
@@ -1694,8 +1776,25 @@ export const StudioEnrollmentsView: React.FC = () => {
                     {Array.isArray(detailModal.entitlements) && detailModal.entitlements.length > 0 && (
                       <div className="flex flex-wrap gap-2">
                         {detailModal.entitlements.map((ent: any) => (
-                          <span key={ent.id} className="px-2.5 py-1 rounded-xl bg-white border border-indigo-100 text-[11px] font-semibold text-slate-800">
-                            {ent.service_name_snapshot}:{' '}
+                          <span
+                            key={ent.id}
+                            className={`px-2.5 py-1 rounded-xl border text-[11px] font-semibold text-slate-800 inline-flex items-center gap-1.5 ${
+                              ent.entitlement_role === 'addon'
+                                ? 'bg-teal-50/60 border-teal-200'
+                                : 'bg-white border-indigo-100'
+                            }`}
+                          >
+                            {ent.entitlement_role === 'base' && (
+                              <span className="text-[9px] uppercase font-extrabold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">
+                                Plano-base
+                              </span>
+                            )}
+                            {ent.entitlement_role === 'addon' && (
+                              <span className="text-[9px] uppercase font-extrabold px-1.5 py-0.5 rounded bg-teal-100 text-teal-800">
+                                Complemento opcional
+                              </span>
+                            )}
+                            <span>{ent.service_name_snapshot}:</span>{' '}
                             {ent.entitlement_type === 'facility_access'
                               ? (ent.access_mode_snapshot === 'unlimited' ? 'Acesso Livre' : `${ent.weekly_frequency_snapshot || ent.monthly_limit_snapshot || ''}x`)
                               : `${ent.credits_used || 0}/${ent.credits_total || 0} usados (${ent.credits_remaining ?? 0} livres)`}
@@ -1732,6 +1831,13 @@ export const StudioEnrollmentsView: React.FC = () => {
                         {formatCurrencyBRL(detailModal.enrollment?.amount)} ({formatBillingCycleLabel(detailModal.enrollment?.paymentPeriodicity, detailModal.enrollment?.billingFrequency, detailModal.enrollment?.installmentsCount)})
                       </span>
                     </div>
+                    {detailModal.enrollment?.commercialBreakdown && (
+                      <PlanWithAddonsBreakdownCard
+                        breakdown={detailModal.enrollment.commercialBreakdown}
+                        baseName={detailModal.enrollment.baseServiceName || detailModal.enrollment.title}
+                        compact
+                      />
+                    )}
                     {Array.isArray(detailModal.payments) && detailModal.payments.length > 0 ? (
                       <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl max-h-44 overflow-y-auto">
                         {detailModal.payments.map((pay: any) => {

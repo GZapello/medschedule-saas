@@ -17,12 +17,15 @@ import { LinkedInstructorsSelector } from './LinkedInstructorsSelector';
 import { StudioAccessAndAdjustmentsPanel } from './StudioAccessAndAdjustmentsPanel';
 import {
   DEFAULT_STUDIO_ACCESS_CONFIG,
+  getDefaultOptionalAddonsConfig,
   normalizeCommercialPriceOptions,
+  normalizeOptionalAddonsConfig,
   normalizeStudioAccessConfig,
   normalizeStudioPriceAdjustments,
   normalizeStudioServiceType,
   StudioAccessConfig,
   StudioCommercialPriceOption,
+  StudioOptionalAddonsConfig,
   StudioPriceAdjustmentRule,
   StudioServiceType
 } from '../../utils/studioAccessAndCommercial';
@@ -82,6 +85,8 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
   const [accessConfig, setAccessConfig] = useState<StudioAccessConfig>(DEFAULT_STUDIO_ACCESS_CONFIG);
   const [pricingAdjustments, setPricingAdjustments] = useState<StudioPriceAdjustmentRule[]>([]);
   const [commercialPriceOptions, setCommercialPriceOptions] = useState<StudioCommercialPriceOption[]>([]);
+  const [optionalAddons, setOptionalAddons] = useState<StudioOptionalAddonsConfig>(getDefaultOptionalAddonsConfig());
+  const [availableAddonServices, setAvailableAddonServices] = useState<Service[]>([]);
   const [allowPublicBooking, setAllowPublicBooking] = useState<boolean>(true);
   const [defaultCapacity, setDefaultCapacity] = useState<number>(10);
   const [allowRecurrence, setAllowRecurrence] = useState<boolean>(true);
@@ -156,6 +161,9 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
       ApiClient.get<{ packages: ServicePackageOption[] }>('/v1/packages')
         .then(res => setAvailablePackages(Array.isArray(res?.packages) ? res.packages : []))
         .catch(() => setAvailablePackages([]));
+      ApiClient.get<Service[]>('/v1/services')
+        .then(res => setAvailableAddonServices(Array.isArray(res) ? res : []))
+        .catch(() => setAvailableAddonServices([]));
     }
   }, [isOpen, isStudioCompatible]);
 
@@ -185,6 +193,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
         setAccessConfig(normalizeStudioAccessConfig(serviceToEdit.access_config));
         setPricingAdjustments(normalizeStudioPriceAdjustments(serviceToEdit.pricing_adjustments));
         setCommercialPriceOptions(normalizeCommercialPriceOptions(serviceToEdit.commercial_price_options));
+        setOptionalAddons(normalizeOptionalAddonsConfig(serviceToEdit.optional_addons));
         setAllowPublicBooking(serviceToEdit.allow_public_booking !== 0 && serviceToEdit.allow_public_booking !== false);
         setDefaultCapacity(Number(serviceToEdit.default_capacity) || 10);
         setAllowRecurrence(recCfg.allowRecurrence);
@@ -237,6 +246,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
         setAccessConfig(DEFAULT_STUDIO_ACCESS_CONFIG);
         setPricingAdjustments([]);
         setCommercialPriceOptions([]);
+        setOptionalAddons(getDefaultOptionalAddonsConfig());
         setAllowPublicBooking(true);
         setDefaultCapacity(10);
         setAllowRecurrence(true);
@@ -377,6 +387,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
               accessConfig: studioServiceType === 'facility_access' ? accessConfig : null,
               pricingAdjustments,
               commercialPriceOptions,
+              optionalAddons,
               allowedRecurrenceFrequencies: allowRecurrence ? allowedFrequencies : [],
               allowedRecurrenceWeekdays:
                 allowRecurrence
@@ -629,6 +640,10 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
                 onPricingAdjustmentsChange={setPricingAdjustments}
                 commercialPriceOptions={commercialPriceOptions}
                 onCommercialPriceOptionsChange={setCommercialPriceOptions}
+                optionalAddons={optionalAddons}
+                onOptionalAddonsChange={setOptionalAddons}
+                availableAddonServices={availableAddonServices}
+                currentServiceId={serviceToEdit?.id || null}
                 defaultCapacity={defaultCapacity}
                 onDefaultCapacityChange={setDefaultCapacity}
                 allowPublicBooking={allowPublicBooking}

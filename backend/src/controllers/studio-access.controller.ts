@@ -325,7 +325,10 @@ export class StudioAccessController {
         accessMode,
         allowDuplicateAccessBenefit,
         notes,
-        generateInitialCharge
+        generateInitialCharge,
+        selectedAddons,
+        selectedAddonOptionIds,
+        addons
       } = req.body || {};
 
       if (!studentId) {
@@ -375,6 +378,9 @@ export class StudioAccessController {
           origin: 'admin',
           notes: notes ? String(notes) : null,
           generateInitialCharge: generateInitialCharge !== false,
+          selectedAddons: Array.isArray(selectedAddonOptionIds)
+            ? selectedAddonOptionIds
+            : (Array.isArray(selectedAddons) ? selectedAddons : (Array.isArray(addons) ? addons : undefined)),
           createdBy: req.user!.userId
         })
       )();
