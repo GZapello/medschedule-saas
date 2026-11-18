@@ -23,6 +23,7 @@ import { migrateSuperAdminVisits } from './superadmin-visits.migration';
 import { migrateProfessionalActivities } from './professional-activities.migration';
 import { migrateIntegratedImprovements } from './integrated-improvements-migration';
 import { migrateStudioImprovements } from './studio-improvements.migration';
+import { migrateStudioCatalogImports } from './studio-catalog-import.migration';
 import { migrateSandbox } from './sandbox.migration';
 import { dbPath } from './db-path';
 import { backfillMissingDefaultSchedules } from '../utils/schedule-defaults';
@@ -4086,22 +4087,7 @@ function repairLegacyPhotoUrls(rawDb: any): void {
   try { migrateSuperAdminVisits(rawDb); } catch (e) { console.error('[Database] Erro ao migrar superadmin visits:', e); }
   try { migrateIntegratedImprovements(rawDb); } catch (e) { console.error('[Database] Erro ao migrar melhorias integradas:', e); }
   try { migrateStudioImprovements(rawDb); } catch (e) { console.error('[Database] Erro ao migrar melhorias studio:', e); }
-  rawDb.exec(`
-    CREATE TABLE IF NOT EXISTS studio_catalog_imports (
-      id TEXT PRIMARY KEY,
-      tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-      actor_id TEXT NOT NULL,
-      fingerprint TEXT NOT NULL,
-      sources_json TEXT NOT NULL,
-      proposal_json TEXT NOT NULL,
-      result_json TEXT,
-      revision INTEGER NOT NULL DEFAULT 1,
-      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-      UNIQUE (tenant_id, actor_id, fingerprint)
-    );
-    CREATE INDEX IF NOT EXISTS idx_studio_catalog_imports_owner
-      ON studio_catalog_imports(tenant_id, actor_id, updated_at);
-  `);
+  try { migrateStudioCatalogImports(rawDb); } catch (e) { console.error('[Database] Erro ao migrar studio_catalog_imports:', e); }
   try { migrateSandbox(rawDb); } catch (e) { console.error('[Database] Erro ao migrar sandbox:', e); }
 }
 

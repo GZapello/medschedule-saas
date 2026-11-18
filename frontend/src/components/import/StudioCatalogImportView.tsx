@@ -1,18 +1,26 @@
-import React, { useEffect, useId, useState } from 'react';
+import React, { useCallback, useEffect, useId, useState } from 'react';
 import {
   AlertCircle,
   CheckCircle2,
   FileText,
   History,
   Loader2,
+  RefreshCw,
   Save,
+  ShieldCheck,
   Sparkles,
   Trash2,
   Upload,
-  X
+  X,
+  XCircle
 } from 'lucide-react';
 import { ApiClient } from '../../api/client';
-import type { ImportDraft, ImportReceipt, ImportSource } from '../../types/studioCatalogImport';
+import type {
+  CatalogImportBatchStatus,
+  ImportDraft,
+  ImportReceipt,
+  ImportSource
+} from '../../types/studioCatalogImport';
 import { StudioCatalogImportReview } from './StudioCatalogImportReview';
 
 const endpoint = '/v1/studio/catalog-imports';
@@ -21,16 +29,63 @@ const MB = 1024 * 1024;
 const primary = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer';
 const secondary = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 cursor-pointer';
 
-type DraftListItem = { id: string; sources: ImportSource[]; result?: ImportReceipt | null; updatedAt: string };
-type Activity = 'reading' | 'analyzing' | 'opening' | 'saving' | 'confirming' | 'deleting';
+type DraftListItem = {
+  id: string;
+  status?: CatalogImportBatchStatus;
+  requestId?: string | null;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+  retryable?: boolean;
+  retryAfterSeconds?: number | null;
+  attempts?: number;
+  tempExpiresAt?: string | null;
+  tempPurgedAt?: string | null;
+  revision?: number;
+  sources: ImportSource[];
+  result?: ImportReceipt | null;
+  updatedAt?: string;
+};
+
+type ApiErrorLike = Error & {
+  status?: number;
+  code?: string;
+  requestId?: string | null;
+  retryable?: boolean;
+  retryAfterSeconds?: number | null;
+  isHtmlResponse?: boolean;
+  batchId?: string;
+};
+
+type Activity =
+  | 'reading'
+  | 'analyzing'
+  | 'retrying'
+  | 'cancelling'
+  | 'opening'
+  | 'saving'
+  | 'confirming'
+  | 'deleting';
+
 const activityLabels: Record<Activity, string> = {
-  reading: 'Preparando os arquivos…',
-  analyzing: 'Analisando os arquivos em conjunto com IA…',
+  reading: 'Preparando e otimizando os arquivos…',
+  analyzing: 'Enviando arquivos para análise em segundo plano…',
+  retrying: 'Reenfileirando análise com os arquivos temporários…',
+  cancelling: 'Cancelando análise e removendo arquivos temporários…',
   opening: 'Abrindo rascunho…',
   saving: 'Salvando progresso do rascunho…',
   confirming: 'Validando e cadastrando no catálogo oficial…',
-  deleting: 'Descartando rascunho…'
+  deleting: 'Descartando lote e removendo arquivos temporários…'
 };
+
+function hasProposal(payload: unknown): payload is ImportDraft {
+  return Boolean(
+    payload
+    && typeof payload === 'object'
+    && 'proposal' in payload
+    && (payload as ImportDraft).proposal
+    && Array.isArray((payload as ImportDraft).proposal.services)
+  );
+}
 
 function encode(file: File) {
   return new Promise<{ fileName: string; base64: string }>((resolve, reject) => {
@@ -54,34 +109,135 @@ function FileThumbnail({ file }: { file: File }) {
     : <FileText aria-hidden="true" className="h-5 w-5 shrink-0 text-indigo-600" />;
 }
 
+function statusBadge(item: DraftListItem): { label: string; className: string } {
+  if (item.status === 'queued' || item.status === 'processing') {
+    return { label: 'Em análise', className: 'bg-indigo-100 text-indigo-800' };
+  }
+  if (item.status === 'failed') {
+    return item.retryable
+      ? { label: 'Falha — retentativa disponível', className: 'bg-amber-100 text-amber-800' }
+      : { label: 'Falha / arquivos expirados', className: 'bg-rose-100 text-rose-800' };
+  }
+  if (item.status === 'cancelled') {
+    return { label: 'Cancelado (arquivos removidos)', className: 'bg-slate-200 text-slate-700' };
+  }
+  return { label: 'Pronto para revisão', className: 'bg-emerald-100 text-emerald-800' };
+}
+
 export function StudioCatalogImportView() {
   const inputId = useId();
   const [files, setFiles] = useState<File[]>([]);
   const [allRecords, setAllRecords] = useState<DraftListItem[]>([]);
   const [draft, setDraft] = useState<ImportDraft | null>(null);
+  const [activeJob, setActiveJob] = useState<DraftListItem | null>(null);
+  const [pollFailureCount, setPollFailureCount] = useState(0);
   const [activity, setActivity] = useState<Activity | null>(null);
   const [error, setError] = useState('');
+  const [errorDetails, setErrorDetails] = useState<{
+    requestId?: string | null;
+    retryable?: boolean;
+    isHtmlResponse?: boolean;
+  } | null>(null);
   const [draftError, setDraftError] = useState('');
   const [message, setMessage] = useState('');
   const [confirming, setConfirming] = useState(false);
 
-  async function refreshDrafts(signal?: AbortSignal) {
+  const setErrorFromException = useCallback((err: unknown, fallback: string) => {
+    const e = err as ApiErrorLike | undefined;
+    setError(e?.message || fallback);
+    setErrorDetails(
+      e?.requestId || e?.retryable || e?.isHtmlResponse
+        ? {
+            requestId: e?.requestId || null,
+            retryable: Boolean(e?.retryable),
+            isHtmlResponse: Boolean(e?.isHtmlResponse)
+          }
+        : null
+    );
+  }, []);
+
+  const refreshDrafts = useCallback(async (signal?: AbortSignal) => {
     try {
-      setAllRecords(await ApiClient.get<DraftListItem[]>(endpoint + '?includeCompleted=1', { signal }));
+      const list = await ApiClient.get<DraftListItem[]>(endpoint + '?includeCompleted=1', { signal });
+      setAllRecords(list);
       setDraftError('');
+      setActiveJob((prev) => {
+        if (prev) return prev;
+        const running = list.find((item) => item.status === 'queued' || item.status === 'processing');
+        return running || null;
+      });
     } catch {
       if (!signal?.aborted) setDraftError('Não foi possível carregar os rascunhos e histórico.');
     }
-  }
+  }, []);
 
   useEffect(() => {
     const abort = new AbortController();
     void refreshDrafts(abort.signal);
     return () => abort.abort();
-  }, []);
+  }, [refreshDrafts]);
+
+  const activeJobId = activeJob?.id || null;
+  const activeJobStatus = activeJob?.status || null;
+  const isJobRunning = activeJobStatus === 'queued' || activeJobStatus === 'processing';
+
+  const checkJobStatusNow = useCallback(async (jobId: string, signal?: AbortSignal) => {
+    const res = await ApiClient.get<ImportDraft | DraftListItem>(endpoint + '/' + jobId, { signal });
+    setPollFailureCount(0);
+    if (hasProposal(res) && (res.status === 'ready' || res.status === 'completed' || !res.status)) {
+      setActiveJob(null);
+      setDraft(res);
+      setError('');
+      setErrorDetails(null);
+      setMessage('Análise concluída com sucesso. Os arquivos originais temporários já foram excluídos.');
+      void refreshDrafts();
+      return 'done';
+    }
+    const statusRes = res as DraftListItem;
+    setActiveJob(statusRes);
+    if (statusRes.status === 'failed' || statusRes.status === 'cancelled') {
+      void refreshDrafts();
+      return 'stopped';
+    }
+    return 'running';
+  }, [refreshDrafts]);
+
+  useEffect(() => {
+    if (!activeJobId || !isJobRunning) return;
+    let disposed = false;
+    const abort = new AbortController();
+    let timer: number | undefined;
+
+    const poll = async () => {
+      try {
+        const outcome = await checkJobStatusNow(activeJobId, abort.signal);
+        if (disposed || outcome !== 'running') return;
+        timer = window.setTimeout(() => void poll(), 2000);
+      } catch (err) {
+        if (disposed || abort.signal.aborted) return;
+        setPollFailureCount((count) => {
+          const next = count + 1;
+          if (next < 5) {
+            timer = window.setTimeout(() => void poll(), Math.min(8000, 2000 * next));
+          } else {
+            setErrorFromException(err, 'Não foi possível acompanhar o progresso da análise no momento.');
+          }
+          return next;
+        });
+      }
+    };
+
+    timer = window.setTimeout(() => void poll(), 1500);
+    return () => {
+      disposed = true;
+      abort.abort();
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [activeJobId, isJobRunning, checkJobStatusNow, setErrorFromException]);
 
   function selectFiles(next: File[]) {
     setError('');
+    setErrorDetails(null);
     const all = [...files, ...next];
     if (all.some(file => !formats.test(file.name) || file.size === 0 || file.size > 5 * MB)) {
       setError('Use arquivos compatíveis (JPG, PNG, WebP, PDF, DOCX, XLSX ou CSV UTF-8) de até 5 MB cada.');
@@ -94,35 +250,88 @@ export function StudioCatalogImportView() {
     setFiles(all);
   }
 
-  async function run(task: Activity, operation: () => Promise<ImportDraft | null>, success = '') {
+  async function run(task: Activity, operation: () => Promise<ImportDraft | DraftListItem | null>, success = '') {
     if (activity) return;
     setActivity(task);
     setError('');
+    setErrorDetails(null);
     setMessage('');
     try {
-      const nextDraft = await operation();
-      setDraft(nextDraft);
-      setMessage(success);
+      const next = await operation();
+      if (!next) {
+        setDraft(null);
+      } else if (hasProposal(next)) {
+        setActiveJob(null);
+        setDraft(next);
+        if (success) setMessage(success);
+      } else {
+        setDraft(null);
+        setActiveJob(next);
+        setPollFailureCount(0);
+      }
       setConfirming(false);
       void refreshDrafts();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Falha ao processar a importação.');
+      setErrorFromException(err, 'Falha ao processar a importação.');
       setConfirming(false);
     } finally {
       setActivity(null);
     }
   }
 
+  async function retryBatch(id: string) {
+    if (activity || isJobRunning) return;
+    setActivity('retrying');
+    setError('');
+    setErrorDetails(null);
+    setMessage('');
+    try {
+      const res = await ApiClient.post<ImportDraft | DraftListItem>(endpoint + '/' + id + '/retry', {});
+      if (hasProposal(res)) {
+        setActiveJob(null);
+        setDraft(res);
+      } else {
+        setActiveJob(res);
+        setPollFailureCount(0);
+      }
+      void refreshDrafts();
+    } catch (err) {
+      setErrorFromException(err, 'Não foi possível reiniciar a análise deste lote.');
+      void refreshDrafts();
+    } finally {
+      setActivity(null);
+    }
+  }
+
+  async function cancelBatch(id: string) {
+    if (activity) return;
+    setActivity('cancelling');
+    setError('');
+    setErrorDetails(null);
+    try {
+      const res = await ApiClient.post<DraftListItem>(endpoint + '/' + id + '/cancel', {});
+      setActiveJob(res);
+      setMessage('Análise cancelada e arquivos originais temporários excluídos.');
+      await refreshDrafts();
+    } catch (err) {
+      setErrorFromException(err, 'Erro ao cancelar análise.');
+    } finally {
+      setActivity(null);
+    }
+  }
+
   async function discardDraft(id: string) {
-    if (activity || !window.confirm('Descartar este rascunho permanentemente?')) return;
+    if (activity || !window.confirm('Descartar este lote permanentemente e remover eventuais arquivos temporários?')) return;
     setActivity('deleting');
     setError('');
+    setErrorDetails(null);
     try {
       await ApiClient.delete(endpoint + '/' + id);
       if (draft?.id === id) setDraft(null);
+      if (activeJob?.id === id) setActiveJob(null);
       await refreshDrafts();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao descartar rascunho.');
+      setErrorFromException(err, 'Erro ao descartar rascunho.');
     } finally {
       setActivity(null);
     }
@@ -168,25 +377,106 @@ export function StudioCatalogImportView() {
     {activity && <p role="status" className="flex items-center gap-2 rounded-xl bg-indigo-50 p-3 text-sm font-semibold text-indigo-800">
       <Loader2 aria-hidden="true" className="h-4 w-4 shrink-0 animate-spin" />{activityLabels[activity]}
     </p>}
-    {error && <p role="alert" className="flex items-start gap-2 rounded-xl bg-rose-50 border border-rose-200 p-3 text-sm text-rose-800">
-      <AlertCircle aria-hidden="true" className="h-4 w-4 shrink-0 mt-0.5" /><span>{error}</span>
-    </p>}
+
+    {error && <div role="alert" className="flex items-start gap-2 rounded-xl bg-rose-50 border border-rose-200 p-3 text-sm text-rose-800">
+      <AlertCircle aria-hidden="true" className="h-4 w-4 shrink-0 mt-0.5" />
+      <div className="min-w-0 flex-1 space-y-1">
+        <p className="font-medium">{error}</p>
+        {errorDetails?.requestId && (
+          <p className="text-xs text-rose-700">Protocolo de diagnóstico: <code className="font-mono">{errorDetails.requestId}</code></p>
+        )}
+      </div>
+    </div>}
+
     {message && <p role="status" className="rounded-xl bg-emerald-50 border border-emerald-200 p-3 text-sm font-medium text-emerald-800">{message}</p>}
+
+    {!draft && activeJob && (
+      <div className={`rounded-2xl border p-4 space-y-3 ${
+        isJobRunning
+          ? 'border-indigo-200 bg-indigo-50/70 text-indigo-950'
+          : activeJob.status === 'failed'
+            ? 'border-amber-200 bg-amber-50/80 text-amber-950'
+            : 'border-slate-200 bg-slate-50 text-slate-800'
+      }`} role="status">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="flex items-start gap-2.5 min-w-0">
+            {isJobRunning
+              ? <Loader2 aria-hidden="true" className="h-5 w-5 shrink-0 animate-spin text-indigo-600 mt-0.5" />
+              : activeJob.status === 'failed'
+                ? <AlertCircle aria-hidden="true" className="h-5 w-5 shrink-0 text-amber-600 mt-0.5" />
+                : <XCircle aria-hidden="true" className="h-5 w-5 shrink-0 text-slate-500 mt-0.5" />}
+            <div className="min-w-0 space-y-1">
+              <p className="text-sm font-bold">
+                {isJobRunning
+                  ? (activeJob.status === 'processing' ? 'Extraindo serviços, preços e grades com IA…' : 'Análise na fila de processamento…')
+                  : activeJob.status === 'failed'
+                    ? 'Análise interrompida antes da conclusão'
+                    : 'Análise cancelada'}
+              </p>
+              <p className="text-xs opacity-90 truncate">
+                Arquivos: {activeJob.sources.map(s => s.fileName).join(', ')}
+                {activeJob.attempts ? ` · Tentativa ${activeJob.attempts}` : ''}
+                {activeJob.requestId ? ` · Protocolo ${activeJob.requestId}` : ''}
+              </p>
+              {isJobRunning && (
+                <p className="text-xs text-indigo-800">
+                  Os arquivos estão em armazenamento temporário isolado e serão excluídos automaticamente assim que a extração concluir.
+                </p>
+              )}
+              {activeJob.status === 'failed' && activeJob.errorMessage && (
+                <p className="text-xs font-medium text-amber-900">{activeJob.errorMessage}</p>
+              )}
+              {activeJob.status === 'cancelled' && (
+                <p className="text-xs text-slate-600">Os arquivos temporários enviados para este lote foram removidos.</p>
+              )}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {isJobRunning && pollFailureCount >= 5 && (
+              <button type="button" className={secondary} disabled={!!activity} onClick={() => void checkJobStatusNow(activeJob.id)}>
+                <RefreshCw aria-hidden="true" className="h-4 w-4" />Atualizar status
+              </button>
+            )}
+            {isJobRunning && (
+              <button type="button" className={secondary} disabled={!!activity} onClick={() => void cancelBatch(activeJob.id)}>
+                <XCircle aria-hidden="true" className="h-4 w-4" />Cancelar análise
+              </button>
+            )}
+            {activeJob.status === 'failed' && activeJob.retryable && (
+              <button type="button" className={primary} disabled={!!activity} onClick={() => void retryBatch(activeJob.id)}>
+                <RefreshCw aria-hidden="true" className="h-4 w-4" />Tentar novamente
+              </button>
+            )}
+            {!isJobRunning && (
+              <button type="button" className={secondary} disabled={!!activity} onClick={() => void discardDraft(activeJob.id)}>
+                <Trash2 aria-hidden="true" className="h-4 w-4" />Descartar lote
+              </button>
+            )}
+            {!isJobRunning && (
+              <button type="button" className="text-xs font-semibold text-slate-600 hover:underline px-2 py-1 cursor-pointer" onClick={() => setActiveJob(null)}>
+                Fechar aviso
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    )}
 
     {!draft && <>
       <div
         onDragOver={e => e.preventDefault()}
         onDrop={e => {
           e.preventDefault();
-          if (!activity && e.dataTransfer.files?.length) selectFiles(Array.from(e.dataTransfer.files));
+          if (!activity && !isJobRunning && e.dataTransfer.files?.length) selectFiles(Array.from(e.dataTransfer.files));
         }}
         className="space-y-3 rounded-2xl border-2 border-dashed border-indigo-200 bg-indigo-50/35 p-4 sm:p-5"
       >
-        <input className="peer sr-only" id={inputId} type="file" multiple disabled={!!activity}
+        <input className="peer sr-only" id={inputId} type="file" multiple disabled={!!activity || isJobRunning}
           accept=".jpg,.jpeg,.png,.webp,.pdf,.docx,.xlsx,.csv"
           onChange={event => { selectFiles(Array.from(event.target.files || [])); event.target.value = ''; }} />
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <label htmlFor={inputId} className={secondary + ' peer-focus-visible:ring-2 peer-focus-visible:ring-indigo-500' + (activity ? ' pointer-events-none opacity-50' : '')}>
+          <label htmlFor={inputId} className={secondary + ' peer-focus-visible:ring-2 peer-focus-visible:ring-indigo-500' + (activity || isJobRunning ? ' pointer-events-none opacity-50' : '')}>
             <Upload aria-hidden="true" className="h-4 w-4" />Selecionar arquivos
           </label>
           <span className="text-xs font-semibold text-slate-600">
@@ -196,6 +486,10 @@ export function StudioCatalogImportView() {
         <p className="text-xs text-slate-600">
           Arraste ou envie JPG, PNG, WebP, PDF, DOCX, XLSX ou CSV UTF-8. Vários arquivos enviados juntos são cruzados em um catálogo único sem duplicar modalidades.
         </p>
+        <p className="flex items-center gap-1.5 text-[11px] font-medium text-slate-600">
+          <ShieldCheck aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+          As imagens e documentos são temporários e excluídos automaticamente após a extração, confirmação ou cancelamento (máx. 24h se pendentes).
+        </p>
         {files.length > 0 && <ul className="grid gap-2 sm:grid-cols-2" aria-label="Arquivos selecionados">
           {files.map((file, index) => <li key={index} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-2.5">
             <FileThumbnail file={file} />
@@ -203,14 +497,14 @@ export function StudioCatalogImportView() {
               <p className="truncate text-sm font-semibold text-slate-800">{file.name}</p>
               <p className="text-xs text-slate-500">{Math.max(1, Math.round(file.size / 1024))} KB</p>
             </div>
-            <button type="button" className="rounded-lg p-2 text-slate-500 hover:bg-rose-50 hover:text-rose-700 cursor-pointer" disabled={!!activity}
+            <button type="button" className="rounded-lg p-2 text-slate-500 hover:bg-rose-50 hover:text-rose-700 cursor-pointer" disabled={!!activity || isJobRunning}
               aria-label={'Remover ' + file.name} onClick={() => setFiles(files.filter((_, i) => i !== index))}><X className="h-4 w-4" /></button>
           </li>)}
         </ul>}
-        <button type="button" className={primary} disabled={!!activity || files.length === 0} onClick={() => void run('reading', async () => {
+        <button type="button" className={primary} disabled={!!activity || isJobRunning || files.length === 0} onClick={() => void run('reading', async () => {
           const encoded = await Promise.all(files.map(encode));
           setActivity('analyzing');
-          const analyzed = await ApiClient.post<ImportDraft>(endpoint + '/analyze', { files: encoded });
+          const analyzed = await ApiClient.post<ImportDraft | DraftListItem>(endpoint + '/analyze', { files: encoded, async: true });
           setFiles([]);
           return analyzed;
         })}><Sparkles aria-hidden="true" className="h-4 w-4" />Analisar catálogo com IA</button>
@@ -219,19 +513,40 @@ export function StudioCatalogImportView() {
       {draftError && <p className="text-sm text-rose-800">{draftError} <button type="button" className="underline" onClick={() => void refreshDrafts()}>Tentar novamente</button></p>}
 
       {openDrafts.length > 0 && <div className="space-y-2">
-        <h3 className="text-sm font-bold text-slate-900">Rascunhos salvos para continuar</h3>
+        <h3 className="text-sm font-bold text-slate-900">Rascunhos e análises recentes</h3>
         <div className="space-y-2">
-          {openDrafts.map(item => <div key={item.id} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-2">
-            <button type="button" disabled={!!activity} className="flex flex-1 min-w-0 items-center gap-2 text-left text-sm font-semibold text-slate-800 hover:text-indigo-700 px-2 py-1 cursor-pointer"
-              onClick={() => void run('opening', () => ApiClient.get<ImportDraft>(endpoint + '/' + item.id))}>
-              <FileText aria-hidden="true" className="h-4 w-4 shrink-0 text-indigo-600" />
-              <span className="truncate">{item.sources.map(s => s.fileName).join(', ')}</span>
-            </button>
-            <button type="button" disabled={!!activity} onClick={() => void discardDraft(item.id)}
-              aria-label="Descartar rascunho" className="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-700 cursor-pointer">
-              <Trash2 className="h-4 w-4" />
-            </button>
-          </div>)}
+          {openDrafts.map(item => {
+            const badge = statusBadge(item);
+            return <div key={item.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-2">
+              <button type="button" disabled={!!activity} className="flex flex-1 min-w-0 items-center gap-2 text-left text-sm font-semibold text-slate-800 hover:text-indigo-700 px-2 py-1 cursor-pointer"
+                onClick={() => void run('opening', () => ApiClient.get<ImportDraft | DraftListItem>(endpoint + '/' + item.id))}>
+                <FileText aria-hidden="true" className="h-4 w-4 shrink-0 text-indigo-600" />
+                <span className="truncate">{item.sources.map(s => s.fileName).join(', ')}</span>
+              </button>
+              <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${badge.className}`}>
+                {badge.label}
+              </span>
+              {item.tempPurgedAt && item.status === 'ready' && (
+                <span className="text-[11px] text-emerald-700 font-medium hidden sm:inline">Arquivos originais removidos</span>
+              )}
+              {item.status === 'failed' && item.retryable && (
+                <button type="button" disabled={!!activity || isJobRunning} onClick={() => void retryBatch(item.id)}
+                  className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 cursor-pointer disabled:opacity-50">
+                  <RefreshCw className="h-3.5 w-3.5" />Retentar
+                </button>
+              )}
+              {(item.status === 'queued' || item.status === 'processing') && (
+                <button type="button" disabled={!!activity} onClick={() => void cancelBatch(item.id)}
+                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer disabled:opacity-50">
+                  Cancelar
+                </button>
+              )}
+              <button type="button" disabled={!!activity} onClick={() => void discardDraft(item.id)}
+                aria-label="Descartar rascunho" className="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-700 cursor-pointer">
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>;
+          })}
         </div>
       </div>}
 
@@ -269,7 +584,14 @@ export function StudioCatalogImportView() {
     {draft && !draft.result && <>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="space-y-0.5">
-          <h3 className="font-bold text-slate-900">Revisar catálogo extraído</h3>
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="font-bold text-slate-900">Revisar catálogo extraído</h3>
+            {draft.tempPurgedAt && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                <ShieldCheck className="h-3 w-3" />Arquivos originais excluídos
+              </span>
+            )}
+          </div>
           <p className="break-words text-xs text-slate-600">Fontes ({draft.sources.length}): {draft.sources.map(s => s.fileName + (s.copies > 1 ? ` (${s.copies}x)` : '')).join(', ')}.</p>
         </div>
         <button type="button" className="text-xs font-semibold text-rose-700 hover:underline cursor-pointer" onClick={() => void discardDraft(draft.id)}>
@@ -311,7 +633,7 @@ export function StudioCatalogImportView() {
           <button type="button" className={secondary} disabled={!!activity} onClick={() => {
             if (confirming) { setConfirming(false); return; }
             if (!window.confirm('Voltar à lista de arquivos? Salve o rascunho antes se fez alterações recentes.')) return;
-            setDraft(null); setError(''); setMessage('');
+            setDraft(null); setError(''); setErrorDetails(null); setMessage('');
           }}>{confirming ? 'Voltar à edição' : 'Voltar aos arquivos'}</button>
         </div>
         {!ready && (

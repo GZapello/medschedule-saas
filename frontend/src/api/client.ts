@@ -191,12 +191,14 @@ export class ApiClient {
     // Validação de Content-Type retornado
     const contentType = response.headers.get('content-type') || '';
     const isJson = contentType.toLowerCase().includes('application/json');
+    const responseRequestId = response.headers.get('x-request-id') || undefined;
 
     if (!response.ok) {
       let errorMsg = `Erro ${response.status}: ${response.statusText}`;
       let errorCode: string | undefined = undefined;
       let errorField: string | undefined;
       let errorData: any = undefined;
+      let isHtmlResponse = false;
       try {
         const text = await response.text();
         if (isJson) {
@@ -209,13 +211,22 @@ export class ApiClient {
             errorMsg = text.trim() || errorMsg;
           }
         } else if (text.trim().startsWith('<') || contentType.includes('text/html')) {
+          isHtmlResponse = true;
           console.warn('[ApiClient] Resposta HTML recebida da API:', {
             status: response.status,
             contentType,
-            url: requestUrl
+            url: requestUrl,
+            requestId: responseRequestId
           });
-          errorMsg = `Erro ${response.status}: O servidor respondeu com uma página HTML em vez de dados (JSON). Verifique o endereço da API e sua conexão.`;
-          errorCode = response.status === 502 ? 'BAD_GATEWAY_HTML' : 'HTML_RESPONSE';
+          errorMsg =
+            response.status === 502 || response.status === 504
+              ? `Erro ${response.status}: O servidor ou proxy retornou uma resposta HTML inesperada (possível falha temporária de comunicação ou tempo limite excedido). Tente novamente em instantes.`
+              : `Erro ${response.status}: O servidor respondeu com uma página HTML em vez de dados estruturados (JSON).`;
+          errorCode = response.status === 502
+            ? 'BAD_GATEWAY_HTML'
+            : response.status === 504
+              ? 'GATEWAY_TIMEOUT_HTML'
+              : 'HTML_RESPONSE';
         } else if (text.trim()) {
           errorMsg = text.trim();
         }
@@ -233,6 +244,10 @@ export class ApiClient {
       err.status = response.status;
       err.contentType = contentType;
       err.requestUrl = requestUrl;
+      err.requestId = errorData?.requestId || responseRequestId;
+      err.retryable = Boolean(errorData?.retryable || [502, 503, 504, 429].includes(response.status));
+      err.retryAfterSeconds = typeof errorData?.retryAfterSeconds === 'number' ? errorData.retryAfterSeconds : undefined;
+      err.isHtmlResponse = isHtmlResponse;
       err.data = errorData;
       throw err;
     }
@@ -249,7 +264,18 @@ export class ApiClient {
     const rawText = await response.text();
     if (!isJson) {
       if (rawText.trim().startsWith('<') || contentType.includes('text/html')) {
-        throw new Error('O servidor respondeu com uma página HTML em vez de dados (JSON). Verifique o endereço do servidor.');
+        console.warn('[ApiClient] Resposta HTML inesperada com status 2xx:', {
+          status: response.status,
+          contentType,
+          url: requestUrl
+        });
+        const htmlErr: any = new Error('O servidor respondeu com uma página HTML em vez de dados estruturados (JSON). Verifique sua conexão e tente novamente.');
+        htmlErr.code = 'HTML_RESPONSE';
+        htmlErr.status = response.status;
+        htmlErr.isHtmlResponse = true;
+        htmlErr.requestUrl = requestUrl;
+        htmlErr.requestId = responseRequestId;
+        throw htmlErr;
       }
       throw new Error(`Esperava JSON da API, mas o servidor retornou ${contentType || 'formato desconhecido'}: ${rawText.slice(0, 100)}`);
     }

@@ -13,14 +13,105 @@ dotenv.config();
 // e o controlador de IA recai no motor heurístico local.
 // ============================================================================
 
-const CANDIDATE_MODELS = [
+const CANDIDATE_MODELS = [...new Set([
   ...(process.env.GEMINI_MODEL ? [process.env.GEMINI_MODEL.trim()] : []),
   'gemini-2.5-flash',
-  'gemini-2.0-flash',
   'gemini-flash-latest',
+  'gemini-2.5-flash-lite',
   'gemini-flash-lite-latest',
-  'gemini-1.5-flash'
-];
+  'gemini-2.0-flash'
+].filter(Boolean))];
+
+export type GeminiErrorCategory =
+  | 'rate_limit'
+  | 'unavailable'
+  | 'model_not_found'
+  | 'invalid_request'
+  | 'safety_blocked'
+  | 'timeout'
+  | 'aborted'
+  | 'empty_response'
+  | 'invalid_json'
+  | 'not_configured'
+  | 'unknown';
+
+export interface GeminiAttemptTrace {
+  model: string;
+  category?: GeminiErrorCategory;
+  httpStatus?: number;
+  retryable: boolean;
+  elapsedMs: number;
+}
+
+export interface GeminiCatalogDiagnostic {
+  ok: boolean;
+  reason?: GeminiErrorCategory;
+  retryable: boolean;
+  retryAfterSeconds: number | null;
+  modelUsed?: string;
+  attempts: GeminiAttemptTrace[];
+}
+
+function classifyGeminiError(err: any): {
+  category: GeminiErrorCategory;
+  httpStatus?: number;
+  retryable: boolean;
+  retryAfterSeconds?: number;
+} {
+  if (err?.name === 'AbortError' || String(err?.message || '').includes('ABORTED')) {
+    return { category: 'aborted', retryable: true };
+  }
+  const msg = String(err?.message || err || '');
+  const lower = msg.toLowerCase();
+  const statusMatch = msg.match(/\b(400|401|403|404|408|409|413|429|500|502|503|504)\b/);
+  const httpStatus = Number(err?.status || err?.response?.status || (statusMatch ? Number(statusMatch[1]) : 0)) || undefined;
+
+  if (lower.includes('timeout') || lower.includes('excedido') || httpStatus === 408 || httpStatus === 504) {
+    return { category: 'timeout', httpStatus: httpStatus || 504, retryable: true, retryAfterSeconds: 15 };
+  }
+  if (httpStatus === 429 || lower.includes('resource_exhausted') || lower.includes('quota') || lower.includes('rate limit')) {
+    return { category: 'rate_limit', httpStatus: 429, retryable: true, retryAfterSeconds: 20 };
+  }
+  if (httpStatus === 503 || httpStatus === 502 || httpStatus === 500 || lower.includes('unavailable') || lower.includes('overloaded')) {
+    return { category: 'unavailable', httpStatus: httpStatus || 503, retryable: true, retryAfterSeconds: 15 };
+  }
+  if (httpStatus === 404 || lower.includes('not found') || lower.includes('is not found for api version')) {
+    return { category: 'model_not_found', httpStatus: 404, retryable: false };
+  }
+  if (lower.includes('safety') || lower.includes('recitation') || lower.includes('blocked')) {
+    return { category: 'safety_blocked', httpStatus, retryable: false };
+  }
+  if (httpStatus === 400 || httpStatus === 413 || lower.includes('invalid') || lower.includes('argument')) {
+    return { category: 'invalid_request', httpStatus: httpStatus || 400, retryable: false };
+  }
+  if (lower.includes('fetch failed') || lower.includes('econnreset') || lower.includes('etimedout') || lower.includes('network')) {
+    return { category: 'unavailable', httpStatus, retryable: true, retryAfterSeconds: 15 };
+  }
+  return { category: 'unknown', httpStatus, retryable: true, retryAfterSeconds: 15 };
+}
+
+function effectiveMaxOutputTokens(modelName: string, requestedMax: number): number {
+  const lower = modelName.toLowerCase();
+  if (lower.includes('1.5') || lower.includes('2.0')) {
+    return Math.min(requestedMax, 8192);
+  }
+  return requestedMax;
+}
+
+async function sleepAbortable(ms: number, signal?: AbortSignal): Promise<boolean> {
+  if (signal?.aborted) return false;
+  return new Promise((resolve) => {
+    const t = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve(true);
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(t);
+      resolve(false);
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
 
 function getApiKey(): string {
   return process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim() || '';
@@ -45,46 +136,146 @@ async function generateWithCascade(
   config: { temperature: number; topP: number; maxOutputTokens: number; responseMimeType?: string },
   timeoutMs: number = 8000,
   sanitizedErrors: boolean = false,
-  totalTimeoutMs?: number
+  totalTimeoutMs?: number,
+  options?: {
+    signal?: AbortSignal;
+    retryTransientPass?: boolean;
+    onComplete?: (diag: GeminiCatalogDiagnostic) => void;
+  }
 ): Promise<{ text: string; modelUsed: string } | null> {
   const ai = getGenAI();
-  if (!ai) return null;
+  if (!ai) {
+    options?.onComplete?.({
+      ok: false,
+      reason: 'not_configured',
+      retryable: false,
+      retryAfterSeconds: null,
+      attempts: []
+    });
+    return null;
+  }
 
   const deadline = totalTimeoutMs ? Date.now() + totalTimeoutMs : Infinity;
-  for (const modelName of CANDIDATE_MODELS) {
-    const attemptTimeout = Math.min(timeoutMs, deadline - Date.now());
-    if (attemptTimeout <= 0) break;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    try {
-      const model = ai.getGenerativeModel({ model: modelName });
-      const apiCall = model.generateContent({
-        contents,
-        systemInstruction,
-        generationConfig: {
-          temperature: config.temperature,
-          topP: config.topP,
-          maxOutputTokens: config.maxOutputTokens,
-          ...(config.responseMimeType ? { responseMimeType: config.responseMimeType } : {})
-        }
-      }, totalTimeoutMs ? { timeout: attemptTimeout } : undefined);
+  const attempts: GeminiAttemptTrace[] = [];
 
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error(`Timeout de ${attemptTimeout}ms excedido na chamada do modelo ${modelName}`)), attemptTimeout);
-      });
-
-      const result = await Promise.race([apiCall, timeoutPromise]);
-      const text = result?.response?.text();
-      if (text && text.trim()) {
-        return { text: text.trim(), modelUsed: modelName };
+  const runPass = async (models: string[]): Promise<{ text: string; modelUsed: string } | null> => {
+    for (const modelName of models) {
+      if (options?.signal?.aborted) {
+        attempts.push({ model: modelName, category: 'aborted', elapsedMs: 0, retryable: true });
+        return null;
       }
-    } catch (err: any) {
-      console.warn(`[GeminiService] Falha no modelo ${modelName}:`, sanitizedErrors ? 'Falha do provedor' : err?.message || err);
-      // Continua para o próximo modelo candidato
-    } finally {
-      if (timer) clearTimeout(timer);
+      const remaining = deadline - Date.now();
+      const attemptTimeout = Math.min(timeoutMs, remaining);
+      if (attemptTimeout <= 0) break;
+
+      const startedAt = Date.now();
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      let abortReject: ((err: Error) => void) | undefined;
+      const onAbort = () => abortReject?.(Object.assign(new Error('ABORTED'), { name: 'AbortError' }));
+
+      try {
+        const model = ai.getGenerativeModel({ model: modelName });
+        const cappedMaxTokens = effectiveMaxOutputTokens(modelName, config.maxOutputTokens);
+        const apiCall = model.generateContent({
+          contents,
+          systemInstruction,
+          generationConfig: {
+            temperature: config.temperature,
+            topP: config.topP,
+            maxOutputTokens: cappedMaxTokens,
+            ...(config.responseMimeType ? { responseMimeType: config.responseMimeType } : {})
+          }
+        }, totalTimeoutMs ? { timeout: attemptTimeout } : undefined);
+
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error(`Timeout de ${attemptTimeout}ms excedido na chamada do modelo ${modelName}`)), attemptTimeout);
+        });
+        const races: Array<Promise<any>> = [apiCall, timeoutPromise];
+        if (options?.signal) {
+          races.push(new Promise<never>((_, reject) => {
+            abortReject = reject;
+            options.signal!.addEventListener('abort', onAbort, { once: true });
+          }));
+        }
+
+        const result = await Promise.race(races);
+        const text = result?.response?.text();
+        const durationMs = Date.now() - startedAt;
+        if (text && text.trim()) {
+          attempts.push({ model: modelName, elapsedMs: durationMs, retryable: false });
+          options?.onComplete?.({
+            ok: true,
+            retryable: false,
+            retryAfterSeconds: null,
+            modelUsed: modelName,
+            attempts
+          });
+          return { text: text.trim(), modelUsed: modelName };
+        }
+        attempts.push({ model: modelName, category: 'empty_response', elapsedMs: durationMs, retryable: true });
+      } catch (err: any) {
+        const durationMs = Date.now() - startedAt;
+        const cls = classifyGeminiError(err);
+        attempts.push({
+          model: modelName,
+          httpStatus: cls.httpStatus,
+          category: cls.category,
+          elapsedMs: durationMs,
+          retryable: cls.retryable
+        });
+        console.warn(
+          `[GeminiService] Falha no modelo ${modelName}:`,
+          sanitizedErrors
+            ? `status=${cls.httpStatus ?? 'n/a'} category=${cls.category} durationMs=${durationMs}`
+            : err?.message || err
+        );
+        if (cls.category === 'aborted') {
+          return null;
+        }
+      } finally {
+        if (timer) clearTimeout(timer);
+        if (options?.signal) options.signal.removeEventListener('abort', onAbort);
+      }
+    }
+    return null;
+  };
+
+  const firstPass = await runPass(CANDIDATE_MODELS);
+  if (firstPass) return firstPass;
+
+  const hasTransient = attempts.some((a) => a.category === 'rate_limit' || a.category === 'unavailable');
+  if (
+    options?.retryTransientPass
+    && hasTransient
+    && !options?.signal?.aborted
+    && deadline - Date.now() > 8000
+  ) {
+    const waited = await sleepAbortable(2200, options?.signal);
+    if (waited) {
+      const retryPass = await runPass(CANDIDATE_MODELS.slice(0, 2));
+      if (retryPass) return retryPass;
     }
   }
 
+  const lastRetryable = [...attempts].reverse().find((a) => a.retryable);
+  const lastWithCategory = [...attempts].reverse().find((a) => a.category);
+  const primaryCategory: GeminiErrorCategory =
+    options?.signal?.aborted
+      ? 'aborted'
+      : lastRetryable?.category || lastWithCategory?.category || 'unknown';
+  const retryable = attempts.length > 0 ? attempts.some((a) => a.retryable) : true;
+  const retryAfterSeconds =
+    primaryCategory === 'rate_limit' ? 20
+      : retryable ? 15
+        : null;
+
+  options?.onComplete?.({
+    ok: false,
+    reason: primaryCategory,
+    retryable,
+    retryAfterSeconds,
+    attempts
+  });
   return null;
 }
 
@@ -321,10 +512,27 @@ function sanitizeContents(rawContents: Content[]): Content[] {
   return filtered;
 }
 
+const catalogDiagByRequestId = new Map<string, GeminiCatalogDiagnostic>();
+
+function rememberCatalogDiagnostic(requestId: string | undefined, diag: GeminiCatalogDiagnostic): void {
+  if (!requestId) return;
+  if (catalogDiagByRequestId.size >= 100) {
+    const firstKey = catalogDiagByRequestId.keys().next().value;
+    if (firstKey) catalogDiagByRequestId.delete(firstKey);
+  }
+  catalogDiagByRequestId.set(requestId, diag);
+}
+
 export class GeminiService {
+  static getLastCatalogDiagnostic(requestId?: string): GeminiCatalogDiagnostic | null {
+    if (!requestId) return null;
+    return catalogDiagByRequestId.get(requestId) || null;
+  }
+
   static async extractStudioCatalog(
     instruction: string,
-    files: Array<{ mimeType: string; base64?: string; text?: string; fileName: string }>
+    files: Array<{ mimeType: string; base64?: string; text?: string; fileName: string }>,
+    options?: { requestId?: string; signal?: AbortSignal }
   ): Promise<unknown> {
     const parts: Content['parts'] = [{
       text: `Analise em conjunto as ${files.length} fonte(s) abaixo como um catálogo unificado de um mesmo estabelecimento Academia & Studio. Relacione preços, grades, modalidades e pacotes que falem do mesmo serviço sem duplicar.`
@@ -334,23 +542,69 @@ export class GeminiService {
       if (file.text) parts.push({ text: file.text });
       else if (file.base64) parts.push({ inlineData: { mimeType: file.mimeType, data: file.base64 } });
     });
+
+    let lastDiag: GeminiCatalogDiagnostic | undefined;
     const result = await generateWithCascade(
-      instruction, [{ role: 'user', parts }],
+      instruction,
+      [{ role: 'user', parts }],
       { temperature: 0.1, topP: 0.85, maxOutputTokens: 16384, responseMimeType: 'application/json' },
-      45000, true, 90_000
+      40000,
+      true,
+      90_000,
+      {
+        signal: options?.signal,
+        retryTransientPass: true,
+        onComplete: (diag) => {
+          lastDiag = diag;
+          rememberCatalogDiagnostic(options?.requestId, diag);
+        }
+      }
     );
-    if (!result) return null;
-    const trimmed = result.text.trim();
-    try { return JSON.parse(trimmed); } catch {
-      const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
-      const candidate = fenced?.[1]?.trim() || trimmed;
-      const firstBrace = candidate.indexOf('{');
-      const lastBrace = candidate.lastIndexOf('}');
-      if (firstBrace >= 0 && lastBrace > firstBrace) {
-        try { return JSON.parse(candidate.slice(firstBrace, lastBrace + 1)); } catch { return null; }
+    if (!result) {
+      if (!lastDiag && options?.requestId) {
+        rememberCatalogDiagnostic(options.requestId, {
+          ok: false,
+          reason: options?.signal?.aborted ? 'aborted' : 'unavailable',
+          retryable: true,
+          retryAfterSeconds: 15,
+          attempts: []
+        });
       }
       return null;
     }
+
+    const trimmed = result.text.trim();
+    const parseCandidate = (rawText: string): unknown => {
+      try {
+        return JSON.parse(rawText);
+      } catch {
+        const fenced = rawText.match(/```(?:json)?\s*([\s\S]*?)```/i);
+        const candidate = fenced?.[1]?.trim() || rawText;
+        const firstBrace = candidate.indexOf('{');
+        const lastBrace = candidate.lastIndexOf('}');
+        if (firstBrace >= 0 && lastBrace > firstBrace) {
+          try {
+            return JSON.parse(candidate.slice(firstBrace, lastBrace + 1));
+          } catch {
+            return null;
+          }
+        }
+        return null;
+      }
+    };
+
+    const parsed = parseCandidate(trimmed);
+    if (!parsed && options?.requestId) {
+      rememberCatalogDiagnostic(options.requestId, {
+        ok: false,
+        reason: 'invalid_json',
+        retryable: true,
+        retryAfterSeconds: 10,
+        modelUsed: result.modelUsed,
+        attempts: lastDiag?.attempts || []
+      });
+    }
+    return parsed;
   }
 
   /**

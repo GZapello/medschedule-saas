@@ -121,14 +121,16 @@ export class R2StorageService {
   async uploadFile(
     objectKey: string,
     fileBuffer: Buffer,
-    contentType: string = 'image/webp'
+    contentType: string = 'image/webp',
+    metadata?: Record<string, string>
   ): Promise<{ objectKey: string; size: number }> {
     if (this.client && this.isConfigured && process.env.R2_MOCK_STORAGE !== 'true') {
       const command = new PutObjectCommand({
         Bucket: this.bucketName,
         Key: objectKey,
         Body: fileBuffer,
-        ContentType: contentType
+        ContentType: contentType,
+        ...(metadata ? { Metadata: metadata } : {})
       });
       await this.client.send(command);
     }

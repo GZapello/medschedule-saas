@@ -205,6 +205,8 @@ export interface ImportSource {
   id: number;
   fileName: string;
   copies: number;
+  mimeType?: string;
+  fileSize?: number;
 }
 
 export interface ImportReceipt {
@@ -212,8 +214,19 @@ export interface ImportReceipt {
   packages: { key: string; id: string; name: string; action: string }[];
 }
 
+export type CatalogImportBatchStatus = 'queued' | 'processing' | 'failed' | 'cancelled' | 'ready' | 'completed';
+
 export interface ImportDraft {
   id: string;
+  status?: CatalogImportBatchStatus;
+  requestId?: string | null;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+  retryable?: boolean;
+  retryAfterSeconds?: number | null;
+  attempts?: number;
+  tempExpiresAt?: string | null;
+  tempPurgedAt?: string | null;
   revision: number;
   sources: ImportSource[];
   proposal: StudioProposal;

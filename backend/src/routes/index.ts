@@ -1084,13 +1084,15 @@ const studioCatalogImportAccess = [
   requireTenant, requireStudioEstablishment, requirePermissionOrRole('manage_services', 'clinic_admin')
 ];
 const studioCatalogAnalysisLimit = rateLimit({
-  windowMs: 15 * 60_000, limit: 8,
+  windowMs: 15 * 60_000, limit: 20,
   keyGenerator: req => String(req.tenantId),
-  message: { error: 'Limite de análises atingido. Tente novamente em alguns minutos.' }
+  message: { error: 'Limite de análises atingido. Tente novamente em alguns minutos.', code: 'RATE_LIMITED', retryable: true, retryAfterSeconds: 60 }
 });
 api.get('/v1/studio/catalog-imports', ...studioCatalogImportAccess, StudioCatalogImportController.list);
 api.get('/v1/studio/catalog-imports/:id', ...studioCatalogImportAccess, StudioCatalogImportController.get);
 api.post('/v1/studio/catalog-imports/analyze', ...studioCatalogImportAccess, studioCatalogAnalysisLimit, StudioCatalogImportController.analyze);
+api.post('/v1/studio/catalog-imports/:id/retry', ...studioCatalogImportAccess, StudioCatalogImportController.retry);
+api.post('/v1/studio/catalog-imports/:id/cancel', ...studioCatalogImportAccess, StudioCatalogImportController.cancel);
 api.put('/v1/studio/catalog-imports/:id', ...studioCatalogImportAccess, StudioCatalogImportController.save);
 api.post('/v1/studio/catalog-imports/:id/confirm', ...studioCatalogImportAccess, StudioCatalogImportController.confirm);
 api.delete('/v1/studio/catalog-imports/:id', ...studioCatalogImportAccess, StudioCatalogImportController.remove);

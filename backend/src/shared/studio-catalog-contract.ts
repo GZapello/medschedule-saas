@@ -200,3 +200,11 @@ export interface ImportDiagnostics {
   scheduleChecks: Record<string, ScheduleSlotCheck[]>;
   preview: ImportPreviewSummary;
 }
+
+export type CatalogImportBatchStatus =
+  | 'queued'
+  | 'processing'
+  | 'failed'
+  | 'cancelled'
+  | 'ready'
+  | 'completed';
