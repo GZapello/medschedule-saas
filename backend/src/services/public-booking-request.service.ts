@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../config/database';
 import { PackageService } from './package.service';
-import { BillingCycleService } from './billing-cycle.service';
+import { BillingCycleService, normalizePeriodicFrequency } from './billing-cycle.service';
 import { quoteFrequencyPlan } from './frequency-pricing.service';
 import { NotificationService } from './notification.service';
 import { GoogleCalendarService } from './google-calendar.service';
@@ -31,8 +31,17 @@ import {
   normalizeOptionalAddonsConfig,
   normalizeStudioAccessConfig,
   normalizeStudioServiceType,
+  resolveOptionCreditPlan,
+  resolveServiceCommercialModes,
+  CommercialOptionBreakdown,
+  PaymentPeriodicityCode,
+  PlanCreditMode,
+  StudioCommercialPriceOption,
   StudioOptionalAddonOption
 } from '../utils/studio-access-and-commercial';
+import { calculateStudioRecurringPrice } from '../utils/studio-pricing';
+import { readFrequencyPricing } from '../utils/studio-frequency-pricing';
+import { evaluateSlotTimingStatus, getLocalTodayYmd, getTenantTimezone } from '../utils/studio-timezone';
 import { resolveConcreteModality, sanitizeBookingErrorMessage } from '../utils/modality-resolver';
 import {
   resolveBookingTenant,
@@ -48,6 +57,7 @@ import { canOperate } from './billing.service';
 import { validateClinicBusinessHours, validateProfessionalSchedule } from '../utils/booking-validators';
 import {
   MAX_PUBLIC_RECURRENCE_OCCURRENCES,
+  PeriodicBillingFrequency,
   PlanDurationCode,
   RecurrenceFrequency,
   RecurrenceIntervalUnit,
@@ -174,6 +184,278 @@ function computeClockOffsetEnd(startClock: string, durationMinutes: number): str
   return `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}:00`;
 }
 
+function matchCommercialOptionForPublicService(params: {
+  serviceRow: any;
+  commercialOptionId?: string | null;
+  durationCode?: string | null;
+  weeklyCount?: number | null;
+  requireActivePublic?: boolean;
+}): StudioCommercialPriceOption | null {
+  const rawOpts = normalizeCommercialPriceOptions(params.serviceRow?.commercial_price_options_json);
+  const activeOpts = params.requireActivePublic
+    ? rawOpts.filter(o => o.active && o.allowPublicBooking !== false)
+    : rawOpts.filter(o => o.active);
+  if (params.commercialOptionId) {
+    return activeOpts.find(o => o.id === String(params.commercialOptionId).trim()) || null;
+  }
+  if (activeOpts.length === 0) return null;
+  const dur = params.durationCode ? String(params.durationCode).trim() : null;
+  const wc = params.weeklyCount && params.weeklyCount > 0 ? Math.floor(Number(params.weeklyCount)) : null;
+  const byDur = dur ? activeOpts.filter(o => o.contractDurationCode === dur) : activeOpts;
+  if (wc) {
+    const exactWeekly = byDur.find(o => o.frequencyType === 'weekly' && o.frequencyCount === wc) ||
+      byDur.find(o => o.frequencyCount === wc);
+    if (exactWeekly) return exactWeekly;
+  }
+  if (byDur.length === 1) return byDur[0];
+  if (activeOpts.length === 1) return activeOpts[0];
+  return null;
+}
+
+interface PublicRecurringPlanTerms {
+  selectedOption: StudioCommercialPriceOption | null;
+  breakdown: CommercialOptionBreakdown | null;
+  quote: ReturnType<typeof quoteFrequencyPlan> | null;
+  creditMode: PlanCreditMode;
+  creditsPerCycle: number | null;
+  totalContractCredits: number | null;
+  cycleAmount: number;
+  totalContractAmount: number;
+  monthlyEquivalent: number;
+  billingFrequency: PeriodicBillingFrequency;
+  paymentPeriodicity: PaymentPeriodicityCode;
+  installmentsCount: number;
+  contractDurationCode: string;
+  contractMonths: number;
+  weeklyFrequency: number;
+  pricingRuleSnapshot: string;
+  referenceSessionsCount: number;
+  scheduleRules: any;
+}
+
+function shouldTreatPublicServiceBookingAsRecurringPlan(params: {
+  tenantId: string;
+  serviceRow: any;
+  bookingIntent?: string | null;
+  bookingMode?: string | null;
+  commercialOptionId?: string | null;
+  hasRecurrence?: boolean;
+}): boolean {
+  if (params.bookingIntent === 'recurring' || params.bookingMode === 'plan' || Boolean(params.commercialOptionId)) {
+    return true;
+  }
+  if (!params.hasRecurrence) return false;
+  const estProfile = getTenantEstablishmentProfile(params.tenantId);
+  const modes = resolveServiceCommercialModes(params.serviceRow, estProfile);
+  if (!modes.allowPlanBooking) return false;
+  const billingMode = String(params.serviceRow?.billing_mode || '').trim().toLowerCase();
+  const hasPeriodicBillingMode = Boolean(billingMode && billingMode !== 'per_session');
+  return hasPeriodicBillingMode || modes.hasActiveCommercialOptions || modes.hasFrequencyPricing;
+}
+
+function resolvePublicRecurringPlanTerms(params: {
+  tenantId: string;
+  serviceRow: any;
+  commercialOptionId?: string | null;
+  recurrence?: any;
+  slots: Array<{ startIso: string; endIso: string; professionalId: string; classScheduleId?: string | null }>;
+  planStart: string;
+  planEnd: string;
+  bookingIntent?: string | null;
+}): PublicRecurringPlanTerms | null {
+  const srv = params.serviceRow;
+  if (!srv) return null;
+  const durationToBilling: Record<string, PeriodicBillingFrequency> = {
+    '1_month': 'monthly',
+    '2_months': 'bimonthly',
+    '3_months': 'quarterly',
+    '6_months': 'semiannual',
+    '12_months': 'annual',
+    '24_months': 'biennial'
+  };
+  const reqDuration = String(
+    params.recurrence?.durationCode ||
+    params.recurrence?.planDurationCode ||
+    srv.default_plan_duration ||
+    '1_month'
+  ).trim();
+  const uniqueDays = new Set(params.slots.map(s => s.startIso.slice(0, 10)).filter(Boolean));
+  const uniqueWeekdays = new Set(params.slots.map(s => getDayOfWeekFromYmd(s.startIso.slice(0, 10))));
+  const inferredWeekly = Math.max(1, uniqueWeekdays.size || Number(srv.weekly_sessions_count || 1));
+
+  const selectedOption = matchCommercialOptionForPublicService({
+    serviceRow: srv,
+    commercialOptionId: params.commercialOptionId || null,
+    durationCode: reqDuration,
+    weeklyCount: inferredWeekly,
+    requireActivePublic: true
+  });
+
+  if (selectedOption) {
+    const breakdown = calculateCommercialOptionBreakdown(selectedOption, {
+      sessionsInContract: Math.max(1, params.slots.length),
+      servicePlanCreditMode: srv.plan_credit_mode,
+      servicePlanCreditsPerCycle: srv.plan_credits_per_cycle
+    });
+    const normFreq = normalizePeriodicFrequency(
+      selectedOption.paymentPeriodicity === 'bimonthly' ||
+      selectedOption.paymentPeriodicity === 'quarterly' ||
+      selectedOption.paymentPeriodicity === 'semiannual' ||
+      selectedOption.paymentPeriodicity === 'annual'
+        ? selectedOption.paymentPeriodicity
+        : (durationToBilling[selectedOption.contractDurationCode] || 'monthly')
+    );
+    return {
+      selectedOption,
+      breakdown,
+      quote: null,
+      creditMode: breakdown.creditMode,
+      creditsPerCycle: breakdown.creditsPerCycle,
+      totalContractCredits: breakdown.totalContractCredits,
+      cycleAmount: breakdown.cycleAmountReais,
+      totalContractAmount: breakdown.totalContractAmountReais,
+      monthlyEquivalent: breakdown.monthlyEquivalentReais,
+      billingFrequency: normFreq.frequency,
+      paymentPeriodicity: selectedOption.paymentPeriodicity,
+      installmentsCount: breakdown.installmentsCount,
+      contractDurationCode: selectedOption.contractDurationCode,
+      contractMonths: breakdown.contractMonths,
+      weeklyFrequency: selectedOption.frequencyCount || inferredWeekly,
+      pricingRuleSnapshot: String(srv.pricing_rule || 'four_weeks'),
+      referenceSessionsCount: Math.max(1, params.slots.length),
+      scheduleRules: params.slots.map(s => ({
+        weekday: getDayOfWeekFromYmd(s.startIso.slice(0, 10)),
+        startTime: s.startIso.slice(11, 16),
+        endTime: s.endIso.slice(11, 16),
+        professionalId: s.professionalId,
+        classScheduleId: s.classScheduleId || null
+      }))
+    };
+  }
+
+  const effBillingFreq: PeriodicBillingFrequency =
+    srv.billing_mode && srv.billing_mode !== 'per_session' && srv.billing_mode !== 'package'
+      ? (String(srv.billing_mode) as PeriodicBillingFrequency)
+      : (durationToBilling[reqDuration] || 'monthly');
+
+  let quote: ReturnType<typeof quoteFrequencyPlan> | null = null;
+  try {
+    quote = quoteFrequencyPlan({
+      tenantId: params.tenantId,
+      serviceId: String(srv.id),
+      billingFrequency: effBillingFreq,
+      startDate: params.planStart,
+      endDate: params.planEnd,
+      publicOnly: true,
+      includeStandardPricing: params.bookingIntent === 'recurring',
+      cadence: params.recurrence?.frequency || 'weekly',
+      slots: params.slots.map(s => ({
+        startTime: s.startIso,
+        endTime: s.endIso,
+        professionalId: s.professionalId,
+        classScheduleId: s.classScheduleId || null
+      }))
+    });
+  } catch {
+    quote = null;
+  }
+
+  const creditMode: PlanCreditMode =
+    srv.plan_credit_mode === 'weekly_guaranteed' || srv.plan_credit_mode === 'unlimited'
+      ? srv.plan_credit_mode
+      : 'fixed_credits';
+
+  if (quote) {
+    const cycleMonths = quote.calculation.cycleMonths || 1;
+    const creditsPerCycle =
+      creditMode === 'fixed_credits'
+        ? (srv.plan_credits_per_cycle && Number(srv.plan_credits_per_cycle) > 0
+            ? Number(srv.plan_credits_per_cycle)
+            : Math.max(1, quote.weeklyCount * 4 * cycleMonths))
+        : null;
+    return {
+      selectedOption: null,
+      breakdown: null,
+      quote,
+      creditMode,
+      creditsPerCycle,
+      totalContractCredits: creditsPerCycle,
+      cycleAmount: quote.calculation.effectivePrice,
+      totalContractAmount: quote.calculation.effectivePrice,
+      monthlyEquivalent: Math.round((quote.calculation.effectivePrice / Math.max(1, cycleMonths)) * 100) / 100,
+      billingFrequency: effBillingFreq,
+      paymentPeriodicity:
+        effBillingFreq === 'quarterly' || effBillingFreq === 'semiannual' || effBillingFreq === 'annual' || effBillingFreq === 'bimonthly'
+          ? (effBillingFreq as PaymentPeriodicityCode)
+          : 'monthly',
+      installmentsCount: 1,
+      contractDurationCode: reqDuration,
+      contractMonths: cycleMonths,
+      weeklyFrequency: quote.weeklyCount,
+      pricingRuleSnapshot: quote.pricingRule,
+      referenceSessionsCount: quote.calculation.referenceSessionsCount,
+      scheduleRules: quote.meetings
+    };
+  }
+
+  // Fallback para serviços Studio sem frequency_pricing quando contratados como plano
+  const calc = calculateStudioRecurringPrice({
+    serviceName: srv.name,
+    sessionPrice: Number(srv.price || 0),
+    weeklySessionsCount: inferredWeekly,
+    billingMode: effBillingFreq as any,
+    pricingRule: srv.pricing_rule || 'four_weeks',
+    frequencyPricing: readFrequencyPricing(srv.frequency_pricing_json),
+    customPrice: Number(srv.periodic_price) > 0 ? Number(srv.periodic_price) : undefined,
+    isPriceCustomized:
+      srv.is_price_customized !== undefined && srv.is_price_customized !== null
+        ? Boolean(srv.is_price_customized)
+        : undefined,
+    scheduledSessionsCount: Math.max(1, uniqueDays.size || params.slots.length)
+  });
+
+  if (params.bookingIntent === 'recurring' && calc.effectivePrice > 0) {
+    const cycleMonths = calc.cycleMonths || 1;
+    const creditsPerCycle =
+      creditMode === 'fixed_credits'
+        ? (srv.plan_credits_per_cycle && Number(srv.plan_credits_per_cycle) > 0
+            ? Number(srv.plan_credits_per_cycle)
+            : Math.max(1, inferredWeekly * 4 * cycleMonths))
+        : null;
+    return {
+      selectedOption: null,
+      breakdown: null,
+      quote: null,
+      creditMode,
+      creditsPerCycle,
+      totalContractCredits: creditsPerCycle,
+      cycleAmount: calc.effectivePrice,
+      totalContractAmount: calc.effectivePrice,
+      monthlyEquivalent: Math.round((calc.effectivePrice / Math.max(1, cycleMonths)) * 100) / 100,
+      billingFrequency: effBillingFreq,
+      paymentPeriodicity:
+        effBillingFreq === 'quarterly' || effBillingFreq === 'semiannual' || effBillingFreq === 'annual' || effBillingFreq === 'bimonthly'
+          ? (effBillingFreq as PaymentPeriodicityCode)
+          : 'monthly',
+      installmentsCount: 1,
+      contractDurationCode: reqDuration,
+      contractMonths: cycleMonths,
+      weeklyFrequency: inferredWeekly,
+      pricingRuleSnapshot: calc.pricingRule,
+      referenceSessionsCount: calc.referenceSessionsCount,
+      scheduleRules: params.slots.map(s => ({
+        weekday: getDayOfWeekFromYmd(s.startIso.slice(0, 10)),
+        startTime: s.startIso.slice(11, 16),
+        endTime: s.endIso.slice(11, 16),
+        professionalId: s.professionalId,
+        classScheduleId: s.classScheduleId || null
+      }))
+    };
+  }
+
+  return null;
+}
+
 function expandStudioScheduleItem(tenantId: string, item: {
   serviceId: string;
   professionalId?: string;
@@ -182,14 +464,20 @@ function expandStudioScheduleItem(tenantId: string, item: {
   startTime: string;
   endTime?: string;
   recurrence?: any;
+  creditMode?: PlanCreditMode | null;
+  creditsPerCycle?: number | null;
 }): ExpandedStudioSlotItem[] {
   const srv = db.prepare(`
-    SELECT id, name, price, duration_minutes, professional_id, COALESCE(service_kind, 'individual') as service_kind,
+    SELECT id, name, price, periodic_price, duration_minutes, professional_id, COALESCE(service_kind, 'individual') as service_kind,
            default_capacity, COALESCE(allow_recurrence, 1) as allow_recurrence,
            allowed_recurrence_frequencies_json, default_recurrence_frequency,
            allowed_plan_durations_json, default_plan_duration,
            custom_recurrence_intervals_json, default_recurrence_interval_json,
            service_domain, modality, clinical_module, billing_mode, default_billing_due_day,
+           pricing_rule, is_price_customized, weekly_sessions_count, frequency_pricing_json,
+           commercial_price_options_json, studio_service_type, requires_appointment, requires_active_contract,
+           allow_single_booking, allow_plan_booking, allow_public_booking, allow_public_single_booking, allow_public_plan_booking,
+           plan_credit_mode, plan_credits_per_cycle, min_lead_time_hours, max_advance_days,
            COALESCE(availability_mode, 'professional_schedule') as availability_mode
     FROM services WHERE id = ? AND tenant_id = ? AND active = 1
   `).get(item.serviceId, tenantId) as any;
@@ -244,7 +532,16 @@ function expandStudioScheduleItem(tenantId: string, item: {
     const rawMax = item.recurrence.maxOccurrences !== undefined && item.recurrence.maxOccurrences !== null
       ? Number(item.recurrence.maxOccurrences)
       : undefined;
-    if (rawMax !== undefined && rawMax > MAX_PUBLIC_RECURRENCE_OCCURRENCES) {
+    const effCreditMode = item.creditMode || (srv.plan_credit_mode as PlanCreditMode | null) || null;
+    const effCreditsCap =
+      rawMax !== undefined
+        ? rawMax
+        : (effCreditMode === 'fixed_credits' && item.creditsPerCycle && item.creditsPerCycle > 0
+            ? Math.floor(item.creditsPerCycle)
+            : (effCreditMode === 'fixed_credits' && srv.plan_credits_per_cycle && Number(srv.plan_credits_per_cycle) > 0
+                ? Math.floor(Number(srv.plan_credits_per_cycle))
+                : undefined));
+    if (effCreditsCap !== undefined && effCreditsCap > MAX_PUBLIC_RECURRENCE_OCCURRENCES) {
       throw Object.assign(
         new Error(`No agendamento online, o limite máximo é de ${MAX_PUBLIC_RECURRENCE_OCCURRENCES} ocorrências por série.`),
         { status: 400, code: 'RECURRENCE_LIMIT_EXCEEDED' }
@@ -258,7 +555,7 @@ function expandStudioScheduleItem(tenantId: string, item: {
       intervalUnit: recValidation.intervalUnit,
       durationCode: recValidation.durationCode,
       endDate: item.recurrence.endDate || undefined,
-      maxOccurrences: rawMax,
+      maxOccurrences: effCreditsCap,
       weekdays: weekdaysList.length > 0 ? weekdaysList : undefined,
       startClock,
       endClock: computedEndClock,
@@ -429,6 +726,25 @@ function resolveStudioPublicSlot(
         capacity: matchedSlot.capacity ?? (item.capacityOverride && item.capacityOverride >= 1 ? item.capacityOverride : 1),
         modality: concreteModality
       };
+    }
+  }
+  if (!item.isRecurrenceFollowUp) {
+    const rawLead =
+      item.serviceRow.min_lead_time_hours !== undefined && item.serviceRow.min_lead_time_hours !== null
+        ? Number(item.serviceRow.min_lead_time_hours)
+        : 0;
+    const timing = evaluateSlotTimingStatus({
+      dateYmd: dateStr,
+      startTimeHhmm: item.startIso.slice(11, 16),
+      timeZone: getTenantTimezone(db, tenantId),
+      minLeadTimeHours: Math.max(0, rawLead),
+      maxAdvanceDays: Number(item.serviceRow.max_advance_days) || 60
+    });
+    if (!timing.eligible) {
+      throw Object.assign(
+        new Error(timing.reasonMessage || 'Este horário não está mais disponível para agendamento online.'),
+        { status: 409, code: timing.reasonCode || 'SLOT_UNAVAILABLE' }
+      );
     }
   }
   const slotCapError =
@@ -1289,9 +1605,14 @@ export class PublicBookingRequestService {
     const targetSrvRow = serviceId
       ? (db.prepare(`
           SELECT id, name, price, periodic_price, billing_mode, default_billing_due_day,
+                 pricing_rule, is_price_customized, weekly_sessions_count, service_domain, service_kind, clinical_module,
                  COALESCE(studio_service_type, 'individual') as studio_service_type,
                  COALESCE(requires_appointment, 1) as requires_appointment,
+                 COALESCE(requires_active_contract, 0) as requires_active_contract,
                  COALESCE(allow_public_booking, 1) as allow_public_booking,
+                 allow_single_booking, allow_plan_booking,
+                 allow_public_single_booking, allow_public_plan_booking,
+                 plan_credit_mode, plan_credits_per_cycle,
                  default_plan_duration, access_config_json, frequency_pricing_json, commercial_price_options_json,
                  optional_addons_json
           FROM services WHERE id = ? AND tenant_id = ? AND active = 1
@@ -1303,24 +1624,32 @@ export class PublicBookingRequestService {
       bookingIntent === 'access_plan' ||
       (targetSrvRow && (targetSrvRow.studio_service_type === 'facility_access' || targetSrvRow.studio_service_type === 'non_scheduled' || Number(targetSrvRow.requires_appointment) === 0))
     ) {
-      if (!targetSrvRow || Number(targetSrvRow.allow_public_booking ?? 1) === 0) {
+      const estProf = getTenantEstablishmentProfile(tenant.id);
+      const targetModes = targetSrvRow ? resolveServiceCommercialModes(targetSrvRow, estProf) : null;
+      if (!targetSrvRow || !targetModes || !targetModes.allowPublicPlanBooking) {
         throw Object.assign(new Error('Plano indisponível para contratação online.'), { status: 404 });
       }
 
       const isDeliverable = targetSrvRow.studio_service_type === 'non_scheduled';
       const contractKind: 'access_plan' | 'deliverable' = isDeliverable ? 'deliverable' : 'access_plan';
-      const commercialOptions = normalizeCommercialPriceOptions(targetSrvRow.commercial_price_options_json);
+      const commercialOptions = normalizeCommercialPriceOptions(targetSrvRow.commercial_price_options_json)
+        .filter(o => o.active && o.allowPublicBooking !== false);
       const matchedOption = rawBody?.commercialOptionId
-        ? commercialOptions.find(o => o.id === String(rawBody.commercialOptionId) && o.active) || null
+        ? commercialOptions.find(o => o.id === String(rawBody.commercialOptionId)) || null
         : null;
       if (rawBody?.commercialOptionId && !matchedOption) {
         throw Object.assign(new Error('Opção comercial selecionada não está disponível para este plano.'), { status: 400 });
       }
-      const optionBreakdown = matchedOption ? calculateCommercialOptionBreakdown(matchedOption) : null;
+      const optionBreakdown = matchedOption
+        ? calculateCommercialOptionBreakdown(matchedOption, {
+            servicePlanCreditMode: targetSrvRow.plan_credit_mode,
+            servicePlanCreditsPerCycle: targetSrvRow.plan_credits_per_cycle
+          })
+        : null;
 
       const requestedStartDate = rawBody?.startDate && validBookingDate(rawBody.startDate)
         ? String(rawBody.startDate).slice(0, 10)
-        : todayBrazilYmd();
+        : getLocalTodayYmd(getTenantTimezone(db, tenant.id));
       const contractDurationCode = String(
         rawBody?.contractDurationCode || rawBody?.planDurationCode || recurrence?.durationCode || matchedOption?.contractDurationCode || targetSrvRow.default_plan_duration || '1_month'
       );
@@ -1476,18 +1805,22 @@ export class PublicBookingRequestService {
         db.prepare(`
           INSERT INTO public_booking_requests (
             id, request_number, tenant_id, establishment_mode, mode, status,
-            service_id, modality, start_time, booking_intent,
+            service_id, modality, start_time, booking_intent, booking_mode, commercial_option_id,
+            credit_mode_snapshot, credits_per_cycle_snapshot,
             weekdays_label, time_range_label, start_date_label, start_date_iso,
             plan_duration_label, weekly_frequency, sessions_count,
             schedules_json, hold_expires_at,
             patient_snapshot_json, payload_json, summary_snapshot_json
-          ) VALUES (?, ?, ?, 'studio', 'access_plan', 'awaiting_confirmation', ?, 'presential', ?, 'access_plan', ?, ?, ?, ?, ?, ?, ?, ?, ${hasHeldSlots ? "datetime('now', '+15 minutes')" : 'NULL'}, ?, ?, ?)
+          ) VALUES (?, ?, ?, 'studio', 'access_plan', 'awaiting_confirmation', ?, 'presential', ?, 'access_plan', 'plan', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${hasHeldSlots ? "datetime('now', '+15 minutes')" : 'NULL'}, ?, ?, ?)
         `).run(
           requestId,
           requestNumber,
           tenant.id,
           targetSrvRow.id,
           requestedStartDate,
+          matchedOption?.id || null,
+          optionBreakdown?.creditMode || targetModes.planCreditMode || null,
+          optionBreakdown?.creditMode === 'fixed_credits' ? (optionBreakdown.totalContractCredits ?? optionBreakdown.creditsPerCycle ?? null) : null,
           accessLabel,
           timeWindowLabel,
           startDateLabel,
@@ -1581,6 +1914,90 @@ export class PublicBookingRequestService {
       throw Object.assign(new Error('Selecione a aula/serviço e o horário desejado.'), { status: 400 });
     }
 
+    const schedSrvMeta = targetSrvRow || (db.prepare(`
+      SELECT id, name, price, periodic_price, billing_mode, default_billing_due_day,
+             pricing_rule, is_price_customized, weekly_sessions_count, service_domain, service_kind, clinical_module,
+             COALESCE(studio_service_type, 'individual') as studio_service_type,
+             COALESCE(requires_appointment, 1) as requires_appointment,
+             COALESCE(requires_active_contract, 0) as requires_active_contract,
+             COALESCE(allow_public_booking, 1) as allow_public_booking,
+             allow_single_booking, allow_plan_booking,
+             allow_public_single_booking, allow_public_plan_booking,
+             plan_credit_mode, plan_credits_per_cycle,
+             default_plan_duration, access_config_json, frequency_pricing_json, commercial_price_options_json,
+             optional_addons_json
+      FROM services WHERE id = ? AND tenant_id = ? AND active = 1
+    `).get(String(serviceId), tenant.id) as any);
+    if (!schedSrvMeta) {
+      throw Object.assign(new Error('Serviço selecionado não está ativo neste estabelecimento.'), { status: 400 });
+    }
+    const schedEstProfile = getTenantEstablishmentProfile(tenant.id);
+    const schedModes = resolveServiceCommercialModes(schedSrvMeta, schedEstProfile);
+    const reqEntriesArr = Array.isArray(recurrence?.scheduleEntries) ? recurrence.scheduleEntries : [];
+    const reqWeekdaysArr = Array.isArray(recurrence?.weekdays) ? recurrence.weekdays : [];
+    const reqDurCode = recurrence?.durationCode ?? recurrence?.planDurationCode ?? null;
+    const hasRecurrenceInput = Boolean(
+      recurrence &&
+      (recurrence.maxOccurrences ||
+        recurrence.endDate ||
+        (reqDurCode && !['count', 'custom_date', 'legacy_frequency'].includes(String(reqDurCode))) ||
+        reqEntriesArr.length > 0)
+    );
+    const isRecurringRequest = bookingIntent === 'recurring' || Boolean(rawBody?.commercialOptionId) || hasRecurrenceInput;
+    const explicitPlanDisabled =
+      schedSrvMeta.allow_plan_booking === 0 ||
+      schedSrvMeta.allow_public_plan_booking === 0 ||
+      schedSrvMeta.allow_public_booking === 0;
+    const isExplicitPlanIntent = bookingIntent === 'recurring' || Boolean(rawBody?.commercialOptionId);
+    const isLegacyRecurringAllowed =
+      !explicitPlanDisabled &&
+      !isExplicitPlanIntent &&
+      hasRecurrenceInput &&
+      Number(schedSrvMeta.allow_recurrence ?? 1) === 1;
+
+    if (!isRecurringRequest) {
+      if (!schedModes.allowSingleBooking || !schedModes.allowPublicSingleBooking) {
+        throw Object.assign(
+          new Error('Este serviço está disponível apenas mediante contratação de plano ou pacote. Selecione uma opção de plano.'),
+          { status: 403, code: 'SINGLE_BOOKING_NOT_ALLOWED' }
+        );
+      }
+    } else if (!isLegacyRecurringAllowed) {
+      if (!schedModes.allowPlanBooking || !schedModes.allowPublicPlanBooking) {
+        throw Object.assign(
+          new Error('A contratação de planos para este serviço não está disponível no agendamento online.'),
+          { status: 403, code: 'PLAN_BOOKING_NOT_ALLOWED' }
+        );
+      }
+    }
+
+    const reqOptWeeklyCount = Math.max(
+      1,
+      reqEntriesArr.length || reqWeekdaysArr.length || Number(schedSrvMeta.weekly_sessions_count || 1)
+    );
+    const preMatchedOption = isRecurringRequest
+      ? matchCommercialOptionForPublicService({
+          serviceRow: schedSrvMeta,
+          commercialOptionId: rawBody?.commercialOptionId ? String(rawBody.commercialOptionId) : null,
+          durationCode: reqDurCode ? String(reqDurCode) : schedSrvMeta.default_plan_duration,
+          weeklyCount: reqOptWeeklyCount,
+          requireActivePublic: true
+        })
+      : null;
+    if (isRecurringRequest && rawBody?.commercialOptionId && !preMatchedOption) {
+      throw Object.assign(new Error('Opção comercial selecionada não está disponível para este serviço.'), { status: 400 });
+    }
+    const preCreditPlan = preMatchedOption
+      ? resolveOptionCreditPlan(preMatchedOption, schedSrvMeta.plan_credit_mode, schedSrvMeta.plan_credits_per_cycle)
+      : null;
+    const effExpandCreditMode: PlanCreditMode | null = isRecurringRequest
+      ? (preCreditPlan?.creditMode || schedModes.planCreditMode)
+      : null;
+    const effExpandCreditsCap: number | null =
+      effExpandCreditMode === 'fixed_credits'
+        ? (preCreditPlan?.totalContractCredits ?? schedModes.planCreditsPerCycle ?? null)
+        : null;
+
     const expandedServiceSlots = expandStudioScheduleItem(tenant.id, {
       serviceId: String(serviceId),
       professionalId: professionalId ? String(professionalId) : 'any',
@@ -1588,7 +2005,9 @@ export class PublicBookingRequestService {
       modality,
       startTime: String(startTime),
       endTime: endTime ? String(endTime) : undefined,
-      recurrence
+      recurrence,
+      creditMode: effExpandCreditMode,
+      creditsPerCycle: effExpandCreditsCap
     });
 
     if (checkDuplicatePendingRequest({
@@ -1648,25 +2067,34 @@ export class PublicBookingRequestService {
     const planEnd = resolvePlanDurationEndDate(planStart, firstPair.slotItem.recurrenceMeta?.durationCode) ||
       (recurrence?.endDate ? String(recurrence.endDate).slice(0, 10) : resolvedPairs[resolvedPairs.length - 1].slotItem.startIso.slice(0, 10));
 
-    let quote: any = null;
-    if (recurrence && firstPair.slotItem.recurrenceMeta) {
-      quote = quoteFrequencyPlan({
+    let planTerms: PublicRecurringPlanTerms | null = null;
+    const isRecurringPlanRequest = shouldTreatPublicServiceBookingAsRecurringPlan({
+      tenantId: tenant.id,
+      serviceRow: firstPair.slotItem.serviceRow,
+      bookingIntent: rawBody?.bookingIntent ? String(rawBody.bookingIntent) : null,
+      bookingMode: rawBody?.bookingMode ? String(rawBody.bookingMode) : null,
+      commercialOptionId: preMatchedOption?.id || (rawBody?.commercialOptionId ? String(rawBody.commercialOptionId) : null),
+      hasRecurrence: isRecurringRequest
+    });
+    if (isRecurringPlanRequest) {
+      planTerms = resolvePublicRecurringPlanTerms({
         tenantId: tenant.id,
-        serviceId: String(serviceId),
-        billingFrequency: firstPair.slotItem.serviceRow.billing_mode,
-        startDate: planStart,
-        endDate: planEnd,
-        publicOnly: true,
-        includeStandardPricing: bookingIntent === 'recurring',
-        cadence: firstPair.slotItem.recurrenceMeta.frequency,
+        serviceRow: firstPair.slotItem.serviceRow,
+        commercialOptionId: preMatchedOption?.id || (rawBody?.commercialOptionId ? String(rawBody.commercialOptionId) : null),
+        recurrence: recurrence || {
+          durationCode: firstPair.slotItem.recurrenceMeta?.durationCode || preMatchedOption?.contractDurationCode || '1_month'
+        },
         slots: resolvedPairs.map(({ slotItem, resolvedSlot }) => ({
-          startTime: slotItem.startIso,
-          endTime: slotItem.endIso,
+          startIso: slotItem.startIso,
+          endIso: slotItem.endIso,
           professionalId: resolvedSlot.professionalId,
           classScheduleId: resolvedSlot.classScheduleId
-        }))
+        })),
+        planStart,
+        planEnd,
+        bookingIntent: 'recurring'
       });
-      if (quote && existingStudentId) {
+      if (planTerms && existingStudentId) {
         const existingCoverage = BillingCycleService.resolveActivePlanCoverage({
           tenantId: tenant.id,
           patientId: existingStudentId,
@@ -1694,6 +2122,7 @@ export class PublicBookingRequestService {
         }
       }
     }
+    const quote = planTerms?.quote || null;
 
     const svcRequestedAddonIds = parsePublicAddonOptionIds(rawBody);
     let svcAddonsResolved: ReturnType<typeof resolvePublicAddonsForBooking> = {
@@ -1704,21 +2133,18 @@ export class PublicBookingRequestService {
       breakdown: null
     };
     if (svcRequestedAddonIds.length > 0) {
-      const baseCommOptions = normalizeCommercialPriceOptions(firstPair.slotItem.serviceRow.commercial_price_options_json);
-      const baseMatchedOpt = rawBody?.commercialOptionId
-        ? baseCommOptions.find(o => o.id === String(rawBody.commercialOptionId) && o.active) || null
-        : null;
-      const baseOptForAddons = baseMatchedOpt || {
+      const resolvedCommercialOptionId = preMatchedOption?.id || planTerms?.selectedOption?.id || (rawBody?.commercialOptionId ? String(rawBody.commercialOptionId) : null);
+      const baseOptForAddons = preMatchedOption || planTerms?.selectedOption || {
         ...buildFallbackBaseCommercialOption(firstPair.slotItem.serviceRow),
-        ...(quote?.calculation?.effectivePrice > 0
-          ? { amountCents: Math.round(Number(quote.calculation.effectivePrice) * 100) }
+        ...(planTerms && planTerms.cycleAmount > 0
+          ? { amountCents: Math.round(Number(planTerms.cycleAmount) * 100) }
           : {})
       };
       svcAddonsResolved = resolvePublicAddonsForBooking({
         tenantId: tenant.id,
         baseServiceRow: firstPair.slotItem.serviceRow,
         baseOption: baseOptForAddons,
-        rawBody
+        rawBody: { ...rawBody, commercialOptionId: resolvedCommercialOptionId }
       });
       if (svcAddonsResolved.expandedAddonSlots.length > 0) {
         const addonExtBusy = await prefetchStudioExternalBusy(tenant.id, svcAddonsResolved.expandedAddonSlots);
@@ -1745,7 +2171,7 @@ export class PublicBookingRequestService {
     const uniqueProfNames = Array.from(new Set(previewAppointments.map(p => p.professionalName).filter(Boolean))).join(', ');
     const modalityValue = firstPair.resolvedSlot.modality;
     const planDurationLabel = formatPlanDurationLabelPt(firstPair.slotItem.recurrenceMeta?.durationCode, recurrence);
-    const weeklyFrequency = quote?.weeklyCount || (firstPair.slotItem.recurrenceMeta ? Array.from(new Set(dayNumbers)).length : null);
+    const weeklyFrequency = planTerms?.weeklyFrequency || quote?.weeklyCount || (firstPair.slotItem.recurrenceMeta ? Array.from(new Set(dayNumbers)).length : null);
     const serviceName = String(firstPair.slotItem.serviceRow.name || 'Aula');
     const svcAddonNames = svcAddonsResolved.selectedAddons.map(a => a.label).join(' + ');
 
@@ -1757,13 +2183,18 @@ export class PublicBookingRequestService {
       ? `${fullName} solicitou ${serviceName}${svcAddonNames ? ` + Complementos: ${svcAddonNames}` : ''} (${weeklyFrequency ? `${weeklyFrequency}x/semana` : `${sessionsCount} aulas`}${planDurationLabel ? ` • ${planDurationLabel}` : ''})`
       : `${fullName} solicitou ${serviceName}${svcAddonNames ? ` + ${svcAddonNames}` : ''} (${formatModalityLabelPt(modalityValue)}) — ${startDateLabel} às ${timeRangeLabel}`;
 
+    const resolvedPayloadOptionId = preMatchedOption?.id || planTerms?.selectedOption?.id || (rawBody?.commercialOptionId ? String(rawBody.commercialOptionId) : null);
     const payload = {
       type: 'studio_service',
       tenantId: tenant.id,
-      bookingIntent: bookingIntent || (sessionsCount > 1 ? 'recurring' : 'single'),
+      bookingIntent: isRecurringPlanRequest ? 'recurring' : (bookingIntent || 'single'),
+      bookingMode: isRecurringPlanRequest ? 'plan' : 'single',
       mode: 'service',
       serviceId: String(serviceId),
-      commercialOptionId: rawBody?.commercialOptionId ? String(rawBody.commercialOptionId) : null,
+      commercialOptionId: resolvedPayloadOptionId,
+      creditMode: effExpandCreditMode,
+      creditsPerCycle: planTerms?.creditsPerCycle ?? effExpandCreditsCap ?? null,
+      totalContractCredits: planTerms?.totalContractCredits ?? effExpandCreditsCap ?? null,
       selectedAddonOptionIds: svcAddonsResolved.selectedAddonIds,
       addonSchedules: svcAddonsResolved.rawAddonSchedules,
       planWithAddonsBreakdown: svcAddonsResolved.breakdown,
@@ -1843,12 +2274,13 @@ export class PublicBookingRequestService {
         INSERT INTO public_booking_requests (
           id, request_number, tenant_id, establishment_mode, mode, status,
           service_id, professional_id, class_schedule_id, modality,
-          start_time, end_time, booking_intent,
+          start_time, end_time, booking_intent, booking_mode, commercial_option_id,
+          credit_mode_snapshot, credits_per_cycle_snapshot,
           weekdays_label, time_range_label, start_date_label, start_date_iso,
           plan_duration_label, weekly_frequency, sessions_count,
           recurrence_json, schedules_json, hold_expires_at,
           patient_snapshot_json, payload_json, summary_snapshot_json
-        ) VALUES (?, ?, ?, 'studio', 'service', 'awaiting_confirmation', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '+15 minutes'), ?, ?, ?)
+        ) VALUES (?, ?, ?, 'studio', 'service', 'awaiting_confirmation', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '+15 minutes'), ?, ?, ?)
       `).run(
         requestId,
         requestNumber,
@@ -1860,6 +2292,10 @@ export class PublicBookingRequestService {
         firstPair.slotItem.startIso,
         firstPair.slotItem.endIso,
         payload.bookingIntent,
+        payload.bookingMode,
+        payload.commercialOptionId,
+        payload.creditMode || null,
+        payload.totalContractCredits ?? payload.creditsPerCycle ?? null,
         weekdaysLabel,
         timeRangeLabel || null,
         startDateLabel,
@@ -1934,7 +2370,24 @@ export class PublicBookingRequestService {
         weeklyFrequency,
         planDurationLabel,
         modality: modalityValue,
-        sessionsCount
+        sessionsCount,
+        bookingMode: payload.bookingMode,
+        commercialOptionId: payload.commercialOptionId,
+        pricing: planTerms
+          ? {
+              amount: planTerms.totalContractAmount,
+              cycleAmount: planTerms.cycleAmount,
+              monthlyEquivalent: planTerms.monthlyEquivalent,
+              installmentsCount: planTerms.installmentsCount,
+              paymentPeriodicity: planTerms.paymentPeriodicity,
+              creditMode: planTerms.creditMode,
+              creditsPerCycle: planTerms.creditsPerCycle,
+              totalContractCredits: planTerms.totalContractCredits
+            }
+          : {
+              amount: schedModes.standalonePrice ?? 0,
+              cycleAmount: schedModes.standalonePrice ?? 0
+            }
       },
       message: 'Solicitação recebida! Aguarde a confirmação do estabelecimento antes de considerar o horário reservado.'
     };
@@ -1953,6 +2406,8 @@ export class PublicBookingRequestService {
   }): Promise<{
     notification: InternalNotificationRecord | null;
     requestId: string;
+    studentId: string | null;
+    createdAppointmentsCount: number;
     appointmentId: string | null;
     appointmentIds: string[];
     seriesId: string | null;
@@ -2140,7 +2595,12 @@ export class PublicBookingRequestService {
         modality: payload.modality,
         startTime: String(payload.startTime),
         endTime: payload.endTime ? String(payload.endTime) : undefined,
-        recurrence: payload.recurrence || undefined
+        recurrence: payload.recurrence || undefined,
+        creditMode: (payload.creditMode || requestRow.credit_mode_snapshot || null) as any,
+        creditsPerCycle:
+          payload.totalContractCredits ??
+          payload.creditsPerCycle ??
+          (requestRow.credits_per_cycle_snapshot ? Number(requestRow.credits_per_cycle_snapshot) : null)
       });
       const rawAddonSchedules = Array.isArray(payload.addonSchedules) ? payload.addonSchedules : [];
       const baseSrvForAddons = payload.serviceId
@@ -2423,6 +2883,8 @@ export class PublicBookingRequestService {
         });
 
         return {
+          studentId: resolvedPatientId,
+          createdAppointmentsCount: 1,
           appointmentId,
           appointmentIds: [appointmentId],
           seriesId: null,
@@ -2567,6 +3029,8 @@ export class PublicBookingRequestService {
         });
 
         return {
+          studentId: resolvedStudentId,
+          createdAppointmentsCount: addonApptRes.createdIds.length,
           appointmentId: firstAddonApptId,
           appointmentIds: addonApptRes.createdIds,
           seriesId: null,
@@ -2732,6 +3196,8 @@ export class PublicBookingRequestService {
         });
 
         return {
+          studentId: resolvedStudentId,
+          createdAppointmentsCount: createdIds.length,
           appointmentId: firstApptId,
           appointmentIds: createdIds,
           seriesId: null,
@@ -2815,24 +3281,32 @@ export class PublicBookingRequestService {
       const planStart = bookingTime(String(payload.startTime))!.slice(0, 10);
       const planEnd = resolvePlanDurationEndDate(planStart, firstSlot.slotItem.recurrenceMeta?.durationCode) ||
         (payload.recurrence?.endDate ? String(payload.recurrence.endDate).slice(0, 10) : resolvedSlots[resolvedSlots.length - 1].slotItem.startIso.slice(0, 10));
-      const quote = payload.recurrence && firstSlot.slotItem.recurrenceMeta
-        ? quoteFrequencyPlan({
+      const isRecurringFlow = shouldTreatPublicServiceBookingAsRecurringPlan({
+        tenantId,
+        serviceRow: firstSlot.slotItem.serviceRow,
+        bookingIntent: payload.bookingIntent || null,
+        bookingMode: payload.bookingMode || null,
+        commercialOptionId: payload.commercialOptionId || requestRow.commercial_option_id || null,
+        hasRecurrence: Boolean(payload.recurrence && firstSlot.slotItem.recurrenceMeta)
+      });
+      const planTerms = isRecurringFlow
+        ? resolvePublicRecurringPlanTerms({
             tenantId,
-            serviceId: String(payload.serviceId),
-            billingFrequency: firstSlot.slotItem.serviceRow.billing_mode,
-            startDate: planStart,
-            endDate: planEnd,
-            publicOnly: true,
-            includeStandardPricing: payload.bookingIntent === 'recurring',
-            cadence: firstSlot.slotItem.recurrenceMeta.frequency,
+            serviceRow: firstSlot.slotItem.serviceRow,
+            commercialOptionId: payload.commercialOptionId || requestRow.commercial_option_id || null,
+            recurrence: payload.recurrence || undefined,
             slots: resolvedSlots.map(({ slotItem, resolvedSlot }) => ({
-              startTime: slotItem.startIso,
-              endTime: slotItem.endIso,
+              startIso: slotItem.startIso,
+              endIso: slotItem.endIso,
               professionalId: resolvedSlot.professionalId,
               classScheduleId: resolvedSlot.classScheduleId
-            }))
+            })),
+            planStart,
+            planEnd,
+            bookingIntent: 'recurring'
           })
         : null;
+      const quote = planTerms?.quote || null;
 
       const hasServiceAddons = Array.isArray(payload.selectedAddonOptionIds) && payload.selectedAddonOptionIds.length > 0;
       let combinedAddonEnrollment: any = null;
@@ -2844,20 +3318,23 @@ export class PublicBookingRequestService {
           studentId: resolvedStudentId,
           serviceId: String(payload.serviceId),
           professionalId: firstSlot.resolvedSlot.professionalId,
-          commercialOptionId: payload.commercialOptionId || null,
+          commercialOptionId: planTerms?.selectedOption?.id || payload.commercialOptionId || null,
           selectedAddonOptionIds: payload.selectedAddonOptionIds,
-          contractDurationCode: firstSlot.slotItem.recurrenceMeta?.durationCode || undefined,
+          contractDurationCode: (planTerms?.contractDurationCode || firstSlot.slotItem.recurrenceMeta?.durationCode || undefined) as any,
+          paymentPeriodicity: planTerms?.paymentPeriodicity,
+          installmentsCount: planTerms?.installmentsCount,
           startDate: planStart,
           paymentMethod: 'pix',
           initialPaymentStatus: 'pending',
           contractStatus: 'active',
-          amount: quote?.calculation?.effectivePrice !== undefined ? Number(quote.calculation.effectivePrice) : undefined,
+          amount: planTerms ? Number(planTerms.cycleAmount) : (quote?.calculation?.effectivePrice !== undefined ? Number(quote.calculation.effectivePrice) : undefined),
+          totalContractAmount: planTerms ? Number(planTerms.totalContractAmount) : undefined,
           origin: 'admin',
           notes: payload.student?.notes || 'Plano com complementos contratado via link público e confirmado',
           generateInitialCharge: true,
           createdBy: userId
         });
-      } else if (quote) {
+      } else if (planTerms) {
         const existingCoverage = BillingCycleService.resolveActivePlanCoverage({
           tenantId,
           patientId: resolvedStudentId,
@@ -2883,29 +3360,80 @@ export class PublicBookingRequestService {
               { status: 409, code: 'EXISTING_PLAN_OVERLAP' }
             );
           }
-          const createdPlan = BillingCycleService.createPeriodicPlanTx({
-            tenantId,
-            patientId: resolvedStudentId,
-            serviceId: String(payload.serviceId),
-            professionalId: firstSlot.resolvedSlot.professionalId,
-            seriesId,
-            title: firstSlot.slotItem.serviceRow.name,
-            billingFrequency: firstSlot.slotItem.serviceRow.billing_mode,
-            amount: quote.calculation.effectivePrice,
-            startDate: planStart,
-            endDate: planEnd,
-            dueDay: firstSlot.slotItem.serviceRow.default_billing_due_day || 10,
-            weeklyFrequency: quote.weeklyCount,
-            weeklySessionsSnapshot: quote.weeklyCount,
-            referenceSessionsCount: quote.calculation.referenceSessionsCount,
-            pricingRuleSnapshot: quote.pricingRule,
-            scheduleRules: quote.meetings,
-            planDurationCode: firstSlot.slotItem.recurrenceMeta?.durationCode,
-            coversSessions: true,
-            generateInitialCycle: true,
-            createdBy: userId
-          });
-          frequencyPlan = createdPlan.plan;
+
+          const useEnrollmentPlanTx = Boolean(
+            planTerms.selectedOption ||
+            planTerms.paymentPeriodicity === 'one_time' ||
+            planTerms.paymentPeriodicity === 'installments' ||
+            planTerms.contractDurationCode !== '1_month'
+          );
+
+          if (useEnrollmentPlanTx) {
+            const enrollRes = StudioAccessService.createEnrollmentTx({
+              tenantId,
+              studentId: resolvedStudentId,
+              serviceId: String(payload.serviceId),
+              professionalId: firstSlot.resolvedSlot.professionalId,
+              contractKind: 'scheduled_plan',
+              commercialOptionId: planTerms.selectedOption?.id || payload.commercialOptionId || null,
+              contractDurationCode: planTerms.contractDurationCode as any,
+              paymentPeriodicity: planTerms.paymentPeriodicity,
+              billingFrequency: planTerms.billingFrequency,
+              installmentsCount: planTerms.installmentsCount,
+              weeklyFrequency: planTerms.weeklyFrequency,
+              referenceSessionsCount: planTerms.referenceSessionsCount,
+              includedSessions: planTerms.creditMode === 'fixed_credits' ? planTerms.creditsPerCycle : null,
+              creditMode: planTerms.creditMode,
+              creditsPerCycle: planTerms.creditMode === 'fixed_credits' ? planTerms.creditsPerCycle : null,
+              pricingRuleSnapshot: planTerms.pricingRuleSnapshot,
+              scheduleRules: planTerms.scheduleRules,
+              startDate: planStart,
+              endDate: planEnd,
+              dueDay: firstSlot.slotItem.serviceRow.default_billing_due_day || 10,
+              paymentMethod: 'pix',
+              initialPaymentStatus: 'pending',
+              contractStatus: 'active',
+              amount: planTerms.cycleAmount,
+              totalContractAmount: planTerms.totalContractAmount,
+              title: planTerms.selectedOption?.label
+                ? `${firstSlot.slotItem.serviceRow.name} — ${planTerms.selectedOption.label}`
+                : firstSlot.slotItem.serviceRow.name,
+              origin: 'admin',
+              notes: payload.student?.notes || 'Plano contratado via link público e confirmado pelo Studio',
+              generateInitialCharge: true,
+              createdBy: userId
+            });
+            frequencyPlan = enrollRes.plan;
+          } else {
+            const createdPlan = BillingCycleService.createPeriodicPlanTx({
+              tenantId,
+              patientId: resolvedStudentId,
+              serviceId: String(payload.serviceId),
+              professionalId: firstSlot.resolvedSlot.professionalId,
+              seriesId,
+              title: firstSlot.slotItem.serviceRow.name,
+              billingFrequency: planTerms.billingFrequency,
+              amount: planTerms.cycleAmount,
+              startDate: planStart,
+              endDate: planEnd,
+              dueDay: firstSlot.slotItem.serviceRow.default_billing_due_day || 10,
+              weeklyFrequency: planTerms.weeklyFrequency,
+              weeklySessionsSnapshot: planTerms.weeklyFrequency,
+              referenceSessionsCount: planTerms.referenceSessionsCount,
+              includedSessions: planTerms.creditMode === 'fixed_credits' ? planTerms.creditsPerCycle : null,
+              creditModeSnapshot: planTerms.creditMode,
+              creditsPerCycleSnapshot: planTerms.creditMode === 'fixed_credits' ? planTerms.creditsPerCycle : null,
+              commercialOptionIdSnapshot: planTerms.selectedOption?.id || null,
+              commercialOptionLabelSnapshot: planTerms.selectedOption?.label || null,
+              pricingRuleSnapshot: planTerms.pricingRuleSnapshot,
+              scheduleRules: planTerms.scheduleRules,
+              planDurationCode: firstSlot.slotItem.recurrenceMeta?.durationCode || planTerms.contractDurationCode,
+              coversSessions: true,
+              generateInitialCycle: true,
+              createdBy: userId
+            });
+            frequencyPlan = createdPlan.plan;
+          }
         }
       }
 
@@ -3004,7 +3532,10 @@ export class PublicBookingRequestService {
           db.prepare("UPDATE appointments SET recurring_plan_id = ?, billing_coverage_type = 'periodic_plan' WHERE id = ? AND tenant_id = ?")
             .run(frequencyPlan.id, apptId, tenantId);
         }
-        const unitPrice = (frequencyPlan || combinedAddonEnrollment) ? 0 : Math.round(Number(slotItem.serviceRow.price || 0) * 100) / 100;
+        const srvUnitModes = resolveServiceCommercialModes(slotItem.serviceRow, getTenantEstablishmentProfile(tenantId));
+        const unitPrice = (frequencyPlan || combinedAddonEnrollment)
+          ? 0
+          : Math.round(Number(srvUnitModes.standalonePrice ?? 0) * 100) / 100;
         if (unitPrice > 0) {
           db.prepare(`
             INSERT INTO payments (
@@ -3091,6 +3622,8 @@ export class PublicBookingRequestService {
       });
 
       return {
+        studentId: resolvedStudentId,
+        createdAppointmentsCount: createdIds.length,
         appointmentId: firstApptId,
         appointmentIds: createdIds,
         seriesId,
@@ -3139,6 +3672,8 @@ export class PublicBookingRequestService {
     return {
       notification: updatedNotifRow ? InternalNotificationService.mapRowToRecord(updatedNotifRow) : null,
       requestId: requestRow.id,
+      studentId: txResult.studentId,
+      createdAppointmentsCount: txResult.createdAppointmentsCount,
       appointmentId: txResult.appointmentId,
       appointmentIds: txResult.appointmentIds,
       seriesId: txResult.seriesId,

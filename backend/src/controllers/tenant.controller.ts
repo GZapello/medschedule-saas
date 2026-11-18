@@ -37,8 +37,10 @@ import {
   normalizeStudioPriceAdjustments,
   normalizeOptionalAddonsConfig,
   hydrateOptionalAddonsConfig,
+  resolveServiceCommercialModes,
   OptionalAddonTargetSummary
 } from '../utils/studio-access-and-commercial';
+import { getLocalTodayYmd, getTenantTimezone, normalizeTenantTimezone } from '../utils/studio-timezone';
 
 
 
@@ -1209,6 +1211,7 @@ export class TenantController {
           t.responsible_name, t.responsible_cpf, t.responsible_email, t.responsible_phone, t.responsible_role,
           t.logo_url, t.primary_color, t.client_term_label, t.status,
           COALESCE(t.establishment_profile, 'clinic') as establishment_profile,
+          COALESCE(t.timezone, 'America/Sao_Paulo') as timezone,
           t.business_hours_json,
           t.onboarding_completed, t.onboarding_step, t.manager_confirmed, t.created_at,
           p.name as plan_name, p.slug as plan_slug, p.features_json
@@ -1293,8 +1296,14 @@ export class TenantController {
         responsibleName, responsibleCpf, responsibleEmail, responsiblePhone, responsibleRole,
         logoUrl, logo_url, primaryColor, clientTermLabel, businessHoursJson, businessHours, settings,
         managerProfession, managerPracticeAreas,
-        establishmentProfile, establishment_profile
+        establishmentProfile, establishment_profile,
+        timezone
       } = req.body;
+
+      const validatedTimezone =
+        timezone !== undefined && timezone !== null && String(timezone).trim() !== ''
+          ? normalizeTenantTimezone(String(timezone))
+          : null;
 
       const rawEstablishmentProfile = establishmentProfile !== undefined ? establishmentProfile : establishment_profile;
       let validatedEstablishmentProfile: string | null = null;
@@ -1354,6 +1363,7 @@ export class TenantController {
           primary_color = COALESCE(?, primary_color),
           client_term_label = COALESCE(?, client_term_label),
           establishment_profile = COALESCE(?, establishment_profile),
+          timezone = COALESCE(?, timezone),
           business_hours_json = COALESCE(?, business_hours_json),
           updated_at = datetime('now')
         WHERE id = ?
@@ -1396,6 +1406,7 @@ export class TenantController {
         primaryColor || null,
         clientTermLabel || null,
         validatedEstablishmentProfile,
+        validatedTimezone,
         rawBusinessHours,
         req.tenantId
       );
@@ -1480,6 +1491,7 @@ export class TenantController {
           t.responsible_name, t.responsible_cpf, t.responsible_email, t.responsible_phone, t.responsible_role,
           t.logo_url, t.primary_color, t.client_term_label, t.status,
           COALESCE(t.establishment_profile, 'clinic') as establishment_profile,
+          COALESCE(t.timezone, 'America/Sao_Paulo') as timezone,
           t.business_hours_json,
           t.onboarding_completed, t.onboarding_step, t.manager_confirmed, t.created_at,
           p.name as plan_name, p.slug as plan_slug, p.features_json
@@ -1509,7 +1521,9 @@ export class TenantController {
       }
       const tenant = db.prepare(`
         SELECT slug, name, trade_name, logo_url, city, state, booking_cancellation_policy_enabled,
-          CASE WHEN booking_cancellation_policy_enabled = 1 THEN booking_cancellation_policy_text ELSE NULL END AS booking_cancellation_policy_text, COALESCE(establishment_profile, 'clinic') as establishment_profile
+          CASE WHEN booking_cancellation_policy_enabled = 1 THEN booking_cancellation_policy_text ELSE NULL END AS booking_cancellation_policy_text,
+          COALESCE(establishment_profile, 'clinic') as establishment_profile,
+          COALESCE(timezone, 'America/Sao_Paulo') as timezone
         FROM tenants WHERE id = ?
       `).get(resolved.id) as any;
       // Profissionais ativos da clínica
@@ -1535,18 +1549,24 @@ export class TenantController {
                s.allowed_plan_durations_json, s.default_plan_duration,
                s.custom_recurrence_intervals_json, s.default_recurrence_interval_json,
                s.service_domain, s.clinical_module,
-               s.billing_mode, s.periodic_price, s.pricing_rule, s.frequency_pricing_json, s.weekly_sessions_count,
+               s.billing_mode, s.periodic_price, s.pricing_rule, s.is_price_customized, s.suggested_price,
+               s.frequency_pricing_json, s.weekly_sessions_count,
                COALESCE(s.availability_mode, 'professional_schedule') as availability_mode,
                s.modality_category, spec.name as specialty_name,
                COALESCE(s.studio_service_type, CASE WHEN s.service_kind = 'group' THEN 'group' ELSE 'individual' END) as studio_service_type,
                COALESCE(s.requires_appointment, 1) as requires_appointment,
                COALESCE(s.requires_active_contract, 0) as requires_active_contract,
                COALESCE(s.allow_public_booking, 1) as allow_public_booking,
+               s.allow_single_booking, s.allow_plan_booking,
+               s.allow_public_single_booking, s.allow_public_plan_booking,
+               s.plan_credit_mode, s.plan_credits_per_cycle,
                s.effective_start_date, s.effective_end_date,
                s.access_config_json, s.pricing_adjustments_json, s.commercial_price_options_json,
                s.optional_addons_json
         FROM services s LEFT JOIN specialties spec ON spec.id = s.specialty_id
-        WHERE s.tenant_id = ? AND s.active = 1 AND COALESCE(s.allow_public_booking, 1) = 1 AND (
+        WHERE s.tenant_id = ? AND s.active = 1
+          AND (COALESCE(s.allow_public_booking, 1) = 1 OR COALESCE(s.allow_public_single_booking, 0) = 1 OR COALESCE(s.allow_public_plan_booking, 0) = 1)
+          AND (
           EXISTS (
             SELECT 1 FROM professionals p WHERE p.tenant_id = s.tenant_id AND p.active = 1 AND p.public_booking_enabled = 1
             AND (
@@ -1571,7 +1591,7 @@ export class TenantController {
           )
         ) ORDER BY s.name
       `).all(resolved.id, isStudioCompat ? 1 : 0);
-      const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+      const todayStr = getLocalTodayYmd(getTenantTimezone(db, resolved.id));
       const publicProfessionals = (professionals as any[]).map(p => {
         const profServices = db.prepare(`
           SELECT DISTINCT s.id, COALESCE(ps.custom_duration, s.duration_minutes) AS duration_minutes, s.modality
@@ -1638,6 +1658,21 @@ export class TenantController {
           srv.frequency_pricing = isStudioCompat && resolvedDomain === 'studio' ? readFrequencyPricing(srv.frequency_pricing_json) : null;
           delete srv.frequency_pricing_json;
           if (!isStudioCompat) {
+            delete srv.price;
+            delete srv.periodic_price;
+            delete srv.pricing_rule;
+            delete srv.is_price_customized;
+            delete srv.suggested_price;
+            delete srv.frequency_pricing_json;
+            delete srv.weekly_sessions_count;
+            delete srv.allow_single_booking;
+            delete srv.allow_plan_booking;
+            delete srv.allow_public_single_booking;
+            delete srv.allow_public_plan_booking;
+            delete srv.plan_credit_mode;
+            delete srv.plan_credits_per_cycle;
+            delete srv.effective_start_date;
+            delete srv.effective_end_date;
             delete srv.access_config_json;
             delete srv.pricing_adjustments_json;
             delete srv.commercial_price_options_json;
@@ -1668,7 +1703,7 @@ export class TenantController {
             ? normalizeStudioPriceAdjustments(srv.pricing_adjustments_json)
             : [];
           const commercialPriceOptions = resolvedDomain === 'studio'
-            ? normalizeCommercialPriceOptions(srv.commercial_price_options_json)
+            ? normalizeCommercialPriceOptions(srv.commercial_price_options_json).filter(o => o.active && o.allowPublicBooking !== false)
             : [];
           if (resolvedDomain === 'studio' && srv.optional_addons_json) {
             rawAddonsJsonByServiceId.set(srv.id, srv.optional_addons_json);
@@ -1677,6 +1712,18 @@ export class TenantController {
           delete srv.pricing_adjustments_json;
           delete srv.commercial_price_options_json;
           delete srv.optional_addons_json;
+
+          const commercialModes = resolveServiceCommercialModes(
+            {
+              ...srv,
+              service_domain: resolvedDomain,
+              studio_service_type: studioServiceType,
+              requires_appointment: requiresAppointment,
+              commercial_options_json: commercialPriceOptions,
+              frequency_pricing_json: srv.frequency_pricing
+            },
+            establishmentProfile
+          );
 
           const recCfg = parseServiceRecurrenceConfig(srv);
           const isGroup = (srv.service_kind || 'individual') === 'group' && requiresAppointment === 1;
@@ -1707,11 +1754,33 @@ export class TenantController {
             : (!isPubliclyAvailable
                 ? (diag?.blockers?.[0] || 'Esta aula ainda não possui dias e horários publicados.')
                 : null);
+          const { price: _clinicalPriceOmitted, periodic_price: _clinicalPeriodicOmitted, ...srvPublicSafe } = srv;
           return {
-            ...srv,
+            ...srvPublicSafe,
+            ...(isStudioCompat
+              ? {
+                  price: commercialModes.standalonePrice !== null ? commercialModes.standalonePrice : 0,
+                  standalone_price: commercialModes.standalonePrice,
+                  periodic_price: srv.periodic_price ?? null,
+                  is_price_customized:
+                    srv.is_price_customized !== undefined && srv.is_price_customized !== null
+                      ? Number(srv.is_price_customized)
+                      : undefined,
+                  allow_single_booking: commercialModes.allowSingleBooking ? 1 : 0,
+                  allow_plan_booking: commercialModes.allowPlanBooking ? 1 : 0,
+                  allow_public_single_booking: commercialModes.allowPublicSingleBooking ? 1 : 0,
+                  allow_public_plan_booking: commercialModes.allowPublicPlanBooking ? 1 : 0,
+                  allow_public_booking: commercialModes.allowPublicBooking ? 1 : 0,
+                  plan_credit_mode: commercialModes.planCreditMode,
+                  plan_credits_per_cycle: commercialModes.planCreditsPerCycle
+                }
+              : {}),
             service_domain: resolvedDomain,
             studio_service_type: studioServiceType,
             requires_appointment: requiresAppointment,
+            requires_active_contract: isStudioCompat
+              ? (commercialModes.allowSingleBooking ? 0 : (commercialModes.allowPlanBooking ? 1 : Number(srv.requires_active_contract ?? 0)))
+              : Number(srv.requires_active_contract ?? 0),
             access_config: accessConfig,
             pricing_adjustments: pricingAdjustments,
             commercial_price_options: commercialPriceOptions,
@@ -1735,7 +1804,12 @@ export class TenantController {
             public_booking_unavailable_reason: unavailableReason
           };
         })
-        .filter(srv => !isStudioCompat || srv.requires_appointment === 0 || srv.service_kind !== 'group' || srv.active_schedules_count > 0 || srv.is_publicly_available);
+        .filter(srv => {
+          if (!isStudioCompat) return true;
+          const scheduleOk = srv.requires_appointment === 0 || srv.service_kind !== 'group' || srv.active_schedules_count > 0 || srv.is_publicly_available;
+          const modeOk = srv.service_domain !== 'studio' || srv.allow_public_single_booking === 1 || srv.allow_public_plan_booking === 1;
+          return scheduleOk && modeOk;
+        });
 
       const addonServicesList: any[] = [];
       const enrichedServices = isStudioCompat
@@ -1789,6 +1863,7 @@ export class TenantController {
               const row = db.prepare(`
                 SELECT s.id, s.name, s.description, s.duration_minutes, s.modality, s.active,
                        COALESCE(s.allow_public_booking, 1) as allow_public_booking,
+                       s.allow_public_single_booking, s.allow_public_plan_booking,
                        COALESCE(s.service_kind, 'individual') as service_kind,
                        s.default_capacity, s.professional_id, s.service_domain, s.clinical_module,
                        COALESCE(s.studio_service_type, CASE WHEN COALESCE(s.service_kind, 'individual') = 'group' THEN 'group' ELSE 'individual' END) as studio_service_type,
@@ -1835,7 +1910,7 @@ export class TenantController {
                 id: row.id,
                 name: row.name,
                 active: Number(row.active) !== 0,
-                allowPublicBooking: Number(row.allow_public_booking ?? 1) !== 0,
+                allowPublicBooking: Number(row.allow_public_booking ?? 1) !== 0 || Number(row.allow_public_single_booking ?? 0) === 1 || Number(row.allow_public_plan_booking ?? 0) === 1,
                 studioServiceType: stType,
                 requiresAppointment: reqAppt,
                 isGroup,

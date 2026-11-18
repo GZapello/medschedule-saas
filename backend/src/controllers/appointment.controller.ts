@@ -42,7 +42,8 @@ import {
 import {
   evaluateStudioPriceAdjustments,
   normalizeStudioPriceAdjustments,
-  normalizeStudioServiceType
+  normalizeStudioServiceType,
+  resolveServiceCommercialModes
 } from '../utils/studio-access-and-commercial';
 
 function validMeetingUrl(value: unknown): boolean {
@@ -351,13 +352,13 @@ export class AppointmentController {
         startTime, endTime, modality, meeting_url, patientNotes, internalNotes,
         insuranceId, referredFromAppointmentId, referredByProfessionalId, referralReason,
         packageContractId,
-        billingPlanId, billing_plan_id,
+        billingPlanId, billing_plan_id, recurringPlanId, recurring_plan_id,
         billingChoice, billing_choice,
         enrollBillingPlan, periodicPlanConfig,
         // Dados se o paciente for novo (página de agendamento público)
         newPatientData
       } = req.body;
-      const reqBillingPlanId = billingPlanId ?? billing_plan_id;
+      const reqBillingPlanId = billingPlanId ?? billing_plan_id ?? recurringPlanId ?? recurring_plan_id;
       const reqBillingChoice = billingChoice ?? billing_choice;
       const reqEnrollBillingPlan = enrollBillingPlan ?? periodicPlanConfig;
 
@@ -456,9 +457,23 @@ export class AppointmentController {
         res.status(400).json({ error: 'Dados de agendamento inválidos.' }); return;
       }
       const suppliedPrice = req.body.appointmentPrice;
-      const defaultReferenceServicePrice = Number(serviceRow.price) > 0
-        ? Number(serviceRow.price)
-        : (Number(serviceRow.periodic_price) > 0 ? Number(serviceRow.periodic_price) : Number(serviceRow.price || 0));
+      const studioModesForCreate =
+        srvDomainForCreate === 'studio'
+          ? resolveServiceCommercialModes(serviceRow, estProfileForCreate)
+          : null;
+      if (isPublic && studioModesForCreate && !studioModesForCreate.allowPublicSingleBooking) {
+        res.status(403).json({
+          code: 'SINGLE_BOOKING_NOT_ALLOWED',
+          error: 'Este serviço está disponível apenas mediante contratação de plano ou pacote.'
+        });
+        return;
+      }
+      const defaultReferenceServicePrice =
+        srvDomainForCreate === 'studio'
+          ? Number(studioModesForCreate?.standalonePrice ?? 0)
+          : (Number(serviceRow.price) > 0
+              ? Number(serviceRow.price)
+              : (Number(serviceRow.periodic_price) > 0 ? Number(serviceRow.periodic_price) : Number(serviceRow.price || 0)));
       const normalizedStartTime = bookingTime(startTime);
       const normalizedEndTime = bookingTime(endTime);
       if (!normalizedStartTime || !normalizedEndTime || normalizedEndTime <= normalizedStartTime) {
@@ -716,9 +731,12 @@ export class AppointmentController {
               ) as { id: string } | undefined)?.id || null)
             : null;
 
-          const catalogPriceSnap = Number(serviceRow.price) > 0
-            ? Number(serviceRow.price)
-            : (Number((serviceRow as any).periodic_price) > 0 ? Number((serviceRow as any).periodic_price) : Number(serviceRow.price || 0));
+          const catalogPriceSnap =
+            srvDomainForCreate === 'studio'
+              ? Number(studioModesForCreate?.standalonePrice ?? 0)
+              : (Number(serviceRow.price) > 0
+                  ? Number(serviceRow.price)
+                  : (Number((serviceRow as any).periodic_price) > 0 ? Number((serviceRow as any).periodic_price) : Number(serviceRow.price || 0)));
 
           const pending = PublicBookingRequestService.createClinicPendingRequest({
             tenantId,
@@ -866,9 +884,12 @@ export class AppointmentController {
       const priceOverrideReason = typeof (req.body.priceOverrideReason ?? req.body.price_override_reason) === 'string'
         ? String(req.body.priceOverrideReason ?? req.body.price_override_reason).trim() || null
         : null;
-      const catalogPriceSnapshot = Number(serviceRow.price) > 0
-        ? Number(serviceRow.price)
-        : (Number((serviceRow as any).periodic_price) > 0 ? Number((serviceRow as any).periodic_price) : Number(serviceRow.price || 0));
+      const catalogPriceSnapshot =
+        srvDomainForCreate === 'studio'
+          ? Number(studioModesForCreate?.standalonePrice ?? 0)
+          : (Number(serviceRow.price) > 0
+              ? Number(serviceRow.price)
+              : (Number((serviceRow as any).periodic_price) > 0 ? Number((serviceRow as any).periodic_price) : Number(serviceRow.price || 0)));
 
       const initialStatus = isRetroactive ? 'in_progress' : 'scheduled';
       const initialAttendanceStartAt = isRetroactive
@@ -2691,12 +2712,14 @@ export class AppointmentController {
         packageContractId,
         billingPlanId,
         billing_plan_id,
+        recurringPlanId,
+        recurring_plan_id,
         billingChoice,
         billing_choice,
         enrollBillingPlan,
         periodicPlanConfig
       } = req.body || {};
-      const reqBillingPlanId = billingPlanId ?? billing_plan_id;
+      const reqBillingPlanId = billingPlanId ?? billing_plan_id ?? recurringPlanId ?? recurring_plan_id;
       const reqBillingChoice = billingChoice ?? billing_choice;
       const reqEnrollBillingPlan = enrollBillingPlan ?? periodicPlanConfig;
       const isCustomTime = Boolean(req.body?.isCustomTime || req.body?.is_custom_time);
@@ -2931,7 +2954,18 @@ export class AppointmentController {
       let resolvedBillingPlanId: string | null = billingCov.billingPlanId;
       let generatedBillingPaymentIds: string[] = [];
 
-      const isGroupService = serviceRow.service_kind === 'group';
+      const estProfileForRec = getTenantEstablishmentProfile(tenantId);
+      const srvDomainForRec = resolveServiceDomain({
+        establishmentProfile: estProfileForRec,
+        serviceDomain: serviceRow.service_domain,
+        serviceKind: serviceRow.service_kind,
+        clinicalModule: serviceRow.clinical_module
+      });
+      const isSharedCapacityRec =
+        supportsStudioFeatures(estProfileForRec) &&
+        srvDomainForRec === 'studio' &&
+        Number(serviceRow.default_capacity) >= 2;
+      const isGroupService = serviceRow.service_kind === 'group' || isSharedCapacityRec;
       const defaultCapacity = isGroupService ? Math.max(1, Number(serviceRow.default_capacity) || 1) : 1;
       const seriesId = 'ser-' + uuidv4().slice(0, 8);
 
@@ -3146,7 +3180,9 @@ export class AppointmentController {
             resolvedBillingPlanId,
             billingCov.mode,
             serviceRow.default_template_id || null,
-            Number(serviceRow.price) > 0 ? Number(serviceRow.price) : Number(serviceRow.periodic_price || 0),
+            srvDomainForRec === 'studio'
+              ? Number(serviceRow.price || 0)
+              : (Number(serviceRow.price) > 0 ? Number(serviceRow.price) : Number(serviceRow.periodic_price || 0)),
             req.user?.userId || 'system'
           );
 

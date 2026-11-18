@@ -2,6 +2,13 @@ import { db } from '../config/database';
 import { getTenantEstablishmentProfile, resolveServiceDomain, supportsStudioFeatures } from './establishment-context';
 import { getServiceDayAvailabilitySegments, intersectIntervalLists, mergeAdjacentSegments, parseClockMinutes } from './service-availability';
 import { countPendingHoldsForSlot, getActivePendingSlotHolds } from './public-slot-holds';
+import {
+  formatLeadTimeLabel,
+  getLocalDatePartsInTimezone,
+  getLocalTodayYmd,
+  getTenantTimezone,
+  zonedDateTimeToUtcMs
+} from './studio-timezone';
 
 export interface AvailableSlot {
   time: string;           // '09:00'
@@ -240,10 +247,8 @@ export function calculateAvailableSlots(
   if (!targetYear || !targetMonth || !targetDay) return [];
 
   const referenceDate = mockNow || new Date();
-
-  // Data atual no fuso de Brasília
-  const spDateFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' });
-  const todayStr = spDateFormatter.format(referenceDate); // 'YYYY-MM-DD'
+  const tenantTz = getTenantTimezone(db, tenantId);
+  const todayStr = getLocalTodayYmd(tenantTz, referenceDate); // 'YYYY-MM-DD'
 
   if (dateStr < todayStr) {
     return []; // Não permite agendar em dias passados
@@ -449,21 +454,12 @@ export function calculateAvailableSlots(
     : 0;
   const minLeadHours = options?.ignoreLeadTime ? 0 : Math.max(0, rawMinLeadHours);
   const minAllowedTimestampMs = referenceDate.getTime() + minLeadHours * 3600000;
-  const dayStartTimestampMs = Date.parse(`${dateStr}T00:00:00-03:00`);
+  const dayStartTimestampMs = zonedDateTimeToUtcMs(dateStr, '00:00', tenantTz);
 
   const isToday = dateStr === todayStr;
 
-  // Calcula os minutos atuais no fuso de Brasília (America/Sao_Paulo) com hourCycle h23
-  const nowSpFormatted = new Intl.DateTimeFormat('pt-BR', {
-    timeZone: 'America/Sao_Paulo',
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23'
-  }).format(referenceDate);
-  const [spHStr, spMStr] = nowSpFormatted.split(':');
-  const spHour = parseInt(spHStr, 10) || 0;
-  const spMin = parseInt(spMStr, 10) || 0;
-  const currentMinutesInDay = spHour * 60 + spMin;
+  const nowLocalParts = getLocalDatePartsInTimezone(referenceDate, tenantTz);
+  const currentMinutesInDay = nowLocalParts.minutesOfDay;
 
   const slotStep = totalSlotDuration > 0 ? totalSlotDuration : duration;
   const customServiceDaySegments = useCustomServiceWindows
@@ -505,10 +501,10 @@ export function calculateAvailableSlots(
       while (current + duration <= seg.end) {
         const slotEndMin = current + duration;
         const slotStartIso = `${dateStr}T${minutesToTime(current)}:00`;
-        const slotStartMs = Date.parse(`${slotStartIso}-03:00`);
+        const slotStartMs = zonedDateTimeToUtcMs(dateStr, minutesToTime(current), tenantTz);
 
         // Se for hoje (ou estiver dentro da janela de antecedência mínima), avança
-        const isBeforeMinTime = (isToday && current < currentMinutesInDay) || (slotStartMs < minAllowedTimestampMs);
+        const isBeforeMinTime = (isToday && current < currentMinutesInDay) || (slotStartMs <= referenceDate.getTime()) || (slotStartMs < minAllowedTimestampMs);
         if (isBeforeMinTime) {
           const nextGrid = current + slotStep;
           const cutoffFromMs = Math.max(0, Math.ceil((minAllowedTimestampMs - dayStartTimestampMs) / 60000));
@@ -642,8 +638,8 @@ export function explainEmptySlots(
   options?: CalculateSlotsOptions
 ): { reasonCode: string; message: string } {
   const referenceDate = mockNow || new Date();
-  const spDateFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' });
-  const todayStr = spDateFormatter.format(referenceDate);
+  const tenantTz = getTenantTimezone(db, tenantId);
+  const todayStr = getLocalTodayYmd(tenantTz, referenceDate);
 
   if (dateStr < todayStr) {
     return {
@@ -748,14 +744,7 @@ export function explainEmptySlots(
   }
 
   if (dateStr === todayStr) {
-    const nowSpFormatted = new Intl.DateTimeFormat('pt-BR', {
-      timeZone: 'America/Sao_Paulo',
-      hour: '2-digit',
-      minute: '2-digit',
-      hourCycle: 'h23'
-    }).format(referenceDate);
-    const [spHStr, spMStr] = nowSpFormatted.split(':');
-    const currentMin = (parseInt(spHStr, 10) || 0) * 60 + (parseInt(spMStr, 10) || 0);
+    const currentMin = getLocalDatePartsInTimezone(referenceDate, tenantTz).minutesOfDay;
     const maxShiftEnd = Math.max(...activeSchedules.map(s => timeToMinutes(s.end_time)));
     if (currentMin >= maxShiftEnd) {
       return {
@@ -778,9 +767,13 @@ export function explainEmptySlots(
       { ignoreLeadTime: true }
     );
     if (slotsWithoutLead.length > 0) {
+      const srvLead = db.prepare('SELECT min_lead_time_hours FROM services WHERE id = ? AND tenant_id = ?').get(serviceId, tenantId) as { min_lead_time_hours?: number | null } | undefined;
+      const leadHours = Math.max(0, Number(srvLead?.min_lead_time_hours || 0));
       return {
-        reasonCode: 'MIN_LEAD_TIME',
-        message: 'Os horários restantes para esta data estão dentro do prazo de antecedência mínima do serviço.'
+        reasonCode: 'LEAD_TIME_NOT_MET',
+        message: leadHours > 0
+          ? `Os horários restantes de hoje exigem antecedência mínima de ${formatLeadTimeLabel(leadHours)} para agendamento online.`
+          : 'Os horários restantes para esta data estão dentro do prazo de antecedência mínima do serviço.'
       };
     }
   }
@@ -870,7 +863,7 @@ export function buildPublicAvailabilityInsights(
   upcomingDays: UpcomingDayAvailability[];
   alternativeProfessionals: AlternativeProfessionalAvailability[];
 } {
-  const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+  const todayStr = getLocalTodayYmd(getTenantTimezone(db, tenantId));
   const baseStart = requestedDateStr >= todayStr ? requestedDateStr : todayStr;
 
   // 1. Próxima data disponível após a data solicitada (se a data solicitada estiver dentro de um horizonte razoável)

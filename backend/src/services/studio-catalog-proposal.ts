@@ -1,4 +1,4 @@
-import { SERVICE_TYPES, MODALITIES, UNITS, PERIODS, DURATIONS, FREQUENCIES } from '../shared/studio-catalog-contract';
+import { SERVICE_TYPES, MODALITIES, UNITS, PERIODS, DURATIONS, FREQUENCIES, CREDIT_MODES } from '../shared/studio-catalog-contract';
 import type { ProposedPrice, ProposedService, StudioProposal } from '../shared/studio-catalog-contract';
 
 export const CATALOG_PROMPT = `
@@ -15,6 +15,7 @@ REGRAS INEGOCIAVEIS DE FIDELIDADE:
    - ACADEMIA / MUSCULAÇÃO LIVRE OU LIMITADA: Tipo "access_unlimited" ou "access_limited" (NÃO usa agenda, NÃO exige instrutor, NÃO exige duração de aula e JAMAIS deve ser vinculado a Personal Trainer ou módulo clínico). Horário de funcionamento da academia vai em "notes", JAMAIS em "schedules". Quando um material oferecer acompanhamento de Personal ou aulas em grupo à parte/opcional sobre a musculação, mantenha a Musculação sem instrutor/agenda e extraia o Personal como serviço próprio e/ou complemento em "optionalAddons[]".
    - ENTREGÁVEL / SEM HORA MARCADA: Avaliação ou entrega de treino digital em vídeo sem sessão agendada usa tipo "deliverable".
 5. DISTINÇÃO FINANCEIRA CRÍTICA:
+   - NUNCA use o preço de plano mensal/trimestral/anual como preço de aula avulsa ("per_session"). Aula avulsa ("unit": "per_session", "duration": null, "frequencyType": null) SÓ deve ser criada quando houver menção explícita a "aula avulsa", "sessão única", "avulso" ou "diária". Se o material trouxer apenas planos (ex.: Zumba 1x/2x/3x Mensal, Trimestral, Semestral, Anual), defina allowSingleBooking: false, allowPlanBooking: true e coloque TODOS os planos em "prices[]".
    - "R$ 75/aula" ou "avulso" -> unit: "per_session".
    - "R$ 55/aula por pessoa" ou "R$ 200 por pessoa" -> unit: "per_participant", participants: numero de alunos (ex.: 2 para dupla).
    - "R$ 120 mensais" / "R$ 200/mês" -> unit: "per_month", paymentPeriod: "monthly".
@@ -31,9 +32,9 @@ REGRAS INEGOCIAVEIS DE FIDELIDADE:
    - NUNCA invente duração (como 50 ou 60 min), término de aula, número de vagas de turma coletiva ou nome de instrutor que não conste nos arquivos.
 7. PACOTES / COMBOS ("packages"):
    - Combinações vendidas em uma única contratação obrigatória (ex.: Avaliação + Treino Personalizado + 1h Personal + Vídeo). NÃO crie pacotes para simples variações de duração de um mesmo serviço, nem quando o segundo serviço é opcional (use optionalAddons).
-   - Campos de serviço: {name, activity, description, notes, type: ${SERVICE_TYPES.join('|')}, modality: ${MODALITIES.join('|')}, durationMinutes, capacity, weeklyLimit, monthlyLimit, professionalNames:[], prices:[], schedules:[], adjustments:[], optionalAddons:[], sources:[], issues:[]}.
+   - Campos de serviço: {name, activity, description, notes, type: ${SERVICE_TYPES.join('|')}, modality: ${MODALITIES.join('|')}, durationMinutes, capacity, weeklyLimit, monthlyLimit, allowSingleBooking, allowPlanBooking, planCreditMode: "fixed_credits"|"weekly_guaranteed"|"unlimited"|null, professionalNames:[], prices:[], schedules:[], adjustments:[], optionalAddons:[], sources:[], issues:[]}.
    - Campos de complemento opcional: {label, addonServiceName, frequencyType: ${FREQUENCIES.join('|')}|null, frequencyCount, creditsPerCycle, additionalPriceCents, comboDiscountType: "none"|"fixed_cents"|"percentage", comboDiscountValue, billingPeriodicity: "monthly"|"per_cycle"|"one_time"|"bimonthly"|"quarterly"|"semiannual"|"annual", durationMode: "match_base"|${DURATIONS.join('|')}, scheduleTiming: "during_purchase"|"after_confirmation"|"not_applicable", attendanceFormat: "match_service"|"individual"|"duo"|"group", sessionCapacity, allowedWeekdays:[], allowPublicBooking, mandatoryUnclear, ambiguousReason, evidence, sources:[]}.
-   - Campos de preço: {label, amountCents (centavos inteiros BRL), unit: ${UNITS.join('|')}|null, paymentPeriod: ${PERIODS.join('|')}|null, duration: ${DURATIONS.join('|')}|null, frequencyType: ${FREQUENCIES.join('|')}|null, frequencyCount, installments, maxInstallments, participants, isMonthlyEquivalent, equivalentMonthlyCents, ambiguousReason, evidence, sources:[]}.
+   - Campos de preço: {label, amountCents (centavos inteiros BRL), unit: ${UNITS.join('|')}|null, paymentPeriod: ${PERIODS.join('|')}|null, duration: ${DURATIONS.join('|')}|null, frequencyType: ${FREQUENCIES.join('|')}|null, frequencyCount, creditMode: "fixed_credits"|"weekly_guaranteed"|"unlimited"|null, creditsPerCycle, installments, maxInstallments, participants, isMonthlyEquivalent, equivalentMonthlyCents, ambiguousReason, evidence, sources:[]}.
    - Campos de pacote: {name, description, notes, price, items:[{serviceName, includedCredits, weeklyFrequency, monthlyLimit, mandatory}], sources:[], issues:[]}.
    - Limites: 40 serviços, 20 pacotes, 30 preços ou horários por serviço.
 `;
@@ -188,7 +189,9 @@ export function normalizeProposal(value: unknown, sourceCount: number, extracted
     isMonthlyEquivalent: row.isMonthlyEquivalent === true,
     equivalentMonthlyCents: integer(row.equivalentMonthlyCents, 1, 100_000_000),
     maxInstallments: integer(row.maxInstallments, 2, 24),
-    ambiguousReason: str(row.ambiguousReason, 300)
+    ambiguousReason: str(row.ambiguousReason, 300),
+    creditMode: choice(row.creditMode, CREDIT_MODES),
+    creditsPerCycle: integer(row.creditsPerCycle, 1, 5000)
   });
   const identity = (row: Raw) => ({
     name: str(row.name), description: str(row.description, 2000), notes: str(row.notes, 2000)
@@ -203,6 +206,12 @@ export function normalizeProposal(value: unknown, sourceCount: number, extracted
     professionalId: extracted ? '' : str(row.professionalId, 100),
     suggestedProfessionalId: extracted ? undefined : str(row.suggestedProfessionalId, 100) || undefined,
     deferSchedules: !extracted && row.deferSchedules === true,
+    allowSingleBooking: typeof row.allowSingleBooking === 'boolean' ? row.allowSingleBooking : null,
+    allowPlanBooking: typeof row.allowPlanBooking === 'boolean' ? row.allowPlanBooking : null,
+    allowPublicSingleBooking: typeof row.allowPublicSingleBooking === 'boolean' ? row.allowPublicSingleBooking : null,
+    allowPublicPlanBooking: typeof row.allowPublicPlanBooking === 'boolean' ? row.allowPublicPlanBooking : null,
+    planCreditMode: choice(row.planCreditMode, CREDIT_MODES),
+    planCreditsPerCycle: integer(row.planCreditsPerCycle, 1, 5000),
     action: (extracted ? null : choice(row.action, ['create', 'link', 'update', 'ignore'] as const)) || 'ignore',
     apply: extracted ? [] : strings(row.apply, 5, 30).filter(x => ['identity', 'prices', 'schedules', 'adjustments', 'addons'].includes(x)),
     prices: list(row.prices, 30, price),
@@ -307,6 +316,10 @@ export function normalizeProposal(value: unknown, sourceCount: number, extracted
     target.notes = [...new Set([target.notes, row.notes].filter(Boolean))].join('\n').slice(0, 2000);
     target.description ||= row.description;
     target.activity ||= row.activity;
+    if (target.allowSingleBooking == null && row.allowSingleBooking != null) target.allowSingleBooking = row.allowSingleBooking;
+    if (target.allowPlanBooking == null && row.allowPlanBooking != null) target.allowPlanBooking = row.allowPlanBooking;
+    if (!target.planCreditMode && row.planCreditMode) target.planCreditMode = row.planCreditMode;
+    if (target.planCreditsPerCycle == null && row.planCreditsPerCycle != null) target.planCreditsPerCycle = row.planCreditsPerCycle;
   }
 
   const mergedServices: ProposedService[] = [];

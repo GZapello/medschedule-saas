@@ -1426,7 +1426,11 @@ export class PackageService {
     try {
       if (targetEnt.addon_pricing_json) addonPricingSnap = JSON.parse(targetEnt.addon_pricing_json);
     } catch (_) {}
-    const isUnlimitedScheduled = addonPricingSnap?.frequencyType === 'unlimited';
+    const entCreditMode = String(targetEnt.credit_mode_snapshot || addonPricingSnap?.creditMode || '').trim();
+    const isUnlimitedScheduled =
+      entCreditMode === 'unlimited' ||
+      entCreditMode === 'weekly_guaranteed' ||
+      addonPricingSnap?.frequencyType === 'unlimited';
 
     const remaining = Number(targetEnt.credits_total || 0) - Number(targetEnt.credits_reserved || 0) - Number(targetEnt.credits_used || 0);
     if (!isUnlimitedScheduled && remaining < 1) {

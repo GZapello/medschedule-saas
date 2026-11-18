@@ -24,6 +24,9 @@ import {
   DEFAULT_STUDIO_ACCESS_CONFIG,
   PAYMENT_PERIODICITY_LABELS,
   COMMERCIAL_UNIT_LABELS,
+  PLAN_CREDIT_MODE_LABELS,
+  PlanCreditMode,
+  calculateCommercialOptionBreakdown,
   ADDON_BILLING_PERIODICITY_LABELS,
   ADDON_SCHEDULE_TIMING_LABELS,
   getDefaultOptionalAddonsConfig,
@@ -150,6 +153,18 @@ interface StudioAccessAndAdjustmentsPanelProps {
   onDefaultCapacityChange?: (nextCap: number) => void;
   allowPublicBooking?: boolean;
   onAllowPublicBookingChange?: (allow: boolean) => void;
+  allowSingleBooking?: boolean;
+  onAllowSingleBookingChange?: (allow: boolean) => void;
+  allowPlanBooking?: boolean;
+  onAllowPlanBookingChange?: (allow: boolean) => void;
+  allowPublicSingleBooking?: boolean;
+  onAllowPublicSingleBookingChange?: (allow: boolean) => void;
+  allowPublicPlanBooking?: boolean;
+  onAllowPublicPlanBookingChange?: (allow: boolean) => void;
+  planCreditMode?: PlanCreditMode;
+  onPlanCreditModeChange?: (mode: PlanCreditMode) => void;
+  planCreditsPerCycle?: number | null;
+  onPlanCreditsPerCycleChange?: (credits: number | null) => void;
   disableFacilityAccessOption?: boolean;
   hideOptionalAddons?: boolean;
 }
@@ -182,6 +197,18 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
   onDefaultCapacityChange,
   allowPublicBooking = true,
   onAllowPublicBookingChange,
+  allowSingleBooking = true,
+  onAllowSingleBookingChange,
+  allowPlanBooking = false,
+  onAllowPlanBookingChange,
+  allowPublicSingleBooking = true,
+  onAllowPublicSingleBookingChange,
+  allowPublicPlanBooking = false,
+  onAllowPublicPlanBookingChange,
+  planCreditMode = 'fixed_credits',
+  onPlanCreditModeChange,
+  planCreditsPerCycle = null,
+  onPlanCreditsPerCycleChange,
   disableFacilityAccessOption = false,
   hideOptionalAddons = false
 }) => {
@@ -346,7 +373,10 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
       fidelityMonths: 0,
       gracePeriodDays: 0,
       autoRenew: false,
-      active: true
+      active: true,
+      creditMode: studioServiceType === 'facility_access' ? 'unlimited' : (planCreditMode || 'fixed_credits'),
+      creditsPerCycle: studioServiceType === 'facility_access' ? null : (planCreditsPerCycle ?? null),
+      allowPublicBooking: true
     };
     onCommercialPriceOptionsChange([...commercialPriceOptions, nextOption]);
     setShowCommercialOptions(true);
@@ -750,8 +780,102 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
         </div>
       )}
 
+      {/* Formas de Contratação & Contabilização de Créditos (Avulso vs Planos) */}
+      {(onAllowSingleBookingChange || onAllowPlanBookingChange) && (
+        <div className="rounded-2xl border border-emerald-200 bg-white p-3.5 space-y-2.5">
+          <div>
+            <h4 className="font-bold text-slate-900">Formas de Contratação</h4>
+            <p className="text-[11px] text-slate-500">
+              Escolha se o aluno pode agendar aula avulsa, contratar planos/recorrências ou ambos no mesmo serviço.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {onAllowSingleBookingChange && (
+              <div className={`p-2.5 rounded-xl border ${studioServiceType === 'facility_access' ? 'border-slate-200 bg-slate-50 opacity-60' : allowSingleBooking ? 'border-teal-300 bg-teal-50/40' : 'border-slate-200 bg-white'}`}>
+                <label className="flex items-center gap-2 font-semibold text-slate-800 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    disabled={studioServiceType === 'facility_access'}
+                    checked={studioServiceType !== 'facility_access' && allowSingleBooking}
+                    onChange={e => onAllowSingleBookingChange(e.target.checked)}
+                    className="h-4 w-4 accent-teal-700"
+                  />
+                  <span>Permite atendimento / aula avulsa</span>
+                </label>
+                {onAllowPublicSingleBookingChange && allowSingleBooking && studioServiceType !== 'facility_access' && (
+                  <label className="mt-1.5 pl-6 flex items-center gap-2 text-[11px] text-slate-600 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={allowPublicSingleBooking}
+                      onChange={e => onAllowPublicSingleBookingChange(e.target.checked)}
+                      className="h-3.5 w-3.5 accent-teal-700"
+                    />
+                    <span>Exibir avulsa no Link Público</span>
+                  </label>
+                )}
+              </div>
+            )}
+            {onAllowPlanBookingChange && (
+              <div className={`p-2.5 rounded-xl border ${allowPlanBooking ? 'border-indigo-300 bg-indigo-50/40' : 'border-slate-200 bg-white'}`}>
+                <label className="flex items-center gap-2 font-semibold text-slate-800 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    disabled={studioServiceType === 'facility_access'}
+                    checked={studioServiceType === 'facility_access' ? true : allowPlanBooking}
+                    onChange={e => onAllowPlanBookingChange(e.target.checked)}
+                    className="h-4 w-4 accent-indigo-700"
+                  />
+                  <span>Permite contratação como plano</span>
+                </label>
+                {onAllowPublicPlanBookingChange && (allowPlanBooking || studioServiceType === 'facility_access') && (
+                  <label className="mt-1.5 pl-6 flex items-center gap-2 text-[11px] text-slate-600 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={allowPublicPlanBooking}
+                      onChange={e => onAllowPublicPlanBookingChange(e.target.checked)}
+                      className="h-3.5 w-3.5 accent-indigo-700"
+                    />
+                    <span>Exibir planos no Link Público</span>
+                  </label>
+                )}
+              </div>
+            )}
+          </div>
+          {(allowPlanBooking || studioServiceType === 'facility_access') && studioServiceType !== 'facility_access' && studioServiceType !== 'non_scheduled' && onPlanCreditModeChange && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1 border-t border-slate-100">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Contagem de aulas no plano</label>
+                <select
+                  value={planCreditMode}
+                  onChange={e => onPlanCreditModeChange(e.target.value as PlanCreditMode)}
+                  className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white"
+                >
+                  <option value="fixed_credits">Modelo A — Créditos fixos por ciclo</option>
+                  <option value="weekly_guaranteed">Modelo B — Frequência semanal garantida (calendário real)</option>
+                  <option value="unlimited">Ilimitado na vigência</option>
+                </select>
+              </div>
+              {planCreditMode === 'fixed_credits' && onPlanCreditsPerCycleChange && (
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Créditos fixos padrão/ciclo (opcional)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={5000}
+                    placeholder="Auto (ex: freq × 4 sem)"
+                    value={planCreditsPerCycle ?? ''}
+                    onChange={e => onPlanCreditsPerCycleChange(e.target.value ? Math.max(1, Number(e.target.value)) : null)}
+                    className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white"
+                  />
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Visibilidade Pública para QUALQUER serviço do Academia & Studio */}
-      {onAllowPublicBookingChange && (
+      {onAllowPublicBookingChange && !onAllowSingleBookingChange && (
         <div className="rounded-2xl border border-slate-200 bg-white p-3.5">
           <label className="flex items-center gap-2 font-semibold text-slate-800 cursor-pointer">
             <input
@@ -1008,7 +1132,58 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
                       />
                       Ativa
                     </label>
+                    <label className="inline-flex items-center gap-1 text-slate-600 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={opt.allowPublicBooking !== false}
+                        onChange={e => updateCommercialOption(idx, { allowPublicBooking: e.target.checked })}
+                      />
+                      Pública
+                    </label>
                   </div>
+                  {opt.accessType !== 'unlimited' && opt.frequencyType !== 'unlimited' && (
+                    <div className="flex flex-wrap items-center gap-2 text-[11px] pt-1 border-t border-slate-200/70">
+                      <span className="text-slate-600 font-medium">Modelo de créditos:</span>
+                      <select
+                        value={opt.creditMode || ''}
+                        onChange={e => updateCommercialOption(idx, {
+                          creditMode: e.target.value ? (e.target.value as PlanCreditMode) : null,
+                          ...(e.target.value && e.target.value !== 'fixed_credits' ? { creditsPerCycle: null } : {})
+                        })}
+                        className="border border-slate-200 rounded-lg px-2 py-1 text-xs bg-white"
+                      >
+                        <option value="">Herdar padrão do serviço ({PLAN_CREDIT_MODE_LABELS[planCreditMode]})</option>
+                        <option value="fixed_credits">Créditos fixos por ciclo</option>
+                        <option value="weekly_guaranteed">Frequência semanal garantida</option>
+                        <option value="unlimited">Ilimitado na vigência</option>
+                      </select>
+                      {(opt.creditMode || planCreditMode) === 'fixed_credits' && (
+                        <label className="inline-flex items-center gap-1 text-slate-600">
+                          <span>Créditos/ciclo:</span>
+                          <input
+                            type="number"
+                            min={1}
+                            max={5000}
+                            placeholder="Auto"
+                            value={opt.creditsPerCycle ?? ''}
+                            onChange={e => updateCommercialOption(idx, { creditsPerCycle: e.target.value ? Math.max(1, Number(e.target.value)) : null })}
+                            className="w-16 border border-slate-200 rounded-lg px-2 py-1 text-xs bg-white text-center"
+                          />
+                        </label>
+                      )}
+                      {(() => {
+                        const bd = calculateCommercialOptionBreakdown(opt, {
+                          servicePlanCreditMode: planCreditMode,
+                          servicePlanCreditsPerCycle: planCreditsPerCycle
+                        });
+                        return (
+                          <span className="ml-auto text-indigo-700 font-semibold">
+                            Ciclo: R$ {bd.cycleAmountReais.toFixed(2).replace('.', ',')} · Total: R$ {bd.totalContractAmountReais.toFixed(2).replace('.', ',')}
+                          </span>
+                        );
+                      })()}
+                    </div>
+                  )}
                 </div>
               ))}
               <button

@@ -63,11 +63,15 @@ export const DEFAULT_STUDIO_ACCESS_CONFIG: StudioAccessConfig = {
 
 export function normalizeStudioServiceType(
   rawType: unknown,
-  fallbackServiceKind?: unknown
+  fallbackServiceKind?: unknown,
+  requiresAppointment?: unknown
 ): StudioServiceType {
   const t = String(rawType || '').trim().toLowerCase();
   if ((VALID_STUDIO_SERVICE_TYPES as string[]).includes(t)) {
     return t as StudioServiceType;
+  }
+  if (requiresAppointment === 0 || requiresAppointment === false) {
+    return 'facility_access';
   }
   if (String(fallbackServiceKind || '').trim().toLowerCase() === 'group') {
     return 'group';
@@ -182,6 +186,14 @@ export type PaymentPeriodicityCode =
 
 export type CommercialFrequencyType = 'weekly' | 'monthly' | 'unlimited' | 'fixed_count';
 
+export type PlanCreditMode = 'fixed_credits' | 'weekly_guaranteed' | 'unlimited';
+
+export const PLAN_CREDIT_MODE_LABELS: Record<PlanCreditMode, string> = {
+  fixed_credits: 'Créditos fixos por ciclo',
+  weekly_guaranteed: 'Frequência semanal garantida',
+  unlimited: 'Acesso livre / ilimitado'
+};
+
 export interface StudioCommercialPriceOption {
   id: string;
   label?: string | null;
@@ -199,6 +211,9 @@ export interface StudioCommercialPriceOption {
   gracePeriodDays: number;
   autoRenew: boolean;
   active: boolean;
+  creditMode?: PlanCreditMode | null;
+  creditsPerCycle?: number | null;
+  allowPublicBooking?: boolean;
 }
 
 export interface CommercialOptionBreakdown {
@@ -217,10 +232,17 @@ export interface CommercialOptionBreakdown {
   cycleAmountReais: number;
   installmentAmountCents: number;
   installmentAmountReais: number;
+  monthlyEquivalentCents: number;
+  monthlyEquivalentReais: number;
   totalContractAmountCents: number;
   totalContractAmountReais: number;
   perParticipantAmountCents: number;
   perParticipantAmountReais: number;
+  creditMode: PlanCreditMode;
+  creditsPerCycle: number | null;
+  totalContractCredits: number | null;
+  weeklyCap: number | null;
+  estimatedSessionsInContract: number | null;
 }
 
 export const COMMERCIAL_UNIT_LABELS: Record<CommercialPriceUnit, string> = {
@@ -319,6 +341,20 @@ export function normalizeCommercialPriceOptions(raw: unknown): StudioCommercialP
     const fidelityMonths = Math.max(0, Math.min(36, Math.floor(Number(item.fidelityMonths) || 0)));
     const gracePeriodDays = Math.max(0, Math.min(90, Math.floor(Number(item.gracePeriodDays) || 0)));
 
+    const rawCreditMode = String(item.creditMode ?? item.credit_mode ?? '').trim();
+    const creditMode: PlanCreditMode | null =
+      rawCreditMode === 'fixed_credits' || rawCreditMode === 'weekly_guaranteed' || rawCreditMode === 'unlimited'
+        ? (rawCreditMode as PlanCreditMode)
+        : (accessType === 'unlimited' || frequencyType === 'unlimited' ? 'unlimited' : null);
+
+    const rawCredits = item.creditsPerCycle ?? item.credits_per_cycle;
+    const parsedCredits = rawCredits !== undefined && rawCredits !== null && String(rawCredits).trim() !== ''
+      ? Math.floor(Number(rawCredits))
+      : NaN;
+    const creditsPerCycle = creditMode === 'unlimited' || creditMode === 'weekly_guaranteed'
+      ? null
+      : (Number.isInteger(parsedCredits) && parsedCredits > 0 ? Math.min(5000, parsedCredits) : null);
+
     out.push({
       id: String(item.id || `opt-${i + 1}`),
       label: item.label ? String(item.label).trim() : null,
@@ -335,11 +371,136 @@ export function normalizeCommercialPriceOptions(raw: unknown): StudioCommercialP
       fidelityMonths,
       gracePeriodDays,
       autoRenew: Boolean(item.autoRenew),
-      active: item.active !== false && item.active !== 0
+      active: item.active !== false && item.active !== 0,
+      creditMode,
+      creditsPerCycle,
+      allowPublicBooking: item.allowPublicBooking !== false && item.allowPublicBooking !== 0
     });
   }
 
   return out;
+}
+
+export function normalizePlanCreditMode(
+  raw: unknown,
+  fallback: PlanCreditMode = 'fixed_credits'
+): PlanCreditMode {
+  const v = String(raw || '').trim();
+  if (v === 'fixed_credits' || v === 'weekly_guaranteed' || v === 'unlimited') {
+    return v;
+  }
+  return fallback;
+}
+
+export function resolveOptionCreditPlan(
+  option: Pick<
+    StudioCommercialPriceOption,
+    'accessType' | 'frequencyType' | 'frequencyCount' | 'contractDurationCode' | 'paymentPeriodicity' | 'creditMode' | 'creditsPerCycle'
+  >,
+  servicePlanCreditMode?: PlanCreditMode | string | null,
+  servicePlanCreditsPerCycle?: number | null
+): {
+  creditMode: PlanCreditMode;
+  creditsPerCycle: number | null;
+  totalContractCredits: number | null;
+  weeklyCap: number | null;
+  estimatedSessionsInContract: number | null;
+} {
+  const contractMonths = PLAN_DURATION_MONTHS[option.contractDurationCode] || 1;
+  const paymentCycleMonths = getPaymentPeriodicityCycleMonths(option.paymentPeriodicity);
+  const billingCyclesCount =
+    option.paymentPeriodicity === 'one_time' || option.paymentPeriodicity === 'installments'
+      ? 1
+      : Math.max(1, Math.round(contractMonths / paymentCycleMonths));
+
+  const effMode: PlanCreditMode =
+    option.accessType === 'unlimited' || option.frequencyType === 'unlimited' || option.creditMode === 'unlimited'
+      ? 'unlimited'
+      : option.creditMode === 'fixed_credits' || option.creditMode === 'weekly_guaranteed'
+        ? option.creditMode
+        : servicePlanCreditMode === 'fixed_credits' || servicePlanCreditMode === 'weekly_guaranteed' || servicePlanCreditMode === 'unlimited'
+          ? (servicePlanCreditMode as PlanCreditMode)
+          : 'fixed_credits';
+
+  const weeklyCap =
+    option.frequencyType === 'weekly' && option.frequencyCount && option.frequencyCount > 0
+      ? Math.max(1, Math.floor(option.frequencyCount))
+      : null;
+
+  if (effMode === 'unlimited') {
+    return {
+      creditMode: 'unlimited',
+      creditsPerCycle: null,
+      totalContractCredits: null,
+      weeklyCap,
+      estimatedSessionsInContract: null
+    };
+  }
+
+  if (effMode === 'weekly_guaranteed') {
+    const cap = weeklyCap || Math.max(1, Math.floor(Number(option.frequencyCount) || 1));
+    const estimatedSessionsInContract = Math.max(1, Math.ceil((cap * 52 * contractMonths) / 12));
+    return {
+      creditMode: 'weekly_guaranteed',
+      creditsPerCycle: null,
+      totalContractCredits: null,
+      weeklyCap: cap,
+      estimatedSessionsInContract
+    };
+  }
+
+  const explicitCredits =
+    option.creditsPerCycle !== undefined && option.creditsPerCycle !== null && option.creditsPerCycle > 0
+      ? Math.floor(Number(option.creditsPerCycle))
+      : servicePlanCreditsPerCycle && Number(servicePlanCreditsPerCycle) > 0
+        ? Math.floor(Number(servicePlanCreditsPerCycle))
+        : null;
+
+  const perMonthDefault =
+    option.frequencyType === 'weekly'
+      ? Math.max(1, option.frequencyCount || 1) * 4
+      : option.frequencyType === 'monthly'
+        ? Math.max(1, option.frequencyCount || 1)
+        : Math.max(1, option.frequencyCount || 1);
+
+  if (option.frequencyType === 'fixed_count') {
+    const fixedTotal = Math.max(1, explicitCredits || option.frequencyCount || perMonthDefault);
+    return {
+      creditMode: 'fixed_credits',
+      creditsPerCycle: fixedTotal,
+      totalContractCredits: fixedTotal,
+      weeklyCap: null,
+      estimatedSessionsInContract: fixedTotal
+    };
+  }
+
+  if (explicitCredits && explicitCredits > 0) {
+    const totalContractCredits =
+      option.paymentPeriodicity === 'one_time' || option.paymentPeriodicity === 'installments'
+        ? explicitCredits
+        : explicitCredits * billingCyclesCount;
+    return {
+      creditMode: 'fixed_credits',
+      creditsPerCycle: explicitCredits,
+      totalContractCredits,
+      weeklyCap,
+      estimatedSessionsInContract: totalContractCredits
+    };
+  }
+
+  const totalContractCredits = Math.max(1, perMonthDefault * contractMonths);
+  const creditsPerCycle =
+    option.paymentPeriodicity === 'one_time' || option.paymentPeriodicity === 'installments'
+      ? totalContractCredits
+      : Math.max(1, perMonthDefault * paymentCycleMonths);
+
+  return {
+    creditMode: 'fixed_credits',
+    creditsPerCycle,
+    totalContractCredits,
+    weeklyCap,
+    estimatedSessionsInContract: totalContractCredits
+  };
 }
 
 export function calculateCommercialOptionBreakdown(
@@ -348,6 +509,8 @@ export function calculateCommercialOptionBreakdown(
     participantsCount?: number;
     sessionsInContract?: number;
     sessionsPerMonth?: number;
+    servicePlanCreditMode?: PlanCreditMode | string | null;
+    servicePlanCreditsPerCycle?: number | null;
   }
 ): CommercialOptionBreakdown {
   const contractMonths = PLAN_DURATION_MONTHS[option.contractDurationCode] || 1;
@@ -361,12 +524,21 @@ export function calculateCommercialOptionBreakdown(
       ? Math.max(1, option.installmentsCount || contractMonths)
       : (option.paymentPeriodicity === 'one_time' ? 1 : billingCyclesCount);
 
+  const creditPlan = resolveOptionCreditPlan(
+    option,
+    context?.servicePlanCreditMode,
+    context?.servicePlanCreditsPerCycle
+  );
+
   const effParticipants = Math.max(1, Math.floor(Number(context?.participantsCount || option.participantsCount || 1)));
   const defaultSessionsPerMonth = option.frequencyType === 'weekly' && option.frequencyCount
     ? option.frequencyCount * 4
     : (option.frequencyType === 'monthly' && option.frequencyCount ? option.frequencyCount : 1);
   const sessionsPerMonth = Math.max(1, Math.floor(Number(context?.sessionsPerMonth || defaultSessionsPerMonth)));
-  const configuredSessions = option.frequencyType === 'fixed_count' ? option.frequencyCount : null;
+  const configuredSessions =
+    creditPlan.creditMode === 'fixed_credits'
+      ? creditPlan.totalContractCredits
+      : (option.frequencyType === 'fixed_count' ? option.frequencyCount : creditPlan.estimatedSessionsInContract);
   const sessionsInContract = Math.max(1, Math.floor(Number(context?.sessionsInContract || configuredSessions || (sessionsPerMonth * contractMonths))));
 
   let totalContractAmountCents = option.amountCents;
@@ -414,6 +586,8 @@ export function calculateCommercialOptionBreakdown(
       ? Math.round(totalContractAmountCents / Math.max(1, installmentsCount))
       : cycleAmountCents;
 
+  const monthlyEquivalentCents = Math.round(totalContractAmountCents / Math.max(1, contractMonths));
+
   return {
     optionId: option.id,
     commercialUnit: option.commercialUnit,
@@ -430,10 +604,17 @@ export function calculateCommercialOptionBreakdown(
     cycleAmountReais: Math.round(cycleAmountCents) / 100,
     installmentAmountCents,
     installmentAmountReais: Math.round(installmentAmountCents) / 100,
+    monthlyEquivalentCents,
+    monthlyEquivalentReais: Math.round(monthlyEquivalentCents) / 100,
     totalContractAmountCents,
     totalContractAmountReais: Math.round(totalContractAmountCents) / 100,
     perParticipantAmountCents,
-    perParticipantAmountReais: Math.round(perParticipantAmountCents) / 100
+    perParticipantAmountReais: Math.round(perParticipantAmountCents) / 100,
+    creditMode: creditPlan.creditMode,
+    creditsPerCycle: creditPlan.creditsPerCycle,
+    totalContractCredits: creditPlan.totalContractCredits,
+    weeklyCap: creditPlan.weeklyCap,
+    estimatedSessionsInContract: creditPlan.estimatedSessionsInContract
   };
 }
 
@@ -1202,6 +1383,215 @@ export function calculatePlanWithAddonsBreakdown(params: {
   };
 }
 
+export interface ServiceCommercialModesInput {
+  service_domain?: string | null;
+  serviceDomain?: string | null;
+  studio_service_type?: string | null;
+  studioServiceType?: string | null;
+  service_kind?: string | null;
+  serviceKind?: string | null;
+  requires_appointment?: number | boolean | null;
+  requiresAppointment?: boolean | null;
+  requires_active_contract?: number | boolean | null;
+  requiresActiveContract?: boolean | null;
+  allow_single_booking?: number | boolean | null;
+  allowSingleBooking?: boolean | null;
+  allow_plan_booking?: number | boolean | null;
+  allowPlanBooking?: boolean | null;
+  allow_public_booking?: number | boolean | null;
+  allowPublicBooking?: boolean | null;
+  allow_public_single_booking?: number | boolean | null;
+  allowPublicSingleBooking?: boolean | null;
+  allow_public_plan_booking?: number | boolean | null;
+  allowPublicPlanBooking?: boolean | null;
+  billing_mode?: string | null;
+  billingMode?: string | null;
+  price?: number | null;
+  periodic_price?: number | null;
+  periodicPrice?: number | null;
+  frequency_pricing_json?: unknown;
+  frequencyPricing?: unknown;
+  commercial_options_json?: unknown;
+  commercial_price_options_json?: unknown;
+  commercial_price_options?: unknown;
+  commercialPriceOptions?: unknown;
+  commercialOptions?: unknown;
+  plan_credit_mode?: string | null;
+  planCreditMode?: string | null;
+  plan_credits_per_cycle?: number | null;
+  planCreditsPerCycle?: number | null;
+  weekly_sessions_count?: number | null;
+  weeklySessionsCount?: number | null;
+}
+
+export interface ResolvedServiceCommercialModes {
+  isStudio: boolean;
+  studioServiceType: StudioServiceType;
+  requiresAppointment: boolean;
+  allowSingleBooking: boolean;
+  allowPlanBooking: boolean;
+  allowPublicSingleBooking: boolean;
+  allowPublicPlanBooking: boolean;
+  allowPublicBooking: boolean;
+  standalonePrice: number | null;
+  hasActiveCommercialOptions: boolean;
+  hasFrequencyPricing: boolean;
+  planCreditMode: PlanCreditMode;
+  planCreditsPerCycle: number | null;
+}
+
+function parseBoolNullable(val: unknown): boolean | null {
+  if (val === undefined || val === null || val === '') return null;
+  if (typeof val === 'boolean') return val;
+  if (typeof val === 'number') return val !== 0;
+  const norm = String(val).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'sim'].includes(norm)) return true;
+  if (['0', 'false', 'no', 'nao', 'não'].includes(norm)) return false;
+  return null;
+}
+
+function hasEnabledFreqPricing(raw: unknown): boolean {
+  if (!raw) return false;
+  let obj: any = raw;
+  if (typeof raw === 'string') {
+    try {
+      obj = JSON.parse(raw);
+    } catch {
+      return false;
+    }
+  }
+  return Boolean(obj && typeof obj === 'object' && obj.enabled);
+}
+
+export function resolveServiceCommercialModes(
+  srv: ServiceCommercialModesInput,
+  establishmentProfile?: string | null
+): ResolvedServiceCommercialModes {
+  const domain = String(srv.service_domain ?? srv.serviceDomain ?? '').trim().toLowerCase();
+  const prof = String(establishmentProfile || '').trim().toLowerCase();
+  const isClinical = domain === 'clinical' || (!domain && prof === 'clinic');
+
+  const rawPrice = Number(srv.price ?? 0);
+  const safePrice = Number.isFinite(rawPrice) && rawPrice > 0 ? Math.round(rawPrice * 100) / 100 : 0;
+  const legacyAllowPublic = parseBoolNullable(srv.allow_public_booking ?? srv.allowPublicBooking);
+  const basePublicFlag = legacyAllowPublic !== null ? legacyAllowPublic : true;
+
+  if (isClinical) {
+    return {
+      isStudio: false,
+      studioServiceType: 'individual',
+      requiresAppointment: true,
+      allowSingleBooking: true,
+      allowPlanBooking: false,
+      allowPublicSingleBooking: basePublicFlag,
+      allowPublicPlanBooking: false,
+      allowPublicBooking: basePublicFlag,
+      standalonePrice: safePrice,
+      hasActiveCommercialOptions: false,
+      hasFrequencyPricing: false,
+      planCreditMode: 'fixed_credits',
+      planCreditsPerCycle: null
+    };
+  }
+
+  const studioServiceType = normalizeStudioServiceType(
+    srv.studio_service_type ?? srv.studioServiceType,
+    srv.service_kind ?? srv.serviceKind,
+    srv.requires_appointment ?? srv.requiresAppointment
+  );
+  const reqApptRaw = parseBoolNullable(srv.requires_appointment ?? srv.requiresAppointment);
+  const requiresAppointment =
+    studioServiceType === 'facility_access' || studioServiceType === 'non_scheduled'
+      ? false
+      : (reqApptRaw !== null ? reqApptRaw : true);
+
+  const commercialOptions = normalizeCommercialPriceOptions(
+    srv.commercial_options_json ??
+      srv.commercial_price_options_json ??
+      srv.commercial_price_options ??
+      srv.commercialPriceOptions ??
+      srv.commercialOptions
+  ).filter((o) => o.active);
+  const hasActiveCommercialOptions = commercialOptions.length > 0;
+  const hasFrequencyPricing = hasEnabledFreqPricing(
+    srv.frequency_pricing_json ?? srv.frequencyPricing
+  );
+  const billingMode = String(srv.billing_mode ?? srv.billingMode ?? 'per_session').trim().toLowerCase();
+  const periodicPrice = Number(srv.periodic_price ?? srv.periodicPrice ?? 0);
+  const reqActiveContract = Boolean(parseBoolNullable(srv.requires_active_contract ?? srv.requiresActiveContract));
+
+  const hasPlanDefinition =
+    hasActiveCommercialOptions ||
+    hasFrequencyPricing ||
+    (billingMode !== '' && billingMode !== 'per_session' && (periodicPrice > 0 || studioServiceType === 'facility_access')) ||
+    studioServiceType === 'facility_access' ||
+    studioServiceType === 'non_scheduled';
+
+  const explicitAllowPlan = parseBoolNullable(srv.allow_plan_booking ?? srv.allowPlanBooking);
+  const allowPlanBooking =
+    studioServiceType === 'facility_access'
+      ? true
+      : (explicitAllowPlan !== null ? explicitAllowPlan : hasPlanDefinition);
+
+  const explicitAllowSingle = parseBoolNullable(srv.allow_single_booking ?? srv.allowSingleBooking);
+  let allowSingleBooking = false;
+  if (studioServiceType === 'facility_access') {
+    allowSingleBooking = false;
+  } else if (explicitAllowSingle !== null) {
+    allowSingleBooking = explicitAllowSingle;
+  } else {
+    allowSingleBooking =
+      !reqActiveContract &&
+      (safePrice > 0 || (billingMode === 'per_session' && !hasPlanDefinition));
+  }
+
+  const standalonePrice = allowSingleBooking ? safePrice : null;
+
+  const explicitPublicSingle = parseBoolNullable(
+    srv.allow_public_single_booking ?? srv.allowPublicSingleBooking
+  );
+  const allowPublicSingleBooking =
+    allowSingleBooking &&
+    (explicitPublicSingle !== null
+      ? explicitPublicSingle
+      : basePublicFlag && (safePrice > 0 || (billingMode === 'per_session' && !hasPlanDefinition)));
+
+  const explicitPublicPlan = parseBoolNullable(
+    srv.allow_public_plan_booking ?? srv.allowPublicPlanBooking
+  );
+  const allowPublicPlanBooking =
+    allowPlanBooking &&
+    (explicitPublicPlan !== null ? explicitPublicPlan : basePublicFlag);
+
+  const defaultCreditMode: PlanCreditMode =
+    studioServiceType === 'facility_access' ? 'unlimited' : 'fixed_credits';
+  const planCreditMode = normalizePlanCreditMode(
+    srv.plan_credit_mode ?? srv.planCreditMode,
+    defaultCreditMode
+  );
+  const rawPlanCredits = Number(srv.plan_credits_per_cycle ?? srv.planCreditsPerCycle);
+  const planCreditsPerCycle =
+    planCreditMode === 'fixed_credits' && Number.isInteger(rawPlanCredits) && rawPlanCredits > 0
+      ? Math.min(5000, rawPlanCredits)
+      : null;
+
+  return {
+    isStudio: true,
+    studioServiceType,
+    requiresAppointment,
+    allowSingleBooking,
+    allowPlanBooking,
+    allowPublicSingleBooking,
+    allowPublicPlanBooking,
+    allowPublicBooking: allowPublicSingleBooking || allowPublicPlanBooking,
+    standalonePrice,
+    hasActiveCommercialOptions,
+    hasFrequencyPricing,
+    planCreditMode,
+    planCreditsPerCycle
+  };
+}
+
 export function buildFallbackBaseCommercialOption(srv: {
   id?: string;
   name?: string;
@@ -1217,18 +1607,29 @@ export function buildFallbackBaseCommercialOption(srv: {
   billing_cycle_months?: number | null;
   billingCycleMonths?: number | null;
   default_plan_duration?: string | null;
+  plan_credit_mode?: string | null;
+  planCreditMode?: string | null;
+  plan_credits_per_cycle?: number | null;
+  planCreditsPerCycle?: number | null;
+  allow_single_booking?: number | boolean | null;
+  allowSingleBooking?: boolean | null;
 }): StudioCommercialPriceOption {
   const billingMode = String(srv.billing_mode ?? srv.billingMode ?? 'per_session').toLowerCase();
   const periodicPrice = Number(srv.periodic_price ?? srv.periodicPrice ?? 0);
   const basePrice = Number(srv.price ?? 0);
-  const amountReais = periodicPrice > 0 ? periodicPrice : basePrice;
+  const amountReais =
+    billingMode !== 'per_session' && periodicPrice > 0
+      ? periodicPrice
+      : (periodicPrice > 0 ? periodicPrice : basePrice);
   const amountCents = Math.max(0, Math.round(amountReais * 100));
   const studioType = String(srv.studio_service_type ?? srv.studioServiceType ?? 'individual');
   const periodicityMap: Record<string, PaymentPeriodicityCode> = {
     monthly: 'monthly',
+    bimonthly: 'bimonthly',
     quarterly: 'quarterly',
     semiannual: 'semiannual',
-    annual: 'annual'
+    annual: 'annual',
+    biennial: 'annual'
   };
   const paymentPeriodicity: PaymentPeriodicityCode = periodicityMap[billingMode] || 'monthly';
   const durationMap: Record<PaymentPeriodicityCode, PlanDurationCode> = {
@@ -1237,7 +1638,7 @@ export function buildFallbackBaseCommercialOption(srv: {
     bimonthly: '2_months',
     quarterly: '3_months',
     semiannual: '6_months',
-    annual: '12_months',
+    annual: billingMode === 'biennial' ? '24_months' : '12_months',
     installments: '1_month'
   };
   const contractDurationCode: PlanDurationCode =
@@ -1245,6 +1646,12 @@ export function buildFallbackBaseCommercialOption(srv: {
       ? (srv.default_plan_duration as PlanDurationCode)
       : durationMap[paymentPeriodicity];
   const weeklyCount = Number(srv.weekly_sessions_count ?? srv.weeklySessionsCount ?? 0);
+  const defaultCreditMode: PlanCreditMode = studioType === 'facility_access' ? 'unlimited' : 'fixed_credits';
+  const creditMode = normalizePlanCreditMode(srv.plan_credit_mode ?? srv.planCreditMode, defaultCreditMode);
+  const rawCredits = Number(srv.plan_credits_per_cycle ?? srv.planCreditsPerCycle);
+  const creditsPerCycle =
+    creditMode === 'fixed_credits' && Number.isInteger(rawCredits) && rawCredits > 0 ? rawCredits : null;
+
   return {
     id: 'default',
     label: srv.name ? String(srv.name) : 'Plano padrão',
@@ -1261,6 +1668,9 @@ export function buildFallbackBaseCommercialOption(srv: {
     fidelityMonths: 0,
     gracePeriodDays: 0,
     autoRenew: billingMode !== 'per_session',
-    active: true
+    active: true,
+    creditMode,
+    creditsPerCycle,
+    allowPublicBooking: true
   };
 }

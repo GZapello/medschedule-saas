@@ -219,7 +219,7 @@ export function ServiceFrequencyPricingPanel({
                             inputMode="decimal"
                             aria-label={`${frequency}x por semana — valor ${unit}`}
                             value={displayValue}
-                            placeholder={autoVal > 0 ? `${formatDecimalEdit(autoVal)} (Automático)` : 'Automático'}
+                            placeholder={autoVal > 0 ? `${formatDecimalEdit(Math.round(autoVal * 100))} (Automático)` : 'Automático'}
                             onChange={event => handleInputChange(frequency, event.target.value)}
                             onBlur={() => handleInputBlur(frequency)}
                             className="w-full rounded-lg border border-gray-300 bg-white py-1.5 pl-8 pr-2 text-xs font-medium text-gray-900 focus:border-emerald-500 focus:outline-none"

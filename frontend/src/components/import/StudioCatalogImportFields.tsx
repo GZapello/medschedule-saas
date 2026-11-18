@@ -42,6 +42,11 @@ export const durations = [
 export const frequencies = [
   ['weekly', 'Por semana'], ['monthly', 'Por mês'], ['unlimited', 'Ilimitada'], ['fixed_count', 'Quantidade fixa']
 ] as const;
+export const creditModes = [
+  ['fixed_credits', 'Créditos fixos por ciclo'],
+  ['weekly_guaranteed', 'Frequência semanal garantida'],
+  ['unlimited', 'Acesso livre / ilimitado']
+] as const;
 export const days = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'].map((name, i) => [String(i), name] as const);
 
 export const formatMoneyBrl = (cents: number | null | undefined) =>
@@ -195,6 +200,14 @@ export function PriceFields({ price, onChange, packagePrice }: {
           onChange={frequencyType => onChange({ frequencyType, frequencyCount: frequencyType === 'unlimited' ? null : (price.frequencyCount ?? 1) })} />
         {price.frequencyType && price.frequencyType !== 'unlimited' && <NumberField label="Qtd na frequência" value={price.frequencyCount} max={200} onChange={frequencyCount => onChange({ frequencyCount })} />}
         {price.unit === 'per_participant' && <NumberField label="Participantes" value={price.participants} max={500} onChange={participants => onChange({ participants })} />}
+        {price.unit !== 'per_session' && price.frequencyType && price.frequencyType !== 'unlimited' && <>
+          <SelectField label="Regra de créditos/frequência" options={creditModes} value={price.creditMode ?? 'fixed_credits'}
+            onChange={creditMode => onChange({ creditMode: (creditMode as ProposedPrice['creditMode']) || null })} />
+          {(price.creditMode ?? 'fixed_credits') === 'fixed_credits' && (
+            <NumberField label="Créditos por ciclo (opc.)" value={price.creditsPerCycle ?? null} min={1} max={5000}
+              onChange={creditsPerCycle => onChange({ creditsPerCycle })} />
+          )}
+        </>}
       </>}
     </div>
 

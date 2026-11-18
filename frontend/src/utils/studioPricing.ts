@@ -240,15 +240,30 @@ export function calculateStudioRecurringPrice(
   const numCustomPrice = hasExplicitCustomPrice ? Math.round(Number(input.customPrice) * 100) / 100 : null;
 
   let isPriceCustomized = input.isPriceCustomized === true;
-  if (input.isPriceCustomized === undefined && numCustomPrice !== null) {
-    if (Math.abs(numCustomPrice - suggestedPrice) > 0.01) {
+  if (!isPriceCustomized && numCustomPrice !== null) {
+    if (input.isPriceCustomized === undefined && Math.abs(numCustomPrice - suggestedPrice) > 0.01) {
+      isPriceCustomized = true;
+    } else if (sessionPrice <= 0 && numCustomPrice > 0) {
       isPriceCustomized = true;
     }
   }
 
-  if (frequencyPricingActive) isPriceCustomized = frequencyCents !== undefined;
+  if (frequencyPricingActive) {
+    if (frequencyCents !== undefined) {
+      isPriceCustomized = true;
+    } else if (sessionPrice <= 0 && numCustomPrice !== null && numCustomPrice > 0) {
+      isPriceCustomized = true;
+    } else {
+      isPriceCustomized = false;
+    }
+  }
+
   const effectivePrice = frequencyPricingActive
-    ? (input.frequencyPricing?.unit === 'per_period' && frequencyCents !== undefined ? frequencyCents / 100 : suggestedPrice)
+    ? (input.frequencyPricing?.unit === 'per_period' && frequencyCents !== undefined
+        ? frequencyCents / 100
+        : (frequencyCents === undefined && sessionPrice <= 0 && numCustomPrice !== null && numCustomPrice > 0
+            ? numCustomPrice
+            : suggestedPrice))
     : (isPriceCustomized && numCustomPrice !== null ? numCustomPrice : suggestedPrice);
 
   const averagePricePerSession = referenceSessionsCount > 0
@@ -352,7 +367,8 @@ function buildStudioCommercialSummary(params: {
   if (billingMode === 'count') periodLabel = 'quantidade fixa';
   if (billingMode === 'custom_date') periodLabel = 'data final personalizada';
 
-  const baseSummary = `${serviceName} • Preço avulso: ${formatBRL(sessionPrice)} • Frequência: ${freqLabel} • Cobrança: ${periodLabel}.`;
+  const singlePart = sessionPrice > 0 ? ` • Preço avulso: ${formatBRL(sessionPrice)}` : ' • Somente em planos';
+  const baseSummary = `${serviceName}${singlePart} • Frequência: ${freqLabel} • Cobrança: ${periodLabel}.`;
   const sugPart = `Valor sugerido: ${formatBRL(suggestedPrice)} (${ruleLabel}).`;
   const confPart = isPriceCustomized
     ? `Valor configurado: ${formatBRL(effectivePrice)} (personalizado).`

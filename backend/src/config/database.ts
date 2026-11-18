@@ -25,6 +25,7 @@ import { migrateIntegratedImprovements } from './integrated-improvements-migrati
 import { migrateStudioImprovements } from './studio-improvements.migration';
 import { migrateStudioCatalogImports } from './studio-catalog-import.migration';
 import { migrateSandbox } from './sandbox.migration';
+import { migrateStudioCommercialModes } from './studio-commercial-modes.migration';
 import { dbPath } from './db-path';
 import { backfillMissingDefaultSchedules } from '../utils/schedule-defaults';
 
@@ -4089,6 +4090,7 @@ function repairLegacyPhotoUrls(rawDb: any): void {
   try { migrateStudioImprovements(rawDb); } catch (e) { console.error('[Database] Erro ao migrar melhorias studio:', e); }
   try { migrateStudioCatalogImports(rawDb); } catch (e) { console.error('[Database] Erro ao migrar studio_catalog_imports:', e); }
   try { migrateSandbox(rawDb); } catch (e) { console.error('[Database] Erro ao migrar sandbox:', e); }
+  try { migrateStudioCommercialModes(rawDb); } catch (e) { console.error('[Database] Erro ao migrar modos comerciais do studio:', e); }
 }
 
 // Inicialização automática e idempotente da base de dados e migrações no carregamento do módulo

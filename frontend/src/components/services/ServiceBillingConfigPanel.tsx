@@ -121,10 +121,10 @@ export const ServiceBillingConfigPanel: React.FC<ServiceBillingConfigPanelProps>
 
   const displayCalc = frequencyActive ? calculateStudioRecurringPrice({ serviceName, sessionPrice, weeklySessionsCount: effectiveWeeklySessions, billingMode, pricingRule, frequencyPricing }) : calcResult;
 
-  // Se o valor não for personalizado e estiver vazio ou o preço avulso/frequência/regra/lote mudar, atualiza automaticamente
+  // Se o valor não for personalizado e houver preço avulso de referência, sincroniza a sugestão
   useEffect(() => {
     if (!isPeriodic) return;
-    if (!isPriceCustomized) {
+    if (!isPriceCustomized && calcResult.suggestedPrice > 0) {
       const formattedSuggested = calcResult.suggestedPrice.toFixed(2);
       const currentValNum = periodicPrice.trim() !== '' ? Number(periodicPrice.replace(',', '.')) : 0;
       if (Math.abs(currentValNum - calcResult.suggestedPrice) > 0.01 || periodicPrice.trim() === '') {

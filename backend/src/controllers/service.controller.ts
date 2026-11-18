@@ -44,6 +44,8 @@ import {
   normalizeStudioAccessConfig,
   normalizeStudioPriceAdjustments,
   normalizeStudioServiceType,
+  normalizePlanCreditMode,
+  resolveServiceCommercialModes,
   OptionalAddonTargetSummary,
   StudioOptionalAddonsConfig,
   StudioServiceType
@@ -638,13 +640,7 @@ export class ServiceController {
           s.id, s.tenant_id, s.professional_id, s.specialty_id, s.name, s.description,
           COALESCE(ps.custom_duration, s.duration_minutes) as duration_minutes,
           s.buffer_minutes,
-          COALESCE(
-            CASE WHEN ps.custom_price > 0 THEN ps.custom_price ELSE NULL END,
-            CASE WHEN s.price > 0 THEN s.price ELSE NULL END,
-            CASE WHEN s.periodic_price > 0 THEN s.periodic_price ELSE NULL END,
-            s.price,
-            0
-          ) as price,
+          CASE WHEN ps.custom_price > 0 THEN ps.custom_price ELSE COALESCE(s.price, 0) END as price,
           s.price as catalog_base_price,
           s.modality, s.active,
           COALESCE(s.service_kind, 'individual') as service_kind,
@@ -675,6 +671,12 @@ export class ServiceController {
           COALESCE(s.requires_appointment, 1) as requires_appointment,
           COALESCE(s.requires_active_contract, 0) as requires_active_contract,
           COALESCE(s.allow_public_booking, 1) as allow_public_booking,
+          s.allow_single_booking,
+          s.allow_plan_booking,
+          s.allow_public_single_booking,
+          s.allow_public_plan_booking,
+          s.plan_credit_mode,
+          s.plan_credits_per_cycle,
           s.effective_start_date,
           s.effective_end_date,
           s.access_config_json,
@@ -885,14 +887,45 @@ export class ServiceController {
         const availDiagnostics = supportsCustomAvailability && resolvedAvailMode === 'custom_windows'
           ? diagnoseServiceAvailability(tenantId, linkedProfIds, availWindows)
           : null;
+        const commercialModes = resolveServiceCommercialModes(
+          {
+            ...srv,
+            service_domain: resolvedDomain,
+            studio_service_type: resolvedStudioType,
+            requires_appointment: resolvedRequiresAppt,
+            billing_mode: billConfig.billingMode,
+            periodic_price: billConfig.periodicPrice
+          },
+          establishmentProfile
+        );
+        const firstPlanReais =
+          commercialPriceOptions.find(o => o.active)?.amountCents
+            ? commercialPriceOptions.find(o => o.active)!.amountCents / 100
+            : 0;
         return {
           ...srv,
-          catalog_price: Number(srv.price || 0) > 0 ? Number(srv.price) : Number(billConfig.periodicPrice || 0),
+          price: resolvedDomain === 'studio'
+            ? (commercialModes.standalonePrice !== null ? commercialModes.standalonePrice : 0)
+            : Number(srv.price || 0),
+          standalone_price: commercialModes.standalonePrice,
+          catalog_price:
+            commercialModes.standalonePrice !== null && commercialModes.standalonePrice > 0
+              ? commercialModes.standalonePrice
+              : Number(billConfig.periodicPrice || firstPlanReais || 0),
           service_domain: resolvedDomain,
           studio_service_type: resolvedStudioType,
           requires_appointment: resolvedRequiresAppt,
-          requires_active_contract: resolvedDomain === 'studio' ? Number(srv.requires_active_contract ?? (resolvedStudioType === 'facility_access' ? 1 : 0)) : 0,
-          allow_public_booking: Number(srv.allow_public_booking ?? 1) === 0 ? 0 : 1,
+          requires_active_contract:
+            resolvedDomain === 'studio'
+              ? (commercialModes.allowSingleBooking ? 0 : (commercialModes.allowPlanBooking ? 1 : Number(srv.requires_active_contract ?? 0)))
+              : 0,
+          allow_single_booking: commercialModes.allowSingleBooking ? 1 : 0,
+          allow_plan_booking: commercialModes.allowPlanBooking ? 1 : 0,
+          allow_public_single_booking: commercialModes.allowPublicSingleBooking ? 1 : 0,
+          allow_public_plan_booking: commercialModes.allowPublicPlanBooking ? 1 : 0,
+          allow_public_booking: commercialModes.allowPublicBooking ? 1 : 0,
+          plan_credit_mode: commercialModes.planCreditMode,
+          plan_credits_per_cycle: commercialModes.planCreditsPerCycle,
           effective_start_date: srv.effective_start_date || null,
           effective_end_date: srv.effective_end_date || null,
           access_config: accessConfig,
@@ -1038,6 +1071,12 @@ export class ServiceController {
       const rawOptionalAddons = req.body?.optionalAddons !== undefined ? req.body.optionalAddons : req.body?.optional_addons;
       const rawRequiresActiveContract = req.body?.requiresActiveContract !== undefined ? req.body.requiresActiveContract : req.body?.requires_active_contract;
       const rawAllowPublicBooking = req.body?.allowPublicBooking !== undefined ? req.body.allowPublicBooking : req.body?.allow_public_booking;
+      const rawAllowSingleBooking = req.body?.allowSingleBooking !== undefined ? req.body.allowSingleBooking : req.body?.allow_single_booking;
+      const rawAllowPlanBooking = req.body?.allowPlanBooking !== undefined ? req.body.allowPlanBooking : req.body?.allow_plan_booking;
+      const rawAllowPublicSingleBooking = req.body?.allowPublicSingleBooking !== undefined ? req.body.allowPublicSingleBooking : req.body?.allow_public_single_booking;
+      const rawAllowPublicPlanBooking = req.body?.allowPublicPlanBooking !== undefined ? req.body.allowPublicPlanBooking : req.body?.allow_public_plan_booking;
+      const rawPlanCreditMode = req.body?.planCreditMode !== undefined ? req.body.planCreditMode : req.body?.plan_credit_mode;
+      const rawPlanCreditsPerCycle = req.body?.planCreditsPerCycle !== undefined ? req.body.planCreditsPerCycle : req.body?.plan_credits_per_cycle;
       const rawEffectiveStartDate = req.body?.effectiveStartDate !== undefined ? req.body.effectiveStartDate : req.body?.effective_start_date;
       const rawEffectiveEndDate = req.body?.effectiveEndDate !== undefined ? req.body.effectiveEndDate : req.body?.effective_end_date;
       const requestedLinkedIds = parseLinkedInstructorIds(req.body);
@@ -1050,6 +1089,12 @@ export class ServiceController {
           rawPricingAdjustments !== undefined ||
           rawCommercialOptions !== undefined ||
           rawOptionalAddons !== undefined ||
+          rawAllowPlanBooking === true ||
+          rawAllowPlanBooking === 1 ||
+          rawAllowPublicPlanBooking === true ||
+          rawAllowPublicPlanBooking === 1 ||
+          rawPlanCreditMode !== undefined ||
+          (rawPlanCreditsPerCycle !== undefined && rawPlanCreditsPerCycle !== null && rawPlanCreditsPerCycle !== '') ||
           (rawCapacity !== undefined && rawCapacity !== null && rawCapacity !== '') ||
           rawClassSchedules.length > 0 ||
           String(rawRequestedDomain || '').trim().toLowerCase() === 'studio' ||
@@ -1180,11 +1225,23 @@ export class ServiceController {
         return;
       }
 
+      const normalizedCommercialOptions =
+        isStudioCompat && resolvedDomain === 'studio'
+          ? normalizeCommercialPriceOptions(rawCommercialOptions)
+          : [];
+      const fallbackOptionReais =
+        normalizedCommercialOptions.find(o => o.active && (o.commercialUnit === 'per_month' || o.paymentPeriodicity === 'monthly'))?.amountCents ??
+        normalizedCommercialOptions.find(o => o.active)?.amountCents;
+      const effectivePeriodicInput =
+        rawPeriodicPrice !== undefined && rawPeriodicPrice !== null && String(rawPeriodicPrice).trim() !== ''
+          ? rawPeriodicPrice
+          : (fallbackOptionReais && fallbackOptionReais > 0 ? fallbackOptionReais / 100 : undefined);
+
       const billNorm = normalizeServiceBillingForSave({
         frequencyPricing: req.body.frequencyPricing,
         isStudioService: isStudioCompat && resolvedDomain === 'studio',
         billingMode: rawBillingMode,
-        periodicPrice: rawPeriodicPrice,
+        periodicPrice: effectivePeriodicInput,
         defaultPackageId: rawDefaultPkgId,
         defaultBillingDueDay: rawDefaultDueDay,
         pricingRule: rawPricingRule,
@@ -1210,10 +1267,6 @@ export class ServiceController {
         isStudioCompat && resolvedDomain === 'studio'
           ? normalizeStudioPriceAdjustments(rawPricingAdjustments)
           : [];
-      const normalizedCommercialOptions =
-        isStudioCompat && resolvedDomain === 'studio'
-          ? normalizeCommercialPriceOptions(rawCommercialOptions)
-          : [];
       const addonsValidation = validateAndHydrateOptionalAddonsForSave({
         tenantId,
         establishmentProfile,
@@ -1230,12 +1283,76 @@ export class ServiceController {
         isStudioCompat && resolvedDomain === 'studio' && (resolvedStudioType === 'facility_access' || resolvedStudioType === 'non_scheduled')
           ? 0
           : 1;
+
+      const rawPriceNum = price !== undefined && price !== null && price !== '' ? Number(price) : 0;
+      const safeRawPriceNum = Number.isFinite(rawPriceNum) && rawPriceNum > 0 ? rawPriceNum : 0;
+      const createdModes = resolveServiceCommercialModes(
+        {
+          service_domain: resolvedDomain,
+          studio_service_type: resolvedStudioType,
+          requires_appointment: resolvedRequiresAppointment,
+          requires_active_contract: rawRequiresActiveContract,
+          allow_single_booking: rawAllowSingleBooking,
+          allow_plan_booking: rawAllowPlanBooking,
+          allow_public_booking: rawAllowPublicBooking,
+          allow_public_single_booking: rawAllowPublicSingleBooking,
+          allow_public_plan_booking: rawAllowPublicPlanBooking,
+          billing_mode: billNorm.billingMode,
+          price: safeRawPriceNum,
+          periodic_price: billNorm.periodicPrice,
+          frequency_pricing_json: frequencyPricing,
+          commercial_options_json: normalizedCommercialOptions,
+          plan_credit_mode: rawPlanCreditMode,
+          plan_credits_per_cycle: rawPlanCreditsPerCycle
+        },
+        establishmentProfile
+      );
+
+      if (
+        isStudioCompat &&
+        resolvedDomain === 'studio' &&
+        (rawAllowSingleBooking !== undefined || rawAllowPlanBooking !== undefined)
+      ) {
+        if (!createdModes.allowSingleBooking && !createdModes.allowPlanBooking) {
+          res.status(400).json({ error: 'Habilite ao menos uma forma de contratação: Aula avulsa ou Plano/Recorrência.' });
+          return;
+        }
+        if (createdModes.allowSingleBooking && safeRawPriceNum <= 0 && !preserveZeroSessionPrice) {
+          res.status(400).json({ error: 'Informe um preço avulso maior que zero para atendimento/aula avulsa.' });
+          return;
+        }
+      }
+
       const resolvedRequiresActiveContract =
         isStudioCompat && resolvedDomain === 'studio'
-          ? (rawRequiresActiveContract !== undefined ? (rawRequiresActiveContract ? 1 : 0) : (resolvedStudioType === 'facility_access' ? 1 : 0))
+          ? (resolvedStudioType === 'facility_access' || (!createdModes.allowSingleBooking && createdModes.allowPlanBooking)
+              ? 1
+              : (rawRequiresActiveContract !== undefined ? (rawRequiresActiveContract ? 1 : 0) : 0))
           : 0;
-      const resolvedAllowPublicBooking =
-        rawAllowPublicBooking === false || rawAllowPublicBooking === 0 || rawAllowPublicBooking === '0' ? 0 : 1;
+      const resolvedAllowPublicBooking = createdModes.allowPublicBooking ? 1 : 0;
+      const resolvedAllowSingleBookingInt = createdModes.allowSingleBooking ? 1 : 0;
+      const resolvedAllowPlanBookingInt = createdModes.allowPlanBooking ? 1 : 0;
+      const resolvedAllowPublicSingleBookingInt = createdModes.allowPublicSingleBooking ? 1 : 0;
+      const resolvedAllowPublicPlanBookingInt = createdModes.allowPublicPlanBooking ? 1 : 0;
+      const dbAllowSingleBooking =
+        rawAllowSingleBooking !== undefined || resolvedStudioType === 'facility_access' || createdModes.allowSingleBooking
+          ? resolvedAllowSingleBookingInt
+          : null;
+      const dbAllowPlanBooking =
+        rawAllowPlanBooking !== undefined || createdModes.allowPlanBooking
+          ? resolvedAllowPlanBookingInt
+          : null;
+      const dbAllowPublicSingleBooking =
+        rawAllowPublicSingleBooking !== undefined || rawAllowSingleBooking !== undefined || resolvedStudioType === 'facility_access' || createdModes.allowPublicSingleBooking
+          ? resolvedAllowPublicSingleBookingInt
+          : null;
+      const dbAllowPublicPlanBooking =
+        rawAllowPublicPlanBooking !== undefined || rawAllowPlanBooking !== undefined || createdModes.allowPublicPlanBooking
+          ? resolvedAllowPublicPlanBookingInt
+          : null;
+      const resolvedPlanCreditMode = isStudioCompat && resolvedDomain === 'studio' ? createdModes.planCreditMode : null;
+      const resolvedPlanCreditsPerCycle = isStudioCompat && resolvedDomain === 'studio' ? createdModes.planCreditsPerCycle : null;
+
       const resolvedEffectiveStartDate =
         isStudioCompat && resolvedDomain === 'studio' && rawEffectiveStartDate && /^\d{4}-\d{2}-\d{2}$/.test(String(rawEffectiveStartDate).slice(0, 10))
           ? String(rawEffectiveStartDate).slice(0, 10)
@@ -1256,13 +1373,13 @@ export class ServiceController {
         return;
       }
 
-      const rawPriceNum = price !== undefined && price !== null && price !== '' ? Number(price) : 0;
+      // Nunca copia periodic_price ou commercialOptions[0] para services.price em serviços Studio.
       const effectiveCreatePrice =
-        rawPriceNum > 0 || (preserveZeroSessionPrice && rawPriceNum === 0)
-          ? rawPriceNum
-          : (billNorm.periodicPrice && billNorm.periodicPrice > 0
-              ? Number(billNorm.periodicPrice)
-              : (normalizedCommercialOptions.length > 0 ? normalizedCommercialOptions[0].amountCents / 100 : 0));
+        isStudioCompat && resolvedDomain === 'studio'
+          ? (createdModes.allowSingleBooking ? safeRawPriceNum : 0)
+          : (safeRawPriceNum > 0 || (preserveZeroSessionPrice && rawPriceNum === 0)
+              ? safeRawPriceNum
+              : (billNorm.periodicPrice && billNorm.periodicPrice > 0 ? Number(billNorm.periodicPrice) : 0));
 
       const resolvedMinLeadTimeHours = (minLeadTimeHours !== undefined && minLeadTimeHours !== null && minLeadTimeHours !== '' && !Number.isNaN(Number(minLeadTimeHours)))
         ? Math.max(0, Number(minLeadTimeHours))
@@ -1370,6 +1487,12 @@ export class ServiceController {
               requires_appointment = ?,
               requires_active_contract = ?,
               allow_public_booking = ?,
+              allow_single_booking = ?,
+              allow_plan_booking = ?,
+              allow_public_single_booking = ?,
+              allow_public_plan_booking = ?,
+              plan_credit_mode = ?,
+              plan_credits_per_cycle = ?,
               effective_start_date = ?,
               effective_end_date = ?,
               access_config_json = ?,
@@ -1385,6 +1508,12 @@ export class ServiceController {
           resolvedRequiresAppointment,
           resolvedRequiresActiveContract,
           resolvedAllowPublicBooking,
+          isStudioCompat && resolvedDomain === 'studio' ? dbAllowSingleBooking : 1,
+          isStudioCompat && resolvedDomain === 'studio' ? dbAllowPlanBooking : 0,
+          isStudioCompat && resolvedDomain === 'studio' ? dbAllowPublicSingleBooking : resolvedAllowPublicBooking,
+          isStudioCompat && resolvedDomain === 'studio' ? dbAllowPublicPlanBooking : 0,
+          resolvedPlanCreditMode,
+          resolvedPlanCreditsPerCycle,
           resolvedEffectiveStartDate,
           resolvedEffectiveEndDate,
           normalizedAccessConfig ? JSON.stringify(normalizedAccessConfig) : null,
@@ -1481,7 +1610,11 @@ export class ServiceController {
         min_lead_time_hours: resolvedMinLeadTimeHours,
         max_advance_days: resolvedMaxAdvanceDays,
         price: effectiveCreatePrice,
-        catalog_price: effectiveCreatePrice,
+        standalone_price: isStudioCompat && resolvedDomain === 'studio' ? createdModes.standalonePrice : effectiveCreatePrice,
+        catalog_price:
+          effectiveCreatePrice > 0
+            ? effectiveCreatePrice
+            : Number(billNorm.periodicPrice || (fallbackOptionReais ? fallbackOptionReais / 100 : 0)),
         modality: modality || 'both',
         active: 1,
         clinical_module: targetModule,
@@ -1490,11 +1623,18 @@ export class ServiceController {
         requires_appointment: resolvedRequiresAppointment,
         requires_active_contract: resolvedRequiresActiveContract,
         allow_public_booking: resolvedAllowPublicBooking,
+        allow_single_booking: isStudioCompat && resolvedDomain === 'studio' ? resolvedAllowSingleBookingInt : 1,
+        allow_plan_booking: isStudioCompat && resolvedDomain === 'studio' ? resolvedAllowPlanBookingInt : 0,
+        allow_public_single_booking: isStudioCompat && resolvedDomain === 'studio' ? resolvedAllowPublicSingleBookingInt : resolvedAllowPublicBooking,
+        allow_public_plan_booking: isStudioCompat && resolvedDomain === 'studio' ? resolvedAllowPublicPlanBookingInt : 0,
+        plan_credit_mode: resolvedPlanCreditMode,
+        plan_credits_per_cycle: resolvedPlanCreditsPerCycle,
         effective_start_date: resolvedEffectiveStartDate,
         effective_end_date: resolvedEffectiveEndDate,
         access_config: normalizedAccessConfig,
         pricing_adjustments: normalizedPricingAdjustments,
         commercial_price_options: normalizedCommercialOptions,
+        optional_addons: normalizedOptionalAddonsJson ? JSON.parse(normalizedOptionalAddonsJson) : null,
         default_capacity: resolvedCapacity,
         service_domain: resolvedDomain,
         billing_mode: billNorm.billingMode,
@@ -1562,6 +1702,8 @@ export class ServiceController {
                COALESCE(requires_appointment, 1) as requires_appointment,
                COALESCE(requires_active_contract, 0) as requires_active_contract,
                COALESCE(allow_public_booking, 1) as allow_public_booking,
+               allow_single_booking, allow_plan_booking, allow_public_single_booking, allow_public_plan_booking,
+               plan_credit_mode, plan_credits_per_cycle,
                effective_start_date, effective_end_date,
                access_config_json, pricing_adjustments_json, commercial_price_options_json, optional_addons_json,
                COALESCE(availability_mode, 'professional_schedule') as availability_mode
@@ -1614,6 +1756,12 @@ export class ServiceController {
       const rawOptionalAddons = req.body?.optionalAddons !== undefined ? req.body.optionalAddons : req.body?.optional_addons;
       const rawRequiresActiveContract = req.body?.requiresActiveContract !== undefined ? req.body.requiresActiveContract : req.body?.requires_active_contract;
       const rawAllowPublicBooking = req.body?.allowPublicBooking !== undefined ? req.body.allowPublicBooking : req.body?.allow_public_booking;
+      const rawAllowSingleBooking = req.body?.allowSingleBooking !== undefined ? req.body.allowSingleBooking : req.body?.allow_single_booking;
+      const rawAllowPlanBooking = req.body?.allowPlanBooking !== undefined ? req.body.allowPlanBooking : req.body?.allow_plan_booking;
+      const rawAllowPublicSingleBooking = req.body?.allowPublicSingleBooking !== undefined ? req.body.allowPublicSingleBooking : req.body?.allow_public_single_booking;
+      const rawAllowPublicPlanBooking = req.body?.allowPublicPlanBooking !== undefined ? req.body.allowPublicPlanBooking : req.body?.allow_public_plan_booking;
+      const rawPlanCreditMode = req.body?.planCreditMode !== undefined ? req.body.planCreditMode : req.body?.plan_credit_mode;
+      const rawPlanCreditsPerCycle = req.body?.planCreditsPerCycle !== undefined ? req.body.planCreditsPerCycle : req.body?.plan_credits_per_cycle;
       const rawEffectiveStartDate = req.body?.effectiveStartDate !== undefined ? req.body.effectiveStartDate : req.body?.effective_start_date;
       const rawEffectiveEndDate = req.body?.effectiveEndDate !== undefined ? req.body.effectiveEndDate : req.body?.effective_end_date;
       const rawCapacity = defaultCapacity !== undefined ? defaultCapacity : default_capacity;
@@ -1648,6 +1796,12 @@ export class ServiceController {
           rawPricingAdjustments !== undefined ||
           rawCommercialOptions !== undefined ||
           rawOptionalAddons !== undefined ||
+          rawAllowPlanBooking === true ||
+          rawAllowPlanBooking === 1 ||
+          rawAllowPublicPlanBooking === true ||
+          rawAllowPublicPlanBooking === 1 ||
+          rawPlanCreditMode !== undefined ||
+          (rawPlanCreditsPerCycle !== undefined && rawPlanCreditsPerCycle !== null && rawPlanCreditsPerCycle !== '') ||
           (rawCapacity !== undefined && rawCapacity !== null && rawCapacity !== '') ||
           String(rawRequestedDomain || '').trim().toLowerCase() === 'studio' ||
           String(rawAvailabilityMode || '').trim().toLowerCase() === 'custom_windows' ||
@@ -1848,11 +2002,22 @@ export class ServiceController {
             rawWeeklySessionsCount !== undefined ||
             price !== undefined);
 
+        const updCommercialOptPreview =
+          isStudioCompat && nextDomain === 'studio'
+            ? normalizeCommercialPriceOptions(rawCommercialOptions !== undefined ? rawCommercialOptions : existing.commercial_price_options_json)
+            : [];
+        const updOptFallbackReais =
+          updCommercialOptPreview.find(o => o.active && (o.commercialUnit === 'per_month' || o.paymentPeriodicity === 'monthly'))?.amountCents ??
+          updCommercialOptPreview.find(o => o.active)?.amountCents;
         const billNorm = normalizeServiceBillingForSave({
           frequencyPricing: req.body.frequencyPricing === undefined ? readFrequencyPricing(existing.frequency_pricing_json) : req.body.frequencyPricing,
           isStudioService: isNextStudioService,
           billingMode: rawBillingMode !== undefined ? rawBillingMode : (isNextStudioService ? (existing.billing_mode || 'per_session') : 'per_session'),
-          periodicPrice: rawPeriodicPrice !== undefined ? rawPeriodicPrice : (shouldAutoRecalcPeriodic ? undefined : existing.periodic_price),
+          periodicPrice: rawPeriodicPrice !== undefined
+            ? rawPeriodicPrice
+            : (shouldAutoRecalcPeriodic
+                ? undefined
+                : (existing.periodic_price ?? (updOptFallbackReais && updOptFallbackReais > 0 ? updOptFallbackReais / 100 : undefined))),
           defaultPackageId: rawDefaultPkgId !== undefined ? rawDefaultPkgId : existing.default_package_id,
           defaultBillingDueDay: rawDefaultDueDay !== undefined ? rawDefaultDueDay : existing.default_billing_due_day,
           pricingRule: rawPricingRule !== undefined ? rawPricingRule : existing.pricing_rule,
@@ -1897,10 +2062,70 @@ export class ServiceController {
 
       const hasExplicitPrice = price !== undefined && price !== null && price !== '';
       const rawUpdPriceNum = hasExplicitPrice ? Number(price) : Number(existing.price || 0);
+      const safeUpdPriceNum = Number.isFinite(rawUpdPriceNum) && rawUpdPriceNum > 0 ? rawUpdPriceNum : 0;
+
+      const nextFrequencyPricingPreview = req.body.frequencyPricing === undefined
+        ? readFrequencyPricing(existing.frequency_pricing_json)
+        : frequencyConfigForSave(req.body.frequencyPricing, establishmentProfile, nextDomain, nextBillingMode, nextStudioType);
+      const nextCommercialOptionsPreview =
+        isStudioCompat && nextDomain === 'studio'
+          ? normalizeCommercialPriceOptions(rawCommercialOptions !== undefined ? rawCommercialOptions : existing.commercial_price_options_json)
+          : [];
+      const nextRequiresApptPreview =
+        isStudioCompat && nextDomain === 'studio' && (nextStudioType === 'facility_access' || nextStudioType === 'non_scheduled')
+          ? 0
+          : 1;
+      const updatedModes = resolveServiceCommercialModes(
+        {
+          service_domain: nextDomain,
+          studio_service_type: nextStudioType,
+          requires_appointment: nextRequiresApptPreview,
+          requires_active_contract:
+            rawRequiresActiveContract !== undefined ? rawRequiresActiveContract : existing.requires_active_contract,
+          allow_single_booking:
+            rawAllowSingleBooking !== undefined ? rawAllowSingleBooking : existing.allow_single_booking,
+          allow_plan_booking:
+            rawAllowPlanBooking !== undefined ? rawAllowPlanBooking : existing.allow_plan_booking,
+          allow_public_booking:
+            rawAllowPublicBooking !== undefined ? rawAllowPublicBooking : existing.allow_public_booking,
+          allow_public_single_booking:
+            rawAllowPublicSingleBooking !== undefined ? rawAllowPublicSingleBooking : existing.allow_public_single_booking,
+          allow_public_plan_booking:
+            rawAllowPublicPlanBooking !== undefined ? rawAllowPublicPlanBooking : existing.allow_public_plan_booking,
+          billing_mode: nextBillingMode,
+          price: safeUpdPriceNum,
+          periodic_price: nextPeriodicPrice,
+          frequency_pricing_json: nextFrequencyPricingPreview,
+          commercial_options_json: nextCommercialOptionsPreview,
+          plan_credit_mode: rawPlanCreditMode !== undefined ? rawPlanCreditMode : existing.plan_credit_mode,
+          plan_credits_per_cycle:
+            rawPlanCreditsPerCycle !== undefined ? rawPlanCreditsPerCycle : existing.plan_credits_per_cycle
+        },
+        establishmentProfile
+      );
+
+      if (
+        isStudioCompat &&
+        nextDomain === 'studio' &&
+        (rawAllowSingleBooking !== undefined || rawAllowPlanBooking !== undefined)
+      ) {
+        if (!updatedModes.allowSingleBooking && !updatedModes.allowPlanBooking) {
+          res.status(400).json({ error: 'Habilite ao menos uma forma de contratação: Aula avulsa ou Plano/Recorrência.' });
+          return;
+        }
+        if (updatedModes.allowSingleBooking && safeUpdPriceNum <= 0 && hasExplicitPrice) {
+          res.status(400).json({ error: 'Informe um preço avulso maior que zero para atendimento/aula avulsa.' });
+          return;
+        }
+      }
+
+      // Nunca copia periodic_price para services.price em serviços Studio.
       const effectiveUpdatePrice =
-        rawUpdPriceNum > 0 || (preserveExistingTerms && !hasExplicitPrice)
-          ? rawUpdPriceNum
-          : (nextPeriodicPrice && nextPeriodicPrice > 0 ? Number(nextPeriodicPrice) : 0);
+        isStudioCompat && nextDomain === 'studio'
+          ? (updatedModes.allowSingleBooking ? safeUpdPriceNum : 0)
+          : (safeUpdPriceNum > 0 || (preserveExistingTerms && !hasExplicitPrice)
+              ? safeUpdPriceNum
+              : (nextPeriodicPrice && nextPeriodicPrice > 0 ? Number(nextPeriodicPrice) : 0));
 
       let nextAvailabilityMode: ServiceAvailabilityMode = isStudioCompat && nextDomain === 'studio' && nextKind === 'individual' && existing.availability_mode === 'custom_windows'
         ? 'custom_windows'
@@ -1983,22 +2208,52 @@ export class ServiceController {
 
       const scheduleWarnings: string[] = [];
 
-      const frequencyPricing = req.body.frequencyPricing === undefined
-        ? readFrequencyPricing(existing.frequency_pricing_json)
-        : frequencyConfigForSave(req.body.frequencyPricing, establishmentProfile, nextDomain, nextBillingMode, nextStudioType);
+      const frequencyPricing = nextFrequencyPricingPreview;
 
-      const nextRequiresAppt =
-        isStudioCompat && nextDomain === 'studio' && (nextStudioType === 'facility_access' || nextStudioType === 'non_scheduled')
-          ? 0
-          : 1;
+      const nextRequiresAppt = nextRequiresApptPreview;
       const nextRequiresActiveContract =
         isStudioCompat && nextDomain === 'studio'
-          ? (rawRequiresActiveContract !== undefined ? (rawRequiresActiveContract ? 1 : 0) : Number(existing.requires_active_contract ?? (nextStudioType === 'facility_access' ? 1 : 0)))
+          ? (nextStudioType === 'facility_access' || (!updatedModes.allowSingleBooking && updatedModes.allowPlanBooking)
+              ? 1
+              : (rawRequiresActiveContract !== undefined ? (rawRequiresActiveContract ? 1 : 0) : Number(existing.requires_active_contract ?? 0)))
           : 0;
-      const nextAllowPublicBooking =
-        rawAllowPublicBooking !== undefined
-          ? (rawAllowPublicBooking === false || rawAllowPublicBooking === 0 || rawAllowPublicBooking === '0' ? 0 : 1)
-          : Number(existing.allow_public_booking ?? 1);
+      const nextAllowPublicBooking = updatedModes.allowPublicBooking ? 1 : 0;
+      const nextAllowSingleBookingInt = isStudioCompat && nextDomain === 'studio' ? (updatedModes.allowSingleBooking ? 1 : 0) : 1;
+      const nextAllowPlanBookingInt = isStudioCompat && nextDomain === 'studio' ? (updatedModes.allowPlanBooking ? 1 : 0) : 0;
+      const nextAllowPublicSingleBookingInt =
+        isStudioCompat && nextDomain === 'studio'
+          ? (updatedModes.allowPublicSingleBooking ? 1 : 0)
+          : nextAllowPublicBooking;
+      const nextAllowPublicPlanBookingInt =
+        isStudioCompat && nextDomain === 'studio'
+          ? (updatedModes.allowPublicPlanBooking ? 1 : 0)
+          : 0;
+      const dbNextAllowSingleBooking =
+        isStudioCompat && nextDomain === 'studio'
+          ? (rawAllowSingleBooking !== undefined || nextStudioType === 'facility_access' || updatedModes.allowSingleBooking
+              ? nextAllowSingleBookingInt
+              : (existing.allow_single_booking ?? null))
+          : 1;
+      const dbNextAllowPlanBooking =
+        isStudioCompat && nextDomain === 'studio'
+          ? (rawAllowPlanBooking !== undefined || updatedModes.allowPlanBooking
+              ? nextAllowPlanBookingInt
+              : (existing.allow_plan_booking ?? null))
+          : 0;
+      const dbNextAllowPublicSingleBooking =
+        isStudioCompat && nextDomain === 'studio'
+          ? (rawAllowPublicSingleBooking !== undefined || rawAllowSingleBooking !== undefined || nextStudioType === 'facility_access' || updatedModes.allowPublicSingleBooking
+              ? nextAllowPublicSingleBookingInt
+              : (existing.allow_public_single_booking ?? null))
+          : nextAllowPublicBooking;
+      const dbNextAllowPublicPlanBooking =
+        isStudioCompat && nextDomain === 'studio'
+          ? (rawAllowPublicPlanBooking !== undefined || rawAllowPlanBooking !== undefined || updatedModes.allowPublicPlanBooking
+              ? nextAllowPublicPlanBookingInt
+              : (existing.allow_public_plan_booking ?? null))
+          : 0;
+      const nextPlanCreditMode = isStudioCompat && nextDomain === 'studio' ? updatedModes.planCreditMode : null;
+      const nextPlanCreditsPerCycle = isStudioCompat && nextDomain === 'studio' ? updatedModes.planCreditsPerCycle : null;
       const nextEffectiveStartDate =
         isStudioCompat && nextDomain === 'studio'
           ? (rawEffectiveStartDate !== undefined
@@ -2049,7 +2304,7 @@ export class ServiceController {
           description !== undefined ? 1 : 0, description !== null ? description : null,
           durationMinutes !== undefined ? 1 : 0, durationMinutes !== undefined ? Number(durationMinutes) : 50,
           bufferMinutes !== undefined ? 1 : 0, bufferMinutes !== undefined ? Number(bufferMinutes) : 10,
-          (hasExplicitPrice || (Number(existing.price || 0) <= 0 && effectiveUpdatePrice > 0)) ? 1 : 0,
+          (hasExplicitPrice || (isStudioCompat && nextDomain === 'studio' && !updatedModes.allowSingleBooking)) ? 1 : 0,
           effectiveUpdatePrice,
           modality !== undefined ? 1 : 0, modality || 'both',
           active !== undefined ? 1 : 0, active ? 1 : 0,
@@ -2101,6 +2356,12 @@ export class ServiceController {
               requires_appointment = ?,
               requires_active_contract = ?,
               allow_public_booking = ?,
+              allow_single_booking = ?,
+              allow_plan_booking = ?,
+              allow_public_single_booking = ?,
+              allow_public_plan_booking = ?,
+              plan_credit_mode = ?,
+              plan_credits_per_cycle = ?,
               effective_start_date = ?,
               effective_end_date = ?,
               access_config_json = ?,
@@ -2116,6 +2377,12 @@ export class ServiceController {
           nextRequiresAppt,
           nextRequiresActiveContract,
           nextAllowPublicBooking,
+          dbNextAllowSingleBooking,
+          dbNextAllowPlanBooking,
+          dbNextAllowPublicSingleBooking,
+          dbNextAllowPublicPlanBooking,
+          nextPlanCreditMode,
+          nextPlanCreditsPerCycle,
           nextEffectiveStartDate,
           nextEffectiveEndDate,
           nextAccessConfig ? JSON.stringify(nextAccessConfig) : null,
@@ -2216,12 +2483,25 @@ export class ServiceController {
       const enrichedUpdated = updatedService
         ? {
             ...updatedService,
-            catalog_price: Number(updatedService.price || 0) > 0 ? Number(updatedService.price) : Number(updatedService.periodic_price || 0),
+            price: isStudioCompat && updatedService.service_domain === 'studio' ? (updatedModes.standalonePrice !== null ? updatedModes.standalonePrice : 0) : Number(updatedService.price || 0),
+            standalone_price: isStudioCompat && updatedService.service_domain === 'studio' ? updatedModes.standalonePrice : Number(updatedService.price || 0),
+            catalog_price:
+              isStudioCompat && updatedService.service_domain === 'studio'
+                ? (updatedModes.standalonePrice !== null && updatedModes.standalonePrice > 0
+                    ? updatedModes.standalonePrice
+                    : Number(updatedService.periodic_price || (nextCommercialOptions[0]?.amountCents || 0) / 100 || 0))
+                : (Number(updatedService.price || 0) > 0 ? Number(updatedService.price) : Number(updatedService.periodic_price || 0)),
             service_kind: isStudioCompat ? (updatedService.service_kind || 'individual') : 'individual',
             studio_service_type: isStudioCompat && updatedService.service_domain === 'studio' ? nextStudioType : 'individual',
             requires_appointment: nextRequiresAppt,
             requires_active_contract: nextRequiresActiveContract,
             allow_public_booking: nextAllowPublicBooking,
+            allow_single_booking: nextAllowSingleBookingInt,
+            allow_plan_booking: nextAllowPlanBookingInt,
+            allow_public_single_booking: nextAllowPublicSingleBookingInt,
+            allow_public_plan_booking: nextAllowPublicPlanBookingInt,
+            plan_credit_mode: nextPlanCreditMode,
+            plan_credits_per_cycle: nextPlanCreditsPerCycle,
             effective_start_date: nextEffectiveStartDate,
             effective_end_date: nextEffectiveEndDate,
             access_config: nextAccessConfig,
@@ -2306,7 +2586,9 @@ export class ServiceController {
         ? calculateCommercialOptionBreakdown(selectedOption, {
             participantsCount: req.body?.participantsCount ? Number(req.body.participantsCount) : undefined,
             sessionsInContract: req.body?.sessionsInContract ? Number(req.body.sessionsInContract) : undefined,
-            sessionsPerMonth: req.body?.sessionsPerMonth ? Number(req.body.sessionsPerMonth) : undefined
+            sessionsPerMonth: req.body?.sessionsPerMonth ? Number(req.body.sessionsPerMonth) : undefined,
+            servicePlanCreditMode: srv.plan_credit_mode,
+            servicePlanCreditsPerCycle: srv.plan_credits_per_cycle
           })
         : null;
 

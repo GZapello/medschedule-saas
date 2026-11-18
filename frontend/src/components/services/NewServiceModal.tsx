@@ -23,6 +23,8 @@ import {
   normalizeStudioAccessConfig,
   normalizeStudioPriceAdjustments,
   normalizeStudioServiceType,
+  PlanCreditMode,
+  resolveServiceCommercialModes,
   StudioAccessConfig,
   StudioCommercialPriceOption,
   StudioOptionalAddonsConfig,
@@ -123,6 +125,12 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
   const [optionalAddons, setOptionalAddons] = useState<StudioOptionalAddonsConfig>(getDefaultOptionalAddonsConfig());
   const [availableAddonServices, setAvailableAddonServices] = useState<Service[]>([]);
   const [allowPublicBooking, setAllowPublicBooking] = useState<boolean>(true);
+  const [allowSingleBooking, setAllowSingleBooking] = useState<boolean>(true);
+  const [allowPlanBooking, setAllowPlanBooking] = useState<boolean>(false);
+  const [allowPublicSingleBooking, setAllowPublicSingleBooking] = useState<boolean>(true);
+  const [allowPublicPlanBooking, setAllowPublicPlanBooking] = useState<boolean>(false);
+  const [planCreditMode, setPlanCreditMode] = useState<PlanCreditMode>('fixed_credits');
+  const [planCreditsPerCycle, setPlanCreditsPerCycle] = useState<number | null>(null);
   const [defaultCapacity, setDefaultCapacity] = useState<number>(10);
   const [allowRecurrence, setAllowRecurrence] = useState<boolean>(true);
   const [allowedFrequencies, setAllowedFrequencies] = useState<RecurrenceFrequency[]>(['weekly']);
@@ -221,15 +229,23 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
         setModality((serviceToEdit.modality as any) || 'both');
         setServiceDomain(domain);
         const resolvedStudioType = domain === 'studio'
-          ? normalizeStudioServiceType(serviceToEdit.studio_service_type, serviceToEdit.service_kind)
+          ? normalizeStudioServiceType(serviceToEdit.studio_service_type, serviceToEdit.service_kind, (serviceToEdit as any).requires_appointment)
           : 'individual';
         setStudioServiceType(resolvedStudioType);
         setServiceKind(domain === 'studio' && (serviceToEdit.service_kind === 'group' || resolvedStudioType === 'group') ? 'group' : 'individual');
         setAccessConfig(normalizeStudioAccessConfig(serviceToEdit.access_config));
         setPricingAdjustments(normalizeStudioPriceAdjustments(serviceToEdit.pricing_adjustments));
-        setCommercialPriceOptions(normalizeCommercialPriceOptions(serviceToEdit.commercial_price_options));
+        const normalizedCommercial = normalizeCommercialPriceOptions(serviceToEdit.commercial_price_options);
+        setCommercialPriceOptions(normalizedCommercial);
         setOptionalAddons(normalizeOptionalAddonsConfig(serviceToEdit.optional_addons));
+        const modes = resolveServiceCommercialModes(serviceToEdit);
         setAllowPublicBooking(serviceToEdit.allow_public_booking !== 0 && serviceToEdit.allow_public_booking !== false);
+        setAllowSingleBooking(modes.allowSingleBooking);
+        setAllowPlanBooking(modes.allowPlanBooking);
+        setAllowPublicSingleBooking(modes.allowPublicSingleBooking);
+        setAllowPublicPlanBooking(modes.allowPublicPlanBooking);
+        setPlanCreditMode(modes.planCreditMode);
+        setPlanCreditsPerCycle(modes.planCreditsPerCycle);
         setDefaultCapacity(Number(serviceToEdit.default_capacity) || 10);
         setAllowRecurrence(recCfg.allowRecurrence);
         setAllowedFrequencies(
@@ -297,7 +313,14 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
         setPricingAdjustments([]);
         setCommercialPriceOptions([]);
         setOptionalAddons(getDefaultOptionalAddonsConfig());
+        const isInitialNonScheduled = startStudioType === 'facility_access' || startStudioType === 'non_scheduled';
         setAllowPublicBooking(true);
+        setAllowSingleBooking(!isInitialNonScheduled);
+        setAllowPlanBooking(isInitialNonScheduled);
+        setAllowPublicSingleBooking(!isInitialNonScheduled);
+        setAllowPublicPlanBooking(isInitialNonScheduled);
+        setPlanCreditMode('fixed_credits');
+        setPlanCreditsPerCycle(null);
         setDefaultCapacity(startStudioType === 'group' ? 6 : 10);
         setAllowRecurrence(true);
         setAllowedFrequencies(['weekly']);
@@ -359,18 +382,27 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
       showToast('Selecione o profissional responsável', 'error');
       return;
     }
-    const numPrice = String(price).trim() !== '' ? parseFloat(String(price).replace(',', '.')) : 0;
-    if (requiresAppointment && (isNaN(numPrice) || numPrice < 0)) {
-      showToast('Informe um valor válido para o serviço', 'error');
-      return;
-    }
     const isPeriodicSave = showStudioConfig && isPeriodicBillingMode(billingMode);
     const numPeriodicPrice = parseFloat(String(periodicPrice).replace(',', '.'));
     const hasActiveCommercialOptions = (commercialPriceOptions || []).some(o => o.active !== false);
+    const effAllowSingle = showStudioConfig ? (requiresAppointment && allowSingleBooking) : true;
+    const effAllowPlan = showStudioConfig ? allowPlanBooking : false;
+    if (showStudioConfig && !effAllowSingle && !effAllowPlan) {
+      showToast('Ative pelo menos uma forma de contratação: Aula avulsa ou Plano comercial.', 'error');
+      return;
+    }
+    const numPrice = String(price).trim() !== '' ? parseFloat(String(price).replace(',', '.')) : NaN;
+    if ((!showStudioConfig || effAllowSingle) && (isNaN(numPrice) || numPrice < 0)) {
+      showToast('Informe um valor válido para atendimento / aula avulsa', 'error');
+      return;
+    }
     if (isPeriodicSave && !hasActiveCommercialOptions && (periodicPrice.trim() === '' || isNaN(numPeriodicPrice) || numPeriodicPrice < 0)) {
       showToast('Informe um valor por período de cobrança válido', 'error');
       return;
     }
+    const safePrice = showStudioConfig
+      ? (effAllowSingle && Number.isFinite(numPrice) && numPrice >= 0 ? numPrice : 0)
+      : (Number.isFinite(numPrice) ? numPrice : 0);
     if (isPeriodicSave && defaultBillingDueDay.trim() !== '') {
       const dueNum = Number(defaultBillingDueDay);
       if (!Number.isInteger(dueNum) || dueNum < 1 || dueNum > 28) {
@@ -426,7 +458,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
         professionalId: professionalId || null,
         ...(showStudioConfig ? { linkedProfessionalIds: normalizedLinkedIds } : {}),
         name: name.trim(),
-        price: requiresAppointment ? numPrice : (numPrice > 0 ? numPrice : (numPeriodicPrice > 0 ? numPeriodicPrice : 0)),
+        price: safePrice,
         durationMinutes: requiresAppointment ? (Number(durationMinutes) || 50) : 0,
         bufferMinutes: requiresAppointment ? (Number(bufferMinutes) || 0) : 0,
         modality,
@@ -438,7 +470,13 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
           ? {
               studioServiceType,
               requiresAppointment,
-              allowPublicBooking,
+              allowPublicBooking: allowPublicSingleBooking || allowPublicPlanBooking || allowPublicBooking,
+              allowSingleBooking: effAllowSingle,
+              allowPlanBooking: effAllowPlan,
+              allowPublicSingleBooking: effAllowSingle && allowPublicSingleBooking,
+              allowPublicPlanBooking: effAllowPlan && allowPublicPlanBooking,
+              planCreditMode,
+              planCreditsPerCycle: planCreditMode === 'fixed_credits' ? planCreditsPerCycle : null,
               ...(requiresAppointment ? {} : { clinicalModule: null }),
               accessConfig: studioServiceType === 'facility_access' ? accessConfig : null,
               pricingAdjustments,
@@ -605,18 +643,24 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">
-                  {showStudioConfig ? 'Preço por Atendimento / Aula (R$) *' : <>Preço (R$) <span className="text-rose-500">*</span></>}
+                  {showStudioConfig
+                    ? (allowSingleBooking ? <>Preço Aula Avulsa (R$) <span className="text-rose-500">*</span></> : 'Preço Aula Avulsa (Desativada)')
+                    : <>Preço (R$) <span className="text-rose-500">*</span></>}
                 </label>
                 <input
                   type="number"
                   step="0.01"
                   min="0"
-                  value={price}
+                  disabled={showStudioConfig && !allowSingleBooking}
+                  value={showStudioConfig && !allowSingleBooking ? '' : price}
                   onChange={e => setPrice(e.target.value)}
-                  placeholder="150.00"
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
-                  required
+                  placeholder={showStudioConfig && !allowSingleBooking ? 'Não vende avulso' : '150.00'}
+                  className={`w-full border border-slate-200 rounded-xl px-3 py-2 text-xs ${showStudioConfig && !allowSingleBooking ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : ''}`}
+                  required={!showStudioConfig || allowSingleBooking}
                 />
+                {showStudioConfig && !allowSingleBooking && (
+                  <span className="block text-[10px] text-slate-500 mt-0.5">Atendimento apenas por planos comerciais</span>
+                )}
               </div>
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">
@@ -699,6 +743,10 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
                     setLinkedProfessionalIds([]);
                     setDurationMinutes(0);
                     setBufferMinutes(0);
+                    setAllowSingleBooking(false);
+                    setAllowPublicSingleBooking(false);
+                    setAllowPlanBooking(true);
+                    setAllowPublicPlanBooking(true);
                   } else if (!professionalId && professionals.length > 0) {
                     const fallbackProf = initialProfessionalId || professionals[0].id;
                     setProfessionalId(fallbackProf);
@@ -707,7 +755,6 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
                   }
                   if (nextType === 'facility_access' && billingMode === 'per_session') {
                     setBillingMode('monthly');
-                    if (!periodicPrice) setPeriodicPrice(price || '150');
                   }
                 }}
                 accessConfig={accessConfig}
@@ -715,7 +762,12 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
                 pricingAdjustments={pricingAdjustments}
                 onPricingAdjustmentsChange={setPricingAdjustments}
                 commercialPriceOptions={commercialPriceOptions}
-                onCommercialPriceOptionsChange={setCommercialPriceOptions}
+                onCommercialPriceOptionsChange={nextOpts => {
+                  setCommercialPriceOptions(nextOpts);
+                  if (nextOpts.some(o => o.active !== false)) {
+                    setAllowPlanBooking(true);
+                  }
+                }}
                 optionalAddons={optionalAddons}
                 onOptionalAddonsChange={setOptionalAddons}
                 availableAddonServices={availableAddonServices}
@@ -725,6 +777,18 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
                 onDefaultCapacityChange={setDefaultCapacity}
                 allowPublicBooking={allowPublicBooking}
                 onAllowPublicBookingChange={setAllowPublicBooking}
+                allowSingleBooking={allowSingleBooking}
+                onAllowSingleBookingChange={setAllowSingleBooking}
+                allowPlanBooking={allowPlanBooking}
+                onAllowPlanBookingChange={setAllowPlanBooking}
+                allowPublicSingleBooking={allowPublicSingleBooking}
+                onAllowPublicSingleBookingChange={setAllowPublicSingleBooking}
+                allowPublicPlanBooking={allowPublicPlanBooking}
+                onAllowPublicPlanBookingChange={setAllowPublicPlanBooking}
+                planCreditMode={planCreditMode}
+                onPlanCreditModeChange={setPlanCreditMode}
+                planCreditsPerCycle={planCreditsPerCycle}
+                onPlanCreditsPerCycleChange={setPlanCreditsPerCycle}
                 disableFacilityAccessOption={forceStudioSchedulable}
                 hideOptionalAddons={hideOptionalAddons}
               />

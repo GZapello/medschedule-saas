@@ -22,7 +22,7 @@ export function quoteFrequencyPlan(params: {
   if (!supportsStudioFeatures(profile)) return null;
   const service = db.prepare('SELECT * FROM services WHERE id = ? AND tenant_id = ? AND active = 1').get(params.serviceId, params.tenantId) as any;
   const config = readFrequencyPricing(service?.frequency_pricing_json);
-  if (!service || resolveServiceDomain({ establishmentProfile: profile, serviceDomain: service.service_domain, serviceKind: service.service_kind, clinicalModule: service.clinical_module }) !== 'studio' || (!config?.enabled && !params.includeStandardPricing) || !supportsFrequencyPricing(service.billing_mode) || !supportsFrequencyPricing(params.billingFrequency)) return null;
+  if (!service || resolveServiceDomain({ establishmentProfile: profile, serviceDomain: service.service_domain, serviceKind: service.service_kind, clinicalModule: service.clinical_module }) !== 'studio' || (!config?.enabled && !params.includeStandardPricing) || !supportsFrequencyPricing(params.billingFrequency)) return null;
   const fail = (message: string): never => { throw Object.assign(new Error(message), { status: 400, code: 'INVALID_FREQUENCY_PLAN' }); };
   const rows = db.prepare(`
     SELECT cs.*, p.active AS professional_active FROM class_schedules cs
@@ -62,11 +62,13 @@ export function quoteFrequencyPlan(params: {
   const cycleEnd = next.toISOString().slice(0, 10);
   const end = params.endDate && params.endDate < cycleEnd ? params.endDate : cycleEnd;
   const calculation = calculateStudioRecurringPrice({
-    serviceName: service.name, sessionPrice: Number(service.price), weeklySessionsCount: weeklyCount,
+    serviceName: service.name, sessionPrice: Number(service.price || 0), weeklySessionsCount: weeklyCount,
     billingMode: params.billingFrequency, pricingRule: service.pricing_rule,
     frequencyPricing: contractableLimit >= 2 ? config : null,
-    customPrice: Number(service.periodic_price) || undefined,
-    isPriceCustomized: Boolean(service.is_price_customized),
+    customPrice: Number(service.periodic_price) > 0 ? Number(service.periodic_price) : undefined,
+    isPriceCustomized: service.is_price_customized === undefined || service.is_price_customized === null
+      ? undefined
+      : Boolean(service.is_price_customized),
     scheduledSessionsCount: countMeetingOccurrences(Array.from(selected.values()), params.startDate, end)
   });
   if (!Number.isSafeInteger(Math.round(calculation.effectivePrice * 100)) || calculation.effectivePrice <= 0) fail('Informe um preço válido para esta frequência semanal.');

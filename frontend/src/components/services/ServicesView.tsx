@@ -43,6 +43,8 @@ import {
   normalizeStudioAccessConfig,
   normalizeStudioPriceAdjustments,
   normalizeStudioServiceType,
+  PlanCreditMode,
+  resolveServiceCommercialModes,
   StudioAccessConfig,
   StudioCommercialPriceOption,
   StudioOptionalAddonsConfig,
@@ -384,6 +386,12 @@ export const ServicesView: React.FC = () => {
   const [commercialPriceOptions, setCommercialPriceOptions] = useState<StudioCommercialPriceOption[]>([]);
   const [optionalAddons, setOptionalAddons] = useState<StudioOptionalAddonsConfig>(getDefaultOptionalAddonsConfig());
   const [allowPublicBooking, setAllowPublicBooking] = useState<boolean>(true);
+  const [allowSingleBooking, setAllowSingleBooking] = useState<boolean>(true);
+  const [allowPlanBooking, setAllowPlanBooking] = useState<boolean>(false);
+  const [allowPublicSingleBooking, setAllowPublicSingleBooking] = useState<boolean>(true);
+  const [allowPublicPlanBooking, setAllowPublicPlanBooking] = useState<boolean>(false);
+  const [planCreditMode, setPlanCreditMode] = useState<PlanCreditMode>('fixed_credits');
+  const [planCreditsPerCycle, setPlanCreditsPerCycle] = useState<number | null>(null);
   const [defaultCapacity, setDefaultCapacity] = useState<number>(10);
   const [allowRecurrence, setAllowRecurrence] = useState<boolean>(true);
   const [allowedFrequencies, setAllowedFrequencies] = useState<RecurrenceFrequency[]>(['weekly']);
@@ -433,6 +441,12 @@ export const ServicesView: React.FC = () => {
   const [editCommercialPriceOptions, setEditCommercialPriceOptions] = useState<StudioCommercialPriceOption[]>([]);
   const [editOptionalAddons, setEditOptionalAddons] = useState<StudioOptionalAddonsConfig>(getDefaultOptionalAddonsConfig());
   const [editAllowPublicBooking, setEditAllowPublicBooking] = useState<boolean>(true);
+  const [editAllowSingleBooking, setEditAllowSingleBooking] = useState<boolean>(true);
+  const [editAllowPlanBooking, setEditAllowPlanBooking] = useState<boolean>(false);
+  const [editAllowPublicSingleBooking, setEditAllowPublicSingleBooking] = useState<boolean>(true);
+  const [editAllowPublicPlanBooking, setEditAllowPublicPlanBooking] = useState<boolean>(false);
+  const [editPlanCreditMode, setEditPlanCreditMode] = useState<PlanCreditMode>('fixed_credits');
+  const [editPlanCreditsPerCycle, setEditPlanCreditsPerCycle] = useState<number | null>(null);
   const [editDefaultCapacity, setEditDefaultCapacity] = useState<number>(10);
   const [editAllowRecurrence, setEditAllowRecurrence] = useState<boolean>(true);
   const [editAllowedFrequencies, setEditAllowedFrequencies] = useState<RecurrenceFrequency[]>(['weekly']);
@@ -706,8 +720,14 @@ export const ServicesView: React.FC = () => {
     const createRequiresAppointment = !showCreateStudioConfig || (studioServiceType !== 'facility_access' && studioServiceType !== 'non_scheduled');
     const isPeriodicCreate = showCreateStudioConfig && isPeriodicBillingMode(billingMode);
     const hasCommercialCreate = showCreateStudioConfig && commercialPriceOptions.some(o => o.active !== false);
-    if (!isPeriodicCreate && !hasCommercialCreate && createRequiresAppointment && (!price || Number(price) < 0)) {
-      showToast('Informe o preço por atendimento / aula', 'error');
+    const effCreateAllowSingle = showCreateStudioConfig ? (createRequiresAppointment && allowSingleBooking) : true;
+    const effCreateAllowPlan = showCreateStudioConfig ? allowPlanBooking : false;
+    if (showCreateStudioConfig && !effCreateAllowSingle && !effCreateAllowPlan) {
+      showToast('Ative ao menos uma forma de contratação: Aula avulsa ou Plano.', 'error');
+      return;
+    }
+    if ((!showCreateStudioConfig || effCreateAllowSingle) && (price.trim() === '' || isNaN(Number(price)) || Number(price) < 0)) {
+      showToast('Informe o preço por atendimento / aula avulsa', 'error');
       return;
     }
     if (isPeriodicCreate && !hasCommercialCreate && (!periodicPrice.trim() || Number(periodicPrice) < 0)) {
@@ -761,13 +781,9 @@ export const ServicesView: React.FC = () => {
       const normalizedCreateLinked = showCreateStudioConfig
         ? Array.from(new Set([professionalId, ...linkedProfessionalIds].filter(Boolean)))
         : [professionalId];
-      const normalizedCreatePrice = createRequiresAppointment
-        ? (price.trim() !== '' ? Number(price) : 0)
-        : (price.trim() !== '' && Number(price) > 0
-            ? Number(price)
-            : (isPeriodicCreate && Number(periodicPrice) > 0
-                ? Number(periodicPrice)
-                : (commercialPriceOptions[0]?.amountCents ? commercialPriceOptions[0].amountCents / 100 : 0)));
+      const normalizedCreatePrice = showCreateStudioConfig
+        ? (effCreateAllowSingle && price.trim() !== '' ? Number(price) : 0)
+        : (price.trim() !== '' ? Number(price) : 0);
       const createdRes = await ApiClient.post<any>('/v1/services', {
         professionalId: professionalId || null,
         ...(showCreateStudioConfig ? { linkedProfessionalIds: normalizedCreateLinked } : {}),
@@ -786,7 +802,13 @@ export const ServicesView: React.FC = () => {
           ? {
               studioServiceType,
               requiresAppointment: createRequiresAppointment,
-              allowPublicBooking,
+              allowPublicBooking: allowPublicSingleBooking || allowPublicPlanBooking || allowPublicBooking,
+              allowSingleBooking: effCreateAllowSingle,
+              allowPlanBooking: effCreateAllowPlan,
+              allowPublicSingleBooking: effCreateAllowSingle && allowPublicSingleBooking,
+              allowPublicPlanBooking: effCreateAllowPlan && allowPublicPlanBooking,
+              planCreditMode,
+              planCreditsPerCycle: planCreditMode === 'fixed_credits' ? planCreditsPerCycle : null,
               accessConfig: studioServiceType === 'facility_access' ? accessConfig : null,
               pricingAdjustments,
               commercialPriceOptions,
@@ -871,6 +893,13 @@ export const ServicesView: React.FC = () => {
       setCommercialPriceOptions([]);
       setOptionalAddons(getDefaultOptionalAddonsConfig());
       setPricingAdjustments([]);
+        setAllowPublicBooking(true);
+        setAllowSingleBooking(true);
+        setAllowPlanBooking(false);
+        setAllowPublicSingleBooking(true);
+        setAllowPublicPlanBooking(false);
+        setPlanCreditMode('fixed_credits');
+        setPlanCreditsPerCycle(null);
       setAvailabilityMode('professional_schedule');
       setAvailabilityWindows([]);
       setLinkedProfessionalIds(professionalId ? [professionalId] : []);
@@ -947,7 +976,14 @@ export const ServicesView: React.FC = () => {
     setEditPricingAdjustments(normalizeStudioPriceAdjustments(s.pricing_adjustments));
     setEditCommercialPriceOptions(normalizeCommercialPriceOptions(s.commercial_price_options));
     setEditOptionalAddons(normalizeOptionalAddonsConfig(s.optional_addons));
+    const editModes = resolveServiceCommercialModes(s);
     setEditAllowPublicBooking(s.allow_public_booking !== 0 && s.allow_public_booking !== false);
+    setEditAllowSingleBooking(editModes.allowSingleBooking);
+    setEditAllowPlanBooking(editModes.allowPlanBooking);
+    setEditAllowPublicSingleBooking(editModes.allowPublicSingleBooking);
+    setEditAllowPublicPlanBooking(editModes.allowPublicPlanBooking);
+    setEditPlanCreditMode(editModes.planCreditMode);
+    setEditPlanCreditsPerCycle(editModes.planCreditsPerCycle);
     setEditDefaultCapacity(Number(s.default_capacity) || 10);
     setEditAllowRecurrence(recCfg.allowRecurrence);
     setEditAllowedFrequencies(
@@ -1002,8 +1038,14 @@ export const ServicesView: React.FC = () => {
     const editRequiresAppointment = !showEditStudioConfig || (editStudioServiceType !== 'facility_access' && editStudioServiceType !== 'non_scheduled');
     const isPeriodicEdit = showEditStudioConfig && isPeriodicBillingMode(editBillingMode);
     const hasCommercialEdit = showEditStudioConfig && editCommercialPriceOptions.some(o => o.active !== false);
-    if (!isPeriodicEdit && !hasCommercialEdit && editRequiresAppointment && (!editPrice || Number(editPrice) < 0)) {
-      showToast('Informe o preço por atendimento / aula', 'error');
+    const effEditAllowSingle = showEditStudioConfig ? (editRequiresAppointment && editAllowSingleBooking) : true;
+    const effEditAllowPlan = showEditStudioConfig ? editAllowPlanBooking : false;
+    if (showEditStudioConfig && !effEditAllowSingle && !effEditAllowPlan) {
+      showToast('Ative ao menos uma forma de contratação: Aula avulsa ou Plano.', 'error');
+      return;
+    }
+    if ((!showEditStudioConfig || effEditAllowSingle) && (editPrice.trim() === '' || isNaN(Number(editPrice)) || Number(editPrice) < 0)) {
+      showToast('Informe o preço por atendimento / aula avulsa', 'error');
       return;
     }
     if (isPeriodicEdit && !hasCommercialEdit && (!editPeriodicPrice.trim() || Number(editPeriodicPrice) < 0)) {
@@ -1063,13 +1105,9 @@ export const ServicesView: React.FC = () => {
         effectiveEditKind === 'group' &&
         editingService.service_kind !== 'group' &&
         editDraftClassSchedules.length > 0;
-      const normalizedEditPrice = editRequiresAppointment
-        ? (editPrice.trim() !== '' ? Number(editPrice) : 0)
-        : (editPrice.trim() !== '' && Number(editPrice) > 0
-            ? Number(editPrice)
-            : (isPeriodicEdit && Number(editPeriodicPrice) > 0
-                ? Number(editPeriodicPrice)
-                : (editCommercialPriceOptions[0]?.amountCents ? editCommercialPriceOptions[0].amountCents / 100 : 0)));
+      const normalizedEditPrice = showEditStudioConfig
+        ? (effEditAllowSingle && editPrice.trim() !== '' ? Number(editPrice) : 0)
+        : (editPrice.trim() !== '' ? Number(editPrice) : 0);
       const updRes = await ApiClient.put<any>(`/v1/services/${editingService.id}`, {
         professionalId: editProfessionalId || null,
         ...(showEditStudioConfig ? { linkedProfessionalIds: normalizedEditLinked } : {}),
@@ -1088,7 +1126,13 @@ export const ServicesView: React.FC = () => {
           ? {
               studioServiceType: editStudioServiceType,
               requiresAppointment: editRequiresAppointment,
-              allowPublicBooking: editAllowPublicBooking,
+              allowPublicBooking: editAllowPublicSingleBooking || editAllowPublicPlanBooking || editAllowPublicBooking,
+              allowSingleBooking: effEditAllowSingle,
+              allowPlanBooking: effEditAllowPlan,
+              allowPublicSingleBooking: effEditAllowSingle && editAllowPublicSingleBooking,
+              allowPublicPlanBooking: effEditAllowPlan && editAllowPublicPlanBooking,
+              planCreditMode: editPlanCreditMode,
+              planCreditsPerCycle: editPlanCreditMode === 'fixed_credits' ? editPlanCreditsPerCycle : null,
               accessConfig: editStudioServiceType === 'facility_access' ? editAccessConfig : null,
               pricingAdjustments: editPricingAdjustments,
               commercialPriceOptions: editCommercialPriceOptions,
@@ -1453,16 +1497,40 @@ export const ServicesView: React.FC = () => {
                               </div>
                             </div>
                             <div className="text-right">
-                              <span className="text-sm font-extrabold text-indigo-600 whitespace-nowrap block">
-                                {isStudioCompatible && isPeriodicBillingMode(s.billing_mode) && s.periodic_price !== null && s.periodic_price !== undefined
-                                  ? `${formatCurrencyBRL(Number(s.periodic_price))} / ${(SERVICE_BILLING_MODE_LABELS[s.billing_mode] || s.billing_mode).toLowerCase()}`
-                                  : isStudioCompatible && s.billing_mode === 'package'
-                                    ? 'Via Pacote'
-                                    : s.service_domain === 'studio' && Number(s.price) === 0 &&
-                                      s.commercial_price_options?.some(option => option.active)
-                                      ? 'Opções comerciais'
-                                      : formatCurrencyBRL(Number(s.price))}
-                              </span>
+                              {(() => {
+                                const srvModes = isStudioCompatible ? resolveServiceCommercialModes(s) : null;
+                                const activeOpts = Array.isArray(s.commercial_price_options)
+                                  ? s.commercial_price_options.filter((o: any) => o.active !== false)
+                                  : [];
+                                const lowestOptReais = activeOpts.length > 0
+                                  ? Math.min(...activeOpts.map((o: any) => Number(o.amountCents || 0) / 100))
+                                  : null;
+                                return (
+                                  <>
+                                    <span className="text-sm font-extrabold text-indigo-600 whitespace-nowrap block">
+                                      {isStudioCompatible && isPeriodicBillingMode(s.billing_mode) && s.periodic_price !== null && s.periodic_price !== undefined
+                                        ? `${formatCurrencyBRL(Number(s.periodic_price))} / ${(SERVICE_BILLING_MODE_LABELS[s.billing_mode] || s.billing_mode).toLowerCase()}`
+                                        : isStudioCompatible && s.billing_mode === 'package'
+                                          ? 'Via Pacote'
+                                          : isStudioCompatible && activeOpts.length > 0 && lowestOptReais !== null
+                                            ? `${activeOpts.length > 1 ? 'Planos a partir de ' : 'Plano '}${formatCurrencyBRL(lowestOptReais)}`
+                                            : isStudioCompatible && srvModes && !srvModes.allowSingleBooking
+                                              ? 'Somente planos'
+                                              : formatCurrencyBRL(Number(s.price))}
+                                    </span>
+                                    {isStudioCompatible && srvModes?.allowSingleBooking && Number(s.price) > 0 && (activeOpts.length > 0 || isPeriodicBillingMode(s.billing_mode)) && (
+                                      <span className="text-[10px] font-semibold text-teal-700 bg-teal-50 border border-teal-200 px-1.5 py-0.5 rounded inline-block mt-0.5 mr-1">
+                                        Avulsa: {formatCurrencyBRL(Number(s.price))}
+                                      </span>
+                                    )}
+                                    {isStudioCompatible && srvModes && !srvModes.allowSingleBooking && s.studio_service_type !== 'facility_access' && s.studio_service_type !== 'non_scheduled' && (
+                                      <span className="text-[10px] font-semibold text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded inline-block mt-0.5 mr-1">
+                                        Não vende avulso
+                                      </span>
+                                    )}
+                                  </>
+                                );
+                              })()}
                               {isStudioCompatible && s.billing_mode && s.billing_mode !== 'per_session' && (
                                 <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded inline-block mt-0.5">
                                   {SERVICE_BILLING_MODE_LABELS[s.billing_mode] || s.billing_mode}
@@ -1799,6 +1867,7 @@ export const ServicesView: React.FC = () => {
             values={{
               name, professionalId, serviceKind, studioServiceType,
               requiresAppointment: studioServiceType !== 'facility_access' && studioServiceType !== 'non_scheduled',
+              allowSingleBooking, allowPlanBooking, planCreditMode,
               price, billingMode, periodicPrice, commercialPriceOptions, optionalAddons,
               frequencyPricing, pricingRule, individualMeetings,
               defaultBillingDueDay, weeklySessionsCount, includedSessionsCount,
@@ -1933,17 +2002,25 @@ export const ServicesView: React.FC = () => {
 
                   <div>
                     <label className="block font-semibold text-slate-700 mb-1">
-                      {showCreateStudioConfig ? 'Preço por Atendimento / Aula (R$) *' : 'Preço (R$) *'}
+                      {showCreateStudioConfig
+                        ? (allowSingleBooking ? 'Preço Aula Avulsa (R$) *' : 'Preço Aula Avulsa (Desativada)')
+                        : 'Preço (R$) *'}
                     </label>
                     <input
                       type="number"
                       step="0.01"
+                      min="0"
+                      disabled={showCreateStudioConfig && !allowSingleBooking}
                       data-studio-field={isPureStudio ? "price" : undefined}
                       aria-label={isPureStudio ? "Preço por aula" : undefined}
-                      value={price}
+                      value={showCreateStudioConfig && !allowSingleBooking ? '' : price}
                       onChange={e => setPrice(e.target.value)}
-                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                      placeholder={showCreateStudioConfig && !allowSingleBooking ? 'Não vende avulso' : undefined}
+                      className={`w-full border border-slate-200 rounded-xl px-3 py-2 text-xs ${showCreateStudioConfig && !allowSingleBooking ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : ''}`}
                     />
+                    {showCreateStudioConfig && !allowSingleBooking && (
+                      <span className="block text-[10px] text-slate-500 mt-0.5">Atendimento apenas por planos comerciais</span>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
@@ -2033,6 +2110,10 @@ export const ServicesView: React.FC = () => {
                         setClinicalModule('');
                         setDurationMinutes(0);
                         setBufferMinutes(0);
+                        setAllowSingleBooking(false);
+                        setAllowPublicSingleBooking(false);
+                        setAllowPlanBooking(true);
+                        setAllowPublicPlanBooking(true);
                       } else if (!professionalId && professionals.length > 0) {
                         handleSelectProfessional(professionals[0].id);
                         setDurationMinutes(prev => (prev > 0 ? prev : 50));
@@ -2040,7 +2121,6 @@ export const ServicesView: React.FC = () => {
                       }
                       if (nextType === 'facility_access' && billingMode === 'per_session') {
                         setBillingMode('monthly');
-                        if (!periodicPrice) setPeriodicPrice(price || '180.00');
                       }
                     }}
                     accessConfig={accessConfig}
@@ -2048,7 +2128,12 @@ export const ServicesView: React.FC = () => {
                     pricingAdjustments={pricingAdjustments}
                     onPricingAdjustmentsChange={setPricingAdjustments}
                     commercialPriceOptions={commercialPriceOptions}
-                    onCommercialPriceOptionsChange={setCommercialPriceOptions}
+                    onCommercialPriceOptionsChange={nextOpts => {
+                      setCommercialPriceOptions(nextOpts);
+                      if (nextOpts.some(o => o.active !== false)) {
+                        setAllowPlanBooking(true);
+                      }
+                    }}
                     optionalAddons={optionalAddons}
                     onOptionalAddonsChange={setOptionalAddons}
                     availableAddonServices={services}
@@ -2057,6 +2142,18 @@ export const ServicesView: React.FC = () => {
                     onDefaultCapacityChange={setDefaultCapacity}
                     allowPublicBooking={allowPublicBooking}
                     onAllowPublicBookingChange={setAllowPublicBooking}
+                    allowSingleBooking={allowSingleBooking}
+                    onAllowSingleBookingChange={setAllowSingleBooking}
+                    allowPlanBooking={allowPlanBooking}
+                    onAllowPlanBookingChange={setAllowPlanBooking}
+                    allowPublicSingleBooking={allowPublicSingleBooking}
+                    onAllowPublicSingleBookingChange={setAllowPublicSingleBooking}
+                    allowPublicPlanBooking={allowPublicPlanBooking}
+                    onAllowPublicPlanBookingChange={setAllowPublicPlanBooking}
+                    planCreditMode={planCreditMode}
+                    onPlanCreditModeChange={setPlanCreditMode}
+                    planCreditsPerCycle={planCreditsPerCycle}
+                    onPlanCreditsPerCycleChange={setPlanCreditsPerCycle}
                   />
                   {studioServiceType !== 'facility_access' && studioServiceType !== 'non_scheduled' && (
                     <div className="grid grid-cols-2 gap-2">
@@ -2362,6 +2459,7 @@ export const ServicesView: React.FC = () => {
             values={{
               name: editName, professionalId: editProfessionalId, serviceKind: editServiceKind, studioServiceType: editStudioServiceType,
               requiresAppointment: editStudioServiceType !== 'facility_access' && editStudioServiceType !== 'non_scheduled',
+              allowSingleBooking: editAllowSingleBooking, allowPlanBooking: editAllowPlanBooking, planCreditMode: editPlanCreditMode,
               price: editPrice, billingMode: editBillingMode, periodicPrice: editPeriodicPrice,
               commercialPriceOptions: editCommercialPriceOptions, optionalAddons: editOptionalAddons,
               frequencyPricing: editFrequencyPricing, pricingRule: editPricingRule, individualMeetings: editIndividualMeetings,
@@ -2503,17 +2601,25 @@ export const ServicesView: React.FC = () => {
 
                   <div>
                     <label className="block font-semibold text-slate-700 mb-1">
-                      {showEditStudioConfig ? 'Preço por Atendimento / Aula (R$) *' : 'Preço (R$) *'}
+                      {showEditStudioConfig
+                        ? (editAllowSingleBooking ? 'Preço Aula Avulsa (R$) *' : 'Preço Aula Avulsa (Desativada)')
+                        : 'Preço (R$) *'}
                     </label>
                     <input
                       type="number"
                       step="0.01"
+                      min="0"
+                      disabled={showEditStudioConfig && !editAllowSingleBooking}
                       data-studio-field={isPureStudio ? "price" : undefined}
                       aria-label={isPureStudio ? "Preço por aula" : undefined}
-                      value={editPrice}
+                      value={showEditStudioConfig && !editAllowSingleBooking ? '' : editPrice}
                       onChange={e => setEditPrice(e.target.value)}
-                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                      placeholder={showEditStudioConfig && !editAllowSingleBooking ? 'Não vende avulso' : undefined}
+                      className={`w-full border border-slate-200 rounded-xl px-3 py-2 text-xs ${showEditStudioConfig && !editAllowSingleBooking ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : ''}`}
                     />
+                    {showEditStudioConfig && !editAllowSingleBooking && (
+                      <span className="block text-[10px] text-slate-500 mt-0.5">Atendimento apenas por planos comerciais</span>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
@@ -2616,6 +2722,10 @@ export const ServicesView: React.FC = () => {
                         setEditClinicalModule('');
                         setEditDurationMinutes(0);
                         setEditBufferMinutes(0);
+                        setEditAllowSingleBooking(false);
+                        setEditAllowPublicSingleBooking(false);
+                        setEditAllowPlanBooking(true);
+                        setEditAllowPublicPlanBooking(true);
                       } else if (!editProfessionalId && professionals.length > 0) {
                         handleSelectEditProfessional(professionals[0].id);
                         setEditDurationMinutes(prev => (prev > 0 ? prev : 50));
@@ -2623,7 +2733,6 @@ export const ServicesView: React.FC = () => {
                       }
                       if (nextType === 'facility_access' && editBillingMode === 'per_session') {
                         setEditBillingMode('monthly');
-                        if (!editPeriodicPrice) setEditPeriodicPrice(editPrice || '180.00');
                       }
                     }}
                     accessConfig={editAccessConfig}
@@ -2631,7 +2740,12 @@ export const ServicesView: React.FC = () => {
                     pricingAdjustments={editPricingAdjustments}
                     onPricingAdjustmentsChange={setEditPricingAdjustments}
                     commercialPriceOptions={editCommercialPriceOptions}
-                    onCommercialPriceOptionsChange={setEditCommercialPriceOptions}
+                    onCommercialPriceOptionsChange={nextOpts => {
+                      setEditCommercialPriceOptions(nextOpts);
+                      if (nextOpts.some(o => o.active !== false)) {
+                        setEditAllowPlanBooking(true);
+                      }
+                    }}
                     optionalAddons={editOptionalAddons}
                     onOptionalAddonsChange={setEditOptionalAddons}
                     availableAddonServices={services}
@@ -2641,6 +2755,18 @@ export const ServicesView: React.FC = () => {
                     onDefaultCapacityChange={setEditDefaultCapacity}
                     allowPublicBooking={editAllowPublicBooking}
                     onAllowPublicBookingChange={setEditAllowPublicBooking}
+                    allowSingleBooking={editAllowSingleBooking}
+                    onAllowSingleBookingChange={setEditAllowSingleBooking}
+                    allowPlanBooking={editAllowPlanBooking}
+                    onAllowPlanBookingChange={setEditAllowPlanBooking}
+                    allowPublicSingleBooking={editAllowPublicSingleBooking}
+                    onAllowPublicSingleBookingChange={setEditAllowPublicSingleBooking}
+                    allowPublicPlanBooking={editAllowPublicPlanBooking}
+                    onAllowPublicPlanBookingChange={setEditAllowPublicPlanBooking}
+                    planCreditMode={editPlanCreditMode}
+                    onPlanCreditModeChange={setEditPlanCreditMode}
+                    planCreditsPerCycle={editPlanCreditsPerCycle}
+                    onPlanCreditsPerCycleChange={setEditPlanCreditsPerCycle}
                   />
                   {editStudioServiceType !== 'facility_access' && editStudioServiceType !== 'non_scheduled' && (
                     <div className="grid grid-cols-2 gap-2">

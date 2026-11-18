@@ -19,6 +19,9 @@ import {
 } from './class-group.service';
 import { ClassScheduleService, getDayOfWeekFromYmd } from './class-schedule.service';
 import { GoogleCalendarService } from './google-calendar.service';
+import { PlanCreditMode } from '../utils/studio-access-and-commercial';
+import { addDaysYmd, evaluateSlotTimingStatus, getTenantTimezone } from '../utils/studio-timezone';
+import { countPendingHoldsForSlot, getActivePendingSlotHolds } from '../utils/public-slot-holds';
 
 const WEEKDAY_SHORT_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
@@ -48,6 +51,9 @@ export interface RecurrenceEvaluationInput {
   ignoreFirstLeadTime?: boolean;
   mockNow?: Date;
   externalBusyByProfAndDate?: Map<string, Array<{ startMin: number; endMin: number }>>;
+  creditMode?: PlanCreditMode | null;
+  creditsPerCycle?: number | null;
+  autoAdvanceFromLeadTime?: boolean;
 }
 
 export interface RecurrenceAlternativeSlot {
@@ -101,6 +107,11 @@ export interface RecurrenceEvaluationResult {
   totalCount: number;
   availableCount: number;
   conflictCount: number;
+  creditMode?: PlanCreditMode | null;
+  creditsPerCycle?: number | null;
+  nextEligibleStartDate?: string | null;
+  leadTimeShifted?: boolean;
+  originalStartDate?: string | null;
   occurrences: RecurrenceOccurrenceEvaluation[];
 }
 
@@ -305,6 +316,7 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
            custom_recurrence_intervals_json, default_recurrence_interval_json,
            min_lead_time_hours, max_advance_days,
            service_domain, clinical_module,
+           plan_credit_mode, plan_credits_per_cycle,
            COALESCE(availability_mode, 'professional_schedule') as availability_mode
     FROM services
     WHERE id = ? AND tenant_id = ? AND active = 1
@@ -313,6 +325,21 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
   if (!serviceRow) {
     throw Object.assign(new Error('Serviço não encontrado ou inativo nesta clínica.'), { status: 404, code: 'SERVICE_NOT_FOUND' });
   }
+
+  const tenantTz = getTenantTimezone(db, tenantId);
+  const resolvedCreditMode: PlanCreditMode | null =
+    input.creditMode ||
+    (serviceRow.plan_credit_mode === 'fixed_credits' ||
+    serviceRow.plan_credit_mode === 'weekly_guaranteed' ||
+    serviceRow.plan_credit_mode === 'unlimited'
+      ? serviceRow.plan_credit_mode
+      : null);
+  const resolvedCreditsCap: number | null =
+    input.creditsPerCycle && Number(input.creditsPerCycle) > 0
+      ? Math.floor(Number(input.creditsPerCycle))
+      : (serviceRow.plan_credits_per_cycle && Number(serviceRow.plan_credits_per_cycle) > 0
+          ? Math.floor(Number(serviceRow.plan_credits_per_cycle))
+          : null);
 
   const hasScheduleEntries = Array.isArray(input.scheduleEntries) && input.scheduleEntries.length > 0;
   const recValidation = validateServiceRecurrenceFrequency(
@@ -331,6 +358,12 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
 
   const endDateStr = input.endDate ? String(input.endDate).slice(0, 10) : undefined;
   const rawMax = input.maxOccurrences !== undefined && input.maxOccurrences !== null ? Number(input.maxOccurrences) : undefined;
+  const effMaxOccurrences =
+    rawMax !== undefined
+      ? rawMax
+      : (resolvedCreditMode === 'fixed_credits' && resolvedCreditsCap && resolvedCreditsCap > 0
+          ? resolvedCreditsCap
+          : undefined);
   const effDurationCode = recValidation.durationCode;
   const hasBoundedPlanDuration = Boolean(effDurationCode && effDurationCode !== 'count' && effDurationCode !== 'custom_date' && effDurationCode !== 'legacy_frequency');
 
@@ -358,7 +391,7 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
     intervalUnit: recValidation.intervalUnit,
     durationCode: effDurationCode,
     endDate: endDateStr,
-    maxOccurrences: rawMax,
+    maxOccurrences: effMaxOccurrences,
     weekdays: Array.isArray(input.weekdays) ? input.weekdays : undefined,
     startClock: startClockFull,
     endClock: endClockFull,
@@ -436,6 +469,7 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
   const allClassSchedules = hasClassSchedules
     ? ClassScheduleService.listForService(tenantId, serviceRow.id, { includeInactive: false, publicOnly })
     : [];
+  const activePublicHolds = publicOnly ? getActivePendingSlotHolds(tenantId) : [];
 
   const occurrences: RecurrenceOccurrenceEvaluation[] = [];
 
@@ -595,6 +629,7 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
           ignoreLeadTime,
           ignoreAdvanceCap,
           publicOnly,
+          includePendingHolds: publicOnly,
           mockNow: input.mockNow
         });
 
@@ -759,10 +794,31 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
           );
           if (!publicSlots.some(s => s.startTime === cleanS && s.endTime === cleanE)) {
             if (!firstFailure) {
-              firstFailure = {
-                code: 'SLOT_UNAVAILABLE',
-                message: `Horário ${startClockHHMM} indisponível para agendamento online em ${dateStr}.`
-              };
+              const rawLead =
+                serviceRow.min_lead_time_hours !== undefined && serviceRow.min_lead_time_hours !== null
+                  ? Number(serviceRow.min_lead_time_hours)
+                  : 0;
+              const timingCheck = !ignoreLeadTime
+                ? evaluateSlotTimingStatus({
+                    dateYmd: dateStr,
+                    startTimeHhmm: startClockHHMM,
+                    timeZone: tenantTz,
+                    now: input.mockNow,
+                    minLeadTimeHours: Math.max(0, rawLead),
+                    maxAdvanceDays: ignoreAdvanceCap ? null : (Number(serviceRow.max_advance_days) || 60)
+                  })
+                : null;
+              if (timingCheck && !timingCheck.eligible) {
+                firstFailure = {
+                  code: timingCheck.reasonCode || 'SLOT_UNAVAILABLE',
+                  message: timingCheck.reasonMessage || `Horário ${startClockHHMM} indisponível para agendamento online em ${dateStr}.`
+                };
+              } else {
+                firstFailure = {
+                  code: 'SLOT_UNAVAILABLE',
+                  message: `Horário ${startClockHHMM} indisponível para agendamento online em ${dateStr}.`
+                };
+              }
             }
             continue;
           }
@@ -834,8 +890,30 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
           continue;
         }
 
+        const fallbackHoldCounts = publicOnly && activePublicHolds.length > 0
+          ? countPendingHoldsForSlot({
+              holds: activePublicHolds,
+              serviceId: serviceRow.id,
+              professionalId: prof.id,
+              startIso: cleanS,
+              endIso: cleanE,
+              isSharedGroup: true,
+              classScheduleId: occ?.class_schedule_id || null
+            })
+          : { sameSlotGroupHolds: 0, conflictingProfessionalHolds: 0 };
+        if (fallbackHoldCounts.conflictingProfessionalHolds > 0) {
+          if (!firstFailure) {
+            firstFailure = {
+              code: 'PROFESSIONAL_CONFLICT',
+              message: 'Conflito com outro atendimento',
+              statusLabel: 'Conflito com outro atendimento'
+            };
+          }
+          continue;
+        }
+
         const cap = Math.max(1, Number(occ?.capacity) || Number(serviceRow.default_capacity) || 1);
-        const enrolled = enrolledRows.length;
+        const enrolled = enrolledRows.length + fallbackHoldCounts.sameSlotGroupHolds;
         if (enrolled >= cap) {
           if (!firstFailure) {
             firstFailure = { code: 'CLASS_FULL', message: 'Turma lotada', statusLabel: 'Turma lotada' };
@@ -894,6 +972,21 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
       if (profConflict) {
         if (!firstFailure) firstFailure = { code: 'PROFESSIONAL_SLOT_OCCUPIED', message: `Horário indisponível para o profissional em ${dateStr} (${startClockHHMM}).` };
         continue;
+      }
+
+      if (publicOnly && activePublicHolds.length > 0) {
+        const indivHold = countPendingHoldsForSlot({
+          holds: activePublicHolds,
+          serviceId: serviceRow.id,
+          professionalId: prof.id,
+          startIso: cleanS,
+          endIso: cleanE,
+          isSharedGroup: false
+        });
+        if (indivHold.conflictingProfessionalHolds > 0) {
+          if (!firstFailure) firstFailure = { code: 'PROFESSIONAL_SLOT_OCCUPIED', message: `Horário reservado temporariamente para outro agendamento em ${dateStr} (${startClockHHMM}).` };
+          continue;
+        }
       }
 
       if (occRoomId) {
@@ -979,6 +1072,30 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
     }
   }
 
+  const firstOcc = occurrences[0];
+  let nextEligibleStartDate: string | null = null;
+  if (
+    firstOcc &&
+    !firstOcc.available &&
+    (firstOcc.reasonCode === 'LEAD_TIME_NOT_MET' ||
+      firstOcc.reasonCode === 'SLOT_PAST' ||
+      firstOcc.reasonCode === 'PAST_DATE' ||
+      firstOcc.reasonCode === 'MIN_LEAD_TIME')
+  ) {
+    const laterAvail = occurrences.find(o => o.date > firstOcc.date && o.available);
+    const laterOcc = occurrences.find(o => o.date > firstOcc.date);
+    nextEligibleStartDate = laterAvail?.date || laterOcc?.date || addDaysYmd(firstOcc.date, 1);
+
+    if (input.autoAdvanceFromLeadTime && !(input as any)._didAutoAdvance && nextEligibleStartDate > input.startDate) {
+      return evaluateRecurrenceSeriesSync({
+        ...input,
+        startDate: nextEligibleStartDate,
+        _didAutoAdvance: true,
+        _originalStartDate: (input as any)._originalStartDate || input.startDate
+      } as any);
+    }
+  }
+
   const availableCount = occurrences.filter(o => o.available).length;
   const conflictCount = occurrences.length - availableCount;
   const uniqueDays = Array.from(new Set(occurrences.map(o => o.dayOfWeek)));
@@ -1007,6 +1124,11 @@ export function evaluateRecurrenceSeriesSync(input: RecurrenceEvaluationInput): 
     totalCount: occurrences.length,
     availableCount,
     conflictCount,
+    creditMode: resolvedCreditMode,
+    creditsPerCycle: resolvedCreditsCap,
+    nextEligibleStartDate: nextEligibleStartDate || ((input as any)._didAutoAdvance ? input.startDate : null),
+    leadTimeShifted: Boolean((input as any)._didAutoAdvance),
+    originalStartDate: (input as any)._originalStartDate || null,
     occurrences
   };
 }
@@ -1020,7 +1142,8 @@ export async function evaluateRecurrenceSeriesWithExternalBusy(
            COALESCE(allow_recurrence, 1) as allow_recurrence,
            allowed_recurrence_frequencies_json, default_recurrence_frequency,
            allowed_plan_durations_json, default_plan_duration,
-           custom_recurrence_intervals_json, default_recurrence_interval_json
+           custom_recurrence_intervals_json, default_recurrence_interval_json,
+           plan_credit_mode, plan_credits_per_cycle
     FROM services
     WHERE id = ? AND tenant_id = ? AND active = 1
   `).get(input.serviceId, input.tenantId) as any;
@@ -1046,6 +1169,25 @@ export async function evaluateRecurrenceSeriesWithExternalBusy(
 
   const endDateStr = input.endDate ? String(input.endDate).slice(0, 10) : undefined;
   const rawMax = input.maxOccurrences !== undefined && input.maxOccurrences !== null ? Number(input.maxOccurrences) : undefined;
+  const resolvedCreditMode =
+    input.creditMode ||
+    (serviceRow.plan_credit_mode === 'fixed_credits' ||
+    serviceRow.plan_credit_mode === 'weekly_guaranteed' ||
+    serviceRow.plan_credit_mode === 'unlimited'
+      ? serviceRow.plan_credit_mode
+      : null);
+  const resolvedCreditsCap =
+    input.creditsPerCycle && Number(input.creditsPerCycle) > 0
+      ? Math.floor(Number(input.creditsPerCycle))
+      : (serviceRow.plan_credits_per_cycle && Number(serviceRow.plan_credits_per_cycle) > 0
+          ? Math.floor(Number(serviceRow.plan_credits_per_cycle))
+          : null);
+  const effMaxOccurrences =
+    rawMax !== undefined
+      ? rawMax
+      : (resolvedCreditMode === 'fixed_credits' && resolvedCreditsCap && resolvedCreditsCap > 0
+          ? resolvedCreditsCap
+          : undefined);
 
   const generatedPlan = generateSchedulePlanOccurrences({
     startDate: input.startDate,
@@ -1054,7 +1196,7 @@ export async function evaluateRecurrenceSeriesWithExternalBusy(
     intervalUnit: recValidation.intervalUnit,
     durationCode: recValidation.durationCode,
     endDate: endDateStr,
-    maxOccurrences: rawMax,
+    maxOccurrences: effMaxOccurrences,
     weekdays: Array.isArray(input.weekdays) ? input.weekdays : undefined,
     startClock: input.startClock,
     endClock: input.endClock || null,

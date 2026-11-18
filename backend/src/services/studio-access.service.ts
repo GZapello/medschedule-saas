@@ -20,6 +20,7 @@ import {
   normalizeOptionalAddonsConfig,
   normalizeStudioAccessConfig,
   normalizeStudioServiceType,
+  resolveOptionCreditPlan,
   PaymentPeriodicityCode,
   PlanWithAddonsBreakdown,
   StudioAccessConfig,
@@ -150,6 +151,13 @@ export interface CreateStudioEnrollmentInput {
   amount?: number;
   totalContractAmount?: number;
   installmentsCount?: number;
+  weeklyFrequency?: number | null;
+  referenceSessionsCount?: number | null;
+  includedSessions?: number | null;
+  creditMode?: 'fixed_credits' | 'weekly_guaranteed' | 'unlimited' | null;
+  creditsPerCycle?: number | null;
+  pricingRuleSnapshot?: string | null;
+  scheduleRules?: any[] | null;
   dueDay?: number;
   startDate?: string;
   endDate?: string | null;
@@ -368,6 +376,26 @@ export class StudioAccessService {
         : (srv.billing_mode && srv.billing_mode !== 'per_session' && srv.billing_mode !== 'package' ? srv.billing_mode : 'monthly'))
     );
 
+    const optionCreditPlan = matchedOption
+      ? resolveOptionCreditPlan(matchedOption, input.creditMode || srv.plan_credit_mode, input.creditsPerCycle ?? srv.plan_credits_per_cycle)
+      : null;
+    const explicitInputCreditMode =
+      input.creditMode === 'fixed_credits' || input.creditMode === 'weekly_guaranteed' || input.creditMode === 'unlimited'
+        ? input.creditMode
+        : null;
+    const resolvedPlanCreditMode =
+      explicitInputCreditMode ||
+      optionCreditPlan?.creditMode ||
+      (srv.plan_credit_mode === 'fixed_credits' || srv.plan_credit_mode === 'weekly_guaranteed' || srv.plan_credit_mode === 'unlimited'
+        ? srv.plan_credit_mode
+        : (srvStudioType === 'facility_access' ? 'unlimited' : 'fixed_credits'));
+    const resolvedPlanCreditsPerCycle =
+      resolvedPlanCreditMode === 'fixed_credits'
+        ? (input.creditsPerCycle !== undefined && input.creditsPerCycle !== null
+            ? Number(input.creditsPerCycle)
+            : (optionCreditPlan?.creditsPerCycle ?? (srv.plan_credits_per_cycle ? Number(srv.plan_credits_per_cycle) : null)))
+        : null;
+
     const cycleAmount = Math.max(
       0,
       Math.round(
@@ -426,9 +454,11 @@ export class StudioAccessService {
           : `Plano: ${srv.name}`);
 
     const weeklyFrequencySnapshot =
-      contractKind === 'access_plan'
-        ? (mergedAccessCfg.accessMode === 'limited' ? (mergedAccessCfg.maxEntriesPerWeek || null) : null)
-        : (matchedOption ? (matchedOption.frequencyType === 'weekly' ? matchedOption.frequencyCount : null) : srv.weekly_sessions_count || 1);
+      input.weeklyFrequency !== undefined && input.weeklyFrequency !== null
+        ? Number(input.weeklyFrequency)
+        : (contractKind === 'access_plan'
+            ? (mergedAccessCfg.accessMode === 'limited' ? (mergedAccessCfg.maxEntriesPerWeek || null) : null)
+            : (matchedOption ? (matchedOption.frequencyType === 'weekly' ? matchedOption.frequencyCount : null) : srv.weekly_sessions_count || 1));
 
     const commercialSnapshot = {
       serviceId: srv.id,
@@ -446,8 +476,17 @@ export class StudioAccessService {
       installmentsCount,
       fidelityMonths,
       gracePeriodDays,
-      autoRenew
+      autoRenew,
+      creditMode: resolvedPlanCreditMode,
+      creditsPerCycle: resolvedPlanCreditsPerCycle
     };
+
+    const resolvedIncludedSessions =
+      input.includedSessions !== undefined
+        ? input.includedSessions
+        : (contractKind === 'scheduled_plan' && resolvedPlanCreditMode === 'fixed_credits'
+            ? (optionCreditPlan?.totalContractCredits ?? (matchedOption?.frequencyType === 'fixed_count' ? matchedOption.frequencyCount : resolvedPlanCreditsPerCycle))
+            : null);
 
     db.prepare(`
       INSERT INTO recurring_billing_plans (
@@ -455,6 +494,9 @@ export class StudioAccessService {
         title, amount, billing_cycle, billing_frequency, cycle_months, covers_sessions,
         due_day, start_date, end_date, payment_method, notes, status,
         plan_duration_code, weekly_frequency, weekly_sessions_snapshot, included_sessions,
+        pricing_rule_snapshot, reference_sessions_count, schedule_rules_json,
+        credit_mode_snapshot, credits_per_cycle_snapshot,
+        commercial_option_id_snapshot, commercial_option_label_snapshot,
         contract_kind, contract_status, payment_periodicity, total_contract_amount,
         installments_count, fidelity_months, grace_period_days, auto_renew,
         access_mode_snapshot, access_rules_snapshot_json, commercial_snapshot_json, origin,
@@ -464,6 +506,9 @@ export class StudioAccessService {
         ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?,
+        ?, ?, ?,
+        ?, ?,
+        ?, ?,
         ?, ?, ?, ?,
         ?, ?, ?, ?,
         ?, ?, ?, ?,
@@ -490,7 +535,14 @@ export class StudioAccessService {
       durationCode,
       weeklyFrequencySnapshot,
       weeklyFrequencySnapshot,
-      contractKind === 'scheduled_plan' && matchedOption?.frequencyType === 'fixed_count' ? matchedOption.frequencyCount : null,
+      resolvedIncludedSessions,
+      input.pricingRuleSnapshot || null,
+      input.referenceSessionsCount ?? null,
+      Array.isArray(input.scheduleRules) && input.scheduleRules.length > 0 ? JSON.stringify(input.scheduleRules) : null,
+      resolvedPlanCreditMode,
+      resolvedPlanCreditsPerCycle,
+      matchedOption?.id || null,
+      matchedOption?.label || null,
       contractKind,
       contractStatus,
       paymentPeriodicity,
@@ -1011,30 +1063,34 @@ export class StudioAccessService {
       INSERT INTO student_package_entitlements (
         id, tenant_id, contract_id, service_id, service_name_snapshot,
         allowed_service_ids_json, weekly_frequency_snapshot, credits_total, credits_reserved, credits_used,
+        credit_mode_snapshot, credits_per_cycle_snapshot,
         entitlement_type, entitlement_role, addon_option_id, addon_pricing_json,
         access_mode_snapshot, monthly_limit_snapshot, access_rules_snapshot_json, schedule_snapshot_json, entries_used
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
     `);
 
     // 1. Direito separado do plano-base
     const baseEntType: 'scheduled_service' | 'facility_access' | 'deliverable' =
       contractKind === 'access_plan' ? 'facility_access' : (contractKind === 'deliverable' ? 'deliverable' : 'scheduled_service');
+    const baseCreditPlan = resolveOptionCreditPlan(
+      effectiveBaseOption,
+      srv.plan_credit_mode,
+      srv.plan_credits_per_cycle
+    );
     const baseCreditsTotal =
       baseEntType === 'facility_access'
         ? 0
         : (baseEntType === 'deliverable'
             ? 1
-            : (effectiveBaseOption.frequencyType === 'fixed_count' && effectiveBaseOption.frequencyCount
-                ? effectiveBaseOption.frequencyCount
-                : (effectiveBaseOption.frequencyType === 'weekly' && effectiveBaseOption.frequencyCount
-                    ? effectiveBaseOption.frequencyCount * 4 * breakdown.base.contractMonths
-                    : (effectiveBaseOption.frequencyType === 'monthly' && effectiveBaseOption.frequencyCount
-                        ? effectiveBaseOption.frequencyCount * breakdown.base.contractMonths
-                        : 0))));
+            : (baseCreditPlan.creditMode === 'unlimited'
+                ? 0
+                : (baseCreditPlan.creditMode === 'weekly_guaranteed'
+                    ? (baseCreditPlan.estimatedSessionsInContract || Math.ceil((baseCreditPlan.weeklyCap || 1) * 4.5 * breakdown.base.contractMonths))
+                    : (baseCreditPlan.totalContractCredits || 1))));
     const baseWeeklyFreq =
       baseEntType === 'facility_access'
         ? (mergedAccessCfg.accessMode === 'limited' ? (mergedAccessCfg.maxEntriesPerWeek ?? null) : null)
-        : (effectiveBaseOption.frequencyType === 'weekly' ? effectiveBaseOption.frequencyCount : null);
+        : (baseCreditPlan.weeklyCap ?? (effectiveBaseOption.frequencyType === 'weekly' ? effectiveBaseOption.frequencyCount : null));
     const baseMonthlyLimit =
       baseEntType === 'facility_access'
         ? (mergedAccessCfg.accessMode === 'limited' ? (mergedAccessCfg.maxEntriesPerMonth ?? null) : null)
@@ -1049,6 +1105,8 @@ export class StudioAccessService {
       JSON.stringify([srv.id]),
       baseWeeklyFreq,
       baseCreditsTotal,
+      baseEntType === 'scheduled_service' ? baseCreditPlan.creditMode : (baseEntType === 'facility_access' ? 'unlimited' : 'fixed_credits'),
+      baseEntType === 'scheduled_service' && baseCreditPlan.creditMode === 'fixed_credits' ? (baseCreditPlan.creditsPerCycle ?? null) : null,
       baseEntType,
       'base',
       null,
@@ -1086,6 +1144,10 @@ export class StudioAccessService {
       const weeklyFreq = itemBreakdown.frequencyType === 'weekly' ? itemBreakdown.frequencyCount : null;
       const monthlyLimit = itemBreakdown.frequencyType === 'monthly' ? itemBreakdown.frequencyCount : null;
       const addonSchedList = input.initialAddonSchedulesByServiceId?.[mAddon.addonServiceId];
+      const addonCreditMode =
+        entType === 'facility_access' || itemBreakdown.frequencyType === 'unlimited'
+          ? 'unlimited'
+          : 'fixed_credits';
 
       insEnt.run(
         'ent-' + uuidv4().slice(0, 8),
@@ -1096,6 +1158,8 @@ export class StudioAccessService {
         JSON.stringify([mAddon.addonServiceId]),
         weeklyFreq,
         entCredits,
+        addonCreditMode,
+        entType === 'scheduled_service' && addonCreditMode === 'fixed_credits' ? (itemBreakdown.creditsPerCycle ?? null) : null,
         entType,
         'addon',
         mAddon.id,
@@ -2208,6 +2272,10 @@ export class StudioAccessService {
         accessConfig: isAccessPlan ? cfg : null,
         weeklyFrequency: r.weekly_frequency || (isAccessPlan ? cfg.maxEntriesPerWeek : null),
         monthlyLimit: isAccessPlan ? cfg.maxEntriesPerMonth : null,
+        creditMode: r.credit_mode_snapshot || null,
+        credit_mode_snapshot: r.credit_mode_snapshot || null,
+        creditsPerCycle: r.credits_per_cycle_snapshot !== null && r.credits_per_cycle_snapshot !== undefined ? Number(r.credits_per_cycle_snapshot) : null,
+        credits_per_cycle_snapshot: r.credits_per_cycle_snapshot !== null && r.credits_per_cycle_snapshot !== undefined ? Number(r.credits_per_cycle_snapshot) : null,
         creditsTotal: Number(r.included_sessions || r.reference_sessions_count || 0),
         creditsUsed: Number(r.used_sessions_count || 0),
         creditsReserved: Number(r.reserved_sessions_count || 0),
@@ -2295,6 +2363,10 @@ export class StudioAccessService {
         accessConfig: accessEnt?.access_rules || null,
         weeklyFrequency: accessEnt?.weekly_frequency_snapshot || c.weekly_limit_snapshot || null,
         monthlyLimit: accessEnt?.monthly_limit_snapshot || null,
+        creditMode: c.credit_mode_snapshot || c.entitlements?.[0]?.credit_mode_snapshot || null,
+        credit_mode_snapshot: c.credit_mode_snapshot || c.entitlements?.[0]?.credit_mode_snapshot || null,
+        creditsPerCycle: c.entitlements?.[0]?.credits_per_cycle_snapshot !== null && c.entitlements?.[0]?.credits_per_cycle_snapshot !== undefined ? Number(c.entitlements[0].credits_per_cycle_snapshot) : null,
+        credits_per_cycle_snapshot: c.entitlements?.[0]?.credits_per_cycle_snapshot !== null && c.entitlements?.[0]?.credits_per_cycle_snapshot !== undefined ? Number(c.entitlements[0].credits_per_cycle_snapshot) : null,
         creditsTotal: Number(c.summary?.creditsTotal || 0),
         creditsUsed: Number(c.summary?.creditsUsed || 0),
         creditsReserved: Number(c.summary?.creditsReserved || 0),

@@ -27,7 +27,7 @@ import {
   sanitizeBookingErrorMessage
 } from '../utils/modality-resolver';
 import { resolveBookingTenant, publicBookingProfessional, professionalBookingService, validBookingDate } from '../utils/public-booking';
-import { calculateAvailableSlots } from '../utils/slot-calculator';
+import { calculateAvailableSlots, explainEmptySlots } from '../utils/slot-calculator';
 import { bookingTime } from '../utils/booking-time';
 import { validateBrazilianPhone, normalizePhoneWithDDI } from '../utils/phone.utils';
 import { isPrimaryClinicalModule, resolveClinicalModule } from '../utils/clinical-module';
@@ -39,7 +39,15 @@ import {
   RecurrenceIntervalUnit,
   validateServiceRecurrenceFrequency, resolvePlanDurationEndDate
 } from '../utils/establishment-context';
-import { normalizeOptionalAddonsConfig, StudioOptionalAddonOption } from '../utils/studio-access-and-commercial';
+import {
+  calculateCommercialOptionBreakdown,
+  normalizeCommercialPriceOptions,
+  normalizeOptionalAddonsConfig,
+  resolveOptionCreditPlan,
+  StudioOptionalAddonOption
+} from '../utils/studio-access-and-commercial';
+import { calculateStudioRecurringPrice } from '../utils/studio-pricing';
+import { readFrequencyPricing } from '../utils/studio-frequency-pricing';
 
 function getOwnProfessionalIds(userId: string, tenantId: string): string[] {
   const rows = db.prepare(`
@@ -674,7 +682,7 @@ export class PackageController {
         }
 
         const upcomingStart =
-          typeof startDate === 'string' && validBookingDate(startDate) ? startDate : todayBrazilYmd();
+          typeof startDate === 'string' && validBookingDate(startDate) ? startDate : todayBrazilYmd(new Date(), tenant.id);
         const upcomingSlots = wantUpcoming
           ? ClassScheduleService.getUpcomingOccurrencesForService({
               tenantId: tenant.id,
@@ -847,7 +855,7 @@ export class PackageController {
       }
 
       const upcomingStart =
-        typeof startDate === 'string' && validBookingDate(startDate) ? startDate : todayBrazilYmd();
+        typeof startDate === 'string' && validBookingDate(startDate) ? startDate : todayBrazilYmd(new Date(), tenant.id);
       const rawUpcomingSlots = wantUpcoming
         ? ClassScheduleService.getUpcomingOccurrencesForService({
             tenantId: tenant.id,
@@ -908,7 +916,16 @@ export class PackageController {
         ...(wantDate && !wantDateAllowed
           ? { emptyReason: 'Esta aula é oferecida apenas nos dias da semana configurados pelo instrutor. Escolha outro dia.' }
           : wantDate && mergedSlots.length === 0
-          ? { emptyReason: 'Não há horários ou vagas disponíveis para esta data. Experimente outro dia.' }
+          ? {
+              emptyReason: (() => {
+                const probeProfId = reqProfId !== 'any' ? reqProfId : (professionals[0]?.id || allLinkedProfs[0]?.id || '');
+                if (probeProfId) {
+                  const exp = explainEmptySlots(tenant.id, probeProfId, srv.id, wantDate);
+                  if (exp?.message) return exp.message;
+                }
+                return 'Não há horários ou vagas disponíveis para esta data. Experimente outro dia.';
+              })()
+            }
           : {}),
         ...(!wantDate && upcomingSlots.length === 0
           ? {
@@ -946,7 +963,10 @@ export class PackageController {
         startDate,
         startClock,
         endClock,
-        recurrence
+        recurrence,
+        commercialOptionId,
+        optionId,
+        autoAdvanceFromLeadTime
       } = req.body || {};
 
       const tenant = resolveBookingTenant(tenantSlug, bookingSequence);
@@ -996,6 +1016,52 @@ export class PackageController {
         return;
       }
 
+      const serviceRow = db.prepare(`
+        SELECT id, name, price, periodic_price, billing_mode, pricing_rule, is_price_customized,
+               weekly_sessions_count, frequency_pricing_json, commercial_price_options_json,
+               plan_credit_mode, plan_credits_per_cycle, default_plan_duration
+        FROM services
+        WHERE id = ? AND tenant_id = ? AND active = 1
+      `).get(String(serviceId), tenant.id) as any;
+
+      if (!serviceRow) {
+        res.status(404).json({ error: 'Serviço não encontrado ou inativo neste estabelecimento.' });
+        return;
+      }
+
+      const activeCommercialOpts = normalizeCommercialPriceOptions(serviceRow.commercial_price_options_json)
+        .filter(o => o.active && o.allowPublicBooking !== false);
+      const reqOptId = commercialOptionId || optionId ? String(commercialOptionId || optionId).trim() : null;
+      const reqWeeklyEntriesCount = Array.isArray(recurrence?.scheduleEntries) && recurrence.scheduleEntries.length > 0
+        ? recurrence.scheduleEntries.length
+        : (Array.isArray(recurrence?.weekdays) && recurrence.weekdays.length > 0
+            ? recurrence.weekdays.length
+            : Number(serviceRow.weekly_sessions_count || 1));
+      const reqDurationCode = recurrence?.durationCode ?? recurrence?.planDurationCode ?? serviceRow.default_plan_duration ?? null;
+
+      let selectedOption = reqOptId ? activeCommercialOpts.find(o => o.id === reqOptId) || null : null;
+      if (!selectedOption && req.body?.bookingIntent === 'recurring' && activeCommercialOpts.length > 0) {
+        const matchDur = reqDurationCode
+          ? activeCommercialOpts.filter(o => o.contractDurationCode === reqDurationCode)
+          : activeCommercialOpts;
+        selectedOption =
+          matchDur.find(o => o.frequencyType === 'weekly' && o.frequencyCount === reqWeeklyEntriesCount) ||
+          matchDur.find(o => o.frequencyCount === reqWeeklyEntriesCount) ||
+          (matchDur.length === 1 ? matchDur[0] : null) ||
+          (activeCommercialOpts.length === 1 ? activeCommercialOpts[0] : null);
+      }
+
+      const resolvedOptCredits = selectedOption
+        ? resolveOptionCreditPlan(selectedOption, serviceRow.plan_credit_mode, serviceRow.plan_credits_per_cycle)
+        : null;
+      const effCreditMode = resolvedOptCredits?.creditMode ?? (serviceRow.plan_credit_mode || null);
+      const effCreditsCap =
+        resolvedOptCredits?.creditMode === 'fixed_credits'
+          ? resolvedOptCredits.totalContractCredits
+          : (effCreditMode === 'fixed_credits' && serviceRow.plan_credits_per_cycle
+              ? Number(serviceRow.plan_credits_per_cycle)
+              : null);
+
       const preview = await evaluateRecurrenceSeriesWithExternalBusy({
         tenantId: tenant.id,
         serviceId: String(serviceId),
@@ -1010,7 +1076,7 @@ export class PackageController {
         frequency: recurrence?.frequency ?? null,
         intervalValue: recurrence?.intervalValue ?? recurrence?.interval_value ?? null,
         intervalUnit: recurrence?.intervalUnit ?? recurrence?.interval_unit ?? null,
-        durationCode: recurrence?.durationCode ?? recurrence?.planDurationCode ?? null,
+        durationCode: reqDurationCode,
         seriesMode: recurrence?.seriesMode ?? null,
         scheduleEntries: Array.isArray(recurrence?.scheduleEntries) ? recurrence.scheduleEntries : undefined,
         weekdays: Array.isArray(recurrence?.weekdays) ? recurrence.weekdays : undefined,
@@ -1018,26 +1084,134 @@ export class PackageController {
         maxOccurrences: recurrence?.maxOccurrences !== undefined ? Number(recurrence.maxOccurrences) : undefined,
         publicOnly: true,
         isCustomTime: false,
-        ignoreFirstLeadTime: false
+        ignoreFirstLeadTime: false,
+        creditMode: effCreditMode,
+        creditsPerCycle: effCreditsCap,
+        autoAdvanceFromLeadTime: Boolean(autoAdvanceFromLeadTime)
       });
 
-      let pricing = null;
-      if (preview.valid && req.body.bookingIntent === 'recurring') {
-        const service = db.prepare('SELECT billing_mode, pricing_rule, frequency_pricing_json FROM services WHERE id = ? AND tenant_id = ?').get(String(serviceId), tenant.id) as any;
-        const quote = quoteFrequencyPlan({ tenantId: tenant.id, serviceId: String(serviceId), billingFrequency: service?.billing_mode,
-          startDate: resolvedDate, endDate: resolvePlanDurationEndDate(resolvedDate, recurrence?.durationCode) || recurrence?.endDate || preview.occurrences.at(-1)?.date,
-          slots: preview.occurrences, cadence: preview.frequency, publicOnly: true, includeStandardPricing: true });
-        if (quote) pricing = {
-          amount: quote.calculation.effectivePrice,
-          averagePricePerSession: quote.calculation.averagePricePerSession,
-          weeklyCount: quote.weeklyCount,
-          billingFrequency: quote.billingFrequency,
-          cycleMonths: quote.calculation.cycleMonths,
-          pricingRule: quote.pricingRule,
-          referenceSessionsCount: quote.calculation.referenceSessionsCount
-        };
+      let pricing: any = null;
+      if (req.body?.bookingIntent === 'recurring') {
+        if (selectedOption) {
+          const breakdown = calculateCommercialOptionBreakdown(selectedOption, {
+            sessionsInContract: preview.occurrences.length,
+            servicePlanCreditMode: serviceRow.plan_credit_mode,
+            servicePlanCreditsPerCycle: serviceRow.plan_credits_per_cycle
+          });
+          pricing = {
+            source: 'commercial_option',
+            commercialOptionId: selectedOption.id,
+            label: selectedOption.label || serviceRow.name,
+            amount: breakdown.cycleAmountReais,
+            cycleAmount: breakdown.cycleAmountReais,
+            contractTotal: breakdown.totalContractAmountReais,
+            totalContractAmount: breakdown.totalContractAmountReais,
+            monthlyEquivalent: breakdown.monthlyEquivalentReais,
+            installmentAmount: breakdown.installmentAmountReais,
+            installmentsCount: breakdown.installmentsCount,
+            billingCyclesCount: breakdown.billingCyclesCount,
+            cycleCount: breakdown.billingCyclesCount,
+            paymentPeriodicity: breakdown.paymentPeriodicity,
+            contractDurationCode: breakdown.contractDurationCode,
+            contractMonths: breakdown.contractMonths,
+            commercialUnit: breakdown.commercialUnit,
+            creditMode: breakdown.creditMode,
+            creditsPerCycle: breakdown.creditsPerCycle,
+            totalContractCredits: breakdown.totalContractCredits,
+            weeklyCap: breakdown.weeklyCap,
+            averagePricePerSession:
+              preview.totalCount > 0
+                ? Math.round((breakdown.totalContractAmountReais / preview.totalCount) * 100) / 100
+                : breakdown.unitAmountReais,
+            weeklyCount: selectedOption.frequencyCount || reqWeeklyEntriesCount,
+            billingFrequency:
+              selectedOption.paymentPeriodicity === 'one_time' ? 'monthly' : selectedOption.paymentPeriodicity,
+            cycleMonths: breakdown.paymentCycleMonths,
+            pricingRule: serviceRow.pricing_rule || 'four_weeks',
+            referenceSessionsCount: preview.totalCount
+          };
+        } else {
+          const durationToBilling: Record<string, string> = {
+            '1_month': 'monthly',
+            '2_months': 'bimonthly',
+            '3_months': 'quarterly',
+            '6_months': 'semiannual',
+            '12_months': 'annual',
+            '24_months': 'biennial'
+          };
+          const effBillingFreq =
+            serviceRow.billing_mode && serviceRow.billing_mode !== 'per_session'
+              ? serviceRow.billing_mode
+              : (reqDurationCode && durationToBilling[String(reqDurationCode)]) || 'monthly';
+          let quoted: ReturnType<typeof quoteFrequencyPlan> = null;
+          try {
+            quoted = quoteFrequencyPlan({
+              tenantId: tenant.id,
+              serviceId: String(serviceId),
+              billingFrequency: effBillingFreq,
+              startDate: preview.startDate || resolvedDate,
+              endDate: resolvePlanDurationEndDate(preview.startDate || resolvedDate, reqDurationCode) || recurrence?.endDate || preview.occurrences.at(-1)?.date,
+              slots: preview.occurrences,
+              cadence: preview.frequency,
+              publicOnly: true,
+              includeStandardPricing: true
+            });
+          } catch {
+            quoted = null;
+          }
+          if (quoted) {
+            pricing = {
+              source: 'frequency_quote',
+              amount: quoted.calculation.effectivePrice,
+              cycleAmount: quoted.calculation.effectivePrice,
+              monthlyEquivalent: quoted.calculation.cycleMonths
+                ? Math.round((quoted.calculation.effectivePrice / quoted.calculation.cycleMonths) * 100) / 100
+                : quoted.calculation.effectivePrice,
+              averagePricePerSession: quoted.calculation.averagePricePerSession,
+              weeklyCount: quoted.weeklyCount,
+              billingFrequency: quoted.billingFrequency,
+              cycleMonths: quoted.calculation.cycleMonths,
+              pricingRule: quoted.pricingRule,
+              referenceSessionsCount: quoted.calculation.referenceSessionsCount,
+              creditMode: effCreditMode || 'fixed_credits',
+              creditsPerCycle: effCreditsCap
+            };
+          } else {
+            const calc = calculateStudioRecurringPrice({
+              serviceName: serviceRow.name,
+              sessionPrice: Number(serviceRow.price || 0),
+              weeklySessionsCount: reqWeeklyEntriesCount,
+              billingMode: effBillingFreq as any,
+              pricingRule: serviceRow.pricing_rule || 'four_weeks',
+              frequencyPricing: readFrequencyPricing(serviceRow.frequency_pricing_json),
+              customPrice: Number(serviceRow.periodic_price) > 0 ? Number(serviceRow.periodic_price) : undefined,
+              isPriceCustomized:
+                serviceRow.is_price_customized !== undefined && serviceRow.is_price_customized !== null
+                  ? Boolean(serviceRow.is_price_customized)
+                  : undefined,
+              scheduledSessionsCount: preview.occurrences.length
+            });
+            pricing = {
+              source: 'service_billing',
+              amount: calc.effectivePrice,
+              cycleAmount: calc.effectivePrice,
+              monthlyEquivalent: calc.cycleMonths
+                ? Math.round((calc.effectivePrice / calc.cycleMonths) * 100) / 100
+                : calc.effectivePrice,
+              averagePricePerSession:
+                preview.totalCount > 0 ? Math.round((calc.effectivePrice / preview.totalCount) * 100) / 100 : calc.averagePricePerSession,
+              weeklyCount: calc.weeklySessionsCount,
+              billingFrequency: effBillingFreq,
+              cycleMonths: calc.cycleMonths,
+              pricingRule: calc.pricingRule,
+              referenceSessionsCount: calc.referenceSessionsCount,
+              creditMode: effCreditMode || 'fixed_credits',
+              creditsPerCycle: effCreditsCap
+            };
+          }
+        }
       }
-      res.json({ ...preview, ...(req.body.bookingIntent === 'recurring' ? { pricing } : {}) });
+      res.json({ ...preview, ...(req.body?.bookingIntent === 'recurring' ? { pricing } : {}) });
     } catch (err: any) {
       console.error('[PackageController.previewPublicStudioRecurrence] Erro:', err);
       const safeMessage = sanitizeBookingErrorMessage(

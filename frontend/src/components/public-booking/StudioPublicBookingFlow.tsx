@@ -37,8 +37,12 @@ import { RecurrencePreviewBox, RecurrencePreviewData } from '../common/Recurrenc
 import {
   addonAppliesToBaseOption,
   buildFallbackBaseCommercialOption,
+  calculateCommercialOptionBreakdown,
   calculatePlanWithAddonsBreakdown,
-  normalizeOptionalAddonsConfig
+  normalizeOptionalAddonsConfig,
+  PLAN_CREDIT_MODE_LABELS,
+  PlanCreditMode,
+  resolveServiceCommercialModes
 } from '../../utils/studioAccessAndCommercial';
 import { OptionalAddonsSelector } from '../studio/OptionalAddonsSelector';
 import { PlanWithAddonsBreakdownCard } from '../studio/PlanWithAddonsBreakdownCard';
@@ -79,7 +83,13 @@ interface SelectedPackageSlotItem {
   recurrenceCount: number;
 }
 
-const todayIso = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+const todayIso = (tz = 'America/Sao_Paulo') => {
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date());
+  } catch {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+  }
+};
 
 const addDays = (baseIso: string, days: number) => {
   const [y, m, d] = baseIso.split('-').map(Number);
@@ -103,7 +113,8 @@ const PLAN_DURATION_MONTHS_MAP: Record<string, number> = {
   '2_months': 2,
   '3_months': 3,
   '6_months': 6,
-  '12_months': 12
+  '12_months': 12,
+  '24_months': 24
 };
 
 function resolveMeetingKey(m: any): string {
@@ -179,6 +190,9 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
   packages,
   onSwitchClinical
 }) => {
+  const tenantTimezone = clinic?.timezone || 'America/Sao_Paulo';
+  const currentLocalYmd = todayIso(tenantTimezone);
+
   const domainFiltered = useMemo(
     () =>
       clinic?.establishment_profile === 'mixed' && services.some(s => s.service_domain === 'studio')
@@ -189,23 +203,34 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
 
   const planServices = useMemo(
     () =>
-      domainFiltered.filter(
-        s =>
-          s.studio_service_type === 'facility_access' ||
-          s.studio_service_type === 'non_scheduled' ||
-          Number(s.requires_appointment ?? 1) === 0
-      ),
+      domainFiltered.filter(s => {
+        const modes = resolveServiceCommercialModes(s);
+        if (!modes.allowPublicPlanBooking) return false;
+        const isSched =
+          s.studio_service_type !== 'facility_access' &&
+          s.studio_service_type !== 'non_scheduled' &&
+          Number(s.requires_appointment ?? 1) !== 0;
+        if (isSched && s.service_kind === 'group') {
+          const schedCount = Number(
+            s.active_schedules_count ?? (Array.isArray(s.weekly_schedule_summary) ? s.weekly_schedule_summary.length : 0)
+          );
+          return schedCount > 0 || s.is_publicly_available === true;
+        }
+        return true;
+      }),
     [domainFiltered]
   );
 
   const bookableServices = useMemo(
     () =>
       domainFiltered.filter(s => {
-        const isPlan =
+        const modes = resolveServiceCommercialModes(s);
+        if (!modes.allowPublicSingleBooking) return false;
+        const isPlanOnlyType =
           s.studio_service_type === 'facility_access' ||
           s.studio_service_type === 'non_scheduled' ||
           Number(s.requires_appointment ?? 1) === 0;
-        if (isPlan) return false;
+        if (isPlanOnlyType) return false;
         if (s.service_kind === 'group') {
           const schedCount = Number(
             s.active_schedules_count ?? (Array.isArray(s.weekly_schedule_summary) ? s.weekly_schedule_summary.length : 0)
@@ -239,7 +264,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
   const [bookingModeChoice, setBookingModeChoice] = useState<'single' | 'recurring' | null>(null);
   const [weeklySchedulesFromApi, setWeeklySchedulesFromApi] = useState<any[]>([]);
   const [weeklyMeetingsFromApi, setWeeklyMeetingsFromApi] = useState<any[]>([]);
-  const [planStartDate, setPlanStartDate] = useState<string>(() => todayIso());
+  const [planStartDate, setPlanStartDate] = useState<string>(() => todayIso(clinic?.timezone || 'America/Sao_Paulo'));
   const [selectedPlanWeekdayTab, setSelectedPlanWeekdayTab] = useState<number | 'all'>('all');
   const [frequencyScheduleIds, setFrequencyScheduleIds] = useState<string[]>([]);
   const [useRecurrence, setUseRecurrence] = useState<boolean>(false);
@@ -324,10 +349,24 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
   }, [selectedService, slotRecurrenceMeta]);
 
   const isServiceStudioDomain = !selectedService || clinic?.establishment_profile !== 'mixed' || selectedService.service_domain === 'studio' || selectedService.service_kind === 'group';
+  const selectedServiceModes = useMemo(
+    () => (selectedService ? resolveServiceCommercialModes(selectedService) : null),
+    [selectedService]
+  );
+  const isSelectedServiceNonScheduled = Boolean(
+    selectedService &&
+      (selectedService.studio_service_type === 'facility_access' ||
+        selectedService.studio_service_type === 'non_scheduled' ||
+        Number(selectedService.requires_appointment ?? 1) === 0)
+  );
+  const canUseSingleBooking = Boolean(
+    !isSelectedServiceNonScheduled && (selectedServiceModes ? selectedServiceModes.allowPublicSingleBooking : true)
+  );
   const canUseRecurringPlan = Boolean(
     isServiceStudioDomain &&
-    selectedServiceRecurrence.allowRecurrence &&
-    selectedServiceRecurrence.allowedFrequencies.length > 0
+      selectedServiceRecurrence.allowRecurrence &&
+      selectedServiceRecurrence.allowedFrequencies.length > 0 &&
+      (selectedServiceModes ? selectedServiceModes.allowPublicPlanBooking : true)
   );
   const supportsWeeklyMultiSelect = useMemo(
     () => selectedServiceRecurrence.allowedFrequencies.some(f => f === 'weekly' || f === 'custom_weekdays'),
@@ -335,8 +374,28 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
   );
 
   const frequencyConfig = readFrequencyPricing(selectedService?.frequency_pricing);
-  const isWeeklySchedulePlan = Boolean(objective === 'service' && useRecurrence && supportsWeeklyMultiSelect);
+  const isWeeklySchedulePlan = Boolean(
+    (objective === 'service' || (objective === 'plan' && !isSelectedServiceNonScheduled)) &&
+      useRecurrence &&
+      supportsWeeklyMultiSelect
+  );
   const frequencyPlanActive = Boolean(isWeeklySchedulePlan && frequencyConfig?.enabled && supportsFrequencyPricing(selectedService?.billing_mode));
+
+  const activeCommercialOptions = useMemo(
+    () =>
+      Array.isArray(selectedService?.commercial_price_options)
+        ? selectedService.commercial_price_options.filter((o: any) => o.active !== false)
+        : [],
+    [selectedService]
+  );
+
+  const selectedCommercialOption = useMemo(
+    () =>
+      activeCommercialOptions.find((o: any) => o.id === selectedCommercialOptionId) ||
+      activeCommercialOptions[0] ||
+      null,
+    [activeCommercialOptions, selectedCommercialOptionId]
+  );
 
   const planMeetings = useMemo(() => {
     if (!selectedService) return [] as Array<any>;
@@ -377,16 +436,25 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
     [planMeetings, frequencyScheduleIds]
   );
 
+  const expectedWeeklyPlanCount = useMemo(() => {
+    if (selectedCommercialOption?.frequencyType === 'weekly' && Number(selectedCommercialOption?.frequencyCount) > 0) {
+      return Number(selectedCommercialOption.frequencyCount);
+    }
+    return null;
+  }, [selectedCommercialOption]);
+
   const togglePlanMeetingSelection = (meeting: any) => {
     const key = resolveMeetingKey(meeting);
     const isGroup = selectedService?.service_kind === 'group';
     const individualCommercialCap =
-      !isGroup &&
-      !frequencyPlanActive &&
-      Boolean(selectedService?.is_price_customized) &&
-      Number(selectedService?.weekly_sessions_count) > 0
-        ? Math.max(1, Number(selectedService.weekly_sessions_count))
-        : null;
+      expectedWeeklyPlanCount
+        ? expectedWeeklyPlanCount
+        : (!isGroup &&
+            !frequencyPlanActive &&
+            Boolean(selectedService?.is_price_customized) &&
+            Number(selectedService?.weekly_sessions_count) > 0
+              ? Math.max(1, Number(selectedService.weekly_sessions_count))
+              : null);
     setFrequencyScheduleIds(prev => {
       if (prev.includes(key)) {
         return prev.filter(id => id !== key);
@@ -402,7 +470,9 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
         }
         return [...withoutSameWeekday, key];
       }
-      const maxGroupWeekly = Math.min(7, planMeetings.length);
+      const maxGroupWeekly = expectedWeeklyPlanCount
+        ? Math.min(7, expectedWeeklyPlanCount, planMeetings.length)
+        : Math.min(7, planMeetings.length);
       if (prev.length >= maxGroupWeekly) {
         return prev;
       }
@@ -419,8 +489,8 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
   const effectiveRecurrenceAnchorSlot = useMemo(() => {
     if (!isWeeklySchedulePlan) return selectedSlot;
     if (selectedPlanMeetings.length === 0) return null;
-    const baseStart = planStartDate && /^\d{4}-\d{2}-\d{2}$/.test(planStartDate) ? planStartDate : todayIso();
-    const minBase = baseStart < todayIso() ? todayIso() : baseStart;
+    const baseStart = planStartDate && /^\d{4}-\d{2}-\d{2}$/.test(planStartDate) ? planStartDate : currentLocalYmd;
+    const minBase = baseStart < currentLocalYmd ? currentLocalYmd : baseStart;
     // Prioriza primeira ocorrência real já validada nos próximos horários quando existir
     const matchedUpcoming = (upcomingSlots || []).find((u: any) => {
       if (u.isFull) return false;
@@ -451,7 +521,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
       }
     }
     return null;
-  }, [isWeeklySchedulePlan, selectedSlot, selectedPlanMeetings, planStartDate, upcomingSlots]);
+  }, [isWeeklySchedulePlan, selectedSlot, selectedPlanMeetings, planStartDate, upcomingSlots, currentLocalYmd]);
 
   const frequencyEntries = useMemo(
     () =>
@@ -472,7 +542,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
   const frequencyQuote = useMemo(() => {
     if (!useRecurrence || !selectedService || !supportsFrequencyPricing(selectedService.billing_mode)) return null;
     if (isWeeklySchedulePlan && selectedPlanMeetings.length === 0) return null;
-    const anchorStart = effectiveRecurrenceAnchorSlot?.startTime?.slice(0, 10) || planStartDate || todayIso();
+    const anchorStart = effectiveRecurrenceAnchorSlot?.startTime?.slice(0, 10) || planStartDate || currentLocalYmd;
     const cycleMonths = getCycleMonthsForBillingMode(selectedService.billing_mode) || 1;
     const cycleEnd = computeBillingCycleEndDate(anchorStart, cycleMonths)!;
     const planEnd =
@@ -486,6 +556,10 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
     const scheduledCnt = isWeeklySchedulePlan
       ? countMeetingOccurrences(selectedPlanMeetings, anchorStart, end)
       : undefined;
+    const explicitCustomized =
+      selectedService.is_price_customized !== undefined && selectedService.is_price_customized !== null
+        ? Boolean(selectedService.is_price_customized)
+        : undefined;
     return calculateStudioRecurringPrice({
       serviceName: selectedService.name,
       sessionPrice: Number(selectedService.price),
@@ -494,7 +568,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
       pricingRule: selectedService.pricing_rule,
       frequencyPricing: frequencyConfig,
       customPrice: selectedService.periodic_price ?? undefined,
-      isPriceCustomized: Boolean(selectedService.is_price_customized),
+      isPriceCustomized: explicitCustomized,
       scheduledSessionsCount: scheduledCnt
     });
   }, [
@@ -504,6 +578,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
     selectedPlanMeetings,
     effectiveRecurrenceAnchorSlot,
     planStartDate,
+    currentLocalYmd,
     recurrenceDurationCode,
     recurrenceEndDate,
     recurrencePreview,
@@ -516,20 +591,73 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
   const resolvedPlanFinancials = useMemo(() => {
     if (!selectedService || !useRecurrence) return null;
     const previewPricing = recurrencePreview?.pricing;
+    const weeklyCount =
+      previewPricing?.weeklyCount ??
+      (isWeeklySchedulePlan && selectedPlanMeetings.length > 0
+        ? selectedPlanMeetings.length
+        : (selectedCommercialOption?.frequencyCount ? Number(selectedCommercialOption.frequencyCount) : 1));
+    const effectiveDurCode = selectedCommercialOption?.contractDurationCode || recurrenceDurationCode;
+    const durationMonths = PLAN_DURATION_MONTHS_MAP[effectiveDurCode] || null;
+
+    if (previewPricing && Number.isFinite(Number(previewPricing.amount))) {
+      const pSource = previewPricing.source;
+      const pAmount = Number(previewPricing.amount || 0);
+      const pTotal = previewPricing.contractTotal !== undefined && previewPricing.contractTotal !== null
+        ? Number(previewPricing.contractTotal)
+        : pAmount;
+      const pCycleMonths = Number(previewPricing.cycleMonths || 1);
+      const pCycles = Number(previewPricing.cycleCount || (durationMonths && pCycleMonths ? Math.max(1, Math.round(durationMonths / pCycleMonths)) : 1));
+      return {
+        isPeriodic: pSource !== 'per_session',
+        source: pSource,
+        weeklyCount,
+        periodAmount: pAmount,
+        monthlyEquivalent: Number(previewPricing.monthlyEquivalent || (pCycleMonths > 1 ? pAmount / pCycleMonths : pAmount)),
+        averagePerSession: Number(previewPricing.averagePricePerSession || 0),
+        cycleMonths: pCycleMonths,
+        cycleCount: pCycles,
+        contractTotal: pTotal,
+        billingPeriodLabel:
+          PERIODICITY_LABELS[previewPricing.paymentPeriodicity || ''] ||
+          billingModeOption?.label ||
+          'Mensal',
+        billingShortPeriod: billingModeOption?.shortPeriod || '/mês'
+      };
+    }
+
+    if (selectedCommercialOption) {
+      const bd = calculateCommercialOptionBreakdown(selectedCommercialOption, {
+        servicePlanCreditMode: (selectedServiceModes?.planCreditMode || 'fixed_credits') as PlanCreditMode,
+        servicePlanCreditsPerCycle: selectedServiceModes?.planCreditsPerCycle ?? null
+      });
+      const cycleReais = bd.cycleAmountCents / 100;
+      const monthlyEq = bd.monthlyEquivalentCents / 100;
+      const contractTot = bd.totalContractAmountCents / 100;
+      return {
+        isPeriodic: true,
+        source: 'commercial_option',
+        weeklyCount,
+        periodAmount: cycleReais,
+        monthlyEquivalent: monthlyEq,
+        averagePerSession: 0,
+        cycleMonths: bd.paymentCycleMonths,
+        cycleCount: bd.billingCyclesCount,
+        contractTotal: contractTot,
+        billingPeriodLabel: PERIODICITY_LABELS[bd.paymentPeriodicity] || 'Mensal',
+        billingShortPeriod: bd.paymentPeriodicity === 'monthly' ? '/mês' : ''
+      };
+    }
+
     const isPeriodic = supportsFrequencyPricing(selectedService.billing_mode);
-    const weeklyCount = previewPricing?.weeklyCount ?? (isWeeklySchedulePlan ? Math.max(1, selectedPlanMeetings.length) : 1);
-    const durationMonths = PLAN_DURATION_MONTHS_MAP[recurrenceDurationCode] || null;
     if (isPeriodic) {
-      const periodAmount = Number(previewPricing?.amount ?? frequencyQuote?.effectivePrice ?? 0);
-      const averagePerSession = Number(
-        previewPricing?.averagePricePerSession ?? frequencyQuote?.averagePricePerSession ?? selectedService.price ?? 0
-      );
-      const cycleMonths = Number(previewPricing?.cycleMonths ?? getCycleMonthsForBillingMode(selectedService.billing_mode) ?? 1);
+      const periodAmount = Number(frequencyQuote?.effectivePrice ?? selectedService.periodic_price ?? 0);
+      const averagePerSession = Number(frequencyQuote?.averagePricePerSession ?? 0);
+      const cycleMonths = Number(getCycleMonthsForBillingMode(selectedService.billing_mode) ?? 1);
       const cycleCount =
         durationMonths && cycleMonths && durationMonths >= cycleMonths && durationMonths % cycleMonths === 0
           ? durationMonths / cycleMonths
           : null;
-      const pricingRuleUsed = previewPricing?.pricingRule || selectedService.pricing_rule || 'four_weeks';
+      const pricingRuleUsed = selectedService.pricing_rule || 'four_weeks';
       const fixedPerCycleAmount = pricingRuleUsed !== 'scheduled_sessions' || (frequencyConfig?.enabled && frequencyConfig.unit === 'per_period');
       const contractTotal =
         cycleCount && periodAmount > 0 && (cycleCount === 1 || fixedPerCycleAmount)
@@ -537,8 +665,10 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
           : null;
       return {
         isPeriodic: true,
+        source: 'service_billing',
         weeklyCount,
         periodAmount,
+        monthlyEquivalent: cycleMonths > 1 ? periodAmount / cycleMonths : periodAmount,
         averagePerSession,
         cycleMonths,
         cycleCount,
@@ -547,20 +677,23 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
         billingShortPeriod: billingModeOption?.shortPeriod || '/mês'
       };
     }
-    const perSessionPrice = Number(selectedService.price || 0);
+
+    const perSessionPrice = selectedServiceModes?.allowSingleBooking !== false ? Number(selectedService.price || 0) : 0;
     const totalCount = recurrencePreview?.availableCount || recurrencePreview?.totalCount || null;
     return {
       isPeriodic: false,
+      source: 'per_session',
       weeklyCount,
       periodAmount: perSessionPrice,
+      monthlyEquivalent: perSessionPrice,
       averagePerSession: perSessionPrice,
       cycleMonths: null,
       cycleCount: totalCount,
-      contractTotal: totalCount ? Math.round(perSessionPrice * totalCount * 100) / 100 : null,
+      contractTotal: totalCount && perSessionPrice > 0 ? Math.round(perSessionPrice * totalCount * 100) / 100 : null,
       billingPeriodLabel: 'Por aula',
       billingShortPeriod: '/aula'
     };
-  }, [selectedService, useRecurrence, recurrencePreview, frequencyQuote, isWeeklySchedulePlan, selectedPlanMeetings.length, recurrenceDurationCode, frequencyConfig, billingModeOption]);
+  }, [selectedService, selectedServiceModes, useRecurrence, recurrencePreview, frequencyQuote, isWeeklySchedulePlan, selectedPlanMeetings.length, selectedCommercialOption, recurrenceDurationCode, frequencyConfig, billingModeOption]);
 
   useEffect(() => {
     if (!selectedServiceRecurrence.allowRecurrence || selectedServiceRecurrence.allowedFrequencies.length === 0) {
@@ -590,10 +723,11 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
 
   useEffect(() => {
     if (
-      objective !== 'service' ||
+      (objective !== 'service' && !(objective === 'plan' && !isSelectedServiceNonScheduled)) ||
       step !== 3 ||
       !useRecurrence ||
       !selectedServiceId ||
+      isSelectedServiceNonScheduled ||
       !selectedServiceRecurrence.allowRecurrence
     ) {
       setRecurrencePreview(null);
@@ -623,13 +757,14 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
     }
 
     const startDateIso = String(effectiveRecurrenceAnchorSlot.startTime).slice(0, 10);
-    const effectiveEndMode: 'count' | 'date' = recurrenceDurationCode === 'count' ? 'count' : 'date';
+    const effectiveDurCode = selectedCommercialOption?.contractDurationCode || recurrenceDurationCode;
+    const effectiveEndMode: 'count' | 'date' = effectiveDurCode === 'count' ? 'count' : 'date';
     const computedPlanEnd =
-      recurrenceDurationCode !== 'count' && recurrenceDurationCode !== 'custom_date'
-        ? resolvePlanDurationEndDate(startDateIso, recurrenceDurationCode)
+      effectiveDurCode !== 'count' && effectiveDurCode !== 'custom_date'
+        ? resolvePlanDurationEndDate(startDateIso, effectiveDurCode as any)
         : null;
     const effectiveEndDateStr =
-      recurrenceDurationCode === 'custom_date' ? recurrenceEndDate : (computedPlanEnd || '');
+      effectiveDurCode === 'custom_date' ? recurrenceEndDate : (computedPlanEnd || '');
 
     if (effectiveEndMode === 'date') {
       if (!effectiveEndDateStr || effectiveEndDateStr < startDateIso) {
@@ -653,6 +788,8 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
         bookingSequence,
         bookingIntent: 'recurring',
         serviceId: selectedServiceId,
+        commercialOptionId: selectedCommercialOption?.id || undefined,
+        autoAdvanceFromLeadTime: true,
         professionalId:
           selectedProfFilter === 'any'
             ? effectiveRecurrenceAnchorSlot?.professionalId || 'any'
@@ -665,7 +802,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
         endTime: effectiveRecurrenceAnchorSlot.endTime,
         recurrence: {
           frequency: activeFrequency,
-          durationCode: recurrenceDurationCode,
+          durationCode: effectiveDurCode,
           seriesMode: isWeeklySchedulePlan ? 'schedule_plan' : 'cadence_duration',
           ...(isWeeklySchedulePlan
             ? {
@@ -705,9 +842,12 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
     };
   }, [
     objective,
+    isSelectedServiceNonScheduled,
     step,
     useRecurrence,
     selectedServiceId,
+    selectedCommercialOption?.id,
+    selectedCommercialOption?.contractDurationCode,
     effectiveRecurrenceAnchorSlot,
     selectedProfFilter,
     selectedModality,
@@ -749,22 +889,6 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
     }
     setPkgSelectedItems([]);
   }, [selectedPackageId, selectedPackage]);
-
-  const activeCommercialOptions = useMemo(
-    () =>
-      Array.isArray(selectedService?.commercial_price_options)
-        ? selectedService.commercial_price_options.filter((o: any) => o.active !== false)
-        : [],
-    [selectedService]
-  );
-
-  const selectedCommercialOption = useMemo(
-    () =>
-      activeCommercialOptions.find((o: any) => o.id === selectedCommercialOptionId) ||
-      activeCommercialOptions[0] ||
-      null,
-    [activeCommercialOptions, selectedCommercialOptionId]
-  );
 
   const optionalAddonsConfig = useMemo(
     () => normalizeOptionalAddonsConfig(selectedService?.optional_addons),
@@ -832,16 +956,20 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
   }, [selectedService, selectedCommercialOption, selectedAddonOptions]);
 
   const isSelectedServiceAccessPlan = Boolean(
-    selectedService &&
-    (objective === 'plan' ||
-      selectedService.studio_service_type === 'facility_access' ||
-      selectedService.studio_service_type === 'non_scheduled' ||
-      Number(selectedService.requires_appointment ?? 1) === 0)
+    selectedService && isSelectedServiceNonScheduled
   );
 
-  // Busca horários e grade semanal para Serviço avulso / Turma
+  // Busca horários e grade semanal para Serviço / Plano agendável
   useEffect(() => {
-    if (objective !== 'service' || step < 3 || step > 4 || !selectedServiceId || isSelectedServiceAccessPlan) return;
+    if (
+      (objective !== 'service' && objective !== 'plan') ||
+      step < 3 ||
+      step > 4 ||
+      !selectedServiceId ||
+      isSelectedServiceAccessPlan
+    ) {
+      return;
+    }
     let cancelled = false;
     setLoadingSlots(true);
     setEmptyReason('');
@@ -967,9 +1095,8 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
   }, [objective, step, activePkgServiceId, pkgDate, pkgProfFilter, tenantSlug, clinic?.slug, bookingSequence]);
 
   const upcomingDatePills = useMemo(() => {
-    const start = todayIso();
-    return Array.from({ length: 7 }, (_, i) => addDays(start, i));
-  }, []);
+    return Array.from({ length: 7 }, (_, i) => addDays(currentLocalYmd, i));
+  }, [currentLocalYmd]);
 
   const addPackageSlotChoice = (slotObj: any) => {
     if (slotObj?.isFull) {
@@ -1130,7 +1257,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                 notes: studentForm.notes.trim() || null
               }
             }
-          : objective === 'plan' || isSelectedServiceAccessPlan
+          : isSelectedServiceAccessPlan
           ? (() => {
               const optSummary = selectedCommercialOption ? formatCommercialOptionSummary(selectedCommercialOption) : null;
               const resolvedAmount = planWithAddonsBreakdown
@@ -1168,7 +1295,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                 commercialOptionId: selectedCommercialOption?.id || undefined,
                 ...(selectedAddonOptionIds.length > 0 ? { selectedAddonOptionIds } : {}),
                 ...(selectedAddonSchedulesList.length > 0 ? { addonSchedules: selectedAddonSchedulesList } : {}),
-                startDate: planStartDate || todayIso(),
+                startDate: planStartDate || currentLocalYmd,
                 contractDurationCode: selectedCommercialOption?.contractDurationCode || recurrenceDurationCode || '1_month',
                 paymentPeriodicity: selectedCommercialOption?.paymentPeriodicity || 'monthly',
                 accessMode:
@@ -1235,17 +1362,19 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                         ? recurrenceFrequency
                         : selectedServiceRecurrence.defaultFrequency || selectedServiceRecurrence.allowedFrequencies[0];
                       const startDateIso = String(targetSlot?.startTime || '').slice(0, 10);
-                      const effectiveEndMode: 'count' | 'date' = recurrenceDurationCode === 'count' ? 'count' : 'date';
+                      const effectiveDurCode = selectedCommercialOption?.contractDurationCode || recurrenceDurationCode;
+                      const effectiveEndMode: 'count' | 'date' = effectiveDurCode === 'count' ? 'count' : 'date';
                       const computedPlanEnd =
-                        recurrenceDurationCode !== 'count' && recurrenceDurationCode !== 'custom_date'
-                          ? resolvePlanDurationEndDate(startDateIso, recurrenceDurationCode)
+                        effectiveDurCode !== 'count' && effectiveDurCode !== 'custom_date'
+                          ? resolvePlanDurationEndDate(startDateIso, effectiveDurCode as any)
                           : null;
                       const effectiveEndDateStr =
-                        recurrenceDurationCode === 'custom_date' ? recurrenceEndDate : (computedPlanEnd || '');
+                        effectiveDurCode === 'custom_date' ? recurrenceEndDate : (computedPlanEnd || '');
                       return {
+                        autoAdvanceFromLeadTime: true,
                         recurrence: {
                           frequency: effectiveFreq,
-                          durationCode: recurrenceDurationCode,
+                          durationCode: effectiveDurCode,
                           seriesMode: isWeeklySchedulePlan ? 'schedule_plan' : 'cadence_duration',
                           ...(isWeeklySchedulePlan
                             ? {
@@ -1471,7 +1600,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                 </div>
                 <div className="font-bold text-base text-slate-900">Contratar um plano</div>
                 <p className="text-xs text-slate-500">
-                  Musculação, acesso livre, planos mensais, trimestrais, semestrais, anuais e opções sem hora marcada ({planServices.length} {planServices.length === 1 ? 'opção' : 'opções'}).
+                  Planos mensais, trimestrais, semestrais ou anuais de musculação, turmas coletivas e atendimentos individuais ({planServices.length} {planServices.length === 1 ? 'opção' : 'opções'}).
                 </p>
                 <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 pt-1">
                   Ver planos <ArrowRight className="w-3.5 h-3.5" />
@@ -1564,8 +1693,14 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                       ? lowestOptPrice
                       : (Number(s.periodic_price) > 0 ? Number(s.periodic_price) : Number(s.price || 0));
                   const isDeliverable = s.studio_service_type === 'non_scheduled';
+                  const isNonSched =
+                    s.studio_service_type === 'facility_access' ||
+                    s.studio_service_type === 'non_scheduled' ||
+                    Number(s.requires_appointment ?? 1) === 0;
                   const acc = s.access_config;
-                  const freqText = isDeliverable
+                  const freqText = !isNonSched
+                    ? (s.service_kind === 'group' ? 'Turma com reserva de horário' : 'Atendimento com horário marcado')
+                    : isDeliverable
                     ? 'Serviço sem hora marcada'
                     : acc?.accessMode === 'limited'
                     ? (acc?.maxEntriesPerWeek
@@ -1585,10 +1720,19 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                         setRecurrenceDurationCode(
                           (firstOpt?.contractDurationCode || s.default_plan_duration || '1_month') as any
                         );
-                        setPlanStartDate(todayIso());
+                        setPlanStartDate(currentLocalYmd);
                         setSelectedSlot(null);
-                        setBookingModeChoice(null);
-                        setUseRecurrence(false);
+                        setFrequencyScheduleIds([]);
+                        setSelectedPlanWeekdayTab('all');
+                        setSelectedDate('');
+                        setSelectedProfFilter('any');
+                        if (isNonSched) {
+                          setBookingModeChoice(null);
+                          setUseRecurrence(false);
+                        } else {
+                          setBookingModeChoice('recurring');
+                          setUseRecurrence(true);
+                        }
                         setError('');
                         setStep(3);
                       }}
@@ -1612,11 +1756,11 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                           {freqText}
                         </span>
                         <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-800 border border-indigo-200 font-semibold">
-                          Sem agendamento obrigatório
+                          {isNonSched ? 'Sem agendamento obrigatório' : 'Escolha dias e horários'}
                         </span>
                         {activeOpts.length > 0 && (
                           <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 font-semibold">
-                            {activeOpts.length} {activeOpts.length === 1 ? 'opção de duração' : 'opções de duração'}
+                            {activeOpts.length} {activeOpts.length === 1 ? 'opção de plano' : 'opções de plano'}
                           </span>
                         )}
                       </div>
@@ -1634,6 +1778,10 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
               ) : (
                 bookableServices.map(s => {
                   const chosen = selectedServiceId === s.id;
+                  const sModes = resolveServiceCommercialModes(s);
+                  const activeOpts = Array.isArray(s.commercial_price_options)
+                    ? s.commercial_price_options.filter((o: any) => o.active !== false)
+                    : [];
                   const unavailableBadge =
                     s.all_upcoming_full || s.is_publicly_available === false
                       ? s.public_booking_unavailable_reason || 'Sem vagas disponíveis nos próximos dias'
@@ -1644,12 +1792,18 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                       type="button"
                       onClick={() => {
                         setSelectedServiceId(s.id);
+                        const firstOpt = activeOpts[0] || null;
+                        setSelectedCommercialOptionId(firstOpt?.id || '');
+                        if (firstOpt?.contractDurationCode) {
+                          setRecurrenceDurationCode(firstOpt.contractDurationCode as any);
+                        }
                         setSelectedSlot(null);
-                        setBookingModeChoice(null);
+                        const canPlanSrv = sModes.allowPublicPlanBooking && Boolean(s.allow_recurrence);
+                        setBookingModeChoice(canPlanSrv ? null : 'single');
                         setUseRecurrence(false);
                         setFrequencyScheduleIds([]);
                         setSelectedPlanWeekdayTab('all');
-                        setPlanStartDate(todayIso());
+                        setPlanStartDate(currentLocalYmd);
                         setSelectedDate('');
                         setSelectedProfFilter('any');
                         setError('');
@@ -1684,9 +1838,9 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                         <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-semibold">
                           {s.modality === 'both' ? 'Presencial ou Online' : modalityLabel(s.modality)}
                         </span>
-                        {Boolean(s.allow_recurrence) && (
+                        {sModes.allowPublicPlanBooking && Boolean(s.allow_recurrence) && (
                           <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-semibold">
-                            Permite plano semanal
+                            Permite contratação de plano
                           </span>
                         )}
                       </div>
@@ -1785,7 +1939,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
       )}
 
       {/* ETAPA 3 (MODO PLANO SEM AGENDAMENTO): BENEFÍCIOS, DURAÇÃO, FREQUÊNCIA E CONDIÇÕES */}
-      {step === 3 && (objective === 'plan' || (objective === 'service' && isSelectedServiceAccessPlan)) && selectedService && (() => {
+      {step === 3 && (objective === 'plan' || objective === 'service') && isSelectedServiceAccessPlan && selectedService && (() => {
         const isDeliverable = selectedService.studio_service_type === 'non_scheduled';
         const optSummary = selectedCommercialOption ? formatCommercialOptionSummary(selectedCommercialOption) : null;
         const durationCode = selectedCommercialOption?.contractDurationCode || recurrenceDurationCode || '1_month';
@@ -1864,9 +2018,9 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                 <label className="block font-bold text-slate-700 mb-1">Data de início desejada *</label>
                 <input
                   type="date"
-                  min={todayIso()}
+                  min={currentLocalYmd}
                   value={planStartDate}
-                  onChange={e => setPlanStartDate(e.target.value || todayIso())}
+                  onChange={e => setPlanStartDate(e.target.value || currentLocalYmd)}
                   className={bookingInput}
                 />
               </div>
@@ -1932,8 +2086,8 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
         );
       })()}
 
-      {/* ETAPA 3: DIAS, HORÁRIOS, VAGAS & INSTRUTOR */}
-      {step === 3 && objective === 'service' && selectedService && !isSelectedServiceAccessPlan && (
+      {/* ETAPA 3 (SERVIÇO OU PLANO AGENDÁVEL): DIAS, HORÁRIOS, OPÇÃO DE PLANO, VAGAS & INSTRUTOR */}
+      {step === 3 && (objective === 'service' || objective === 'plan') && selectedService && !isSelectedServiceAccessPlan && (
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-2">
             <BookingBackButton onClick={() => setStep(2)} />
@@ -1961,7 +2115,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
             </div>
           )}
 
-          {canUseRecurringPlan && (
+          {objective === 'service' && canUseSingleBooking && canUseRecurringPlan && (
             <div className="space-y-2">
               <div className="text-xs font-bold text-slate-800">Como deseja agendar esta aula?</div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -2020,9 +2174,60 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                     )}
                   </div>
                   <p className="text-xs text-slate-600">
-                    Escolha quantas vezes por semana deseja participar, seus horários e a duração do plano.
+                    Escolha o plano, a frequência semanal, seus horários e a duração do contrato.
                   </p>
                 </button>
+              </div>
+            </div>
+          )}
+
+          {bookingModeChoice === 'recurring' && activeCommercialOptions.length > 0 && (
+            <div className="p-4 rounded-2xl border border-emerald-200 bg-emerald-50/40 space-y-2.5 text-xs">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <label className="block font-bold text-slate-900">Escolha o plano comercial *</label>
+                {selectedServiceModes && (
+                  <span className="px-2 py-0.5 rounded-full bg-white border border-emerald-200 text-emerald-800 text-[11px] font-semibold">
+                    {PLAN_CREDIT_MODE_LABELS[((selectedCommercialOption?.creditMode || selectedServiceModes.planCreditMode) as PlanCreditMode)]}
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {activeCommercialOptions.map((opt: any) => {
+                  const summary = formatCommercialOptionSummary(opt);
+                  const isActive = (selectedCommercialOption?.id || '') === opt.id;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedCommercialOptionId(opt.id);
+                        if (opt.contractDurationCode) {
+                          setRecurrenceDurationCode(opt.contractDurationCode);
+                        }
+                        if (opt.frequencyType === 'weekly' && Number(opt.frequencyCount) > 0) {
+                          const maxWeekly = Number(opt.frequencyCount);
+                          setFrequencyScheduleIds(prev => (prev.length > maxWeekly ? prev.slice(0, maxWeekly) : prev));
+                        }
+                      }}
+                      className={`p-3.5 rounded-xl border text-left space-y-1 transition-all cursor-pointer ${
+                        isActive
+                          ? 'border-emerald-600 bg-white ring-2 ring-emerald-500/20'
+                          : 'border-slate-200 bg-white/80 hover:border-emerald-400'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2 font-bold text-slate-900">
+                        <span>{opt.label || `${summary.durationLabel} • ${summary.frequencyLabel}`}</span>
+                        <span className="text-emerald-700 whitespace-nowrap">
+                          {formatMoney(summary.cycleAmount)}{summary.unitSuffix}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-slate-600">
+                        {summary.durationLabel} • {summary.frequencyLabel} • {summary.paymentLabel}
+                        {summary.secondaryDetail ? ` • ${summary.secondaryDetail}` : ''}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -2066,7 +2271,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                   </div>
                   <input
                     type="date"
-                    min={todayIso()}
+                    min={currentLocalYmd}
                     value={selectedDate}
                     onChange={e => {
                       setSelectedDate(e.target.value);
@@ -2268,9 +2473,9 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                     <label className="block font-bold text-slate-700 mb-1">Início do plano</label>
                     <input
                       type="date"
-                      min={todayIso()}
+                      min={currentLocalYmd}
                       value={planStartDate}
-                      onChange={e => setPlanStartDate(e.target.value || todayIso())}
+                      onChange={e => setPlanStartDate(e.target.value || currentLocalYmd)}
                       className={bookingInput}
                     />
                   </div>
@@ -2497,34 +2702,51 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                 </div>
               )}
 
-              {/* 2. Duração do plano (somente durações permitidas pelo serviço, separada da periodicidade financeira) */}
+              {/* 2. Duração do plano (somente durações permitidas pelo serviço ou do plano comercial escolhido) */}
               <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-3.5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-bold text-slate-900">2. Duração do plano</span>
+                  <span className="font-bold text-slate-900">2. Duração e regra do plano</span>
                   <span className="text-[11px] font-semibold text-slate-600">
-                    Periodicidade de cobrança: <strong>{billingModeOption?.label || 'Por aula'}</strong>
+                    Cobrança:{' '}
+                    <strong>
+                      {selectedCommercialOption
+                        ? PERIODICITY_LABELS[selectedCommercialOption.paymentPeriodicity || 'monthly'] || 'Mensal'
+                        : billingModeOption?.label || 'Por aula'}
+                    </strong>
                   </span>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {(selectedServiceRecurrence.allowedPlanDurations || ALL_PLAN_DURATIONS).map(dur => {
-                    const activeDur = recurrenceDurationCode === dur;
-                    return (
-                      <button
-                        key={dur}
-                        type="button"
-                        onClick={() => setRecurrenceDurationCode(dur)}
-                        className={`px-3 py-1.5 rounded-xl border text-xs font-bold cursor-pointer transition-all ${
-                          activeDur
-                            ? 'bg-teal-700 text-white border-teal-700'
-                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-teal-400'
-                        }`}
-                      >
-                        {PLAN_DURATION_LABELS[dur]}
-                      </button>
-                    );
-                  })}
-                </div>
-                {recurrenceDurationCode === 'count' && (
+                {activeCommercialOptions.length > 0 && selectedCommercialOption ? (
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className="px-3 py-1.5 rounded-xl bg-teal-700 text-white font-bold">
+                      {PLAN_DURATION_LABELS[(selectedCommercialOption.contractDurationCode || recurrenceDurationCode) as PlanDurationCode] ||
+                        selectedCommercialOption.contractDurationCode}
+                    </span>
+                    <span className="px-2.5 py-1 rounded-xl bg-slate-100 text-slate-700 font-semibold text-[11px]">
+                      {PLAN_CREDIT_MODE_LABELS[((selectedCommercialOption.creditMode || selectedServiceModes?.planCreditMode || 'fixed_credits') as PlanCreditMode)]}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {(selectedServiceRecurrence.allowedPlanDurations || ALL_PLAN_DURATIONS).map(dur => {
+                      const activeDur = recurrenceDurationCode === dur;
+                      return (
+                        <button
+                          key={dur}
+                          type="button"
+                          onClick={() => setRecurrenceDurationCode(dur)}
+                          className={`px-3 py-1.5 rounded-xl border text-xs font-bold cursor-pointer transition-all ${
+                            activeDur
+                              ? 'bg-teal-700 text-white border-teal-700'
+                              : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-teal-400'
+                          }`}
+                        >
+                          {PLAN_DURATION_LABELS[dur]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                {!selectedCommercialOption && recurrenceDurationCode === 'count' && (
                   <div className="inline-flex items-center gap-1.5 pt-1">
                     <input
                       type="number"
@@ -2542,11 +2764,11 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                     <span className="text-slate-600 font-semibold">aulas</span>
                   </div>
                 )}
-                {recurrenceDurationCode === 'custom_date' && (
+                {!selectedCommercialOption && recurrenceDurationCode === 'custom_date' && (
                   <div className="pt-1">
                     <input
                       type="date"
-                      min={effectiveRecurrenceAnchorSlot?.startTime ? String(effectiveRecurrenceAnchorSlot.startTime).slice(0, 10) : todayIso()}
+                      min={effectiveRecurrenceAnchorSlot?.startTime ? String(effectiveRecurrenceAnchorSlot.startTime).slice(0, 10) : currentLocalYmd}
                       value={recurrenceEndDate}
                       onChange={e => setRecurrenceEndDate(e.target.value)}
                       className="border border-slate-200 rounded-lg px-2 py-1 bg-white font-semibold"
@@ -2556,31 +2778,59 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                 )}
               </div>
 
+              {expectedWeeklyPlanCount && planMeetings.length >= expectedWeeklyPlanCount && selectedPlanMeetings.length !== expectedWeeklyPlanCount && (
+                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 font-semibold">
+                  Este plano contempla <strong>{expectedWeeklyPlanCount}x por semana</strong>. Selecione {expectedWeeklyPlanCount}{' '}
+                  {expectedWeeklyPlanCount === 1 ? 'horário semanal' : 'horários semanais'} acima ({selectedPlanMeetings.length}/{expectedWeeklyPlanCount} selecionado{selectedPlanMeetings.length === 1 ? '' : 's'}).
+                </div>
+              )}
+
               {resolvedPlanFinancials && (!isWeeklySchedulePlan || selectedPlanMeetings.length > 0) && (
                 <div className="p-3.5 rounded-xl border border-emerald-200 bg-emerald-50/50 space-y-1">
                   <div className="flex flex-wrap items-center justify-between gap-2 font-bold text-slate-900">
                     <span>
-                      {resolvedPlanFinancials.weeklyCount}x por semana · {formatMoney(resolvedPlanFinancials.periodAmount)}{' '}
-                      {resolvedPlanFinancials.isPeriodic ? `por período ${frequencyPeriodLabel}` : '/ aula'}
+                      {selectedCommercialOption?.label ? `${selectedCommercialOption.label} · ` : `${resolvedPlanFinancials.weeklyCount}x por semana · `}
+                      {formatMoney(resolvedPlanFinancials.periodAmount)}{' '}
+                      {resolvedPlanFinancials.isPeriodic
+                        ? `/ ${resolvedPlanFinancials.billingPeriodLabel.toLowerCase()}`
+                        : '/ aula'}
                     </span>
-                    {resolvedPlanFinancials.averagePerSession > 0 && resolvedPlanFinancials.isPeriodic && (
+                    {resolvedPlanFinancials.cycleMonths && resolvedPlanFinancials.cycleMonths > 1 && resolvedPlanFinancials.monthlyEquivalent > 0 ? (
                       <span className="text-[11px] font-semibold text-emerald-800">
-                        ({formatMoney(resolvedPlanFinancials.averagePerSession)} / aula)
+                        (equiv. {formatMoney(resolvedPlanFinancials.monthlyEquivalent)}/mês)
                       </span>
-                    )}
+                    ) : resolvedPlanFinancials.averagePerSession > 0 && resolvedPlanFinancials.isPeriodic ? (
+                      <span className="text-[11px] font-semibold text-emerald-800">
+                        (equiv. {formatMoney(resolvedPlanFinancials.averagePerSession)} / encontro)
+                      </span>
+                    ) : null}
                   </div>
-                  {resolvedPlanFinancials.contractTotal !== null &&
-                    resolvedPlanFinancials.cycleCount &&
-                    resolvedPlanFinancials.cycleCount > 1 && (
-                      <p className="text-xs font-semibold text-teal-900">
-                        {resolvedPlanFinancials.isPeriodic
-                          ? `Total estimado na duração (${PLAN_DURATION_LABELS[recurrenceDurationCode]} — ${resolvedPlanFinancials.cycleCount} ciclos): ${formatMoney(resolvedPlanFinancials.contractTotal)}`
-                          : `Total previsto (${resolvedPlanFinancials.cycleCount} aulas): ${formatMoney(resolvedPlanFinancials.contractTotal)}`}
-                      </p>
-                    )}
+                  {resolvedPlanFinancials.contractTotal !== null && resolvedPlanFinancials.contractTotal > 0 && (
+                    <p className="text-xs font-semibold text-teal-900">
+                      {resolvedPlanFinancials.isPeriodic
+                        ? `Total contratual (${PLAN_DURATION_LABELS[(selectedCommercialOption?.contractDurationCode || recurrenceDurationCode) as PlanDurationCode] || 'contrato'}${resolvedPlanFinancials.cycleCount && resolvedPlanFinancials.cycleCount > 1 ? ` — ${resolvedPlanFinancials.cycleCount} cobranças` : ''}): ${formatMoney(resolvedPlanFinancials.contractTotal)}`
+                        : `Total previsto (${resolvedPlanFinancials.cycleCount} aulas): ${formatMoney(resolvedPlanFinancials.contractTotal)}`}
+                    </p>
+                  )}
                   <p className="text-[11px] text-slate-600">
-                    As aulas incluídas no plano seguem a regra financeira do serviço, sem cobrança avulsa duplicada por encontro.
+                    As aulas incluídas no plano seguem a regra financeira do contrato selecionado, sem cobrança avulsa duplicada por encontro.
                   </p>
+                </div>
+              )}
+
+              {recurrencePreview?.leadTimeShifted && recurrencePreview?.nextEligibleStartDate && (
+                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex flex-wrap items-center justify-between gap-2">
+                  <span>
+                    O início solicitado já está dentro do prazo mínimo de antecedência. Primeira aula disponível considerada a partir de{' '}
+                    <strong>{formatDateShort(recurrencePreview.nextEligibleStartDate)}</strong>.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setPlanStartDate(String(recurrencePreview.nextEligibleStartDate).slice(0, 10))}
+                    className="px-2.5 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-950 font-bold text-[11px] cursor-pointer"
+                  >
+                    Usar esta data inicial
+                  </button>
                 </div>
               )}
 
@@ -2606,9 +2856,15 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
               type="button"
               disabled={
                 Boolean(missingDuringPurchaseAddon) ||
-                (canUseRecurringPlan && bookingModeChoice === null) ||
+                (canUseRecurringPlan && objective === 'service' && bookingModeChoice === null) ||
                 (isWeeklySchedulePlan
-                  ? !effectiveRecurrenceAnchorSlot || selectedPlanMeetings.length === 0
+                  ? !effectiveRecurrenceAnchorSlot ||
+                    selectedPlanMeetings.length === 0 ||
+                    Boolean(
+                      expectedWeeklyPlanCount &&
+                        planMeetings.length >= expectedWeeklyPlanCount &&
+                        selectedPlanMeetings.length !== expectedWeeklyPlanCount
+                    )
                   : !selectedSlot) ||
                 (useRecurrence &&
                   (loadingRecurrencePreview ||
@@ -2757,7 +3013,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                   </div>
                   <input
                     type="date"
-                    min={todayIso()}
+                    min={currentLocalYmd}
                     value={pkgDate}
                     onChange={e => setPkgDate(e.target.value)}
                     className={bookingInput}
@@ -2988,7 +3244,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                   <p className="text-slate-500">Sem horários pré-reservados agora — você poderá agendar após confirmação.</p>
                 )}
               </div>
-            ) : selectedService && (objective === 'plan' || isSelectedServiceAccessPlan) ? (() => {
+            ) : selectedService && isSelectedServiceAccessPlan ? (() => {
               const optSummary = selectedCommercialOption ? formatCommercialOptionSummary(selectedCommercialOption) : null;
               const priceDisplay = optSummary
                 ? optSummary.cycleAmount
@@ -3014,7 +3270,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                     : 'Uso livre'}
                 </p>
                 <p className="text-slate-700">
-                  <strong>Início solicitado:</strong> {planStartDate || todayIso()} •{' '}
+                  <strong>Início solicitado:</strong> {planStartDate || currentLocalYmd} •{' '}
                   <strong>Vigência:</strong> {PLAN_DURATION_LABELS[durCode as PlanDurationCode] || durCode}
                   {optSummary ? ` • ${optSummary.paymentLabel}` : ''}
                 </p>
@@ -3032,15 +3288,20 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
               const totalSessionsCount = recurrencePreview?.totalCount ?? (
                 recurrenceDurationCode === 'count' ? recurrenceCount : null
               );
+              const effSummaryDur = selectedCommercialOption?.contractDurationCode || recurrenceDurationCode;
+              const creditModeUsed = selectedCommercialOption?.creditMode || selectedServiceModes?.planCreditMode || 'fixed_credits';
               return (
                 <div className="space-y-2.5">
                   <div className="flex flex-wrap justify-between gap-2 font-bold text-sm text-slate-900">
-                    <span>{selectedService.name}</span>
+                    <span>
+                      {selectedService.name}
+                      {useRecurrence && selectedCommercialOption?.label ? ` — ${selectedCommercialOption.label}` : ''}
+                    </span>
                     {useRecurrence && resolvedPlanFinancials ? (
                       <span className="text-teal-700">
                         {formatMoney(resolvedPlanFinancials.periodAmount)}{' '}
                         {resolvedPlanFinancials.isPeriodic
-                          ? `/ período ${frequencyPeriodLabel} · ${resolvedPlanFinancials.weeklyCount}x por semana`
+                          ? `/ ${resolvedPlanFinancials.billingPeriodLabel.toLowerCase()} · ${resolvedPlanFinancials.weeklyCount}x por semana`
                           : '/ aula'}
                       </span>
                     ) : (
@@ -3083,8 +3344,12 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                       )}
 
                       <p className="text-slate-700">
-                        <strong>Duração contratada:</strong> {PLAN_DURATION_LABELS[recurrenceDurationCode] || 'Duração do plano'}
+                        <strong>Duração contratada:</strong> {PLAN_DURATION_LABELS[effSummaryDur as PlanDurationCode] || 'Duração do plano'}
                         {totalSessionsCount ? ` (${totalSessionsCount} aula${totalSessionsCount === 1 ? '' : 's'} prevista${totalSessionsCount === 1 ? '' : 's'})` : ''}
+                      </p>
+
+                      <p className="text-slate-700">
+                        <strong>Regra de utilização:</strong> {PLAN_CREDIT_MODE_LABELS[creditModeUsed as PlanCreditMode]}
                       </p>
 
                       {resolvedPlanFinancials && (
@@ -3092,26 +3357,28 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                           <div>
                             <strong>Periodicidade de cobrança:</strong> {resolvedPlanFinancials.billingPeriodLabel}
                           </div>
-                          {resolvedPlanFinancials.averagePerSession > 0 && (
+                          {resolvedPlanFinancials.isPeriodic ? (
                             <div>
-                              <strong>Valor por aula:</strong> {formatMoney(resolvedPlanFinancials.averagePerSession)}
-                            </div>
-                          )}
-                          {resolvedPlanFinancials.isPeriodic && (
-                            <div>
-                              <strong>Valor por período ({resolvedPlanFinancials.billingPeriodLabel.toLowerCase()}):</strong>{' '}
+                              <strong>Valor por cobrança ({resolvedPlanFinancials.billingPeriodLabel.toLowerCase()}):</strong>{' '}
                               {formatMoney(resolvedPlanFinancials.periodAmount)}
+                              {resolvedPlanFinancials.cycleMonths && resolvedPlanFinancials.cycleMonths > 1 && resolvedPlanFinancials.monthlyEquivalent > 0
+                                ? ` (equiv. ${formatMoney(resolvedPlanFinancials.monthlyEquivalent)}/mês)`
+                                : ''}
+                            </div>
+                          ) : (
+                            resolvedPlanFinancials.averagePerSession > 0 && (
+                              <div>
+                                <strong>Valor por aula:</strong> {formatMoney(resolvedPlanFinancials.averagePerSession)}
+                              </div>
+                            )
+                          )}
+                          {resolvedPlanFinancials.contractTotal !== null && resolvedPlanFinancials.contractTotal > 0 && (
+                            <div className="text-teal-800 font-bold pt-0.5">
+                              {resolvedPlanFinancials.isPeriodic
+                                ? `Total contratual${resolvedPlanFinancials.cycleCount && resolvedPlanFinancials.cycleCount > 1 ? ` (${resolvedPlanFinancials.cycleCount} cobranças de ${formatMoney(resolvedPlanFinancials.periodAmount)})` : ''}: ${formatMoney(resolvedPlanFinancials.contractTotal)}`
+                                : `Total previsto (${resolvedPlanFinancials.cycleCount} aulas): ${formatMoney(resolvedPlanFinancials.contractTotal)}`}
                             </div>
                           )}
-                          {resolvedPlanFinancials.contractTotal !== null &&
-                            resolvedPlanFinancials.cycleCount &&
-                            resolvedPlanFinancials.cycleCount > 1 && (
-                              <div className="text-teal-800 font-bold pt-0.5">
-                                {resolvedPlanFinancials.isPeriodic
-                                  ? `Total contratual estimado (${resolvedPlanFinancials.cycleCount} cobranças de ${formatMoney(resolvedPlanFinancials.periodAmount)}): ${formatMoney(resolvedPlanFinancials.contractTotal)}`
-                                  : `Total previsto (${resolvedPlanFinancials.cycleCount} aulas): ${formatMoney(resolvedPlanFinancials.contractTotal)}`}
-                              </div>
-                            )}
                         </div>
                       )}
                     </>

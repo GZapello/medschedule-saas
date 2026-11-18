@@ -4,6 +4,7 @@ export const UNITS = ['per_session', 'per_participant', 'per_month', 'per_cycle'
 export const PERIODS = ['one_time', 'monthly', 'bimonthly', 'quarterly', 'semiannual', 'annual', 'installments'] as const;
 export const DURATIONS = ['1_month', '2_months', '3_months', '6_months', '12_months', '24_months'] as const;
 export const FREQUENCIES = ['weekly', 'monthly', 'unlimited', 'fixed_count'] as const;
+export const CREDIT_MODES = ['fixed_credits', 'weekly_guaranteed', 'unlimited'] as const;
 
 export interface ProposalEvidence {
   sources: number[];
@@ -24,6 +25,8 @@ export interface ProposedPrice extends ProposalEvidence {
   equivalentMonthlyCents?: number | null;
   maxInstallments?: number | null;
   ambiguousReason?: string;
+  creditMode?: typeof CREDIT_MODES[number] | null;
+  creditsPerCycle?: number | null;
 }
 
 export interface ProposedSchedule extends ProposalEvidence {
@@ -96,6 +99,12 @@ export interface ProposedService extends ReviewableRecord {
   professionalId: string;
   suggestedProfessionalId?: string;
   deferSchedules?: boolean;
+  allowSingleBooking?: boolean | null;
+  allowPlanBooking?: boolean | null;
+  allowPublicSingleBooking?: boolean | null;
+  allowPublicPlanBooking?: boolean | null;
+  planCreditMode?: typeof CREDIT_MODES[number] | null;
+  planCreditsPerCycle?: number | null;
   action: 'create' | 'link' | 'update' | 'ignore';
   apply: string[];
   prices: ProposedPrice[];

@@ -129,7 +129,15 @@ function sanitizeHistorySummary(summary?: string | null): string {
 
 export const StudioEnrollmentsView: React.FC = () => {
   const { showToast } = useToast();
-  const { currentUser, isClinicAdmin, isSuperAdmin, isReceptionist, hasPermission } = useAuth();
+  const { currentUser, currentTenant, isClinicAdmin, isSuperAdmin, isReceptionist, hasPermission } = useAuth();
+  const tenantTimezone = currentTenant?.timezone || 'America/Sao_Paulo';
+  const localYmd = (dateObj = new Date()) => {
+    try {
+      return new Intl.DateTimeFormat('en-CA', { timeZone: tenantTimezone }).format(dateObj);
+    } catch {
+      return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(dateObj);
+    }
+  };
   const [loading, setLoading] = useState(true);
   const [enrollments, setEnrollments] = useState<any[]>([]);
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
@@ -200,8 +208,8 @@ export const StudioEnrollmentsView: React.FC = () => {
     enrollment: any;
     action: 'freeze' | 'cancel' | 'change_plan' | 'renew';
   } | null>(null);
-  const [freezeFrom, setFreezeFrom] = useState<string>(() => new Date().toISOString().slice(0, 10));
-  const [freezeUntil, setFreezeUntil] = useState<string>(() => new Date(Date.now() + 15 * 86400000).toISOString().slice(0, 10));
+  const [freezeFrom, setFreezeFrom] = useState<string>(() => localYmd());
+  const [freezeUntil, setFreezeUntil] = useState<string>(() => localYmd(new Date(Date.now() + 15 * 86400000)));
   const [lifecycleReason, setLifecycleReason] = useState<string>('');
   const [changePlanServiceId, setChangePlanServiceId] = useState<string>('');
   const [changePlanOptionId, setChangePlanOptionId] = useState<string>('');
@@ -954,9 +962,15 @@ export const StudioEnrollmentsView: React.FC = () => {
                                 <span className="text-indigo-700 font-bold">Uso ilimitado no ciclo</span>
                               ) : (
                                 <span className={`font-bold ${isCancelledEnt ? 'text-slate-500' : 'text-indigo-700'}`}>
-                                  {ent.credits_used}/{ent.credits_total} {isDeliv ? 'entregue(s)' : 'aula(s)'}
-                                  {!isCancelledEnt && Number(ent.credits_reserved || 0) > 0 && ` • ${ent.credits_reserved} res.`}
-                                  {!isCancelledEnt && ent.credits_remaining !== null && ent.credits_remaining !== undefined && ` • ${ent.credits_remaining} disp.`}
+                                  {ent.credit_mode_snapshot === 'weekly_guaranteed' || ent.credits_total === null
+                                    ? `${ent.credits_used ?? 0} realizada(s)${Number(ent.credits_reserved || 0) > 0 ? ` • ${ent.credits_reserved} res.` : ''}${ent.weekly_frequency_snapshot ? ` (${ent.weekly_frequency_snapshot}x/sem garantido)` : ' (Sem limite fixo)'}`
+                                    : (
+                                      <>
+                                        {ent.credits_used}/{ent.credits_total} {isDeliv ? 'entregue(s)' : 'aula(s)'}
+                                        {!isCancelledEnt && Number(ent.credits_reserved || 0) > 0 && ` • ${ent.credits_reserved} res.`}
+                                        {!isCancelledEnt && ent.credits_remaining !== null && ent.credits_remaining !== undefined && ` • ${ent.credits_remaining} disp.`}
+                                      </>
+                                    )}
                                 </span>
                               )}
                               {schedCompact && (
@@ -1956,9 +1970,13 @@ export const StudioEnrollmentsView: React.FC = () => {
                                 </span>
                               ) : isUnlimited ? (
                                 <span className="font-semibold text-indigo-700">Frequência: Ilimitada no ciclo</span>
+                              ) : ent.credit_mode_snapshot === 'weekly_guaranteed' || ent.credits_total === null ? (
+                                <span className="font-semibold text-indigo-800">
+                                  Regra: <strong>Frequência semanal garantida (Modelo B)</strong> • Utilizadas: <strong>{ent.credits_used ?? 0}</strong> • Reservadas: <strong>{ent.credits_reserved ?? 0}</strong>
+                                </span>
                               ) : (
                                 <span className="font-semibold text-indigo-800">
-                                  Contratadas: <strong>{ent.credits_total ?? 0}</strong> • Utilizadas: <strong>{ent.credits_used ?? 0}</strong> • Reservadas: <strong>{ent.credits_reserved ?? 0}</strong> • Restantes: <strong>{ent.credits_remaining ?? 0}</strong>
+                                  Regra: <strong>Créditos fixos (Modelo A)</strong> • Contratadas: <strong>{ent.credits_total ?? 0}</strong> • Utilizadas: <strong>{ent.credits_used ?? 0}</strong> • Reservadas: <strong>{ent.credits_reserved ?? 0}</strong> • Restantes: <strong>{ent.credits_remaining ?? 0}</strong>
                                 </span>
                               )}
                               {ent.weekly_frequency_snapshot && ent.entitlement_type !== 'facility_access' && (

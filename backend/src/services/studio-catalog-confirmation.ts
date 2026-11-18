@@ -834,7 +834,9 @@ function commercialOptions(row: ProposedService, type: string) {
     return {
       id: randomUUID(), label: p.label || null, accessType, frequencyType, frequencyCount: p.frequencyCount,
       contractDurationCode: p.duration, paymentPeriodicity: p.paymentPeriod, commercialUnit: p.unit,
-      amountCents: p.amountCents, installmentsCount: p.installments || 1, participantsCount: p.participants || (row.type === 'duo' ? 2 : 1)
+      amountCents: p.amountCents, installmentsCount: p.installments || 1, participantsCount: p.participants || (row.type === 'duo' ? 2 : 1),
+      creditMode: p.creditMode || row.planCreditMode || null,
+      creditsPerCycle: p.creditsPerCycle ?? null
     };
   });
   if (standalone.length && (type === 'facility_access' || type === 'non_scheduled')) {
@@ -1026,7 +1028,9 @@ export function applyStudioCatalog(req: Request, proposal: StudioProposal): Impo
           ? row.schedules[0].professionalId
           : '';
       const professional = (current
-        ? (row.professionalId || current.professional_id || fallbackSlotProf)
+        ? (row.action === 'update' && !row.apply.includes('identity')
+            ? (current.professional_id || row.professionalId || fallbackSlotProf)
+            : (row.professionalId || current.professional_id || fallbackSlotProf))
         : (row.professionalId || fallbackSlotProf)) || '';
       if (isCreate && scheduled && !catalog.professionals.some(p => p.id === professional)) {
         throw catalogError('Selecione um profissional responsável ativo deste estabelecimento.');
@@ -1097,22 +1101,79 @@ export function applyStudioCatalog(req: Request, proposal: StudioProposal): Impo
         row.deferSchedules
           ? false
           : (row.allowPublicBooking !== false);
-      if (isCreate) Object.assign(body, {
-        studioServiceType: type, serviceKind: type === 'group' ? 'group' : 'individual',
-        defaultCapacity: type === 'facility_access' ? 1 : capacity,
-        durationMinutes: scheduled ? duration : undefined,
-        requiresActiveContract: type === 'facility_access' || (scheduled && Boolean(prices?.options.length) && prices?.basePrice === undefined),
-        professionalId: type === 'facility_access' ? undefined : (professional || undefined),
-        modality: row.modality || undefined, allowPublicBooking: effectiveAllowPublic,
-        allowRecurrence: scheduled && row.prices.some(p => p.frequencyType === 'weekly' || p.frequencyType === 'monthly'),
-        allowedPlanDurations: [...new Set(row.prices.map(p => p.duration).filter(Boolean))],
-        accessConfig: type === 'facility_access' ? {
-          accessMode: row.type === 'access_limited' ? 'limited' : 'unlimited',
-          maxEntriesPerWeek: row.weeklyLimit, maxEntriesPerMonth: row.monthlyLimit,
-          countPeriod: row.monthlyLimit && !row.weeklyLimit ? 'monthly' : 'weekly'
-        } : undefined,
-        price: prices?.basePrice ?? 0
-      });
+      const inferredHasPlans = Boolean(prices?.options.length) || type === 'facility_access' || type === 'non_scheduled';
+      const inferredAllowSingle =
+        type === 'facility_access'
+          ? false
+          : (row.allowSingleBooking !== undefined && row.allowSingleBooking !== null
+              ? Boolean(row.allowSingleBooking)
+              : (Boolean(prices?.basePrice && prices.basePrice > 0) || !inferredHasPlans));
+      const inferredAllowPlan =
+        type === 'facility_access'
+          ? true
+          : (row.allowPlanBooking !== undefined && row.allowPlanBooking !== null
+              ? Boolean(row.allowPlanBooking)
+              : inferredHasPlans);
+      const effectivePlanCreditMode =
+        row.planCreditMode || (type === 'facility_access' ? 'unlimited' : 'fixed_credits');
+
+      if (isCreate) {
+        const primaryPlanOpt = prices?.options.find(o => o.commercialUnit === 'per_month' || o.paymentPeriodicity === 'monthly') || prices?.options[0];
+        const periodToBillingMode: Record<string, string> = {
+          '1_month': 'monthly',
+          '2_months': 'bimonthly',
+          '3_months': 'quarterly',
+          '6_months': 'semiannual',
+          '12_months': 'annual',
+          '24_months': 'biennial'
+        };
+        const derivedBillingMode = inferredAllowPlan && primaryPlanOpt
+          ? (periodToBillingMode[primaryPlanOpt.contractDurationCode] || 'monthly')
+          : 'per_session';
+        Object.assign(body, {
+          studioServiceType: type, serviceKind: type === 'group' ? 'group' : 'individual',
+          defaultCapacity: type === 'facility_access' ? 1 : capacity,
+          durationMinutes: scheduled ? duration : undefined,
+          requiresActiveContract: type === 'facility_access' || (!inferredAllowSingle && inferredAllowPlan),
+          allowSingleBooking: inferredAllowSingle,
+          allowPlanBooking: inferredAllowPlan,
+          allowPublicSingleBooking:
+            row.allowPublicSingleBooking !== undefined && row.allowPublicSingleBooking !== null
+              ? (effectiveAllowPublic && Boolean(row.allowPublicSingleBooking) && inferredAllowSingle)
+              : (effectiveAllowPublic && inferredAllowSingle),
+          allowPublicPlanBooking:
+            row.allowPublicPlanBooking !== undefined && row.allowPublicPlanBooking !== null
+              ? (effectiveAllowPublic && Boolean(row.allowPublicPlanBooking) && inferredAllowPlan)
+              : (effectiveAllowPublic && inferredAllowPlan),
+          planCreditMode: effectivePlanCreditMode,
+          planCreditsPerCycle: row.planCreditsPerCycle ?? null,
+          billingMode: derivedBillingMode,
+          ...(inferredAllowPlan && primaryPlanOpt ? {
+            periodicPrice: Math.round(primaryPlanOpt.amountCents) / 100,
+            defaultPlanDuration: primaryPlanOpt.contractDurationCode,
+            weeklySessionsCount: primaryPlanOpt.frequencyType === 'weekly' && primaryPlanOpt.frequencyCount ? primaryPlanOpt.frequencyCount : 1
+          } : {}),
+          professionalId: type === 'facility_access' ? undefined : (professional || undefined),
+          modality: row.modality || undefined, allowPublicBooking: effectiveAllowPublic,
+          allowRecurrence: scheduled && row.prices.some(p => p.frequencyType === 'weekly' || p.frequencyType === 'monthly'),
+          allowedPlanDurations: [...new Set(row.prices.map(p => p.duration).filter(Boolean))],
+          accessConfig: type === 'facility_access' ? {
+            accessMode: row.type === 'access_limited' ? 'limited' : 'unlimited',
+            maxEntriesPerWeek: row.weeklyLimit, maxEntriesPerMonth: row.monthlyLimit,
+            countPeriod: row.monthlyLimit && !row.weeklyLimit ? 'monthly' : 'weekly'
+          } : undefined,
+          price: inferredAllowSingle ? (prices?.basePrice ?? 0) : 0
+        });
+      } else if (row.allowSingleBooking !== undefined || row.allowPlanBooking !== undefined || row.planCreditMode !== undefined) {
+        if (row.allowSingleBooking !== undefined && row.allowSingleBooking !== null) {
+          body.allowSingleBooking = Boolean(row.allowSingleBooking);
+          if (!body.allowSingleBooking) body.price = 0;
+          else if (prices?.basePrice) body.price = prices.basePrice;
+        }
+        if (row.allowPlanBooking !== undefined && row.allowPlanBooking !== null) body.allowPlanBooking = Boolean(row.allowPlanBooking);
+        if (row.planCreditMode) body.planCreditMode = row.planCreditMode;
+        if (row.planCreditsPerCycle !== undefined) body.planCreditsPerCycle = row.planCreditsPerCycle;
+      }
       if (prices) body.commercialPriceOptions = current ? mergeCommercialOptions(current, prices) : prices.options;
       if (adjustments?.length) {
         const previous = normalizeStudioPriceAdjustments(current?.pricing_adjustments_json);

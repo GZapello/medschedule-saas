@@ -21,6 +21,9 @@ interface PresentationValues {
   serviceKind: 'individual' | 'group';
   studioServiceType?: 'facility_access' | 'individual' | 'group' | 'non_scheduled';
   requiresAppointment?: boolean;
+  allowSingleBooking?: boolean;
+  allowPlanBooking?: boolean;
+  planCreditMode?: 'fixed_credits' | 'weekly_guaranteed' | 'unlimited';
   price: string;
   billingMode: ServiceBillingMode;
   periodicPrice: string;
@@ -99,8 +102,12 @@ function sectionSummary(section: Section, v: PresentationValues) {
         ? [frequency(v), ...scheduleLines(v), PLAN_DURATION_LABELS[v.defaultPlanDuration]].join(' • ') : 'Sem recorrência';
     case 'billing': {
       const activeCommercial = (v.commercialPriceOptions || []).filter(o => o.active !== false);
-      if (isNonScheduled && activeCommercial.length > 0) {
-        return `${activeCommercial.length} plano(s) comercial(is)`;
+      const singleEnabled = !isNonScheduled && v.allowSingleBooking !== false;
+      if ((isNonScheduled || !singleEnabled) && activeCommercial.length > 0) {
+        return `${activeCommercial.length} plano(s) comercial(is)${!singleEnabled && !isNonScheduled ? ' • Sem avulsa' : ''}`;
+      }
+      if (!singleEnabled && !isNonScheduled && isPeriodicBillingMode(v.billingMode)) {
+        return `${SERVICE_BILLING_MODE_LABELS[v.billingMode]} • ${money(frequencyTotal(v) ?? v.periodicPrice)} por período • Sem avulsa`;
       }
       return `${SERVICE_BILLING_MODE_LABELS[v.billingMode]}${v.billingMode === 'package' ? '' : ` • ${money(isPeriodicBillingMode(v.billingMode) ? frequencyTotal(v) ?? v.periodicPrice : v.price)}${isPeriodicBillingMode(v.billingMode) ? ' por período' : ''}`}`;
     }
@@ -143,11 +150,12 @@ export function StudioServicePresentation({ enabled, values, className, children
   const revealSaveFeedback = () => {
     const v = values;
     const periodic = isPeriodicBillingMode(v.billingMode);
+    const singleEnabled = v.allowSingleBooking !== false && v.requiresAppointment !== false && v.studioServiceType !== 'facility_access' && v.studioServiceType !== 'non_scheduled';
     let section: Section | undefined;
     let field = '';
     if (!v.name.trim()) { section = 'basics'; field = 'name'; }
-    else if (!periodic && (!v.price || Number(v.price) < 0)) { section = 'basics'; field = 'price'; }
-    else if (periodic && (!v.periodicPrice.trim() || Number(v.periodicPrice) < 0)) { section = 'billing'; }
+    else if (singleEnabled && (!v.price || Number(v.price) < 0)) { section = 'basics'; field = 'price'; }
+    else if (periodic && !((v.commercialPriceOptions || []).some(o => o.active !== false)) && (!v.periodicPrice.trim() || Number(v.periodicPrice) < 0)) { section = 'billing'; }
     else if (periodic && v.defaultBillingDueDay.trim() !== '' &&
       (!Number.isInteger(Number(v.defaultBillingDueDay)) || Number(v.defaultBillingDueDay) < 1 || Number(v.defaultBillingDueDay) > 28)) { section = 'billing'; }
     else if (!v.professionalId && v.requiresAppointment !== false && v.studioServiceType !== 'facility_access' && v.studioServiceType !== 'non_scheduled') { section = 'basics'; field = 'professional'; }
@@ -236,6 +244,7 @@ function SummaryCards({ values: v }: { values: PresentationValues }) {
   const times = scheduleLines(v);
   const isFacilityAccess = v.studioServiceType === 'facility_access';
   const isNonScheduled = isFacilityAccess || v.studioServiceType === 'non_scheduled';
+  const singleEnabled = !isNonScheduled && v.allowSingleBooking !== false;
   const activeCommercial = (v.commercialPriceOptions || []).filter(o => o.active !== false);
   const activeAddons = (v.optionalAddons?.options || []).filter(o => o.active !== false);
 
@@ -243,7 +252,9 @@ function SummaryCards({ values: v }: { values: PresentationValues }) {
     <div className="rounded-2xl border border-teal-100 bg-white p-4">
       <h4 className="flex items-center gap-2 font-bold text-sm text-teal-800"><CreditCard className="w-4 h-4" />Resumo comercial</h4>
       <dl className="mt-4 space-y-3 text-xs">
-        {!isNonScheduled && <SummaryRow label="Preço por aula" value={money(v.price)} />}
+        {!isNonScheduled && (
+          <SummaryRow label="Aula avulsa" value={singleEnabled ? money(v.price) : 'Não vende avulso'} />
+        )}
         <SummaryRow label="Tipo de cobrança" value={SERVICE_BILLING_MODE_LABELS[v.billingMode]} />
         {isPeriodicBillingMode(v.billingMode) && <>
           {frequencyTotal(v) !== null && <SummaryRow label="Preço" value="Conforme frequência semanal" />}
@@ -252,6 +263,18 @@ function SummaryCards({ values: v }: { values: PresentationValues }) {
             <SummaryRow label={v.billingMode === 'count' ? 'Quantidade de aulas' : 'Aulas por semana'} value={String(v.billingMode === 'count' ? v.includedSessionsCount : v.weeklySessionsCount)} />
           )}
         </>}
+        {v.allowPlanBooking !== false && v.planCreditMode && (
+          <SummaryRow
+            label="Regra dos planos"
+            value={
+              v.planCreditMode === 'weekly_guaranteed'
+                ? 'Frequência semanal garantida (Modelo B)'
+                : v.planCreditMode === 'unlimited'
+                  ? 'Acesso / créditos livres'
+                  : 'Créditos fixos por ciclo (Modelo A)'
+            }
+          />
+        )}
         {activeCommercial.length > 0 && (
           <SummaryRow
             label="Opções comerciais"

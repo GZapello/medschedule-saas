@@ -508,6 +508,10 @@ export class BillingCycleService {
     pricingRuleSnapshot?: string | null;
     weeklySessionsSnapshot?: number | null;
     referenceSessionsCount?: number | null;
+    creditModeSnapshot?: string | null;
+    creditsPerCycleSnapshot?: number | null;
+    commercialOptionIdSnapshot?: string | null;
+    commercialOptionLabelSnapshot?: string | null;
     title: string;
     amount: number;
     billingFrequency?: PeriodicBillingFrequency;
@@ -564,10 +568,12 @@ export class BillingCycleService {
         series_id, class_schedule_id, schedule_rules_json, plan_duration_code,
         weekly_frequency, included_sessions, billing_charges_count, billing_custom_end_date, renewed_from_plan_id,
         pricing_rule_snapshot, weekly_sessions_snapshot, reference_sessions_count,
+        credit_mode_snapshot, credits_per_cycle_snapshot,
+        commercial_option_id_snapshot, commercial_option_label_snapshot,
         title, amount, billing_cycle, billing_frequency, cycle_months, covers_sessions,
         due_day, payment_method, start_date, end_date, status, notes, created_by,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
     `).run(
       planId,
       input.tenantId,
@@ -587,6 +593,10 @@ export class BillingCycleService {
       pricingRuleSnapshot,
       weeklySessionsSnapshot,
       referenceSessionsCount,
+      input.creditModeSnapshot || null,
+      input.creditsPerCycleSnapshot !== undefined && input.creditsPerCycleSnapshot !== null ? Math.floor(Number(input.creditsPerCycleSnapshot)) : null,
+      input.commercialOptionIdSnapshot || null,
+      input.commercialOptionLabelSnapshot || null,
       String(input.title).trim(),
       roundedAmount,
       frequency,
@@ -689,7 +699,18 @@ export class BillingCycleService {
       if (plan.end_date && maxDate > String(plan.end_date).slice(0, 10)) {
         return { plan: null, error: `A vigência do plano expira em ${plan.end_date}.`, code: 'BILLING_PLAN_EXPIRED', status: 409 };
       }
-      if (plan.included_sessions && Number(plan.included_sessions) > 0) {
+      const planCreditMode = String(plan.credit_mode_snapshot || '').trim();
+      if (planCreditMode === 'weekly_guaranteed' && plan.weekly_frequency && Number(plan.weekly_frequency) > 0) {
+        const overflow = this.findWeeklyFrequencyOverflow(params.tenantId, plan.id, Number(plan.weekly_frequency), cleanDates);
+        if (overflow) {
+          return {
+            plan: null,
+            error: `O limite semanal de ${plan.weekly_frequency} aula(s) garantida(s) na semana já foi atingido (${overflow.existingCount}/${plan.weekly_frequency}).`,
+            code: 'WEEKLY_FREQUENCY_LIMIT_EXCEEDED',
+            status: 409
+          };
+        }
+      } else if (planCreditMode !== 'weekly_guaranteed' && planCreditMode !== 'unlimited' && plan.included_sessions && Number(plan.included_sessions) > 0) {
         const usedRow = db.prepare(`
           SELECT COUNT(*) as c FROM appointments
           WHERE tenant_id = ? AND recurring_plan_id = ? AND status != 'cancelled'
@@ -739,7 +760,13 @@ export class BillingCycleService {
         LIMIT 1
       `).get(params.tenantId, params.patientId, params.serviceId, minDate, maxDate) as any;
 
-      if (candidate && candidate.included_sessions && Number(candidate.included_sessions) > 0) {
+      const candCreditMode = String(candidate?.credit_mode_snapshot || '').trim();
+      if (candCreditMode === 'weekly_guaranteed' && candidate && candidate.weekly_frequency && Number(candidate.weekly_frequency) > 0) {
+        const overflow = this.findWeeklyFrequencyOverflow(params.tenantId, candidate.id, Number(candidate.weekly_frequency), cleanDates);
+        if (overflow) {
+          return { plan: null };
+        }
+      } else if (candCreditMode !== 'weekly_guaranteed' && candCreditMode !== 'unlimited' && candidate && candidate.included_sessions && Number(candidate.included_sessions) > 0) {
         const usedRow = db.prepare(`
           SELECT COUNT(*) as c FROM appointments
           WHERE tenant_id = ? AND recurring_plan_id = ? AND status != 'cancelled'
@@ -753,6 +780,46 @@ export class BillingCycleService {
     }
 
     return { plan: null };
+  }
+
+  private static findWeeklyFrequencyOverflow(
+    tenantId: string,
+    planId: string,
+    weeklyFrequency: number,
+    cleanDates: string[]
+  ): { weekStart: string; weekEnd: string; existingCount: number; incomingCount: number } | null {
+    if (!weeklyFrequency || weeklyFrequency <= 0 || cleanDates.length === 0) return null;
+    const datesByWeek = new Map<string, { weekStart: string; weekEnd: string; count: number }>();
+    for (const dateStr of cleanDates) {
+      const [y, m, d] = dateStr.slice(0, 10).split('-').map(Number);
+      if (!y || !m || !d) continue;
+      const dt = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+      const dow = dt.getUTCDay();
+      const mondayOffset = dow === 0 ? -6 : 1 - dow;
+      const weekStart = addDaysIso(dateStr.slice(0, 10), mondayOffset);
+      const weekEnd = addDaysIso(weekStart, 6);
+      const cur = datesByWeek.get(weekStart) || { weekStart, weekEnd, count: 0 };
+      cur.count += 1;
+      datesByWeek.set(weekStart, cur);
+    }
+    const stmt = db.prepare(`
+      SELECT COUNT(*) as c FROM appointments
+      WHERE tenant_id = ? AND recurring_plan_id = ? AND status != 'cancelled'
+        AND substr(start_time, 1, 10) >= ? AND substr(start_time, 1, 10) <= ?
+    `);
+    for (const entry of datesByWeek.values()) {
+      const row = stmt.get(tenantId, planId, entry.weekStart, entry.weekEnd) as { c: number } | undefined;
+      const existingCount = Number(row?.c || 0);
+      if (existingCount + entry.count > weeklyFrequency) {
+        return {
+          weekStart: entry.weekStart,
+          weekEnd: entry.weekEnd,
+          existingCount,
+          incomingCount: entry.count
+        };
+      }
+    }
+    return null;
   }
 
   /**
@@ -794,6 +861,8 @@ export class BillingCycleService {
       pricingRuleSnapshot?: string | null;
       weeklySessionsSnapshot?: number | null;
       referenceSessionsCount?: number | null;
+      creditModeSnapshot?: string | null;
+      creditsPerCycleSnapshot?: number | null;
       title: string;
       amount: number;
       billingFrequency: PeriodicBillingFrequency;
@@ -1037,6 +1106,8 @@ export class BillingCycleService {
             !frequencyQuote && params.enrollBillingPlan.referenceSessionsCount && Number(params.enrollBillingPlan.referenceSessionsCount) > 0
               ? Math.floor(Number(params.enrollBillingPlan.referenceSessionsCount))
               : pricingCalc.referenceSessionsCount,
+          creditModeSnapshot: params.enrollBillingPlan.creditModeSnapshot || params.serviceRow?.plan_credit_mode || null,
+          creditsPerCycleSnapshot: params.enrollBillingPlan.creditsPerCycleSnapshot ?? params.serviceRow?.plan_credits_per_cycle ?? null,
           title,
           amount: Math.round(rawAmount * 100) / 100,
           billingFrequency: frequency,

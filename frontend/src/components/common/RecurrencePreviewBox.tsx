@@ -49,6 +49,11 @@ export interface RecurrencePreviewData {
   totalCount: number;
   availableCount: number;
   conflictCount: number;
+  creditMode?: 'fixed_credits' | 'weekly_guaranteed' | 'unlimited' | null;
+  creditsPerCycle?: number | null;
+  leadTimeShifted?: boolean;
+  nextEligibleStartDate?: string | null;
+  originalStartDate?: string | null;
   occurrences: RecurrenceOccurrencePreviewItem[];
 }
 

@@ -9,6 +9,11 @@ import {
   normalizeUniqueIds,
   ScheduleInstructorEntry
 } from './instructor-participation.service';
+import {
+  evaluateSlotTimingStatus,
+  getLocalTodayYmd,
+  getTenantTimezone
+} from '../utils/studio-timezone';
 
 export interface ClassScheduleRecord {
   id: string;
@@ -107,8 +112,9 @@ const WEEKDAY_SINGULAR_LABELS = [
   'Sábado'
 ];
 
-export function todayBrazilYmd(refDate = new Date()): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(refDate);
+export function todayBrazilYmd(refDate = new Date(), tenantId?: string | null): string {
+  const tz = tenantId ? getTenantTimezone(db, tenantId) : undefined;
+  return getLocalTodayYmd(tz, refDate);
 }
 
 export function addDaysYmd(ymd: string, days: number): string {
@@ -943,7 +949,8 @@ export class ClassScheduleService {
   } {
     const { tenantId, schedule, serviceRow, dateStr } = params;
     const referenceDate = params.mockNow || new Date();
-    const todayStr = todayBrazilYmd(referenceDate);
+    const tenantTz = getTenantTimezone(db, tenantId);
+    const todayStr = getLocalTodayYmd(tenantTz, referenceDate);
 
     const startHHMM = schedule.start_time.slice(0, 5);
     const endHHMM = schedule.end_time.slice(0, 5);
@@ -1001,45 +1008,27 @@ export class ClassScheduleService {
       };
     }
 
-    if (dateStr < todayStr) {
-      return {
-        eligibleForDate: false,
-        bookable: false,
-        reasonCode: 'PAST_DATE',
-        reasonMessage: 'Data no passado.',
-        slot: baseSlot
-      };
-    }
-
-    const [tY, tM, tD] = todayStr.split('-').map(Number);
-    const [y, m, d] = dateStr.split('-').map(Number);
-    const todayOnly = new Date(tY, tM - 1, tD);
-    const targetOnly = new Date(y, m - 1, d);
-    const maxDate = new Date(todayOnly);
-    maxDate.setDate(maxDate.getDate() + (Number(serviceRow.max_advance_days) || 60));
-    if (!params.ignoreAdvanceCap && targetOnly > maxDate) {
-      return {
-        eligibleForDate: false,
-        bookable: false,
-        reasonCode: 'BEYOND_MAX_ADVANCE',
-        reasonMessage: 'Data fora do limite máximo de antecedência.',
-        slot: baseSlot
-      };
-    }
-
-    // Antecedência mínima
+    const maxAdvDays = params.ignoreAdvanceCap
+      ? null
+      : (Number(serviceRow.max_advance_days) > 0 ? Number(serviceRow.max_advance_days) : 60);
     const rawLead = serviceRow.min_lead_time_hours !== undefined && serviceRow.min_lead_time_hours !== null
       ? Number(serviceRow.min_lead_time_hours)
       : 0;
     const minLeadHours = params.ignoreLeadTime ? 0 : Math.max(0, rawLead);
-    const slotStartMs = Date.parse(`${startTimeIso}-03:00`);
-    const minAllowedMs = referenceDate.getTime() + minLeadHours * 3600000;
-    if (Number.isFinite(slotStartMs) && slotStartMs < minAllowedMs) {
+    const timing = evaluateSlotTimingStatus({
+      dateYmd: dateStr,
+      startTimeHhmm: startHHMM,
+      timeZone: tenantTz,
+      now: referenceDate,
+      minLeadTimeHours: minLeadHours,
+      maxAdvanceDays: maxAdvDays
+    });
+    if (!timing.eligible) {
       return {
         eligibleForDate: false,
         bookable: false,
-        reasonCode: 'LEAD_TIME_NOT_MET',
-        reasonMessage: 'Horário já encerrado para agendamento online.',
+        reasonCode: timing.reasonCode === 'TOO_FAR_IN_ADVANCE' ? 'BEYOND_MAX_ADVANCE' : (timing.reasonCode || 'SLOT_PAST'),
+        reasonMessage: timing.reasonMessage || 'Horário indisponível para agendamento.',
         slot: baseSlot
       };
     }
@@ -1301,7 +1290,8 @@ export class ClassScheduleService {
       params.capacityOverride && params.capacityOverride >= 1
         ? Math.max(1, Math.floor(Number(params.capacityOverride)))
         : Math.max(1, Number(occ?.capacity) || Number(schedule.capacity) || Number(serviceRow.default_capacity) || 1);
-    const activeHolds = params.includePendingHolds
+    const shouldIncludeHolds = params.includePendingHolds ?? Boolean(params.publicOnly);
+    const activeHolds = shouldIncludeHolds
       ? getActivePendingSlotHolds(tenantId, {
           datePrefix: dateStr,
           excludeRequestId: params.excludeHoldRequestId

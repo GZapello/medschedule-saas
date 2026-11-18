@@ -575,6 +575,27 @@ function ServiceEditor({
 
               {activeTab === 'prices' && edit('prices') && (
                 <div className="space-y-3">
+                  {row.type !== 'access_unlimited' && row.type !== 'access_limited' && (
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 space-y-2">
+                      <p className="text-xs font-bold uppercase tracking-wide text-slate-700">Modalidades comerciais permitidas</p>
+                      <div className="flex flex-wrap gap-4 text-xs">
+                        <Checkbox
+                          label="Permite agendar aula avulsa"
+                          checked={row.allowSingleBooking !== undefined && row.allowSingleBooking !== null
+                            ? Boolean(row.allowSingleBooking)
+                            : row.prices.some(p => p.unit === 'per_session' && !p.duration && !p.frequencyType)}
+                          onChange={checked => onChange({ allowSingleBooking: checked, allowPublicSingleBooking: checked })}
+                        />
+                        <Checkbox
+                          label="Permite contratação como plano / recorrência"
+                          checked={row.allowPlanBooking !== undefined && row.allowPlanBooking !== null
+                            ? Boolean(row.allowPlanBooking)
+                            : row.prices.some(p => p.unit !== 'per_session' || Boolean(p.duration))}
+                          onChange={checked => onChange({ allowPlanBooking: checked, allowPublicPlanBooking: checked })}
+                        />
+                      </div>
+                    </div>
+                  )}
                   {row.prices.length > 0 && (hasMissingPriceUnits || hasEquivPrices) && (
                     <div className="flex flex-wrap items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50/50 p-2.5 text-xs">
                       <span className="font-bold text-indigo-950 flex items-center gap-1">

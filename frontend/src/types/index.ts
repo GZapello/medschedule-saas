@@ -88,6 +88,7 @@ export interface Tenant {
   primary_color?: string;
   client_term_label?: string;
   establishment_profile?: 'clinic' | 'studio' | 'mixed';
+  timezone?: string;
   status: 'active' | 'suspended' | 'trial' | 'pending' | 'blocked' | 'rejected';
   onboarding_status?: string;
   plan_name?: string;
