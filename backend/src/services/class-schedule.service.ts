@@ -3,6 +3,7 @@ import { db } from '../config/database';
 import { ConcreteModality, resolveConcreteModality } from '../utils/modality-resolver';
 import { checkProfessionalScheduleCoverage } from '../utils/service-availability';
 import { calculateAvailableSlots } from '../utils/slot-calculator';
+import { countPendingHoldsForSlot, getActivePendingSlotHolds } from '../utils/public-slot-holds';
 import {
   InstructorParticipationService,
   normalizeUniqueIds,
@@ -929,6 +930,9 @@ export class ClassScheduleService {
     ignoreLeadTime?: boolean;
     ignoreAdvanceCap?: boolean;
     publicOnly?: boolean;
+    includePendingHolds?: boolean;
+    excludeHoldRequestId?: string;
+    capacityOverride?: number | null;
     mockNow?: Date;
   }): {
     eligibleForDate: boolean;
@@ -1293,8 +1297,37 @@ export class ClassScheduleService {
       schedule.professional_id
     ) as Array<{ id: string; patient_id: string }>;
 
-    const capacity = Math.max(1, Number(occ?.capacity) || Number(schedule.capacity) || Number(serviceRow.default_capacity) || 1);
-    const enrolledCount = enrolledRows.length;
+    const capacity =
+      params.capacityOverride && params.capacityOverride >= 1
+        ? Math.max(1, Math.floor(Number(params.capacityOverride)))
+        : Math.max(1, Number(occ?.capacity) || Number(schedule.capacity) || Number(serviceRow.default_capacity) || 1);
+    const activeHolds = params.includePendingHolds
+      ? getActivePendingSlotHolds(tenantId, {
+          datePrefix: dateStr,
+          excludeRequestId: params.excludeHoldRequestId
+        })
+      : [];
+    const holdCounts = activeHolds.length > 0
+      ? countPendingHoldsForSlot({
+          holds: activeHolds,
+          serviceId: schedule.service_id,
+          professionalId: schedule.professional_id,
+          startIso: startTimeIso,
+          endIso: endTimeIso,
+          isSharedGroup: true,
+          classScheduleId: schedule.id
+        })
+      : { sameSlotGroupHolds: 0, conflictingProfessionalHolds: 0 };
+    if (holdCounts.conflictingProfessionalHolds > 0) {
+      return {
+        eligibleForDate: false,
+        bookable: false,
+        reasonCode: 'PROF_CONFLICT',
+        reasonMessage: 'Instrutor com reserva pendente em outro horário simultâneo.',
+        slot: baseSlot
+      };
+    }
+    const enrolledCount = enrolledRows.length + holdCounts.sameSlotGroupHolds;
     const remainingSpots = Math.max(0, capacity - enrolledCount);
     const isFull = remainingSpots <= 0;
 
@@ -1349,11 +1382,15 @@ export class ClassScheduleService {
     serviceRow: any;
     dateStr: string;
     professionalId?: string;
+    allowedProfessionalIds?: string[];
     externalBusyByProf?: Map<string, Array<{ startMin: number; endMin: number }>>;
     patientId?: string;
     ignoreLeadTime?: boolean;
     ignoreAdvanceCap?: boolean;
     publicOnly?: boolean;
+    includePendingHolds?: boolean;
+    excludeHoldRequestId?: string;
+    capacityOverride?: number | null;
     includeBlockedNotice?: boolean;
     mockNow?: Date;
   }): {
@@ -1390,8 +1427,13 @@ export class ClassScheduleService {
     }
 
     const dow = getDayOfWeekFromYmd(dateStr);
+    const allowedProSet =
+      Array.isArray(params.allowedProfessionalIds) && params.allowedProfessionalIds.length > 0
+        ? new Set(params.allowedProfessionalIds)
+        : null;
     const matching = allSchedules.filter(s => {
       if (Number(s.day_of_week) !== dow) return false;
+      if (allowedProSet && !allowedProSet.has(s.professional_id)) return false;
       if (params.professionalId && params.professionalId !== 'any' && s.professional_id !== params.professionalId) {
         return false;
       }
@@ -1438,6 +1480,9 @@ export class ClassScheduleService {
         ignoreLeadTime: params.ignoreLeadTime,
         ignoreAdvanceCap: params.ignoreAdvanceCap,
         publicOnly: params.publicOnly,
+        includePendingHolds: params.includePendingHolds ?? Boolean(params.publicOnly),
+        excludeHoldRequestId: params.excludeHoldRequestId,
+        capacityOverride: params.capacityOverride,
         mockNow: params.mockNow
       });
 
@@ -1470,16 +1515,28 @@ export class ClassScheduleService {
     tenantId: string;
     serviceRow: any;
     professionalId?: string;
+    allowedProfessionalIds?: string[];
+    allowedWeekdays?: number[];
     startDate?: string;
     daysAhead?: number;
     limit?: number;
     externalBusyByProfAndDate?: Map<string, Array<{ startMin: number; endMin: number }>>;
     publicOnly?: boolean;
+    includePendingHolds?: boolean;
+    capacityOverride?: number | null;
   }): StudioClassSlotItem[] {
     const startDate = params.startDate || todayBrazilYmd();
     const maxScanDays = Math.min(45, Math.max(7, params.daysAhead || 21));
     const maxItems = Math.min(40, Math.max(4, params.limit || 20));
     const upcoming: StudioClassSlotItem[] = [];
+    const allowedProSet =
+      Array.isArray(params.allowedProfessionalIds) && params.allowedProfessionalIds.length > 0
+        ? new Set(params.allowedProfessionalIds)
+        : null;
+    const allowedDaySet =
+      Array.isArray(params.allowedWeekdays) && params.allowedWeekdays.length > 0
+        ? new Set(params.allowedWeekdays.map(Number))
+        : null;
 
     if (params.serviceRow.service_kind === 'group') {
       const allSchedules = this.listForService(params.tenantId, params.serviceRow.id, {
@@ -1491,8 +1548,10 @@ export class ClassScheduleService {
       for (let offset = 0; offset < maxScanDays && upcoming.length < maxItems; offset++) {
         const dStr = addDaysYmd(startDate, offset);
         const dow = getDayOfWeekFromYmd(dStr);
+        if (allowedDaySet && !allowedDaySet.has(dow)) continue;
         const dayMatches = allSchedules.filter(s => {
           if (Number(s.day_of_week) !== dow) return false;
+          if (allowedProSet && !allowedProSet.has(s.professional_id)) return false;
           if (params.professionalId && params.professionalId !== 'any' && s.professional_id !== params.professionalId) {
             return false;
           }
@@ -1509,7 +1568,9 @@ export class ClassScheduleService {
             serviceRow: params.serviceRow,
             dateStr: dStr,
             externalBusyIntervals: params.externalBusyByProfAndDate?.get(extKey),
-            publicOnly: params.publicOnly
+            publicOnly: params.publicOnly,
+            includePendingHolds: params.includePendingHolds ?? Boolean(params.publicOnly),
+            capacityOverride: params.capacityOverride
           });
           if (evalRes.bookable || evalRes.reasonCode === 'CLASS_FULL') {
             upcoming.push(evalRes.slot);
@@ -1522,7 +1583,7 @@ export class ClassScheduleService {
 
     // Serviço individual: busca próximas datas reais com calculateAvailableSlots
     const profFilter = params.professionalId && params.professionalId !== 'any' ? params.professionalId : null;
-    const profRows = db.prepare(`
+    const rawProfRows = db.prepare(`
       SELECT DISTINCT p.id, p.name, p.photo_url, COALESCE(pr.name, 'Instrutor') as profession_name
       FROM professionals p
       LEFT JOIN professions pr ON pr.id = p.profession_id
@@ -1538,11 +1599,13 @@ export class ClassScheduleService {
         ? [params.serviceRow.id, params.serviceRow.id, params.tenantId, profFilter]
         : [params.serviceRow.id, params.serviceRow.id, params.tenantId])
     ) as any[];
+    const profRows = allowedProSet ? rawProfRows.filter(p => allowedProSet.has(p.id)) : rawProfRows;
 
     const allowedModalities = getAllowedModalitiesSafe(params.serviceRow.modality, null);
     for (let offset = 0; offset < Math.min(14, maxScanDays) && upcoming.length < maxItems; offset++) {
       const dStr = addDaysYmd(startDate, offset);
       const dow = getDayOfWeekFromYmd(dStr);
+      if (allowedDaySet && !allowedDaySet.has(dow)) continue;
       for (const prof of profRows) {
         const extKey = `${prof.id}|${dStr}`;
         const slots = calculateAvailableSlots(
@@ -1552,9 +1615,17 @@ export class ClassScheduleService {
           dStr,
           undefined,
           undefined,
-          params.externalBusyByProfAndDate?.get(extKey)
+          params.externalBusyByProfAndDate?.get(extKey),
+          undefined,
+          {
+            includePendingHolds: params.includePendingHolds ?? Boolean(params.publicOnly),
+            capacityOverride: params.capacityOverride
+          }
         );
         for (const s of slots) {
+          const cap = s.capacity ?? (params.capacityOverride && params.capacityOverride >= 1 ? Number(params.capacityOverride) : 1);
+          const enr = s.enrolledCount ?? 0;
+          const rem = s.remainingSpots ?? Math.max(0, cap - enr);
           upcoming.push({
             classScheduleId: null,
             occurrenceId: null,
@@ -1575,12 +1646,12 @@ export class ClassScheduleService {
             modality: allowedModalities.includes('presential') ? 'presential' : allowedModalities[0] || 'presential',
             serviceModality: String(params.serviceRow.modality || 'both'),
             allowedModalities,
-            serviceKind: 'individual',
-            capacity: 1,
-            enrolledCount: 0,
-            remainingSpots: 1,
-            isFull: false,
-            statusLabel: 'Disponível'
+            serviceKind: cap >= 2 ? 'group' : 'individual',
+            capacity: cap,
+            enrolledCount: enr,
+            remainingSpots: rem,
+            isFull: rem <= 0,
+            statusLabel: rem <= 0 ? 'Lotado' : cap >= 2 ? `Disponível — ${rem} vaga(s)` : 'Disponível'
           });
           if (upcoming.length >= maxItems) break;
         }
@@ -1684,6 +1755,7 @@ export class ClassScheduleService {
     tenantId: string;
     serviceRow: any;
     preferredProfId: string;
+    allowedProfessionalIds?: string[];
     classScheduleId?: string | null;
     startIso: string;
     endIso: string;
@@ -1692,6 +1764,9 @@ export class ClassScheduleService {
     patientId?: string;
     ignoreLeadTime?: boolean;
     ignoreAdvanceCap?: boolean;
+    includePendingHolds?: boolean;
+    excludeHoldRequestId?: string;
+    capacityOverride?: number | null;
   }): {
     professionalId: string;
     coInstructorIds: string[];
@@ -1718,10 +1793,15 @@ export class ClassScheduleService {
       );
     }
 
+    const allowedProSet =
+      Array.isArray(params.allowedProfessionalIds) && params.allowedProfessionalIds.length > 0
+        ? new Set(params.allowedProfessionalIds)
+        : null;
     const candidates = schedules.filter(s => {
       if (classScheduleId && s.id !== classScheduleId) return false;
       if (Number(s.day_of_week) !== dow) return false;
       if (s.start_time.slice(0, 5) !== startClock || s.end_time.slice(0, 5) !== endClock) return false;
+      if (allowedProSet && !allowedProSet.has(s.professional_id)) return false;
       if (preferredProfId && preferredProfId !== 'any' && s.professional_id !== preferredProfId) return false;
       if (dateStr < s.effective_start_date) return false;
       if (s.effective_end_date && dateStr > s.effective_end_date) return false;
@@ -1758,7 +1838,10 @@ export class ClassScheduleService {
         patientId: params.patientId,
         ignoreLeadTime: params.ignoreLeadTime,
         ignoreAdvanceCap: params.ignoreAdvanceCap,
-        publicOnly: true
+        publicOnly: true,
+        includePendingHolds: params.includePendingHolds ?? true,
+        excludeHoldRequestId: params.excludeHoldRequestId,
+        capacityOverride: params.capacityOverride
       });
 
       if (evalRes.bookable) {

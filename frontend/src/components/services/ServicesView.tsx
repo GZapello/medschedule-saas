@@ -698,12 +698,14 @@ export const ServicesView: React.FC = () => {
       showToast('Nome do serviço é obrigatório', 'error');
       return;
     }
+    const createRequiresAppointment = !showCreateStudioConfig || (studioServiceType !== 'facility_access' && studioServiceType !== 'non_scheduled');
     const isPeriodicCreate = showCreateStudioConfig && isPeriodicBillingMode(billingMode);
-    if (!isPeriodicCreate && (!price || Number(price) < 0)) {
+    const hasCommercialCreate = showCreateStudioConfig && commercialPriceOptions.some(o => o.active !== false);
+    if (!isPeriodicCreate && !hasCommercialCreate && createRequiresAppointment && (!price || Number(price) < 0)) {
       showToast('Informe o preço por atendimento / aula', 'error');
       return;
     }
-    if (isPeriodicCreate && (!periodicPrice.trim() || Number(periodicPrice) < 0)) {
+    if (isPeriodicCreate && !hasCommercialCreate && (!periodicPrice.trim() || Number(periodicPrice) < 0)) {
       showToast('Informe o valor por período de cobrança', 'error');
       return;
     }
@@ -715,7 +717,6 @@ export const ServicesView: React.FC = () => {
       }
     }
 
-    const createRequiresAppointment = !showCreateStudioConfig || (studioServiceType !== 'facility_access' && studioServiceType !== 'non_scheduled');
     if (!professionalId && createRequiresAppointment) {
       showToast('Selecione o profissional responsável pelo serviço', 'error');
       return;
@@ -745,15 +746,21 @@ export const ServicesView: React.FC = () => {
       const normalizedCreateLinked = showCreateStudioConfig
         ? Array.from(new Set([professionalId, ...linkedProfessionalIds].filter(Boolean)))
         : [professionalId];
-      const normalizedCreatePrice = price.trim() !== '' ? Number(price) : 0;
+      const normalizedCreatePrice = createRequiresAppointment
+        ? (price.trim() !== '' ? Number(price) : 0)
+        : (price.trim() !== '' && Number(price) > 0
+            ? Number(price)
+            : (isPeriodicCreate && Number(periodicPrice) > 0
+                ? Number(periodicPrice)
+                : (commercialPriceOptions[0]?.amountCents ? commercialPriceOptions[0].amountCents / 100 : 0)));
       const createdRes = await ApiClient.post<any>('/v1/services', {
         professionalId: professionalId || null,
         ...(showCreateStudioConfig ? { linkedProfessionalIds: normalizedCreateLinked } : {}),
-        clinicalModule: clinicalModule || null,
+        clinicalModule: createRequiresAppointment ? (clinicalModule || null) : null,
         name: name.trim(),
-        specialtyId: specialtyId || null,
-        durationMinutes: Number(durationMinutes),
-        bufferMinutes: Number(bufferMinutes),
+        specialtyId: createRequiresAppointment ? (specialtyId || null) : null,
+        durationMinutes: createRequiresAppointment ? Number(durationMinutes) : 0,
+        bufferMinutes: createRequiresAppointment ? Number(bufferMinutes) : 0,
         price: normalizedCreatePrice,
         modality,
         serviceKind: effectiveKind,
@@ -885,14 +892,24 @@ export const ServicesView: React.FC = () => {
 
   const handleOpenEdit = (s: Service) => {
     setEditingService(s);
-    const profId = s.professional_id || (professionals.length > 0 ? professionals[0].id : '');
+    const domain = resolveServiceDomain({
+      establishmentProfile,
+      serviceDomain: s.service_domain,
+      serviceKind: s.service_kind,
+      clinicalModule: s.clinical_module
+    });
+    const resolvedEditType = domain === 'studio'
+      ? normalizeStudioServiceType(s.studio_service_type, s.service_kind)
+      : 'individual';
+    const isEditNonScheduled = domain === 'studio' && (resolvedEditType === 'facility_access' || resolvedEditType === 'non_scheduled');
+    const profId = s.professional_id || (isEditNonScheduled ? '' : (professionals.length > 0 ? professionals[0].id : ''));
     setEditProfessionalId(profId);
     
     const prof = professionals.find(p => p.id === profId);
     const mods = getModulesForProfessional(prof, authContext);
     
-    let targetMod = s.clinical_module || '';
-    if (!targetMod) {
+    let targetMod = isEditNonScheduled ? '' : (s.clinical_module || '');
+    if (!isEditNonScheduled && !targetMod) {
       if (mods.length === 1) {
         targetMod = mods[0].code;
       } else if (mods.length > 0) {
@@ -900,24 +917,14 @@ export const ServicesView: React.FC = () => {
       }
     }
     setEditClinicalModule(targetMod);
-
-    const domain = resolveServiceDomain({
-      establishmentProfile,
-      serviceDomain: s.service_domain,
-      serviceKind: s.service_kind,
-      clinicalModule: s.clinical_module
-    });
     const recCfg = parseServiceRecurrenceConfig(s);
     setEditName(s.name);
     setEditSpecialtyId(s.specialty_id || '');
-    setEditDurationMinutes(s.duration_minutes || 50);
-    setEditBufferMinutes(s.buffer_minutes || 10);
+    setEditDurationMinutes(isEditNonScheduled ? Number(s.duration_minutes || 0) : (s.duration_minutes || 50));
+    setEditBufferMinutes(isEditNonScheduled ? Number(s.buffer_minutes || 0) : (s.buffer_minutes || 10));
     setEditPrice(s.price !== undefined && s.price !== null ? String(s.price) : '0.00');
     setEditModality(s.modality || 'both');
     setEditServiceDomain(domain);
-    const resolvedEditType = domain === 'studio'
-      ? normalizeStudioServiceType(s.studio_service_type, s.service_kind)
-      : 'individual';
     setEditStudioServiceType(resolvedEditType);
     setEditServiceKind(domain === 'studio' && (s.service_kind === 'group' || resolvedEditType === 'group') ? 'group' : 'individual');
     setEditAccessConfig(normalizeStudioAccessConfig(s.access_config));
@@ -976,12 +983,14 @@ export const ServicesView: React.FC = () => {
       showToast('Nome do serviço é obrigatório', 'error');
       return;
     }
+    const editRequiresAppointment = !showEditStudioConfig || (editStudioServiceType !== 'facility_access' && editStudioServiceType !== 'non_scheduled');
     const isPeriodicEdit = showEditStudioConfig && isPeriodicBillingMode(editBillingMode);
-    if (!isPeriodicEdit && (!editPrice || Number(editPrice) < 0)) {
+    const hasCommercialEdit = showEditStudioConfig && editCommercialPriceOptions.some(o => o.active !== false);
+    if (!isPeriodicEdit && !hasCommercialEdit && editRequiresAppointment && (!editPrice || Number(editPrice) < 0)) {
       showToast('Informe o preço por atendimento / aula', 'error');
       return;
     }
-    if (isPeriodicEdit && editCommercialPriceOptions.length === 0 && (!editPeriodicPrice.trim() || Number(editPeriodicPrice) < 0)) {
+    if (isPeriodicEdit && !hasCommercialEdit && (!editPeriodicPrice.trim() || Number(editPeriodicPrice) < 0)) {
       showToast('Informe o valor por período de cobrança', 'error');
       return;
     }
@@ -993,7 +1002,6 @@ export const ServicesView: React.FC = () => {
       }
     }
 
-    const editRequiresAppointment = !showEditStudioConfig || (editStudioServiceType !== 'facility_access' && editStudioServiceType !== 'non_scheduled');
     if (!editProfessionalId && editRequiresAppointment) {
       showToast('Selecione o profissional responsável pelo serviço', 'error');
       return;
@@ -1029,15 +1037,21 @@ export const ServicesView: React.FC = () => {
         effectiveEditKind === 'group' &&
         editingService.service_kind !== 'group' &&
         editDraftClassSchedules.length > 0;
-      const normalizedEditPrice = editPrice.trim() !== '' ? Number(editPrice) : 0;
+      const normalizedEditPrice = editRequiresAppointment
+        ? (editPrice.trim() !== '' ? Number(editPrice) : 0)
+        : (editPrice.trim() !== '' && Number(editPrice) > 0
+            ? Number(editPrice)
+            : (isPeriodicEdit && Number(editPeriodicPrice) > 0
+                ? Number(editPeriodicPrice)
+                : (editCommercialPriceOptions[0]?.amountCents ? editCommercialPriceOptions[0].amountCents / 100 : 0)));
       const updRes = await ApiClient.put<any>(`/v1/services/${editingService.id}`, {
         professionalId: editProfessionalId || null,
         ...(showEditStudioConfig ? { linkedProfessionalIds: normalizedEditLinked } : {}),
-        clinicalModule: editClinicalModule || null,
+        clinicalModule: editRequiresAppointment ? (editClinicalModule || null) : null,
         name: editName.trim(),
-        specialtyId: editSpecialtyId || null,
-        durationMinutes: Number(editDurationMinutes),
-        bufferMinutes: Number(editBufferMinutes),
+        specialtyId: editRequiresAppointment ? (editSpecialtyId || null) : null,
+        durationMinutes: editRequiresAppointment ? Number(editDurationMinutes) : 0,
+        bufferMinutes: editRequiresAppointment ? Number(editBufferMinutes) : 0,
         price: normalizedEditPrice,
         modality: editModality,
         serviceKind: effectiveEditKind,
@@ -1163,19 +1177,19 @@ export const ServicesView: React.FC = () => {
       });
     }
 
-    // Serviços sem profissional atribuído (histórico ou geral)
+    // Serviços sem profissional atribuído (planos gerais de academia ou serviços sem instrutor)
     const unassigned = services.filter(s => !s.professional_id || !profMap.has(s.professional_id));
     if (unassigned.length > 0) {
       groups.push({
         profId: null,
-        profName: 'Geral da Clínica / Não Atribuído',
-        professionName: '',
+        profName: isStudioCompatible ? 'Planos Gerais & Acesso à Academia' : 'Geral da Clínica / Não Atribuído',
+        professionName: isStudioCompatible ? 'Sem vínculo obrigatório com Personal' : '',
         items: unassigned
       });
     }
 
     return groups;
-  }, [services, professionals, selectedProfFilter]);
+  }, [services, professionals, selectedProfFilter, isStudioCompatible]);
 
   const selectableCreateScheduleProfessionals = useMemo(() => {
     const activeIds = new Set([professionalId, ...linkedProfessionalIds].filter(Boolean));
@@ -1204,11 +1218,17 @@ export const ServicesView: React.FC = () => {
   const handleOpenCreateModalForProf = (profId?: string | null, initialKind: 'individual' | 'group' = 'individual') => {
     setServiceKind(initialKind);
     setHasPendingCreateScheduleForm(false);
-    const targetId = profId || (professionals.length > 0 ? professionals[0].id : '');
+    const targetId = profId !== undefined
+      ? (profId || '')
+      : (studioServiceType === 'facility_access' || studioServiceType === 'non_scheduled'
+          ? ''
+          : (professionals.length > 0 ? professionals[0].id : ''));
     if (targetId) {
       handleSelectProfessional(targetId);
       setLinkedProfessionalIds([targetId]);
     } else {
+      setProfessionalId('');
+      setClinicalModule('');
       setLinkedProfessionalIds([]);
     }
     setDraftClassSchedules([]);
@@ -1365,7 +1385,7 @@ export const ServicesView: React.FC = () => {
                                     Inativo
                                   </span>
                                 )}
-                                {s.clinical_module && (
+                                {s.clinical_module && s.studio_service_type !== 'facility_access' && s.studio_service_type !== 'non_scheduled' && (
                                   <span className="text-[10px] font-semibold px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-full inline-flex items-center gap-1">
                                     <Layers className="w-3 h-3 text-blue-600" />
                                     {CLINICAL_MODULE_LABELS[s.clinical_module] || s.clinical_module}
@@ -1382,6 +1402,11 @@ export const ServicesView: React.FC = () => {
                                 ) : s.service_kind === 'group' && (
                                   <span className="text-[10px] font-bold px-2 py-0.5 bg-teal-50 text-teal-700 border border-teal-200 rounded-full inline-block">
                                     {Number(s.default_capacity) === 2 ? 'Dupla • 2 vagas' : `Turma • ${s.default_capacity || 1} vagas`}
+                                  </span>
+                                )}
+                                {s.optional_addons?.enabled && (s.optional_addons.options || []).some(o => o.active !== false) && (
+                                  <span className="text-[10px] font-bold px-2 py-0.5 bg-teal-50 text-teal-800 border border-teal-200 rounded-full inline-block">
+                                    + {(s.optional_addons.options || []).filter(o => o.active !== false).length} complemento(s)
                                   </span>
                                 )}
                                 {s.specialty_name && (
@@ -1499,7 +1524,15 @@ export const ServicesView: React.FC = () => {
 
                         <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
                           <div className="flex items-center gap-1 font-medium text-slate-700">
-                            <Clock className="w-3.5 h-3.5 text-indigo-500" /> {s.duration_minutes} min (+{s.buffer_minutes}m buffer)
+                            {s.studio_service_type === 'facility_access' ? (
+                              <span>Acesso livre / Sem agenda</span>
+                            ) : s.studio_service_type === 'non_scheduled' ? (
+                              <span>Serviço entregável</span>
+                            ) : (
+                              <>
+                                <Clock className="w-3.5 h-3.5 text-indigo-500" /> {s.duration_minutes} min (+{s.buffer_minutes}m buffer)
+                              </>
+                            )}
                           </div>
                           <div className="flex items-center gap-1.5">
                             <span className="capitalize font-semibold text-slate-600 text-[11px] mr-1">
@@ -1739,7 +1772,8 @@ export const ServicesView: React.FC = () => {
             values={{
               name, professionalId, serviceKind, studioServiceType,
               requiresAppointment: studioServiceType !== 'facility_access' && studioServiceType !== 'non_scheduled',
-              price, billingMode, periodicPrice, frequencyPricing, pricingRule, individualMeetings,
+              price, billingMode, periodicPrice, commercialPriceOptions, optionalAddons,
+              frequencyPricing, pricingRule, individualMeetings,
               defaultBillingDueDay, weeklySessionsCount, includedSessionsCount,
               allowRecurrence, defaultFrequency, defaultCustomInterval,
               defaultPlanDuration, linkedTemplateIds, defaultTemplateId,
@@ -1802,103 +1836,111 @@ export const ServicesView: React.FC = () => {
                 )}
               </div>
 
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1 flex items-center justify-between">
-                  <span>Módulo do atendimento *</span>
-                  {createAvailableModules.length === 1 && (
-                    <span className="text-[10px] text-slate-400 font-normal">
-                      {createAvailableModules[0].code === 'general' ? 'Workspace Geral da Clínica' : 'Módulo único do profissional'}
-                    </span>
-                  )}
-                  {createAvailableModules.length > 1 && (
-                    <span className="text-[10px] text-indigo-600 font-semibold">
-                      {createAvailableModules.length} módulos disponíveis
-                    </span>
-                  )}
-                </label>
-                <select
-                  value={clinicalModule}
-                  onChange={e => handleSelectModule(e.target.value)}
-                  disabled={createAvailableModules.length <= 1}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium disabled:opacity-80 disabled:cursor-not-allowed cursor-pointer"
-                  required
-                >
-                  {createAvailableModules.length === 0 && (
-                    <option value="">Nenhum módulo clínico disponível</option>
-                  )}
-                  {createAvailableModules.map(m => (
-                    <option key={m.code} value={m.code}>
-                      {m.label}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-[10px] text-slate-400 mt-1">
-                  Define qual workspace clínico abrirá ao iniciar o atendimento deste serviço.
-                </p>
-              </div>
+              {(!showCreateStudioConfig || (studioServiceType !== 'facility_access' && studioServiceType !== 'non_scheduled')) && (
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                    <span>Módulo do atendimento *</span>
+                    {createAvailableModules.length === 1 && (
+                      <span className="text-[10px] text-slate-400 font-normal">
+                        {createAvailableModules[0].code === 'general' ? 'Workspace Geral da Clínica' : 'Módulo único do profissional'}
+                      </span>
+                    )}
+                    {createAvailableModules.length > 1 && (
+                      <span className="text-[10px] text-indigo-600 font-semibold">
+                        {createAvailableModules.length} módulos disponíveis
+                      </span>
+                    )}
+                  </label>
+                  <select
+                    value={clinicalModule}
+                    onChange={e => handleSelectModule(e.target.value)}
+                    disabled={createAvailableModules.length <= 1}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium disabled:opacity-80 disabled:cursor-not-allowed cursor-pointer"
+                    required
+                  >
+                    {createAvailableModules.length === 0 && (
+                      <option value="">Nenhum módulo clínico disponível</option>
+                    )}
+                    {createAvailableModules.map(m => (
+                      <option key={m.code} value={m.code}>
+                        {m.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Define qual workspace clínico abrirá ao iniciar o atendimento deste serviço.
+                  </p>
+                </div>
+              )}
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Nome do Atendimento *</label>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  {showCreateStudioConfig && studioServiceType === 'facility_access' ? 'Nome do Plano / Serviço *' : 'Nome do Atendimento *'}
+                </label>
                 <input
                   type="text"
                   data-studio-field={isPureStudio ? "name" : undefined}
                   aria-label={isPureStudio ? "Nome do serviço" : undefined}
                   value={name}
                   onChange={e => setName(e.target.value)}
-                  placeholder="Ex: Consulta Odontológica Inicial"
+                  placeholder={showCreateStudioConfig && studioServiceType === 'facility_access' ? 'Ex: Musculação — Acesso Livre' : 'Ex: Consulta Odontológica Inicial'}
                   className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
                 />
               </div>
 
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Especialidade</label>
-                <select
-                  value={specialtyId}
-                  onChange={e => setSpecialtyId(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 cursor-pointer"
-                >
-                  <option value="">Geral / Sem Especialidade Específica</option>
-                  {createCompatibleSpecialties.map(s => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
-              </div>
+              {(!showCreateStudioConfig || (studioServiceType !== 'facility_access' && studioServiceType !== 'non_scheduled')) && (
+                <>
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Especialidade</label>
+                    <select
+                      value={specialtyId}
+                      onChange={e => setSpecialtyId(e.target.value)}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 cursor-pointer"
+                    >
+                      <option value="">Geral / Sem Especialidade Específica</option>
+                      {createCompatibleSpecialties.map(s => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </select>
+                  </div>
 
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  {showCreateStudioConfig ? 'Preço por Atendimento / Aula (R$) *' : 'Preço (R$) *'}
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  data-studio-field={isPureStudio ? "price" : undefined}
-                  aria-label={isPureStudio ? "Preço por aula" : undefined}
-                  value={price}
-                  onChange={e => setPrice(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
-                />
-              </div>
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      {showCreateStudioConfig ? 'Preço por Atendimento / Aula (R$) *' : 'Preço (R$) *'}
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      data-studio-field={isPureStudio ? "price" : undefined}
+                      aria-label={isPureStudio ? "Preço por aula" : undefined}
+                      value={price}
+                      onChange={e => setPrice(e.target.value)}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                    />
+                  </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Duração (minutos)</label>
-                  <input
-                    type="number"
-                    value={durationMinutes}
-                    onChange={e => setDurationMinutes(Number(e.target.value))}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Intervalo / Buffer (minutos)</label>
-                  <input
-                    type="number"
-                    value={bufferMinutes}
-                    onChange={e => setBufferMinutes(Number(e.target.value))}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
-                  />
-                </div>
-              </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">Duração (minutos)</label>
+                      <input
+                        type="number"
+                        value={durationMinutes}
+                        onChange={e => setDurationMinutes(Number(e.target.value))}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">Intervalo / Buffer (minutos)</label>
+                      <input
+                        type="number"
+                        value={bufferMinutes}
+                        onChange={e => setBufferMinutes(Number(e.target.value))}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
 
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Modalidade</label>
@@ -1958,6 +2000,17 @@ export const ServicesView: React.FC = () => {
                     onStudioServiceTypeChange={nextType => {
                       setStudioServiceType(nextType);
                       setServiceKind(nextType === 'group' ? 'group' : 'individual');
+                      if (nextType === 'facility_access' || nextType === 'non_scheduled') {
+                        setProfessionalId('');
+                        setLinkedProfessionalIds([]);
+                        setClinicalModule('');
+                        setDurationMinutes(0);
+                        setBufferMinutes(0);
+                      } else if (!professionalId && professionals.length > 0) {
+                        handleSelectProfessional(professionals[0].id);
+                        setDurationMinutes(prev => (prev > 0 ? prev : 50));
+                        setBufferMinutes(prev => (prev > 0 ? prev : 10));
+                      }
                       if (nextType === 'facility_access' && billingMode === 'per_session') {
                         setBillingMode('monthly');
                         if (!periodicPrice) setPeriodicPrice(price || '180.00');
@@ -1972,6 +2025,7 @@ export const ServicesView: React.FC = () => {
                     optionalAddons={optionalAddons}
                     onOptionalAddonsChange={setOptionalAddons}
                     availableAddonServices={services}
+                    professionals={professionals}
                     defaultCapacity={defaultCapacity}
                     onDefaultCapacityChange={setDefaultCapacity}
                     allowPublicBooking={allowPublicBooking}
@@ -2119,16 +2173,18 @@ export const ServicesView: React.FC = () => {
                     }}
                   />
                   </ServiceFormSection>
-                  <ServiceFormSection section="templates">
-                  <ServiceTemplatesConfigPanel
-                    defaultTemplateId={defaultTemplateId}
-                    linkedTemplateIds={linkedTemplateIds}
-                    onChange={next => {
-                      setDefaultTemplateId(next.defaultTemplateId);
-                      setLinkedTemplateIds(next.linkedTemplateIds);
-                    }}
-                  />
-                  </ServiceFormSection>
+                  {studioServiceType !== 'facility_access' && (
+                    <ServiceFormSection section="templates">
+                    <ServiceTemplatesConfigPanel
+                      defaultTemplateId={defaultTemplateId}
+                      linkedTemplateIds={linkedTemplateIds}
+                      onChange={next => {
+                        setDefaultTemplateId(next.defaultTemplateId);
+                        setLinkedTemplateIds(next.linkedTemplateIds);
+                      }}
+                    />
+                    </ServiceFormSection>
+                  )}
                 </div>
               ) : (
                 <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200">
@@ -2279,7 +2335,9 @@ export const ServicesView: React.FC = () => {
             values={{
               name: editName, professionalId: editProfessionalId, serviceKind: editServiceKind, studioServiceType: editStudioServiceType,
               requiresAppointment: editStudioServiceType !== 'facility_access' && editStudioServiceType !== 'non_scheduled',
-              price: editPrice, billingMode: editBillingMode, periodicPrice: editPeriodicPrice, frequencyPricing: editFrequencyPricing, pricingRule: editPricingRule, individualMeetings: editIndividualMeetings,
+              price: editPrice, billingMode: editBillingMode, periodicPrice: editPeriodicPrice,
+              commercialPriceOptions: editCommercialPriceOptions, optionalAddons: editOptionalAddons,
+              frequencyPricing: editFrequencyPricing, pricingRule: editPricingRule, individualMeetings: editIndividualMeetings,
               defaultBillingDueDay: editDefaultBillingDueDay, weeklySessionsCount: editWeeklySessionsCount, includedSessionsCount: editIncludedSessionsCount,
               allowRecurrence: editAllowRecurrence, defaultFrequency: editDefaultFrequency, defaultCustomInterval: editDefaultCustomInterval,
               defaultPlanDuration: editDefaultPlanDuration, linkedTemplateIds: editLinkedTemplateIds, defaultTemplateId: editDefaultTemplateId,
@@ -2343,43 +2401,47 @@ export const ServicesView: React.FC = () => {
                 )}
               </div>
 
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1 flex items-center justify-between">
-                  <span>Módulo do atendimento *</span>
-                  {editAvailableModules.length === 1 && (
-                    <span className="text-[10px] text-slate-400 font-normal">
-                      {editAvailableModules[0].code === 'general' ? 'Workspace Geral da Clínica' : 'Módulo único do profissional'}
-                    </span>
-                  )}
-                  {editAvailableModules.length > 1 && (
-                    <span className="text-[10px] text-indigo-600 font-semibold">
-                      {editAvailableModules.length} módulos disponíveis
-                    </span>
-                  )}
-                </label>
-                <select
-                  value={editClinicalModule}
-                  onChange={e => handleSelectEditModule(e.target.value)}
-                  disabled={editAvailableModules.length <= 1}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium disabled:opacity-80 disabled:cursor-not-allowed"
-                  required
-                >
-                  {editAvailableModules.length === 0 && (
-                    <option value="">Nenhum módulo clínico disponível</option>
-                  )}
-                  {editAvailableModules.map(m => (
-                    <option key={m.code} value={m.code}>
-                      {m.label}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-[10px] text-slate-400 mt-1">
-                  Define qual workspace clínico abrirá ao iniciar o atendimento deste serviço.
-                </p>
-              </div>
+              {(!showEditStudioConfig || (editStudioServiceType !== 'facility_access' && editStudioServiceType !== 'non_scheduled')) && (
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                    <span>Módulo do atendimento *</span>
+                    {editAvailableModules.length === 1 && (
+                      <span className="text-[10px] text-slate-400 font-normal">
+                        {editAvailableModules[0].code === 'general' ? 'Workspace Geral da Clínica' : 'Módulo único do profissional'}
+                      </span>
+                    )}
+                    {editAvailableModules.length > 1 && (
+                      <span className="text-[10px] text-indigo-600 font-semibold">
+                        {editAvailableModules.length} módulos disponíveis
+                      </span>
+                    )}
+                  </label>
+                  <select
+                    value={editClinicalModule}
+                    onChange={e => handleSelectEditModule(e.target.value)}
+                    disabled={editAvailableModules.length <= 1}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium disabled:opacity-80 disabled:cursor-not-allowed"
+                    required
+                  >
+                    {editAvailableModules.length === 0 && (
+                      <option value="">Nenhum módulo clínico disponível</option>
+                    )}
+                    {editAvailableModules.map(m => (
+                      <option key={m.code} value={m.code}>
+                        {m.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Define qual workspace clínico abrirá ao iniciar o atendimento deste serviço.
+                  </p>
+                </div>
+              )}
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Nome do Atendimento *</label>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  {showEditStudioConfig && editStudioServiceType === 'facility_access' ? 'Nome do Plano / Serviço *' : 'Nome do Atendimento *'}
+                </label>
                 <input
                   type="text"
                   data-studio-field={isPureStudio ? "name" : undefined}
@@ -2391,60 +2453,64 @@ export const ServicesView: React.FC = () => {
                 />
               </div>
 
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Especialidade</label>
-                <select
-                  value={editSpecialtyId}
-                  onChange={e => setEditSpecialtyId(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50"
-                >
-                  <option value="">Geral / Sem Especialidade Específica</option>
-                  {editSpecialtyId && !editCompatibleSpecialties.some(s => s.id === editSpecialtyId) && (
-                    <option value={editSpecialtyId}>
-                      {editingService?.specialty_name || 'Especialidade Atual'}
-                    </option>
-                  )}
-                  {editCompatibleSpecialties.map(s => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
-              </div>
+              {(!showEditStudioConfig || (editStudioServiceType !== 'facility_access' && editStudioServiceType !== 'non_scheduled')) && (
+                <>
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Especialidade</label>
+                    <select
+                      value={editSpecialtyId}
+                      onChange={e => setEditSpecialtyId(e.target.value)}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50"
+                    >
+                      <option value="">Geral / Sem Especialidade Específica</option>
+                      {editSpecialtyId && !editCompatibleSpecialties.some(s => s.id === editSpecialtyId) && (
+                        <option value={editSpecialtyId}>
+                          {editingService?.specialty_name || 'Especialidade Atual'}
+                        </option>
+                      )}
+                      {editCompatibleSpecialties.map(s => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </select>
+                  </div>
 
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  {showEditStudioConfig ? 'Preço por Atendimento / Aula (R$) *' : 'Preço (R$) *'}
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  data-studio-field={isPureStudio ? "price" : undefined}
-                  aria-label={isPureStudio ? "Preço por aula" : undefined}
-                  value={editPrice}
-                  onChange={e => setEditPrice(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
-                />
-              </div>
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      {showEditStudioConfig ? 'Preço por Atendimento / Aula (R$) *' : 'Preço (R$) *'}
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      data-studio-field={isPureStudio ? "price" : undefined}
+                      aria-label={isPureStudio ? "Preço por aula" : undefined}
+                      value={editPrice}
+                      onChange={e => setEditPrice(e.target.value)}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                    />
+                  </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Duração (minutos)</label>
-                  <input
-                    type="number"
-                    value={editDurationMinutes}
-                    onChange={e => setEditDurationMinutes(Number(e.target.value))}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Intervalo / Buffer (minutos)</label>
-                  <input
-                    type="number"
-                    value={editBufferMinutes}
-                    onChange={e => setEditBufferMinutes(Number(e.target.value))}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
-                  />
-                </div>
-              </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">Duração (minutos)</label>
+                      <input
+                        type="number"
+                        value={editDurationMinutes}
+                        onChange={e => setEditDurationMinutes(Number(e.target.value))}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">Intervalo / Buffer (minutos)</label>
+                      <input
+                        type="number"
+                        value={editBufferMinutes}
+                        onChange={e => setEditBufferMinutes(Number(e.target.value))}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -2517,6 +2583,17 @@ export const ServicesView: React.FC = () => {
                     onStudioServiceTypeChange={nextType => {
                       setEditStudioServiceType(nextType);
                       setEditServiceKind(nextType === 'group' ? 'group' : 'individual');
+                      if (nextType === 'facility_access' || nextType === 'non_scheduled') {
+                        setEditProfessionalId('');
+                        setEditLinkedProfessionalIds([]);
+                        setEditClinicalModule('');
+                        setEditDurationMinutes(0);
+                        setEditBufferMinutes(0);
+                      } else if (!editProfessionalId && professionals.length > 0) {
+                        handleSelectEditProfessional(professionals[0].id);
+                        setEditDurationMinutes(prev => (prev > 0 ? prev : 50));
+                        setEditBufferMinutes(prev => (prev > 0 ? prev : 10));
+                      }
                       if (nextType === 'facility_access' && editBillingMode === 'per_session') {
                         setEditBillingMode('monthly');
                         if (!editPeriodicPrice) setEditPeriodicPrice(editPrice || '180.00');
@@ -2531,6 +2608,7 @@ export const ServicesView: React.FC = () => {
                     optionalAddons={editOptionalAddons}
                     onOptionalAddonsChange={setEditOptionalAddons}
                     availableAddonServices={services}
+                    professionals={professionals}
                     currentServiceId={editingService?.id || null}
                     defaultCapacity={editDefaultCapacity}
                     onDefaultCapacityChange={setEditDefaultCapacity}
@@ -2704,16 +2782,18 @@ export const ServicesView: React.FC = () => {
                     }}
                   />
                   </ServiceFormSection>
-                  <ServiceFormSection section="templates">
-                  <ServiceTemplatesConfigPanel
-                    defaultTemplateId={editDefaultTemplateId}
-                    linkedTemplateIds={editLinkedTemplateIds}
-                    onChange={next => {
-                      setEditDefaultTemplateId(next.defaultTemplateId);
-                      setEditLinkedTemplateIds(next.linkedTemplateIds);
-                    }}
-                  />
-                  </ServiceFormSection>
+                  {editStudioServiceType !== 'facility_access' && (
+                    <ServiceFormSection section="templates">
+                    <ServiceTemplatesConfigPanel
+                      defaultTemplateId={editDefaultTemplateId}
+                      linkedTemplateIds={editLinkedTemplateIds}
+                      onChange={next => {
+                        setEditDefaultTemplateId(next.defaultTemplateId);
+                        setEditLinkedTemplateIds(next.linkedTemplateIds);
+                      }}
+                    />
+                    </ServiceFormSection>
+                  )}
                 </div>
               ) : (
                 <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200">

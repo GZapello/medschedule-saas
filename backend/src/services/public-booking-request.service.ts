@@ -60,6 +60,10 @@ import {
 export type ExpandedStudioSlotItem = {
   serviceRow: any;
   preferredProfId: string;
+  allowedProfessionalIds?: string[];
+  capacityOverride?: number | null;
+  allowedWeekdays?: number[];
+  addonOptionId?: string | null;
   classScheduleId: string | null;
   requestedModality: unknown;
   startIso: string;
@@ -351,7 +355,8 @@ function resolveStudioPublicSlot(
   tenantId: string,
   item: ExpandedStudioSlotItem,
   studentId: string | null,
-  extBusyMap: Map<string, Array<{ startMin: number; endMin: number }>>
+  extBusyMap: Map<string, Array<{ startMin: number; endMin: number }>>,
+  opts?: { includePendingHolds?: boolean; excludeHoldRequestId?: string }
 ): {
   professionalId: string;
   coInstructorIds?: string[];
@@ -360,11 +365,13 @@ function resolveStudioPublicSlot(
   capacity: number;
   modality: 'presential' | 'online' | 'home';
 } {
+  const includePendingHolds = opts?.includePendingHolds ?? true;
   if (item.serviceRow.service_kind === 'group') {
     return ClassScheduleService.validatePublicGroupSlotTx({
       tenantId,
       serviceRow: item.serviceRow,
       preferredProfId: item.preferredProfId,
+      allowedProfessionalIds: item.allowedProfessionalIds,
       classScheduleId: item.classScheduleId,
       startIso: item.startIso,
       endIso: item.endIso,
@@ -372,7 +379,10 @@ function resolveStudioPublicSlot(
       externalBusyByProfAndDate: extBusyMap,
       patientId: studentId || undefined,
       ignoreLeadTime: item.isRecurrenceFollowUp,
-      ignoreAdvanceCap: item.isRecurrenceFollowUp
+      ignoreAdvanceCap: item.isRecurrenceFollowUp,
+      includePendingHolds,
+      excludeHoldRequestId: opts?.excludeHoldRequestId,
+      capacityOverride: item.capacityOverride
     });
   }
 
@@ -381,7 +391,14 @@ function resolveStudioPublicSlot(
     requestedModality: item.requestedModality,
     allowHome: true
   });
-  const candidates = getLinkedPublicProfessionals(tenantId, item.serviceRow.id, item.preferredProfId);
+  const allowedProSet =
+    Array.isArray(item.allowedProfessionalIds) && item.allowedProfessionalIds.length > 0
+      ? new Set(item.allowedProfessionalIds)
+      : null;
+  const rawCandidates = getLinkedPublicProfessionals(tenantId, item.serviceRow.id, item.preferredProfId);
+  const candidates = allowedProSet
+    ? rawCandidates.filter(p => allowedProSet.has(p.id))
+    : rawCandidates;
   const dateStr = item.startIso.slice(0, 10);
   for (const prof of candidates) {
     if (!publicBookingProfessional(tenantId, prof.id) || !professionalBookingService(tenantId, prof.id, item.serviceRow.id)) continue;
@@ -397,22 +414,30 @@ function resolveStudioPublicSlot(
       studentId || undefined,
       {
         ignoreLeadTime: item.isRecurrenceFollowUp,
-        ignoreAdvanceCap: item.isRecurrenceFollowUp
+        ignoreAdvanceCap: item.isRecurrenceFollowUp,
+        capacityOverride: item.capacityOverride,
+        includePendingHolds,
+        excludeHoldRequestId: opts?.excludeHoldRequestId
       }
     );
-    if (slots.some(s => s.startTime === item.startIso && s.endTime === item.endIso)) {
+    const matchedSlot = slots.find(s => s.startTime === item.startIso && s.endTime === item.endIso);
+    if (matchedSlot) {
       return {
         professionalId: prof.id,
         classScheduleId: null,
         roomId: null,
-        capacity: 1,
+        capacity: matchedSlot.capacity ?? (item.capacityOverride && item.capacityOverride >= 1 ? item.capacityOverride : 1),
         modality: concreteModality
       };
     }
   }
-  throw Object.assign(new Error(`Horário indisponível em ${dateStr} às ${item.startIso.slice(11, 16)}. Escolha outro horário ou data.`), {
+  const slotCapError =
+    item.capacityOverride && item.capacityOverride >= 2
+      ? `Sem vagas disponíveis para ${dateStr} às ${item.startIso.slice(11, 16)}. Escolha outro horário.`
+      : `Horário indisponível em ${dateStr} às ${item.startIso.slice(11, 16)}. Escolha outro horário ou data.`;
+  throw Object.assign(new Error(slotCapError), {
     status: 409,
-    code: 'SLOT_UNAVAILABLE'
+    code: item.capacityOverride && item.capacityOverride >= 2 ? 'CLASS_FULL' : 'SLOT_UNAVAILABLE'
   });
 }
 
@@ -536,6 +561,9 @@ function resolvePublicAddonsForBooking(params: {
     if (!opt) {
       throw Object.assign(new Error('Complemento opcional selecionado não está ativo ou não existe neste plano.'), { status: 400 });
     }
+    if (opt.allowPublicBooking === false) {
+      throw Object.assign(new Error(`O complemento "${opt.label}" não está publicado para contratação online.`), { status: 400 });
+    }
     if (!addonAppliesToBaseOption(opt, baseOption?.id || null)) {
       throw Object.assign(new Error(`O complemento "${opt.label}" não se aplica ao plano-base selecionado.`), { status: 400 });
     }
@@ -579,8 +607,10 @@ function resolvePublicAddonsForBooking(params: {
   );
 
   for (const dp of duringPurchaseAddons) {
-    const hasMatch = sanitizedSchedules.some((s: any) => String(s.serviceId) === dp.addonServiceId);
-    if (!hasMatch) {
+    const matching = sanitizedSchedules.filter(
+      (s: any) => String(s.serviceId) === dp.addonServiceId && (!s.addonOptionId || String(s.addonOptionId) === dp.id)
+    );
+    if (matching.length === 0) {
       throw Object.assign(
         new Error(`Selecione o horário para o complemento "${dp.label}" durante a contratação.`),
         { status: 400, code: 'ADDON_SCHEDULE_REQUIRED' }
@@ -590,15 +620,66 @@ function resolvePublicAddonsForBooking(params: {
 
   const expandedAddonSlots: ExpandedStudioSlotItem[] = [];
   for (const sch of sanitizedSchedules) {
-    expandedAddonSlots.push(...expandStudioScheduleItem(tenantId, {
+    const matchedOpt =
+      (sch.addonOptionId ? duringPurchaseAddons.find((a) => a.id === String(sch.addonOptionId)) : null) ||
+      duringPurchaseAddons.find((a) => a.addonServiceId === String(sch.serviceId));
+
+    const enabledPros =
+      matchedOpt && Array.isArray(matchedOpt.enabledProfessionalIds) && matchedOpt.enabledProfessionalIds.length > 0
+        ? matchedOpt.enabledProfessionalIds
+        : undefined;
+    const reqProf = sch.professionalId ? String(sch.professionalId) : 'any';
+    if (enabledPros && reqProf !== 'any' && !enabledPros.includes(reqProf)) {
+      throw Object.assign(
+        new Error(`O profissional selecionado não está habilitado para o complemento "${matchedOpt?.label || 'Complemento'}".`),
+        { status: 400, code: 'ADDON_PROFESSIONAL_NOT_ALLOWED' }
+      );
+    }
+
+    const capacityOverride = matchedOpt
+      ? (matchedOpt.attendanceFormat === 'individual'
+          ? 1
+          : matchedOpt.attendanceFormat === 'duo'
+            ? 2
+            : matchedOpt.attendanceFormat === 'group' && matchedOpt.sessionCapacity && matchedOpt.sessionCapacity >= 2
+              ? matchedOpt.sessionCapacity
+              : null)
+      : null;
+
+    const allowedWeekdays =
+      matchedOpt && Array.isArray(matchedOpt.allowedWeekdays) && matchedOpt.allowedWeekdays.length > 0
+        ? matchedOpt.allowedWeekdays
+        : undefined;
+
+    const expandedItems = expandStudioScheduleItem(tenantId, {
       serviceId: String(sch.serviceId),
-      professionalId: sch.professionalId ? String(sch.professionalId) : 'any',
+      professionalId: reqProf,
       classScheduleId: sch.classScheduleId ? String(sch.classScheduleId) : null,
       modality: sch.modality,
       startTime: String(sch.startTime),
       endTime: sch.endTime ? String(sch.endTime) : undefined,
       recurrence: sch.recurrence || undefined
-    }));
+    });
+
+    for (const exItem of expandedItems) {
+      if (allowedWeekdays) {
+        const ymd = exItem.startIso.slice(0, 10);
+        const dow = getDayOfWeekFromYmd(ymd);
+        if (!allowedWeekdays.includes(dow)) {
+          throw Object.assign(
+            new Error(`O complemento "${matchedOpt?.label || 'Complemento'}" permite agendamentos apenas nos dias configurados pelo estabelecimento.`),
+            { status: 400, code: 'ADDON_WEEKDAY_NOT_ALLOWED' }
+          );
+        }
+      }
+      expandedAddonSlots.push({
+        ...exItem,
+        allowedProfessionalIds: enabledPros,
+        capacityOverride,
+        allowedWeekdays,
+        addonOptionId: matchedOpt?.id || null
+      });
+    }
   }
 
   const breakdown = calculatePlanWithAddonsBreakdown({
@@ -624,6 +705,7 @@ function insertScheduledAddonAppointmentsTx(params: {
   studentNotes?: string | null;
   userId: string;
   gcalSyncTargets: Array<{ appointmentId: string; professionalId: string; isGroupService: boolean; isFirstEnrollment: boolean }>;
+  excludeHoldRequestId?: string;
 }): { createdIds: string[]; firstOccId: string | null } {
   const { tenantId, contractId, resolvedStudentId, expandedAddonSlots, studioExtBusyMap, studentNotes, userId, gcalSyncTargets } = params;
   if (expandedAddonSlots.length === 0) return { createdIds: [], firstOccId: null };
@@ -647,17 +729,24 @@ function insertScheduledAddonAppointmentsTx(params: {
       );
     }
 
-    const resolvedSlot = resolveStudioPublicSlot(tenantId, item, resolvedStudentId, studioExtBusyMap);
+    const resolvedSlot = resolveStudioPublicSlot(tenantId, item, resolvedStudentId, studioExtBusyMap, {
+      includePendingHolds: true,
+      excludeHoldRequestId: params.excludeHoldRequestId
+    });
     const concreteProfId = resolvedSlot.professionalId;
     const concreteModality = resolvedSlot.modality;
     const profMeta = db.prepare(`SELECT name, profession_id FROM professionals WHERE id = ? AND tenant_id = ?`).get(concreteProfId, tenantId) as any;
 
-    const isGroup = item.serviceRow.service_kind === 'group';
-    const capacity = isGroup ? resolvedSlot.capacity : 1;
+    const isGroupService = item.serviceRow.service_kind === 'group';
+    const effectiveCapacity =
+      item.capacityOverride && item.capacityOverride >= 1
+        ? item.capacityOverride
+        : (isGroupService ? resolvedSlot.capacity : 1);
+    const isSharedOccurrence = isGroupService || effectiveCapacity >= 2;
 
     let occurrenceId: string | null = null;
     let isFirstEnrollment = true;
-    if (isGroup) {
+    if (isSharedOccurrence) {
       const occ = resolveOrCreateGroupOccurrenceTx({
         tenantId,
         serviceId: item.serviceRow.id,
@@ -667,7 +756,7 @@ function insertScheduledAddonAppointmentsTx(params: {
         classScheduleId: resolvedSlot.classScheduleId,
         startTime: item.startIso,
         endTime: item.endIso,
-        defaultCapacity: capacity,
+        defaultCapacity: effectiveCapacity,
         modality: concreteModality,
         patientId: resolvedStudentId,
         coInstructorIds: resolvedSlot.coInstructorIds
@@ -710,7 +799,7 @@ function insertScheduledAddonAppointmentsTx(params: {
       clinicalModule,
       profMeta?.profession_id || null,
       occurrenceId,
-      isGroup ? 'group' : 'individual',
+      isSharedOccurrence ? 'group' : 'individual',
       contractId,
       userId
     );
@@ -731,7 +820,7 @@ function insertScheduledAddonAppointmentsTx(params: {
     `).run(uuidv4(), apptId, userId);
 
     NotificationService.scheduleAppointmentReminder(apptId);
-    gcalSyncTargets.push({ appointmentId: apptId, professionalId: concreteProfId, isGroupService: isGroup, isFirstEnrollment });
+    gcalSyncTargets.push({ appointmentId: apptId, professionalId: concreteProfId, isGroupService: isSharedOccurrence, isFirstEnrollment });
     createdIds.push(apptId);
   }
 
@@ -1273,40 +1362,9 @@ export class PublicBookingRequestService {
 
       const addonProfIdSet = new Set<string>();
       const previewAddonAppointments: any[] = [];
-      if (addonsResolved.expandedAddonSlots.length > 0) {
-        const addonExtBusyMap = await prefetchStudioExternalBusy(tenant.id, addonsResolved.expandedAddonSlots);
-        for (let i = 0; i < addonsResolved.expandedAddonSlots.length; i++) {
-          const item = addonsResolved.expandedAddonSlots[i];
-          if (existingStudentId) {
-            const patientConflict = db.prepare(`
-              SELECT id FROM appointments
-              WHERE tenant_id = ? AND patient_id = ? AND status != 'cancelled'
-                AND REPLACE(start_time, ' ', 'T') < ? AND REPLACE(end_time, ' ', 'T') > ?
-            `).get(tenant.id, existingStudentId, item.endIso, item.startIso);
-            if (patientConflict) {
-              throw Object.assign(
-                new Error(`Você já possui horário reservado em ${item.startIso.slice(0, 10)} às ${item.startIso.slice(11, 16)}.`),
-                { status: 409, code: 'PATIENT_APPOINTMENT_CONFLICT' }
-              );
-            }
-          }
-          const resolvedSlot = resolveStudioPublicSlot(tenant.id, item, existingStudentId, addonExtBusyMap);
-          addonProfIdSet.add(resolvedSlot.professionalId);
-          for (const co of resolvedSlot.coInstructorIds || []) addonProfIdSet.add(co);
-          const profMeta = db.prepare(`SELECT name FROM professionals WHERE id = ? AND tenant_id = ?`).get(resolvedSlot.professionalId, tenant.id) as any;
-          previewAddonAppointments.push({
-            id: `req-addon-slot-${i + 1}`,
-            status: 'awaiting_confirmation',
-            serviceId: item.serviceRow.id,
-            serviceName: item.serviceRow.name,
-            professionalId: resolvedSlot.professionalId,
-            professionalName: profMeta?.name || 'Instrutor',
-            modality: resolvedSlot.modality,
-            startTime: item.startIso,
-            endTime: item.endIso
-          });
-        }
-      }
+      const addonExtBusyMap = addonsResolved.expandedAddonSlots.length > 0
+        ? await prefetchStudioExternalBusy(tenant.id, addonsResolved.expandedAddonSlots)
+        : new Map<string, Array<{ startMin: number; endMin: number }>>();
 
       const resolvedAmount = addonsResolved.breakdown
         ? addonsResolved.breakdown.firstChargeDueCents / 100
@@ -1360,15 +1418,70 @@ export class PublicBookingRequestService {
         }
       };
 
-      db.transaction(() => {
+      const commitAccessPlanPendingTx = db.transaction(() => {
+        const heldAddonSlots: Array<{
+          serviceId: string;
+          professionalId: string;
+          classScheduleId: string | null;
+          startIso: string;
+          endIso: string;
+        }> = [];
+        previewAddonAppointments.length = 0;
+        addonProfIdSet.clear();
+
+        if (addonsResolved.expandedAddonSlots.length > 0) {
+          for (let i = 0; i < addonsResolved.expandedAddonSlots.length; i++) {
+            const item = addonsResolved.expandedAddonSlots[i];
+            if (existingStudentId) {
+              const patientConflict = db.prepare(`
+                SELECT id FROM appointments
+                WHERE tenant_id = ? AND patient_id = ? AND status != 'cancelled'
+                  AND REPLACE(start_time, ' ', 'T') < ? AND REPLACE(end_time, ' ', 'T') > ?
+              `).get(tenant.id, existingStudentId, item.endIso, item.startIso);
+              if (patientConflict) {
+                throw Object.assign(
+                  new Error(`Você já possui horário reservado em ${item.startIso.slice(0, 10)} às ${item.startIso.slice(11, 16)}.`),
+                  { status: 409, code: 'PATIENT_APPOINTMENT_CONFLICT' }
+                );
+              }
+            }
+            const resolvedSlot = resolveStudioPublicSlot(tenant.id, item, existingStudentId, addonExtBusyMap, {
+              includePendingHolds: true
+            });
+            addonProfIdSet.add(resolvedSlot.professionalId);
+            for (const co of resolvedSlot.coInstructorIds || []) addonProfIdSet.add(co);
+            const profMeta = db.prepare(`SELECT name FROM professionals WHERE id = ? AND tenant_id = ?`).get(resolvedSlot.professionalId, tenant.id) as any;
+            previewAddonAppointments.push({
+              id: `req-addon-slot-${i + 1}`,
+              status: 'awaiting_confirmation',
+              serviceId: item.serviceRow.id,
+              serviceName: item.serviceRow.name,
+              professionalId: resolvedSlot.professionalId,
+              professionalName: profMeta?.name || 'Instrutor',
+              modality: resolvedSlot.modality,
+              startTime: item.startIso,
+              endTime: item.endIso
+            });
+            heldAddonSlots.push({
+              serviceId: item.serviceRow.id,
+              professionalId: resolvedSlot.professionalId,
+              classScheduleId: resolvedSlot.classScheduleId || null,
+              startIso: item.startIso,
+              endIso: item.endIso
+            });
+          }
+        }
+
+        const hasHeldSlots = heldAddonSlots.length > 0;
         db.prepare(`
           INSERT INTO public_booking_requests (
             id, request_number, tenant_id, establishment_mode, mode, status,
             service_id, modality, start_time, booking_intent,
             weekdays_label, time_range_label, start_date_label, start_date_iso,
             plan_duration_label, weekly_frequency, sessions_count,
+            schedules_json, hold_expires_at,
             patient_snapshot_json, payload_json, summary_snapshot_json
-          ) VALUES (?, ?, ?, 'studio', 'access_plan', 'awaiting_confirmation', ?, 'presential', ?, 'access_plan', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ) VALUES (?, ?, ?, 'studio', 'access_plan', 'awaiting_confirmation', ?, 'presential', ?, 'access_plan', ?, ?, ?, ?, ?, ?, ?, ?, ${hasHeldSlots ? "datetime('now', '+15 minutes')" : 'NULL'}, ?, ?, ?)
         `).run(
           requestId,
           requestNumber,
@@ -1382,6 +1495,7 @@ export class PublicBookingRequestService {
           planDurationLabel,
           requestedWeeklyLimit || null,
           previewAddonAppointments.length,
+          hasHeldSlots ? JSON.stringify(heldAddonSlots) : null,
           JSON.stringify(payload.student),
           JSON.stringify(payload),
           JSON.stringify({
@@ -1431,7 +1545,8 @@ export class PublicBookingRequestService {
             whatsappPhone: validWhatsapp
           }
         });
-      })();
+      });
+      commitAccessPlanPendingTx();
 
       return {
         mode: 'access_plan',
@@ -1667,7 +1782,63 @@ export class PublicBookingRequestService {
       }
     };
 
-    db.transaction(() => {
+    const addonExtBusyMap = svcAddonsResolved.expandedAddonSlots.length > 0
+      ? await prefetchStudioExternalBusy(tenant.id, svcAddonsResolved.expandedAddonSlots)
+      : new Map<string, Array<{ startMin: number; endMin: number }>>();
+
+    const commitServicePendingTx = db.transaction(() => {
+      const heldAllSlots: Array<{
+        serviceId: string;
+        professionalId: string;
+        classScheduleId: string | null;
+        startIso: string;
+        endIso: string;
+      }> = [];
+
+      // Revalida disponibilidade + holds dentro de BEGIN IMMEDIATE para impedir dupla reserva simultânea na última vaga
+      for (const pair of resolvedPairs) {
+        const reResolved = resolveStudioPublicSlot(tenant.id, pair.slotItem, existingStudentId, extBusyMap, {
+          includePendingHolds: true
+        });
+        pair.resolvedSlot = reResolved;
+        heldAllSlots.push({
+          serviceId: pair.slotItem.serviceRow.id,
+          professionalId: reResolved.professionalId,
+          classScheduleId: reResolved.classScheduleId || null,
+          startIso: pair.slotItem.startIso,
+          endIso: pair.slotItem.endIso
+        });
+      }
+
+      if (svcAddonsResolved.expandedAddonSlots.length > 0) {
+        for (const addonSlot of svcAddonsResolved.expandedAddonSlots) {
+          if (existingStudentId) {
+            const patientAddonConflict = db.prepare(`
+              SELECT id FROM appointments
+              WHERE tenant_id = ? AND patient_id = ? AND status != 'cancelled'
+                AND REPLACE(start_time, ' ', 'T') < ? AND REPLACE(end_time, ' ', 'T') > ?
+            `).get(tenant.id, existingStudentId, addonSlot.endIso, addonSlot.startIso);
+            if (patientAddonConflict) {
+              throw Object.assign(
+                new Error(`Você já possui horário reservado em ${addonSlot.startIso.slice(0, 10)} às ${addonSlot.startIso.slice(11, 16)}.`),
+                { status: 409, code: 'PATIENT_APPOINTMENT_CONFLICT' }
+              );
+            }
+          }
+          const resolvedAddon = resolveStudioPublicSlot(tenant.id, addonSlot, existingStudentId, addonExtBusyMap, {
+            includePendingHolds: true
+          });
+          profIdSet.add(resolvedAddon.professionalId);
+          heldAllSlots.push({
+            serviceId: addonSlot.serviceRow.id,
+            professionalId: resolvedAddon.professionalId,
+            classScheduleId: resolvedAddon.classScheduleId || null,
+            startIso: addonSlot.startIso,
+            endIso: addonSlot.endIso
+          });
+        }
+      }
+
       db.prepare(`
         INSERT INTO public_booking_requests (
           id, request_number, tenant_id, establishment_mode, mode, status,
@@ -1675,8 +1846,9 @@ export class PublicBookingRequestService {
           start_time, end_time, booking_intent,
           weekdays_label, time_range_label, start_date_label, start_date_iso,
           plan_duration_label, weekly_frequency, sessions_count,
-          recurrence_json, patient_snapshot_json, payload_json, summary_snapshot_json
-        ) VALUES (?, ?, ?, 'studio', 'service', 'awaiting_confirmation', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          recurrence_json, schedules_json, hold_expires_at,
+          patient_snapshot_json, payload_json, summary_snapshot_json
+        ) VALUES (?, ?, ?, 'studio', 'service', 'awaiting_confirmation', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '+15 minutes'), ?, ?, ?)
       `).run(
         requestId,
         requestNumber,
@@ -1696,6 +1868,7 @@ export class PublicBookingRequestService {
         weeklyFrequency,
         sessionsCount,
         recurrence ? JSON.stringify(recurrence) : null,
+        JSON.stringify(heldAllSlots),
         JSON.stringify(payload.student),
         JSON.stringify(payload),
         JSON.stringify({
@@ -1740,7 +1913,8 @@ export class PublicBookingRequestService {
           whatsappPhone: validWhatsapp
         }
       });
-    })();
+    });
+    commitServicePendingTx();
 
     return {
       mode: 'service',
@@ -1912,8 +2086,42 @@ export class PublicBookingRequestService {
       }
     } else if (requestRow.mode === 'access_plan' || payload.type === 'studio_access_plan') {
       const rawAddonSchedules = Array.isArray(payload.addonSchedules) ? payload.addonSchedules : [];
+      const baseSrvForAddons = payload.serviceId
+        ? (db.prepare(`SELECT optional_addons_json FROM services WHERE id = ? AND tenant_id = ?`).get(String(payload.serviceId), tenantId) as any)
+        : null;
+      const baseAddonsCfg = normalizeOptionalAddonsConfig(baseSrvForAddons?.optional_addons_json);
+      const selectedIds = Array.isArray(payload.selectedAddonOptionIds) ? payload.selectedAddonOptionIds : [];
       for (const sch of rawAddonSchedules) {
-        expandedAddonSlots.push(...expandStudioScheduleItem(tenantId, sch));
+        const matchedOpt =
+          (sch.addonOptionId ? baseAddonsCfg.options.find(o => o.id === String(sch.addonOptionId)) : null) ||
+          baseAddonsCfg.options.find(o => selectedIds.includes(o.id) && o.addonServiceId === String(sch.serviceId)) ||
+          baseAddonsCfg.options.find(o => o.addonServiceId === String(sch.serviceId));
+        const capOv = matchedOpt
+          ? (matchedOpt.attendanceFormat === 'individual'
+              ? 1
+              : matchedOpt.attendanceFormat === 'duo'
+                ? 2
+                : matchedOpt.attendanceFormat === 'group' && matchedOpt.sessionCapacity && matchedOpt.sessionCapacity >= 2
+                  ? matchedOpt.sessionCapacity
+                  : null)
+          : null;
+        const allowedPros =
+          matchedOpt && Array.isArray(matchedOpt.enabledProfessionalIds) && matchedOpt.enabledProfessionalIds.length > 0
+            ? matchedOpt.enabledProfessionalIds
+            : undefined;
+        const allowedDays =
+          matchedOpt && Array.isArray(matchedOpt.allowedWeekdays) && matchedOpt.allowedWeekdays.length > 0
+            ? matchedOpt.allowedWeekdays
+            : undefined;
+        for (const ex of expandStudioScheduleItem(tenantId, sch)) {
+          expandedAddonSlots.push({
+            ...ex,
+            allowedProfessionalIds: allowedPros,
+            capacityOverride: capOv,
+            allowedWeekdays: allowedDays,
+            addonOptionId: matchedOpt?.id || null
+          });
+        }
       }
       if (expandedAddonSlots.length > 0) {
         studioExtBusyMap = await prefetchStudioExternalBusy(tenantId, expandedAddonSlots);
@@ -1935,8 +2143,42 @@ export class PublicBookingRequestService {
         recurrence: payload.recurrence || undefined
       });
       const rawAddonSchedules = Array.isArray(payload.addonSchedules) ? payload.addonSchedules : [];
+      const baseSrvForAddons = payload.serviceId
+        ? (db.prepare(`SELECT optional_addons_json FROM services WHERE id = ? AND tenant_id = ?`).get(String(payload.serviceId), tenantId) as any)
+        : null;
+      const baseAddonsCfg = normalizeOptionalAddonsConfig(baseSrvForAddons?.optional_addons_json);
+      const selectedIds = Array.isArray(payload.selectedAddonOptionIds) ? payload.selectedAddonOptionIds : [];
       for (const sch of rawAddonSchedules) {
-        expandedAddonSlots.push(...expandStudioScheduleItem(tenantId, sch));
+        const matchedOpt =
+          (sch.addonOptionId ? baseAddonsCfg.options.find(o => o.id === String(sch.addonOptionId)) : null) ||
+          baseAddonsCfg.options.find(o => selectedIds.includes(o.id) && o.addonServiceId === String(sch.serviceId)) ||
+          baseAddonsCfg.options.find(o => o.addonServiceId === String(sch.serviceId));
+        const capOv = matchedOpt
+          ? (matchedOpt.attendanceFormat === 'individual'
+              ? 1
+              : matchedOpt.attendanceFormat === 'duo'
+                ? 2
+                : matchedOpt.attendanceFormat === 'group' && matchedOpt.sessionCapacity && matchedOpt.sessionCapacity >= 2
+                  ? matchedOpt.sessionCapacity
+                  : null)
+          : null;
+        const allowedPros =
+          matchedOpt && Array.isArray(matchedOpt.enabledProfessionalIds) && matchedOpt.enabledProfessionalIds.length > 0
+            ? matchedOpt.enabledProfessionalIds
+            : undefined;
+        const allowedDays =
+          matchedOpt && Array.isArray(matchedOpt.allowedWeekdays) && matchedOpt.allowedWeekdays.length > 0
+            ? matchedOpt.allowedWeekdays
+            : undefined;
+        for (const ex of expandStudioScheduleItem(tenantId, sch)) {
+          expandedAddonSlots.push({
+            ...ex,
+            allowedProfessionalIds: allowedPros,
+            capacityOverride: capOv,
+            allowedWeekdays: allowedDays,
+            addonOptionId: matchedOpt?.id || null
+          });
+        }
       }
       studioExtBusyMap = await prefetchStudioExternalBusy(tenantId, expandedServiceSlots.concat(expandedAddonSlots));
     }
@@ -2220,6 +2462,26 @@ export class PublicBookingRequestService {
 
       if (requestRow.mode === 'access_plan' || payload.type === 'studio_access_plan') {
         const resolvedStudentId = resolveOrCreateStudioStudentTx();
+        const initialAddonScheduleMap: Record<string, Array<{ dayOfWeek: number; startTime: string; endTime: string; professionalId?: string }>> = {};
+        const initialAddonCounts: Record<string, number> = {};
+        for (const item of expandedAddonSlots) {
+          const sid = String(item.serviceRow.id);
+          initialAddonCounts[sid] = (initialAddonCounts[sid] || 0) + 1;
+          const dow = getDayOfWeekFromYmd(item.startIso.slice(0, 10));
+          const list = initialAddonScheduleMap[sid] || [];
+          const keyStart = item.startIso.slice(11, 16);
+          const keyEnd = item.endIso.slice(11, 16);
+          if (!list.some(x => x.dayOfWeek === dow && x.startTime === keyStart && x.endTime === keyEnd)) {
+            list.push({
+              dayOfWeek: dow,
+              startTime: keyStart,
+              endTime: keyEnd,
+              ...(item.preferredProfId && item.preferredProfId !== 'any' ? { professionalId: item.preferredProfId } : {})
+            });
+            initialAddonScheduleMap[sid] = list;
+          }
+        }
+
         const enrollment = StudioAccessService.createEnrollmentTx({
           tenantId,
           studentId: resolvedStudentId,
@@ -2227,6 +2489,8 @@ export class PublicBookingRequestService {
           contractKind: payload.contractKind === 'deliverable' ? 'deliverable' : 'access_plan',
           commercialOptionId: payload.commercialOptionId || null,
           selectedAddonOptionIds: Array.isArray(payload.selectedAddonOptionIds) ? payload.selectedAddonOptionIds : undefined,
+          initialAddonCountsByServiceId: initialAddonCounts,
+          initialAddonSchedulesByServiceId: initialAddonScheduleMap,
           contractDurationCode: payload.contractDurationCode || '1_month',
           paymentPeriodicity: payload.paymentPeriodicity || 'monthly',
           startDate: payload.startDate || todayBrazilYmd(),
@@ -2259,7 +2523,8 @@ export class PublicBookingRequestService {
                 studioExtBusyMap,
                 studentNotes: payload.student?.notes || null,
                 userId,
-                gcalSyncTargets
+                gcalSyncTargets,
+                excludeHoldRequestId: requestRow.id
               })
             : { createdIds: [] as string[], firstOccId: null as string | null };
 
@@ -2499,7 +2764,10 @@ export class PublicBookingRequestService {
         }
         return {
           slotItem,
-          resolvedSlot: resolveStudioPublicSlot(tenantId, slotItem, resolvedStudentId, studioExtBusyMap)
+          resolvedSlot: resolveStudioPublicSlot(tenantId, slotItem, resolvedStudentId, studioExtBusyMap, {
+            includePendingHolds: true,
+            excludeHoldRequestId: requestRow.id
+          })
         };
       });
 
@@ -2770,7 +3038,8 @@ export class PublicBookingRequestService {
           studioExtBusyMap,
           studentNotes: payload.student?.notes || null,
           userId,
-          gcalSyncTargets
+          gcalSyncTargets,
+          excludeHoldRequestId: requestRow.id
         });
         createdIds.push(...addonRes.createdIds);
         if (!firstOccId && addonRes.firstOccId) firstOccId = addonRes.firstOccId;

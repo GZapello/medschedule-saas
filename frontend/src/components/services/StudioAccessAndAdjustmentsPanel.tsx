@@ -17,6 +17,8 @@ import {
   StudioCommercialPriceOption,
   StudioOptionalAddonsConfig,
   StudioOptionalAddonOption,
+  AddonAttendanceFormat,
+  AddonProfessionalSelectionMode,
   DEFAULT_STUDIO_ACCESS_CONFIG,
   PAYMENT_PERIODICITY_LABELS,
   COMMERCIAL_UNIT_LABELS,
@@ -35,6 +37,16 @@ export interface AddonCandidateService {
   service_kind?: string;
   requires_appointment?: number | boolean;
   service_domain?: string;
+  professional_id?: string | null;
+  linked_professional_ids?: string[];
+}
+
+export interface AddonCandidateProfessional {
+  id: string;
+  name: string;
+  profession_name?: string | null;
+  active?: number | boolean;
+  public_booking_enabled?: number | boolean;
 }
 
 interface StudioAccessAndAdjustmentsPanelProps {
@@ -49,6 +61,7 @@ interface StudioAccessAndAdjustmentsPanelProps {
   optionalAddons?: StudioOptionalAddonsConfig;
   onOptionalAddonsChange?: (nextConfig: StudioOptionalAddonsConfig) => void;
   availableAddonServices?: AddonCandidateService[];
+  professionals?: AddonCandidateProfessional[];
   currentServiceId?: string | null;
   defaultCapacity: number;
   onDefaultCapacityChange?: (nextCap: number) => void;
@@ -78,6 +91,7 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
   optionalAddons,
   onOptionalAddonsChange,
   availableAddonServices = [],
+  professionals = [],
   currentServiceId = null,
   defaultCapacity,
   onDefaultCapacityChange,
@@ -100,6 +114,7 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
       s.active !== 0 &&
       (!s.service_domain || s.service_domain === 'studio')
   );
+  const activeProfessionals = professionals.filter(p => p && p.active !== false && p.active !== 0);
 
   const patchOptionalAddons = (patch: Partial<StudioOptionalAddonsConfig>) => {
     if (!onOptionalAddonsChange) return;
@@ -108,7 +123,7 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
 
   const addOptionalAddonOption = () => {
     if (!onOptionalAddonsChange) return;
-    const defaultTarget = candidateAddonServices[0] || null;
+    const defaultTarget = candidateAddonServices.find(s => s.requires_appointment !== 0) || candidateAddonServices[0] || null;
     const defaultReqAppt =
       defaultTarget &&
       (defaultTarget.studio_service_type === 'facility_access' ||
@@ -124,7 +139,14 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
       label: defaultTarget ? `${defaultTarget.name} (1x/semana)` : '',
       description: null,
       active: true,
+      allowPublicBooking: true,
       acceptedBaseOptionIds: [],
+      enabledProfessionalIds: [],
+      professionalSelectionMode: 'student_picks',
+      attendanceFormat: 'match_service',
+      sessionCapacity: null,
+      allowedWeekdays: [],
+      studentCanChooseSchedule: false,
       frequencyType: defaultReqAppt ? 'weekly' : 'unlimited',
       frequencyCount: defaultReqAppt ? 1 : null,
       creditsPerCycle: defaultReqAppt ? 4 : null,
@@ -859,26 +881,55 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
             <div>
               <div className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-teal-600" />
-                Complementos opcionais
+                Complementos opcionais (ex.: Personal Trainer)
               </div>
               <p className="text-[11px] text-slate-500">
-                Ofereça serviços vinculados (ex.: Personal, Pilates, Avaliação) sem duplicar cadastros.
+                Ofereça serviços vinculados sem duplicar cadastros e sem vincular Personal diretamente ao acesso da academia.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => setShowOptionalAddons(prev => !prev)}
-              className="text-xs font-semibold text-teal-700 hover:text-teal-900 cursor-pointer"
-            >
-              {showOptionalAddons
-                ? 'Ocultar complementos'
-                : effectiveOptionalAddons.options.length > 0
-                  ? `Gerenciar (${effectiveOptionalAddons.options.length})`
-                  : '+ Configurar complementos'}
-            </button>
+            <div className="flex items-center gap-2">
+              <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5 text-[11px] font-semibold">
+                <button
+                  type="button"
+                  onClick={() => patchOptionalAddons({ enabled: false })}
+                  className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                    !effectiveOptionalAddons.enabled
+                      ? 'bg-white text-slate-800 shadow-xs'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  Desativado
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    patchOptionalAddons({ enabled: true });
+                    setShowOptionalAddons(true);
+                  }}
+                  className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                    effectiveOptionalAddons.enabled
+                      ? 'bg-teal-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-800'
+                  }`}
+                >
+                  Ativado
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowOptionalAddons(prev => !prev)}
+                className="text-xs font-semibold text-teal-700 hover:text-teal-900 cursor-pointer"
+              >
+                {showOptionalAddons
+                  ? 'Recolher'
+                  : effectiveOptionalAddons.options.length > 0
+                    ? `Gerenciar (${effectiveOptionalAddons.options.length})`
+                    : '+ Configurar'}
+              </button>
+            </div>
           </div>
 
-          {showOptionalAddons && (
+          {(showOptionalAddons || effectiveOptionalAddons.enabled) && (
             <div className="space-y-3 pt-2 border-t border-slate-100">
               <div className="flex flex-wrap items-center gap-4">
                 <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
@@ -951,10 +1002,14 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
                     selectedTarget.requires_appointment === false)
                     ? false
                     : true;
+                const enabledPros = Array.isArray(opt.enabledProfessionalIds) ? opt.enabledProfessionalIds : [];
+                const allowedDays = Array.isArray(opt.allowedWeekdays) ? opt.allowedWeekdays : [];
+                const attendanceFormat: AddonAttendanceFormat = opt.attendanceFormat || 'match_service';
+                const proSelectionMode: AddonProfessionalSelectionMode = opt.professionalSelectionMode || 'student_picks';
 
                 return (
                   <div key={opt.id} className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5">
-                    <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
                       <span className="text-xs font-bold text-slate-700">
                         Complemento #{idx + 1}
                         {opt.comboDiscountType !== 'none' && opt.comboDiscountValue > 0 && (
@@ -963,7 +1018,7 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
                           </span>
                         )}
                       </span>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 flex-wrap">
                         <label className="inline-flex items-center gap-1 text-[11px] text-slate-700 cursor-pointer">
                           <input
                             type="checkbox"
@@ -971,6 +1026,14 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
                             onChange={e => updateOptionalAddonOption(idx, { active: e.target.checked })}
                           />
                           Ativo
+                        </label>
+                        <label className="inline-flex items-center gap-1 text-[11px] text-slate-700 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={opt.allowPublicBooking !== false}
+                            onChange={e => updateOptionalAddonOption(idx, { allowPublicBooking: e.target.checked })}
+                          />
+                          No Link Público
                         </label>
                         <button
                           type="button"
@@ -1009,7 +1072,8 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
                               addonServiceId: nextId,
                               addonServiceName: nextTarget?.name || null,
                               label: opt.label || (nextTarget ? nextTarget.name : ''),
-                              scheduleTiming: reqAppt ? (opt.scheduleTiming === 'not_applicable' ? 'after_confirmation' : opt.scheduleTiming) : 'not_applicable'
+                              scheduleTiming: reqAppt ? (opt.scheduleTiming === 'not_applicable' ? 'after_confirmation' : opt.scheduleTiming) : 'not_applicable',
+                              studentCanChooseSchedule: reqAppt ? (opt.scheduleTiming === 'during_purchase') : false
                             });
                           }}
                           className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white font-semibold"
@@ -1184,7 +1248,13 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
                         <select
                           value={targetRequiresAppt ? opt.scheduleTiming : 'not_applicable'}
                           disabled={!targetRequiresAppt}
-                          onChange={e => updateOptionalAddonOption(idx, { scheduleTiming: e.target.value as any })}
+                          onChange={e => {
+                            const nextTiming = e.target.value as any;
+                            updateOptionalAddonOption(idx, {
+                              scheduleTiming: nextTiming,
+                              studentCanChooseSchedule: nextTiming === 'during_purchase'
+                            });
+                          }}
                           className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white disabled:bg-slate-100"
                         >
                           {Object.entries(ADDON_SCHEDULE_TIMING_LABELS).map(([k, lbl]) => (
@@ -1193,6 +1263,126 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
                         </select>
                       </div>
                     </div>
+
+                    {targetRequiresAppt && (
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 border-t border-slate-200/80">
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Formato do atendimento</label>
+                          <select
+                            value={attendanceFormat}
+                            onChange={e => {
+                              const nextFmt = e.target.value as AddonAttendanceFormat;
+                              updateOptionalAddonOption(idx, {
+                                attendanceFormat: nextFmt,
+                                sessionCapacity:
+                                  nextFmt === 'individual'
+                                    ? 1
+                                    : nextFmt === 'duo'
+                                      ? 2
+                                      : nextFmt === 'group'
+                                        ? Math.max(2, Number(opt.sessionCapacity) || 4)
+                                        : null
+                              });
+                            }}
+                            className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white"
+                          >
+                            <option value="match_service">Seguir serviço vinculado</option>
+                            <option value="individual">Individual (1 aluno)</option>
+                            <option value="duo">Dupla (2 alunos)</option>
+                            <option value="group">Pequeno grupo / Turma</option>
+                          </select>
+                        </div>
+                        {attendanceFormat === 'group' && (
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Vagas por sessão (capacidade)</label>
+                            <input
+                              type="number"
+                              min={2}
+                              max={500}
+                              value={opt.sessionCapacity ?? 4}
+                              onChange={e => updateOptionalAddonOption(idx, { sessionCapacity: Math.max(2, Number(e.target.value) || 2) })}
+                              className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white font-semibold"
+                            />
+                          </div>
+                        )}
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Escolha do profissional</label>
+                          <select
+                            value={proSelectionMode}
+                            onChange={e => updateOptionalAddonOption(idx, { professionalSelectionMode: e.target.value as AddonProfessionalSelectionMode })}
+                            className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white"
+                          >
+                            <option value="student_picks">Aluno escolhe o profissional</option>
+                            <option value="auto_assign">Sistema atribui automaticamente</option>
+                          </select>
+                        </div>
+                      </div>
+                    )}
+
+                    {targetRequiresAppt && activeProfessionals.length > 0 && (
+                      <div className="pt-1 border-t border-slate-200/80">
+                        <span className="block text-[11px] font-semibold text-slate-600 mb-1">
+                          Profissionais habilitados neste complemento (deixe vazio para usar os vinculados ao serviço-alvo):
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {activeProfessionals.map(pro => {
+                            const selected = enabledPros.includes(pro.id);
+                            return (
+                              <button
+                                key={pro.id}
+                                type="button"
+                                onClick={() => {
+                                  const nextPros = selected
+                                    ? enabledPros.filter(id => id !== pro.id)
+                                    : [...enabledPros, pro.id];
+                                  updateOptionalAddonOption(idx, { enabledProfessionalIds: nextPros });
+                                }}
+                                className={`px-2 py-0.5 rounded-full text-[11px] border font-semibold cursor-pointer ${
+                                  selected
+                                    ? 'bg-indigo-600 text-white border-indigo-600'
+                                    : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'
+                                }`}
+                              >
+                                {pro.name}
+                                {Number(pro.public_booking_enabled ?? 1) === 0 ? ' (agenda pública off)' : ''}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {targetRequiresAppt && (
+                      <div className="pt-1 border-t border-slate-200/80">
+                        <span className="block text-[11px] font-semibold text-slate-600 mb-1">
+                          Dias permitidos (vazio = todos os dias ofertados na agenda/grade):
+                        </span>
+                        <div className="flex flex-wrap gap-1">
+                          {WEEKDAY_SHORT.map(wd => {
+                            const checked = allowedDays.includes(wd.day);
+                            return (
+                              <button
+                                key={wd.day}
+                                type="button"
+                                onClick={() => {
+                                  const nextDays = checked
+                                    ? allowedDays.filter(d => d !== wd.day)
+                                    : [...allowedDays, wd.day].sort((a, b) => a - b);
+                                  updateOptionalAddonOption(idx, { allowedWeekdays: nextDays });
+                                }}
+                                className={`px-2 py-0.5 rounded-md text-[11px] border font-semibold cursor-pointer ${
+                                  checked
+                                    ? 'bg-teal-600 text-white border-teal-600'
+                                    : 'bg-white text-slate-600 border-slate-200 hover:border-teal-300'
+                                }`}
+                              >
+                                {wd.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
 
                     {commercialPriceOptions.length > 0 && (
                       <div className="pt-1 border-t border-slate-200/80">

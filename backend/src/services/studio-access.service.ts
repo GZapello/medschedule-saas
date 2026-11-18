@@ -131,6 +131,8 @@ export interface CreateStudioEnrollmentInput {
   commercialOptionId?: string | null;
   selectedAddons?: Array<string | SelectedAddonInput>;
   selectedAddonOptionIds?: string[];
+  initialAddonCountsByServiceId?: Record<string, number>;
+  initialAddonSchedulesByServiceId?: Record<string, Array<{ dayOfWeek: number; startTime: string; endTime: string; professionalId?: string }>>;
   title?: string | null;
   contractKind?: 'access_plan' | 'scheduled_plan' | 'combined_package' | 'deliverable';
   accessMode?: 'unlimited' | 'limited' | 'none';
@@ -1010,8 +1012,8 @@ export class StudioAccessService {
         id, tenant_id, contract_id, service_id, service_name_snapshot,
         allowed_service_ids_json, weekly_frequency_snapshot, credits_total, credits_reserved, credits_used,
         entitlement_type, entitlement_role, addon_option_id, addon_pricing_json,
-        access_mode_snapshot, monthly_limit_snapshot, access_rules_snapshot_json, entries_used
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?, 0)
+        access_mode_snapshot, monthly_limit_snapshot, access_rules_snapshot_json, schedule_snapshot_json, entries_used
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?, 0)
     `);
 
     // 1. Direito separado do plano-base
@@ -1053,7 +1055,8 @@ export class StudioAccessService {
       null,
       baseEntType === 'facility_access' ? mergedAccessCfg.accessMode : null,
       baseMonthlyLimit,
-      baseEntType === 'facility_access' ? JSON.stringify(mergedAccessCfg) : null
+      baseEntType === 'facility_access' ? JSON.stringify(mergedAccessCfg) : null,
+      null
     );
 
     // 2. Direitos separados por complemento opcional contratado
@@ -1064,14 +1067,25 @@ export class StudioAccessService {
         mAddon._srvType === 'facility_access'
           ? 'facility_access'
           : (mAddon._srvType === 'non_scheduled' ? 'deliverable' : 'scheduled_service');
-      const entCredits =
+      let entCredits =
         entType === 'facility_access'
           ? 0
           : (entType === 'deliverable'
               ? 1
               : (itemBreakdown.totalCreditsInDuration ?? itemBreakdown.creditsPerCycle ?? 0));
+      const initialScheduledCount = input.initialAddonCountsByServiceId?.[mAddon.addonServiceId] || 0;
+      if (
+        entType === 'scheduled_service' &&
+        itemBreakdown.frequencyType === 'weekly' &&
+        initialScheduledCount > entCredits
+      ) {
+        const weeklyCap = Math.max(1, itemBreakdown.frequencyCount || 1);
+        const maxWeeksCeiling = Math.ceil(itemBreakdown.durationMonths * 4.5) * weeklyCap;
+        entCredits = Math.min(maxWeeksCeiling, initialScheduledCount);
+      }
       const weeklyFreq = itemBreakdown.frequencyType === 'weekly' ? itemBreakdown.frequencyCount : null;
       const monthlyLimit = itemBreakdown.frequencyType === 'monthly' ? itemBreakdown.frequencyCount : null;
+      const addonSchedList = input.initialAddonSchedulesByServiceId?.[mAddon.addonServiceId];
 
       insEnt.run(
         'ent-' + uuidv4().slice(0, 8),
@@ -1088,7 +1102,8 @@ export class StudioAccessService {
         JSON.stringify(itemBreakdown),
         entType === 'facility_access' ? (itemBreakdown.frequencyType === 'unlimited' ? 'unlimited' : 'limited') : null,
         monthlyLimit,
-        null
+        null,
+        addonSchedList && addonSchedList.length > 0 ? JSON.stringify(addonSchedList) : null
       );
     }
 
@@ -1500,6 +1515,16 @@ export class StudioAccessService {
       }
     } else if (params.action === 'cancel') {
       nextPkgStatus = 'cancelled';
+      // Encerramento explícito do plano-base encerra todos os benefícios/complementos vinculados sem deixar órfãos
+      db.prepare(`
+        UPDATE student_package_entitlements
+        SET entitlement_status = 'cancelled',
+            cancelled_at = COALESCE(cancelled_at, datetime('now')),
+            cancellation_reason = COALESCE(cancellation_reason, ?),
+            updated_at = datetime('now')
+        WHERE tenant_id = ? AND contract_id = ? AND COALESCE(entitlement_status, 'active') != 'cancelled'
+      `).run(params.reason || 'Cancelamento do contrato principal', params.tenantId, pkgContract.id);
+
       if (params.cancelFuturePendingPayments !== false) {
         db.prepare(`
           UPDATE payments
@@ -1616,6 +1641,438 @@ export class StudioAccessService {
     });
 
     return { contractSource: 'package_contract', packageContract: updatedPkg };
+  }
+
+  /**
+   * Cancela um complemento opcional individual mantendo o plano-base e demais benefícios ativos.
+   * Preserva integralmente cobranças já pagas e sessões já realizadas.
+   */
+  static cancelAddonFromEnrollmentTx(params: {
+    tenantId: string;
+    contractId: string;
+    entitlementId: string;
+    reason?: string | null;
+    cancelFuturePendingPayments?: boolean;
+    cancelFutureScheduledAppointments?: boolean;
+    actorId: string;
+  }): any {
+    this.ensureStudioCompatible(params.tenantId);
+    const { dateIso: todayIso } = getBrazilNowParts();
+
+    const pkgContract = db
+      .prepare(`SELECT * FROM student_package_contracts WHERE id = ? AND tenant_id = ?`)
+      .get(params.contractId, params.tenantId) as any;
+    if (!pkgContract) {
+      throw Object.assign(new Error('Matrícula/contrato não encontrado neste estabelecimento.'), { status: 404 });
+    }
+    if (pkgContract.contract_status === 'cancelled') {
+      throw Object.assign(new Error('Este contrato já está cancelado.'), { status: 409 });
+    }
+
+    const ent = db
+      .prepare(`SELECT * FROM student_package_entitlements WHERE id = ? AND contract_id = ? AND tenant_id = ?`)
+      .get(params.entitlementId, params.contractId, params.tenantId) as any;
+    if (!ent) {
+      throw Object.assign(new Error('Complemento opcional não encontrado nesta matrícula.'), { status: 404 });
+    }
+    if (String(ent.entitlement_role || 'primary') !== 'addon') {
+      throw Object.assign(
+        new Error('Apenas benefícios adicionados como complemento podem ser cancelados separadamente sem encerrar o plano-base.'),
+        { status: 400 }
+      );
+    }
+    if (String(ent.entitlement_status || 'active') === 'cancelled') {
+      throw Object.assign(new Error('Este complemento já foi cancelado anteriormente.'), { status: 409 });
+    }
+
+    const prevSnapshot = PackageService.getContractById(params.tenantId, pkgContract.id);
+
+    db.prepare(`
+      UPDATE student_package_entitlements
+      SET entitlement_status = 'cancelled',
+          cancelled_at = datetime('now'),
+          cancellation_reason = ?,
+          updated_at = datetime('now')
+      WHERE id = ? AND tenant_id = ?
+    `).run(params.reason || 'Cancelamento independente do complemento', ent.id, params.tenantId);
+
+    if (params.cancelFutureScheduledAppointments !== false) {
+      db.prepare(`
+        UPDATE appointments
+        SET status = 'cancelled',
+            attendance_status = 'cancelled',
+            cancellation_reason = ?,
+            cancelled_at = datetime('now')
+        WHERE tenant_id = ?
+          AND package_contract_id = ?
+          AND (package_entitlement_id = ? OR service_id = ?)
+          AND status IN ('scheduled', 'confirmed')
+          AND substr(start_time, 1, 10) >= ?
+      `).run(
+        params.reason || `Cancelamento do complemento: ${ent.service_name_snapshot}`,
+        params.tenantId,
+        pkgContract.id,
+        ent.id,
+        ent.service_id,
+        todayIso
+      );
+    }
+
+    let addonPricing: any = null;
+    try {
+      if (ent.addon_pricing_json) addonPricing = JSON.parse(ent.addon_pricing_json);
+    } catch (_) {}
+    const addonNetCycleReais = Math.round(Number(addonPricing?.netPriceCents || 0)) / 100;
+
+    if (params.cancelFuturePendingPayments !== false && addonNetCycleReais >= 0) {
+      const pendingPays = db.prepare(`
+        SELECT id, amount, notes, service_id
+        FROM payments
+        WHERE tenant_id = ? AND package_contract_id = ? AND status = 'pending'
+        ORDER BY due_date ASC
+      `).all(params.tenantId, pkgContract.id) as any[];
+
+      for (const p of pendingPays) {
+        const notesStr = String(p.notes || '');
+        const isDedicatedAddonCharge =
+          (p.service_id && p.service_id === ent.service_id) ||
+          notesStr.includes(`Complemento:${ent.addon_option_id || ''}`) ||
+          notesStr.includes(`Complemento opcional incluído: ${addonPricing?.label || ent.service_name_snapshot}`) ||
+          (addonPricing?.label && notesStr.includes(addonPricing.label) && !notesStr.includes(pkgContract.package_name_snapshot));
+
+        if (isDedicatedAddonCharge) {
+          db.prepare(`
+            UPDATE payments
+            SET status = 'cancelled',
+                notes = COALESCE(notes, '') || ' [Cancelado ao encerrar complemento opcional]'
+            WHERE id = ? AND tenant_id = ?
+          `).run(p.id, params.tenantId);
+        } else if (
+          addonNetCycleReais > 0 &&
+          addonPricing?.effectivePeriodicity !== 'one_time' &&
+          Number(p.amount) >= addonNetCycleReais &&
+          notesStr.includes('+')
+        ) {
+          const reduced = Math.round(Math.max(0, Number(p.amount) - addonNetCycleReais) * 100) / 100;
+          if (reduced <= 0) {
+            db.prepare(`UPDATE payments SET status = 'cancelled', notes = COALESCE(notes, '') || ' [Ajustado após cancelamento de complemento]' WHERE id = ? AND tenant_id = ?`).run(p.id, params.tenantId);
+          } else {
+            db.prepare(`UPDATE payments SET amount = ?, base_amount = ?, notes = COALESCE(notes, '') || ' [Valor reduzido após cancelamento de complemento]' WHERE id = ? AND tenant_id = ?`).run(reduced, reduced, p.id, params.tenantId);
+          }
+        }
+      }
+
+      if (addonNetCycleReais > 0 && addonPricing?.effectivePeriodicity !== 'one_time') {
+        const newContractedPrice = Math.max(0, Math.round((Number(pkgContract.contracted_price || 0) - addonNetCycleReais) * 100) / 100);
+        db.prepare(`UPDATE student_package_contracts SET contracted_price = ?, updated_at = datetime('now') WHERE id = ? AND tenant_id = ?`)
+          .run(newContractedPrice, pkgContract.id, params.tenantId);
+        if (pkgContract.recurring_plan_id) {
+          const rp = db.prepare(`SELECT amount FROM recurring_billing_plans WHERE id = ? AND tenant_id = ?`).get(pkgContract.recurring_plan_id, params.tenantId) as any;
+          if (rp && Number(rp.amount) >= addonNetCycleReais) {
+            const newRpAmount = Math.max(0, Math.round((Number(rp.amount) - addonNetCycleReais) * 100) / 100);
+            db.prepare(`UPDATE recurring_billing_plans SET amount = ?, updated_at = datetime('now') WHERE id = ? AND tenant_id = ?`)
+              .run(newRpAmount, pkgContract.recurring_plan_id, params.tenantId);
+          }
+        }
+      }
+    }
+
+    const updatedPkg = PackageService.getContractById(params.tenantId, pkgContract.id);
+    this.recordContractHistoryTx({
+      tenantId: params.tenantId,
+      patientId: pkgContract.student_id,
+      packageContractId: pkgContract.id,
+      recurringPlanId: pkgContract.recurring_plan_id || null,
+      action: 'CANCEL_ADDON',
+      summary: `Complemento opcional cancelado (${ent.service_name_snapshot}) com manutenção do plano-base ativo`,
+      previousState: prevSnapshot,
+      newState: updatedPkg,
+      reason: params.reason || null,
+      createdBy: params.actorId
+    });
+
+    return {
+      contractSource: 'package_contract',
+      contractId: pkgContract.id,
+      cancelledEntitlementId: ent.id,
+      packageContract: updatedPkg
+    };
+  }
+
+  /**
+   * Inclui um complemento opcional posteriormente em uma matrícula ativa (de plano solo ou combinado).
+   */
+  static addAddonToEnrollmentTx(params: {
+    tenantId: string;
+    contractId: string;
+    addonOptionId: string;
+    startDate?: string;
+    dueDay?: number;
+    paymentMethod?: string;
+    initialPaymentStatus?: 'pending' | 'paid' | 'exempt';
+    generateInitialCharge?: boolean;
+    scheduleEntries?: Array<{ dayOfWeek: number; startTime: string; endTime: string; professionalId?: string }>;
+    actorId: string;
+  }): any {
+    this.ensureStudioCompatible(params.tenantId);
+    const { dateIso: todayIso } = getBrazilNowParts();
+
+    let pkgContract = db
+      .prepare(`SELECT * FROM student_package_contracts WHERE id = ? AND tenant_id = ?`)
+      .get(params.contractId, params.tenantId) as any;
+    const soloPlan = !pkgContract
+      ? (db.prepare(`SELECT * FROM recurring_billing_plans WHERE id = ? AND tenant_id = ?`).get(params.contractId, params.tenantId) as any)
+      : null;
+
+    if (!pkgContract && !soloPlan) {
+      throw Object.assign(new Error('Matrícula não encontrada neste estabelecimento.'), { status: 404 });
+    }
+
+    if (soloPlan && soloPlan.package_contract_id) {
+      pkgContract = db
+        .prepare(`SELECT * FROM student_package_contracts WHERE id = ? AND tenant_id = ?`)
+        .get(soloPlan.package_contract_id, params.tenantId) as any;
+    }
+
+    const baseServiceId = pkgContract?.base_service_id || soloPlan?.service_id;
+    if (!baseServiceId) {
+      throw Object.assign(new Error('Esta matrícula não possui plano-base compatível para inclusão de complemento.'), { status: 400 });
+    }
+
+    const currentStatus = pkgContract ? pkgContract.contract_status : (soloPlan.contract_status || soloPlan.status);
+    if (!['active', 'approved', 'confirmed'].includes(String(currentStatus || ''))) {
+      throw Object.assign(new Error('A inclusão de complementos exige uma matrícula ativa.'), { status: 409 });
+    }
+
+    const baseSrv = db.prepare(`
+      SELECT id, name, price, periodic_price, billing_mode, default_billing_due_day, default_plan_duration,
+             commercial_price_options_json, optional_addons_json, access_config_json,
+             COALESCE(studio_service_type, CASE WHEN COALESCE(service_kind, 'individual') = 'group' THEN 'group' ELSE 'individual' END) as studio_service_type
+      FROM services WHERE id = ? AND tenant_id = ?
+    `).get(baseServiceId, params.tenantId) as any;
+
+    if (!baseSrv) {
+      throw Object.assign(new Error('Serviço-base da matrícula não encontrado.'), { status: 404 });
+    }
+
+    const addonsCfg = normalizeOptionalAddonsConfig(baseSrv.optional_addons_json);
+    const addonOpt = addonsCfg.options.find(o => o.id === params.addonOptionId && o.active);
+    if (!addonOpt) {
+      throw Object.assign(new Error('Complemento opcional selecionado não encontrado ou inativo neste plano.'), { status: 400 });
+    }
+
+    const addonSrv = db.prepare(`
+      SELECT id, name, active, service_kind, service_domain, clinical_module,
+             COALESCE(studio_service_type, CASE WHEN COALESCE(service_kind, 'individual') = 'group' THEN 'group' ELSE 'individual' END) as studio_service_type
+      FROM services WHERE id = ? AND tenant_id = ?
+    `).get(addonOpt.addonServiceId, params.tenantId) as any;
+    if (!addonSrv || Number(addonSrv.active) === 0) {
+      throw Object.assign(new Error(`O serviço "${addonOpt.label}" está inativo.`), { status: 400 });
+    }
+
+    const establishmentProfile = getTenantEstablishmentProfile(params.tenantId);
+    const baseOptions = normalizeCommercialPriceOptions(baseSrv.commercial_price_options_json);
+    const fallbackBase = buildFallbackBaseCommercialOption(baseSrv);
+    let baseOptForCalc = fallbackBase;
+    if (pkgContract?.commercial_snapshot_json) {
+      try {
+        const parsed = JSON.parse(pkgContract.commercial_snapshot_json);
+        if (parsed?.baseOption?.id) baseOptForCalc = parsed.baseOption;
+      } catch (_) {}
+    } else if (baseOptions.length > 0 && soloPlan?.plan_duration_code) {
+      baseOptForCalc = baseOptions.find(o => o.contractDurationCode === soloPlan.plan_duration_code && o.active) || fallbackBase;
+    }
+
+    const itemBreakdown = calculatePlanWithAddonsBreakdown({
+      baseOption: baseOptForCalc,
+      selectedAddons: [addonOpt]
+    }).addons[0];
+
+    let targetContractId = pkgContract?.id;
+    let studentId = pkgContract?.student_id || soloPlan?.patient_id;
+
+    // Promove matrícula solo em recurring_billing_plans para contrato com benefícios separados mantendo o plano original intacto
+    if (!targetContractId && soloPlan) {
+      targetContractId = 'ctr-' + uuidv4().slice(0, 8);
+      const baseTitle = `${soloPlan.title || baseSrv.name} + ${addonOpt.label}`;
+      const basePeriodicity = soloPlan.payment_periodicity || soloPlan.billing_frequency || 'monthly';
+      const { frequency: billingFreq, cycleMonths } = normalizePeriodicFrequency(basePeriodicity);
+      const baseAmount = Number(soloPlan.amount || 0);
+      db.prepare(`
+        INSERT INTO student_package_contracts (
+          id, tenant_id, package_id, student_id, recurring_plan_id,
+          package_name_snapshot, description_snapshot, billing_type_snapshot, billing_frequency_snapshot, cycle_months_snapshot,
+          credit_mode_snapshot, contracted_price, installments_count, total_credits_snapshot, weekly_limit_snapshot,
+          validity_days_snapshot, due_day_snapshot, absent_consumption_policy_snapshot,
+          cancellation_hours_limit_snapshot, start_date, end_date, contract_status,
+          payment_status, origin, notes, base_service_id, contract_duration_code,
+          payment_periodicity_snapshot, total_contract_amount, fidelity_months_snapshot, grace_period_days_snapshot,
+          auto_renew_snapshot, commercial_snapshot_json, confirmed_by, confirmed_at, created_by, created_at, updated_at
+        ) VALUES (?, ?, NULL, ?, ?, ?, ?, 'recurring_monthly', ?, ?, 'per_service', ?, 1, 0, ?, ?, ?, 'consume', 12, ?, ?, 'active', 'pending', 'admin', ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, datetime('now'), ?, datetime('now'), datetime('now'))
+      `).run(
+        targetContractId,
+        params.tenantId,
+        soloPlan.patient_id,
+        soloPlan.id,
+        baseTitle,
+        `Plano-base: ${baseSrv.name} + Complemento incluído posteriormente: ${addonOpt.label}`,
+        billingFreq,
+        cycleMonths,
+        baseAmount,
+        soloPlan.weekly_frequency ?? null,
+        30,
+        Number(soloPlan.due_day || 10),
+        soloPlan.start_date || todayIso,
+        soloPlan.end_date || null,
+        soloPlan.notes || null,
+        baseSrv.id,
+        soloPlan.plan_duration_code || baseOptForCalc.contractDurationCode,
+        basePeriodicity,
+        Number(soloPlan.total_contract_amount || baseAmount),
+        soloPlan.auto_renew ? 1 : 0,
+        JSON.stringify({ serviceName: baseSrv.name, baseOption: baseOptForCalc }),
+        params.actorId,
+        params.actorId
+      );
+
+      db.prepare(`UPDATE recurring_billing_plans SET package_contract_id = ?, updated_at = datetime('now') WHERE id = ? AND tenant_id = ?`)
+        .run(targetContractId, soloPlan.id, params.tenantId);
+
+      const baseAccessCfg = normalizeStudioAccessConfig(soloPlan.access_rules_snapshot_json || baseSrv.access_config_json);
+      const baseType = baseSrv.studio_service_type === 'facility_access' ? 'facility_access' : 'scheduled_service';
+      db.prepare(`
+        INSERT INTO student_package_entitlements (
+          id, tenant_id, contract_id, service_id, service_name_snapshot,
+          allowed_service_ids_json, weekly_frequency_snapshot, credits_total, credits_reserved, credits_used,
+          entitlement_type, entitlement_role, access_mode_snapshot, monthly_limit_snapshot, access_rules_snapshot_json, entries_used
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?, 'base', ?, ?, ?, 0)
+      `).run(
+        'ent-' + uuidv4().slice(0, 8),
+        params.tenantId,
+        targetContractId,
+        baseSrv.id,
+        baseSrv.name,
+        JSON.stringify([baseSrv.id]),
+        soloPlan.weekly_frequency ?? null,
+        baseType,
+        baseType === 'facility_access' ? (soloPlan.access_mode_snapshot || baseAccessCfg.accessMode || 'unlimited') : null,
+        baseAccessCfg.maxEntriesPerMonth ?? null,
+        baseSrv.access_config_json || null
+      );
+
+      pkgContract = db.prepare(`SELECT * FROM student_package_contracts WHERE id = ? AND tenant_id = ?`).get(targetContractId, params.tenantId) as any;
+    } else {
+      const existingSameActive = db.prepare(`
+        SELECT id FROM student_package_entitlements
+        WHERE tenant_id = ? AND contract_id = ? AND addon_option_id = ? AND COALESCE(entitlement_status, 'active') != 'cancelled'
+      `).get(params.tenantId, targetContractId, addonOpt.id);
+      if (existingSameActive) {
+        throw Object.assign(new Error(`O complemento "${addonOpt.label}" já está ativo nesta matrícula.`), { status: 409 });
+      }
+      if (!addonsCfg.allowMultiple) {
+        const anyOtherActive = db.prepare(`
+          SELECT id FROM student_package_entitlements
+          WHERE tenant_id = ? AND contract_id = ? AND entitlement_role = 'addon' AND COALESCE(entitlement_status, 'active') != 'cancelled'
+        `).get(params.tenantId, targetContractId);
+        if (anyOtherActive) {
+          throw Object.assign(new Error('Este plano permite apenas um complemento opcional ativo por vez.'), { status: 409 });
+        }
+      }
+    }
+
+    const addonSrvType = normalizeStudioServiceType(addonSrv.studio_service_type, addonSrv.service_kind);
+    const targetDomain = resolveServiceDomain({
+      establishmentProfile,
+      serviceDomain: addonSrv.service_domain,
+      serviceKind: addonSrv.service_kind,
+      clinicalModule: addonSrv.clinical_module
+    });
+    if (targetDomain !== 'studio') {
+      throw Object.assign(new Error('Complemento precisa pertencer ao domínio Academia & Studio.'), { status: 400 });
+    }
+    const entType: 'scheduled_service' | 'facility_access' | 'deliverable' =
+      addonSrvType === 'facility_access'
+        ? 'facility_access'
+        : (addonSrvType === 'non_scheduled' ? 'deliverable' : 'scheduled_service');
+    const entCredits =
+      entType === 'facility_access'
+        ? 0
+        : (entType === 'deliverable'
+            ? 1
+            : (itemBreakdown.totalCreditsInDuration ?? itemBreakdown.creditsPerCycle ?? 0));
+
+    const newEntId = 'ent-' + uuidv4().slice(0, 8);
+    db.prepare(`
+      INSERT INTO student_package_entitlements (
+        id, tenant_id, contract_id, service_id, service_name_snapshot,
+        allowed_service_ids_json, weekly_frequency_snapshot, credits_total, credits_reserved, credits_used,
+        entitlement_type, entitlement_role, addon_option_id, addon_pricing_json,
+        access_mode_snapshot, monthly_limit_snapshot, schedule_snapshot_json, entries_used
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, 'addon', ?, ?, ?, ?, ?, 0)
+    `).run(
+      newEntId,
+      params.tenantId,
+      targetContractId,
+      addonOpt.addonServiceId,
+      `${addonOpt.label} (${addonSrv.name})`,
+      JSON.stringify([addonOpt.addonServiceId]),
+      itemBreakdown.frequencyType === 'weekly' ? itemBreakdown.frequencyCount : null,
+      entCredits,
+      entType,
+      addonOpt.id,
+      JSON.stringify(itemBreakdown),
+      entType === 'facility_access' ? (itemBreakdown.frequencyType === 'unlimited' ? 'unlimited' : 'limited') : null,
+      itemBreakdown.frequencyType === 'monthly' ? itemBreakdown.frequencyCount : null,
+      Array.isArray(params.scheduleEntries) && params.scheduleEntries.length > 0 ? JSON.stringify(params.scheduleEntries) : null
+    );
+
+    const netReais = Math.round(itemBreakdown.netPriceCents) / 100;
+    const chargeDueDate = params.startDate ? String(params.startDate).slice(0, 10) : todayIso;
+    if (params.generateInitialCharge !== false && netReais > 0) {
+      const payStatus = params.initialPaymentStatus === 'paid' ? 'paid' : (params.initialPaymentStatus === 'exempt' ? 'exempt' : 'pending');
+      db.prepare(`
+        INSERT INTO payments (
+          id, tenant_id, appointment_id, patient_id, service_id, recurring_plan_id, package_contract_id,
+          amount, base_amount, discount_amount, payment_method, status, payment_date,
+          due_date, competence_month, installment_number, total_installments, notes, created_at
+        ) VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1, ?, datetime('now'))
+      `).run(
+        'pay-' + uuidv4().slice(0, 8),
+        params.tenantId,
+        studentId,
+        addonOpt.addonServiceId,
+        null, // Cobrança adicional do complemento vinculada ao package_contract_id (evita colisão de unicidade na mesma competência da mensalidade-base)
+        targetContractId,
+        netReais,
+        Math.round(itemBreakdown.grossPriceCents) / 100,
+        Math.round(itemBreakdown.discountCents) / 100,
+        params.paymentMethod || 'pix',
+        payStatus,
+        payStatus === 'paid' ? new Date().toISOString() : null,
+        chargeDueDate,
+        chargeDueDate.slice(0, 7),
+        `Complemento opcional incluído: ${addonOpt.label}`
+      );
+    }
+
+    const updatedPkg = PackageService.getContractById(params.tenantId, targetContractId);
+    this.recordContractHistoryTx({
+      tenantId: params.tenantId,
+      patientId: studentId,
+      packageContractId: targetContractId,
+      recurringPlanId: pkgContract?.recurring_plan_id || null,
+      action: 'ADD_ADDON',
+      summary: `Complemento opcional "${addonOpt.label}" incluído na matrícula ativa`,
+      newState: updatedPkg,
+      createdBy: params.actorId
+    });
+
+    return {
+      contractSource: 'package_contract',
+      contractId: targetContractId,
+      addedEntitlementId: newEntId,
+      packageContract: updatedPkg
+    };
   }
 
   /**
@@ -1988,7 +2445,7 @@ export class StudioAccessService {
     `).all(tenantId, contractId) as any[];
 
     const appointments = db.prepare(`
-      SELECT a.id, a.service_id, a.professional_id, a.start_time, a.end_time, a.status,
+      SELECT a.id, a.service_id, a.professional_id, a.package_entitlement_id, a.start_time, a.end_time, a.status,
              a.attendance_status, a.modality, a.patient_notes as notes,
              s.name as service_name, prof.name as professional_name
       FROM appointments a
@@ -1997,7 +2454,7 @@ export class StudioAccessService {
       WHERE a.tenant_id = ?
         AND (${enrollment.contractSource === 'package_contract' ? 'a.package_contract_id = ?' : 'a.recurring_plan_id = ?'})
       ORDER BY a.start_time DESC
-      LIMIT 50
+      LIMIT 80
     `).all(tenantId, contractId) as any[];
 
     const history = db.prepare(`
@@ -2010,10 +2467,44 @@ export class StudioAccessService {
       LIMIT 100
     `).all(tenantId, contractId, contractId) as any[];
 
+    // Carrega opções de complementos ainda disponíveis para inclusão posterior no contrato ativo
+    let availableAddons: any[] = [];
+    const baseSrvId = enrollment.baseServiceId || enrollment.serviceId;
+    if (baseSrvId && !['cancelled', 'expired'].includes(enrollment.lifecycleCategory)) {
+      const baseSrv = db
+        .prepare(`SELECT optional_addons_json FROM services WHERE id = ? AND tenant_id = ?`)
+        .get(baseSrvId, tenantId) as { optional_addons_json?: string | null } | undefined;
+      if (baseSrv?.optional_addons_json) {
+        const cfg = normalizeOptionalAddonsConfig(baseSrv.optional_addons_json);
+        const activeAddonOptIds = new Set(
+          (enrollment.entitlements || [])
+            .filter((e: any) => e.entitlement_role === 'addon' && String(e.entitlement_status || 'active') !== 'cancelled')
+            .map((e: any) => e.addon_option_id)
+            .filter(Boolean)
+        );
+        availableAddons = cfg.options
+          .filter(o => o.active && o.addonServiceId && !activeAddonOptIds.has(o.id))
+          .map(o => ({
+            id: o.id,
+            label: o.label,
+            addonServiceId: o.addonServiceId,
+            addonServiceName: o.addonServiceName || null,
+            frequencyType: o.frequencyType,
+            frequencyCount: o.frequencyCount,
+            creditsPerCycle: o.creditsPerCycle,
+            additionalPriceCents: o.additionalPriceCents,
+            comboDiscountType: o.comboDiscountType,
+            comboDiscountValue: o.comboDiscountValue,
+            billingPeriodicity: o.billingPeriodicity
+          }));
+      }
+    }
+
     return {
       enrollment,
       student: studentRow ? {
         id: studentRow.id,
+        full_name: studentRow.full_name,
         fullName: studentRow.full_name,
         phone: studentRow.phone,
         whatsapp: studentRow.whatsapp || null,
@@ -2030,6 +2521,7 @@ export class StudioAccessService {
         notes: null
       },
       entitlements: enrollment.entitlements || [],
+      availableAddons,
       appointments,
       payments,
       history
@@ -2256,10 +2748,14 @@ export class StudioAccessService {
   static sanitizeEnrollmentDetailForViewer(detail: any, canViewFinancial: boolean): any {
     if (canViewFinancial || !detail) return detail;
     const sanitizedEnrollment = this.sanitizeEnrollmentForViewer(detail.enrollment, false);
+    const sanitizedAvailableAddons = Array.isArray(detail.availableAddons)
+      ? detail.availableAddons.map((a: any) => ({ ...a, additionalPriceCents: null, comboDiscountValue: null }))
+      : [];
     return {
       ...detail,
       enrollment: sanitizedEnrollment,
       entitlements: sanitizedEnrollment?.entitlements || [],
+      availableAddons: sanitizedAvailableAddons,
       student: detail.student ? { ...detail.student, cpf: null } : detail.student,
       payments: [],
       history: this.sanitizeContractHistoryForViewer(detail.history || [], false)

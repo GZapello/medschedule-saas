@@ -918,6 +918,11 @@ export function migrateStudioImprovements(rawDb: DatabaseSync): void {
   addColIfMissing('student_package_entitlements', 'entries_used', 'INTEGER NOT NULL DEFAULT 0');
   addColIfMissing('student_package_entitlements', 'delivered_at', 'TEXT');
   addColIfMissing('student_package_entitlements', 'delivered_by', 'TEXT');
+  addColIfMissing('student_package_entitlements', 'entitlement_status', "TEXT NOT NULL DEFAULT 'active'");
+  addColIfMissing('student_package_entitlements', 'cancelled_at', 'TEXT');
+  addColIfMissing('student_package_entitlements', 'cancellation_reason', 'TEXT');
+  addColIfMissing('student_package_entitlements', 'schedule_snapshot_json', 'TEXT');
+  addColIfMissing('public_booking_requests', 'hold_expires_at', 'TEXT');
 
   addColIfMissing('student_package_contracts', 'base_service_id', 'TEXT');
   addColIfMissing('student_package_contracts', 'contract_duration_code', 'TEXT');
@@ -999,5 +1004,34 @@ export function migrateStudioImprovements(rawDb: DatabaseSync): void {
     `);
   } catch (e) {
     console.warn('[StudioMigration] Aviso ao criar estrutura de Controle de Acesso:', e);
+  }
+
+  // 11. Limpeza segura e idempotente: remove vínculo indevido de profissional/módulo clínico em planos de acesso à academia (facility_access)
+  // Nunca altera serviços agendados legítimos (individual, group) nem contratos, mensalidades ou históricos.
+  try {
+    rawDb.exec(`
+      DELETE FROM professional_services
+      WHERE service_id IN (
+        SELECT id FROM services
+        WHERE studio_service_type = 'facility_access'
+      );
+
+      UPDATE services
+      SET professional_id = NULL,
+          clinical_module = NULL,
+          requires_appointment = 0,
+          updated_at = datetime('now')
+      WHERE studio_service_type = 'facility_access'
+        AND (professional_id IS NOT NULL OR clinical_module IS NOT NULL OR COALESCE(requires_appointment, 1) != 0);
+
+      UPDATE services
+      SET clinical_module = NULL,
+          requires_appointment = 0,
+          updated_at = datetime('now')
+      WHERE studio_service_type = 'non_scheduled'
+        AND (clinical_module = 'ZemdaPersonal' OR COALESCE(requires_appointment, 1) != 0);
+    `);
+  } catch (e) {
+    console.warn('[StudioMigration] Aviso ao higienizar vínculos em serviços facility_access:', e);
   }
 }

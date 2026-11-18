@@ -193,6 +193,9 @@ export const StudioEnrollmentsView: React.FC = () => {
   const [notes, setNotes] = useState<string>('');
 
   // Modal Congelamento / Cancelamento / Troca de Plano / Renovação
+  const [selectedAddonToAdd, setSelectedAddonToAdd] = useState<string>('');
+  const [addonCancelTarget, setAddonCancelTarget] = useState<{ contractId: string; entitlementId: string; label: string } | null>(null);
+  const [addonActionLoading, setAddonActionLoading] = useState<boolean>(false);
   const [lifecycleModal, setLifecycleModal] = useState<{
     enrollment: any;
     action: 'freeze' | 'cancel' | 'change_plan' | 'renew';
@@ -457,6 +460,7 @@ export const StudioEnrollmentsView: React.FC = () => {
 
   const handleOpenDetail = async (enrollment: any) => {
     try {
+      setSelectedAddonToAdd('');
       setDetailLoading(true);
       setDetailModal({ enrollment, loading: true });
       const res = await ApiClient.get<any>(`/v1/studio/enrollments/${enrollment.id}`);
@@ -537,6 +541,51 @@ export const StudioEnrollmentsView: React.FC = () => {
       showToast(err?.message || 'Erro ao registrar entrega.', 'error');
     } finally {
       setProcessingId(null);
+    }
+  };
+
+  const handleAddAddonToEnrollment = async (contractId: string, addonOptionId: string) => {
+    if (!addonOptionId) return;
+    try {
+      setAddonActionLoading(true);
+      const res: any = await ApiClient.post(`/v1/studio/enrollments/${contractId}/addons`, {
+        addonOptionId
+      });
+      showToast('Complemento opcional incluído na matrícula!', 'success');
+      setSelectedAddonToAdd('');
+      if (res?.detail) {
+        setDetailModal(res.detail);
+      }
+      fetchEnrollments();
+    } catch (err: any) {
+      showToast(err?.message || 'Erro ao incluir complemento na matrícula.', 'error');
+    } finally {
+      setAddonActionLoading(false);
+    }
+  };
+
+  const handleCancelAddonFromEnrollment = async () => {
+    if (!addonCancelTarget) return;
+    try {
+      setAddonActionLoading(true);
+      const res: any = await ApiClient.post(
+        `/v1/studio/enrollments/${addonCancelTarget.contractId}/entitlements/${addonCancelTarget.entitlementId}/cancel`,
+        {
+          cancelFuturePendingPayments: true,
+          cancelFutureScheduledAppointments: true,
+          reason: 'Cancelamento independente do complemento opcional via gestão de matrículas'
+        }
+      );
+      showToast(`Complemento "${addonCancelTarget.label}" cancelado. O plano-base permanece ativo.`, 'success');
+      setAddonCancelTarget(null);
+      if (res?.detail) {
+        setDetailModal(res.detail);
+      }
+      fetchEnrollments();
+    } catch (err: any) {
+      showToast(err?.message || 'Erro ao cancelar complemento.', 'error');
+    } finally {
+      setAddonActionLoading(false);
     }
   };
 
@@ -857,13 +906,25 @@ export const StudioEnrollmentsView: React.FC = () => {
                           const isFac = ent.entitlement_type === 'facility_access';
                           const isAddon = ent.entitlement_role === 'addon';
                           const isBaseRole = ent.entitlement_role === 'base';
+                          const isCancelledEnt = String(ent.entitlement_status || '').toLowerCase() === 'cancelled';
+                          const schedList = Array.isArray(ent.schedule_snapshot) ? ent.schedule_snapshot : [];
+                          const weekdayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+                          const schedCompact = schedList.length > 0
+                            ? schedList
+                                .map((s: any) => `${weekdayNames[Number(s.dayOfWeek)] ?? ''} ${String(s.startTime || '').slice(0, 5)}`.trim())
+                                .filter(Boolean)
+                                .join(', ')
+                            : '';
+                          const proLabel = schedList.find((s: any) => s.professionalName)?.professionalName || '';
                           return (
                             <div
                               key={ent.id}
-                              className={`px-2.5 py-1 rounded-lg border text-[11px] flex items-center gap-2 ${
-                                isAddon
-                                  ? 'border-teal-200 bg-teal-50/50'
-                                  : 'border-slate-200 bg-white'
+                              className={`px-2.5 py-1 rounded-lg border text-[11px] flex flex-wrap items-center gap-1.5 ${
+                                isCancelledEnt
+                                  ? 'border-slate-200 bg-slate-100/80 text-slate-500'
+                                  : isAddon
+                                    ? 'border-teal-200 bg-teal-50/50'
+                                    : 'border-slate-200 bg-white'
                               }`}
                             >
                               {isBaseRole && (
@@ -872,11 +933,13 @@ export const StudioEnrollmentsView: React.FC = () => {
                                 </span>
                               )}
                               {isAddon && (
-                                <span className="text-[9px] uppercase font-extrabold px-1.5 py-0.5 rounded bg-teal-100 text-teal-800">
-                                  Complemento
+                                <span className={`text-[9px] uppercase font-extrabold px-1.5 py-0.5 rounded ${isCancelledEnt ? 'bg-rose-100 text-rose-700' : 'bg-teal-100 text-teal-800'}`}>
+                                  {isCancelledEnt ? 'Complemento cancelado' : 'Complemento'}
                                 </span>
                               )}
-                              <span className="font-semibold text-slate-800">{ent.service_name_snapshot}:</span>
+                              <span className={`font-semibold ${isCancelledEnt ? 'line-through text-slate-500' : 'text-slate-800'}`}>
+                                {ent.service_name_snapshot}:
+                              </span>
                               {isFac ? (
                                 <span className="text-teal-700 font-bold">
                                   {ent.access_mode_snapshot === 'unlimited'
@@ -887,12 +950,27 @@ export const StudioEnrollmentsView: React.FC = () => {
                                         ? `Plano ${ent.monthly_limit_snapshot}x/mês`
                                         : 'Plano de Acesso'}
                                 </span>
+                              ) : ent.addon_pricing?.frequencyType === 'unlimited' ? (
+                                <span className="text-indigo-700 font-bold">Uso ilimitado no ciclo</span>
                               ) : (
-                                <span className="text-indigo-700 font-bold">
+                                <span className={`font-bold ${isCancelledEnt ? 'text-slate-500' : 'text-indigo-700'}`}>
                                   {ent.credits_used}/{ent.credits_total} {isDeliv ? 'entregue(s)' : 'aula(s)'}
+                                  {!isCancelledEnt && Number(ent.credits_reserved || 0) > 0 && ` • ${ent.credits_reserved} res.`}
+                                  {!isCancelledEnt && ent.credits_remaining !== null && ent.credits_remaining !== undefined && ` • ${ent.credits_remaining} disp.`}
                                 </span>
                               )}
-                              {canDeliverEntitlement && isDeliv && Number(ent.credits_remaining) > 0 && (
+                              {schedCompact && (
+                                <span className="text-[10px] text-slate-600">• {schedCompact}</span>
+                              )}
+                              {proLabel && (
+                                <span className="text-[10px] text-slate-500">({proLabel})</span>
+                              )}
+                              {canViewFinancial && isAddon && ent.addon_pricing && Number.isFinite(Number(ent.addon_pricing.netPriceCents)) && (
+                                <span className="text-[10px] font-bold text-emerald-700">
+                                  +{formatCurrencyBRL(Number(ent.addon_pricing.netPriceCents) / 100)}
+                                </span>
+                              )}
+                              {canDeliverEntitlement && isDeliv && !isCancelledEnt && Number(ent.credits_remaining) > 0 && (
                                 <button
                                   type="button"
                                   disabled={processingId === ent.id}
@@ -1534,9 +1612,17 @@ export const StudioEnrollmentsView: React.FC = () => {
               </div>
 
               {lifecycleModal.action === 'cancel' && (
-                <p className="text-[11px] text-amber-800 bg-amber-50 p-2.5 rounded-xl border border-amber-200">
-                  Cobranças futuras pendentes serão canceladas. Pagamentos já quitados e aulas já realizadas permanecem intactos no histórico.
-                </p>
+                <div className="text-[11px] text-amber-800 bg-amber-50 p-2.5 rounded-xl border border-amber-200 space-y-1">
+                  <div>Cobranças futuras pendentes serão canceladas. Pagamentos já quitados e aulas já realizadas permanecem intactos no histórico.</div>
+                  {Array.isArray(lifecycleModal.enrollment?.entitlements) &&
+                    lifecycleModal.enrollment.entitlements.some(
+                      (ent: any) => ent.entitlement_role === 'addon' && String(ent.entitlement_status || 'active').toLowerCase() !== 'cancelled'
+                    ) && (
+                      <div className="font-bold text-rose-800">
+                        Atenção: este contrato possui complementos opcionais ativos que também serão encerrados explicitamente junto ao plano-base.
+                      </div>
+                    )}
+                </div>
               )}
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
@@ -1769,39 +1855,195 @@ export const StudioEnrollmentsView: React.FC = () => {
                 {((Array.isArray(detailModal.entitlements) && detailModal.entitlements.length > 0) ||
                   (Array.isArray(detailModal.appointments) && detailModal.appointments.length > 0) ||
                   (detailModal.enrollment?.creditsTotal || 0) > 0) && (
-                  <div className="p-4 rounded-2xl border border-indigo-100 bg-indigo-50/30 space-y-2.5">
+                  <div className="p-4 rounded-2xl border border-indigo-100 bg-indigo-50/30 space-y-3">
                     <div className="font-bold text-indigo-900 uppercase text-[10px] tracking-wider flex items-center gap-1.5">
-                      <FileCheck2 className="w-3.5 h-3.5 text-indigo-600" /> Aulas, Benefícios e Agendamentos
+                      <FileCheck2 className="w-3.5 h-3.5 text-indigo-600" /> Plano-base, Complementos e Agendamentos
                     </div>
-                    {Array.isArray(detailModal.entitlements) && detailModal.entitlements.length > 0 && (
-                      <div className="flex flex-wrap gap-2">
-                        {detailModal.entitlements.map((ent: any) => (
-                          <span
+                    {Array.isArray(detailModal.entitlements) && detailModal.entitlements.length > 0 && (() => {
+                      const baseEntitlements = detailModal.entitlements.filter((ent: any) => ent.entitlement_role !== 'addon');
+                      const addonEntitlements = detailModal.entitlements.filter((ent: any) => ent.entitlement_role === 'addon');
+                      const weekdayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+                      const contractIsClosed = ['cancelled', 'expired'].includes(detailModal.enrollment?.lifecycleCategory);
+
+                      const renderEntitlementCard = (ent: any, isAddon: boolean) => {
+                        const isCancelledEnt = String(ent.entitlement_status || '').toLowerCase() === 'cancelled';
+                        const schedList = Array.isArray(ent.schedule_snapshot) ? ent.schedule_snapshot : [];
+                        const isUnlimited = ent.entitlement_type === 'facility_access'
+                          ? ent.access_mode_snapshot === 'unlimited'
+                          : ent.addon_pricing?.frequencyType === 'unlimited';
+                        const fmtLabel =
+                          ent.addon_pricing?.attendanceFormat === 'duo'
+                            ? 'Dupla (2 vagas)'
+                            : ent.addon_pricing?.attendanceFormat === 'group'
+                              ? `Grupo (${ent.addon_pricing?.sessionCapacity || '?'} vagas)`
+                              : ent.addon_pricing?.attendanceFormat === 'individual'
+                                ? 'Individual (1 vaga)'
+                                : null;
+
+                        return (
+                          <div
                             key={ent.id}
-                            className={`px-2.5 py-1 rounded-xl border text-[11px] font-semibold text-slate-800 inline-flex items-center gap-1.5 ${
-                              ent.entitlement_role === 'addon'
-                                ? 'bg-teal-50/60 border-teal-200'
-                                : 'bg-white border-indigo-100'
+                            className={`p-3 rounded-xl border text-[11px] space-y-1.5 ${
+                              isCancelledEnt
+                                ? 'bg-slate-100/90 border-slate-200 text-slate-500'
+                                : isAddon
+                                  ? 'bg-teal-50/60 border-teal-200 text-slate-800'
+                                  : 'bg-white border-indigo-100 text-slate-800'
                             }`}
                           >
-                            {ent.entitlement_role === 'base' && (
-                              <span className="text-[9px] uppercase font-extrabold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">
-                                Plano-base
-                              </span>
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span
+                                  className={`text-[9px] uppercase font-extrabold px-1.5 py-0.5 rounded ${
+                                    isCancelledEnt
+                                      ? 'bg-rose-100 text-rose-700'
+                                      : isAddon
+                                        ? 'bg-teal-100 text-teal-800'
+                                        : 'bg-slate-100 text-slate-700'
+                                  }`}
+                                >
+                                  {isCancelledEnt ? 'Complemento cancelado' : isAddon ? 'Complemento opcional' : 'Plano-base'}
+                                </span>
+                                <span className={`font-bold ${isCancelledEnt ? 'line-through text-slate-500' : 'text-slate-900'}`}>
+                                  {ent.service_name_snapshot}
+                                </span>
+                                {fmtLabel && !isCancelledEnt && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/80 border border-teal-200 text-teal-800 font-semibold">
+                                    {fmtLabel}
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                {canViewFinancial && isAddon && ent.addon_pricing && Number.isFinite(Number(ent.addon_pricing.netPriceCents)) && (
+                                  <span className="font-bold text-emerald-700">
+                                    +{formatCurrencyBRL(Number(ent.addon_pricing.netPriceCents) / 100)}
+                                    {ent.addon_pricing.effectivePeriodicity && PAYMENT_PERIODICITY_LABELS[ent.addon_pricing.effectivePeriodicity as keyof typeof PAYMENT_PERIODICITY_LABELS]
+                                      ? ` (${PAYMENT_PERIODICITY_LABELS[ent.addon_pricing.effectivePeriodicity as keyof typeof PAYMENT_PERIODICITY_LABELS]})`
+                                      : ''}
+                                  </span>
+                                )}
+                                {canManageContracts && isAddon && !isCancelledEnt && !contractIsClosed && (
+                                  <button
+                                    type="button"
+                                    disabled={addonActionLoading}
+                                    onClick={() =>
+                                      setAddonCancelTarget({
+                                        contractId: detailModal.enrollment.id,
+                                        entitlementId: ent.id,
+                                        label: ent.service_name_snapshot
+                                      })
+                                    }
+                                    className="px-2 py-0.5 rounded-lg border border-rose-200 bg-white hover:bg-rose-50 text-rose-700 font-bold text-[10px] cursor-pointer"
+                                  >
+                                    Cancelar Complemento
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+                              {ent.entitlement_type === 'facility_access' ? (
+                                <span className="font-semibold text-teal-800">
+                                  Regra de acesso:{' '}
+                                  {ent.access_mode_snapshot === 'unlimited'
+                                    ? 'Acesso Livre (sem necessidade de agendamento)'
+                                    : ent.weekly_frequency_snapshot
+                                      ? `${ent.weekly_frequency_snapshot}x por semana`
+                                      : ent.monthly_limit_snapshot
+                                        ? `${ent.monthly_limit_snapshot}x por mês`
+                                        : 'Conforme plano'}
+                                </span>
+                              ) : isUnlimited ? (
+                                <span className="font-semibold text-indigo-700">Frequência: Ilimitada no ciclo</span>
+                              ) : (
+                                <span className="font-semibold text-indigo-800">
+                                  Contratadas: <strong>{ent.credits_total ?? 0}</strong> • Utilizadas: <strong>{ent.credits_used ?? 0}</strong> • Reservadas: <strong>{ent.credits_reserved ?? 0}</strong> • Restantes: <strong>{ent.credits_remaining ?? 0}</strong>
+                                </span>
+                              )}
+                              {ent.weekly_frequency_snapshot && ent.entitlement_type !== 'facility_access' && (
+                                <span className="text-slate-600">• Frequência: {ent.weekly_frequency_snapshot}x/sem</span>
+                              )}
+                            </div>
+
+                            {schedList.length > 0 && (
+                              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                                <span className="text-[10px] font-semibold text-slate-500">Dias e instrutor:</span>
+                                {schedList.map((s: any, idx: number) => (
+                                  <span key={idx} className="px-2 py-0.5 rounded-md bg-white border border-slate-200 text-[10px] text-slate-700 font-medium">
+                                    {weekdayNames[Number(s.dayOfWeek)] ?? `Dia ${s.dayOfWeek}`} {String(s.startTime || '').slice(0, 5)}
+                                    {s.endTime ? `–${String(s.endTime).slice(0, 5)}` : ''}
+                                    {s.professionalName ? ` • Prof. ${s.professionalName}` : ''}
+                                  </span>
+                                ))}
+                              </div>
                             )}
-                            {ent.entitlement_role === 'addon' && (
-                              <span className="text-[9px] uppercase font-extrabold px-1.5 py-0.5 rounded bg-teal-100 text-teal-800">
-                                Complemento opcional
-                              </span>
+
+                            {isCancelledEnt && (ent.cancelled_at || ent.cancellation_reason) && (
+                              <div className="text-[10px] text-rose-700">
+                                Encerrado em {formatBrDateTime(ent.cancelled_at)}{ent.cancellation_reason ? ` — ${ent.cancellation_reason}` : ''}
+                              </div>
                             )}
-                            <span>{ent.service_name_snapshot}:</span>{' '}
-                            {ent.entitlement_type === 'facility_access'
-                              ? (ent.access_mode_snapshot === 'unlimited' ? 'Acesso Livre' : `${ent.weekly_frequency_snapshot || ent.monthly_limit_snapshot || ''}x`)
-                              : `${ent.credits_used || 0}/${ent.credits_total || 0} usados (${ent.credits_remaining ?? 0} livres)`}
-                          </span>
-                        ))}
-                      </div>
-                    )}
+                          </div>
+                        );
+                      };
+
+                      return (
+                        <div className="space-y-2">
+                          {baseEntitlements.length > 0 && (
+                            <div className="space-y-1.5">
+                              {baseEntitlements.map((ent: any) => renderEntitlementCard(ent, false))}
+                            </div>
+                          )}
+                          {addonEntitlements.length > 0 && (
+                            <div className="space-y-1.5 pt-1">
+                              <div className="text-[10px] font-bold uppercase text-teal-800 tracking-wider">
+                                Complementos Opcionais Contratados ({addonEntitlements.length})
+                              </div>
+                              {addonEntitlements.map((ent: any) => renderEntitlementCard(ent, true))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+
+                    {Array.isArray(detailModal.availableAddons) &&
+                      detailModal.availableAddons.length > 0 &&
+                      canManageContracts &&
+                      !['cancelled', 'expired'].includes(detailModal.enrollment?.lifecycleCategory) && (
+                        <div className="p-3 rounded-xl border border-dashed border-teal-300 bg-white space-y-2">
+                          <div className="text-[10px] font-bold uppercase text-teal-800 tracking-wider">
+                            Incluir Complemento Opcional no Contrato Ativo
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <select
+                              value={selectedAddonToAdd}
+                              onChange={e => setSelectedAddonToAdd(e.target.value)}
+                              className="flex-1 min-w-[220px] border border-slate-200 rounded-xl px-3 py-1.5 text-xs bg-white"
+                            >
+                              <option value="">Selecione um complemento disponível...</option>
+                              {detailModal.availableAddons.map((opt: any) => (
+                                <option key={opt.id} value={opt.id}>
+                                  {opt.label}
+                                  {opt.addonServiceName ? ` (${opt.addonServiceName})` : ''}
+                                  {canViewFinancial && Number.isFinite(Number(opt.additionalPriceCents))
+                                    ? ` — +${formatCurrencyBRL(Number(opt.additionalPriceCents) / 100)}`
+                                    : ''}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              disabled={!selectedAddonToAdd || addonActionLoading}
+                              onClick={() => handleAddAddonToEnrollment(detailModal.enrollment.id, selectedAddonToAdd)}
+                              className="px-3.5 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs cursor-pointer disabled:opacity-50 inline-flex items-center gap-1"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              Incluir Complemento
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     {Array.isArray(detailModal.appointments) && detailModal.appointments.length > 0 ? (
                       <div className="divide-y divide-indigo-100 bg-white rounded-xl border border-indigo-100 max-h-40 overflow-y-auto">
                         {detailModal.appointments.map((ap: any) => (
@@ -1936,6 +2178,49 @@ export const StudioEnrollmentsView: React.FC = () => {
                   </div>
                 ))
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmação: Cancelar Somente Complemento Opcional */}
+      {addonCancelTarget && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 mobile-modal">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 text-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-rose-600" />
+                <h3 className="text-base font-bold text-slate-900">Cancelar Complemento Opcional</h3>
+              </div>
+              <button type="button" onClick={() => setAddonCancelTarget(null)} className="text-slate-400 hover:text-slate-700 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-slate-600 leading-relaxed">
+              Deseja cancelar apenas o complemento <strong>{addonCancelTarget.label}</strong>?
+            </p>
+            <div className="p-3 rounded-xl bg-teal-50 border border-teal-200 text-teal-900 text-[11px] space-y-1">
+              <div>• O <strong>plano-base</strong> desta matrícula permanecerá ativo sem interrupção.</div>
+              <div>• Agendamentos futuros exclusivos do complemento e cobranças futuras pendentes correspondentes serão cancelados.</div>
+              <div>• Aulas já realizadas e pagamentos já quitados permanecem preservados no histórico.</div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                disabled={addonActionLoading}
+                onClick={() => setAddonCancelTarget(null)}
+                className="px-4 py-2 rounded-xl font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer"
+              >
+                Voltar
+              </button>
+              <button
+                type="button"
+                disabled={addonActionLoading}
+                onClick={handleCancelAddonFromEnrollment}
+                className="px-4 py-2 rounded-xl font-bold bg-rose-600 hover:bg-rose-700 text-white cursor-pointer disabled:opacity-50"
+              >
+                {addonActionLoading ? 'Cancelando...' : 'Confirmar Cancelamento'}
+              </button>
             </div>
           </div>
         </div>

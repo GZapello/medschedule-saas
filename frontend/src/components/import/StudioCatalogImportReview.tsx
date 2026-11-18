@@ -61,6 +61,12 @@ const emptyAddon: ProposedAddonOption = {
   billingPeriodicity: 'monthly',
   durationMode: 'match_base',
   scheduleTiming: 'after_confirmation',
+  attendanceFormat: 'match_service',
+  sessionCapacity: null,
+  professionalSelectionMode: 'student_picks',
+  enabledProfessionalIds: [],
+  allowedWeekdays: [],
+  allowPublicBooking: true,
   mandatoryUnclear: false,
   ambiguousReason: '',
   active: true,
@@ -221,7 +227,14 @@ function ServiceEditor({
 
   const hasPendingSchedules = !row.deferSchedules && slotChecks.some(c => !c.ok);
   const hasPendingPrices = row.prices.some(p => !p.amountCents || !p.unit || Boolean(p.ambiguousReason));
-  const hasPendingAddons = (row.optionalAddons || []).some(a => a.active && (Boolean(a.mandatoryUnclear) || a.additionalPriceCents === null || (!a.addonServiceRef && !a.addonServiceName)));
+  const hasPendingAddons = (row.optionalAddons || []).some(
+    a =>
+      a.active &&
+      (Boolean(a.mandatoryUnclear) ||
+        a.additionalPriceCents === null ||
+        (!a.addonServiceRef && !a.addonServiceName) ||
+        (a.attendanceFormat === 'group' && (!a.sessionCapacity || a.sessionCapacity < 2)))
+  );
   const needsConfirmation = row.issues.length > 0 || hasPendingSchedules || hasPendingPrices || hasPendingAddons;
   const hasIncompleteEndTimes = row.schedules.some(s => Boolean(s.startTime) && !s.endTime);
 
@@ -835,9 +848,119 @@ function ServiceEditor({
                             onChange={val => change({ comboDiscountValue: val === null ? 0 : (addon.comboDiscountType === 'percentage' ? Math.round(val) : Math.round(val * 100)) })}
                           />
                         )}
+                        <SelectField
+                          label="Formato de atendimento"
+                          options={[
+                            ['match_service', 'Seguir serviço vinculado'],
+                            ['individual', 'Individual (1 vaga/horário)'],
+                            ['duo', 'Dupla (2 vagas/horário)'],
+                            ['group', 'Grupo / Turma reduzida']
+                          ] as const}
+                          value={addon.attendanceFormat || 'match_service'}
+                          onChange={attendanceFormat =>
+                            attendanceFormat &&
+                            change({
+                              attendanceFormat,
+                              sessionCapacity:
+                                attendanceFormat === 'individual'
+                                  ? 1
+                                  : attendanceFormat === 'duo'
+                                    ? 2
+                                    : attendanceFormat === 'group'
+                                      ? (addon.sessionCapacity && addon.sessionCapacity >= 2 ? addon.sessionCapacity : 4)
+                                      : null
+                            })
+                          }
+                        />
+                        {(addon.attendanceFormat || 'match_service') === 'group' && (
+                          <NumberField
+                            label="Capacidade por horário (mín. 2)"
+                            value={addon.sessionCapacity ?? null}
+                            min={2}
+                            max={500}
+                            onChange={sessionCapacity => change({ sessionCapacity })}
+                          />
+                        )}
+                        <SelectField
+                          label="Escolha de profissional pelo aluno"
+                          options={[
+                            ['student_picks', 'Aluno escolhe profissional habilitado'],
+                            ['auto_assign', 'Atribuir profissional disponível automaticamente']
+                          ] as const}
+                          value={addon.professionalSelectionMode || 'student_picks'}
+                          onChange={professionalSelectionMode =>
+                            professionalSelectionMode && change({ professionalSelectionMode })
+                          }
+                        />
                       </div>
+
+                      {draft.catalog.professionals.length > 0 && (
+                        <div className="space-y-1">
+                          <div className="text-[11px] font-semibold text-slate-600">
+                            Profissionais habilitados (vazio = todos do serviço vinculado)
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {draft.catalog.professionals.map(prof => {
+                              const selected = Array.isArray(addon.enabledProfessionalIds) && addon.enabledProfessionalIds.includes(prof.id);
+                              return (
+                                <button
+                                  key={prof.id}
+                                  type="button"
+                                  onClick={() => {
+                                    const currentIds = Array.isArray(addon.enabledProfessionalIds) ? addon.enabledProfessionalIds : [];
+                                    const nextIds = selected
+                                      ? currentIds.filter(id => id !== prof.id)
+                                      : [...currentIds, prof.id];
+                                    change({ enabledProfessionalIds: nextIds });
+                                  }}
+                                  className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold cursor-pointer transition-colors ${
+                                    selected
+                                      ? 'bg-indigo-600 text-white border-indigo-600'
+                                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                                  }`}
+                                >
+                                  {prof.name}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="space-y-1">
+                        <div className="text-[11px] font-semibold text-slate-600">
+                          Dias permitidos (vazio = conforme agenda disponível)
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {WEEKDAY_SHORT.map((wdLabel, wdIdx) => {
+                            const selected = Array.isArray(addon.allowedWeekdays) && addon.allowedWeekdays.includes(wdIdx);
+                            return (
+                              <button
+                                key={wdIdx}
+                                type="button"
+                                onClick={() => {
+                                  const cur = Array.isArray(addon.allowedWeekdays) ? addon.allowedWeekdays : [];
+                                  const next = selected
+                                    ? cur.filter(d => d !== wdIdx)
+                                    : [...cur, wdIdx].sort((a, b) => a - b);
+                                  change({ allowedWeekdays: next });
+                                }}
+                                className={`px-2 py-1 rounded-lg border text-[11px] font-semibold cursor-pointer transition-colors ${
+                                  selected
+                                    ? 'bg-teal-600 text-white border-teal-600'
+                                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                                }`}
+                              >
+                                {wdLabel}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
                       <div className="flex flex-wrap items-center gap-4">
                         <Checkbox label="Complemento ativo para seleção" checked={addon.active !== false} onChange={active => change({ active })} />
+                        <Checkbox label="Disponível no link público" checked={addon.allowPublicBooking !== false} onChange={allowPublicBooking => change({ allowPublicBooking })} />
                         {addon.mandatoryUnclear === true ? null : (
                           <Checkbox label="Marcar obrigatoriedade como ambígua" checked={false} onChange={checked => change({ mandatoryUnclear: checked })} />
                         )}
@@ -1020,7 +1143,23 @@ export function StudioCatalogImportReview({ draft, onChange }: { draft: ImportDr
     const hasEffDuration = Boolean(row.durationMinutes || existing);
     const hasEffCapacity = (row.type || effType) !== 'group' || Boolean(row.capacity || existing?.capacity);
     const hasOpIssue = needsOpFields && (!hasEffModality || !hasEffDuration || !hasEffProf || !hasEffCapacity);
-    return Boolean(row.name && (row.type || existing) && row.issues.length === 0 && !hasLiveSlotIssue && !hasPriceIssue && !hasOpIssue);
+    const hasAddonIssue = (row.optionalAddons || []).some(
+      a =>
+        a.active &&
+        (Boolean(a.mandatoryUnclear) ||
+          a.additionalPriceCents === null ||
+          (!a.addonServiceRef && !a.addonServiceName) ||
+          (a.attendanceFormat === 'group' && (!a.sessionCapacity || a.sessionCapacity < 2)))
+    );
+    return Boolean(
+      row.name &&
+      (row.type || existing) &&
+      row.issues.length === 0 &&
+      !hasLiveSlotIssue &&
+      !hasPriceIssue &&
+      !hasOpIssue &&
+      !hasAddonIssue
+    );
   };
 
   const isPackageRowReady = (pkg: ProposedPackage): boolean => {

@@ -228,7 +228,8 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
         );
         setAvailabilityWindows(Array.isArray(serviceToEdit.availability_windows) ? serviceToEdit.availability_windows : []);
         setDescription(serviceToEdit.description || '');
-        const editPrimaryId = serviceToEdit.professional_id || initialProfessionalId || professionals[0]?.id || '';
+        const isEditNonScheduled = domain === 'studio' && (resolvedStudioType === 'facility_access' || resolvedStudioType === 'non_scheduled');
+        const editPrimaryId = serviceToEdit.professional_id || (isEditNonScheduled ? '' : (initialProfessionalId || professionals[0]?.id || ''));
         setProfessionalId(editPrimaryId);
         const existingLinked = Array.isArray(serviceToEdit.linked_professional_ids) && serviceToEdit.linked_professional_ids.length > 0
           ? serviceToEdit.linked_professional_ids
@@ -316,13 +317,14 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
       return;
     }
     const numPrice = String(price).trim() !== '' ? parseFloat(String(price).replace(',', '.')) : 0;
-    if (isNaN(numPrice) || numPrice < 0) {
+    if (requiresAppointment && (isNaN(numPrice) || numPrice < 0)) {
       showToast('Informe um valor válido para o serviço', 'error');
       return;
     }
     const isPeriodicSave = showStudioConfig && isPeriodicBillingMode(billingMode);
     const numPeriodicPrice = parseFloat(String(periodicPrice).replace(',', '.'));
-    if (isPeriodicSave && commercialPriceOptions.length === 0 && (periodicPrice.trim() === '' || isNaN(numPeriodicPrice) || numPeriodicPrice < 0)) {
+    const hasActiveCommercialOptions = (commercialPriceOptions || []).some(o => o.active !== false);
+    if (isPeriodicSave && !hasActiveCommercialOptions && (periodicPrice.trim() === '' || isNaN(numPeriodicPrice) || numPeriodicPrice < 0)) {
       showToast('Informe um valor por período de cobrança válido', 'error');
       return;
     }
@@ -371,9 +373,9 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
         professionalId: professionalId || null,
         ...(showStudioConfig ? { linkedProfessionalIds: normalizedLinkedIds } : {}),
         name: name.trim(),
-        price: numPrice,
-        durationMinutes: Number(durationMinutes) || 50,
-        bufferMinutes: Number(bufferMinutes) || 0,
+        price: requiresAppointment ? numPrice : (numPrice > 0 ? numPrice : (numPeriodicPrice > 0 ? numPeriodicPrice : 0)),
+        durationMinutes: requiresAppointment ? (Number(durationMinutes) || 50) : 0,
+        bufferMinutes: requiresAppointment ? (Number(bufferMinutes) || 0) : 0,
         modality,
         serviceKind: effectiveKind,
         defaultCapacity: effectiveKind === 'group' ? Number(defaultCapacity) : null,
@@ -384,6 +386,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
               studioServiceType,
               requiresAppointment,
               allowPublicBooking,
+              ...(requiresAppointment ? {} : { clinicalModule: null }),
               accessConfig: studioServiceType === 'facility_access' ? accessConfig : null,
               pricingAdjustments,
               commercialPriceOptions,
@@ -538,38 +541,40 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">
-                {showStudioConfig ? 'Preço por Atendimento / Aula (R$) *' : <>Preço (R$) <span className="text-rose-500">*</span></>}
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                value={price}
-                onChange={e => setPrice(e.target.value)}
-                placeholder="150.00"
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
-                required
-              />
+          {(!showStudioConfig || (studioServiceType !== 'facility_access' && studioServiceType !== 'non_scheduled')) && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  {showStudioConfig ? 'Preço por Atendimento / Aula (R$) *' : <>Preço (R$) <span className="text-rose-500">*</span></>}
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={price}
+                  onChange={e => setPrice(e.target.value)}
+                  placeholder="150.00"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Duração (minutos) <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  step="5"
+                  min="5"
+                  max="480"
+                  value={durationMinutes}
+                  onChange={e => setDurationMinutes(Number(e.target.value))}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                  required
+                />
+              </div>
             </div>
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">
-                Duração (minutos) <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="number"
-                step="5"
-                min="5"
-                max="480"
-                value={durationMinutes}
-                onChange={e => setDurationMinutes(Number(e.target.value))}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
-                required
-              />
-            </div>
-          </div>
+          )}
 
           <div>
             <label className="block font-semibold text-slate-700 mb-1">Modalidade</label>
@@ -629,6 +634,17 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
                 onStudioServiceTypeChange={nextType => {
                   setStudioServiceType(nextType);
                   setServiceKind(nextType === 'group' ? 'group' : 'individual');
+                  if (nextType === 'facility_access' || nextType === 'non_scheduled') {
+                    setProfessionalId('');
+                    setLinkedProfessionalIds([]);
+                    setDurationMinutes(0);
+                    setBufferMinutes(0);
+                  } else if (!professionalId && professionals.length > 0) {
+                    const fallbackProf = initialProfessionalId || professionals[0].id;
+                    setProfessionalId(fallbackProf);
+                    setLinkedProfessionalIds([fallbackProf]);
+                    setDurationMinutes(prev => (prev > 0 ? prev : 50));
+                  }
                   if (nextType === 'facility_access' && billingMode === 'per_session') {
                     setBillingMode('monthly');
                     if (!periodicPrice) setPeriodicPrice(price || '150');
@@ -643,6 +659,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
                 optionalAddons={optionalAddons}
                 onOptionalAddonsChange={setOptionalAddons}
                 availableAddonServices={availableAddonServices}
+                professionals={professionals}
                 currentServiceId={serviceToEdit?.id || null}
                 defaultCapacity={defaultCapacity}
                 onDefaultCapacityChange={setDefaultCapacity}

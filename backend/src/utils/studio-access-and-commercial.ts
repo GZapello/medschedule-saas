@@ -623,6 +623,8 @@ export function evaluateStudioPriceAdjustments(params: {
 // ============================================================================
 
 export type AddonScheduleTiming = 'during_purchase' | 'after_confirmation' | 'not_applicable';
+export type AddonAttendanceFormat = 'match_service' | 'individual' | 'duo' | 'group';
+export type AddonProfessionalSelectionMode = 'student_picks' | 'auto_assign';
 export type AddonComboDiscountType = 'none' | 'fixed_cents' | 'percentage';
 export type AddonBillingPeriodicity =
   | 'monthly'
@@ -649,8 +651,18 @@ export interface StudioOptionalAddonOption {
   label: string;
   description?: string | null;
   active: boolean;
+  /** Permite ocultar um complemento ativo apenas do link público. */
+  allowPublicBooking?: boolean;
   /** Lista vazia = válido para qualquer plano-base ativo do serviço; preenchida = restrito aos IDs de commercialPriceOptions listados. */
   acceptedBaseOptionIds: string[];
+  /** Profissionais habilitados para este complemento (vazio = qualquer profissional ativo vinculado ao serviço-alvo). */
+  enabledProfessionalIds?: string[];
+  professionalSelectionMode?: AddonProfessionalSelectionMode;
+  attendanceFormat?: AddonAttendanceFormat;
+  sessionCapacity?: number | null;
+  /** Dias permitidos da semana (0=Dom..6=Sáb). Vazio = qualquer dia ofertado pelo serviço/profissional. */
+  allowedWeekdays?: number[];
+  studentCanChooseSchedule?: boolean;
   frequencyType: CommercialFrequencyType;
   frequencyCount: number | null;
   creditsPerCycle: number | null;
@@ -664,7 +676,7 @@ export interface StudioOptionalAddonOption {
   scheduleTiming: AddonScheduleTiming;
   displayOrder: number;
   /** Preenchido dinamicamente nas consultas públicas/administrativas ao validar o serviço vinculado. */
-  availabilityStatus?: 'available' | 'needs_professional' | 'needs_schedule' | 'inactive_service';
+  availabilityStatus?: 'available' | 'needs_professional' | 'needs_schedule' | 'inactive_service' | 'incomplete_config';
   availabilityMessage?: string | null;
 }
 
@@ -815,8 +827,50 @@ export function normalizeOptionalAddonsConfig(raw: any): StudioOptionalAddonsCon
       ? Array.from(new Set<string>(item.acceptedBaseOptionIds.map((v: any) => String(v || '').trim()).filter(Boolean)))
       : [];
 
+    const enabledProfessionalIds = Array.isArray(item.enabledProfessionalIds)
+      ? Array.from(new Set<string>(item.enabledProfessionalIds.map((v: any) => String(v || '').trim()).filter(Boolean)))
+      : [];
+
+    const professionalSelectionMode: AddonProfessionalSelectionMode =
+      item.professionalSelectionMode === 'auto_assign' ? 'auto_assign' : 'student_picks';
+
+    const attendanceFormat: AddonAttendanceFormat =
+      item.attendanceFormat && ['match_service', 'individual', 'duo', 'group'].includes(String(item.attendanceFormat))
+        ? (item.attendanceFormat as AddonAttendanceFormat)
+        : 'match_service';
+
+    const rawCap = item.sessionCapacity !== undefined && item.sessionCapacity !== null && item.sessionCapacity !== ''
+      ? Number(item.sessionCapacity)
+      : NaN;
+    const sessionCapacity =
+      attendanceFormat === 'individual'
+        ? 1
+        : attendanceFormat === 'duo'
+        ? 2
+        : Number.isInteger(rawCap) && rawCap >= 1
+        ? Math.min(500, rawCap)
+        : null;
+
+    const allowedWeekdays = Array.isArray(item.allowedWeekdays)
+      ? Array.from(
+          new Set<number>(
+            item.allowedWeekdays
+              .map((d: any) => Number(d))
+              .filter((d: number) => Number.isInteger(d) && d >= 0 && d <= 6)
+          )
+        ).sort((a, b) => a - b)
+      : [];
+
+    const allowPublicBooking = item.allowPublicBooking !== false && item.allowPublicBooking !== 0;
+    const studentCanChooseSchedule =
+      scheduleTiming === 'not_applicable'
+        ? false
+        : item.studentCanChooseSchedule !== undefined
+        ? Boolean(item.studentCanChooseSchedule)
+        : scheduleTiming === 'during_purchase';
+
     const addonServiceType =
-      item.addonServiceType && ['scheduled_class', 'individual_appointment', 'facility_access', 'hybrid'].includes(String(item.addonServiceType))
+      item.addonServiceType && (VALID_STUDIO_SERVICE_TYPES as string[]).includes(String(item.addonServiceType))
         ? (item.addonServiceType as StudioServiceType)
         : null;
 
@@ -828,7 +882,14 @@ export function normalizeOptionalAddonsConfig(raw: any): StudioOptionalAddonsCon
       label,
       description: item.description ? String(item.description).trim() : null,
       active: item.active !== false && item.active !== 0,
+      allowPublicBooking,
       acceptedBaseOptionIds,
+      enabledProfessionalIds,
+      professionalSelectionMode,
+      attendanceFormat,
+      sessionCapacity,
+      allowedWeekdays,
+      studentCanChooseSchedule,
       frequencyType,
       frequencyCount,
       creditsPerCycle,
@@ -873,6 +934,11 @@ export interface AddonItemFinancialBreakdown {
   addonServiceId: string;
   addonServiceName: string | null;
   label: string;
+  attendanceFormat: AddonAttendanceFormat;
+  sessionCapacity: number | null;
+  professionalSelectionMode: AddonProfessionalSelectionMode;
+  enabledProfessionalIds: string[];
+  allowedWeekdays: number[];
   frequencyType: CommercialFrequencyType;
   frequencyCount: number | null;
   creditsPerCycle: number | null;
@@ -1008,6 +1074,11 @@ export function calculateAddonItemBreakdown(
     addonServiceId: addon.addonServiceId,
     addonServiceName: addon.addonServiceName || addon.label,
     label: addon.label,
+    attendanceFormat: addon.attendanceFormat || 'match_service',
+    sessionCapacity: addon.sessionCapacity ?? null,
+    professionalSelectionMode: addon.professionalSelectionMode || 'student_picks',
+    enabledProfessionalIds: Array.isArray(addon.enabledProfessionalIds) ? addon.enabledProfessionalIds : [],
+    allowedWeekdays: Array.isArray(addon.allowedWeekdays) ? addon.allowedWeekdays : [],
     frequencyType: addon.frequencyType,
     frequencyCount: addon.frequencyCount,
     creditsPerCycle: resolvedCreditsPerCycle,
@@ -1214,11 +1285,14 @@ export interface OptionalAddonTargetSummary {
   id: string;
   name: string;
   active: boolean;
+  allowPublicBooking?: boolean;
   studioServiceType: StudioServiceType;
   requiresAppointment: boolean;
   isGroup: boolean;
   hasInstructor: boolean;
   hasSchedule: boolean;
+  professionalIds?: string[];
+  publicProfessionalIds?: string[];
 }
 
 export function hydrateOptionalAddonsConfig(
@@ -1237,9 +1311,28 @@ export function hydrateOptionalAddonsConfig(
     let availabilityMessage: string | null = null;
     let effectiveTiming = opt.scheduleTiming;
 
+    const configuredProIds = Array.isArray(opt.enabledProfessionalIds) ? opt.enabledProfessionalIds : [];
+    const targetActiveProIds = Array.isArray(target?.professionalIds) ? target!.professionalIds : [];
+    const targetPublicProIds = Array.isArray(target?.publicProfessionalIds)
+      ? target!.publicProfessionalIds
+      : targetActiveProIds;
+    const hasConfiguredPros = configuredProIds.length > 0;
+    const matchingActivePros = hasConfiguredPros
+      ? configuredProIds.filter(id => targetActiveProIds.includes(id))
+      : targetActiveProIds;
+    const matchingPublicPros = hasConfiguredPros
+      ? configuredProIds.filter(id => targetPublicProIds.includes(id))
+      : targetPublicProIds;
+
     if (!target || !target.active) {
       availabilityStatus = 'inactive_service';
       availabilityMessage = 'Serviço vinculado inativo ou não encontrado.';
+    } else if (publicOnly && target.allowPublicBooking === false) {
+      availabilityStatus = 'inactive_service';
+      availabilityMessage = 'Serviço vinculado não está publicado no link público.';
+    } else if (!opt.label || !opt.label.trim()) {
+      availabilityStatus = 'incomplete_config';
+      availabilityMessage = 'Defina um rótulo comercial válido para o complemento.';
     } else {
       if (!target.requiresAppointment) {
         effectiveTiming = 'not_applicable';
@@ -1248,18 +1341,27 @@ export function hydrateOptionalAddonsConfig(
       }
 
       if (target.requiresAppointment) {
+        const usablePros = publicOnly ? matchingPublicPros : matchingActivePros;
+        const hasUsablePro = hasConfiguredPros
+          ? usablePros.length > 0
+          : (publicOnly ? usablePros.length > 0 : target.hasInstructor || usablePros.length > 0);
         if (target.isGroup && !target.hasSchedule) {
           availabilityStatus = 'needs_schedule';
           availabilityMessage = 'Serviço coletivo vinculado ainda sem horários/turmas ativos.';
-        } else if (!target.isGroup && !target.hasInstructor) {
+        } else if (!hasUsablePro) {
           availabilityStatus = 'needs_professional';
-          availabilityMessage = 'Serviço vinculado sem instrutor ativo disponível.';
+          availabilityMessage = hasConfiguredPros
+            ? 'Nenhum dos profissionais habilitados para este complemento está ativo/disponível.'
+            : 'Serviço vinculado sem instrutor ativo disponível.';
+        } else if (opt.attendanceFormat === 'group' && (!opt.sessionCapacity || opt.sessionCapacity < 2)) {
+          availabilityStatus = 'incomplete_config';
+          availabilityMessage = 'Informe a capacidade da sessão em grupo (mínimo 2 alunos).';
         }
       }
     }
 
     if (publicOnly) {
-      if (!opt.active || availabilityStatus !== 'available') {
+      if (!opt.active || opt.allowPublicBooking === false || availabilityStatus !== 'available') {
         continue;
       }
     }
@@ -1269,6 +1371,7 @@ export function hydrateOptionalAddonsConfig(
       addonServiceName: target?.name || opt.addonServiceName || opt.label,
       addonServiceType: target?.studioServiceType || opt.addonServiceType || null,
       scheduleTiming: effectiveTiming,
+      studentCanChooseSchedule: effectiveTiming === 'during_purchase',
       availabilityStatus,
       availabilityMessage
     });

@@ -136,6 +136,11 @@ export const OptionalAddonsSelector: React.FC<OptionalAddonsSelectorProps> = ({
                   </div>
                   <div className="text-[11px] text-slate-600 flex flex-wrap gap-1.5">
                     {opt.addonServiceName && <span>{opt.addonServiceName}</span>}
+                    {opt.attendanceFormat === 'individual' && <span>• Individual</span>}
+                    {opt.attendanceFormat === 'duo' && <span>• Em dupla (2 alunos)</span>}
+                    {opt.attendanceFormat === 'group' && opt.sessionCapacity && (
+                      <span>• Pequeno grupo (até {opt.sessionCapacity} alunos)</span>
+                    )}
                     {opt.creditsPerCycle !== null && opt.creditsPerCycle > 0 && (
                       <span>• {opt.creditsPerCycle} aula(s) por ciclo</span>
                     )}

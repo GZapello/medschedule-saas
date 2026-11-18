@@ -1754,15 +1754,19 @@ export class TenantController {
               if (inCatalog) {
                 const reqAppt = inCatalog.requires_appointment !== 0;
                 const isGroup = (inCatalog.service_kind || 'individual') === 'group' && reqAppt;
+                const catProfs = Array.isArray(inCatalog.linked_professionals) ? inCatalog.linked_professionals : [];
                 addonTargetsById.set(targetId, {
                   id: inCatalog.id,
                   name: inCatalog.name,
                   active: true,
+                  allowPublicBooking: true,
                   studioServiceType: inCatalog.studio_service_type,
                   requiresAppointment: reqAppt,
                   isGroup,
-                  hasInstructor: Array.isArray(inCatalog.linked_professionals) && inCatalog.linked_professionals.length > 0,
-                  hasSchedule: !isGroup || Boolean(inCatalog.is_publicly_available && inCatalog.has_public_schedules)
+                  hasInstructor: catProfs.length > 0,
+                  hasSchedule: !isGroup || Boolean(inCatalog.is_publicly_available && inCatalog.has_public_schedules),
+                  professionalIds: catProfs.map((p: any) => p.id),
+                  publicProfessionalIds: catProfs.map((p: any) => p.id)
                 });
                 addonServicesList.push({
                   id: inCatalog.id,
@@ -1775,7 +1779,7 @@ export class TenantController {
                   requires_appointment: inCatalog.requires_appointment,
                   default_capacity: inCatalog.default_capacity,
                   availability_mode: inCatalog.availability_mode,
-                  linked_professionals: inCatalog.linked_professionals,
+                  linked_professionals: catProfs,
                   class_schedules: inCatalog.class_schedules,
                   weekly_schedule_summary: inCatalog.weekly_schedule_summary
                 });
@@ -1784,6 +1788,7 @@ export class TenantController {
 
               const row = db.prepare(`
                 SELECT s.id, s.name, s.description, s.duration_minutes, s.modality, s.active,
+                       COALESCE(s.allow_public_booking, 1) as allow_public_booking,
                        COALESCE(s.service_kind, 'individual') as service_kind,
                        s.default_capacity, s.professional_id, s.service_domain, s.clinical_module,
                        COALESCE(s.studio_service_type, CASE WHEN COALESCE(s.service_kind, 'individual') = 'group' THEN 'group' ELSE 'individual' END) as studio_service_type,
@@ -1821,22 +1826,26 @@ export class TenantController {
               const pubScheds = publicSchedulesByService.get(row.id) || [];
               const allScheds = allSchedulesByService.get(row.id) || [];
               const diag = isGroup ? ClassScheduleService.diagnoseServiceSchedules(resolved.id, row.id, allScheds) : null;
+              const publicSelectableProfs = publicProfs.length > 0
+                ? publicProfs
+                : anyActiveProf.filter((ap: any) => Number(ap.public_booking_enabled ?? 1) === 1);
+              const activeProIds = Array.from(new Set([...publicProfs.map((p: any) => p.id), ...anyActiveProf.map((p: any) => p.id)]));
 
               addonTargetsById.set(row.id, {
                 id: row.id,
                 name: row.name,
                 active: Number(row.active) !== 0,
+                allowPublicBooking: Number(row.allow_public_booking ?? 1) !== 0,
                 studioServiceType: stType,
                 requiresAppointment: reqAppt,
                 isGroup,
                 hasInstructor: publicProfs.length > 0 || anyActiveProf.length > 0,
-                hasSchedule: !isGroup || Boolean(diag && diag.publishableCount > 0 && pubScheds.length > 0)
+                hasSchedule: !isGroup || Boolean(diag && diag.publishableCount > 0 && pubScheds.length > 0),
+                professionalIds: activeProIds,
+                publicProfessionalIds: publicSelectableProfs.map((p: any) => p.id)
               });
 
-              if (Number(row.active) !== 0) {
-                const publicSelectableProfs = publicProfs.length > 0
-                  ? publicProfs
-                  : anyActiveProf.filter((ap: any) => Number(ap.public_booking_enabled ?? 1) === 1);
+              if (Number(row.active) !== 0 && Number(row.allow_public_booking ?? 1) !== 0) {
                 addonServicesList.push({
                   id: row.id,
                   name: row.name,
@@ -1862,13 +1871,25 @@ export class TenantController {
               }
               const hydrated = hydrateOptionalAddonsConfig(rawAddonsJson, addonTargetsById, { publicOnly: true });
               const filteredOpts = hydrated.options.filter((opt) => {
+                if (opt.allowPublicBooking === false || !opt.active) return false;
                 if (opt.scheduleTiming !== 'during_purchase') return true;
                 const meta = addonServicesList.find((m) => m.id === opt.addonServiceId);
                 if (!meta || meta.requires_appointment === 0) return true;
+                const enabledPros = Array.isArray(opt.enabledProfessionalIds) ? opt.enabledProfessionalIds : [];
+                const allowedDays = Array.isArray(opt.allowedWeekdays) ? opt.allowedWeekdays : [];
+                const usableProfs = (meta.linked_professionals || []).filter(
+                  (p: any) => enabledPros.length === 0 || enabledPros.includes(p.id)
+                );
+                if (usableProfs.length === 0) return false;
                 if (meta.service_kind === 'group') {
-                  return Array.isArray(meta.class_schedules) && meta.class_schedules.length > 0;
+                  const usableScheds = (meta.class_schedules || []).filter(
+                    (cs: any) =>
+                      (enabledPros.length === 0 || enabledPros.includes(cs.professional_id)) &&
+                      (allowedDays.length === 0 || allowedDays.includes(Number(cs.day_of_week)))
+                  );
+                  return usableScheds.length > 0;
                 }
-                return Array.isArray(meta.linked_professionals) && meta.linked_professionals.length > 0;
+                return true;
               });
               return {
                 ...srv,

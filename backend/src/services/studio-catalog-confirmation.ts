@@ -601,6 +601,30 @@ export function buildProposalDiagnostics(
             message: `${row.name || 'Serviço'} · Complemento "${ao.label || ai + 1}": confirme o valor adicional do complemento.`
           });
         }
+        if (ao.attendanceFormat === 'group' && (!ao.sessionCapacity || Number(ao.sessionCapacity) < 2)) {
+          hasServiceIssue = true;
+          alerts.push({
+            id: `addon-cap-${row.key}-${ai}`,
+            scope: 'service',
+            recordKey: row.key,
+            recordName: row.name || 'Serviço',
+            section: 'addons',
+            severity: addonSeverity,
+            message: `${row.name || 'Serviço'} · Complemento "${ao.label || ai + 1}": informe a capacidade de vagas por horário (mínimo 2 para atendimento em grupo).`
+          });
+        }
+        if (Array.isArray(ao.enabledProfessionalIds) && ao.enabledProfessionalIds.length > 0 && !ao.enabledProfessionalIds.some(pid => profById.has(pid))) {
+          hasServiceIssue = true;
+          alerts.push({
+            id: `addon-prof-${row.key}-${ai}`,
+            scope: 'service',
+            recordKey: row.key,
+            recordName: row.name || 'Serviço',
+            section: 'addons',
+            severity: addonSeverity,
+            message: `${row.name || 'Serviço'} · Complemento "${ao.label || ai + 1}": selecione profissionais ativos válidos ou libere todos os habilitados.`
+          });
+        }
       }
     }
 
@@ -974,6 +998,9 @@ export function applyStudioCatalog(req: Request, proposal: StudioProposal) {
         if (ao.additionalPriceCents === null || ao.additionalPriceCents < 0) {
           throw catalogError(`Informe o valor adicional do complemento "${ao.label || ao.addonServiceName}".`);
         }
+        if (ao.attendanceFormat === 'group' && (!ao.sessionCapacity || Number(ao.sessionCapacity) < 2)) {
+          throw catalogError(`Informe a capacidade de vagas por horário (mínimo 2) para o complemento em grupo "${ao.label || ao.addonServiceName}".`);
+        }
         const rawRef = String(ao.addonServiceRef || '').trim();
         const hasPlannedTarget =
           (rawRef.startsWith('existing:') && catalog.services.some(s => s.active && s.id === rawRef.slice(9))) ||
@@ -999,9 +1026,11 @@ export function applyStudioCatalog(req: Request, proposal: StudioProposal) {
           : (row.allowPublicBooking !== false);
       if (isCreate) Object.assign(body, {
         studioServiceType: type, serviceKind: type === 'group' ? 'group' : 'individual',
-        defaultCapacity: capacity, durationMinutes: scheduled ? duration : undefined,
+        defaultCapacity: type === 'facility_access' ? 1 : capacity,
+        durationMinutes: scheduled ? duration : undefined,
         requiresActiveContract: type === 'facility_access' || (scheduled && Boolean(prices?.options.length) && prices?.basePrice === undefined),
-        professionalId: professional || undefined, modality: row.modality || undefined, allowPublicBooking: effectiveAllowPublic,
+        professionalId: type === 'facility_access' ? undefined : (professional || undefined),
+        modality: row.modality || undefined, allowPublicBooking: effectiveAllowPublic,
         allowRecurrence: scheduled && row.prices.some(p => p.frequencyType === 'weekly' || p.frequencyType === 'monthly'),
         allowedPlanDurations: [...new Set(row.prices.map(p => p.duration).filter(Boolean))],
         accessConfig: type === 'facility_access' ? {
@@ -1048,7 +1077,7 @@ export function applyStudioCatalog(req: Request, proposal: StudioProposal) {
       const existingCfg = normalizeOptionalAddonsConfig(baseRow?.optional_addons_json);
       const mergedOptions: StudioOptionalAddonOption[] = row.action === 'update' ? [...existingCfg.options] : [];
       const sig = (o: StudioOptionalAddonOption) =>
-        JSON.stringify([o.addonServiceId, o.frequencyType, o.frequencyCount, o.billingPeriodicity, o.durationMode]);
+        JSON.stringify([o.addonServiceId, o.frequencyType, o.frequencyCount, o.billingPeriodicity, o.durationMode, o.attendanceFormat || 'match_service', o.sessionCapacity ?? null]);
       const seenSig = new Set(mergedOptions.map(sig));
 
       for (let ai = 0; ai < rawAddons.length; ai++) {
@@ -1058,6 +1087,9 @@ export function applyStudioCatalog(req: Request, proposal: StudioProposal) {
         }
         if (ao.additionalPriceCents === null || ao.additionalPriceCents < 0) {
           throw catalogError(`Informe o valor adicional do complemento "${ao.label || ao.addonServiceName}".`);
+        }
+        if (ao.attendanceFormat === 'group' && (!ao.sessionCapacity || Number(ao.sessionCapacity) < 2)) {
+          throw catalogError(`Informe a capacidade de vagas por horário (mínimo 2) para o complemento "${ao.label || ao.addonServiceName}".`);
         }
 
         let targetId = ao.addonServiceRef ? (references.get(ao.addonServiceRef) || '') : '';
@@ -1076,7 +1108,9 @@ export function applyStudioCatalog(req: Request, proposal: StudioProposal) {
           throw catalogError(`Vincule um serviço complementar distinto e ativo para "${ao.label || ao.addonServiceName}".`);
         }
 
-        const targetSrv = catalog.services.find(s => s.id === targetId);
+        const targetSrv =
+          catalog.services.find(s => s.id === targetId) ||
+          (db.prepare('SELECT id, name, studio_service_type, service_kind FROM services WHERE id = ? AND tenant_id = ?').get(targetId, tenantId) as { id: string; name: string; studio_service_type: string | null; service_kind: string | null } | undefined);
         const freqType = ao.frequencyType || 'weekly';
         const freqCount = freqType === 'unlimited' ? null : (ao.frequencyCount || 1);
         const creditsPerCycle = freqType === 'unlimited'
@@ -1085,6 +1119,21 @@ export function applyStudioCatalog(req: Request, proposal: StudioProposal) {
               ? ao.creditsPerCycle
               : resolveDefaultAddonCreditsPerCycle(freqType, freqCount, 1));
         const targetType = targetSrv ? normalizeStudioServiceType(targetSrv.studio_service_type, targetSrv.service_kind) : 'individual';
+        const attendanceFormat = ao.attendanceFormat || 'match_service';
+        const sessionCapacity =
+          attendanceFormat === 'individual'
+            ? 1
+            : attendanceFormat === 'duo'
+              ? 2
+              : attendanceFormat === 'group'
+                ? Number(ao.sessionCapacity)
+                : null;
+        const validProIds = Array.isArray(ao.enabledProfessionalIds)
+          ? ao.enabledProfessionalIds.filter(pid => catalog.professionals.some(p => p.id === pid))
+          : [];
+        const validWeekdays = Array.isArray(ao.allowedWeekdays)
+          ? [...new Set(ao.allowedWeekdays.map(Number).filter(d => Number.isInteger(d) && d >= 0 && d <= 6))].sort((a, b) => a - b)
+          : [];
 
         const newOpt: StudioOptionalAddonOption = {
           id: ao.id || `addon-${randomUUID().slice(0, 8)}`,
@@ -1094,6 +1143,7 @@ export function applyStudioCatalog(req: Request, proposal: StudioProposal) {
           label: ao.label || targetSrv?.name || `Complemento ${ai + 1}`,
           description: null,
           active: true,
+          allowPublicBooking: ao.allowPublicBooking !== false,
           acceptedBaseOptionIds: [],
           frequencyType: freqType,
           frequencyCount: freqCount,
@@ -1105,6 +1155,11 @@ export function applyStudioCatalog(req: Request, proposal: StudioProposal) {
           durationMode: ao.durationMode || 'match_base',
           autoRenew: null,
           scheduleTiming: targetType === 'facility_access' || targetType === 'non_scheduled' ? 'not_applicable' : (ao.scheduleTiming || 'after_confirmation'),
+          enabledProfessionalIds: validProIds,
+          professionalSelectionMode: ao.professionalSelectionMode || 'student_picks',
+          attendanceFormat,
+          sessionCapacity,
+          allowedWeekdays: validWeekdays,
           displayOrder: mergedOptions.length
         };
 

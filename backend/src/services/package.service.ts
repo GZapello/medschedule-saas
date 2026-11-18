@@ -1163,17 +1163,29 @@ export class PackageService {
       try {
         if (e.addon_pricing_json) addonPricing = JSON.parse(e.addon_pricing_json);
       } catch (_) {}
+      let scheduleSnapshot: any[] = [];
+      try {
+        if (e.schedule_snapshot_json) {
+          const parsed = JSON.parse(e.schedule_snapshot_json);
+          if (Array.isArray(parsed)) scheduleSnapshot = parsed;
+        }
+      } catch (_) {}
+      const entStatus = String(e.entitlement_status || 'active').toLowerCase();
       const entType = e.entitlement_type || 'scheduled_service';
       const isUnlimitedAccess = entType === 'facility_access' && e.access_mode_snapshot === 'unlimited';
       const remaining = isUnlimitedAccess || addonPricing?.frequencyType === 'unlimited'
         ? null
-        : Math.max(0, Number(e.credits_total || 0) - Number(e.credits_reserved || 0) - Number(e.credits_used || 0));
+        : (entStatus === 'cancelled'
+            ? 0
+            : Math.max(0, Number(e.credits_total || 0) - Number(e.credits_reserved || 0) - Number(e.credits_used || 0)));
       return {
         ...e,
+        entitlement_status: entStatus,
         entitlement_type: entType,
         entitlement_role: e.entitlement_role || 'primary',
         allowed_service_ids: allowedServiceIds,
         addon_pricing: addonPricing,
+        schedule_snapshot: scheduleSnapshot,
         credits_remaining: remaining,
         access_rules: e.access_rules_snapshot_json ? normalizeStudioAccessConfig(e.access_rules_snapshot_json) : null
       };
@@ -1186,11 +1198,12 @@ export class PackageService {
       ORDER BY due_date ASC, created_at ASC
     `).all(contractId, tenantId) as any[];
 
-    const scheduledEntitlements = entitlements.filter(e => e.entitlement_type !== 'facility_access');
+    const activeEntitlements = entitlements.filter(e => e.entitlement_status !== 'cancelled');
+    const scheduledEntitlements = activeEntitlements.filter(e => e.entitlement_type !== 'facility_access');
     const totalCredits = scheduledEntitlements.reduce((s, e) => s + Number(e.credits_total || 0), 0);
     const totalReserved = scheduledEntitlements.reduce((s, e) => s + Number(e.credits_reserved || 0), 0);
     const totalUsed = scheduledEntitlements.reduce((s, e) => s + Number(e.credits_used || 0), 0);
-    const totalAccessEntries = entitlements
+    const totalAccessEntries = activeEntitlements
       .filter(e => e.entitlement_type === 'facility_access')
       .reduce((s, e) => s + Number(e.entries_used || 0), 0);
 
@@ -1204,7 +1217,7 @@ export class PackageService {
         creditsUsed: totalUsed,
         creditsRemaining: Math.max(0, totalCredits - totalReserved - totalUsed),
         accessEntriesUsed: totalAccessEntries,
-        hasUnlimitedAccess: entitlements.some(e => e.entitlement_type === 'facility_access' && e.access_mode_snapshot === 'unlimited')
+        hasUnlimitedAccess: activeEntitlements.some(e => e.entitlement_type === 'facility_access' && e.access_mode_snapshot === 'unlimited')
       }
     };
   }
@@ -1375,10 +1388,10 @@ export class PackageService {
       return { contractId: params.contractId, entitlementId: alreadyReserved.entitlement_id };
     }
 
-    // Localiza direito compatível (direto por serviço ou pool compartilhado)
-    const entitlements = db.prepare(`
+    // Localiza direito compatível (direto por serviço ou pool compartilhado), ignorando direitos cancelados
+    const entitlements = (db.prepare(`
       SELECT * FROM student_package_entitlements WHERE contract_id = ? AND tenant_id = ?
-    `).all(params.contractId, params.tenantId) as any[];
+    `).all(params.contractId, params.tenantId) as any[]).filter(e => String(e.entitlement_status || 'active').toLowerCase() !== 'cancelled');
 
     let targetEnt =
       entitlements.find(e => e.service_id === params.serviceId && (e.entitlement_type || 'scheduled_service') === 'scheduled_service') ||

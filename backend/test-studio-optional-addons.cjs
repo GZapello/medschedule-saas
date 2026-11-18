@@ -591,7 +591,488 @@ async function run() {
     assert.equal(pilatesImported.optional_addons.options[0].addonServiceId, personalId);
     assert.equal(afterImportSrvs.data.length, 5, 'Deve reaproveitar Personal existente sem duplicar serviços');
 
-    console.log('ALL 14 OPTIONAL ADDONS TEST SCENARIOS PASSED!');
+    console.log('11. Verificando isolamento facility_access SEM Personal/clínica + migração segura...');
+    const muscDb = db.prepare(`SELECT professional_id, clinical_module, requires_appointment FROM services WHERE id = ?`).get(muscId);
+    assert.equal(muscDb.professional_id, null, 'Musculação não deve possuir professional_id');
+    assert.equal(muscDb.clinical_module, null, 'Musculação não deve possuir clinical_module');
+    assert.equal(Number(muscDb.requires_appointment), 0, 'Musculação não deve exigir agendamento');
+    const muscLinks = db.prepare(`SELECT COUNT(*) AS cnt FROM professional_services WHERE service_id = ?`).get(muscId);
+    assert.equal(Number(muscLinks.cnt), 0, 'Musculação não deve ter vínculos em professional_services');
+
+    // Simular legado corrompido em facility_access + verificar que migrateStudioImprovements limpa só facility_access e preserva agendáveis
+    const { migrateStudioImprovements } = require('./dist/config/studio-improvements.migration');
+    db.prepare(`UPDATE services SET professional_id = ?, clinical_module = 'ZemdaPersonal', requires_appointment = 1 WHERE id = ?`).run(studioA.profId, muscId);
+    db.prepare(`INSERT OR IGNORE INTO professional_services (id, professional_id, service_id) VALUES ('ps-legacy-dirty', ?, ?)`).run(studioA.profId, muscId);
+    db.prepare(`INSERT OR IGNORE INTO professional_services (id, professional_id, service_id) VALUES ('ps-keep-personal', ?, ?)`).run(studioA.profId, personalId);
+    migrateStudioImprovements(db);
+    const muscCleaned = db.prepare(`SELECT professional_id, clinical_module, requires_appointment FROM services WHERE id = ?`).get(muscId);
+    assert.equal(muscCleaned.professional_id, null, 'Migration deve limpar professional_id indevido de facility_access');
+    assert.equal(muscCleaned.clinical_module, null, 'Migration deve limpar clinical_module de facility_access');
+    assert.equal(Number(muscCleaned.requires_appointment), 0, 'Migration deve manter requires_appointment = 0 para facility_access');
+    assert.equal(Number(db.prepare(`SELECT COUNT(*) AS cnt FROM professional_services WHERE service_id = ?`).get(muscId).cnt), 0);
+    const persKept = db.prepare(`SELECT professional_id FROM services WHERE id = ?`).get(personalId);
+    assert.equal(persKept.professional_id, studioA.profId, 'Serviço agendável deve preservar professional_id intacto');
+
+    console.log('12. Testando configuração avançada de complementos (profissionais, formato, capacidade, dias, link público)...');
+    const prof2Id = 'prof-ten-studio-a-2';
+    const prof2UserId = 'usr-prf2-ten-studio-a';
+    db.prepare(`INSERT INTO users (id, tenant_id, name, email, password_hash, role, status, onboarding_status, email_verified) VALUES (?, 'ten-studio-a', 'Prof Marina Personal', 'marina@test.invalid', 'x', 'professional', 'active', 'active', 1)`).run(prof2UserId);
+    db.prepare(`INSERT INTO clinic_users (id, tenant_id, user_id, role, status, is_manager) VALUES ('mem-prf2-a', 'ten-studio-a', ?, 'professional', 'active', 0)`).run(prof2UserId);
+    db.prepare(`INSERT INTO professionals (id, tenant_id, user_id, name, slug, profession_id, profession_name, active, public_booking_enabled) VALUES (?, 'ten-studio-a', ?, 'Prof Marina Personal', 'marina-studio-a', 'prof-personal-trainer', 'Educador Físico', 1, 1)`).run(prof2Id, prof2UserId);
+    for (const dow of [1, 2, 3, 4, 5]) {
+      db.prepare(`INSERT INTO schedules (id, tenant_id, professional_id, day_of_week, start_time, end_time, is_active) VALUES (?, 'ten-studio-a', ?, ?, '07:00', '21:00', 1)`).run(`sh-a2-${dow}`, prof2Id, dow);
+    }
+    db.prepare(`INSERT OR IGNORE INTO professional_services (id, professional_id, service_id) VALUES ('ps-marina-pers', ?, ?)`).run(prof2Id, personalId);
+
+    // Rejeitar complemento em grupo sem capacidade >= 2
+    const invalidGroupAddonRes = await req(server, 'PUT', `/v1/services/${muscId}`, authA, {
+      optionalAddons: {
+        enabled: true,
+        options: [{
+          id: 'bad-group',
+          addonServiceId: personalId,
+          label: 'Grupo inválido',
+          attendanceFormat: 'group',
+          sessionCapacity: 1,
+          additionalPriceCents: 10000
+        }]
+      }
+    });
+    assert.equal(invalidGroupAddonRes.status, 400, 'Complemento group exige sessionCapacity >= 2');
+
+    const updMuscRes = await req(server, 'PUT', `/v1/services/${muscId}`, authA, {
+      commercialPriceOptions: [
+        {
+          id: 'musc-mensal',
+          label: 'Mensal Livre',
+          accessType: 'unlimited',
+          frequencyType: 'unlimited',
+          frequencyCount: null,
+          contractDurationCode: '1_month',
+          paymentPeriodicity: 'monthly',
+          commercialUnit: 'per_month',
+          amountCents: 12000,
+          autoRenew: true,
+          active: true
+        },
+        {
+          id: 'musc-trim',
+          label: 'Trimestral Livre',
+          accessType: 'unlimited',
+          frequencyType: 'unlimited',
+          frequencyCount: null,
+          contractDurationCode: '3_months',
+          paymentPeriodicity: 'quarterly',
+          commercialUnit: 'contract_total',
+          amountCents: 30000,
+          autoRenew: false,
+          active: true
+        },
+        {
+          id: 'musc-anual',
+          label: 'Anual Livre',
+          accessType: 'unlimited',
+          frequencyType: 'unlimited',
+          frequencyCount: null,
+          contractDurationCode: '12_months',
+          paymentPeriodicity: 'annual',
+          commercialUnit: 'contract_total',
+          amountCents: 120000,
+          autoRenew: false,
+          active: true
+        }
+      ],
+      optionalAddons: {
+        enabled: true,
+        allowMultiple: true,
+        promptTitle: 'Deseja adicionar acompanhamento personalizado?',
+        noAddonLabel: 'Não adicionar',
+        options: [
+          {
+            id: 'pers-1x',
+            addonServiceId: personalId,
+            label: 'Personal 1 vez por semana',
+            acceptedBaseOptionIds: [],
+            frequencyType: 'weekly',
+            frequencyCount: 1,
+            creditsPerCycle: 4,
+            additionalPriceCents: 20000,
+            comboDiscountType: 'fixed_cents',
+            comboDiscountValue: 2000,
+            billingPeriodicity: 'monthly',
+            durationMode: 'match_base',
+            scheduleTiming: 'after_confirmation',
+            active: true,
+            allowPublicBooking: true
+          },
+          {
+            id: 'pers-duo-filtered',
+            addonServiceId: personalId,
+            label: 'Personal Dupla 2x/sem (Ter/Qui)',
+            acceptedBaseOptionIds: ['musc-mensal', 'musc-trim'],
+            frequencyType: 'weekly',
+            frequencyCount: 2,
+            creditsPerCycle: 8,
+            additionalPriceCents: 26000,
+            comboDiscountType: 'none',
+            comboDiscountValue: 0,
+            billingPeriodicity: 'monthly',
+            durationMode: 'match_base',
+            scheduleTiming: 'during_purchase',
+            attendanceFormat: 'duo',
+            sessionCapacity: 2,
+            professionalSelectionMode: 'student_picks',
+            enabledProfessionalIds: [prof2Id],
+            allowedWeekdays: [2, 4],
+            allowPublicBooking: true,
+            active: true
+          },
+          {
+            id: 'pers-hidden-pub',
+            addonServiceId: personalId,
+            label: 'Personal Interno Oculto no Link',
+            acceptedBaseOptionIds: [],
+            frequencyType: 'weekly',
+            frequencyCount: 1,
+            creditsPerCycle: 4,
+            additionalPriceCents: 15000,
+            billingPeriodicity: 'monthly',
+            durationMode: 'match_base',
+            scheduleTiming: 'after_confirmation',
+            allowPublicBooking: false,
+            active: true
+          },
+          {
+            id: 'pers-auto-group',
+            addonServiceId: personalId,
+            label: 'Personal Pequeno Grupo (até 3)',
+            acceptedBaseOptionIds: [],
+            frequencyType: 'weekly',
+            frequencyCount: 1,
+            creditsPerCycle: 4,
+            additionalPriceCents: 12000,
+            billingPeriodicity: 'monthly',
+            durationMode: 'match_base',
+            scheduleTiming: 'during_purchase',
+            attendanceFormat: 'group',
+            sessionCapacity: 3,
+            professionalSelectionMode: 'auto_assign',
+            enabledProfessionalIds: [studioA.profId, prof2Id],
+            allowedWeekdays: [5],
+            allowPublicBooking: true,
+            active: true
+          }
+        ]
+      }
+    });
+    assert.equal(updMuscRes.status, 200);
+    const muscAfterUpd = db.prepare(`SELECT professional_id, clinical_module FROM services WHERE id = ?`).get(muscId);
+    assert.equal(muscAfterUpd.professional_id, null, 'PUT em facility_access não pode vincular profissional');
+    assert.equal(muscAfterUpd.clinical_module, null, 'PUT em facility_access não pode vincular módulo clínico');
+
+    const pubCatCheck = await req(server, 'GET', '/v1/public/tenants/academia-addons-a');
+    assert.equal(pubCatCheck.status, 200);
+    const pubMuscCheck = pubCatCheck.data.services.find(s => s.id === muscId);
+    assert.ok(pubMuscCheck.optional_addons.options.every(o => o.id !== 'pers-hidden-pub'), 'Complemento com allowPublicBooking=false deve ficar oculto no link público');
+    const pubDuoOpt = pubMuscCheck.optional_addons.options.find(o => o.id === 'pers-duo-filtered');
+    assert.equal(pubDuoOpt.attendanceFormat, 'duo');
+    assert.equal(pubDuoOpt.sessionCapacity, 2);
+
+    console.log('13. Testando slots públicos de complementos (filtro de dia, profissional, capacidade e holds)...');
+    const monDate = nextWeekdayYmd(1, 3);
+    const addDaysYmd = (ymd, days) => {
+      const dt = new Date(Date.parse(`${ymd}T12:00:00Z`) + days * 86400000);
+      return dt.toISOString().slice(0, 10);
+    };
+    const tueDate = addDaysYmd(monDate, 1);
+    const thuDate = addDaysYmd(monDate, 3);
+    const friDate = addDaysYmd(monDate, 4);
+
+    const monDisallowed = await req(server, 'GET', `/v1/public/studio/slots?tenantSlug=academia-addons-a&serviceId=${personalId}&baseServiceId=${muscId}&addonOptionId=pers-duo-filtered&date=${monDate}`);
+    assert.equal(monDisallowed.status, 200);
+    assert.equal(monDisallowed.data.slots.length, 0, 'Segunda não permitida em allowedWeekdays [2,4] deve retornar 0 slots');
+
+    const tueSlotsRes = await req(server, 'GET', `/v1/public/studio/slots?tenantSlug=academia-addons-a&serviceId=${personalId}&baseServiceId=${muscId}&addonOptionId=pers-duo-filtered&date=${tueDate}`);
+    assert.equal(tueSlotsRes.status, 200);
+    assert.ok(tueSlotsRes.data.slots.length > 0);
+    assert.ok(tueSlotsRes.data.slots.every(sl => sl.professionalId === prof2Id), 'Somente profissionais habilitados no complemento devem retornar');
+    assert.equal(tueSlotsRes.data.slots[0].capacity, 2, 'Formato duo aplica sessionCapacity = 2 nos slots');
+    assert.equal(tueSlotsRes.data.slots[0].remainingSpots, 2);
+
+    const friSlotsRes = await req(server, 'GET', `/v1/public/studio/slots?tenantSlug=academia-addons-a&serviceId=${personalId}&baseServiceId=${muscId}&addonOptionId=pers-auto-group&date=${friDate}`);
+    assert.equal(friSlotsRes.status, 200);
+    assert.equal(friSlotsRes.data.professionalSelectionMode, 'auto_assign');
+    assert.equal(friSlotsRes.data.slots[0].capacity, 3);
+
+    console.log('14. Testando multi-slot 2x/sem, hold temporário e corrida concorrente na última vaga do Duo...');
+    const duoPickReq1 = await req(server, 'POST', '/v1/public/studio/bookings', {}, {
+      tenantSlug: 'academia-addons-a',
+      mode: 'access_plan',
+      bookingIntent: 'access_plan',
+      serviceId: muscId,
+      commercialOptionId: 'musc-mensal',
+      selectedAddonOptionIds: ['pers-duo-filtered'],
+      addonSchedules: [
+        { addonOptionId: 'pers-duo-filtered', serviceId: personalId, professionalId: prof2Id, modality: 'presential', startTime: `${tueDate}T09:00:00`, endTime: `${tueDate}T10:00:00`, recurrence: { frequency: 'weekly', durationCode: '1_month' } },
+        { addonOptionId: 'pers-duo-filtered', serviceId: personalId, professionalId: prof2Id, modality: 'presential', startTime: `${thuDate}T09:00:00`, endTime: `${thuDate}T10:00:00`, recurrence: { frequency: 'weekly', durationCode: '1_month' } }
+      ],
+      startDate: tueDate,
+      student: { fullName: 'Aluno Duo 1', phone: '11988887051' }
+    });
+    assert.equal(duoPickReq1.status, 201);
+    const duoReq1Id = duoPickReq1.data.id;
+    assert.ok(duoPickReq1.data.appointments.length >= 2, 'Prévia deve listar os horários recorrentes escolhidos (Ter e Qui)');
+
+    // Enquanto pendente (hold ativo), disponibilidade restante cai de 2 para 1
+    const tueSlotsDuringHold = await req(server, 'GET', `/v1/public/studio/slots?tenantSlug=academia-addons-a&serviceId=${personalId}&baseServiceId=${muscId}&addonOptionId=pers-duo-filtered&date=${tueDate}`);
+    const slot0900 = tueSlotsDuringHold.data.slots.find(s => s.time === '09:00' || s.startTime === '09:00');
+    assert.equal(slot0900.remainingSpots, 1, 'Hold ativo deve reduzir vagas restantes de 2 para 1');
+
+    // Disputa simultânea pela última vaga (2 pedidos idênticos ao mesmo tempo -> exatamente 1 vence e 1 recebe 409)
+    const [race1, race2] = await Promise.all([
+      req(server, 'POST', '/v1/public/studio/bookings', {}, {
+        tenantSlug: 'academia-addons-a',
+        mode: 'access_plan',
+        bookingIntent: 'access_plan',
+        serviceId: muscId,
+        commercialOptionId: 'musc-mensal',
+        selectedAddonOptionIds: ['pers-duo-filtered'],
+        addonSchedules: [
+          { addonOptionId: 'pers-duo-filtered', serviceId: personalId, professionalId: prof2Id, modality: 'presential', startTime: `${tueDate}T09:00:00`, endTime: `${tueDate}T10:00:00`, recurrence: { frequency: 'weekly', durationCode: '1_month' } },
+          { addonOptionId: 'pers-duo-filtered', serviceId: personalId, professionalId: prof2Id, modality: 'presential', startTime: `${thuDate}T09:00:00`, endTime: `${thuDate}T10:00:00`, recurrence: { frequency: 'weekly', durationCode: '1_month' } }
+        ],
+        startDate: tueDate,
+        student: { fullName: 'Aluno Corrida A', phone: '11988887052' }
+      }),
+      req(server, 'POST', '/v1/public/studio/bookings', {}, {
+        tenantSlug: 'academia-addons-a',
+        mode: 'access_plan',
+        bookingIntent: 'access_plan',
+        serviceId: muscId,
+        commercialOptionId: 'musc-mensal',
+        selectedAddonOptionIds: ['pers-duo-filtered'],
+        addonSchedules: [
+          { addonOptionId: 'pers-duo-filtered', serviceId: personalId, professionalId: prof2Id, modality: 'presential', startTime: `${tueDate}T09:00:00`, endTime: `${tueDate}T10:00:00`, recurrence: { frequency: 'weekly', durationCode: '1_month' } },
+          { addonOptionId: 'pers-duo-filtered', serviceId: personalId, professionalId: prof2Id, modality: 'presential', startTime: `${thuDate}T09:00:00`, endTime: `${thuDate}T10:00:00`, recurrence: { frequency: 'weekly', durationCode: '1_month' } }
+        ],
+        startDate: tueDate,
+        student: { fullName: 'Aluno Corrida B', phone: '11988887053' }
+      })
+    ]);
+    const raceStatuses = [race1.status, race2.status].sort();
+    assert.deepEqual(raceStatuses, [201, 409], 'Somente 1 candidato pode obter a última vaga sob concorrência simultânea');
+    const raceWinnerId = race1.status === 201 ? race1.data.id : race2.data.id;
+
+    // Expirar hold do vencedor devolve vaga imediatamente no cálculo de disponibilidade
+    db.prepare(`UPDATE public_booking_requests SET hold_expires_at = datetime('now', '-5 minutes') WHERE id = ?`).run(raceWinnerId);
+    const tueSlotsAfterExpire = await req(server, 'GET', `/v1/public/studio/slots?tenantSlug=academia-addons-a&serviceId=${personalId}&baseServiceId=${muscId}&addonOptionId=pers-duo-filtered&date=${tueDate}`);
+    const slotAfterExpire = tueSlotsAfterExpire.data.slots.find(s => s.time === '09:00' || s.startTime === '09:00');
+    assert.equal(slotAfterExpire.remainingSpots, 1, 'Hold expirado deve liberar a vaga novamente');
+
+    // Aprovar duoReq1Id e um 2o aluno para preencher 2/2 na turma Duo compartilhada
+    const approveDuo1 = await req(server, 'POST', `/v1/studio/enrollments/public-requests/${duoReq1Id}/approve`, authA, {});
+    assert.equal(approveDuo1.status, 200);
+    const duoContract1Id = approveDuo1.data.contractId;
+    assert.ok(approveDuo1.data.appointmentIds.length >= 2, 'Deve gerar recorrência dos dias escolhidos do addon');
+
+    const duoPickReq2 = await req(server, 'POST', '/v1/public/studio/bookings', {}, {
+      tenantSlug: 'academia-addons-a',
+      mode: 'access_plan',
+      bookingIntent: 'access_plan',
+      serviceId: muscId,
+      commercialOptionId: 'musc-mensal',
+      selectedAddonOptionIds: ['pers-duo-filtered'],
+      addonSchedules: [
+        { addonOptionId: 'pers-duo-filtered', serviceId: personalId, professionalId: prof2Id, modality: 'presential', startTime: `${tueDate}T09:00:00`, endTime: `${tueDate}T10:00:00`, recurrence: { frequency: 'weekly', durationCode: '1_month' } },
+        { addonOptionId: 'pers-duo-filtered', serviceId: personalId, professionalId: prof2Id, modality: 'presential', startTime: `${thuDate}T09:00:00`, endTime: `${thuDate}T10:00:00`, recurrence: { frequency: 'weekly', durationCode: '1_month' } }
+      ],
+      startDate: tueDate,
+      student: { fullName: 'Aluno Duo 2', phone: '11988887054' }
+    });
+    assert.equal(duoPickReq2.status, 201);
+    const approveDuo2 = await req(server, 'POST', `/v1/studio/enrollments/public-requests/${duoPickReq2.data.id}/approve`, authA, {});
+    assert.equal(approveDuo2.status, 200);
+
+    const duo3Blocked = await req(server, 'POST', '/v1/public/studio/bookings', {}, {
+      tenantSlug: 'academia-addons-a',
+      mode: 'access_plan',
+      bookingIntent: 'access_plan',
+      serviceId: muscId,
+      commercialOptionId: 'musc-mensal',
+      selectedAddonOptionIds: ['pers-duo-filtered'],
+      addonSchedules: [
+        { addonOptionId: 'pers-duo-filtered', serviceId: personalId, professionalId: prof2Id, modality: 'presential', startTime: `${tueDate}T09:00:00`, endTime: `${tueDate}T10:00:00`, recurrence: { frequency: 'weekly', durationCode: '1_month' } },
+        { addonOptionId: 'pers-duo-filtered', serviceId: personalId, professionalId: prof2Id, modality: 'presential', startTime: `${thuDate}T09:00:00`, endTime: `${thuDate}T10:00:00`, recurrence: { frequency: 'weekly', durationCode: '1_month' } }
+      ],
+      startDate: tueDate,
+      student: { fullName: 'Aluno Duo 3 Barrado', phone: '11988887055' }
+    });
+    assert.equal(duo3Blocked.status, 409, 'Duo com 2/2 aprovados deve bloquear 3o aluno no horário');
+
+    console.log('15. Testando plano Anual Base + Complemento semanal recorrente (match_base, sem estourar créditos)...');
+    const annualReq = await req(server, 'POST', '/v1/public/studio/bookings', {}, {
+      tenantSlug: 'academia-addons-a',
+      mode: 'access_plan',
+      bookingIntent: 'access_plan',
+      serviceId: muscId,
+      commercialOptionId: 'musc-anual',
+      selectedAddonOptionIds: ['pers-auto-group'],
+      addonSchedules: [
+        { addonOptionId: 'pers-auto-group', serviceId: personalId, modality: 'presential', startTime: `${friDate}T11:00:00`, endTime: `${friDate}T12:00:00`, recurrence: { frequency: 'weekly', durationCode: '12_months' } }
+      ],
+      startDate: friDate,
+      student: { fullName: 'Aluno Anual Grupo', phone: '11988887056' }
+    });
+    assert.equal(annualReq.status, 201);
+    const annualApprove = await req(server, 'POST', `/v1/studio/enrollments/public-requests/${annualReq.data.id}/approve`, authA, {});
+    assert.equal(annualApprove.status, 200, 'Aprovação anual com addon semanal não deve falhar em 52+ ocorrências');
+    const annualAddonEnt = db.prepare(`SELECT * FROM student_package_entitlements WHERE contract_id = ? AND entitlement_role = 'addon'`).get(annualApprove.data.contractId);
+    assert.ok(annualAddonEnt.credits_total >= annualApprove.data.appointmentIds.length);
+    assert.ok(annualApprove.data.appointmentIds.length >= 48, 'Plano anual 1x/sem deve agendar todo o ciclo anual');
+
+    console.log('16. Testando cancelamento independente de complemento, inclusão posterior, RBAC e cancelamento do plano-base...');
+    const duoDetailBefore = await req(server, 'GET', `/v1/studio/enrollments/${duoContract1Id}`, authA);
+    assert.equal(duoDetailBefore.status, 200);
+    const duoAddonEnt = duoDetailBefore.data.entitlements.find(e => e.entitlement_role === 'addon');
+    assert.ok(duoAddonEnt && duoAddonEnt.schedule_snapshot.length === 2, 'Snapshot deve registrar os 2 dias/horários escolhidos do complemento');
+
+    // Simula 1 pagamento já quitado + 1 pagamento futuro pendente + 1 aula já concluída do addon
+    const firstApptId = duoDetailBefore.data.appointments[0].id;
+    db.prepare(`UPDATE appointments SET status = 'completed' WHERE id = ?`).run(firstApptId);
+    db.prepare(`INSERT INTO payments (id, tenant_id, patient_id, package_contract_id, amount, base_amount, status, due_date, payment_date, payment_method, notes) VALUES ('pay-paid-hist', 'ten-studio-a', ?, ?, 380, 380, 'paid', date('now'), date('now'), 'pix', 'Pago anterior')`)
+      .run(duoDetailBefore.data.enrollment.studentId, duoContract1Id);
+
+    const cancelAddonRes = await req(server, 'POST', `/v1/studio/enrollments/${duoContract1Id}/entitlements/${duoAddonEnt.id}/cancel`, authA, {
+      cancelFuturePendingPayments: true,
+      cancelFutureScheduledAppointments: true,
+      reason: 'Aluno optou por seguir somente na musculação'
+    });
+    assert.equal(cancelAddonRes.status, 200);
+    assert.equal(cancelAddonRes.data.detail.enrollment.contractStatus, 'active', 'Status contratual deve permanecer ativo após cancelar somente complemento');
+    assert.ok(['active', 'future'].includes(cancelAddonRes.data.detail.enrollment.lifecycleCategory), 'Plano-base não deve ser marcado como cancelado após cancelar somente complemento');
+    const cancelledEntRow = cancelAddonRes.data.detail.entitlements.find(e => e.id === duoAddonEnt.id);
+    assert.equal(cancelledEntRow.entitlement_status, 'cancelled');
+    const baseEntAfterCancel = cancelAddonRes.data.detail.entitlements.find(e => e.entitlement_role === 'base');
+    assert.equal(baseEntAfterCancel.entitlement_status, 'active');
+    assert.equal(db.prepare(`SELECT status FROM appointments WHERE id = ?`).get(firstApptId).status, 'completed', 'Aula já realizada deve permanecer intacta');
+    assert.equal(db.prepare(`SELECT status FROM payments WHERE id = 'pay-paid-hist'`).get().status, 'paid', 'Pagamento já quitado deve permanecer intacto');
+
+    // Incluir complemento posteriormente no contrato ativo combinado
+    const addLateAddonRes = await req(server, 'POST', `/v1/studio/enrollments/${duoContract1Id}/addons`, authA, {
+      addonOptionId: 'pers-auto-group'
+    });
+    assert.equal(addLateAddonRes.status, 201);
+    assert.ok(addLateAddonRes.data.addedEntitlementId);
+
+    // RBAC em detalhe com availableAddons
+    const profDetailRedacted = await req(server, 'GET', `/v1/studio/enrollments/${duoContract1Id}`, authProfA);
+    assert.equal(profDetailRedacted.status, 200);
+    assert.equal(profDetailRedacted.data.enrollment.amount, null);
+    assert.deepEqual(profDetailRedacted.data.payments, []);
+    assert.ok(profDetailRedacted.data.availableAddons.every(a => a.additionalPriceCents === null));
+
+    // Incluir complemento em matrícula originalmente AVULSA/SOLO (Sem complemento -> Com complemento)
+    const soloEnrollmentList = await req(server, 'GET', '/v1/studio/enrollments', authA);
+    const soloCtr = soloEnrollmentList.data.enrollments.find(e => e.studentName === 'Aluno Sem Addon');
+    assert.ok(soloCtr);
+    const promoteSoloRes = await req(server, 'POST', `/v1/studio/enrollments/${soloCtr.id}/addons`, authA, {
+      addonOptionId: 'pers-auto-group'
+    });
+    assert.equal(promoteSoloRes.status, 201);
+    assert.equal(promoteSoloRes.data.detail.entitlements.length, 2, 'Contrato solo deve passar a ter plano-base + complemento');
+
+    // Cancelar o plano-base deve encerrar explicitamente o complemento ativo vinculado (zero órfãos ativos)
+    const cancelBaseRes = await req(server, 'POST', `/v1/studio/enrollments/${duoContract1Id}/lifecycle`, authA, {
+      action: 'cancel',
+      reason: 'Encerramento completo'
+    });
+    assert.equal(cancelBaseRes.status, 200);
+    const activeAddonsLeft = db.prepare(`SELECT COUNT(*) AS cnt FROM student_package_entitlements WHERE contract_id = ? AND entitlement_status != 'cancelled'`).get(duoContract1Id);
+    assert.equal(Number(activeAddonsLeft.cnt), 0, 'Cancelamento do contrato principal deve encerrar também os complementos ativos vinculados');
+
+    console.log('17. Testando Importação Inteligente com IA para Musculação + Personal em grupo reduzido (sem vincular Personal à Musculação)...');
+    const gymPersonalAiNorm = normalizeProposal({
+      services: [
+        {
+          name: 'Academia Livre Nova',
+          type: 'access_unlimited',
+          modality: 'presential',
+          prices: [{ amountCents: 12000, unit: 'per_month', paymentPeriod: 'monthly', duration: '1_month', frequencyType: 'unlimited', frequencyCount: null, evidence: 'R$ 120/mês' }],
+          optionalAddons: [{
+            label: 'Personal Grupo Até 4',
+            addonServiceName: 'Personal Grupo Reduzido Novo',
+            attendanceFormat: 'group',
+            sessionCapacity: 4,
+            frequencyType: 'weekly',
+            frequencyCount: 2,
+            additionalPriceCents: 24000,
+            billingPeriodicity: 'monthly',
+            durationMode: 'match_base',
+            scheduleTiming: 'during_purchase',
+            allowedWeekdays: [1, 3, 5],
+            allowPublicBooking: true,
+            mandatoryUnclear: false,
+            evidence: '+R$ 240/mês em pequeno grupo até 4'
+          }]
+        },
+        {
+          name: 'Personal Grupo Reduzido Novo',
+          type: 'group',
+          modality: 'presential',
+          durationMinutes: 60,
+          capacity: 4,
+          prices: [{ amountCents: 30000, unit: 'per_month', paymentPeriod: 'monthly', duration: '1_month', frequencyType: 'weekly', frequencyCount: 2, evidence: 'R$ 300/mês avulso' }]
+        }
+      ],
+      packages: []
+    }, false);
+    const srvBaseAi = {
+      ...gymPersonalAiNorm.services[0],
+      action: 'create',
+      reviewed: true,
+      professionalId: studioA.profId, // mesmo se vier poluído na UI, facility_access nunca pode vincular Personal
+      optionalAddons: [{
+        ...gymPersonalAiNorm.services[0].optionalAddons[0],
+        addonServiceRef: gymPersonalAiNorm.services[1].key
+      }]
+    };
+    const srvPersAi = {
+      ...gymPersonalAiNorm.services[1],
+      action: 'create',
+      reviewed: true,
+      professionalId: studioA.profId
+    };
+    const { buildProposalDiagnostics, readStudioImportCatalog } = require('./dist/services/studio-catalog-confirmation');
+    const studioImportCatalog = readStudioImportCatalog('ten-studio-a');
+    const badGroupDiag = buildProposalDiagnostics(
+      'ten-studio-a',
+      {
+        services: [{
+          ...srvBaseAi,
+          optionalAddons: [{ ...srvBaseAi.optionalAddons[0], attendanceFormat: 'group', sessionCapacity: 1 }]
+        }, srvPersAi],
+        packages: []
+      },
+      studioImportCatalog,
+      { services: {}, packages: {} }
+    );
+    assert.ok(badGroupDiag.alerts.some(al => al.id.startsWith('addon-cap-')), 'Diagnóstico deve alertar complemento group com capacidade < 2');
+
+    const appliedAi = applyStudioCatalog(
+      { tenantId: 'ten-studio-a', user: { userId: studioA.adminId } },
+      { services: [srvBaseAi, srvPersAi], packages: [] }
+    );
+    assert.equal(appliedAi.services.length, 2);
+    const gymImportedRow = db.prepare(`SELECT * FROM services WHERE id = ?`).get(appliedAi.services[0].id);
+    assert.equal(gymImportedRow.professional_id, null, 'Importação IA jamais deve vincular Personal ao serviço-base de Musculação');
+    assert.equal(gymImportedRow.clinical_module, null);
+    const gymAddonsCfg = JSON.parse(gymImportedRow.optional_addons_json);
+    assert.equal(gymAddonsCfg.options[0].addonServiceId, appliedAi.services[1].id);
+    assert.equal(gymAddonsCfg.options[0].attendanceFormat, 'group');
+    assert.equal(gymAddonsCfg.options[0].sessionCapacity, 4);
+    assert.deepEqual(gymAddonsCfg.options[0].allowedWeekdays, [1, 3, 5]);
+
+    console.log('ALL 17 OPTIONAL ADDONS COMPREHENSIVE SCENARIOS PASSED!');
   } finally {
     server.close();
   }

@@ -109,8 +109,36 @@ function validateAndHydrateOptionalAddonsForSave(params: {
     opt.addonServiceType = targetStudioType;
     if (targetRequiresAppt === 0) {
       opt.scheduleTiming = 'not_applicable';
-    } else if (opt.scheduleTiming === 'not_applicable') {
-      opt.scheduleTiming = 'after_confirmation';
+      opt.studentCanChooseSchedule = false;
+    } else {
+      if (opt.scheduleTiming === 'not_applicable') {
+        opt.scheduleTiming = 'after_confirmation';
+      }
+      opt.studentCanChooseSchedule = opt.scheduleTiming === 'during_purchase';
+    }
+    if (opt.attendanceFormat === 'duo') {
+      opt.sessionCapacity = 2;
+    } else if (opt.attendanceFormat === 'individual') {
+      opt.sessionCapacity = 1;
+    } else if (opt.attendanceFormat === 'group' && (!opt.sessionCapacity || opt.sessionCapacity < 2)) {
+      return {
+        error: `Para o complemento "${opt.label}" em pequeno grupo/turma, informe uma capacidade mínima de 2 alunos por sessão.`,
+        config: null,
+        configJson: null
+      };
+    }
+    if (Array.isArray(opt.enabledProfessionalIds) && opt.enabledProfessionalIds.length > 0) {
+      const checkProfStmt = db.prepare(`SELECT id, active FROM professionals WHERE id = ? AND tenant_id = ?`);
+      for (const pid of opt.enabledProfessionalIds) {
+        const proRow = checkProfStmt.get(pid, tenantId) as { id: string; active: number } | undefined;
+        if (!proRow) {
+          return {
+            error: `Um dos profissionais selecionados no complemento "${opt.label}" não pertence a este estabelecimento.`,
+            config: null,
+            configJson: null
+          };
+        }
+      }
     }
   }
 
@@ -218,6 +246,7 @@ function validateAndSyncLinkedInstructorsTx(params: {
   durationMinutes: number | null;
   isUpdate: boolean;
   preserveExistingTerms?: boolean;
+  clearIfNoPrimary?: boolean;
 }): void {
   const {
     tenantId,
@@ -229,7 +258,8 @@ function validateAndSyncLinkedInstructorsTx(params: {
     price,
     durationMinutes,
     isUpdate,
-    preserveExistingTerms
+    preserveExistingTerms,
+    clearIfNoPrimary
   } = params;
 
   const existingLinkedRows = db
@@ -254,6 +284,8 @@ function validateAndSyncLinkedInstructorsTx(params: {
       }
     }
     desiredIds = Array.from(new Set([primaryProfId, ...requestedIds].filter(Boolean) as string[]));
+  } else if (clearIfNoPrimary && !primaryProfId) {
+    desiredIds = [];
   } else if (!isUpdate && primaryProfId) {
     desiredIds = [primaryProfId];
   } else if (isUpdate && primaryProfId) {
@@ -639,7 +671,8 @@ export class ServiceController {
       if (isStudioCompat) {
         const targetSourceRows = professionalId
           ? (db.prepare(`
-              SELECT s.id, s.name, s.active, COALESCE(s.service_kind, 'individual') as service_kind,
+              SELECT s.id, s.name, s.active, COALESCE(s.allow_public_booking, 1) as allow_public_booking,
+                     COALESCE(s.service_kind, 'individual') as service_kind,
                      COALESCE(s.studio_service_type, CASE WHEN COALESCE(s.service_kind, 'individual') = 'group' THEN 'group' ELSE 'individual' END) as studio_service_type,
                      COALESCE(s.requires_appointment, 1) as requires_appointment,
                      s.professional_id
@@ -649,23 +682,42 @@ export class ServiceController {
           : services;
         const targetPrimaryMap = new Map<string, string | null>(targetSourceRows.map(r => [r.id, r.professional_id || null]));
         const targetLinkedMap = professionalId ? getLinkedProfessionalsMap(tenantId, targetPrimaryMap) : linkedByService;
+        const activeProfRows = db.prepare(`SELECT id, active, public_booking_enabled FROM professionals WHERE tenant_id = ?`).all(tenantId) as Array<{ id: string; active: number; public_booking_enabled: number }>;
+        const profStatusMap = new Map(activeProfRows.map(p => [p.id, p]));
         for (const r of targetSourceRows) {
           const stType = normalizeStudioServiceType(r.studio_service_type, r.service_kind);
           const reqAppt = stType === 'facility_access' || stType === 'non_scheduled' ? false : Number(r.requires_appointment ?? 1) !== 0;
           const isGroup = (r.service_kind || 'individual') === 'group' && reqAppt;
           const tLinked = targetLinkedMap.get(r.id) || [];
-          const hasInst = tLinked.length > 0 || Boolean(r.professional_id);
+          const activeIds = new Set<string>();
+          const publicIds = new Set<string>();
+          for (const lp of tLinked) {
+            if (Number(lp.active) === 1) {
+              activeIds.add(lp.id);
+              if (Number(lp.public_booking_enabled ?? 1) === 1) publicIds.add(lp.id);
+            }
+          }
+          if (r.professional_id) {
+            const pStat = profStatusMap.get(r.professional_id);
+            if (!pStat || Number(pStat.active) === 1) {
+              activeIds.add(r.professional_id);
+              if (!pStat || Number(pStat.public_booking_enabled ?? 1) === 1) publicIds.add(r.professional_id);
+            }
+          }
           const tScheds = schedulesByService.get(r.id) || [];
           const activeScheds = tScheds.filter((sc: any) => Number(sc.active) !== 0);
           addonTargetsById.set(r.id, {
             id: r.id,
             name: r.name,
             active: Number(r.active) !== 0,
+            allowPublicBooking: Number(r.allow_public_booking ?? 1) !== 0,
             studioServiceType: stType,
             requiresAppointment: reqAppt,
             isGroup,
-            hasInstructor: hasInst,
-            hasSchedule: !isGroup || activeScheds.length > 0
+            hasInstructor: activeIds.size > 0,
+            hasSchedule: !isGroup || activeScheds.length > 0,
+            professionalIds: Array.from(activeIds),
+            publicProfessionalIds: Array.from(publicIds)
           });
         }
       }
@@ -978,16 +1030,28 @@ export class ServiceController {
         return;
       }
 
+      let effectiveCreateProfId: string | null = professionalId ? String(professionalId) : null;
       let prof: any = null;
       let targetModule: string | null = null;
 
-      if (professionalId) {
-        prof = db.prepare('SELECT id, name FROM professionals WHERE id = ? AND tenant_id = ?').get(professionalId, tenantId) as any;
+      if (resolvedStudioType === 'facility_access') {
+        // Acesso à academia (musculação / plano base) nunca depende de Personal Trainer nem de módulo clínico
+        effectiveCreateProfId = professionalId ? String(professionalId) : null;
+        if (effectiveCreateProfId) {
+          prof = db.prepare('SELECT id, name FROM professionals WHERE id = ? AND tenant_id = ?').get(effectiveCreateProfId, tenantId) as any;
+          if (!prof) {
+            res.status(400).json({ error: 'Profissional selecionado não encontrado neste estabelecimento' });
+            return;
+          }
+        }
+        targetModule = null;
+      } else if (effectiveCreateProfId) {
+        prof = db.prepare('SELECT id, name FROM professionals WHERE id = ? AND tenant_id = ?').get(effectiveCreateProfId, tenantId) as any;
         if (!prof) {
           res.status(400).json({ error: 'Profissional selecionado não encontrado na clínica' });
           return;
         }
-        const availableModules = getAvailableModulesForProfessional(professionalId, tenantId);
+        const availableModules = getAvailableModulesForProfessional(effectiveCreateProfId, tenantId);
         if (clinicalModule) {
           const isAllowed = availableModules.some(m => m.code === clinicalModule);
           if (!isAllowed) {
@@ -1002,7 +1066,7 @@ export class ServiceController {
         res.status(400).json({ error: 'A seleção do profissional é obrigatória para cadastrar o serviço.' });
         return;
       } else {
-        targetModule = clinicalModule || 'ZemdaPersonal';
+        targetModule = null;
       }
 
       const resolvedDomain: ServiceDomain = resolveServiceDomain({
@@ -1596,9 +1660,14 @@ export class ServiceController {
 
       const nextDomain: ServiceDomain = resolveServiceDomain({
         establishmentProfile,
-        serviceDomain: rawRequestedDomain !== undefined ? rawRequestedDomain : existing.service_domain,
+        serviceDomain:
+          rawRequestedDomain !== undefined
+            ? rawRequestedDomain
+            : (nextStudioType === 'facility_access' || nextStudioType === 'non_scheduled'
+                ? 'studio'
+                : existing.service_domain),
         serviceKind: nextKind,
-        clinicalModule: clinicalModule !== undefined ? clinicalModule : existing.clinical_module
+        clinicalModule: nextStudioType === 'facility_access' ? null : (clinicalModule !== undefined ? clinicalModule : existing.clinical_module)
       });
 
       if (establishmentProfile === 'mixed' && nextDomain === 'clinical' && (nextKind === 'group' || nextStudioType !== 'individual')) {
@@ -1920,7 +1989,8 @@ export class ServiceController {
           reminderEnabled !== undefined ? 1 : 0, reminderEnabled ? 1 : 0,
           reminderValue !== undefined ? 1 : 0, reminderEnabled && reminderValue ? Number(reminderValue) : null,
           reminderUnit !== undefined ? 1 : 0, reminderEnabled && reminderUnit ? String(reminderUnit).toUpperCase() : 'DAYS',
-          clinicalModule !== undefined ? 1 : 0, clinicalModule || null,
+          (clinicalModule !== undefined || nextStudioType === 'facility_access' || nextStudioType === 'non_scheduled') ? 1 : 0,
+          nextStudioType === 'facility_access' || nextStudioType === 'non_scheduled' ? null : (clinicalModule || null),
           nextKind,
           nextCapacity,
           nextAllowRec,
@@ -1998,7 +2068,8 @@ export class ServiceController {
           price: nextCustomPrice,
           durationMinutes: nextCustomDuration,
           isUpdate: true,
-          preserveExistingTerms
+          preserveExistingTerms,
+          clearIfNoPrimary: nextStudioType === 'facility_access' && !targetProfId && requestedLinkedIds === undefined
         });
 
         if (isStudioCompat && nextKind === 'group' && rawClassSchedules.length > 0 && PackageService.isStudioCompatible(tenantId)) {

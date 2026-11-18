@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { AlertCircle, Calendar, Check, Clock, UserRound } from 'lucide-react';
+import { AlertCircle, Calendar, Check, Clock, Trash2, UserRound, Users } from 'lucide-react';
 import { ApiClient } from '../../api/client';
 import { StudioOptionalAddonOption } from '../../utils/studioAccessAndCommercial';
 
@@ -20,10 +20,11 @@ export interface SelectedAddonSchedule {
 interface AddonSchedulePickerBlockProps {
   tenantSlug: string;
   bookingSequence?: number;
+  baseServiceId?: string | null;
   addon: StudioOptionalAddonOption;
   targetServiceMeta?: any;
-  value?: SelectedAddonSchedule | null;
-  onChange: (next: SelectedAddonSchedule | null) => void;
+  values: SelectedAddonSchedule[];
+  onChange: (next: SelectedAddonSchedule[]) => void;
 }
 
 const todayIso = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
@@ -35,20 +36,37 @@ const formatShortDate = (iso: string) => {
   return new Intl.DateTimeFormat('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' }).format(dt);
 };
 
+export function getRequiredAddonSlotsCount(addon: StudioOptionalAddonOption): number {
+  if (addon.frequencyType === 'weekly' && addon.frequencyCount && addon.frequencyCount > 1) {
+    return Math.min(7, addon.frequencyCount);
+  }
+  return 1;
+}
+
 export const AddonSchedulePickerBlock: React.FC<AddonSchedulePickerBlockProps> = ({
   tenantSlug,
   bookingSequence,
+  baseServiceId,
   addon,
   targetServiceMeta,
-  value,
+  values,
   onChange
 }) => {
+  const requiredCount = getRequiredAddonSlotsCount(addon);
   const [date, setDate] = useState<string>(() => todayIso());
+  const [selectedProFilter, setSelectedProFilter] = useState<string>('any');
+  const [availablePros, setAvailablePros] = useState<any[]>(() =>
+    Array.isArray(targetServiceMeta?.linked_professionals) ? targetServiceMeta.linked_professionals : []
+  );
   const [loading, setLoading] = useState<boolean>(false);
   const [slots, setSlots] = useState<any[]>([]);
   const [upcomingSlots, setUpcomingSlots] = useState<any[]>([]);
   const [emptyReason, setEmptyReason] = useState<string>('');
   const [fetchErr, setFetchErr] = useState<string>('');
+
+  useEffect(() => {
+    setSelectedProFilter('any');
+  }, [addon.id]);
 
   useEffect(() => {
     if (!tenantSlug || !addon.addonServiceId) return;
@@ -57,13 +75,21 @@ export const AddonSchedulePickerBlock: React.FC<AddonSchedulePickerBlockProps> =
     setFetchErr('');
     const seqParam = bookingSequence ? `&bookingSequence=${bookingSequence}` : '';
     const dateParam = date ? `&date=${encodeURIComponent(date)}` : '';
+    const baseParam = baseServiceId ? `&baseServiceId=${encodeURIComponent(baseServiceId)}` : '';
+    const optParam = `&addonOptionId=${encodeURIComponent(addon.id)}`;
+    const proParam = selectedProFilter && selectedProFilter !== 'any'
+      ? `&professionalId=${encodeURIComponent(selectedProFilter)}`
+      : '';
     ApiClient.get<any>(
-      `/v1/public/studio/slots?tenantSlug=${encodeURIComponent(tenantSlug)}${seqParam}&serviceId=${encodeURIComponent(addon.addonServiceId)}${dateParam}&includeUpcoming=1&includeWeekly=0`
+      `/v1/public/studio/slots?tenantSlug=${encodeURIComponent(tenantSlug)}${seqParam}&serviceId=${encodeURIComponent(addon.addonServiceId)}${baseParam}${optParam}${proParam}${dateParam}&includeUpcoming=1&includeWeekly=0`
     )
       .then((res) => {
         if (cancelled) return;
         setSlots(Array.isArray(res?.slots) ? res.slots : []);
         setUpcomingSlots(Array.isArray(res?.upcomingSlots) ? res.upcomingSlots : []);
+        if (Array.isArray(res?.professionals)) {
+          setAvailablePros(res.professionals);
+        }
         setEmptyReason(res?.emptyReason || '');
       })
       .catch((err) => {
@@ -76,16 +102,17 @@ export const AddonSchedulePickerBlock: React.FC<AddonSchedulePickerBlockProps> =
     return () => {
       cancelled = true;
     };
-  }, [tenantSlug, bookingSequence, addon.addonServiceId, date]);
+  }, [tenantSlug, bookingSequence, baseServiceId, addon.id, addon.addonServiceId, selectedProFilter, date]);
 
-  const handlePickSlot = (slotObj: any) => {
+  const handleToggleSlot = (slotObj: any) => {
     if (slotObj?.isFull) return;
     const rawSchedId = typeof slotObj?.classScheduleId === 'string' && !slotObj.classScheduleId.startsWith('individual:')
       ? slotObj.classScheduleId
       : null;
     const modality: 'presential' | 'online' | 'home' =
       slotObj?.modality === 'online' || slotObj?.modality === 'home' ? slotObj.modality : 'presential';
-    onChange({
+
+    const nextItem: SelectedAddonSchedule = {
       optionId: addon.id,
       addonLabel: addon.label,
       serviceId: addon.addonServiceId,
@@ -97,23 +124,51 @@ export const AddonSchedulePickerBlock: React.FC<AddonSchedulePickerBlockProps> =
       startTime: slotObj.startTime,
       endTime: slotObj.endTime,
       roomName: slotObj.roomName || null
-    });
+    };
+
+    const existingIdx = values.findIndex(
+      v => v.startTime === nextItem.startTime && v.professionalId === nextItem.professionalId
+    );
+    if (existingIdx >= 0) {
+      onChange(values.filter((_, i) => i !== existingIdx));
+      return;
+    }
+
+    if (requiredCount === 1) {
+      onChange([nextItem]);
+      return;
+    }
+
+    if (values.length >= requiredCount) {
+      onChange([...values.slice(1), nextItem]);
+      return;
+    }
+    onChange([...values, nextItem]);
   };
 
   const displayList = slots.filter(s => !s.isFull).length > 0
     ? slots
-    : upcomingSlots.filter(s => !s.isFull).slice(0, 8);
+    : upcomingSlots.filter(s => !s.isFull).slice(0, 12);
+
+  const allowProChoice = addon.professionalSelectionMode !== 'auto_assign' && availablePros.length > 1;
 
   return (
-    <div className="p-3.5 rounded-2xl border border-teal-200 bg-white space-y-2.5 text-xs">
+    <div className="p-3.5 rounded-2xl border border-teal-200 bg-white space-y-3 text-xs">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <div className="font-bold text-slate-900 flex items-center gap-1.5">
             <Calendar className="w-3.5 h-3.5 text-teal-600" />
-            Escolha o 1º horário para: {addon.label}
+            {requiredCount > 1
+              ? `Escolha ${requiredCount} horários semanais para: ${addon.label}`
+              : `Escolha o 1º horário para: ${addon.label}`}
           </div>
           <p className="text-[11px] text-slate-500">
-            Disponibilidade e vagas reais do serviço {targetServiceMeta?.name || addon.addonServiceName || addon.label}.
+            Disponibilidade real do serviço {targetServiceMeta?.name || addon.addonServiceName || addon.label}
+            {addon.attendanceFormat === 'duo'
+              ? ' • Formato: Dupla (2 vagas)'
+              : addon.attendanceFormat === 'group' && addon.sessionCapacity
+                ? ` • Formato: Pequeno grupo (até ${addon.sessionCapacity} vagas)`
+                : ''}.
           </p>
         </div>
         <input
@@ -126,21 +181,72 @@ export const AddonSchedulePickerBlock: React.FC<AddonSchedulePickerBlockProps> =
         />
       </div>
 
-      {value && (
-        <div className="p-2.5 rounded-xl bg-teal-50 border border-teal-200 flex items-center justify-between gap-2">
-          <div className="text-[11px] text-teal-900 font-semibold flex items-center gap-1.5">
-            <Check className="w-3.5 h-3.5 text-teal-700 shrink-0" />
-            <span>
-              Horário selecionado: {formatShortDate(value.startTime)} às {value.startTime.slice(11, 16)} ({value.professionalName})
-            </span>
+      {/* Passo C: Escolha de Profissional habilitado (quando configurada seleção manual com 2+ profissionais) */}
+      {allowProChoice && (
+        <div className="space-y-1">
+          <div className="text-[11px] font-semibold text-slate-700 flex items-center gap-1">
+            <Users className="w-3 h-3 text-indigo-600" />
+            Profissional para acompanhamento:
           </div>
-          <button
-            type="button"
-            onClick={() => onChange(null)}
-            className="text-[11px] font-bold text-teal-800 underline cursor-pointer"
-          >
-            Trocar
-          </button>
+          <div className="flex flex-wrap gap-1.5">
+            <button
+              type="button"
+              onClick={() => setSelectedProFilter('any')}
+              className={`px-2.5 py-1 rounded-full text-[11px] border font-semibold cursor-pointer ${
+                selectedProFilter === 'any'
+                  ? 'bg-indigo-600 text-white border-indigo-600'
+                  : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-indigo-300'
+              }`}
+            >
+              Qualquer disponível
+            </button>
+            {availablePros.map((pro: any) => (
+              <button
+                key={pro.id}
+                type="button"
+                onClick={() => setSelectedProFilter(pro.id)}
+                className={`px-2.5 py-1 rounded-full text-[11px] border font-semibold cursor-pointer ${
+                  selectedProFilter === pro.id
+                    ? 'bg-indigo-600 text-white border-indigo-600'
+                    : 'bg-white text-slate-700 border-slate-200 hover:border-indigo-300'
+                }`}
+              >
+                {pro.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {addon.professionalSelectionMode === 'auto_assign' && availablePros.length > 0 && (
+        <div className="text-[11px] text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5">
+          Profissional será atribuído automaticamente entre os instrutores disponíveis ({availablePros.map((p: any) => p.name).join(', ')}).
+        </div>
+      )}
+
+      {values.length > 0 && (
+        <div className="space-y-1.5">
+          <div className="text-[11px] font-bold text-teal-800">
+            {requiredCount > 1
+              ? `Horários selecionados (${values.length} de ${requiredCount}):`
+              : 'Horário selecionado:'}
+          </div>
+          {values.map((sel, idx) => (
+            <div key={`${sel.startTime}-${sel.professionalId}-${idx}`} className="p-2 rounded-xl bg-teal-50 border border-teal-200 flex items-center justify-between gap-2">
+              <div className="text-[11px] text-teal-900 font-semibold flex items-center gap-1.5">
+                <Check className="w-3.5 h-3.5 text-teal-700 shrink-0" />
+                <span>
+                  {formatShortDate(sel.startTime)} às {sel.startTime.slice(11, 16)} ({sel.professionalName})
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => onChange(values.filter((_, i) => i !== idx))}
+                className="text-[11px] font-bold text-rose-700 hover:text-rose-900 cursor-pointer flex items-center gap-0.5"
+              >
+                <Trash2 className="w-3 h-3" /> Remover
+              </button>
+            </div>
+          ))}
         </div>
       )}
 
@@ -153,22 +259,21 @@ export const AddonSchedulePickerBlock: React.FC<AddonSchedulePickerBlockProps> =
         </div>
       ) : displayList.length === 0 ? (
         <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-[11px]">
-          {emptyReason || 'Sem horários livres para a data selecionada. Tente escolher outro dia acima.'}
+          {emptyReason || 'Sem horários disponíveis para este complemento no momento. Escolha outra data ou continue somente com o plano-base.'}
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {displayList.slice(0, 8).map((slotObj: any, idx: number) => {
+          {displayList.slice(0, 10).map((slotObj: any, idx: number) => {
             const isFull = Boolean(slotObj.isFull);
-            const isPicked =
-              value &&
-              value.startTime === slotObj.startTime &&
-              value.professionalId === slotObj.professionalId;
+            const isPicked = values.some(
+              v => v.startTime === slotObj.startTime && v.professionalId === slotObj.professionalId
+            );
             return (
               <button
                 key={`${slotObj.startTime}-${slotObj.professionalId}-${idx}`}
                 type="button"
                 disabled={isFull}
-                onClick={() => handlePickSlot(slotObj)}
+                onClick={() => handleToggleSlot(slotObj)}
                 className={`p-2.5 rounded-xl border text-left transition-all flex items-center justify-between gap-2 ${
                   isFull
                     ? 'bg-slate-50 border-slate-200 opacity-50 cursor-not-allowed'

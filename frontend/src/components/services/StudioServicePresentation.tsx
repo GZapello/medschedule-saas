@@ -1,5 +1,9 @@
 import { FrequencyPricing, WeeklyMeeting, supportsFrequencyPricing, offeredWeeklyMeetings } from '../../utils/studioFrequencyPricing';
 import { calculateStudioRecurringPrice, StudioPricingRule } from '../../utils/studioPricing';
+import { StudioCommercialPriceOption, StudioOptionalAddonsConfig } from '../../utils/studioAccessAndCommercial';
+
+const formatCurrencyFromCents = (cents?: number | null) =>
+  formatCurrencyBRL((Number(cents) || 0) / 100);
 import React, { createContext, useContext, useEffect, useId, useRef, useState } from 'react';
 import { Calendar, ChevronDown, CreditCard, Dumbbell, FileText, SlidersHorizontal, Users } from 'lucide-react';
 import { ClassScheduleItem } from '../../types';
@@ -20,6 +24,8 @@ interface PresentationValues {
   price: string;
   billingMode: ServiceBillingMode;
   periodicPrice: string;
+  commercialPriceOptions?: StudioCommercialPriceOption[];
+  optionalAddons?: StudioOptionalAddonsConfig;
   frequencyPricing?: FrequencyPricing;
   individualMeetings?: WeeklyMeeting[];
   pricingRule?: StudioPricingRule;
@@ -75,6 +81,7 @@ const frequencyTotal = (v: PresentationValues) => v.frequencyPricing?.enabled &&
 }).effectivePrice.toFixed(2) : null;
 
 function sectionSummary(section: Section, v: PresentationValues) {
+  const isNonScheduled = v.studioServiceType === 'facility_access' || v.studioServiceType === 'non_scheduled';
   const formatLabel =
     v.studioServiceType === 'facility_access'
       ? 'Acesso ao estabelecimento (sem agendamento)'
@@ -86,10 +93,18 @@ function sectionSummary(section: Section, v: PresentationValues) {
   switch (section) {
     case 'basics': return v.name || 'Dados do serviço';
     case 'format': return formatLabel;
-    case 'recurrence': return v.allowRecurrence
-      ? [frequency(v), ...scheduleLines(v), PLAN_DURATION_LABELS[v.defaultPlanDuration]].join(' • ') : 'Sem recorrência';
-    case 'billing': return `${SERVICE_BILLING_MODE_LABELS[v.billingMode]}${v.billingMode === 'package' ? '' : ` • ${money(isPeriodicBillingMode(v.billingMode) ? frequencyTotal(v) ?? v.periodicPrice : v.price)}${isPeriodicBillingMode(v.billingMode) ? ' por período' : ''}`}`;
-    case 'templates': return templateCount(v);
+    case 'recurrence':
+      if (isNonScheduled) return 'Não exige agendamento';
+      return v.allowRecurrence
+        ? [frequency(v), ...scheduleLines(v), PLAN_DURATION_LABELS[v.defaultPlanDuration]].join(' • ') : 'Sem recorrência';
+    case 'billing': {
+      const activeCommercial = (v.commercialPriceOptions || []).filter(o => o.active !== false);
+      if (isNonScheduled && activeCommercial.length > 0) {
+        return `${activeCommercial.length} plano(s) comercial(is)`;
+      }
+      return `${SERVICE_BILLING_MODE_LABELS[v.billingMode]}${v.billingMode === 'package' ? '' : ` • ${money(isPeriodicBillingMode(v.billingMode) ? frequencyTotal(v) ?? v.periodicPrice : v.price)}${isPeriodicBillingMode(v.billingMode) ? ' por período' : ''}`}`;
+    }
+    case 'templates': return v.studioServiceType === 'facility_access' ? 'Não se aplica' : templateCount(v);
     case 'description': return v.reminderEnabled ? 'Lembrete ativado' : 'Opcional';
   }
 }
@@ -176,6 +191,7 @@ export function StudioServiceIndicators() {
   const context = useContext(Context);
   if (!context) return null;
   const v = context.values;
+  const isNonScheduled = v.studioServiceType === 'facility_access' || v.studioServiceType === 'non_scheduled';
   const kindLabel =
     v.studioServiceType === 'facility_access'
       ? 'Acesso ao estabelecimento'
@@ -184,8 +200,9 @@ export function StudioServiceIndicators() {
         : v.serviceKind === 'group'
           ? 'Aula coletiva'
           : 'Individual';
+  const secondPill = isNonScheduled ? 'Sem agendamento' : frequency(v);
   return <div className="flex flex-wrap gap-1.5 px-5 pb-3 sm:px-6 text-[11px] shrink-0 border-b border-slate-100">
-    {[kindLabel, frequency(v), SERVICE_BILLING_MODE_LABELS[v.billingMode], 'Academia & Studio'].map((label, index) =>
+    {[kindLabel, secondPill, SERVICE_BILLING_MODE_LABELS[v.billingMode], 'Academia & Studio'].map((label, index) =>
       <span key={index} className={`px-2.5 py-1 rounded-lg border font-medium ${index === 3 ? 'bg-indigo-50 border-indigo-100 text-indigo-700' : 'bg-teal-50 border-teal-100 text-teal-800'}`}>{label}</span>)}
   </div>;
 }
@@ -217,32 +234,67 @@ export function ServiceFormSection({ section, children }: { section: Section; ch
 
 function SummaryCards({ values: v }: { values: PresentationValues }) {
   const times = scheduleLines(v);
+  const isFacilityAccess = v.studioServiceType === 'facility_access';
+  const isNonScheduled = isFacilityAccess || v.studioServiceType === 'non_scheduled';
+  const activeCommercial = (v.commercialPriceOptions || []).filter(o => o.active !== false);
+  const activeAddons = (v.optionalAddons?.options || []).filter(o => o.active !== false);
+
   return <div className="space-y-3">
     <div className="rounded-2xl border border-teal-100 bg-white p-4">
       <h4 className="flex items-center gap-2 font-bold text-sm text-teal-800"><CreditCard className="w-4 h-4" />Resumo comercial</h4>
       <dl className="mt-4 space-y-3 text-xs">
-        <SummaryRow label="Preço por aula" value={money(v.price)} />
+        {!isNonScheduled && <SummaryRow label="Preço por aula" value={money(v.price)} />}
         <SummaryRow label="Tipo de cobrança" value={SERVICE_BILLING_MODE_LABELS[v.billingMode]} />
         {isPeriodicBillingMode(v.billingMode) && <>
           {frequencyTotal(v) !== null && <SummaryRow label="Preço" value="Conforme frequência semanal" />}
-          <SummaryRow label="Valor por período" value={money(frequencyTotal(v) ?? v.periodicPrice)} />
-          <SummaryRow label={v.billingMode === 'count' ? 'Quantidade de aulas' : 'Aulas por semana'} value={String(v.billingMode === 'count' ? v.includedSessionsCount : v.weeklySessionsCount)} />
+          {v.periodicPrice?.trim() && <SummaryRow label="Valor por período" value={money(frequencyTotal(v) ?? v.periodicPrice)} />}
+          {!isNonScheduled && (
+            <SummaryRow label={v.billingMode === 'count' ? 'Quantidade de aulas' : 'Aulas por semana'} value={String(v.billingMode === 'count' ? v.includedSessionsCount : v.weeklySessionsCount)} />
+          )}
         </>}
+        {activeCommercial.length > 0 && (
+          <SummaryRow
+            label="Opções comerciais"
+            value={activeCommercial
+              .slice(0, 4)
+              .map(o => `${o.label || 'Plano'}: ${formatCurrencyFromCents(o.amountCents)}`)
+              .join('\n')}
+          />
+        )}
+        {v.optionalAddons?.enabled && activeAddons.length > 0 && (
+          <SummaryRow
+            label="Complementos opcionais"
+            value={activeAddons
+              .map(a => `${a.label || a.addonServiceName || 'Complemento'}: +${formatCurrencyFromCents(a.additionalPriceCents)}`)
+              .join('\n')}
+          />
+        )}
       </dl>
     </div>
     <div className="rounded-2xl border border-slate-200 bg-white p-4">
-      <h4 className="flex items-center gap-2 font-bold text-sm text-slate-800"><Calendar className="w-4 h-4 text-teal-600" />Recorrência</h4>
+      <h4 className="flex items-center gap-2 font-bold text-sm text-slate-800"><Calendar className="w-4 h-4 text-teal-600" />{isNonScheduled ? 'Controle de acesso' : 'Recorrência'}</h4>
       <dl className="mt-4 space-y-3 text-xs">
-        <SummaryRow label="Frequência" value={frequency(v)} />
-        <SummaryRow label="Dias e horários" value={times.length ? times.join('\n') : 'Não definido'} />
-        <SummaryRow label="Vigência" value={v.allowRecurrence ? PLAN_DURATION_LABELS[v.defaultPlanDuration] || 'Não definido' : 'Não definido'} />
+        {isNonScheduled ? (
+          <>
+            <SummaryRow label="Agendamento" value="Não exige reserva de horário ou instrutor" />
+            <SummaryRow label="Vigência padrão" value={v.allowRecurrence ? PLAN_DURATION_LABELS[v.defaultPlanDuration] || 'Mensal / Contínuo' : 'Livre'} />
+          </>
+        ) : (
+          <>
+            <SummaryRow label="Frequência" value={frequency(v)} />
+            <SummaryRow label="Dias e horários" value={times.length ? times.join('\n') : 'Não definido'} />
+            <SummaryRow label="Vigência" value={v.allowRecurrence ? PLAN_DURATION_LABELS[v.defaultPlanDuration] || 'Não definido' : 'Não definido'} />
+          </>
+        )}
       </dl>
     </div>
-    <div className="rounded-2xl border border-indigo-100 bg-indigo-50/40 p-4">
-      <h4 className="flex items-center gap-2 font-bold text-sm text-indigo-900"><Dumbbell className="w-4 h-4 text-indigo-600" />Templates vinculados</h4>
-      <p className="text-xs text-slate-600 mt-3">{templateCount(v)}</p>
-      {v.defaultTemplateId && <p className="text-[11px] text-indigo-700 mt-2">Template padrão definido</p>}
-    </div>
+    {!isFacilityAccess && (
+      <div className="rounded-2xl border border-indigo-100 bg-indigo-50/40 p-4">
+        <h4 className="flex items-center gap-2 font-bold text-sm text-indigo-900"><Dumbbell className="w-4 h-4 text-indigo-600" />Templates vinculados</h4>
+        <p className="text-xs text-slate-600 mt-3">{templateCount(v)}</p>
+        {v.defaultTemplateId && <p className="text-[11px] text-indigo-700 mt-2">Template padrão definido</p>}
+      </div>
+    )}
   </div>;
 }
 

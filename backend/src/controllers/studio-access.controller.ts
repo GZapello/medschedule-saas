@@ -554,6 +554,118 @@ export class StudioAccessController {
     }
   }
 
+  static cancelAddonFromEnrollment(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      const contractId = String(req.params.contractId || '');
+      const entitlementId = String(req.params.entitlementId || '');
+      if (!tenantId || !req.user || !contractId || !entitlementId) {
+        res.status(400).json({ error: 'Informe a matrícula e o complemento a cancelar.' });
+        return;
+      }
+
+      const viewerPerms = resolveEnrollmentViewerPermissions(req, tenantId);
+      if (!viewerPerms.canManageContracts) {
+        res.status(403).json({ error: 'Sem permissão para cancelar complementos de matrícula.' });
+        return;
+      }
+
+      const { reason, cancelFuturePendingPayments, cancelFutureScheduledAppointments } = req.body || {};
+      const result = db.transaction(() =>
+        StudioAccessService.cancelAddonFromEnrollmentTx({
+          tenantId,
+          contractId,
+          entitlementId,
+          reason: reason ? String(reason) : undefined,
+          cancelFuturePendingPayments,
+          cancelFutureScheduledAppointments,
+          actorId: req.user!.userId
+        })
+      )();
+
+      logAudit(req, 'CANCEL_ENROLLMENT_ADDON', 'student_package_entitlements', entitlementId, {
+        contractId
+      });
+
+      const detail = StudioAccessService.getEnrollmentDetail(tenantId, result.contractId);
+      const safeDetail = detail
+        ? StudioAccessService.sanitizeEnrollmentDetailForViewer(detail, viewerPerms.canViewFinancial)
+        : null;
+
+      res.json({
+        message: 'Complemento cancelado com sucesso; o plano-base permanece ativo!',
+        result: {
+          contractSource: result.contractSource,
+          contractId: result.contractId,
+          cancelledEntitlementId: result.cancelledEntitlementId
+        },
+        detail: safeDetail
+      });
+    } catch (err: any) {
+      console.error('[StudioAccessController.cancelAddonFromEnrollment] Erro:', err);
+      res.status(err?.status || 500).json({
+        error: err?.message || 'Erro ao cancelar complemento da matrícula.',
+        ...(err?.code ? { code: err.code } : {})
+      });
+    }
+  }
+
+  static addAddonToEnrollment(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      const contractId = String(req.params.contractId || '');
+      const { addonOptionId, startDate, dueDay, paymentMethod, initialPaymentStatus, generateInitialCharge, scheduleEntries } = req.body || {};
+      if (!tenantId || !req.user || !contractId || !addonOptionId) {
+        res.status(400).json({ error: 'Informe a matrícula e a opção de complemento a incluir.' });
+        return;
+      }
+
+      const viewerPerms = resolveEnrollmentViewerPermissions(req, tenantId);
+      if (!viewerPerms.canManageContracts) {
+        res.status(403).json({ error: 'Sem permissão para incluir complementos em matrículas.' });
+        return;
+      }
+
+      const result = db.transaction(() =>
+        StudioAccessService.addAddonToEnrollmentTx({
+          tenantId,
+          contractId,
+          addonOptionId: String(addonOptionId),
+          startDate: startDate ? String(startDate) : undefined,
+          dueDay: dueDay !== undefined ? Number(dueDay) : undefined,
+          paymentMethod: paymentMethod ? String(paymentMethod) : undefined,
+          initialPaymentStatus,
+          generateInitialCharge,
+          scheduleEntries: Array.isArray(scheduleEntries) ? scheduleEntries : undefined,
+          actorId: req.user!.userId
+        })
+      )();
+
+      logAudit(req, 'ADD_ENROLLMENT_ADDON', 'student_package_entitlements', result.addedEntitlementId, {
+        contractId: result.contractId,
+        addonOptionId
+      });
+
+      const detail = StudioAccessService.getEnrollmentDetail(tenantId, result.contractId);
+      const safeDetail = detail
+        ? StudioAccessService.sanitizeEnrollmentDetailForViewer(detail, viewerPerms.canViewFinancial)
+        : null;
+
+      res.status(201).json({
+        message: 'Complemento opcional incluído na matrícula com sucesso!',
+        contractId: result.contractId,
+        addedEntitlementId: result.addedEntitlementId,
+        detail: safeDetail
+      });
+    } catch (err: any) {
+      console.error('[StudioAccessController.addAddonToEnrollment] Erro:', err);
+      res.status(err?.status || 500).json({
+        error: err?.message || 'Erro ao incluir complemento na matrícula.',
+        ...(err?.code ? { code: err.code } : {})
+      });
+    }
+  }
+
   static getContractHistory(req: Request, res: Response): void {
     try {
       const tenantId = req.tenantId;

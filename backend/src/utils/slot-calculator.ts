@@ -1,6 +1,7 @@
 import { db } from '../config/database';
 import { getTenantEstablishmentProfile, resolveServiceDomain, supportsStudioFeatures } from './establishment-context';
 import { getServiceDayAvailabilitySegments, intersectIntervalLists, mergeAdjacentSegments, parseClockMinutes } from './service-availability';
+import { countPendingHoldsForSlot, getActivePendingSlotHolds } from './public-slot-holds';
 
 export interface AvailableSlot {
   time: string;           // '09:00'
@@ -67,6 +68,9 @@ export interface CalculateSlotsOptions {
   };
   ignoreLeadTime?: boolean;
   ignoreAdvanceCap?: boolean;
+  capacityOverride?: number | null;
+  includePendingHolds?: boolean;
+  excludeHoldRequestId?: string;
 }
 
 function subtractBreakFromSegments(
@@ -149,13 +153,27 @@ export function calculateAvailableSlots(
     serviceKind: service.service_kind,
     clinicalModule: service.clinical_module
   });
+  const capacityOverrideNum =
+    options?.capacityOverride !== undefined && options?.capacityOverride !== null && Number(options.capacityOverride) >= 1
+      ? Math.floor(Number(options.capacityOverride))
+      : null;
+  const effectiveRawCapacity = capacityOverrideNum !== null ? capacityOverrideNum : service.default_capacity;
   const isSharedCapacityStudio =
     supportsStudioFeatures(estProfile) &&
     resolvedServiceDomain === 'studio' &&
-    Number(service.default_capacity) >= 2 &&
+    (Number(effectiveRawCapacity) >= 2 || (capacityOverrideNum !== null && capacityOverrideNum === 1)) &&
     service.studio_service_type !== 'facility_access';
-  const isGroupService = service.service_kind === 'group' || isSharedCapacityStudio;
-  const defaultGroupCapacity = isGroupService ? Math.max(1, Number(service.default_capacity) || 1) : 1;
+  const isGroupService =
+    capacityOverrideNum !== null
+      ? capacityOverrideNum >= 2
+      : (service.service_kind === 'group' || isSharedCapacityStudio);
+  const defaultGroupCapacity = isGroupService ? Math.max(1, Number(effectiveRawCapacity) || 1) : 1;
+  const activePendingHolds = options?.includePendingHolds
+    ? getActivePendingSlotHolds(tenantId, {
+        datePrefix: dateStr,
+        excludeRequestId: options.excludeHoldRequestId
+      })
+    : [];
   const useCustomServiceWindows =
     !isGroupService &&
     supportsStudioFeatures(estProfile) &&
@@ -509,26 +527,47 @@ export function calculateAvailableSlots(
           continue;
         }
 
-        // Checa conflito com agendamentos existentes, bloqueios e Google Agenda
+        // Checa conflito com agendamentos existentes, bloqueios, reservas temporárias ativas e Google Agenda
         let maxConflictRecovery = -1;
         const slotStartKey = slotStartIso.slice(0, 16);
+        const slotEndIso = `${dateStr}T${minutesToTime(slotEndMin)}:00`;
         const slotOcc = isGroupService ? groupOccurrencesByStart.get(slotStartKey) : undefined;
+        const holdCounts = activePendingHolds.length > 0
+          ? countPendingHoldsForSlot({
+              holds: activePendingHolds,
+              serviceId,
+              professionalId,
+              startIso: slotStartIso,
+              endIso: slotEndIso,
+              isSharedGroup: isGroupService
+            })
+          : { sameSlotGroupHolds: 0, conflictingProfessionalHolds: 0 };
+
+        const slotOccEffectiveEnrolled = slotOcc ? (slotOcc.enrolledCount + holdCounts.sameSlotGroupHolds) : holdCounts.sameSlotGroupHolds;
+        const slotCapLimit = slotOcc ? slotOcc.capacity : defaultGroupCapacity;
 
         for (const appt of existingApptIntervals) {
           if (current < appt.endMin && slotEndMin > appt.startMin) {
             const isSameNonFullGroupOccurrence = Boolean(
               isGroupService &&
-              slotOcc &&
               appt.serviceId === serviceId &&
               appt.startKey === slotStartKey &&
-              (!slotOcc.id || !appt.occurrenceId || appt.occurrenceId === slotOcc.id) &&
-              slotOcc.enrolledCount < slotOcc.capacity &&
+              (!slotOcc?.id || !appt.occurrenceId || appt.occurrenceId === slotOcc.id) &&
+              slotOccEffectiveEnrolled < slotCapLimit &&
               (!patientId || appt.patientId !== patientId)
             );
             if (!isSameNonFullGroupOccurrence) {
               maxConflictRecovery = Math.max(maxConflictRecovery, appt.endMin + buffer);
             }
           }
+        }
+
+        if (holdCounts.conflictingProfessionalHolds > 0) {
+          maxConflictRecovery = Math.max(maxConflictRecovery, slotEndMin + buffer);
+        } else if (!isGroupService && holdCounts.sameSlotGroupHolds > 0) {
+          maxConflictRecovery = Math.max(maxConflictRecovery, slotEndMin + buffer);
+        } else if (isGroupService && slotOccEffectiveEnrolled >= slotCapLimit) {
+          maxConflictRecovery = Math.max(maxConflictRecovery, slotEndMin + buffer);
         }
 
         for (const blk of blockedIntervals) {
@@ -557,8 +596,6 @@ export function calculateAvailableSlots(
           continue;
         }
 
-        const slotEndIso = `${dateStr}T${minutesToTime(slotEndMin)}:00`;
-
         if (!seenTimes.has(slotStartIso)) {
           seenTimes.add(slotStartIso);
           const slotItem: AvailableSlot = {
@@ -571,7 +608,7 @@ export function calculateAvailableSlots(
           if (isGroupService) {
             const occ = groupOccurrencesByStart.get(slotStartIso.slice(0, 16));
             const cap = occ ? occ.capacity : defaultGroupCapacity;
-            const enrolled = occ ? occ.enrolledCount : 0;
+            const enrolled = (occ ? occ.enrolledCount : 0) + holdCounts.sameSlotGroupHolds;
             slotItem.serviceKind = 'group';
             slotItem.capacity = cap;
             slotItem.enrolledCount = enrolled;

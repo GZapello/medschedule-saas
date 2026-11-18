@@ -61,6 +61,12 @@ export interface ProposedAddonOption extends ProposalEvidence {
   billingPeriodicity: 'monthly' | 'per_cycle' | 'one_time' | 'bimonthly' | 'quarterly' | 'semiannual' | 'annual';
   durationMode: 'match_base' | typeof DURATIONS[number];
   scheduleTiming: 'during_purchase' | 'after_confirmation' | 'not_applicable';
+  attendanceFormat?: 'match_service' | 'individual' | 'duo' | 'group';
+  sessionCapacity?: number | null;
+  enabledProfessionalIds?: string[];
+  professionalSelectionMode?: 'student_picks' | 'auto_assign';
+  allowedWeekdays?: number[];
+  allowPublicBooking?: boolean;
   mandatoryUnclear?: boolean;
   ambiguousReason?: string;
   active: boolean;

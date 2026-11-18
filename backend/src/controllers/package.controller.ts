@@ -39,6 +39,7 @@ import {
   RecurrenceIntervalUnit,
   validateServiceRecurrenceFrequency, resolvePlanDurationEndDate
 } from '../utils/establishment-context';
+import { normalizeOptionalAddonsConfig, StudioOptionalAddonOption } from '../utils/studio-access-and-commercial';
 
 function getOwnProfessionalIds(userId: string, tenantId: string): string[] {
   const rows = db.prepare(`
@@ -491,7 +492,7 @@ export class PackageController {
 
   static async getPublicStudioSlots(req: Request, res: Response): Promise<void> {
     try {
-      const { tenantSlug, bookingSequence, serviceId, date, professionalId, includeUpcoming, startDate } = req.query;
+      const { tenantSlug, bookingSequence, serviceId, date, professionalId, includeUpcoming, startDate, baseServiceId, addonOptionId } = req.query;
       const tenant = resolveBookingTenant(tenantSlug, bookingSequence);
       if (!tenant || tenant.public_booking_enabled !== 1) {
         res.status(404).json({ error: 'Agendamento online indisponível.' });
@@ -556,20 +557,65 @@ export class PackageController {
         return;
       }
 
+      let resolvedAddonOpt: StudioOptionalAddonOption | null = null;
+      if (baseServiceId && addonOptionId) {
+        const baseSrvRow = db
+          .prepare(`SELECT id, optional_addons_json FROM services WHERE id = ? AND tenant_id = ? AND active = 1`)
+          .get(String(baseServiceId), tenant.id) as { id: string; optional_addons_json?: string | null } | undefined;
+        if (baseSrvRow?.optional_addons_json) {
+          const addonsCfg = normalizeOptionalAddonsConfig(baseSrvRow.optional_addons_json);
+          const candidateOpt = addonsCfg.options.find(
+            o => o.id === String(addonOptionId) && o.active && o.allowPublicBooking !== false && o.addonServiceId === srv.id
+          );
+          if (candidateOpt) {
+            resolvedAddonOpt = candidateOpt;
+          }
+        }
+      }
+
+      const addonAllowedProIds =
+        resolvedAddonOpt && Array.isArray(resolvedAddonOpt.enabledProfessionalIds) && resolvedAddonOpt.enabledProfessionalIds.length > 0
+          ? resolvedAddonOpt.enabledProfessionalIds
+          : null;
+      const addonCapacityOverride = resolvedAddonOpt
+        ? (resolvedAddonOpt.attendanceFormat === 'individual'
+            ? 1
+            : resolvedAddonOpt.attendanceFormat === 'duo'
+              ? 2
+              : resolvedAddonOpt.attendanceFormat === 'group' && resolvedAddonOpt.sessionCapacity && resolvedAddonOpt.sessionCapacity >= 2
+                ? resolvedAddonOpt.sessionCapacity
+                : null)
+        : null;
+      const addonAllowedWeekdays =
+        resolvedAddonOpt && Array.isArray(resolvedAddonOpt.allowedWeekdays) && resolvedAddonOpt.allowedWeekdays.length > 0
+          ? resolvedAddonOpt.allowedWeekdays
+          : null;
+
       const recCfg = parseServiceRecurrenceConfig(srv);
 
       const reqProfId = typeof professionalId === 'string' && professionalId.trim() ? professionalId.trim() : 'any';
-      const professionals = getLinkedPublicProfessionals(tenant.id, srv.id, reqProfId);
-      const allLinkedProfs = getLinkedPublicProfessionals(tenant.id, srv.id, 'any');
+      const rawMatchedProfs = getLinkedPublicProfessionals(tenant.id, srv.id, reqProfId);
+      const rawAllLinkedProfs = getLinkedPublicProfessionals(tenant.id, srv.id, 'any');
+      const professionals = addonAllowedProIds
+        ? rawMatchedProfs.filter(p => addonAllowedProIds.includes(p.id))
+        : rawMatchedProfs;
+      const allLinkedProfs = addonAllowedProIds
+        ? rawAllLinkedProfs.filter(p => addonAllowedProIds.includes(p.id))
+        : rawAllLinkedProfs;
       const allowedModalities = getAllowedConcreteModalities(srv.modality, true);
       const wantDate = typeof date === 'string' && date.trim() ? date.trim() : null;
       const wantUpcoming = !wantDate || includeUpcoming === '1' || includeUpcoming === 'true';
 
       if (srv.service_kind === 'group') {
-        const weeklySchedules = ClassScheduleService.listForService(tenant.id, srv.id, {
+        const rawWeeklySchedules = ClassScheduleService.listForService(tenant.id, srv.id, {
           includeInactive: false,
           publicOnly: true
         });
+        const weeklySchedules = rawWeeklySchedules.filter(
+          ws =>
+            (!addonAllowedProIds || addonAllowedProIds.includes(ws.professional_id)) &&
+            (!addonAllowedWeekdays || addonAllowedWeekdays.includes(Number(ws.day_of_week)))
+        );
         const weeklySummary = buildWeeklyScheduleSummary(weeklySchedules);
 
         // Coleta instrutores envolvidos na grade + vinculados
@@ -606,15 +652,25 @@ export class PackageController {
           weeklySchedules
         };
 
-        if (wantDate) {
+        const wantDow = wantDate
+          ? new Date(Date.UTC(Number(wantDate.slice(0, 4)), Number(wantDate.slice(5, 7)) - 1, Number(wantDate.slice(8, 10)), 12, 0, 0)).getUTCDay()
+          : null;
+        const wantDateAllowedByAddon = !wantDate || !addonAllowedWeekdays || addonAllowedWeekdays.includes(wantDow!);
+
+        if (wantDate && wantDateAllowedByAddon) {
           dayResult = ClassScheduleService.getScheduledSlotsForDate({
             tenantId: tenant.id,
             serviceRow: srv,
             dateStr: wantDate,
             professionalId: reqProfId,
+            allowedProfessionalIds: addonAllowedProIds || undefined,
             externalBusyByProf: targetDateBusyByProf,
-            publicOnly: true
+            publicOnly: true,
+            includePendingHolds: true,
+            capacityOverride: addonCapacityOverride
           });
+        } else if (wantDate && !wantDateAllowedByAddon) {
+          dayResult.emptyReason = 'Este complemento está disponível apenas nos dias permitidos configurados pela academia.';
         }
 
         const upcomingStart =
@@ -624,11 +680,15 @@ export class PackageController {
               tenantId: tenant.id,
               serviceRow: srv,
               professionalId: reqProfId,
+              allowedProfessionalIds: addonAllowedProIds || undefined,
+              allowedWeekdays: addonAllowedWeekdays || undefined,
               startDate: upcomingStart,
               daysAhead: 21,
               limit: 24,
               externalBusyByProfAndDate: extBusyByProfDate,
-              publicOnly: true
+              publicOnly: true,
+              includePendingHolds: true,
+              capacityOverride: addonCapacityOverride
             })
           : [];
 
@@ -647,10 +707,12 @@ export class PackageController {
           serviceKind: 'group',
           serviceModality: srv.modality || 'presential',
           allowedModalities,
-          defaultCapacity: srv.default_capacity || 1,
+          defaultCapacity: addonCapacityOverride || srv.default_capacity || 1,
+          professionalSelectionMode: resolvedAddonOpt?.professionalSelectionMode || 'student_picks',
+          attendanceFormat: resolvedAddonOpt?.attendanceFormat || 'match_service',
           allowRecurrence: recCfg.allowRecurrence,
           allowedRecurrenceFrequencies: recCfg.allowedFrequencies,
-          allowedRecurrenceWeekdays: recCfg.allowedWeekdays,
+          allowedRecurrenceWeekdays: addonAllowedWeekdays || recCfg.allowedWeekdays,
           defaultRecurrenceFrequency: recCfg.defaultFrequency,
           allowedPlanDurations: recCfg.allowedPlanDurations,
           defaultPlanDuration: recCfg.defaultPlanDuration,
@@ -693,11 +755,13 @@ export class PackageController {
           totalAvailable: 0,
           slots: [],
           upcomingSlots: [],
-          emptyReason: ClassScheduleService.explainEmptyPublicAvailability({
-            tenantId: tenant.id,
-            serviceRow: srv,
-            professionalId: reqProfId
-          })
+          emptyReason: addonAllowedProIds
+            ? 'Nenhum profissional habilitado para este complemento possui agenda pública ativa no momento.'
+            : ClassScheduleService.explainEmptyPublicAvailability({
+                tenantId: tenant.id,
+                serviceRow: srv,
+                professionalId: reqProfId
+              })
         });
         return;
       }
@@ -706,9 +770,15 @@ export class PackageController {
         ? 'presential'
         : allowedModalities[0] || 'presential';
 
-      const restrictWeekdays = recCfg.allowedFrequencies.includes('custom_weekdays') && recCfg.allowedWeekdays.length > 0
+      const baseRestrictWeekdays = recCfg.allowedFrequencies.includes('custom_weekdays') && recCfg.allowedWeekdays.length > 0
         ? new Set(recCfg.allowedWeekdays)
         : null;
+      const addonDaySet = addonAllowedWeekdays ? new Set(addonAllowedWeekdays) : null;
+      const restrictWeekdays =
+        baseRestrictWeekdays && addonDaySet
+          ? new Set(Array.from(addonDaySet).filter(d => baseRestrictWeekdays.has(d)))
+          : (addonDaySet || baseRestrictWeekdays);
+
       const wantDateAllowed = !wantDate || !restrictWeekdays || (() => {
         const [wy, wm, wd] = wantDate.split('-').map(Number);
         return restrictWeekdays.has(new Date(Date.UTC(wy, wm - 1, wd, 12, 0, 0)).getUTCDay());
@@ -732,10 +802,19 @@ export class PackageController {
             wantDate,
             undefined,
             undefined,
-            externalBusy
+            externalBusy,
+            undefined,
+            {
+              includePendingHolds: true,
+              capacityOverride: addonCapacityOverride
+            }
           );
 
           for (const s of profSlots) {
+            const effectiveCap = s.capacity ?? (addonCapacityOverride && addonCapacityOverride >= 1 ? addonCapacityOverride : 1);
+            const enrolled = s.enrolledCount ?? 0;
+            const remaining = s.remainingSpots ?? Math.max(0, effectiveCap - enrolled);
+            if (remaining <= 0) continue;
             mergedSlots.push({
               ...s,
               date: wantDate,
@@ -748,12 +827,12 @@ export class PackageController {
               modality: defaultModality,
               serviceModality: srv.modality || 'presential',
               allowedModalities,
-              serviceKind: 'individual',
-              capacity: 1,
-              enrolledCount: 0,
-              remainingSpots: 1,
+              serviceKind: effectiveCap >= 2 ? 'group' : 'individual',
+              capacity: effectiveCap,
+              enrolledCount: enrolled,
+              remainingSpots: remaining,
               isFull: false,
-              statusLabel: 'Disponível'
+              statusLabel: effectiveCap >= 2 ? `Disponível — ${remaining} vaga(s)` : 'Disponível'
             });
           }
         }
@@ -774,10 +853,14 @@ export class PackageController {
             tenantId: tenant.id,
             serviceRow: srv,
             professionalId: reqProfId,
+            allowedProfessionalIds: addonAllowedProIds || undefined,
+            allowedWeekdays: addonAllowedWeekdays || undefined,
             startDate: upcomingStart,
             daysAhead: 14,
             limit: 30,
-            publicOnly: true
+            publicOnly: true,
+            includePendingHolds: true,
+            capacityOverride: addonCapacityOverride
           })
         : [];
       const upcomingSlots = restrictWeekdays
@@ -787,21 +870,36 @@ export class PackageController {
       res.json({
         date: wantDate,
         serviceId: srv.id,
-        serviceKind: srv.service_kind,
+        serviceKind: addonCapacityOverride && addonCapacityOverride >= 2 ? 'group' : srv.service_kind,
         serviceModality: srv.modality || 'presential',
         availabilityMode: (srv as any).availability_mode || 'professional_schedule',
         allowedModalities,
-        defaultCapacity: srv.default_capacity || 1,
+        defaultCapacity: addonCapacityOverride || srv.default_capacity || 1,
+        professionalSelectionMode: resolvedAddonOpt?.professionalSelectionMode || 'student_picks',
+        attendanceFormat: resolvedAddonOpt?.attendanceFormat || 'match_service',
         allowRecurrence: recCfg.allowRecurrence,
         allowedRecurrenceFrequencies: recCfg.allowedFrequencies,
-        allowedRecurrenceWeekdays: recCfg.allowedWeekdays,
+        allowedRecurrenceWeekdays: addonAllowedWeekdays || recCfg.allowedWeekdays,
         defaultRecurrenceFrequency: recCfg.defaultFrequency,
         allowedPlanDurations: recCfg.allowedPlanDurations,
         defaultPlanDuration: recCfg.defaultPlanDuration,
         customRecurrenceIntervals: recCfg.customIntervals,
         defaultRecurrenceInterval: recCfg.defaultCustomInterval,
         professionals: allLinkedProfs,
-        weeklyMeetings: req.query.includeWeekly === '1' ? individualStudioMeetings({ tenantId: tenant.id, serviceId: srv.id, professionalIds: reqProfId && reqProfId !== 'any' ? [reqProfId] : undefined, startDate: wantDate || upcomingStart, publicOnly: true }) : [],
+        weeklyMeetings:
+          req.query.includeWeekly === '1'
+            ? individualStudioMeetings({
+                tenantId: tenant.id,
+                serviceId: srv.id,
+                professionalIds:
+                  reqProfId && reqProfId !== 'any'
+                    ? [reqProfId]
+                    : addonAllowedProIds || undefined,
+                startDate: wantDate || upcomingStart,
+                publicOnly: true,
+                allowedWeekdays: addonAllowedWeekdays || undefined
+              })
+            : [],
         weeklySchedules: [],
         weeklySummary: [],
         totalAvailable: mergedSlots.length,

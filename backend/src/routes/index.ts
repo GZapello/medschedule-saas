@@ -404,6 +404,8 @@ api.post('/v1/studio/enrollments/public-requests/:requestId/approve', requireTen
 api.post('/v1/studio/enrollments/:id/lifecycle', requireTenant, requireStudioEstablishment, requirePermissionOrRole(['manage_contracts', 'manage_financial'], 'clinic_admin', 'receptionist'), StudioAccessController.updateEnrollmentLifecycle);
 api.get('/v1/studio/enrollments/:id/history', requireTenant, requireStudioEstablishment, requirePermissionOrRole(['view_enrollments', 'manage_contracts', 'manage_financial'], 'clinic_admin', 'receptionist', 'professional'), StudioAccessController.getContractHistory);
 api.post('/v1/studio/enrollments/:contractId/entitlements/:entitlementId/deliver', requireTenant, requireStudioEstablishment, requirePermissionOrRole(['manage_contracts', 'view_attendance'], 'clinic_admin', 'receptionist', 'professional'), StudioAccessController.deliverEntitlement);
+api.post('/v1/studio/enrollments/:contractId/addons', requireTenant, requireStudioEstablishment, requirePermissionOrRole(['manage_contracts', 'manage_financial'], 'clinic_admin', 'receptionist'), StudioAccessController.addAddonToEnrollment);
+api.post('/v1/studio/enrollments/:contractId/entitlements/:entitlementId/cancel', requireTenant, requireStudioEstablishment, requirePermissionOrRole(['manage_contracts', 'manage_financial'], 'clinic_admin', 'receptionist'), StudioAccessController.cancelAddonFromEnrollment);
 
 // Lembretes de Contato / Retorno por Serviço
 api.get('/v1/service-reminders', requireTenant, ServiceReminderController.list);
