@@ -11,14 +11,44 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 
+/** Normaliza o endpoint S3 do Cloudflare R2 evitando subdomínio de bucket duplicado que quebra TLS SNI (*.r2.cloudflarestorage.com). */
+export function resolveR2Endpoint(rawEndpoint?: string, accountId?: string, bucketName?: string): string {
+  const cleanAccount = String(accountId || '').trim();
+  const cleanBucket = String(bucketName || '').trim();
+  const raw = String(rawEndpoint || '').trim().replace(/\/+$/, '');
+  if (!raw) {
+    return cleanAccount ? `https://${cleanAccount}.r2.cloudflarestorage.com` : '';
+  }
+  try {
+    const withScheme = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+    const parsed = new URL(withScheme);
+    let host = parsed.hostname;
+    if (
+      cleanAccount
+      && cleanBucket
+      && host.toLowerCase() === `${cleanBucket}.${cleanAccount}.r2.cloudflarestorage.com`.toLowerCase()
+    ) {
+      host = `${cleanAccount}.r2.cloudflarestorage.com`;
+    } else if (
+      cleanAccount
+      && /^[a-z0-9_-]+\.[a-f0-9]{20,}\.r2\.cloudflarestorage\.com$/i.test(host)
+      && host.toLowerCase().includes(`.${cleanAccount.toLowerCase()}.`)
+    ) {
+      host = `${cleanAccount}.r2.cloudflarestorage.com`;
+    }
+    return `https://${host}`;
+  } catch {
+    return cleanAccount ? `https://${cleanAccount}.r2.cloudflarestorage.com` : raw;
+  }
+}
+
 /** Cliente S3 apontando para o Cloudflare R2, ou null se as credenciais não estiverem configuradas. */
 export function buildR2Client(): S3Client | null {
   const accountId = process.env.R2_ACCOUNT_ID || '';
   const accessKeyId = process.env.R2_ACCESS_KEY_ID || '';
   const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY || '';
-  const endpoint =
-    process.env.R2_ENDPOINT ||
-    (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : '');
+  const bucketName = process.env.R2_BUCKET_NAME || 'zemda-files';
+  const endpoint = resolveR2Endpoint(process.env.R2_ENDPOINT, accountId, bucketName);
 
   if (!accessKeyId || !secretAccessKey || !endpoint) {
     return null;

@@ -64,8 +64,14 @@ function serviceMergeKey(name: string, type: ProposedService['type']): string {
 const strings = (v: unknown, max: number, length: number) =>
   Array.isArray(v) ? Array.from(new Set(v.slice(0, max).map(s => str(s, length)).filter(Boolean))) : [];
 const choice = <T extends string>(v: unknown, options: readonly T[]) => options.includes(v as T) ? v as T : null;
-const integer = (v: unknown, min: number, max: number) =>
-  typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max ? v : null;
+const integer = (v: unknown, min: number, max: number) => {
+  if (typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max) return v;
+  if (typeof v === 'string' && /^\d+$/.test(v.trim())) {
+    const n = Number(v.trim());
+    if (Number.isInteger(n) && n >= min && n <= max) return n;
+  }
+  return null;
+};
 const list = <T>(v: unknown, max: number, parse: (row: Raw, index: number) => T) =>
   Array.isArray(v) ? v.slice(0, max).map((row, i) => parse(object(row), i)) : [];
 const indexes = (v: unknown, min: number, max: number) => Array.isArray(v)
@@ -151,10 +157,20 @@ function typesAreCompatible(a: ProposedService['type'], b: ProposedService['type
 }
 
 export function normalizeProposal(value: unknown, sourceCount: number, extracted: boolean): StudioProposal {
-  const raw = object(value);
-  if (!Array.isArray(raw.services) || !Array.isArray(raw.packages)) {
+  const outer = object(value);
+  const unwrapped =
+    extracted && !Array.isArray(outer.services) && !Array.isArray(outer.packages)
+      ? object(outer.proposal ?? outer.catalog ?? outer.data ?? outer)
+      : outer;
+
+  const hasServices = Array.isArray(unwrapped.services);
+  const hasPackages = Array.isArray(unwrapped.packages);
+  if ((!extracted && (!hasServices || !hasPackages)) || (extracted && !hasServices && !hasPackages)) {
     throw Object.assign(new Error('A proposta precisa conter serviços e pacotes em listas separadas.'), { status: 400 });
   }
+  const rawServicesList = hasServices ? unwrapped.services : [];
+  const rawPackagesList = hasPackages ? unwrapped.packages : [];
+
   const sources = (v: unknown) => extracted && sourceCount === 1 ? [1] : indexes(v, 1, Math.max(1, sourceCount));
   const review = (row: Raw) => ({
     sources: sources(row.sources), issues: strings(row.issues, 20, 350),
@@ -178,7 +194,7 @@ export function normalizeProposal(value: unknown, sourceCount: number, extracted
     name: str(row.name), description: str(row.description, 2000), notes: str(row.notes, 2000)
   });
 
-  const services: ProposedService[] = list(raw.services, 40, (row, i) => ({
+  const services: ProposedService[] = list(rawServicesList, 40, (row, i) => ({
     ...identity(row), ...review(row), key: 's' + (i + 1), activity: str(row.activity),
     type: choice(row.type, SERVICE_TYPES), modality: choice(row.modality, MODALITIES),
     capacity: integer(row.capacity, 1, 500), durationMinutes: integer(row.durationMinutes, 1, 1440),
@@ -235,7 +251,7 @@ export function normalizeProposal(value: unknown, sourceCount: number, extracted
     })
   }));
 
-  const packages = list(raw.packages, 20, (row, i) => {
+  const packages = list(rawPackagesList, 20, (row, i) => {
     const rawPrice = row.price;
     const normalizedPkgPrice =
       typeof rawPrice === 'number' && Number.isFinite(rawPrice) && rawPrice > 0

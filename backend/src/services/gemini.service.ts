@@ -575,26 +575,42 @@ export class GeminiService {
 
     const trimmed = result.text.trim();
     const parseCandidate = (rawText: string): unknown => {
-      try {
-        return JSON.parse(rawText);
-      } catch {
-        const fenced = rawText.match(/```(?:json)?\s*([\s\S]*?)```/i);
-        const candidate = fenced?.[1]?.trim() || rawText;
-        const firstBrace = candidate.indexOf('{');
-        const lastBrace = candidate.lastIndexOf('}');
-        if (firstBrace >= 0 && lastBrace > firstBrace) {
+      const tryParse = (txt: string): unknown => {
+        try {
+          return JSON.parse(txt);
+        } catch {
+          const withoutTrailingCommas = txt.replace(/,\s*([}\]])/g, '$1');
           try {
-            return JSON.parse(candidate.slice(firstBrace, lastBrace + 1));
+            return JSON.parse(withoutTrailingCommas);
           } catch {
             return null;
           }
         }
-        return null;
+      };
+
+      const direct = tryParse(rawText);
+      const unwrapped = (val: unknown): unknown => {
+        if (Array.isArray(val) && val.length === 1 && val[0] && typeof val[0] === 'object') {
+          return val[0];
+        }
+        return val;
+      };
+      if (direct !== null) return unwrapped(direct);
+
+      const fenced = rawText.match(/```(?:json)?\s*([\s\S]*?)```/i);
+      const candidate = fenced?.[1]?.trim() || rawText;
+      const firstBrace = candidate.indexOf('{');
+      const lastBrace = candidate.lastIndexOf('}');
+      if (firstBrace >= 0 && lastBrace > firstBrace) {
+        const sliced = tryParse(candidate.slice(firstBrace, lastBrace + 1));
+        if (sliced !== null) return unwrapped(sliced);
       }
+      return null;
     };
 
     const parsed = parseCandidate(trimmed);
     if (!parsed && options?.requestId) {
+      console.warn(`[GeminiService] [${options.requestId}] JSON inválido retornado pelo modelo ${result.modelUsed} (tamanho=${trimmed.length})`);
       rememberCatalogDiagnostic(options.requestId, {
         ok: false,
         reason: 'invalid_json',

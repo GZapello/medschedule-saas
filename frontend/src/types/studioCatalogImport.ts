@@ -216,9 +216,13 @@ export interface ImportReceipt {
 
 export type CatalogImportBatchStatus = 'queued' | 'processing' | 'failed' | 'cancelled' | 'ready' | 'completed';
 
+export type CatalogImportErrorCategory = 'analysis_error' | 'communication_error' | 'validation_error' | 'expired';
+
 export interface ImportDraft {
   id: string;
   status?: CatalogImportBatchStatus;
+  errorCategory?: CatalogImportErrorCategory | null;
+  hasExtractedData?: boolean;
   requestId?: string | null;
   errorCode?: string | null;
   errorMessage?: string | null;

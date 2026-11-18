@@ -18,7 +18,11 @@ import {
   PreparedCatalogInput,
   StudioCatalogTempStorageService
 } from '../services/studio-catalog-temp-storage.service';
-import type { CatalogImportBatchStatus, StudioProposal } from '../shared/studio-catalog-contract';
+import type {
+  CatalogImportBatchStatus,
+  CatalogImportErrorCategory,
+  StudioProposal
+} from '../shared/studio-catalog-contract';
 
 interface Draft {
   id: string;
@@ -42,6 +46,7 @@ interface Draft {
 
 const activeJobs = new Map<string, { tenantId: string; abortController: AbortController; requestId: string }>();
 const activeSyncCountByTenant = new Map<string, number>();
+const inFlightAnalyzeByKey = new Map<string, string>();
 
 function resolveRequestId(req: Request): string {
   const incoming = String(req.headers['x-request-id'] || '').trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 60);
@@ -124,6 +129,15 @@ function friendlyAiFailureMessage(diag?: GeminiCatalogDiagnostic | null): {
       retryAfterSeconds: null
     };
   }
+  if (diag.reason === 'invalid_json') {
+    return {
+      status: 422,
+      code: 'AI_INVALID_JSON',
+      message: 'A resposta estruturada da IA veio incompleta desta vez. Tente novamente ou envie menos itens por lote.',
+      retryable: true,
+      retryAfterSeconds: 10
+    };
+  }
   return {
     status: 422,
     code: 'AI_UNREADABLE_CONTENT',
@@ -133,15 +147,48 @@ function friendlyAiFailureMessage(diag?: GeminiCatalogDiagnostic | null): {
   };
 }
 
+function classifyBatchErrorCategory(status: string, errorCode: string | null): CatalogImportErrorCategory | null {
+  if (status !== 'failed') return null;
+  if (errorCode === 'TEMP_FILES_EXPIRED' || errorCode === 'BACKEND_RESTARTED_TEMP_UNAVAILABLE') {
+    return 'expired';
+  }
+  if (errorCode === 'AI_INVALID_OR_BLOCKED' || errorCode === 'AI_UNREADABLE_CONTENT') {
+    return 'validation_error';
+  }
+  if (
+    errorCode === 'AI_RATE_LIMITED'
+    || errorCode === 'AI_PROVIDER_UNAVAILABLE'
+    || errorCode === 'AI_NOT_CONFIGURED'
+    || errorCode === 'TEMP_STAGE_ERROR'
+    || errorCode === 'ASYNC_JOB_ERROR'
+    || errorCode === 'BACKEND_RESTARTED'
+    || errorCode === 'ANALYSIS_IN_PROGRESS'
+  ) {
+    return 'communication_error';
+  }
+  return 'analysis_error';
+}
+
 function statusResponseFor(draft: Draft) {
+  const effectiveStatus: CatalogImportBatchStatus =
+    draft.status || (draft.result_json ? 'completed' : 'ready');
+  let hasExtractedData = false;
+  try {
+    const parsed = JSON.parse(draft.proposal_json);
+    hasExtractedData = Boolean((parsed?.services?.length || 0) > 0 || (parsed?.packages?.length || 0) > 0);
+  } catch {
+    hasExtractedData = false;
+  }
   return {
     id: draft.id,
-    status: draft.status || (draft.result_json ? 'completed' : 'ready'),
+    status: effectiveStatus,
+    errorCategory: classifyBatchErrorCategory(effectiveStatus, draft.error_code || null),
+    hasExtractedData,
     requestId: draft.request_id || null,
     errorCode: draft.error_code || null,
     errorMessage: draft.error_message || null,
     retryable: Boolean(draft.retryable),
-    retryAfterSeconds: draft.status === 'failed' && draft.retryable ? 15 : null,
+    retryAfterSeconds: effectiveStatus === 'failed' && draft.retryable ? 15 : null,
     attempts: Number(draft.attempts || 0),
     tempExpiresAt: draft.temp_expires_at || null,
     tempPurgedAt: draft.temp_purged_at || null,
@@ -214,8 +261,9 @@ async function runGeminiExtraction(
   let proposal: StudioProposal;
   try {
     proposal = normalizeProposal(raw, inputs.length, true);
-  } catch {
-    return { proposal: null, diag: diag || { ok: false, reason: 'invalid_json', retryable: true, retryAfterSeconds: 10, attempts: [] } };
+  } catch (normErr: any) {
+    console.warn(`[StudioCatalogImport] [${options.requestId}] normalizeProposal falhou:`, normErr?.message || normErr);
+    return { proposal: null, diag: { ok: false, reason: 'invalid_json', retryable: true, retryAfterSeconds: 10, attempts: diag?.attempts || [] } };
   }
   if (!proposal.services.length && !proposal.packages.length) {
     return {
@@ -479,6 +527,7 @@ export class StudioCatalogImportController {
       const uploads = readCatalogUploads(req.body?.files);
       const files = [...new Map(uploads.map(file => [file.fingerprint, file])).values()];
       const fingerprint = hash(files.map(file => file.fingerprint).sort().join('|'));
+      const lockKey = `${tenantId}:${actorId}:${fingerprint}`;
       const lookup = db.prepare('SELECT * FROM studio_catalog_imports WHERE tenant_id = ? AND actor_id = ? AND fingerprint = ?');
       const saved = lookup.get(tenantId, actorId, fingerprint) as Draft | undefined;
 
@@ -487,9 +536,17 @@ export class StudioCatalogImportController {
         return;
       }
 
-      if (saved && (saved.status === 'queued' || saved.status === 'processing') && activeJobs.has(saved.id)) {
+      if (saved && (saved.status === 'queued' || saved.status === 'processing') && (activeJobs.has(saved.id) || inFlightAnalyzeByKey.has(lockKey))) {
         res.status(202).json({ ...statusResponseFor(saved), deduplicated: true });
         return;
+      }
+
+      if (inFlightAnalyzeByKey.has(lockKey)) {
+        throw Object.assign(catalogError('Este mesmo lote já está sendo enviado. Aguarde alguns segundos.', 429), {
+          code: 'ANALYSIS_IN_PROGRESS',
+          retryable: true,
+          retryAfterSeconds: 3
+        });
       }
 
       if (!GeminiService.isConfigured()) {
@@ -507,148 +564,158 @@ export class StudioCatalogImportController {
         });
       }
 
-      const preparedInputs: PreparedCatalogInput[] = [];
-      for (const file of files) {
-        const prep = await prepareCatalogFile(file);
-        preparedInputs.push({ ...prep, fingerprint: file.fingerprint });
-      }
-      const sources = files.map((file, i) => ({
-        id: i + 1,
-        fileName: file.fileName,
-        copies: uploads.filter(upload => upload.fingerprint === file.fingerprint).length,
-        mimeType: preparedInputs[i]?.mimeType || file.mimeType,
-        fileSize: file.bytes.length
-      }));
-
-      const isAsync = req.body?.async === true || req.query.async === '1' || req.query.async === 'true';
-
-      if (isAsync) {
-        const expiresAtIso = computeTempExpiryIso();
-        const targetBatchId = db.transaction(() => {
-          const existing = lookup.get(tenantId, actorId, fingerprint) as Draft | undefined;
-          const batchId = existing?.id || saved?.id || randomUUID();
-          if (existing) {
-            db.prepare(`
-              UPDATE studio_catalog_imports
-              SET sources_json = ?,
-                  proposal_json = '{"services":[],"packages":[]}',
-                  status = 'queued',
-                  error_code = NULL,
-                  error_message = NULL,
-                  request_id = ?,
-                  attempts = COALESCE(attempts, 0) + 1,
-                  retryable = 0,
-                  temp_expires_at = ?,
-                  temp_purged_at = NULL,
-                  updated_at = datetime('now')
-              WHERE id = ? AND tenant_id = ? AND actor_id = ?
-            `).run(JSON.stringify(sources), requestId, expiresAtIso, existing.id, tenantId, actorId);
-          } else {
-            db.prepare(`
-              INSERT INTO studio_catalog_imports (
-                id, tenant_id, actor_id, fingerprint, sources_json, proposal_json,
-                status, request_id, attempts, retryable, temp_expires_at
-              ) VALUES (?, ?, ?, ?, ?, '{"services":[],"packages":[]}', 'queued', ?, 1, 0, ?)
-            `).run(batchId, tenantId, actorId, fingerprint, JSON.stringify(sources), requestId, expiresAtIso);
-          }
-          logAudit(req, 'QUEUE_STUDIO_CATALOG_IMPORT', 'studio_catalog_imports', batchId, {
-            requestId,
-            files: sources.length,
-            duplicateFiles: uploads.length - files.length
-          });
-          return batchId;
-        })();
-
-        try {
-          await StudioCatalogTempStorageService.stageBatchTempFiles({
-            tenantId,
-            batchId: targetBatchId,
-            inputs: preparedInputs,
-            expiresAtIso
-          });
-        } catch (stageErr) {
-          db.prepare(`
-            UPDATE studio_catalog_imports
-            SET status = 'failed',
-                error_code = 'TEMP_STAGE_ERROR',
-                error_message = 'Não foi possível preparar a área temporária dos arquivos. Tente novamente.',
-                retryable = 0,
-                temp_purged_at = datetime('now'),
-                updated_at = datetime('now')
-            WHERE id = ? AND tenant_id = ? AND status = 'queued'
-          `).run(targetBatchId, tenantId);
-          throw stageErr;
-        }
-
-        const queuedDraft = lookup.get(tenantId, actorId, fingerprint) as Draft;
-        startAsyncCatalogJob({ batchId: queuedDraft.id, tenantId, actorId, requestId });
-        res.status(202).json(statusResponseFor(queuedDraft));
-        return;
-      }
-
-      // Fluxo síncrono compatível com chamadas diretas de API/testes
-      activeSyncCountByTenant.set(tenantId, (activeSyncCountByTenant.get(tenantId) || 0) + 1);
-      const syncBatchId = saved?.id || randomUUID();
+      inFlightAnalyzeByKey.set(lockKey, requestId);
       try {
-        const { proposal, diag, emptyExtraction } = await runGeminiExtraction(preparedInputs, { requestId });
-        if (!proposal) {
-          if (emptyExtraction) {
-            throw Object.assign(
-              catalogError('Nenhum serviço ou pacote foi identificado. Envie arquivos com o catálogo ou a tabela de preços.', 422),
-              { code: 'AI_UNREADABLE_CONTENT', retryable: false }
-            );
-          }
-          const fail = friendlyAiFailureMessage(diag);
-          throw Object.assign(catalogError(fail.message, fail.status), {
-            code: fail.code,
-            retryable: fail.retryable,
-            retryAfterSeconds: fail.retryAfterSeconds
-          });
+        const preparedInputs: PreparedCatalogInput[] = [];
+        for (const file of files) {
+          const prep = await prepareCatalogFile(file);
+          preparedInputs.push({ ...prep, fingerprint: file.fingerprint });
         }
+        const sources = files.map((file, i) => ({
+          id: i + 1,
+          fileName: file.fileName,
+          copies: uploads.filter(upload => upload.fingerprint === file.fingerprint).length,
+          mimeType: preparedInputs[i]?.mimeType || file.mimeType,
+          fileSize: file.bytes.length
+        }));
 
-        const draft = db.transaction(() => {
-          const previous = lookup.get(tenantId, actorId, fingerprint) as Draft | undefined;
-          if (previous && (previous.status === 'ready' || previous.status === 'completed' || previous.result_json)) {
-            return previous;
-          }
-          if (previous) {
+        const isAsync = req.body?.async === true || req.query.async === '1' || req.query.async === 'true';
+
+        if (isAsync) {
+          const expiresAtIso = computeTempExpiryIso();
+          const targetBatchId = db.transaction(() => {
+            const existing = lookup.get(tenantId, actorId, fingerprint) as Draft | undefined;
+            const batchId = existing?.id || saved?.id || randomUUID();
+            if (existing) {
+              db.prepare(`
+                UPDATE studio_catalog_imports
+                SET sources_json = ?,
+                    proposal_json = '{"services":[],"packages":[]}',
+                    status = 'queued',
+                    error_code = NULL,
+                    error_message = NULL,
+                    request_id = ?,
+                    attempts = COALESCE(attempts, 0) + 1,
+                    retryable = 0,
+                    temp_expires_at = ?,
+                    temp_purged_at = NULL,
+                    updated_at = datetime('now')
+                WHERE id = ? AND tenant_id = ? AND actor_id = ?
+              `).run(JSON.stringify(sources), requestId, expiresAtIso, existing.id, tenantId, actorId);
+            } else {
+              db.prepare(`
+                INSERT INTO studio_catalog_imports (
+                  id, tenant_id, actor_id, fingerprint, sources_json, proposal_json,
+                  status, request_id, attempts, retryable, temp_expires_at
+                ) VALUES (?, ?, ?, ?, ?, '{"services":[],"packages":[]}', 'queued', ?, 1, 0, ?)
+              `).run(batchId, tenantId, actorId, fingerprint, JSON.stringify(sources), requestId, expiresAtIso);
+            }
+            logAudit(req, 'QUEUE_STUDIO_CATALOG_IMPORT', 'studio_catalog_imports', batchId, {
+              requestId,
+              files: sources.length,
+              duplicateFiles: uploads.length - files.length
+            });
+            return batchId;
+          })();
+
+          let stagedProvider = 'local_tmp';
+          try {
+            const staged = await StudioCatalogTempStorageService.stageBatchTempFiles({
+              tenantId,
+              batchId: targetBatchId,
+              inputs: preparedInputs,
+              expiresAtIso
+            });
+            stagedProvider = staged.provider;
+          } catch (stageErr) {
             db.prepare(`
               UPDATE studio_catalog_imports
-              SET sources_json = ?,
-                  proposal_json = ?,
-                  status = 'ready',
-                  error_code = NULL,
-                  error_message = NULL,
-                  request_id = ?,
-                  attempts = COALESCE(attempts, 0) + 1,
+              SET status = 'failed',
+                  error_code = 'TEMP_STAGE_ERROR',
+                  error_message = 'Não foi possível preparar a área temporária dos arquivos. Tente novamente.',
                   retryable = 0,
                   temp_purged_at = datetime('now'),
                   updated_at = datetime('now')
-              WHERE id = ? AND tenant_id = ? AND actor_id = ?
-            `).run(JSON.stringify(sources), JSON.stringify(proposal), requestId, previous.id, tenantId, actorId);
-          } else {
-            db.prepare(`
-              INSERT INTO studio_catalog_imports (
-                id, tenant_id, actor_id, fingerprint, sources_json, proposal_json,
-                status, request_id, attempts, retryable, temp_purged_at
-              ) VALUES (?, ?, ?, ?, ?, ?, 'ready', ?, 1, 0, datetime('now'))
-            `).run(syncBatchId, tenantId, actorId, fingerprint, JSON.stringify(sources), JSON.stringify(proposal), requestId);
+              WHERE id = ? AND tenant_id = ? AND status = 'queued'
+            `).run(targetBatchId, tenantId);
+            throw stageErr;
           }
-          const targetId = previous?.id || syncBatchId;
-          logAudit(req, 'ANALYZE_STUDIO_CATALOG_IMPORT', 'studio_catalog_imports', targetId, {
-            requestId,
-            files: sources.length,
-            duplicateFiles: uploads.length - files.length,
-            services: proposal.services.length,
-            packages: proposal.packages.length
-          });
-          return lookup.get(tenantId, actorId, fingerprint) as Draft;
-        })();
-        res.json(responseFor(tenantId, draft));
+
+          console.info(`[StudioCatalogImport] [${requestId}] lote=${targetBatchId} enfileirado (provider=${stagedProvider}, arquivos=${preparedInputs.length})`);
+          const queuedDraft = lookup.get(tenantId, actorId, fingerprint) as Draft;
+          startAsyncCatalogJob({ batchId: queuedDraft.id, tenantId, actorId, requestId });
+          res.status(202).json(statusResponseFor(queuedDraft));
+          return;
+        }
+
+        // Fluxo síncrono compatível com chamadas diretas de API/testes
+        activeSyncCountByTenant.set(tenantId, (activeSyncCountByTenant.get(tenantId) || 0) + 1);
+        const syncBatchId = saved?.id || randomUUID();
+        try {
+          const { proposal, diag, emptyExtraction } = await runGeminiExtraction(preparedInputs, { requestId });
+          if (!proposal) {
+            if (emptyExtraction) {
+              throw Object.assign(
+                catalogError('Nenhum serviço ou pacote foi identificado. Envie arquivos com o catálogo ou a tabela de preços.', 422),
+                { code: 'AI_UNREADABLE_CONTENT', retryable: false }
+              );
+            }
+            const fail = friendlyAiFailureMessage(diag);
+            throw Object.assign(catalogError(fail.message, fail.status), {
+              code: fail.code,
+              retryable: fail.retryable,
+              retryAfterSeconds: fail.retryAfterSeconds
+            });
+          }
+
+          const draft = db.transaction(() => {
+            const previous = lookup.get(tenantId, actorId, fingerprint) as Draft | undefined;
+            if (previous && (previous.status === 'ready' || previous.status === 'completed' || previous.result_json)) {
+              return previous;
+            }
+            if (previous) {
+              db.prepare(`
+                UPDATE studio_catalog_imports
+                SET sources_json = ?,
+                    proposal_json = ?,
+                    status = 'ready',
+                    error_code = NULL,
+                    error_message = NULL,
+                    request_id = ?,
+                    attempts = COALESCE(attempts, 0) + 1,
+                    retryable = 0,
+                    temp_purged_at = datetime('now'),
+                    updated_at = datetime('now')
+                WHERE id = ? AND tenant_id = ? AND actor_id = ?
+              `).run(JSON.stringify(sources), JSON.stringify(proposal), requestId, previous.id, tenantId, actorId);
+            } else {
+              db.prepare(`
+                INSERT INTO studio_catalog_imports (
+                  id, tenant_id, actor_id, fingerprint, sources_json, proposal_json,
+                  status, request_id, attempts, retryable, temp_purged_at
+                ) VALUES (?, ?, ?, ?, ?, ?, 'ready', ?, 1, 0, datetime('now'))
+              `).run(syncBatchId, tenantId, actorId, fingerprint, JSON.stringify(sources), JSON.stringify(proposal), requestId);
+            }
+            const targetId = previous?.id || syncBatchId;
+            logAudit(req, 'ANALYZE_STUDIO_CATALOG_IMPORT', 'studio_catalog_imports', targetId, {
+              requestId,
+              files: sources.length,
+              duplicateFiles: uploads.length - files.length,
+              services: proposal.services.length,
+              packages: proposal.packages.length
+            });
+            return lookup.get(tenantId, actorId, fingerprint) as Draft;
+          })();
+          res.json(responseFor(tenantId, draft));
+        } finally {
+          const nextCount = Math.max(0, (activeSyncCountByTenant.get(tenantId) || 1) - 1);
+          if (nextCount === 0) activeSyncCountByTenant.delete(tenantId);
+          else activeSyncCountByTenant.set(tenantId, nextCount);
+        }
       } finally {
-        const nextCount = Math.max(0, (activeSyncCountByTenant.get(tenantId) || 1) - 1);
-        if (nextCount === 0) activeSyncCountByTenant.delete(tenantId);
-        else activeSyncCountByTenant.set(tenantId, nextCount);
+        if (inFlightAnalyzeByKey.get(lockKey) === requestId) {
+          inFlightAnalyzeByKey.delete(lockKey);
+        }
       }
     } catch (error) {
       respondError(res, error, requestId);

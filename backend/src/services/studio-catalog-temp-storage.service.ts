@@ -106,21 +106,15 @@ function shouldUseCloudflareR2(): boolean {
 let cleanupWorkerTimer: ReturnType<typeof setInterval> | null = null;
 
 export class StudioCatalogTempStorageService {
-  static async stageBatchTempFiles(params: {
-    tenantId: string;
-    batchId: string;
-    inputs: PreparedCatalogInput[];
-    expiresAtIso?: string;
-  }): Promise<{ provider: 'cloudflare_r2' | 'local_tmp'; count: number; expiresAtIso: string }> {
+  private static async writeBatchToProvider(
+    provider: 'cloudflare_r2' | 'local_tmp',
+    params: { tenantId: string; batchId: string; inputs: PreparedCatalogInput[] },
+    expiresAtIso: string
+  ): Promise<{ provider: 'cloudflare_r2' | 'local_tmp'; count: number; expiresAtIso: string }> {
     const tenantSeg = sanitizeSegment(params.tenantId);
     const batchSeg = sanitizeSegment(params.batchId);
-    const expiresAtIso = params.expiresAtIso || computeTempExpiryIso();
-    const provider: 'cloudflare_r2' | 'local_tmp' = shouldUseCloudflareR2() ? 'cloudflare_r2' : 'local_tmp';
+    const createdKeys: string[] = [];
 
-    // Remove quaisquer restos temporários anteriores do mesmo lote antes de gravar novos.
-    await this.purgeBatchTempFiles(params.tenantId, params.batchId, 'restage');
-
-    const createdKeys: Array<{ objectKey: string; provider: 'cloudflare_r2' | 'local_tmp' }> = [];
     try {
       const insertStmt = db.prepare(`
         INSERT INTO studio_catalog_import_temp_files (
@@ -158,7 +152,7 @@ export class StudioCatalogTempStorageService {
           fs.mkdirSync(path.dirname(targetPath), { recursive: true });
           fs.writeFileSync(targetPath, buffer);
         }
-        createdKeys.push({ objectKey, provider });
+        createdKeys.push(objectKey);
 
         const fingerprint = item.fingerprint || fileId;
         const originalMime = item.mimeType;
@@ -185,19 +179,42 @@ export class StudioCatalogTempStorageService {
 
       return { provider, count: createdKeys.length, expiresAtIso };
     } catch (err) {
-      // Limpa qualquer objeto órfão gravado antes da falha transacional.
-      for (const item of createdKeys) {
+      for (const objectKey of createdKeys) {
         try {
-          if (item.provider === 'cloudflare_r2') {
-            await r2StorageService.deleteFile(item.objectKey);
+          if (provider === 'cloudflare_r2') {
+            await r2StorageService.deleteFile(objectKey);
           } else {
-            const p = resolveLocalFilePath(item.objectKey, params.tenantId, params.batchId);
+            const p = resolveLocalFilePath(objectKey, params.tenantId, params.batchId);
             if (fs.existsSync(p)) fs.unlinkSync(p);
           }
         } catch (_) {}
       }
       throw err;
     }
+  }
+
+  static async stageBatchTempFiles(params: {
+    tenantId: string;
+    batchId: string;
+    inputs: PreparedCatalogInput[];
+    expiresAtIso?: string;
+  }): Promise<{ provider: 'cloudflare_r2' | 'local_tmp'; count: number; expiresAtIso: string }> {
+    const expiresAtIso = params.expiresAtIso || computeTempExpiryIso();
+    // Remove quaisquer restos temporários anteriores do mesmo lote antes de gravar novos.
+    await this.purgeBatchTempFiles(params.tenantId, params.batchId, 'restage');
+
+    if (shouldUseCloudflareR2()) {
+      try {
+        return await this.writeBatchToProvider('cloudflare_r2', params, expiresAtIso);
+      } catch (r2Err: any) {
+        console.warn(
+          '[StudioCatalogTempStorage] Falha ao gravar arquivo temporário no R2; usando armazenamento temporário isolado em disco local:',
+          r2Err?.code || r2Err?.message || r2Err
+        );
+      }
+    }
+
+    return await this.writeBatchToProvider('local_tmp', params, expiresAtIso);
   }
 
   static hasUnexpiredTempFiles(tenantId: string, batchId: string, nowIso = toSqliteUtc(new Date())): boolean {
@@ -236,7 +253,12 @@ export class StudioCatalogTempStorageService {
       }
       let bytes: Buffer;
       if (row.storage_provider === 'cloudflare_r2') {
-        bytes = await r2StorageService.getObjectBuffer(row.object_key, 12 * 1024 * 1024);
+        try {
+          bytes = await r2StorageService.getObjectBuffer(row.object_key, 12 * 1024 * 1024);
+        } catch (err: any) {
+          console.warn('[StudioCatalogTempStorage] Falha ao ler temporário no R2:', err?.code || err?.message || err);
+          return [];
+        }
       } else {
         const filePath = resolveLocalFilePath(row.object_key, tenantId, batchId);
         if (!fs.existsSync(filePath)) {

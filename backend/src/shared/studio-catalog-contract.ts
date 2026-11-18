@@ -208,3 +208,9 @@ export type CatalogImportBatchStatus =
   | 'cancelled'
   | 'ready'
   | 'completed';
+
+export type CatalogImportErrorCategory =
+  | 'analysis_error'
+  | 'communication_error'
+  | 'validation_error'
+  | 'expired';

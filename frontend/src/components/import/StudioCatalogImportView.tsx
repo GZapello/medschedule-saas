@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useId, useState } from 'react';
+import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import {
   AlertCircle,
   CheckCircle2,
@@ -17,6 +17,7 @@ import {
 import { ApiClient } from '../../api/client';
 import type {
   CatalogImportBatchStatus,
+  CatalogImportErrorCategory,
   ImportDraft,
   ImportReceipt,
   ImportSource
@@ -32,6 +33,8 @@ const secondary = 'inline-flex min-h-11 items-center justify-center gap-2 rounde
 type DraftListItem = {
   id: string;
   status?: CatalogImportBatchStatus;
+  errorCategory?: CatalogImportErrorCategory | null;
+  hasExtractedData?: boolean;
   requestId?: string | null;
   errorCode?: string | null;
   errorMessage?: string | null;
@@ -109,23 +112,71 @@ function FileThumbnail({ file }: { file: File }) {
     : <FileText aria-hidden="true" className="h-5 w-5 shrink-0 text-indigo-600" />;
 }
 
+function resolveErrorCategory(item: Pick<DraftListItem, 'errorCategory' | 'errorCode'>): CatalogImportErrorCategory {
+  if (item.errorCategory) return item.errorCategory;
+  if (item.errorCode === 'TEMP_FILES_EXPIRED' || item.errorCode === 'BACKEND_RESTARTED_TEMP_UNAVAILABLE') {
+    return 'expired';
+  }
+  if (item.errorCode === 'AI_INVALID_OR_BLOCKED' || item.errorCode === 'AI_UNREADABLE_CONTENT') {
+    return 'validation_error';
+  }
+  if (
+    item.errorCode === 'AI_RATE_LIMITED'
+    || item.errorCode === 'AI_PROVIDER_UNAVAILABLE'
+    || item.errorCode === 'AI_NOT_CONFIGURED'
+    || item.errorCode === 'TEMP_STAGE_ERROR'
+    || item.errorCode === 'ASYNC_JOB_ERROR'
+    || item.errorCode === 'BACKEND_RESTARTED'
+  ) {
+    return 'communication_error';
+  }
+  return 'analysis_error';
+}
+
+function failureHeading(item: Pick<DraftListItem, 'errorCategory' | 'errorCode'>): string {
+  const cat = resolveErrorCategory(item);
+  if (cat === 'expired') return 'Arquivos temporários expirados';
+  if (cat === 'communication_error') return 'Falha de comunicação com o serviço';
+  if (cat === 'validation_error') return 'Falha de validação dos arquivos';
+  return 'Falha na análise do catálogo';
+}
+
 function statusBadge(item: DraftListItem): { label: string; className: string } {
+  if (item.result || item.status === 'completed') {
+    return { label: 'Importação concluída', className: 'bg-emerald-100 text-emerald-800' };
+  }
   if (item.status === 'queued' || item.status === 'processing') {
     return { label: 'Em análise', className: 'bg-indigo-100 text-indigo-800' };
   }
-  if (item.status === 'failed') {
-    return item.retryable
-      ? { label: 'Falha — retentativa disponível', className: 'bg-amber-100 text-amber-800' }
-      : { label: 'Falha / arquivos expirados', className: 'bg-rose-100 text-rose-800' };
-  }
   if (item.status === 'cancelled') {
-    return { label: 'Cancelado (arquivos removidos)', className: 'bg-slate-200 text-slate-700' };
+    return { label: 'Importação descartada', className: 'bg-slate-200 text-slate-700' };
+  }
+  if (item.status === 'failed') {
+    const cat = resolveErrorCategory(item);
+    if (cat === 'expired') {
+      return { label: 'Arquivos expirados', className: 'bg-rose-100 text-rose-800' };
+    }
+    if (cat === 'communication_error') {
+      return {
+        label: item.retryable ? 'Falha de comunicação · retentativa' : 'Falha de comunicação',
+        className: 'bg-amber-100 text-amber-800'
+      };
+    }
+    if (cat === 'validation_error') {
+      return { label: 'Falha de validação', className: 'bg-amber-100 text-amber-800' };
+    }
+    return {
+      label: item.retryable ? 'Falha de análise · retentativa' : 'Falha de análise',
+      className: 'bg-rose-100 text-rose-800'
+    };
   }
   return { label: 'Pronto para revisão', className: 'bg-emerald-100 text-emerald-800' };
 }
 
 export function StudioCatalogImportView() {
   const inputId = useId();
+  const submitLockRef = useRef(false);
+  const dropzoneRef = useRef<HTMLDivElement>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [allRecords, setAllRecords] = useState<DraftListItem[]>([]);
   const [draft, setDraft] = useState<ImportDraft | null>(null);
@@ -251,7 +302,8 @@ export function StudioCatalogImportView() {
   }
 
   async function run(task: Activity, operation: () => Promise<ImportDraft | DraftListItem | null>, success = '') {
-    if (activity) return;
+    if (submitLockRef.current || activity) return;
+    submitLockRef.current = true;
     setActivity(task);
     setError('');
     setErrorDetails(null);
@@ -274,13 +326,16 @@ export function StudioCatalogImportView() {
     } catch (err) {
       setErrorFromException(err, 'Falha ao processar a importação.');
       setConfirming(false);
+      void refreshDrafts();
     } finally {
+      submitLockRef.current = false;
       setActivity(null);
     }
   }
 
   async function retryBatch(id: string) {
-    if (activity || isJobRunning) return;
+    if (submitLockRef.current || activity || isJobRunning) return;
+    submitLockRef.current = true;
     setActivity('retrying');
     setError('');
     setErrorDetails(null);
@@ -299,12 +354,14 @@ export function StudioCatalogImportView() {
       setErrorFromException(err, 'Não foi possível reiniciar a análise deste lote.');
       void refreshDrafts();
     } finally {
+      submitLockRef.current = false;
       setActivity(null);
     }
   }
 
   async function cancelBatch(id: string) {
-    if (activity) return;
+    if (submitLockRef.current || activity) return;
+    submitLockRef.current = true;
     setActivity('cancelling');
     setError('');
     setErrorDetails(null);
@@ -316,12 +373,15 @@ export function StudioCatalogImportView() {
     } catch (err) {
       setErrorFromException(err, 'Erro ao cancelar análise.');
     } finally {
+      submitLockRef.current = false;
       setActivity(null);
     }
   }
 
-  async function discardDraft(id: string) {
-    if (activity || !window.confirm('Descartar este lote permanentemente e remover eventuais arquivos temporários?')) return;
+  async function discardDraft(id: string, confirmFirst = true) {
+    if (submitLockRef.current || activity) return;
+    if (confirmFirst && !window.confirm('Descartar este lote permanentemente e remover eventuais arquivos temporários?')) return;
+    submitLockRef.current = true;
     setActivity('deleting');
     setError('');
     setErrorDetails(null);
@@ -333,6 +393,29 @@ export function StudioCatalogImportView() {
     } catch (err) {
       setErrorFromException(err, 'Erro ao descartar rascunho.');
     } finally {
+      submitLockRef.current = false;
+      setActivity(null);
+    }
+  }
+
+  async function reuploadForBatch(item: DraftListItem) {
+    if (submitLockRef.current || activity) return;
+    submitLockRef.current = true;
+    setActivity('deleting');
+    setError('');
+    setErrorDetails(null);
+    try {
+      if (!item.hasExtractedData) {
+        await ApiClient.delete(endpoint + '/' + item.id);
+      }
+      if (activeJob?.id === item.id) setActiveJob(null);
+      setMessage('Lote anterior limpo. Selecione os arquivos novamente abaixo para iniciar uma nova análise.');
+      await refreshDrafts();
+      dropzoneRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } catch (err) {
+      setErrorFromException(err, 'Não foi possível preparar o reenvio dos arquivos.');
+    } finally {
+      submitLockRef.current = false;
       setActivity(null);
     }
   }
@@ -395,7 +478,9 @@ export function StudioCatalogImportView() {
         isJobRunning
           ? 'border-indigo-200 bg-indigo-50/70 text-indigo-950'
           : activeJob.status === 'failed'
-            ? 'border-amber-200 bg-amber-50/80 text-amber-950'
+            ? (resolveErrorCategory(activeJob) === 'expired' || resolveErrorCategory(activeJob) === 'analysis_error'
+              ? 'border-rose-200 bg-rose-50/70 text-rose-950'
+              : 'border-amber-200 bg-amber-50/80 text-amber-950')
             : 'border-slate-200 bg-slate-50 text-slate-800'
       }`} role="status">
         <div className="flex flex-wrap items-start justify-between gap-2">
@@ -403,15 +488,15 @@ export function StudioCatalogImportView() {
             {isJobRunning
               ? <Loader2 aria-hidden="true" className="h-5 w-5 shrink-0 animate-spin text-indigo-600 mt-0.5" />
               : activeJob.status === 'failed'
-                ? <AlertCircle aria-hidden="true" className="h-5 w-5 shrink-0 text-amber-600 mt-0.5" />
+                ? <AlertCircle aria-hidden="true" className={`h-5 w-5 shrink-0 mt-0.5 ${resolveErrorCategory(activeJob) === 'expired' ? 'text-rose-600' : 'text-amber-600'}`} />
                 : <XCircle aria-hidden="true" className="h-5 w-5 shrink-0 text-slate-500 mt-0.5" />}
             <div className="min-w-0 space-y-1">
               <p className="text-sm font-bold">
                 {isJobRunning
                   ? (activeJob.status === 'processing' ? 'Extraindo serviços, preços e grades com IA…' : 'Análise na fila de processamento…')
                   : activeJob.status === 'failed'
-                    ? 'Análise interrompida antes da conclusão'
-                    : 'Análise cancelada'}
+                    ? failureHeading(activeJob)
+                    : 'Importação cancelada'}
               </p>
               <p className="text-xs opacity-90 truncate">
                 Arquivos: {activeJob.sources.map(s => s.fileName).join(', ')}
@@ -424,7 +509,7 @@ export function StudioCatalogImportView() {
                 </p>
               )}
               {activeJob.status === 'failed' && activeJob.errorMessage && (
-                <p className="text-xs font-medium text-amber-900">{activeJob.errorMessage}</p>
+                <p className="text-xs font-medium">{activeJob.errorMessage}</p>
               )}
               {activeJob.status === 'cancelled' && (
                 <p className="text-xs text-slate-600">Os arquivos temporários enviados para este lote foram removidos.</p>
@@ -448,6 +533,11 @@ export function StudioCatalogImportView() {
                 <RefreshCw aria-hidden="true" className="h-4 w-4" />Tentar novamente
               </button>
             )}
+            {!isJobRunning && !activeJob.retryable && (
+              <button type="button" className={primary} disabled={!!activity} onClick={() => void reuploadForBatch(activeJob)}>
+                <Upload aria-hidden="true" className="h-4 w-4" />Reenviar arquivos
+              </button>
+            )}
             {!isJobRunning && (
               <button type="button" className={secondary} disabled={!!activity} onClick={() => void discardDraft(activeJob.id)}>
                 <Trash2 aria-hidden="true" className="h-4 w-4" />Descartar lote
@@ -465,6 +555,7 @@ export function StudioCatalogImportView() {
 
     {!draft && <>
       <div
+        ref={dropzoneRef}
         onDragOver={e => e.preventDefault()}
         onDrop={e => {
           e.preventDefault();
@@ -517,11 +608,18 @@ export function StudioCatalogImportView() {
         <div className="space-y-2">
           {openDrafts.map(item => {
             const badge = statusBadge(item);
-            return <div key={item.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-2">
+            return <div key={item.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-2.5">
               <button type="button" disabled={!!activity} className="flex flex-1 min-w-0 items-center gap-2 text-left text-sm font-semibold text-slate-800 hover:text-indigo-700 px-2 py-1 cursor-pointer"
                 onClick={() => void run('opening', () => ApiClient.get<ImportDraft | DraftListItem>(endpoint + '/' + item.id))}>
                 <FileText aria-hidden="true" className="h-4 w-4 shrink-0 text-indigo-600" />
-                <span className="truncate">{item.sources.map(s => s.fileName).join(', ')}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate">{item.sources.map(s => s.fileName).join(', ')}</span>
+                  {item.status === 'failed' && item.errorMessage && (
+                    <span className="block truncate text-[11px] font-normal text-slate-500">
+                      {item.errorMessage}{item.requestId ? ` · Protocolo ${item.requestId}` : ''}
+                    </span>
+                  )}
+                </span>
               </button>
               <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${badge.className}`}>
                 {badge.label}
@@ -533,6 +631,12 @@ export function StudioCatalogImportView() {
                 <button type="button" disabled={!!activity || isJobRunning} onClick={() => void retryBatch(item.id)}
                   className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 cursor-pointer disabled:opacity-50">
                   <RefreshCw className="h-3.5 w-3.5" />Retentar
+                </button>
+              )}
+              {(item.status === 'failed' || item.status === 'cancelled') && !item.retryable && (
+                <button type="button" disabled={!!activity} onClick={() => void reuploadForBatch(item)}
+                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100 cursor-pointer disabled:opacity-50">
+                  <Upload className="h-3.5 w-3.5" />Reenviar arquivos
                 </button>
               )}
               {(item.status === 'queued' || item.status === 'processing') && (

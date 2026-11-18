@@ -53,13 +53,17 @@ function checkOfficeArchive(bytes: Buffer, requiredEntry: string) {
   }
 }
 
+const ALLOWED_IMAGE_FORMATS = new Set(['jpeg', 'png', 'webp', 'heif', 'heic', 'gif']);
+
 export async function prepareCatalogFile(file: ReturnType<typeof readCatalogUploads>[number]) {
   const { fileName, mimeType, format, bytes } = file;
   try {
     if (mimeType.startsWith('image/')) {
       const image = sharp(bytes, { limitInputPixels: 24_000_000 });
       const meta = await image.metadata();
-      if (mimeType !== 'image/' + meta.format) throw new Error('Imagem inválida.');
+      if (!meta.format || !ALLOWED_IMAGE_FORMATS.has(meta.format)) {
+        throw new Error('Imagem inválida.');
+      }
       const data = await image.rotate().resize({ width: 2048, height: 2048, fit: 'inside', withoutEnlargement: true })
         .flatten({ background: '#ffffff' }).jpeg({ quality: 84 }).toBuffer();
       return { fileName, mimeType: 'image/jpeg', base64: data.toString('base64') };

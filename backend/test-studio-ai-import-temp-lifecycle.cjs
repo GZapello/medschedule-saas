@@ -25,7 +25,7 @@ const { db } = require('./dist/config/database');
 const apiRouter = require('./dist/routes').default;
 const { generateToken } = require('./dist/utils/jwt');
 const { GeminiService } = require('./dist/services/gemini.service');
-const { r2StorageService } = require('./dist/services/r2-storage.service');
+const { r2StorageService, resolveR2Endpoint } = require('./dist/services/r2-storage.service');
 const {
   StudioCatalogTempStorageService,
   isSafeCatalogTempKey
@@ -627,13 +627,231 @@ function seedTenantAndAdmin(idPrefix) {
     console.log('[PASS] 7. Expired batch returns 410, startup recovery rescues interrupted jobs, ready drafts survive file deletion');
 
     // ------------------------------------------------------------------------
-    // TEST 7: Nenhuma sobra ativa de arquivo temporário para nenhum lote concluído/pronto
+    // TEST 9: Repro exata req-dfd7936524ab (plano de academia.jpg ~321KB + EPROTO SSL alert 40 -> fallback local_tmp -> revisão -> confirmação),
+    // respostas parciais/wrapped, PNG renomeado para .jpg e distinção estrita de categorias de erro
+    // ------------------------------------------------------------------------
+    assert.equal(
+      resolveR2Endpoint(
+        'https://zemda-files.abcdef1234567890abcdef1234567890.r2.cloudflarestorage.com/',
+        'abcdef1234567890abcdef1234567890',
+        'zemda-files'
+      ),
+      'https://abcdef1234567890abcdef1234567890.r2.cloudflarestorage.com'
+    );
+
+    const jpgRawSide = 440;
+    const jpgRaw = Buffer.alloc(jpgRawSide * jpgRawSide * 3);
+    let jpgState = 987654321;
+    for (let i = 0; i < jpgRaw.length; i++) {
+      jpgState = (Math.imul(jpgState, 1664525) + 1013904223) >>> 0;
+      jpgRaw[i] = (jpgState >>> 16) & 0xff;
+    }
+    const planoJpgBuf = await sharp(jpgRaw, { raw: { width: jpgRawSide, height: jpgRawSide, channels: 3 } })
+      .jpeg({ quality: 92 })
+      .toBuffer();
+    const planoJpgBase64 = planoJpgBuf.toString('base64');
+
+    // Simula R2 configurado mas falhando TLS (write EPROTO ... SSL alert number 40)
+    r2ConfiguredFlag = true;
+    process.env.R2_MOCK_STORAGE = 'false';
+    const savedUploadImpl = r2StorageService.uploadFile;
+    r2StorageService.uploadFile = async () => {
+      const tlsErr = new Error(
+        'write EPROTO C02C74F9467F0000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:SSL alert number 40'
+      );
+      tlsErr.code = 'EPROTO';
+      throw tlsErr;
+    };
+
+    // IA retorna resposta wrapped + parcial (sem chave packages) + string numérica + horário de Zumba sem término
+    GeminiService.extractStudioCatalog = async () => ({
+      proposal: {
+        services: [
+          {
+            name: 'Musculação Plano Academia',
+            activity: 'musculacao',
+            type: 'access_unlimited',
+            modality: 'presential',
+            allowPublicBooking: true,
+            prices: [
+              {
+                label: 'Mensal',
+                amountCents: '18900',
+                unit: 'per_month',
+                paymentPeriod: 'monthly',
+                duration: '1_month',
+                frequencyType: 'unlimited'
+              },
+              {
+                label: 'Trimestral Total',
+                amountCents: 49900,
+                unit: 'contract_total',
+                paymentPeriod: 'one_time',
+                duration: '3_months',
+                frequencyType: 'unlimited'
+              }
+            ]
+          },
+          {
+            name: 'Zumba Plano Academia',
+            activity: 'zumba',
+            type: 'group',
+            modality: 'presential',
+            durationMinutes: 50,
+            capacity: 20,
+            allowPublicBooking: true,
+            prices: [
+              {
+                label: 'Mensal 2x',
+                amountCents: 15000,
+                unit: 'per_month',
+                paymentPeriod: 'monthly',
+                duration: '1_month',
+                frequencyType: 'weekly',
+                frequencyCount: 2
+              }
+            ],
+            schedules: [
+              { dayOfWeek: 3, startTime: '19:00', endTime: '', capacity: 20 }
+            ]
+          }
+        ]
+      }
+    });
+
+    // Dispara 2 requisições concorrentes simultâneas (simula double-submit req-fea0035c81f4 + req-f3f67a3aa52e)
+    const [race1, race2] = await Promise.all([
+      requestJson(baseUrl, 'POST', '/api/v1/studio/catalog-imports/analyze', tenantA.token, {
+        async: true,
+        files: [{ fileName: 'plano de academia.jpg', base64: planoJpgBase64 }]
+      }),
+      requestJson(baseUrl, 'POST', '/api/v1/studio/catalog-imports/analyze', tenantA.token, {
+        async: true,
+        files: [{ fileName: 'plano de academia.jpg', base64: planoJpgBase64 }]
+      })
+    ]);
+
+    const acceptedRace = [race1, race2].find((r) => r.status === 202);
+    assert.ok(acceptedRace, `At least one concurrent request must succeed with 202 despite R2 EPROTO; got ${race1.status} & ${race2.status}`);
+    for (const r of [race1, race2]) {
+      assert.ok([202, 429].includes(r.status), `Concurrent race response must be 202 or 429 (never 500), got ${r.status}: ${r.text}`);
+    }
+
+    const planoBatchId = acceptedRace.json.id;
+    const planoReady = await pollUntilTerminal(baseUrl, planoBatchId, tenantA.token);
+    assert.equal(planoReady.json.status, 'ready');
+    assert.equal(planoReady.json.hasExtractedData, true);
+    assert.equal(planoReady.json.proposal.services.length, 2);
+    assert.equal(planoReady.json.proposal.services[0].prices.length, 2);
+    assert.equal(planoReady.json.proposal.services[0].prices[0].amountCents, 18900);
+    // Zumba com horário sem término não quebra extração (preserva serviço com alerta/pendência)
+    assert.equal(planoReady.json.proposal.services[1].schedules.length, 1);
+
+    // Confirma o serviço Musculação Plano Academia no catálogo oficial (adiando Zumba incompleto)
+    const planoConfirmProp = planoReady.json.proposal;
+    planoConfirmProp.services[0].action = 'create';
+    planoConfirmProp.services[0].reviewed = true;
+    planoConfirmProp.services[1].action = 'ignore';
+    const confirmPlanoRes = await requestJson(baseUrl, 'POST', `/api/v1/studio/catalog-imports/${planoBatchId}/confirm`, tenantA.token, {
+      confirmed: true,
+      proposal: planoConfirmProp,
+      revision: planoReady.json.revision
+    });
+    assert.equal(confirmPlanoRes.status, 200, confirmPlanoRes.text);
+    assert.equal(confirmPlanoRes.json.status, 'completed');
+    const savedMusc = db.prepare(`SELECT id, commercial_price_options_json FROM services WHERE tenant_id = ? AND name = 'Musculação Plano Academia'`).get(tenantA.tenantId);
+    assert.ok(savedMusc && JSON.parse(savedMusc.commercial_price_options_json).length === 2);
+
+    // Restaura R2 mock offline para testar categorias de erro e PNG com extensão .jpg
+    r2StorageService.uploadFile = savedUploadImpl;
+    r2ConfiguredFlag = false;
+    process.env.R2_MOCK_STORAGE = 'true';
+
+    // PNG salvo como .jpg
+    const pngAsJpgRes = await requestJson(baseUrl, 'POST', '/api/v1/studio/catalog-imports/analyze', tenantB.token, {
+      async: true,
+      files: [{ fileName: 'captura-png-renomeada.jpg', base64: img1.base64 }]
+    });
+    assert.equal(pngAsJpgRes.status, 202);
+    const pngAsJpgDone = await pollUntilTerminal(baseUrl, pngAsJpgRes.json.id, tenantB.token);
+    assert.equal(pngAsJpgDone.json.status, 'ready');
+
+    // JSON inválido da IA -> errorCategory = analysis_error (NUNCA 'expired'!)
+    GeminiService.extractStudioCatalog = origExtractCatalog;
+    GoogleGenerativeAI.prototype.getGenerativeModel = function () {
+      return {
+        generateContent: async () => ({ response: { text: () => '{invalid-json-truncated' } })
+      };
+    };
+    const imgInvalidJson = await makeSyntheticPngBase64(211);
+    const invalidJsonRes = await requestJson(baseUrl, 'POST', '/api/v1/studio/catalog-imports/analyze', tenantB.token, {
+      async: true,
+      files: [{ fileName: 'json-corrompido.png', base64: imgInvalidJson.base64 }]
+    });
+    assert.equal(invalidJsonRes.status, 202);
+    const invalidJsonDone = await pollUntilTerminal(baseUrl, invalidJsonRes.json.id, tenantB.token);
+    assert.equal(invalidJsonDone.json.status, 'failed');
+    assert.equal(invalidJsonDone.json.errorCode, 'AI_INVALID_JSON');
+    assert.equal(invalidJsonDone.json.errorCategory, 'analysis_error');
+
+    // Timeout real -> errorCategory = communication_error, retryable = true
+    GoogleGenerativeAI.prototype.getGenerativeModel = function () {
+      return {
+        generateContent: async () => { throw new Error('Timeout de 40000ms excedido'); }
+      };
+    };
+    const imgTimeout = await makeSyntheticPngBase64(223);
+    const timeoutRes = await requestJson(baseUrl, 'POST', '/api/v1/studio/catalog-imports/analyze', tenantB.token, {
+      async: true,
+      files: [{ fileName: 'timeout.png', base64: imgTimeout.base64 }]
+    });
+    assert.equal(timeoutRes.status, 202);
+    const timeoutDone = await pollUntilTerminal(baseUrl, timeoutRes.json.id, tenantB.token);
+    assert.equal(timeoutDone.json.status, 'failed');
+    assert.equal(timeoutDone.json.errorCode, 'AI_PROVIDER_UNAVAILABLE');
+    assert.equal(timeoutDone.json.errorCategory, 'communication_error');
+    assert.equal(timeoutDone.json.retryable, true);
+    GoogleGenerativeAI.prototype.getGenerativeModel = origGetModel;
+
+    // Resposta vazia -> validation_error (retryable = false), seguido de reenvio do mesmo arquivo que substitui o lote sem reuso de arquivo antigo
+    GeminiService.extractStudioCatalog = async () => ({ services: [], packages: [] });
+    const imgReupload = await makeSyntheticPngBase64(239);
+    const validationRes = await requestJson(baseUrl, 'POST', '/api/v1/studio/catalog-imports/analyze', tenantB.token, {
+      async: true,
+      files: [{ fileName: 'ilegivel.png', base64: imgReupload.base64 }]
+    });
+    assert.equal(validationRes.status, 202);
+    const validationDone = await pollUntilTerminal(baseUrl, validationRes.json.id, tenantB.token);
+    assert.equal(validationDone.json.status, 'failed');
+    assert.equal(validationDone.json.errorCode, 'AI_UNREADABLE_CONTENT');
+    assert.equal(validationDone.json.errorCategory, 'validation_error');
+    assert.equal(validationDone.json.retryable, false);
+
+    // Reenviar o mesmo arquivo após correção funciona e substitui o lote anterior com sucesso
+    GeminiService.extractStudioCatalog = async () => createSampleProposal('Reenviado Pos Falha', 260);
+    const reuploadRes = await requestJson(baseUrl, 'POST', '/api/v1/studio/catalog-imports/analyze', tenantB.token, {
+      async: true,
+      files: [{ fileName: 'ilegivel.png', base64: imgReupload.base64 }]
+    });
+    assert.equal(reuploadRes.status, 202);
+    assert.equal(reuploadRes.json.id, validationRes.json.id);
+    const reuploadDone = await pollUntilTerminal(baseUrl, reuploadRes.json.id, tenantB.token);
+    assert.equal(reuploadDone.json.status, 'ready');
+    assert.equal(reuploadDone.json.hasExtractedData, true);
+    console.log('[PASS] 9. EPROTO SSL fallback, 321KB JPG plano de academia, partial/wrapped JSON, PNG-as-JPG, timeout, error categories & clean re-upload');
+
+    // Purga lotes ainda marcados retryable no teste (timeout/invalid_json) para validar limpeza final absoluta
+    await StudioCatalogTempStorageService.purgeBatchTempFiles(tenantB.tenantId, invalidJsonRes.json.id, 'test_cleanup');
+    await StudioCatalogTempStorageService.purgeBatchTempFiles(tenantB.tenantId, timeoutRes.json.id, 'test_cleanup');
+
+    // ------------------------------------------------------------------------
+    // TEST 10: Nenhuma sobra ativa de arquivo temporário para nenhum lote concluído/pronto
     // ------------------------------------------------------------------------
     const leftoverActive = db.prepare(`
       SELECT COUNT(*) AS cnt FROM studio_catalog_import_temp_files WHERE temp_state != 'deleted'
     `).get().cnt;
     assert.equal(leftoverActive, 0, `Expected 0 active temp files across all finalized/expired batches, found ${leftoverActive}`);
-    console.log('[PASS] 8. Zero remaining temp files across DB and storage');
+    console.log('[PASS] 10. Zero remaining temp files across DB and storage');
 
     console.log('\nALL STUDIO AI IMPORT TEMP LIFECYCLE TESTS PASSED!');
   } finally {
