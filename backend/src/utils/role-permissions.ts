@@ -21,7 +21,6 @@ export const DEFAULT_RECEPTIONIST_PERMISSIONS: string[] = [
   'view_reports',
   'can_import_data',
   'view_enrollments',
-  'register_access',
   'view_attendance'
 ];
 
@@ -66,7 +65,6 @@ export const DEFAULT_ASSISTANT_PERMISSIONS: string[] = [
   'view_inventory',
   'manage_inventory',
   'view_enrollments',
-  'register_access',
   'view_attendance'
 ];
 
@@ -99,10 +97,7 @@ export const DEFAULT_CLINIC_ADMIN_PERMISSIONS: string[] = [
   'can_import_data',
   'view_enrollments',
   'manage_contracts',
-  'register_access',
-  'correct_access_logs',
-  'view_attendance',
-  'authorize_access_exceptions'
+  'view_attendance'
 ];
 
 /**

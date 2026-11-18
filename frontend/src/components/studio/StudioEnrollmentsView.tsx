@@ -12,7 +12,6 @@ import {
   PauseCircle,
   Snowflake,
   XCircle,
-  QrCode,
   History,
   FileCheck2,
   Calendar,
@@ -77,9 +76,8 @@ export const StudioEnrollmentsView: React.FC = () => {
   const [changePlanAmount, setChangePlanAmount] = useState<string>('');
   const [processingId, setProcessingId] = useState<string | null>(null);
 
-  // Modal Histórico & QR Code
+  // Modal Histórico
   const [historyModal, setHistoryModal] = useState<{ enrollment: any; items: any[] } | null>(null);
-  const [qrModal, setQrModal] = useState<{ student: any; token: string; expiresAt: string } | null>(null);
 
   const fetchEnrollments = async () => {
     try {
@@ -272,15 +270,6 @@ export const StudioEnrollmentsView: React.FC = () => {
     }
   };
 
-  const handleOpenQrCode = async (studentId: string) => {
-    try {
-      const res = await ApiClient.get<any>(`/v1/studio/access/students/${studentId}/qr-token`);
-      setQrModal(res);
-    } catch {
-      showToast('Não foi possível gerar o QR Code de acesso.', 'error');
-    }
-  };
-
   const renderStatusBadge = (cat: string, status: string) => {
     if (cat === 'active') {
       return <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">Ativo</span>;
@@ -458,11 +447,15 @@ export const StudioEnrollmentsView: React.FC = () => {
                     </div>
                     {isAccess && (
                       <div>
-                        <span className="text-slate-400 block">Acesso Academia</span>
+                        <span className="text-slate-400 block">Modalidade do Plano</span>
                         <span className="font-bold text-teal-800">
                           {enr.accessMode === 'unlimited'
-                            ? `Livre (${enr.accessEntriesWeek}x na sem / ${enr.accessEntriesMonth}x no mês)`
-                            : `Limitado: ${enr.accessEntriesWeek}/${enr.weeklyFrequency || '-'} na sem`}
+                            ? 'Acesso Livre'
+                            : enr.weeklyFrequency
+                              ? `Contratado: ${enr.weeklyFrequency}x por semana`
+                              : enr.monthlyLimit
+                                ? `Contratado: ${enr.monthlyLimit}x por mês`
+                                : 'Frequência limitada'}
                         </span>
                       </div>
                     )}
@@ -504,7 +497,13 @@ export const StudioEnrollmentsView: React.FC = () => {
                               <span className="font-semibold text-slate-800">{ent.service_name_snapshot}:</span>
                               {isFac ? (
                                 <span className="text-teal-700 font-bold">
-                                  {ent.access_mode_snapshot === 'unlimited' ? 'Acesso Livre' : `${ent.entries_used || 0} acessos`}
+                                  {ent.access_mode_snapshot === 'unlimited'
+                                    ? 'Acesso Livre incluído'
+                                    : ent.weekly_frequency_snapshot
+                                      ? `Plano ${ent.weekly_frequency_snapshot}x/sem`
+                                      : ent.monthly_limit_snapshot
+                                        ? `Plano ${ent.monthly_limit_snapshot}x/mês`
+                                        : 'Plano de Acesso'}
                                 </span>
                               ) : (
                                 <span className="text-indigo-700 font-bold">
@@ -603,14 +602,6 @@ export const StudioEnrollmentsView: React.FC = () => {
                   </div>
 
                   <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => handleOpenQrCode(enr.studentId)}
-                      className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 cursor-pointer"
-                      title="Gerar QR Code de Acesso do Aluno"
-                    >
-                      <QrCode className="w-4 h-4" />
-                    </button>
                     <button
                       type="button"
                       onClick={() => handleOpenHistory(enr)}
@@ -725,7 +716,7 @@ export const StudioEnrollmentsView: React.FC = () => {
 
                   {commercialOptions.length === 0 && selectedServiceObj?.studio_service_type === 'facility_access' && (
                     <div className="p-3 rounded-xl bg-indigo-50/50 border border-indigo-100 space-y-2.5">
-                      <div className="font-bold text-indigo-950">Regras de Entrada do Aluno</div>
+                      <div className="font-bold text-indigo-950">Condição do Plano de Acesso</div>
                       <div className="grid grid-cols-2 gap-2">
                         <button
                           type="button"
@@ -1044,44 +1035,6 @@ export const StudioEnrollmentsView: React.FC = () => {
                   </div>
                 ))
               )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal QR Code do Aluno */}
-      {qrModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 mobile-modal">
-          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 text-xs space-y-4 text-center">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-base font-bold text-slate-900">Credencial QR Code de Acesso</h3>
-              <button type="button" onClick={() => setQrModal(null)} className="text-slate-400 hover:text-slate-700 cursor-pointer">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
-              <QrCode className="w-16 h-16 text-indigo-600 mx-auto" />
-              <div className="font-bold text-sm text-slate-900">{qrModal.student?.name}</div>
-              <p className="text-[11px] text-slate-500">
-                Token assinado temporário (válido até {new Date(qrModal.expiresAt).toLocaleTimeString('pt-BR')}):
-              </p>
-              <input
-                type="text"
-                readOnly
-                value={qrModal.token}
-                onFocus={e => e.target.select()}
-                className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-[10px] font-mono bg-white text-center"
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  navigator.clipboard?.writeText(qrModal.token);
-                  showToast('Token QR copiado para usar no Controle de Acesso!', 'success');
-                }}
-                className="w-full py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold cursor-pointer"
-              >
-                Copiar Token QR
-              </button>
             </div>
           </div>
         </div>

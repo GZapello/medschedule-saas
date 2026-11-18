@@ -395,19 +395,12 @@ api.get('/v1/package-contracts/:id', requireTenant, requireStudioEstablishment, 
 api.patch('/v1/package-contracts/:id/status', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist'), PackageController.updateContractStatus);
 api.get('/v1/patients/:patientId/packages', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist', 'professional'), PackageController.listStudentContracts);
 
-// Matrículas, Planos de Acesso & Controle de Acesso (Academia & Studio)
+// Matrículas, Planos e Contratos (Academia & Studio)
 api.get('/v1/studio/enrollments', requireTenant, requireStudioEstablishment, requirePermissionOrRole(['view_enrollments', 'manage_contracts', 'manage_financial'], 'clinic_admin', 'receptionist', 'professional'), StudioAccessController.listEnrollments);
 api.post('/v1/studio/enrollments', requireTenant, requireStudioEstablishment, requirePermissionOrRole(['manage_contracts', 'manage_financial'], 'clinic_admin', 'receptionist'), StudioAccessController.createEnrollment);
 api.post('/v1/studio/enrollments/:id/lifecycle', requireTenant, requireStudioEstablishment, requirePermissionOrRole(['manage_contracts', 'manage_financial'], 'clinic_admin', 'receptionist'), StudioAccessController.updateEnrollmentLifecycle);
 api.get('/v1/studio/enrollments/:id/history', requireTenant, requireStudioEstablishment, requirePermissionOrRole(['view_enrollments', 'manage_contracts', 'manage_financial'], 'clinic_admin', 'receptionist', 'professional'), StudioAccessController.getContractHistory);
-api.post('/v1/studio/enrollments/:contractId/entitlements/:entitlementId/deliver', requireTenant, requireStudioEstablishment, requirePermissionOrRole(['manage_contracts', 'register_access', 'view_attendance'], 'clinic_admin', 'receptionist', 'professional'), StudioAccessController.deliverEntitlement);
-
-api.get('/v1/studio/access/logs', requireTenant, requireStudioEstablishment, requirePermissionOrRole(['register_access', 'view_attendance', 'view_enrollments'], 'clinic_admin', 'receptionist', 'professional'), StudioAccessController.listAccessLogs);
-api.post('/v1/studio/access/check-in', requireTenant, requireStudioEstablishment, requirePermissionOrRole(['register_access', 'manage_contracts'], 'clinic_admin', 'receptionist', 'professional'), StudioAccessController.checkIn);
-api.post('/v1/studio/access/:logId/check-out', requireTenant, requireStudioEstablishment, requirePermissionOrRole(['register_access', 'manage_contracts'], 'clinic_admin', 'receptionist', 'professional'), StudioAccessController.checkOut);
-api.patch('/v1/studio/access/:logId/correct', requireTenant, requireStudioEstablishment, requirePermissionOrRole(['correct_access_logs', 'manage_contracts'], 'clinic_admin'), StudioAccessController.correctAccessLog);
-api.get('/v1/studio/access/students/:studentId/qr-token', requireTenant, requireStudioEstablishment, requirePermissionOrRole(['register_access', 'view_enrollments', 'manage_contracts'], 'clinic_admin', 'receptionist', 'professional'), StudioAccessController.getStudentQrToken);
-api.post('/v1/studio/access/verify-qr', requireTenant, requireStudioEstablishment, requirePermissionOrRole(['register_access', 'view_enrollments', 'manage_contracts'], 'clinic_admin', 'receptionist', 'professional'), StudioAccessController.verifyQrToken);
+api.post('/v1/studio/enrollments/:contractId/entitlements/:entitlementId/deliver', requireTenant, requireStudioEstablishment, requirePermissionOrRole(['manage_contracts', 'view_attendance'], 'clinic_admin', 'receptionist', 'professional'), StudioAccessController.deliverEntitlement);
 
 // Lembretes de Contato / Retorno por Serviço
 api.get('/v1/service-reminders', requireTenant, ServiceReminderController.list);
@@ -1095,6 +1088,7 @@ api.get('/v1/studio/catalog-imports/:id', ...studioCatalogImportAccess, StudioCa
 api.post('/v1/studio/catalog-imports/analyze', ...studioCatalogImportAccess, studioCatalogAnalysisLimit, StudioCatalogImportController.analyze);
 api.put('/v1/studio/catalog-imports/:id', ...studioCatalogImportAccess, StudioCatalogImportController.save);
 api.post('/v1/studio/catalog-imports/:id/confirm', ...studioCatalogImportAccess, StudioCatalogImportController.confirm);
+api.delete('/v1/studio/catalog-imports/:id', ...studioCatalogImportAccess, StudioCatalogImportController.remove);
 api.post('/v1/import/execute', requireTenant, requirePermissionOrRole('can_import_data', 'clinic_admin'), ImportController.executeImport);
 api.get('/v1/import/batches', requireTenant, requirePermissionOrRole('can_import_data', 'clinic_admin'), ImportController.listBatches);
 api.post('/v1/import/batches/:id/rollback', requireTenant, requireRole('clinic_admin'), ImportController.rollbackBatch);

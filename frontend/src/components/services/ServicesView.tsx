@@ -37,10 +37,12 @@ import { ServiceFormBody, ServiceFormSection, StudioServiceIndicators, StudioSer
 import { StudioAccessAndAdjustmentsPanel } from './StudioAccessAndAdjustmentsPanel';
 import {
   DEFAULT_STUDIO_ACCESS_CONFIG,
+  normalizeCommercialPriceOptions,
   normalizeStudioAccessConfig,
   normalizeStudioPriceAdjustments,
   normalizeStudioServiceType,
   StudioAccessConfig,
+  StudioCommercialPriceOption,
   StudioPriceAdjustmentRule,
   StudioServiceType
 } from '../../utils/studioAccessAndCommercial';
@@ -376,6 +378,7 @@ export const ServicesView: React.FC = () => {
   const [studioServiceType, setStudioServiceType] = useState<StudioServiceType>('individual');
   const [accessConfig, setAccessConfig] = useState<StudioAccessConfig>(DEFAULT_STUDIO_ACCESS_CONFIG);
   const [pricingAdjustments, setPricingAdjustments] = useState<StudioPriceAdjustmentRule[]>([]);
+  const [commercialPriceOptions, setCommercialPriceOptions] = useState<StudioCommercialPriceOption[]>([]);
   const [allowPublicBooking, setAllowPublicBooking] = useState<boolean>(true);
   const [defaultCapacity, setDefaultCapacity] = useState<number>(10);
   const [allowRecurrence, setAllowRecurrence] = useState<boolean>(true);
@@ -423,6 +426,7 @@ export const ServicesView: React.FC = () => {
   const [editStudioServiceType, setEditStudioServiceType] = useState<StudioServiceType>('individual');
   const [editAccessConfig, setEditAccessConfig] = useState<StudioAccessConfig>(DEFAULT_STUDIO_ACCESS_CONFIG);
   const [editPricingAdjustments, setEditPricingAdjustments] = useState<StudioPriceAdjustmentRule[]>([]);
+  const [editCommercialPriceOptions, setEditCommercialPriceOptions] = useState<StudioCommercialPriceOption[]>([]);
   const [editAllowPublicBooking, setEditAllowPublicBooking] = useState<boolean>(true);
   const [editDefaultCapacity, setEditDefaultCapacity] = useState<number>(10);
   const [editAllowRecurrence, setEditAllowRecurrence] = useState<boolean>(true);
@@ -758,6 +762,7 @@ export const ServicesView: React.FC = () => {
               allowPublicBooking,
               accessConfig: studioServiceType === 'facility_access' ? accessConfig : null,
               pricingAdjustments,
+              commercialPriceOptions,
               allowedRecurrenceFrequencies: allowRecurrence ? allowedFrequencies : [],
               allowedRecurrenceWeekdays:
                 allowRecurrence
@@ -834,6 +839,8 @@ export const ServicesView: React.FC = () => {
       setDefaultTemplateId('');
       setLinkedTemplateIds([]);
       setDraftClassSchedules([]);
+      setCommercialPriceOptions([]);
+      setPricingAdjustments([]);
       setAvailabilityMode('professional_schedule');
       setAvailabilityWindows([]);
       setLinkedProfessionalIds(professionalId ? [professionalId] : []);
@@ -908,6 +915,7 @@ export const ServicesView: React.FC = () => {
     setEditServiceKind(domain === 'studio' && (s.service_kind === 'group' || resolvedEditType === 'group') ? 'group' : 'individual');
     setEditAccessConfig(normalizeStudioAccessConfig(s.access_config));
     setEditPricingAdjustments(normalizeStudioPriceAdjustments(s.pricing_adjustments));
+    setEditCommercialPriceOptions(normalizeCommercialPriceOptions(s.commercial_price_options));
     setEditAllowPublicBooking(s.allow_public_booking !== 0 && s.allow_public_booking !== false);
     setEditDefaultCapacity(Number(s.default_capacity) || 10);
     setEditAllowRecurrence(recCfg.allowRecurrence);
@@ -965,7 +973,7 @@ export const ServicesView: React.FC = () => {
       showToast('Informe o preço por atendimento / aula', 'error');
       return;
     }
-    if (isPeriodicEdit && (!editPeriodicPrice.trim() || Number(editPeriodicPrice) < 0)) {
+    if (isPeriodicEdit && editCommercialPriceOptions.length === 0 && (!editPeriodicPrice.trim() || Number(editPeriodicPrice) < 0)) {
       showToast('Informe o valor por período de cobrança', 'error');
       return;
     }
@@ -1035,6 +1043,7 @@ export const ServicesView: React.FC = () => {
               allowPublicBooking: editAllowPublicBooking,
               accessConfig: editStudioServiceType === 'facility_access' ? editAccessConfig : null,
               pricingAdjustments: editPricingAdjustments,
+              commercialPriceOptions: editCommercialPriceOptions,
               allowedRecurrenceFrequencies: editAllowRecurrence ? editAllowedFrequencies : [],
               allowedRecurrenceWeekdays:
                 editAllowRecurrence
@@ -1918,6 +1927,8 @@ export const ServicesView: React.FC = () => {
                     onAccessConfigChange={setAccessConfig}
                     pricingAdjustments={pricingAdjustments}
                     onPricingAdjustmentsChange={setPricingAdjustments}
+                    commercialPriceOptions={commercialPriceOptions}
+                    onCommercialPriceOptionsChange={setCommercialPriceOptions}
                     defaultCapacity={defaultCapacity}
                     onDefaultCapacityChange={setDefaultCapacity}
                     allowPublicBooking={allowPublicBooking}
@@ -2472,6 +2483,8 @@ export const ServicesView: React.FC = () => {
                     onAccessConfigChange={setEditAccessConfig}
                     pricingAdjustments={editPricingAdjustments}
                     onPricingAdjustmentsChange={setEditPricingAdjustments}
+                    commercialPriceOptions={editCommercialPriceOptions}
+                    onCommercialPriceOptionsChange={setEditCommercialPriceOptions}
                     defaultCapacity={editDefaultCapacity}
                     onDefaultCapacityChange={setEditDefaultCapacity}
                     allowPublicBooking={editAllowPublicBooking}

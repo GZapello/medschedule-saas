@@ -1553,8 +1553,16 @@ export class TenantController {
           )
           OR (
             ? = 1 AND (
-              COALESCE(s.studio_service_type, 'individual') = 'facility_access'
+              COALESCE(s.studio_service_type, 'individual') IN ('facility_access', 'non_scheduled')
               OR COALESCE(s.requires_appointment, 1) = 0
+              OR (
+                COALESCE(s.service_kind, 'individual') = 'group'
+                AND EXISTS (
+                  SELECT 1 FROM class_schedules cs
+                  JOIN professionals p ON p.id = cs.professional_id AND p.tenant_id = cs.tenant_id
+                  WHERE cs.service_id = s.id AND cs.tenant_id = s.tenant_id AND cs.active = 1 AND p.active = 1
+                )
+              )
             )
           )
         ) ORDER BY s.name
@@ -1653,11 +1661,32 @@ export class TenantController {
           const recCfg = parseServiceRecurrenceConfig(srv);
           const isGroup = (srv.service_kind || 'individual') === 'group' && requiresAppointment === 1;
           const allScheds = allSchedulesByService.get(srv.id) || [];
+          const activeScheds = allScheds.filter((sc: any) => Number(sc.active) !== 0);
           const diag = isGroup
             ? ClassScheduleService.diagnoseServiceSchedules(resolved.id, srv.id, allScheds)
             : null;
           const isPubliclyAvailable = requiresAppointment === 0 || !isGroup || Boolean(diag && diag.publishableCount > 0 && scheds.length > 0);
+          const upcomingOccs = isGroup && scheds.length > 0
+            ? ClassScheduleService.getUpcomingOccurrencesForService({
+                tenantId: resolved.id,
+                serviceRow: srv,
+                startDate: todayStr,
+                daysAhead: 21,
+                limit: 24,
+                publicOnly: true
+              })
+            : [];
+          const upcomingAvailableCount = isGroup
+            ? upcomingOccs.filter((o: any) => !o.isFull && Number(o.remainingSpots ?? 1) > 0).length
+            : 0;
+          const allUpcomingFull = isGroup && scheds.length > 0 && upcomingOccs.length > 0 && upcomingAvailableCount === 0;
+          const effectiveWeeklySummary = buildWeeklyScheduleSummary(scheds.length > 0 ? scheds : activeScheds);
           const linkedProfs = publicLinkedByService.get(srv.id) || [];
+          const unavailableReason = allUpcomingFull
+            ? 'Turmas temporariamente sem vagas nos próximos dias. Confira os horários da grade semanal.'
+            : (!isPubliclyAvailable
+                ? (diag?.blockers?.[0] || 'Esta aula ainda não possui dias e horários publicados.')
+                : null);
           return {
             ...srv,
             service_domain: resolvedDomain,
@@ -1677,15 +1706,16 @@ export class TenantController {
             linked_professionals: linkedProfs,
             linked_professional_ids: linkedProfs.map(lp => lp.id),
             class_schedules: scheds,
-            weekly_schedule_summary: buildWeeklyScheduleSummary(scheds),
+            weekly_schedule_summary: effectiveWeeklySummary,
             has_public_schedules: requiresAppointment === 0 || !isGroup || scheds.length > 0,
+            active_schedules_count: activeScheds.length,
+            upcoming_available_count: upcomingAvailableCount,
+            all_upcoming_full: allUpcomingFull,
             is_publicly_available: isPubliclyAvailable,
-            public_booking_unavailable_reason: !isPubliclyAvailable
-              ? (diag?.blockers?.[0] || 'Esta aula ainda não possui dias e horários publicados.')
-              : null
+            public_booking_unavailable_reason: unavailableReason
           };
         })
-        .filter(srv => !isStudioCompat || srv.requires_appointment === 0 || srv.service_kind !== 'group' || srv.is_publicly_available);
+        .filter(srv => !isStudioCompat || srv.requires_appointment === 0 || srv.service_kind !== 'group' || srv.active_schedules_count > 0 || srv.is_publicly_available);
       const rawPackages = isStudioCompat
         ? PackageService.listCatalogPackages(resolved.id, { publicOnly: true })
         : [];

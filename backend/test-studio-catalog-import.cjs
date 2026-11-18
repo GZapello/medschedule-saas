@@ -256,6 +256,15 @@ async function main() {
     const packages = (await ok('GET', '/v1/packages', studio)).packages;
     assert.equal(packages.find(p => p.name === 'Academia + Personal').items.length, 2);
     assert.equal(packages.find(p => p.name === 'Avaliação + Treino').items.length, 2);
+    assert.equal(service('Musculação').allow_public_booking, 1);
+    db.prepare(`UPDATE tenants SET public_booking_enabled = 1, public_booking_slug = 'studio-fixture' WHERE id = 'studio-fixture'`).run();
+    const pubCatalogRes = await ok('GET', '/v1/public/tenants/studio-fixture');
+    assert.ok(pubCatalogRes.services.some(s => s.name === 'Musculação'));
+    assert.ok(pubCatalogRes.services.some(s => s.name === 'Zumba' && s.weekly_schedule_summary?.length > 0));
+    assert.ok(pubCatalogRes.services.some(s => s.name === 'Pilates Individual'));
+    assert.ok(pubCatalogRes.services.some(s => s.name === 'Avaliação'));
+    assert.ok(pubCatalogRes.packages.some(p => p.name === 'Academia + Personal'));
+    assert.ok(pubCatalogRes.packages.some(p => p.name === 'Avaliação + Treino'));
 
     db.prepare("INSERT INTO patients (id, tenant_id, full_name) VALUES ('student-fixture', ?, 'Aluno Teste')").run('studio-fixture');
     const enroll = await ok('POST', '/v1/studio/enrollments', studio, {

@@ -192,24 +192,26 @@ async function runHomologation() {
     });
     assert(resEnroll1.status === 201, 'Matrícula de Acesso Livre criada com sucesso', resEnroll1.data);
 
-    // Registra 5 entradas na semana em horários diferentes
-    for (let i = 1; i <= 5; i++) {
-      const checkRes = await makeReq('POST', '/api/v1/studio/access/check-in', studioAuth.headers, {
-        studentId: student1Id,
-        mockNowIso: `${mondayIso}T1${i}:00:00-03:00`
-      });
-      assert(checkRes.status === 200 && checkRes.data.allowed === true, `Entrada #${i} de Acesso Livre liberada`, checkRes.data);
-    }
+    // ========================================================================
+    // VERIFICAÇÃO DA REMOÇÃO DO CONTROLE DE ACESSO & PORTARIA
+    // ========================================================================
+    const removedAccessLogs = await makeReq('GET', '/api/v1/studio/access/logs', studioAuth.headers);
+    const removedAccessCheckin = await makeReq('POST', '/api/v1/studio/access/check-in', studioAuth.headers, { studentId: student1Id });
+    const removedQrRoute = await makeReq('GET', `/api/v1/studio/access/students/${student1Id}/qr-token`, studioAuth.headers);
+    assert(
+      removedAccessLogs.status === 404 && removedAccessCheckin.status === 404 && removedQrRoute.status === 404,
+      'Rotas exclusivas de Controle de Acesso & Portaria foram removidas (404)'
+    );
 
     const apptsCount1 = db.prepare(`SELECT COUNT(*) as c FROM appointments WHERE tenant_id = ? AND patient_id = ?`).get(studioTenantId, student1Id).c;
     const paysCount1 = db.prepare(`SELECT COUNT(*) as c FROM payments WHERE tenant_id = ? AND patient_id = ?`).get(studioTenantId, student1Id).c;
-    assert(apptsCount1 === 0, '5 entradas na academia geraram 0 agendamentos na agenda de profissionais');
+    assert(apptsCount1 === 0, 'Plano de Acesso Livre gerou 0 agendamentos na agenda de profissionais');
     assert(paysCount1 === 1, 'Apenas 1 cobrança mensal foi gerada para o contrato');
 
     // ========================================================================
-    // CENÁRIO 2 — ACADEMIA LIMITADA (3x por semana + bloqueio na 4ª + exceção)
+    // CENÁRIO 2 — ACADEMIA LIMITADA (3x por semana preservada como condição comercial)
     // ========================================================================
-    console.log('\n--- Cenário 2: Academia Limitada (3x/semana) ---');
+    console.log('\n--- Cenário 2: Academia Limitada (3x/semana como condição contratual) ---');
     const resMusc3x = await makeReq('POST', '/api/v1/services', studioAuth.headers, {
       name: 'Musculação 3x Semana',
       studioServiceType: 'facility_access',
@@ -220,7 +222,6 @@ async function runHomologation() {
       accessConfig: {
         accessMode: 'limited',
         maxEntriesPerWeek: 3,
-        allowSameDayReentry: true,
         allowedWeekdays: [1, 2, 3, 4, 5, 6]
       }
     });
@@ -233,7 +234,7 @@ async function runHomologation() {
     });
     const student2Id = resStudent2.data.id;
 
-    await makeReq('POST', '/api/v1/studio/enrollments', studioAuth.headers, {
+    const resEnroll2 = await makeReq('POST', '/api/v1/studio/enrollments', studioAuth.headers, {
       studentId: student2Id,
       serviceId: musc3xId,
       contractKind: 'access_plan',
@@ -242,28 +243,10 @@ async function runHomologation() {
       startDate: mondayIso,
       initialPaymentStatus: 'paid'
     });
-
-    for (let i = 1; i <= 3; i++) {
-      const r = await makeReq('POST', '/api/v1/studio/access/check-in', studioAuth.headers, {
-        studentId: student2Id,
-        mockNowIso: `${mondayIso}T${String(7 + i).padStart(2, '0')}:00:00-03:00`
-      });
-      assert(r.status === 200 && r.data.allowed === true, `Entrada limitada ${i}/3 liberada`, r.data);
-    }
-
-    const r4Denied = await makeReq('POST', '/api/v1/studio/access/check-in', studioAuth.headers, {
-      studentId: student2Id,
-      mockNowIso: `${mondayIso}T14:00:00-03:00`
-    });
-    assert(r4Denied.status === 422 && r4Denied.data.allowed === false && r4Denied.data.denialReasonCode === 'FREQUENCY_EXCEEDED', '4ª entrada na mesma semana bloqueada com FREQUENCY_EXCEEDED', r4Denied.data);
-
-    const r4Exception = await makeReq('POST', '/api/v1/studio/access/check-in', studioAuth.headers, {
-      studentId: student2Id,
-      authorizeException: true,
-      exceptionReason: 'Reposição autorizada pelo gestor',
-      mockNowIso: `${mondayIso}T14:05:00-03:00`
-    });
-    assert(r4Exception.status === 200 && r4Exception.data.allowed === true && r4Exception.data.isException === true, '4ª entrada liberada mediante exceção autorizada com justificativa auditada');
+    assert(
+      resEnroll2.status === 201 && resEnroll2.data.plan?.weekly_frequency === 3,
+      'Plano com frequência semanal limitada (3x/semana) preservado como condição comercial sem portaria'
+    );
 
     // ========================================================================
     // CENÁRIO 3 — PERSONAL INDIVIDUAL (Com adicional de horário de pico)
@@ -450,21 +433,14 @@ async function runHomologation() {
     assert(resComboContract.status === 201, 'Contrato do Pacote Combinado ativado para o Aluno 3');
     const comboContractId = resComboContract.data.contract.id;
 
-    // Registra 2 entradas na academia para o Aluno 3 e verifica que NÃO consumiu créditos das 8 sessões de Personal!
-    await makeReq('POST', '/api/v1/studio/access/check-in', studioAuth.headers, {
-      studentId: student3Id,
-      mockNowIso: `${mondayIso}T08:00:00-03:00`
-    });
-    await makeReq('POST', '/api/v1/studio/access/check-in', studioAuth.headers, {
-      studentId: student3Id,
-      mockNowIso: `${mondayIso}T18:00:00-03:00`
-    });
-
-    const contractAfterGym = await makeReq('GET', `/api/v1/package-contracts/${comboContractId}`, studioAuth.headers);
-    const personalEntBefore = contractAfterGym.data.contract.entitlements.find(e => e.service_id === personalIndId);
-    const accessEntAfter = contractAfterGym.data.contract.entitlements.find(e => e.service_id === muscLivreId);
-    assert(personalEntBefore.credits_remaining === 8 && personalEntBefore.credits_used === 0, 'Entradas na academia NÃO consumiram créditos das 8 sessões de Personal');
-    assert(accessEntAfter.entries_used === 2, 'Entradas na academia contabilizadas separadamente em entries_used (2 acessos)', accessEntAfter);
+    // Verifica que o benefício de acesso livre NÃO interfere nem consome créditos das 8 sessões de Personal
+    const contractInitial = await makeReq('GET', `/api/v1/package-contracts/${comboContractId}`, studioAuth.headers);
+    const personalEntBefore = contractInitial.data.contract.entitlements.find(e => e.service_id === personalIndId);
+    const accessEntInitial = contractInitial.data.contract.entitlements.find(e => e.service_id === muscLivreId);
+    assert(
+      personalEntBefore.credits_remaining === 8 && personalEntBefore.credits_used === 0 && accessEntInitial?.entitlement_type === 'facility_access',
+      'Pacote combinado mantém acesso livre e 8 créditos de Personal separados'
+    );
 
     // Agora agenda e realiza 1 sessão de Personal coberta pelo pacote combinado
     const nextThu = getNextWeekdayIso(4, 2);
@@ -523,12 +499,141 @@ async function runHomologation() {
     assert(confirmPubAccess.status === 200 && confirmPubAccess.data.billingPlanId, 'Solicitação pública de Plano de Acesso confirmada gerando matrícula ativa e 0 agendamentos', confirmPubAccess.data);
     assert(Array.isArray(confirmPubAccess.data.appointmentIds) && confirmPubAccess.data.appointmentIds.length === 0, 'Confirmação de Plano de Acesso criou 0 agendamentos na agenda');
 
+    // Testa assinatura anual com opção comercial sem exigir agendamento via link público
+    const resAnualMusc = await makeReq('POST', '/api/v1/services', studioAuth.headers, {
+      name: 'Plano Anual Academia Total',
+      studioServiceType: 'facility_access',
+      requiresAppointment: false,
+      allowPublicBooking: true,
+      price: 119.9,
+      periodicPrice: 119.9,
+      billingMode: 'annual',
+      defaultPlanDuration: '12_months',
+      commercialPriceOptions: [
+        {
+          id: 'opt-anual-12m',
+          label: 'Plano Anual 12 meses',
+          accessType: 'unlimited',
+          frequencyType: 'unlimited',
+          contractDurationCode: '12_months',
+          paymentPeriodicity: 'annual',
+          commercialUnit: 'contract_total',
+          amountCents: 119000,
+          active: true
+        }
+      ]
+    });
+    assert(resAnualMusc.status === 201, 'Plano Anual sem agendamento criado com opção comercial');
+
+    const resPublicHiddenSrv = await makeReq('POST', '/api/v1/services', studioAuth.headers, {
+      name: 'Plano VIP Oculto Interno',
+      studioServiceType: 'facility_access',
+      requiresAppointment: false,
+      allowPublicBooking: false,
+      price: 299
+    });
+    assert(resPublicHiddenSrv.status === 201, 'Serviço privado (allowPublicBooking=false) criado para validar filtro');
+
+    // Cria turma de Zumba Qua/Sex com capacidade 1 e valida catálogo público antes e depois de lotar vagas
+    const resZumba = await makeReq('POST', '/api/v1/services', studioAuth.headers, {
+      professionalId: studioAuth.profId,
+      name: 'Zumba Quarta e Sexta',
+      studioServiceType: 'group',
+      serviceKind: 'group',
+      defaultCapacity: 1,
+      durationMinutes: 50,
+      price: 55,
+      allowPublicBooking: true,
+      classSchedules: [{ weekdays: [3, 5], startTime: '19:00', endTime: '19:50', capacity: 1, professionalId: studioAuth.profId }]
+    });
+    assert(resZumba.status === 201, 'Aula coletiva de Zumba Qua/Sex criada');
+
+    const pubProfile2 = await makeReq('GET', '/api/v1/public/tenants/iron-studio');
+    const pubServices2 = pubProfile2.data?.services || [];
+    const pubPackages2 = pubProfile2.data?.packages || [];
+    assert(
+      pubServices2.some(s => s.id === resAnualMusc.data.id && s.commercial_price_options?.length === 1) &&
+      pubServices2.some(s => s.id === resZumba.data.id && s.weekly_schedule_summary?.length > 0) &&
+      pubServices2.some(s => s.id === personalIndId) &&
+      !pubServices2.some(s => s.id === resPublicHiddenSrv.data.id) &&
+      pubPackages2.some(p => p.id === comboPkgId),
+      'Catálogo público exibe planos (com opção anual), turmas Qua/Sex, individuais e pacotes combinados, e oculta serviço privado'
+    );
+
+    // Contrata Plano Anual pelo link público sem escolher horário e valida status awaiting_confirmation
+    const pubAnualReq = await makeReq('POST', '/api/v1/public/studio/bookings', {}, {
+      tenantSlug: 'iron-studio',
+      mode: 'access_plan',
+      bookingIntent: 'access_plan',
+      serviceId: resAnualMusc.data.id,
+      commercialOptionId: 'opt-anual-12m',
+      startDate: mondayIso,
+      student: {
+        fullName: 'Carlos Plano Anual',
+        phone: '11966665544',
+        whatsapp: '11966665544',
+        email: 'carlos.anual@teste.com'
+      }
+    });
+    assert(pubAnualReq.status === 201 && pubAnualReq.data.status === 'awaiting_confirmation', 'Contratação pública de Plano Anual ficou pendente de aprovação sem conceder acesso ativo', pubAnualReq.data);
+
+    // Contrata Pacote Combinado pelo link público escolhendo horário APENAS do componente agendável (Personal)
+    const nextFri = getNextWeekdayIso(5, 2);
+    const pubPkgReq = await makeReq('POST', '/api/v1/public/studio/bookings', {}, {
+      tenantSlug: 'iron-studio',
+      mode: 'package',
+      packageId: comboPkgId,
+      schedules: [
+        {
+          serviceId: personalIndId,
+          professionalId: studioAuth.profId,
+          modality: 'presential',
+          startTime: `${nextFri}T15:00:00`,
+          endTime: `${nextFri}T16:00:00`
+        }
+      ],
+      student: {
+        fullName: 'Marina Pacote Público',
+        phone: '11955554433'
+      }
+    });
+    assert(pubPkgReq.status === 201 && pubPkgReq.data.status === 'awaiting_confirmation', 'Solicitação pública de pacote combinado aceitou horário apenas do item agendável', pubPkgReq.data);
+
+    // Garante que turma publicada com todas as vagas preenchidas continua visível com motivo claro
+    const zumbaOccsRes = await makeReq('GET', `/api/v1/public/studio/slots?tenantSlug=iron-studio&serviceId=${resZumba.data.id}&includeUpcoming=1`);
+    const zumbaUpcoming = zumbaOccsRes.data?.upcomingSlots || [];
+    for (let i = 0; i < zumbaUpcoming.length; i++) {
+      const slot = zumbaUpcoming[i];
+      const patTmp = await makeReq('POST', '/api/v1/patients', studioAuth.headers, {
+        fullName: `Aluno Lotação ${i + 1}`,
+        phone: `119900010${String(i).padStart(2, '0')}`
+      });
+      await makeReq('POST', '/api/v1/appointments', studioAuth.headers, {
+        patientId: patTmp.data.id,
+        professionalId: slot.professionalId,
+        serviceId: resZumba.data.id,
+        startTime: slot.startTime,
+        endTime: slot.endTime,
+        modality: 'presential'
+      });
+    }
+    const pubProfileFull = await makeReq('GET', '/api/v1/public/tenants/iron-studio');
+    const zumbaPubCard = (pubProfileFull.data?.services || []).find(s => s.id === resZumba.data.id);
+    assert(
+      Boolean(zumbaPubCard) &&
+      zumbaPubCard.all_upcoming_full === true &&
+      typeof zumbaPubCard.public_booking_unavailable_reason === 'string' &&
+      zumbaPubCard.weekly_schedule_summary?.length > 0,
+      'Turma publicada (Zumba Qua/Sex) permanece visível com grade semanal e aviso claro mesmo quando sem vagas',
+      zumbaPubCard
+    );
+
     // ========================================================================
-    // CENÁRIO 11 — FINANCEIRO, INADIMPLÊNCIA, CONGELAMENTO E COMISSÕES
+    // CENÁRIO 11 — FINANCEIRO, CONGELAMENTO E CANCELAMENTO
     // ========================================================================
-    console.log('\n--- Cenário 11: Financeiro, Bloqueio por Inadimplência, Congelamento e Comissões ---');
+    console.log('\n--- Cenário 11: Financeiro, Congelamento e Cancelamento ---');
     const resStudentOverdue = await makeReq('POST', '/api/v1/patients', studioAuth.headers, {
-      fullName: 'Roberto Inadimplente',
+      fullName: 'Roberto Contrato Pendente',
       phone: '11966665555'
     });
     const studentOverdueId = resStudentOverdue.data.id;
@@ -540,13 +645,7 @@ async function runHomologation() {
       endDate: '2027-01-01',
       initialPaymentStatus: 'pending'
     });
-    // Força vencimento no passado
-    db.prepare(`UPDATE payments SET due_date = '2026-01-05' WHERE recurring_plan_id = ?`).run(overdueEnroll.data.contractId);
-
-    const overdueCheckIn = await makeReq('POST', '/api/v1/studio/access/check-in', studioAuth.headers, {
-      studentId: studentOverdueId
-    });
-    assert(overdueCheckIn.status === 422 && overdueCheckIn.data.denialReasonCode === 'FINANCIAL_BLOCK', 'Aluno com parcela vencida é bloqueado no Controle de Acesso (FINANCIAL_BLOCK)');
+    assert(overdueEnroll.status === 201 && overdueEnroll.data.contractId, 'Matrícula financeira com cobrança pendente criada em Matrículas e Planos');
 
     // Testa Congelamento (freeze) e Cancelamento preservando pagamentos quitados
     const freezeRes = await makeReq('POST', `/api/v1/studio/enrollments/${resEnroll1.data.contractId}/lifecycle`, studioAuth.headers, {
@@ -596,39 +695,36 @@ async function runHomologation() {
     });
     assert(mixedClinSrv.data.service_domain === 'clinical' && mixedStudioSrv.data.service_domain === 'studio', 'Estabelecimento Misto separa perfeitamente serviços clínicos e de Academia & Studio');
 
-    // Multitenant & QR Code (Cenários 14 e 16)
-    const qrRes = await makeReq('GET', `/api/v1/studio/access/students/${student2Id}/qr-token`, studioAuth.headers);
-    assert(qrRes.status === 200 && qrRes.data.token.startsWith('zqr.'), 'QR Code assinado gerado com sucesso');
-
-    const crossTenantVerify = await makeReq('POST', '/api/v1/studio/access/verify-qr', studioBAuth.headers, {
-      qrToken: qrRes.data.token
-    });
-    assert(crossTenantVerify.status === 422 && crossTenantVerify.data.code === 'CROSS_TENANT_QR', 'Isolamento Multitenant bloqueia QR Code de outro estabelecimento (CROSS_TENANT_QR)');
+    const crossTenantEnrollments = await makeReq('GET', '/api/v1/studio/enrollments', studioBAuth.headers);
+    assert(
+      crossTenantEnrollments.status === 200 &&
+      !(crossTenantEnrollments.data?.enrollments || []).some(e => e.studentId === student1Id || e.studentId === student2Id),
+      'Isolamento Multitenant garante que outro Studio não vê matrículas de Iron Studio'
+    );
 
     // ========================================================================
-    // CENÁRIO 17 E 18 — CONCORRÊNCIA, IDEMPOTÊNCIA E DESEMPENHO DE RELATÓRIOS
+    // CENÁRIO 17 E 18 — REATIVAÇÃO E DESEMPENHO DE RELATÓRIOS
     // ========================================================================
-    console.log('\n--- Cenários 17 e 18: Concorrência, Idempotência e Desempenho ---');
+    console.log('\n--- Cenários 17 e 18: Reativação Contratual e Desempenho ---');
     const reactivate1 = await makeReq('POST', `/api/v1/studio/enrollments/${resEnroll1.data.contractId}/lifecycle`, studioAuth.headers, {
       action: 'reactivate'
     });
-    assert(reactivate1.status === 200, 'Contrato reativado para teste de idempotência');
-
-    const idempKey = 'idemp-checkin-' + uuidv4();
-    const [conc1, conc2] = await Promise.all([
-      makeReq('POST', '/api/v1/studio/access/check-in', studioAuth.headers, { studentId: student1Id, idempotencyKey: idempKey, mockNowIso: `${mondayIso}T20:00:00-03:00` }),
-      makeReq('POST', '/api/v1/studio/access/check-in', studioAuth.headers, { studentId: student1Id, idempotencyKey: idempKey, mockNowIso: `${mondayIso}T20:00:00-03:00` })
-    ]);
-    assert(conc1.status === 200 && conc2.status === 200 && conc1.data.accessLog.id === conc2.data.accessLog.id, 'Cliques simultâneos com mesma idempotencyKey geram apenas 1 registro de acesso', { c1: conc1.data, c2: conc2.data });
+    assert(reactivate1.status === 200, 'Contrato reativado preservando histórico contratual');
 
     const t0 = Date.now();
     const repRes = await makeReq('GET', '/api/v1/personal/attendance-reports', studioAuth.headers);
     const elapsedMs = Date.now() - t0;
-    assert(repRes.status === 200 && repRes.data.enrollmentMetrics && repRes.data.accessMetrics && repRes.data.studioFinancialMetrics, `Relatório consolidado de Academia & Studio retornado em ${elapsedMs}ms (< 500ms)`, {
-      elapsedMs,
-      enrollmentMetrics: repRes.data.enrollmentMetrics,
-      accessMetrics: repRes.data.accessMetrics
-    });
+    assert(
+      repRes.status === 200 &&
+      repRes.data.enrollmentMetrics &&
+      repRes.data.accessMetrics === undefined &&
+      repRes.data.studioFinancialMetrics,
+      `Relatório consolidado de Academia & Studio retornado sem accessMetrics em ${elapsedMs}ms (< 500ms)`,
+      {
+        elapsedMs,
+        enrollmentMetrics: repRes.data.enrollmentMetrics
+      }
+    );
 
     console.log('\n========================================================================');
     console.log(` RESULTADO FINAL: ${passed} APROVADOS | ${failed} FALHAS`);

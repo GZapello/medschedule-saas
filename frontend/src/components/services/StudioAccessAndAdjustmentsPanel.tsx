@@ -14,7 +14,10 @@ import {
   StudioServiceType,
   StudioAccessConfig,
   StudioPriceAdjustmentRule,
-  DEFAULT_STUDIO_ACCESS_CONFIG
+  StudioCommercialPriceOption,
+  DEFAULT_STUDIO_ACCESS_CONFIG,
+  PAYMENT_PERIODICITY_LABELS,
+  COMMERCIAL_UNIT_LABELS
 } from '../../utils/studioAccessAndCommercial';
 
 interface StudioAccessAndAdjustmentsPanelProps {
@@ -24,6 +27,8 @@ interface StudioAccessAndAdjustmentsPanelProps {
   onAccessConfigChange: (nextConfig: StudioAccessConfig) => void;
   pricingAdjustments: StudioPriceAdjustmentRule[];
   onPricingAdjustmentsChange: (nextRules: StudioPriceAdjustmentRule[]) => void;
+  commercialPriceOptions?: StudioCommercialPriceOption[];
+  onCommercialPriceOptionsChange?: (nextOptions: StudioCommercialPriceOption[]) => void;
   defaultCapacity: number;
   onDefaultCapacityChange?: (nextCap: number) => void;
   allowPublicBooking?: boolean;
@@ -47,6 +52,8 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
   onAccessConfigChange,
   pricingAdjustments,
   onPricingAdjustmentsChange,
+  commercialPriceOptions = [],
+  onCommercialPriceOptionsChange,
   defaultCapacity,
   onDefaultCapacityChange,
   allowPublicBooking = true,
@@ -55,6 +62,41 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
   const [newWindowStart, setNewWindowStart] = useState('06:00');
   const [newWindowEnd, setNewWindowEnd] = useState('22:00');
   const [showAdjustments, setShowAdjustments] = useState(pricingAdjustments.length > 0);
+  const [showCommercialOptions, setShowCommercialOptions] = useState(commercialPriceOptions.length > 0);
+
+  const addCommercialOption = () => {
+    if (!onCommercialPriceOptionsChange) return;
+    const nextOption: StudioCommercialPriceOption = {
+      id: `opt-${Date.now()}-${commercialPriceOptions.length + 1}`,
+      label: '',
+      modality: 'any',
+      accessType: studioServiceType === 'facility_access' ? (accessConfig?.accessMode === 'limited' ? 'limited' : 'unlimited') : 'scheduled',
+      frequencyType: studioServiceType === 'facility_access' && accessConfig?.accessMode !== 'limited' ? 'unlimited' : 'weekly',
+      frequencyCount: studioServiceType === 'facility_access' && accessConfig?.accessMode !== 'limited' ? null : 2,
+      contractDurationCode: '1_month',
+      paymentPeriodicity: 'monthly',
+      participantsCount: 1,
+      commercialUnit: 'per_month',
+      amountCents: 15000,
+      installmentsCount: 1,
+      fidelityMonths: 0,
+      gracePeriodDays: 0,
+      autoRenew: false,
+      active: true
+    };
+    onCommercialPriceOptionsChange([...commercialPriceOptions, nextOption]);
+    setShowCommercialOptions(true);
+  };
+
+  const updateCommercialOption = (idx: number, patch: Partial<StudioCommercialPriceOption>) => {
+    if (!onCommercialPriceOptionsChange) return;
+    onCommercialPriceOptionsChange(commercialPriceOptions.map((o, i) => (i === idx ? { ...o, ...patch } : o)));
+  };
+
+  const removeCommercialOption = (idx: number) => {
+    if (!onCommercialPriceOptionsChange) return;
+    onCommercialPriceOptionsChange(commercialPriceOptions.filter((_, i) => i !== idx));
+  };
 
   const cfg = accessConfig || DEFAULT_STUDIO_ACCESS_CONFIG;
 
@@ -234,17 +276,17 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
         )}
       </div>
 
-      {/* Painel completo de Acesso ao Estabelecimento (quando Tipo A) */}
+      {/* Painel de Plano de Acesso / Academia (quando Tipo A) */}
       {studioServiceType === 'facility_access' && (
         <div className="rounded-2xl border border-indigo-200 bg-indigo-50/30 p-4 space-y-3.5">
           <div className="flex items-start justify-between gap-2">
             <div>
               <h4 className="font-bold text-indigo-950 flex items-center gap-1.5">
                 <KeyRound className="w-4 h-4 text-indigo-600" />
-                Regras do Plano de Acesso (Catraca / Recepção / QR Code)
+                Regras Comerciais do Plano de Acesso (Academia)
               </h4>
               <p className="text-[11px] text-slate-600 mt-0.5">
-                Este serviço não ocupa horários na agenda de profissionais. As entradas são validadas em Controle de Acesso.
+                Este serviço não ocupa horários na agenda de profissionais e não exige registro de entrada ou saída.
               </p>
             </div>
           </div>
@@ -261,7 +303,7 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
             >
               <div className="font-bold text-slate-900">Acesso Livre (Ilimitado)</div>
               <div className="text-[11px] text-slate-500 mt-0.5">
-                Aluno pode frequentar todos os dias e horários permitidos durante a vigência.
+                Aluno pode frequentar durante a vigência contratual conforme dias e horários do estabelecimento.
               </div>
             </button>
 
@@ -274,9 +316,9 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
                   : 'border-slate-200 bg-white/70 hover:bg-white'
               }`}
             >
-              <div className="font-bold text-slate-900">Acesso Limitado por Frequência</div>
+              <div className="font-bold text-slate-900">Frequência Contratada</div>
               <div className="text-[11px] text-slate-500 mt-0.5">
-                Ex: 2x, 3x ou 5x por semana, ou 12x por mês (controlado no check-in).
+                Condição comercial por semana ou mês (ex: 2x, 3x, 5x por semana ou 12x por mês).
               </div>
             </button>
           </div>
@@ -284,7 +326,7 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
           {cfg.accessMode === 'limited' && (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-white p-3 rounded-xl border border-slate-200">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Entradas por semana</label>
+                <label className="block font-semibold text-slate-700 mb-1">Frequência por semana</label>
                 <input
                   type="number"
                   min={1}
@@ -311,7 +353,7 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Entradas por mês (opcional)</label>
+                <label className="block font-semibold text-slate-700 mb-1">Frequência por mês (opcional)</label>
                 <input
                   type="number"
                   min={1}
@@ -337,61 +379,9 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-white p-3 rounded-xl border border-slate-200">
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">Limite por dia</label>
-              <input
-                type="number"
-                min={1}
-                max={10}
-                placeholder="Ilimitado"
-                value={cfg.maxEntriesPerDay ?? ''}
-                onChange={e => updateCfg({ maxEntriesPerDay: e.target.value ? Number(e.target.value) : null })}
-                className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
-              />
-              <label className="flex items-center gap-1.5 mt-1.5 text-[11px] text-slate-600 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={cfg.allowSameDayReentry}
-                  onChange={e => updateCfg({ allowSameDayReentry: e.target.checked })}
-                />
-                Permitir reentrada no mesmo dia
-              </label>
-            </div>
-
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">Lotação simultânea máx.</label>
-              <input
-                type="number"
-                min={1}
-                max={5000}
-                placeholder="Sem limite fixo"
-                value={cfg.maxSimultaneousCapacity ?? ''}
-                onChange={e => updateCfg({ maxSimultaneousCapacity: e.target.value ? Number(e.target.value) : null })}
-                className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
-              />
-              <span className="block text-[10px] text-slate-400 mt-1">
-                Controla ocupação ativa na academia
-              </span>
-            </div>
-
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">Regra em feriados</label>
-              <select
-                value={cfg.holidayPolicy}
-                onChange={e => updateCfg({ holidayPolicy: e.target.value as any })}
-                className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white"
-              >
-                <option value="normal">Acesso normal</option>
-                <option value="ignore_limit">Liberar sem descontar limite</option>
-                <option value="block">Bloquear entrada no feriado</option>
-              </select>
-            </div>
-          </div>
-
           {/* Dias permitidos */}
           <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-2">
-            <label className="block font-semibold text-slate-700">Dias da semana permitidos para acesso</label>
+            <label className="block font-semibold text-slate-700">Dias da semana incluídos no plano</label>
             <div className="flex flex-wrap gap-1.5">
               {WEEKDAY_SHORT.map(w => {
                 const active = (cfg.allowedWeekdays || []).includes(w.day);
@@ -418,7 +408,7 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
             <div className="flex items-center justify-between">
               <label className="font-semibold text-slate-700 flex items-center gap-1.5">
                 <Clock className="w-3.5 h-3.5 text-indigo-600" />
-                Faixas horárias permitidas (vazio = qualquer horário de funcionamento)
+                Faixas horárias do plano (vazio = qualquer horário de funcionamento)
               </label>
             </div>
             {(cfg.allowedTimeWindows || []).length > 0 && (
@@ -464,46 +454,46 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
             </div>
           </div>
 
-          {/* Bloqueio por inadimplência e Contratação Pública */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white p-3 rounded-xl border border-slate-200">
-            <div className="space-y-1.5">
-              <label className="flex items-center gap-2 font-semibold text-slate-800 cursor-pointer">
+          {/* Condição financeira de suspensão por inadimplência */}
+          <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-1.5">
+            <label className="flex items-center gap-2 font-semibold text-slate-800 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={cfg.blockOnOverdue}
+                onChange={e => updateCfg({ blockOnOverdue: e.target.checked })}
+              />
+              <ShieldAlert className="w-3.5 h-3.5 text-amber-600" />
+              Sinalizar pendência contratual se houver parcela vencida
+            </label>
+            {cfg.blockOnOverdue && (
+              <div className="flex items-center gap-2 pl-5">
+                <span className="text-[11px] text-slate-600">Dias de tolerância após vencimento:</span>
                 <input
-                  type="checkbox"
-                  checked={cfg.blockOnOverdue}
-                  onChange={e => updateCfg({ blockOnOverdue: e.target.checked })}
+                  type="number"
+                  min={0}
+                  max={90}
+                  value={cfg.overdueGraceDays}
+                  onChange={e => updateCfg({ overdueGraceDays: Math.max(0, Number(e.target.value) || 0) })}
+                  className="w-16 border border-slate-200 rounded-lg px-2 py-1 text-xs text-center"
                 />
-                <ShieldAlert className="w-3.5 h-3.5 text-amber-600" />
-                Bloquear acesso se houver parcela vencida
-              </label>
-              {cfg.blockOnOverdue && (
-                <div className="flex items-center gap-2 pl-5">
-                  <span className="text-[11px] text-slate-600">Dias de tolerância após vencimento:</span>
-                  <input
-                    type="number"
-                    min={0}
-                    max={90}
-                    value={cfg.overdueGraceDays}
-                    onChange={e => updateCfg({ overdueGraceDays: Math.max(0, Number(e.target.value) || 0) })}
-                    className="w-16 border border-slate-200 rounded-lg px-2 py-1 text-xs text-center"
-                  />
-                </div>
-              )}
-            </div>
-
-            {onAllowPublicBookingChange && (
-              <div className="flex items-center">
-                <label className="flex items-center gap-2 font-semibold text-slate-800 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={allowPublicBooking}
-                    onChange={e => onAllowPublicBookingChange(e.target.checked)}
-                  />
-                  Permitir contratação deste plano pelo Link Público (sem exigir horário)
-                </label>
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Visibilidade Pública para QUALQUER serviço do Academia & Studio */}
+      {onAllowPublicBookingChange && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-3.5">
+          <label className="flex items-center gap-2 font-semibold text-slate-800 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={allowPublicBooking}
+              onChange={e => onAllowPublicBookingChange(e.target.checked)}
+              className="h-4 w-4 accent-teal-700"
+            />
+            <span>Exibir e permitir solicitação/contratação deste serviço no Link Público</span>
+          </label>
         </div>
       )}
 
@@ -615,6 +605,155 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
           </div>
         )}
       </div>
+
+      {/* Planos e Opções Comerciais (Matriz Duração x Frequência compartilhada com Importação IA) */}
+      {onCommercialPriceOptionsChange && (
+        <div className="rounded-2xl border border-indigo-200 bg-white p-3.5 space-y-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <h4 className="font-bold text-slate-800">Planos e Opções Comerciais</h4>
+              <p className="text-[11px] text-slate-500">
+                Mensalidades, trimestrais, semestrais, anuais e parcelamentos por frequência contratada.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (commercialPriceOptions.length === 0) addCommercialOption();
+                else setShowCommercialOptions(!showCommercialOptions);
+              }}
+              className="px-2.5 py-1.5 rounded-xl border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 font-semibold text-indigo-700 cursor-pointer shrink-0"
+            >
+              {commercialPriceOptions.length === 0
+                ? '+ Adicionar opção comercial'
+                : showCommercialOptions
+                  ? 'Ocultar opções'
+                  : `Ver opções (${commercialPriceOptions.length})`}
+            </button>
+          </div>
+
+          {showCommercialOptions && (
+            <div className="space-y-2.5 pt-1">
+              {commercialPriceOptions.map((opt, idx) => (
+                <div key={opt.id || idx} className="p-3 rounded-xl border border-slate-200 bg-slate-50/70 space-y-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+                    <input
+                      type="text"
+                      value={opt.label || ''}
+                      onChange={e => updateCommercialOption(idx, { label: e.target.value })}
+                      placeholder="Rótulo (ex: Trimestral Livre)"
+                      className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white font-semibold"
+                    />
+                    <select
+                      value={opt.contractDurationCode}
+                      onChange={e => updateCommercialOption(idx, { contractDurationCode: e.target.value as any })}
+                      className="border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white"
+                    >
+                      <option value="1_month">1 mês (Mensal)</option>
+                      <option value="2_months">2 meses</option>
+                      <option value="3_months">3 meses (Trimestral)</option>
+                      <option value="6_months">6 meses (Semestral)</option>
+                      <option value="12_months">12 meses (Anual)</option>
+                      <option value="24_months">24 meses</option>
+                    </select>
+                    <select
+                      value={opt.paymentPeriodicity}
+                      onChange={e => updateCommercialOption(idx, { paymentPeriodicity: e.target.value as any })}
+                      className="border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white"
+                    >
+                      {Object.entries(PAYMENT_PERIODICITY_LABELS).map(([k, lbl]) => (
+                        <option key={k} value={k}>{lbl}</option>
+                      ))}
+                    </select>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="number"
+                        min={0.01}
+                        step="0.01"
+                        value={Number((opt.amountCents || 0) / 100)}
+                        onChange={e => updateCommercialOption(idx, { amountCents: Math.max(1, Math.round((Number(e.target.value) || 0) * 100)) })}
+                        className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white font-bold"
+                        title="Valor em reais"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeCommercialOption(idx)}
+                        className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg bg-white border border-slate-200 cursor-pointer"
+                        title="Remover opção comercial"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                    <select
+                      value={opt.commercialUnit}
+                      onChange={e => updateCommercialOption(idx, { commercialUnit: e.target.value as any })}
+                      className="border border-slate-200 rounded-lg px-2 py-1 text-xs bg-white"
+                    >
+                      {Object.entries(COMMERCIAL_UNIT_LABELS).map(([k, lbl]) => (
+                        <option key={k} value={k}>{lbl}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={opt.frequencyType}
+                      onChange={e => updateCommercialOption(idx, {
+                        frequencyType: e.target.value as any,
+                        frequencyCount: e.target.value === 'unlimited' ? null : (opt.frequencyCount || 1)
+                      })}
+                      className="border border-slate-200 rounded-lg px-2 py-1 text-xs bg-white"
+                    >
+                      <option value="unlimited">Uso livre / ilimitado</option>
+                      <option value="weekly">Frequência semanal</option>
+                      <option value="monthly">Frequência mensal</option>
+                      <option value="fixed_count">Quantidade fixa</option>
+                    </select>
+                    {opt.frequencyType !== 'unlimited' && (
+                      <input
+                        type="number"
+                        min={1}
+                        max={200}
+                        value={opt.frequencyCount ?? 1}
+                        onChange={e => updateCommercialOption(idx, { frequencyCount: Math.max(1, Number(e.target.value) || 1) })}
+                        className="w-16 border border-slate-200 rounded-lg px-2 py-1 text-xs bg-white text-center font-semibold"
+                        title="Quantidade"
+                      />
+                    )}
+                    {opt.paymentPeriodicity === 'installments' && (
+                      <label className="inline-flex items-center gap-1 text-slate-600">
+                        <span>Parcelas:</span>
+                        <input
+                          type="number"
+                          min={2}
+                          max={24}
+                          value={opt.installmentsCount || 2}
+                          onChange={e => updateCommercialOption(idx, { installmentsCount: Math.max(2, Number(e.target.value) || 2) })}
+                          className="w-14 border border-slate-200 rounded-lg px-2 py-1 text-xs bg-white text-center font-semibold"
+                        />
+                      </label>
+                    )}
+                    <label className="inline-flex items-center gap-1 text-slate-600 cursor-pointer ml-auto">
+                      <input
+                        type="checkbox"
+                        checked={opt.active !== false}
+                        onChange={e => updateCommercialOption(idx, { active: e.target.checked })}
+                      />
+                      Ativa
+                    </label>
+                  </div>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={addCommercialOption}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-700 hover:text-indigo-900 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" /> Adicionar outra opção comercial
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

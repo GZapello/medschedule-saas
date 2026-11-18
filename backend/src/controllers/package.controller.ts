@@ -563,6 +563,13 @@ export class PackageController {
           : [];
 
         const totalAvailable = dayResult.slots.filter(s => !s.isFull).length;
+        const upcomingAvailable = upcomingSlots.filter(s => !s.isFull && Number(s.remainingSpots ?? 1) > 0).length;
+        const fullDayReason = wantDate && dayResult.slots.length > 0 && totalAvailable === 0
+          ? 'Sem vagas disponíveis nesta data. Escolha outro dia da grade semanal.'
+          : null;
+        const fullUpcomingReason = !wantDate && upcomingSlots.length > 0 && upcomingAvailable === 0
+          ? 'Todas as turmas programadas nos próximos dias estão sem vagas no momento.'
+          : null;
 
         res.json({
           date: wantDate,
@@ -586,6 +593,8 @@ export class PackageController {
           slots: dayResult.slots,
           upcomingSlots,
           ...(wantDate && dayResult.slots.length === 0 ? { emptyReason: dayResult.emptyReason } : {}),
+          ...(fullDayReason ? { emptyReason: fullDayReason } : {}),
+          ...(fullUpcomingReason ? { emptyReason: fullUpcomingReason } : {}),
           ...(!wantDate && upcomingSlots.length === 0
             ? {
                 emptyReason: ClassScheduleService.explainEmptyPublicAvailability({

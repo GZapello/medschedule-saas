@@ -1418,47 +1418,7 @@ export class ClassAttendanceController {
         topPlans: topPlansRows
       };
 
-      // 9. Métricas de Controle de Acesso (Academia Livre & Limitada)
-      const accessStats = db.prepare(`
-        SELECT
-          SUM(CASE WHEN substr(REPLACE(check_in_at, ' ', 'T'), 1, 10) = ? AND access_status = 'allowed' THEN 1 ELSE 0 END) as today_access_count,
-          SUM(CASE WHEN substr(REPLACE(check_in_at, ' ', 'T'), 1, 10) BETWEEN ? AND ? AND access_status = 'allowed' AND COALESCE(is_exception, 0) = 0 THEN 1 ELSE 0 END) as period_allowed_count,
-          SUM(CASE WHEN substr(REPLACE(check_in_at, ' ', 'T'), 1, 10) BETWEEN ? AND ? AND access_status = 'denied' THEN 1 ELSE 0 END) as period_denied_count,
-          SUM(CASE WHEN substr(REPLACE(check_in_at, ' ', 'T'), 1, 10) BETWEEN ? AND ? AND COALESCE(is_exception, 0) = 1 THEN 1 ELSE 0 END) as period_exception_count
-        FROM studio_access_logs
-        WHERE tenant_id = ?
-      `).get(todayYmd, startDate, endDate, startDate, endDate, startDate, endDate, tenantId) as any;
-
-      const threeHoursAgoIso = new Date(Date.now() - 3 * 3600 * 1000).toISOString().slice(0, 19);
-      const currentOccupancyRow = db.prepare(`
-        SELECT COUNT(DISTINCT student_id) as c
-        FROM studio_access_logs
-        WHERE tenant_id = ?
-          AND substr(REPLACE(check_in_at, ' ', 'T'), 1, 10) = ?
-          AND access_status = 'allowed'
-          AND check_out_at IS NULL
-          AND REPLACE(check_in_at, ' ', 'T') >= ?
-      `).get(tenantId, todayYmd, threeHoursAgoIso) as { c: number } | undefined;
-
-      const accessPeakHours = db.prepare(`
-        SELECT substr(REPLACE(check_in_at, ' ', 'T'), 12, 2) || ':00' as hour_bucket, COUNT(*) as count
-        FROM studio_access_logs
-        WHERE tenant_id = ? AND substr(REPLACE(check_in_at, ' ', 'T'), 1, 10) BETWEEN ? AND ? AND access_status = 'allowed'
-        GROUP BY hour_bucket
-        ORDER BY count DESC
-        LIMIT 12
-      `).all(tenantId, startDate, endDate);
-
-      const accessMetrics = {
-        todayAccessCount: Number(accessStats?.today_access_count || 0),
-        periodAllowedAccesses: Number(accessStats?.period_allowed_count || 0),
-        periodDeniedAccesses: Number(accessStats?.period_denied_count || 0),
-        periodExceptionAccesses: Number(accessStats?.period_exception_count || 0),
-        currentOccupancy: Number(currentOccupancyRow?.c || 0),
-        accessPeakHours
-      };
-
-      // 10. Métricas Financeiras do Studio / Academia no período
+      // 9. Métricas Financeiras do Studio / Academia no período
       const finRow = db.prepare(`
         SELECT
           COALESCE(SUM(CASE WHEN status = 'paid' AND substr(COALESCE(payment_date, due_date, created_at), 1, 10) BETWEEN ? AND ? THEN amount ELSE 0 END), 0) as received_in_period,
@@ -1501,7 +1461,6 @@ export class ClassAttendanceController {
           occupancyRate
         },
         enrollmentMetrics,
-        accessMetrics,
         studioFinancialMetrics,
         studentRanking,
         topModalities,

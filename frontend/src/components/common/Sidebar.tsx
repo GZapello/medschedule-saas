@@ -156,19 +156,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
         },
         {
           id: 'studio-enrollments',
-          label: 'Matrículas e Acessos',
+          label: 'Matrículas e Planos',
           icon: KeyRound,
           visible:
             supportsStudioFeatures(currentTenant?.establishment_profile) &&
             (isClinicAdmin || isReceptionist || isProfessional || hasPermission('view_enrollments') || hasPermission('manage_contracts'))
-        },
-        {
-          id: 'studio-access',
-          label: 'Controle de Acesso',
-          icon: UserCheck,
-          visible:
-            supportsStudioFeatures(currentTenant?.establishment_profile) &&
-            (isClinicAdmin || isReceptionist || isProfessional || hasPermission('register_access') || hasPermission('view_attendance'))
         },
         {
           id: 'clinical',

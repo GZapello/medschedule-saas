@@ -434,7 +434,7 @@ export class AppointmentController {
       ) {
         res.status(400).json({
           code: 'NON_SCHEDULABLE_SERVICE',
-          error: 'Este serviço não exige agendamento de horário (Acesso Livre/Limitado ou Entregável). Utilize Matrículas e Acessos ou Controle de Acesso.'
+          error: 'Este serviço não exige agendamento de horário (Acesso Livre/Limitado ou Entregável). Utilize Matrículas e Planos.'
         });
         return;
       }
@@ -2756,7 +2756,7 @@ export class AppointmentController {
       ) {
         res.status(400).json({
           code: 'NON_SCHEDULABLE_SERVICE',
-          error: 'Este serviço não exige agendamento de horário (Acesso Livre/Limitado ou Entregável). Utilize Matrículas e Acessos ou Controle de Acesso.'
+          error: 'Este serviço não exige agendamento de horário (Acesso Livre/Limitado ou Entregável). Utilize Matrículas e Planos.'
         });
         return;
       }

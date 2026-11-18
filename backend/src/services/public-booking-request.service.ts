@@ -22,7 +22,11 @@ import {
 } from './class-group.service';
 import { ClassScheduleService, getDayOfWeekFromYmd, todayBrazilYmd } from './class-schedule.service';
 import { StudioAccessService } from './studio-access.service';
-import { normalizeStudioAccessConfig } from '../utils/studio-access-and-commercial';
+import {
+  calculateCommercialOptionBreakdown,
+  normalizeCommercialPriceOptions,
+  normalizeStudioAccessConfig
+} from '../utils/studio-access-and-commercial';
 import { resolveConcreteModality, sanitizeBookingErrorMessage } from '../utils/modality-resolver';
 import {
   resolveBookingTenant,
@@ -937,29 +941,44 @@ export class PublicBookingRequestService {
     if (
       mode === 'access_plan' ||
       bookingIntent === 'access_plan' ||
-      (targetSrvRow && (targetSrvRow.studio_service_type === 'facility_access' || Number(targetSrvRow.requires_appointment) === 0))
+      (targetSrvRow && (targetSrvRow.studio_service_type === 'facility_access' || targetSrvRow.studio_service_type === 'non_scheduled' || Number(targetSrvRow.requires_appointment) === 0))
     ) {
       if (!targetSrvRow || Number(targetSrvRow.allow_public_booking ?? 1) === 0) {
-        throw Object.assign(new Error('Plano de acesso indisponível para contratação online.'), { status: 404 });
+        throw Object.assign(new Error('Plano indisponível para contratação online.'), { status: 404 });
       }
+
+      const isDeliverable = targetSrvRow.studio_service_type === 'non_scheduled';
+      const contractKind: 'access_plan' | 'deliverable' = isDeliverable ? 'deliverable' : 'access_plan';
+      const commercialOptions = normalizeCommercialPriceOptions(targetSrvRow.commercial_price_options_json);
+      const matchedOption = rawBody?.commercialOptionId
+        ? commercialOptions.find(o => o.id === String(rawBody.commercialOptionId) && o.active) || null
+        : null;
+      if (rawBody?.commercialOptionId && !matchedOption) {
+        throw Object.assign(new Error('Opção comercial selecionada não está disponível para este plano.'), { status: 400 });
+      }
+      const optionBreakdown = matchedOption ? calculateCommercialOptionBreakdown(matchedOption) : null;
 
       const requestedStartDate = rawBody?.startDate && validBookingDate(rawBody.startDate)
         ? String(rawBody.startDate).slice(0, 10)
         : todayBrazilYmd();
       const contractDurationCode = String(
-        rawBody?.contractDurationCode || rawBody?.planDurationCode || recurrence?.durationCode || targetSrvRow.default_plan_duration || 'monthly'
+        rawBody?.contractDurationCode || rawBody?.planDurationCode || recurrence?.durationCode || matchedOption?.contractDurationCode || targetSrvRow.default_plan_duration || '1_month'
       );
-      const paymentPeriodicity = String(rawBody?.paymentPeriodicity || 'monthly');
+      const paymentPeriodicity = String(rawBody?.paymentPeriodicity || matchedOption?.paymentPeriodicity || 'monthly');
       const accCfg = normalizeStudioAccessConfig(targetSrvRow.access_config_json);
       const requestedAccessMode = rawBody?.accessMode === 'limited' || rawBody?.accessMode === 'unlimited'
         ? rawBody.accessMode
-        : accCfg.accessMode;
+        : (matchedOption && matchedOption.accessType !== 'scheduled' ? matchedOption.accessType : accCfg.accessMode);
       const requestedWeeklyLimit = rawBody?.weeklyLimit !== undefined && rawBody?.weeklyLimit !== null
         ? Number(rawBody.weeklyLimit)
-        : (requestedAccessMode === 'limited' ? accCfg.maxEntriesPerWeek : null);
+        : (matchedOption?.accessType === 'limited' && matchedOption.frequencyType === 'weekly' && matchedOption.frequencyCount
+            ? matchedOption.frequencyCount
+            : (requestedAccessMode === 'limited' ? accCfg.maxEntriesPerWeek : null));
       const requestedMonthlyLimit = rawBody?.monthlyLimit !== undefined && rawBody?.monthlyLimit !== null
         ? Number(rawBody.monthlyLimit)
-        : (requestedAccessMode === 'limited' ? accCfg.maxEntriesPerMonth : null);
+        : (matchedOption?.accessType === 'limited' && matchedOption.frequencyType === 'monthly' && matchedOption.frequencyCount
+            ? matchedOption.frequencyCount
+            : (requestedAccessMode === 'limited' ? accCfg.maxEntriesPerMonth : null));
 
       if (checkDuplicatePendingRequest({
         tenantId: tenant.id,
@@ -968,36 +987,46 @@ export class PublicBookingRequestService {
         startTime: requestedStartDate
       })) {
         throw Object.assign(
-          new Error('Você já possui uma solicitação pendente para este plano de acesso. Aguarde a confirmação do estabelecimento.'),
+          new Error('Você já possui uma solicitação pendente para este plano. Aguarde a confirmação do estabelecimento.'),
           { status: 409, code: 'DUPLICATE_PENDING_REQUEST' }
         );
       }
+
+      const resolvedAmount = optionBreakdown
+        ? optionBreakdown.cycleAmountReais
+        : (rawBody?.amount !== undefined && !Number.isNaN(Number(rawBody.amount)) ? Number(rawBody.amount) : undefined);
 
       const requestId = 'pbr-' + uuidv4().slice(0, 8);
       const requestNumber = generateRequestNumber(tenant.id);
       const startDateLabel = formatDateBr(requestedStartDate);
       const planDurationLabel = formatPlanDurationLabelPt(contractDurationCode, recurrence) || 'Mensal';
-      const accessLabel = requestedAccessMode === 'limited'
-        ? (requestedWeeklyLimit ? `${requestedWeeklyLimit}x/semana` : (requestedMonthlyLimit ? `${requestedMonthlyLimit}x/mês` : 'Acesso limitado'))
-        : 'Acesso livre';
-      const timeWindowLabel = accCfg.allowedTimeWindows.length > 0
-        ? accCfg.allowedTimeWindows.map(w => `${w.startTime} às ${w.endTime}`).join(', ')
-        : 'Horário de funcionamento';
-      const summary = `${fullName} solicitou matrícula no plano ${targetSrvRow.name} (${accessLabel} • ${planDurationLabel}) a partir de ${startDateLabel}`;
+      const accessLabel = isDeliverable
+        ? (matchedOption?.label || 'Sem horário marcado')
+        : (requestedAccessMode === 'limited'
+            ? (requestedWeeklyLimit ? `${requestedWeeklyLimit}x/semana` : (requestedMonthlyLimit ? `${requestedMonthlyLimit}x/mês` : 'Frequência limitada'))
+            : 'Uso livre');
+      const timeWindowLabel = isDeliverable
+        ? 'Conforme entrega combinada'
+        : (accCfg.allowedTimeWindows.length > 0
+            ? accCfg.allowedTimeWindows.map(w => `${w.startTime} às ${w.endTime}`).join(', ')
+            : 'Horário de funcionamento');
+      const summary = `${fullName} solicitou contratação do plano ${targetSrvRow.name} (${accessLabel} • ${planDurationLabel}) a partir de ${startDateLabel}`;
 
       const payload = {
         type: 'studio_access_plan',
         tenantId: tenant.id,
         mode: 'access_plan',
         bookingIntent: 'access_plan',
+        contractKind,
         serviceId: targetSrvRow.id,
+        commercialOptionId: matchedOption?.id || null,
         startDate: requestedStartDate,
         contractDurationCode,
         paymentPeriodicity,
         accessMode: requestedAccessMode,
         weeklyLimit: requestedWeeklyLimit,
         monthlyLimit: requestedMonthlyLimit,
-        amount: rawBody?.amount !== undefined ? Number(rawBody.amount) : undefined,
+        amount: resolvedAmount,
         student: {
           fullName,
           phone: normalizedPhone,
@@ -1797,7 +1826,8 @@ export class PublicBookingRequestService {
           tenantId,
           studentId: resolvedStudentId,
           serviceId: String(payload.serviceId || requestRow.service_id),
-          contractKind: 'access_plan',
+          contractKind: payload.contractKind === 'deliverable' ? 'deliverable' : 'access_plan',
+          commercialOptionId: payload.commercialOptionId || null,
           contractDurationCode: payload.contractDurationCode || '1_month',
           paymentPeriodicity: payload.paymentPeriodicity || 'monthly',
           startDate: payload.startDate || todayBrazilYmd(),
@@ -1809,7 +1839,7 @@ export class PublicBookingRequestService {
           maxEntriesPerMonth: payload.monthlyLimit !== undefined ? payload.monthlyLimit : null,
           accessMode: payload.accessMode || undefined,
           origin: 'admin',
-          notes: payload.student?.notes || 'Plano de acesso contratado via link público e confirmado pelo estabelecimento',
+          notes: payload.student?.notes || 'Plano contratado via link público e confirmado pelo estabelecimento',
           generateInitialCharge: true,
           createdBy: userId
         });

@@ -17,10 +17,12 @@ import { LinkedInstructorsSelector } from './LinkedInstructorsSelector';
 import { StudioAccessAndAdjustmentsPanel } from './StudioAccessAndAdjustmentsPanel';
 import {
   DEFAULT_STUDIO_ACCESS_CONFIG,
+  normalizeCommercialPriceOptions,
   normalizeStudioAccessConfig,
   normalizeStudioPriceAdjustments,
   normalizeStudioServiceType,
   StudioAccessConfig,
+  StudioCommercialPriceOption,
   StudioPriceAdjustmentRule,
   StudioServiceType
 } from '../../utils/studioAccessAndCommercial';
@@ -79,6 +81,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
   const [studioServiceType, setStudioServiceType] = useState<StudioServiceType>('individual');
   const [accessConfig, setAccessConfig] = useState<StudioAccessConfig>(DEFAULT_STUDIO_ACCESS_CONFIG);
   const [pricingAdjustments, setPricingAdjustments] = useState<StudioPriceAdjustmentRule[]>([]);
+  const [commercialPriceOptions, setCommercialPriceOptions] = useState<StudioCommercialPriceOption[]>([]);
   const [allowPublicBooking, setAllowPublicBooking] = useState<boolean>(true);
   const [defaultCapacity, setDefaultCapacity] = useState<number>(10);
   const [allowRecurrence, setAllowRecurrence] = useState<boolean>(true);
@@ -181,6 +184,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
         setServiceKind(domain === 'studio' && (serviceToEdit.service_kind === 'group' || resolvedStudioType === 'group') ? 'group' : 'individual');
         setAccessConfig(normalizeStudioAccessConfig(serviceToEdit.access_config));
         setPricingAdjustments(normalizeStudioPriceAdjustments(serviceToEdit.pricing_adjustments));
+        setCommercialPriceOptions(normalizeCommercialPriceOptions(serviceToEdit.commercial_price_options));
         setAllowPublicBooking(serviceToEdit.allow_public_booking !== 0 && serviceToEdit.allow_public_booking !== false);
         setDefaultCapacity(Number(serviceToEdit.default_capacity) || 10);
         setAllowRecurrence(recCfg.allowRecurrence);
@@ -232,6 +236,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
         setStudioServiceType('individual');
         setAccessConfig(DEFAULT_STUDIO_ACCESS_CONFIG);
         setPricingAdjustments([]);
+        setCommercialPriceOptions([]);
         setAllowPublicBooking(true);
         setDefaultCapacity(10);
         setAllowRecurrence(true);
@@ -307,7 +312,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
     }
     const isPeriodicSave = showStudioConfig && isPeriodicBillingMode(billingMode);
     const numPeriodicPrice = parseFloat(String(periodicPrice).replace(',', '.'));
-    if (isPeriodicSave && (periodicPrice.trim() === '' || isNaN(numPeriodicPrice) || numPeriodicPrice < 0)) {
+    if (isPeriodicSave && commercialPriceOptions.length === 0 && (periodicPrice.trim() === '' || isNaN(numPeriodicPrice) || numPeriodicPrice < 0)) {
       showToast('Informe um valor por período de cobrança válido', 'error');
       return;
     }
@@ -371,6 +376,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
               allowPublicBooking,
               accessConfig: studioServiceType === 'facility_access' ? accessConfig : null,
               pricingAdjustments,
+              commercialPriceOptions,
               allowedRecurrenceFrequencies: allowRecurrence ? allowedFrequencies : [],
               allowedRecurrenceWeekdays:
                 allowRecurrence
@@ -621,6 +627,8 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
                 onAccessConfigChange={setAccessConfig}
                 pricingAdjustments={pricingAdjustments}
                 onPricingAdjustmentsChange={setPricingAdjustments}
+                commercialPriceOptions={commercialPriceOptions}
+                onCommercialPriceOptionsChange={setCommercialPriceOptions}
                 defaultCapacity={defaultCapacity}
                 onDefaultCapacityChange={setDefaultCapacity}
                 allowPublicBooking={allowPublicBooking}

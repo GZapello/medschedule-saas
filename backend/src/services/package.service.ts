@@ -167,7 +167,7 @@ export class PackageService {
       const items = rawItems.map(item => {
         const allProfs = profsForServiceStmt.all(item.service_id, tenantId, tenantId) as any[];
         const professionals = opts?.publicOnly
-          ? allProfs.filter(p => Number(p.public_booking_enabled) === 1)
+          ? allProfs.filter(p => Number(p.public_booking_enabled ?? 1) === 1)
           : allProfs;
         const resolvedStudioType = normalizeStudioServiceType(item.studio_service_type, item.service_kind);
         const resolvedItemType =

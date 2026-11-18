@@ -104,6 +104,48 @@ function isRealClassScheduleId(id: unknown): id is string {
   return typeof id === 'string' && id.trim() !== '' && !id.startsWith('individual:');
 }
 
+const PERIODICITY_LABELS: Record<string, string> = {
+  one_time: 'Pagamento único / à vista',
+  monthly: 'Mensal',
+  bimonthly: 'Bimestral',
+  quarterly: 'Trimestral',
+  semiannual: 'Semestral',
+  annual: 'Anual',
+  installments: 'Parcelado'
+};
+
+function formatCommercialOptionSummary(opt: any): {
+  frequencyLabel: string;
+  paymentLabel: string;
+  durationLabel: string;
+  cycleAmount: number;
+} {
+  const accessType = opt?.accessType || 'unlimited';
+  let frequencyLabel = 'Acesso livre';
+  if (accessType === 'limited') {
+    if (opt?.frequencyType === 'monthly' && opt?.frequencyCount) {
+      frequencyLabel = `${opt.frequencyCount}x por mês`;
+    } else if (opt?.frequencyCount) {
+      frequencyLabel = `${opt.frequencyCount}x por semana`;
+    } else {
+      frequencyLabel = 'Frequência limitada';
+    }
+  } else if (opt?.accessType === 'scheduled') {
+    frequencyLabel = opt?.frequencyCount ? `${opt.frequencyCount}x por semana` : 'Horário marcado';
+  }
+  const period = String(opt?.paymentPeriodicity || 'monthly');
+  const installments = Number(opt?.installmentsCount || 1);
+  const paymentLabel =
+    period === 'installments' && installments > 1
+      ? `Parcelado em ${installments}x`
+      : PERIODICITY_LABELS[period] || 'Mensal';
+  const durationLabel = PLAN_DURATION_LABELS[opt?.contractDurationCode as PlanDurationCode] || opt?.contractDurationCode || 'Mensal';
+  const cycleAmount = Number(
+    opt?.priceReais ?? (Number(opt?.amountCents ?? opt?.priceCents ?? 0) / 100)
+  );
+  return { frequencyLabel, paymentLabel, durationLabel, cycleAmount };
+}
+
 export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = ({
   clinic,
   tenantSlug,
@@ -113,11 +155,50 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
   packages,
   onSwitchClinical
 }) => {
+  const domainFiltered = useMemo(
+    () =>
+      clinic?.establishment_profile === 'mixed' && services.some(s => s.service_domain === 'studio')
+        ? services.filter(s => s.service_domain === 'studio')
+        : services,
+    [clinic?.establishment_profile, services]
+  );
+
+  const planServices = useMemo(
+    () =>
+      domainFiltered.filter(
+        s =>
+          s.studio_service_type === 'facility_access' ||
+          s.studio_service_type === 'non_scheduled' ||
+          Number(s.requires_appointment ?? 1) === 0
+      ),
+    [domainFiltered]
+  );
+
+  const bookableServices = useMemo(
+    () =>
+      domainFiltered.filter(s => {
+        const isPlan =
+          s.studio_service_type === 'facility_access' ||
+          s.studio_service_type === 'non_scheduled' ||
+          Number(s.requires_appointment ?? 1) === 0;
+        if (isPlan) return false;
+        if (s.service_kind === 'group') {
+          const schedCount = Number(
+            s.active_schedules_count ?? (Array.isArray(s.weekly_schedule_summary) ? s.weekly_schedule_summary.length : 0)
+          );
+          return schedCount > 0 || s.is_publicly_available === true;
+        }
+        return true;
+      }),
+    [domainFiltered]
+  );
+
   const [step, setStep] = useState<number>(1);
-  const [objective, setObjective] = useState<'service' | 'package'>('service');
+  const [objective, setObjective] = useState<'plan' | 'service' | 'package'>('service');
+  const [selectedCommercialOptionId, setSelectedCommercialOptionId] = useState<string>('');
 
   // Service booking state
-  const [selectedServiceId, setSelectedServiceId] = useState<string>(services.length === 1 ? services[0].id : '');
+  const [selectedServiceId, setSelectedServiceId] = useState<string>('');
   const [selectedProfFilter, setSelectedProfFilter] = useState<string>('any');
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [loadingSlots, setLoadingSlots] = useState<boolean>(false);
@@ -625,11 +706,17 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
     [packages, selectedPackageId]
   );
 
-  // Auto-seleciona primeiro serviço do pacote ao escolher pacote
+  // Auto-seleciona primeiro item agendável do pacote ao escolher pacote
   useEffect(() => {
-    if (selectedPackage?.items?.length > 0) {
+    const schedulableItems = (selectedPackage?.items || []).filter(
+      (i: any) =>
+        i.item_type !== 'facility_access' &&
+        i.item_type !== 'deliverable' &&
+        Number(i.requires_appointment ?? 1) !== 0
+    );
+    if (schedulableItems.length > 0) {
       setActivePkgServiceId(prev =>
-        selectedPackage.items.some((i: any) => i.service_id === prev) ? prev : selectedPackage.items[0].service_id
+        schedulableItems.some((i: any) => i.service_id === prev) ? prev : schedulableItems[0].service_id
       );
     } else {
       setActivePkgServiceId('');
@@ -637,9 +724,26 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
     setPkgSelectedItems([]);
   }, [selectedPackageId, selectedPackage]);
 
+  const activeCommercialOptions = useMemo(
+    () =>
+      Array.isArray(selectedService?.commercial_price_options)
+        ? selectedService.commercial_price_options.filter((o: any) => o.active !== false)
+        : [],
+    [selectedService]
+  );
+
+  const selectedCommercialOption = useMemo(
+    () =>
+      activeCommercialOptions.find((o: any) => o.id === selectedCommercialOptionId) ||
+      activeCommercialOptions[0] ||
+      null,
+    [activeCommercialOptions, selectedCommercialOptionId]
+  );
+
   const isSelectedServiceAccessPlan = Boolean(
     selectedService &&
-    (selectedService.studio_service_type === 'facility_access' ||
+    (objective === 'plan' ||
+      selectedService.studio_service_type === 'facility_access' ||
       selectedService.studio_service_type === 'non_scheduled' ||
       Number(selectedService.requires_appointment ?? 1) === 0)
   );
@@ -929,26 +1033,46 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                 notes: studentForm.notes.trim() || null
               }
             }
-          : isSelectedServiceAccessPlan
-          ? {
-              tenantSlug: tenantSlug || clinic?.slug,
-              bookingSequence,
-              bookingIntent: 'access_plan',
-              mode: 'access_plan',
-              serviceId: selectedServiceId,
-              startDate: planStartDate || todayIso(),
-              contractDurationCode: recurrenceDurationCode || '1_month',
-              accessMode: selectedService?.access_config?.accessMode || 'unlimited',
-              weeklyLimit: selectedService?.access_config?.maxEntriesPerWeek || null,
-              monthlyLimit: selectedService?.access_config?.maxEntriesPerMonth || null,
-              student: {
-                fullName: studentForm.fullName.trim(),
-                phone: studentForm.phone.trim(),
-                whatsapp: studentForm.whatsapp.trim() || studentForm.phone.trim(),
-                email: studentForm.email.trim() || null,
-                notes: studentForm.notes.trim() || null
-              }
-            }
+          : objective === 'plan' || isSelectedServiceAccessPlan
+          ? (() => {
+              const optSummary = selectedCommercialOption ? formatCommercialOptionSummary(selectedCommercialOption) : null;
+              const resolvedAmount = optSummary
+                ? optSummary.cycleAmount
+                : (Number(selectedService?.periodic_price) > 0
+                    ? Number(selectedService.periodic_price)
+                    : Number(selectedService?.price || 0));
+              return {
+                tenantSlug: tenantSlug || clinic?.slug,
+                bookingSequence,
+                bookingIntent: 'access_plan',
+                mode: 'access_plan',
+                serviceId: selectedServiceId,
+                commercialOptionId: selectedCommercialOption?.id || undefined,
+                startDate: planStartDate || todayIso(),
+                contractDurationCode: selectedCommercialOption?.contractDurationCode || recurrenceDurationCode || '1_month',
+                paymentPeriodicity: selectedCommercialOption?.paymentPeriodicity || 'monthly',
+                accessMode:
+                  selectedCommercialOption && selectedCommercialOption.accessType !== 'scheduled'
+                    ? selectedCommercialOption.accessType
+                    : selectedService?.access_config?.accessMode || 'unlimited',
+                weeklyLimit:
+                  selectedCommercialOption?.frequencyType === 'weekly' && selectedCommercialOption?.frequencyCount
+                    ? selectedCommercialOption.frequencyCount
+                    : selectedService?.access_config?.maxEntriesPerWeek || null,
+                monthlyLimit:
+                  selectedCommercialOption?.frequencyType === 'monthly' && selectedCommercialOption?.frequencyCount
+                    ? selectedCommercialOption.frequencyCount
+                    : selectedService?.access_config?.maxEntriesPerMonth || null,
+                amount: resolvedAmount,
+                student: {
+                  fullName: studentForm.fullName.trim(),
+                  phone: studentForm.phone.trim(),
+                  whatsapp: studentForm.whatsapp.trim() || studentForm.phone.trim(),
+                  email: studentForm.email.trim() || null,
+                  notes: studentForm.notes.trim() || null
+                }
+              };
+            })()
           : (() => {
               const targetSlot = useRecurrence ? effectiveRecurrenceAnchorSlot : selectedSlot;
               return {
@@ -1060,8 +1184,11 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
 
   const stepLabels = [
     { num: 1, label: 'Objetivo' },
-    { num: 2, label: objective === 'package' ? 'Pacotes' : 'Modalidade' },
-    { num: 3, label: 'Horários' },
+    {
+      num: 2,
+      label: objective === 'package' ? 'Pacotes' : objective === 'plan' ? 'Planos' : 'Modalidade'
+    },
+    { num: 3, label: objective === 'plan' ? 'Condições' : 'Horários' },
     { num: 4, label: 'Resumo' },
     { num: 5, label: 'Seus dados' },
     { num: 6, label: 'Finalização' }
@@ -1114,184 +1241,288 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
       )}
 
       {/* ETAPA 1: OBJETIVO */}
-      {step === 1 && (
+      {step === 1 && (() => {
+        const availableCardsCount =
+          (planServices.length > 0 ? 1 : 0) +
+          (bookableServices.length > 0 ? 1 : 0) +
+          (packages.length > 0 ? 1 : 0);
+        return (
         <div className="space-y-4">
           <div className="text-center space-y-1">
-            <h2 className="text-xl font-bold text-slate-900">Como deseja agendar hoje?</h2>
+            <h2 className="text-xl font-bold text-slate-900">Como deseja prosseguir hoje?</h2>
             <p className="text-xs text-slate-500">
-              {packages.length ? 'Escolha entre agendar uma aula avulsa / turma ou conhecer os pacotes do Studio.' : 'Escolha uma aula avulsa ou turma do Studio.'}
+              Escolha entre contratar um plano da academia, agendar uma aula/atendimento ou conhecer os pacotes disponíveis.
             </p>
           </div>
 
-          <div className={`grid grid-cols-1 gap-4 ${packages.length ? 'sm:grid-cols-2' : 'max-w-lg mx-auto'}`}>
-            <button
-              type="button"
-              onClick={() => {
-                setObjective('service');
-                setError('');
-                setStep(2);
-              }}
-              className="p-5 rounded-2xl border-2 border-slate-200 hover:border-teal-600 bg-white text-left space-y-2.5 transition-all shadow-2xs cursor-pointer group"
-            >
-              <div className="w-11 h-11 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center group-hover:bg-teal-700 group-hover:text-white transition-colors">
-                <Calendar className="w-5 h-5" />
-              </div>
-              <div className="font-bold text-base text-slate-900">Contratar plano ou agendar aula</div>
-              <p className="text-xs text-slate-500">
-                Contrate planos de acesso à academia (sem hora marcada) ou agende aulas individuais, duplas e turmas coletivas.
-              </p>
-              <span className="inline-flex items-center gap-1 text-xs font-bold text-teal-700 pt-1">
-                Ver modalidades <ArrowRight className="w-3.5 h-3.5" />
-              </span>
-            </button>
+          {availableCardsCount === 0 ? (
+            <div className="p-6 rounded-2xl border border-dashed border-slate-200 bg-slate-50 text-center text-xs text-slate-600">
+              Este estabelecimento ainda não publicou planos, aulas ou pacotes disponíveis para contratação online neste momento.
+            </div>
+          ) : (
+          <div className={`grid grid-cols-1 gap-4 ${availableCardsCount === 3 ? 'sm:grid-cols-3' : availableCardsCount === 2 ? 'sm:grid-cols-2' : 'max-w-lg mx-auto'}`}>
+            {planServices.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setObjective('plan');
+                  setError('');
+                  setStep(2);
+                }}
+                className="p-5 rounded-2xl border-2 border-slate-200 hover:border-emerald-600 bg-white text-left space-y-2.5 transition-all shadow-2xs cursor-pointer group"
+              >
+                <div className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center group-hover:bg-emerald-700 group-hover:text-white transition-colors">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div className="font-bold text-base text-slate-900">Contratar um plano</div>
+                <p className="text-xs text-slate-500">
+                  Musculação, acesso livre, planos mensais, trimestrais, semestrais, anuais e opções sem hora marcada ({planServices.length} {planServices.length === 1 ? 'opção' : 'opções'}).
+                </p>
+                <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 pt-1">
+                  Ver planos <ArrowRight className="w-3.5 h-3.5" />
+                </span>
+              </button>
+            )}
 
-            {packages.length > 0 && <button
-              type="button"
-              onClick={() => {
-                setObjective('package');
-                setError('');
-                setStep(2);
-              }}
-              className={`p-5 rounded-2xl border-2 text-left space-y-2.5 transition-all shadow-2xs ${
-                packages.length === 0
-                  ? 'border-slate-100 bg-slate-50 opacity-60 cursor-not-allowed'
-                  : 'border-slate-200 hover:border-indigo-600 bg-white cursor-pointer group'
-              }`}
-            >
-              <div className="w-11 h-11 rounded-2xl bg-indigo-50 text-indigo-700 flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                <Package className="w-5 h-5" />
-              </div>
-              <div className="font-bold text-base text-slate-900">Conhecer os pacotes</div>
-              <p className="text-xs text-slate-500">
-                {packages.length > 0
-                  ? `Combine aulas e modalidades com mensalidade ou valor fechado (${packages.length} pacote${packages.length > 1 ? 's' : ''} disponíve${packages.length > 1 ? 'is' : 'l'}).`
-                  : 'Nenhum pacote público configurado neste Studio no momento.'}
-              </p>
-              {packages.length > 0 && (
+            {bookableServices.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setObjective('service');
+                  setError('');
+                  setStep(2);
+                }}
+                className="p-5 rounded-2xl border-2 border-slate-200 hover:border-teal-600 bg-white text-left space-y-2.5 transition-all shadow-2xs cursor-pointer group"
+              >
+                <div className="w-11 h-11 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center group-hover:bg-teal-700 group-hover:text-white transition-colors">
+                  <Calendar className="w-5 h-5" />
+                </div>
+                <div className="font-bold text-base text-slate-900">Agendar uma aula ou atendimento</div>
+                <p className="text-xs text-slate-500">
+                  Personal trainer, Pilates, funcional, dança, avaliação física e turmas coletivas ({bookableServices.length} {bookableServices.length === 1 ? 'modalidade' : 'modalidades'}).
+                </p>
+                <span className="inline-flex items-center gap-1 text-xs font-bold text-teal-700 pt-1">
+                  Ver aulas e horários <ArrowRight className="w-3.5 h-3.5" />
+                </span>
+              </button>
+            )}
+
+            {packages.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setObjective('package');
+                  setError('');
+                  setStep(2);
+                }}
+                className="p-5 rounded-2xl border-2 border-slate-200 hover:border-indigo-600 bg-white text-left space-y-2.5 transition-all shadow-2xs cursor-pointer group"
+              >
+                <div className="w-11 h-11 rounded-2xl bg-indigo-50 text-indigo-700 flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                  <Package className="w-5 h-5" />
+                </div>
+                <div className="font-bold text-base text-slate-900">Conhecer os pacotes</div>
+                <p className="text-xs text-slate-500">
+                  Combine academia e aulas em pacotes exclusivos ({packages.length} pacote{packages.length > 1 ? 's' : ''} disponíve{packages.length > 1 ? 'is' : 'l'}).
+                </p>
                 <span className="inline-flex items-center gap-1 text-xs font-bold text-indigo-700 pt-1">
                   Explorar pacotes <ArrowRight className="w-3.5 h-3.5" />
                 </span>
-              )}
-            </button>}
+              </button>
+            )}
           </div>
+          )}
         </div>
-      )}
+        );
+      })()}
 
-      {/* ETAPA 2: MODALIDADE (SERVIÇO) OU PACOTE */}
+      {/* ETAPA 2: PLANO, MODALIDADE/AULA OU PACOTE */}
       {step === 2 && (
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-2">
             <BookingBackButton onClick={() => setStep(1)} />
             <span className="text-xs font-semibold text-slate-500">
-              {objective === 'package' ? 'Escolha um pacote' : 'Escolha a modalidade ou aula'}
+              {objective === 'package'
+                ? 'Escolha um pacote'
+                : objective === 'plan'
+                ? 'Escolha o plano ideal para você'
+                : 'Escolha a aula ou atendimento'}
             </span>
           </div>
 
-          {objective === 'service' ? (() => {
-            const domainFiltered =
-              clinic?.establishment_profile === 'mixed' && services.some(s => s.service_domain === 'studio')
-                ? services.filter(s => s.service_domain === 'studio')
-                : services;
-            const visibleServices = domainFiltered.filter(
-              s =>
-                s.service_kind !== 'group' ||
-                (s.has_public_schedules !== false &&
-                  s.is_publicly_available !== false &&
-                  Array.isArray(s.weekly_schedule_summary) &&
-                  s.weekly_schedule_summary.length > 0)
-            );
-            return (
+          {objective === 'plan' ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {visibleServices.length === 0 ? (
+              {planServices.length === 0 ? (
                 <div className="col-span-full p-5 rounded-2xl border border-dashed border-slate-200 bg-slate-50 text-center text-xs text-slate-600">
-                  Nenhuma aula com horários públicos ativos disponível para reserva online neste momento.
+                  Nenhum plano público configurado para contratação online no momento.
                 </div>
               ) : (
-                visibleServices
-                  .map(s => {
-                const chosen = selectedServiceId === s.id;
-                return (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedServiceId(s.id);
-                      setSelectedSlot(null);
-                      setBookingModeChoice(null);
-                      setUseRecurrence(false);
-                      setFrequencyScheduleIds([]);
-                      setSelectedPlanWeekdayTab('all');
-                      setPlanStartDate(todayIso());
-                      setSelectedDate('');
-                      setSelectedProfFilter('any');
-                      setError('');
-                      setStep(3);
-                    }}
-                    className={`p-4 rounded-2xl border text-left space-y-2 transition-all cursor-pointer ${
-                      chosen
-                        ? 'border-teal-600 bg-teal-50/40 ring-2 ring-teal-500/20'
-                        : 'border-slate-200 bg-white hover:border-teal-400'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="font-bold text-sm text-slate-900">{s.name}</span>
-                      {Number(s.price) > 0 && (
-                        <span className="text-xs font-extrabold text-teal-700 whitespace-nowrap">
-                          {formatMoney(s.price)}
+                planServices.map(s => {
+                  const chosen = selectedServiceId === s.id;
+                  const activeOpts = Array.isArray(s.commercial_price_options)
+                    ? s.commercial_price_options.filter((o: any) => o.active !== false)
+                    : [];
+                  const lowestOptPrice = activeOpts.length > 0
+                    ? Math.min(...activeOpts.map((o: any) => Number(o.priceReais ?? Number(o.amountCents ?? o.priceCents ?? 0) / 100)))
+                    : null;
+                  const displayPrice =
+                    lowestOptPrice !== null && lowestOptPrice > 0
+                      ? lowestOptPrice
+                      : (Number(s.periodic_price) > 0 ? Number(s.periodic_price) : Number(s.price || 0));
+                  const isDeliverable = s.studio_service_type === 'non_scheduled';
+                  const acc = s.access_config;
+                  const freqText = isDeliverable
+                    ? 'Serviço sem hora marcada'
+                    : acc?.accessMode === 'limited'
+                    ? (acc?.maxEntriesPerWeek
+                        ? `${acc.maxEntriesPerWeek}x por semana`
+                        : acc?.maxEntriesPerMonth
+                        ? `${acc.maxEntriesPerMonth}x por mês`
+                        : 'Frequência limitada')
+                    : 'Uso livre';
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedServiceId(s.id);
+                        const firstOpt = activeOpts[0] || null;
+                        setSelectedCommercialOptionId(firstOpt?.id || '');
+                        setRecurrenceDurationCode(
+                          (firstOpt?.contractDurationCode || s.default_plan_duration || '1_month') as any
+                        );
+                        setPlanStartDate(todayIso());
+                        setSelectedSlot(null);
+                        setBookingModeChoice(null);
+                        setUseRecurrence(false);
+                        setError('');
+                        setStep(3);
+                      }}
+                      className={`p-4 rounded-2xl border text-left space-y-2.5 transition-all cursor-pointer ${
+                        chosen
+                          ? 'border-emerald-600 bg-emerald-50/40 ring-2 ring-emerald-500/20'
+                          : 'border-slate-200 bg-white hover:border-emerald-400'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="font-bold text-sm text-slate-900">{s.name}</span>
+                        {displayPrice > 0 && (
+                          <span className="text-xs font-extrabold text-emerald-700 whitespace-nowrap">
+                            {activeOpts.length > 1 ? `A partir de ${formatMoney(displayPrice)}` : formatMoney(displayPrice)}
+                          </span>
+                        )}
+                      </div>
+                      {s.description && <p className="text-xs text-slate-600 line-clamp-2">{s.description}</p>}
+                      <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold">
+                          {freqText}
                         </span>
-                      )}
-                    </div>
-                    {s.description && <p className="text-xs text-slate-500 line-clamp-2">{s.description}</p>}
-                    <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-                      {s.studio_service_type === 'facility_access' || Number(s.requires_appointment ?? 1) === 0 ? (
-                        <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-800 border border-indigo-200 font-bold">
-                          Plano de Acesso • Sem hora marcada
+                        <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-800 border border-indigo-200 font-semibold">
+                          Sem agendamento obrigatório
                         </span>
-                      ) : (
+                        {activeOpts.length > 0 && (
+                          <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 font-semibold">
+                            {activeOpts.length} {activeOpts.length === 1 ? 'opção de duração' : 'opções de duração'}
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          ) : objective === 'service' ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {bookableServices.length === 0 ? (
+                <div className="col-span-full p-5 rounded-2xl border border-dashed border-slate-200 bg-slate-50 text-center text-xs text-slate-600">
+                  Nenhuma aula ou atendimento público disponível para agendamento online neste momento.
+                </div>
+              ) : (
+                bookableServices.map(s => {
+                  const chosen = selectedServiceId === s.id;
+                  const unavailableBadge =
+                    s.all_upcoming_full || s.is_publicly_available === false
+                      ? s.public_booking_unavailable_reason || 'Sem vagas disponíveis nos próximos dias'
+                      : null;
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedServiceId(s.id);
+                        setSelectedSlot(null);
+                        setBookingModeChoice(null);
+                        setUseRecurrence(false);
+                        setFrequencyScheduleIds([]);
+                        setSelectedPlanWeekdayTab('all');
+                        setPlanStartDate(todayIso());
+                        setSelectedDate('');
+                        setSelectedProfFilter('any');
+                        setError('');
+                        setStep(3);
+                      }}
+                      className={`p-4 rounded-2xl border text-left space-y-2 transition-all cursor-pointer ${
+                        chosen
+                          ? 'border-teal-600 bg-teal-50/40 ring-2 ring-teal-500/20'
+                          : 'border-slate-200 bg-white hover:border-teal-400'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="font-bold text-sm text-slate-900">{s.name}</span>
+                        {Number(s.price) > 0 && (
+                          <span className="text-xs font-extrabold text-teal-700 whitespace-nowrap">
+                            {formatMoney(s.price)}
+                          </span>
+                        )}
+                      </div>
+                      {s.description && <p className="text-xs text-slate-500 line-clamp-2">{s.description}</p>}
+                      <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
                         <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 font-semibold">
                           <Clock className="w-3 h-3 inline mr-1" />
                           {s.duration_minutes || 50} min
                         </span>
-                      )}
-                      {s.service_kind === 'group' && (
-                        <span className="px-2 py-0.5 rounded-full bg-teal-50 text-teal-800 border border-teal-200 font-bold">
-                          <Users className="w-3 h-3 inline mr-1" />
-                          Turma coletiva ({s.default_capacity || 1} vagas)
+                        {s.service_kind === 'group' && (
+                          <span className="px-2 py-0.5 rounded-full bg-teal-50 text-teal-800 border border-teal-200 font-bold">
+                            <Users className="w-3 h-3 inline mr-1" />
+                            Turma coletiva ({s.default_capacity || 1} vagas)
+                          </span>
+                        )}
+                        <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-semibold">
+                          {s.modality === 'both' ? 'Presencial ou Online' : modalityLabel(s.modality)}
                         </span>
-                      )}
-                      <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-semibold">
-                        {s.modality === 'both' ? 'Presencial ou Online' : modalityLabel(s.modality)}
-                      </span>
-                      {Boolean(s.allow_recurrence) && (
-                        <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-semibold">
-                          Permite plano semanal
-                        </span>
-                      )}
-                    </div>
-                    {Array.isArray(s.linked_professionals) && s.linked_professionals.length > 0 && (
-                      <p className="text-[11px] text-slate-500 truncate">
-                        Instrutores: <span className="font-semibold text-slate-700">{s.linked_professionals.map((lp: any) => lp.name).join(', ')}</span>
-                      </p>
-                    )}
-                    {s.service_kind === 'group' && (
-                      <div className="pt-1.5 mt-1 border-t border-slate-100 text-[11px]">
-                        <div className="space-y-0.5 text-slate-600">
-                          <span className="font-bold text-teal-800 block">Grade semanal:</span>
-                          {s.weekly_schedule_summary.slice(0, 3).map((w: any, idx: number) => (
-                            <span key={idx} className="block truncate">
-                              • {w.weekdaysLabel} — {w.timeRange}{w.professionalName ? ` (${w.professionalName})` : ''}
-                            </span>
-                          ))}
-                        </div>
+                        {Boolean(s.allow_recurrence) && (
+                          <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-semibold">
+                            Permite plano semanal
+                          </span>
+                        )}
                       </div>
-                    )}
-                  </button>
-                );
-              })
+                      {unavailableBadge && (
+                        <div className="px-2.5 py-1 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-semibold">
+                          {unavailableBadge}
+                        </div>
+                      )}
+                      {Array.isArray(s.linked_professionals) && s.linked_professionals.length > 0 && (
+                        <p className="text-[11px] text-slate-500 truncate">
+                          Instrutores: <span className="font-semibold text-slate-700">{s.linked_professionals.map((lp: any) => lp.name).join(', ')}</span>
+                        </p>
+                      )}
+                      {s.service_kind === 'group' && Array.isArray(s.weekly_schedule_summary) && s.weekly_schedule_summary.length > 0 && (
+                        <div className="pt-1.5 mt-1 border-t border-slate-100 text-[11px]">
+                          <div className="space-y-0.5 text-slate-600">
+                            <span className="font-bold text-teal-800 block">Grade semanal:</span>
+                            {s.weekly_schedule_summary.slice(0, 3).map((w: any, idx: number) => (
+                              <span key={idx} className="block truncate">
+                                • {w.weekdaysLabel} — {w.timeRange}{w.professionalName ? ` (${w.professionalName})` : ''}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </button>
+                  );
+                })
               )}
             </div>
-            );
-          })() : (
+          ) : (
             <div className="grid grid-cols-1 gap-3">
               {packages.map(pkg => (
                 <button
@@ -1342,7 +1573,11 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                         className="text-[11px] px-2.5 py-1 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 font-semibold"
                       >
                         {it.service_name}
-                        {pkg.credit_mode === 'per_service' ? ` (${it.included_credits}x)` : ''}
+                        {it.item_type === 'facility_access' || it.requires_appointment === 0
+                          ? ' • Acesso incluído'
+                          : pkg.credit_mode === 'per_service' && it.included_credits
+                          ? ` (${it.included_credits}x)`
+                          : ''}
                         {it.service_professional_name ? ` • Prof. ${it.service_professional_name}` : ''}
                       </span>
                     ))}
@@ -1354,21 +1589,77 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
         </div>
       )}
 
-      {/* ETAPA 3 (MODO PLANO DE ACESSO SEM HORÁRIO): VIGÊNCIA E REGRAS */}
-      {step === 3 && objective === 'service' && selectedService && isSelectedServiceAccessPlan && (
+      {/* ETAPA 3 (MODO PLANO SEM AGENDAMENTO): BENEFÍCIOS, DURAÇÃO, FREQUÊNCIA E CONDIÇÕES */}
+      {step === 3 && (objective === 'plan' || (objective === 'service' && isSelectedServiceAccessPlan)) && selectedService && (() => {
+        const isDeliverable = selectedService.studio_service_type === 'non_scheduled';
+        const optSummary = selectedCommercialOption ? formatCommercialOptionSummary(selectedCommercialOption) : null;
+        const durationCode = selectedCommercialOption?.contractDurationCode || recurrenceDurationCode || '1_month';
+        const frequencyDisplay = optSummary
+          ? optSummary.frequencyLabel
+          : isDeliverable
+          ? 'Atendimento / entrega sem horário fixo'
+          : selectedService.access_config?.accessMode === 'limited'
+          ? (selectedService.access_config?.maxEntriesPerWeek
+              ? `${selectedService.access_config.maxEntriesPerWeek}x por semana`
+              : `${selectedService.access_config?.maxEntriesPerMonth || 3}x por mês`)
+          : 'Acesso livre durante a vigência';
+        const priceDisplay = optSummary
+          ? optSummary.cycleAmount
+          : (Number(selectedService.periodic_price) > 0 ? Number(selectedService.periodic_price) : Number(selectedService.price || 0));
+        const paymentDisplay = optSummary
+          ? optSummary.paymentLabel
+          : SERVICE_BILLING_MODE_OPTIONS.find((m: any) => m.value === selectedService.billing_mode)?.label || 'Mensal';
+        return (
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-2">
             <BookingBackButton onClick={() => setStep(2)} />
             <span className="text-xs font-bold text-slate-700">{selectedService.name}</span>
           </div>
 
-          <div className="p-4 sm:p-5 rounded-2xl border border-indigo-200 bg-indigo-50/40 space-y-4 text-xs">
+          <div className="p-4 sm:p-5 rounded-2xl border border-emerald-200 bg-emerald-50/40 space-y-4 text-xs">
             <div>
-              <h3 className="font-bold text-base text-slate-900">Contratação de Plano de Acesso (Sem Hora Marcada)</h3>
+              <h3 className="font-bold text-base text-slate-900">{selectedService.name}</h3>
               <p className="text-slate-600 mt-1">
-                Este plano permite frequentar o estabelecimento dentro dos dias e horários autorizados, sem precisar reservar horário na agenda.
+                {selectedService.description || 'Plano contratual sem necessidade de reservar dias, horários ou instrutor.'}
               </p>
             </div>
+
+            {activeCommercialOptions.length > 0 && (
+              <div className="space-y-2">
+                <label className="block font-bold text-slate-800">Escolha a opção do plano *</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {activeCommercialOptions.map((opt: any) => {
+                    const summary = formatCommercialOptionSummary(opt);
+                    const isActive = (selectedCommercialOption?.id || '') === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedCommercialOptionId(opt.id);
+                          if (opt.contractDurationCode) {
+                            setRecurrenceDurationCode(opt.contractDurationCode);
+                          }
+                        }}
+                        className={`p-3.5 rounded-xl border text-left space-y-1 transition-all cursor-pointer ${
+                          isActive
+                            ? 'border-emerald-600 bg-white ring-2 ring-emerald-500/20'
+                            : 'border-slate-200 bg-white/80 hover:border-emerald-400'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2 font-bold text-slate-900">
+                          <span>{opt.label || `${summary.durationLabel} • ${summary.frequencyLabel}`}</span>
+                          <span className="text-emerald-700">{formatMoney(summary.cycleAmount)}</span>
+                        </div>
+                        <div className="text-[11px] text-slate-600">
+                          {summary.durationLabel} • {summary.frequencyLabel} • {summary.paymentLabel}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
@@ -1382,35 +1673,42 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                 />
               </div>
 
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Duração do contrato *</label>
-                <select
-                  value={recurrenceDurationCode}
-                  onChange={e => setRecurrenceDurationCode(e.target.value as any)}
-                  className={bookingInput}
-                >
-                  {(selectedServiceRecurrence.allowedPlanDurations || ['1_month', '3_months', '6_months', '12_months'])
-                    .filter(d => d !== 'count' && d !== 'custom_date')
-                    .map(dur => (
-                      <option key={dur} value={dur}>
-                        {PLAN_DURATION_LABELS[dur as PlanDurationCode] || dur}
-                      </option>
-                    ))}
-                </select>
-              </div>
+              {activeCommercialOptions.length === 0 && (
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Duração do contrato *</label>
+                  <select
+                    value={recurrenceDurationCode}
+                    onChange={e => setRecurrenceDurationCode(e.target.value as any)}
+                    className={bookingInput}
+                  >
+                    {(selectedServiceRecurrence.allowedPlanDurations || ['1_month', '3_months', '6_months', '12_months'])
+                      .filter(d => d !== 'count' && d !== 'custom_date')
+                      .map(dur => (
+                        <option key={dur} value={dur}>
+                          {PLAN_DURATION_LABELS[dur as PlanDurationCode] || dur}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              )}
             </div>
 
-            <div className="p-3 rounded-xl bg-white border border-slate-200 space-y-1 text-slate-700">
+            <div className="p-3.5 rounded-xl bg-white border border-slate-200 space-y-1.5 text-slate-700">
               <div>
-                <strong>Modalidade de acesso:</strong>{' '}
-                {selectedService.access_config?.accessMode === 'limited'
-                  ? `Acesso Limitado (${selectedService.access_config?.maxEntriesPerWeek || selectedService.access_config?.maxEntriesPerMonth || 3}x)`
-                  : 'Acesso Livre durante a vigência'}
+                <strong>Frequência / Benefício:</strong> {frequencyDisplay}
               </div>
               <div>
-                <strong>Valor de referência:</strong>{' '}
-                {formatMoney(Number(selectedService.periodic_price) > 0 ? selectedService.periodic_price : selectedService.price)}
+                <strong>Duração contratada:</strong> {PLAN_DURATION_LABELS[durationCode as PlanDurationCode] || durationCode}
               </div>
+              <div>
+                <strong>Valor:</strong> {formatMoney(priceDisplay)}
+              </div>
+              <div>
+                <strong>Condições de pagamento:</strong> {paymentDisplay} (cobrança gerada após aprovação do estabelecimento)
+              </div>
+              <p className="text-[11px] text-slate-500 pt-1">
+                Não é necessário escolher dia, horário ou instrutor. Sua solicitação seguirá para análise e aprovação do estabelecimento.
+              </p>
             </div>
           </div>
 
@@ -1420,7 +1718,8 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
             </button>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* ETAPA 3: DIAS, HORÁRIOS, VAGAS & INSTRUTOR */}
       {step === 3 && objective === 'service' && selectedService && !isSelectedServiceAccessPlan && (
@@ -1429,6 +1728,13 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
             <BookingBackButton onClick={() => setStep(2)} />
             <span className="text-xs font-bold text-slate-700">{selectedService.name}</span>
           </div>
+
+          {(selectedService.all_upcoming_full || selectedService.is_publicly_available === false) && selectedService.public_booking_unavailable_reason && (
+            <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-900 font-semibold flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-700" />
+              <span>{selectedService.public_booking_unavailable_reason}</span>
+            </div>
+          )}
 
           {weeklySummary.length > 0 && (
             <div className="p-3.5 rounded-2xl bg-teal-50/70 border border-teal-200 text-xs space-y-1">
@@ -2106,38 +2412,85 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
             <span className="text-xs font-bold text-indigo-800">{selectedPackage.name}</span>
           </div>
 
-          <div className="p-3.5 rounded-2xl bg-indigo-50/60 border border-indigo-200 text-xs text-indigo-950 space-y-2">
-            <div className="font-bold">Seu pacote inclui:</div>
-            <div className="flex flex-wrap gap-2">
-              {(selectedPackage.items || []).map((it: any) => {
-                const countChosen = pkgSelectedItems
-                  .filter(x => x.serviceId === it.service_id)
-                  .reduce((sum, x) => sum + x.recurrenceCount, 0);
-                const maxPerService =
-                  selectedPackage.credit_mode === 'per_service' ? Number(it.included_credits || 0) : null;
-                return (
-                  <button
-                    key={it.id}
-                    type="button"
-                    onClick={() => {
-                      setActivePkgServiceId(it.service_id);
-                      setPkgProfFilter('any');
-                      setPkgDate('');
-                    }}
-                    className={`px-3 py-2 rounded-xl font-bold border transition-all cursor-pointer text-left ${
-                      activePkgServiceId === it.service_id
-                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                        : 'bg-white text-slate-700 border-slate-200 hover:border-indigo-400'
-                    }`}
-                  >
-                    <div>
-                      {it.service_name}
-                      {maxPerService ? ` (${countChosen}/${maxPerService} aulas)` : countChosen > 0 ? ` (${countChosen} escolh.)` : ''}
+          <div className="p-3.5 rounded-2xl bg-indigo-50/60 border border-indigo-200 text-xs text-indigo-950 space-y-2.5">
+            {(() => {
+              const nonScheduledPkgItems = (selectedPackage.items || []).filter(
+                (i: any) =>
+                  i.item_type === 'facility_access' ||
+                  i.item_type === 'deliverable' ||
+                  Number(i.requires_appointment ?? 1) === 0
+              );
+              const scheduledPkgItems = (selectedPackage.items || []).filter(
+                (i: any) =>
+                  i.item_type !== 'facility_access' &&
+                  i.item_type !== 'deliverable' &&
+                  Number(i.requires_appointment ?? 1) !== 0
+              );
+              return (
+                <>
+                  {nonScheduledPkgItems.length > 0 && (
+                    <div className="space-y-1.5">
+                      <div className="font-bold">Benefícios sem necessidade de agendamento:</div>
+                      <div className="flex flex-wrap gap-2">
+                        {nonScheduledPkgItems.map((it: any) => (
+                          <div
+                            key={it.id}
+                            className="px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 font-semibold text-[11px]"
+                          >
+                            ✓ {it.service_name}
+                            {it.item_type === 'facility_access'
+                              ? (it.access_mode === 'limited'
+                                  ? ` (${it.weekly_frequency ? `${it.weekly_frequency}x/sem` : it.monthly_limit ? `${it.monthly_limit}x/mês` : 'Uso limitado'})`
+                                  : ' (Uso livre incluído)')
+                              : ' (Incluído no pacote)'}
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </button>
-                );
-              })}
-            </div>
+                  )}
+
+                  {scheduledPkgItems.length > 0 ? (
+                    <div className="space-y-1.5">
+                      <div className="font-bold">Modalidades do pacote que exigem escolha de horário:</div>
+                      <div className="flex flex-wrap gap-2">
+                        {scheduledPkgItems.map((it: any) => {
+                          const countChosen = pkgSelectedItems
+                            .filter(x => x.serviceId === it.service_id)
+                            .reduce((sum, x) => sum + x.recurrenceCount, 0);
+                          const maxPerService =
+                            selectedPackage.credit_mode === 'per_service' ? Number(it.included_credits || 0) : null;
+                          return (
+                            <button
+                              key={it.id}
+                              type="button"
+                              onClick={() => {
+                                setActivePkgServiceId(it.service_id);
+                                setPkgProfFilter('any');
+                                setPkgDate('');
+                              }}
+                              className={`px-3 py-2 rounded-xl font-bold border transition-all cursor-pointer text-left ${
+                                activePkgServiceId === it.service_id
+                                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                                  : 'bg-white text-slate-700 border-slate-200 hover:border-indigo-400'
+                              }`}
+                            >
+                              <div>
+                                {it.service_name}
+                                {maxPerService ? ` (${countChosen}/${maxPerService} aulas)` : countChosen > 0 ? ` (${countChosen} escolh.)` : ''}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-2.5 rounded-xl bg-white border border-emerald-200 text-emerald-900 font-semibold text-xs">
+                      Todos os itens deste pacote funcionam sem hora marcada — avance para revisar e confirmar sua solicitação.
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
 
           {activePkgServiceId && (
@@ -2413,26 +2766,42 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                   <p className="text-slate-500">Sem horários pré-reservados agora — você poderá agendar após confirmação.</p>
                 )}
               </div>
-            ) : selectedService && isSelectedServiceAccessPlan ? (
+            ) : selectedService && (objective === 'plan' || isSelectedServiceAccessPlan) ? (() => {
+              const optSummary = selectedCommercialOption ? formatCommercialOptionSummary(selectedCommercialOption) : null;
+              const priceDisplay = optSummary
+                ? optSummary.cycleAmount
+                : (Number(selectedService.periodic_price) > 0 ? Number(selectedService.periodic_price) : Number(selectedService.price || 0));
+              const durCode = selectedCommercialOption?.contractDurationCode || recurrenceDurationCode || '1_month';
+              return (
               <div className="space-y-2">
                 <div className="flex justify-between font-bold text-sm text-slate-900">
-                  <span>{selectedService.name}</span>
-                  <span className="text-teal-700">
-                    {formatMoney(Number(selectedService.periodic_price) > 0 ? selectedService.periodic_price : selectedService.price)}
-                  </span>
+                  <span>{selectedService.name}{selectedCommercialOption?.label ? ` — ${selectedCommercialOption.label}` : ''}</span>
+                  <span className="text-emerald-700">{formatMoney(priceDisplay)}</span>
                 </div>
+                {selectedService.description && (
+                  <p className="text-slate-600">{selectedService.description}</p>
+                )}
                 <p className="text-slate-700">
-                  <strong>Tipo:</strong> Plano de Acesso ao Estabelecimento ({selectedService.access_config?.accessMode === 'limited' ? `Limitado ${selectedService.access_config?.maxEntriesPerWeek || 3}x` : 'Acesso Livre'})
+                  <strong>Frequência / Modalidade:</strong>{' '}
+                  {optSummary
+                    ? optSummary.frequencyLabel
+                    : selectedService.studio_service_type === 'non_scheduled'
+                    ? 'Serviço sem hora marcada'
+                    : selectedService.access_config?.accessMode === 'limited'
+                    ? `Limitado (${selectedService.access_config?.maxEntriesPerWeek || selectedService.access_config?.maxEntriesPerMonth || 3}x)`
+                    : 'Uso livre'}
                 </p>
                 <p className="text-slate-700">
                   <strong>Início solicitado:</strong> {planStartDate || todayIso()} •{' '}
-                  <strong>Vigência:</strong> {PLAN_DURATION_LABELS[recurrenceDurationCode] || 'Mensal'}
+                  <strong>Vigência:</strong> {PLAN_DURATION_LABELS[durCode as PlanDurationCode] || durCode}
+                  {optSummary ? ` • ${optSummary.paymentLabel}` : ''}
                 </p>
                 <p className="text-slate-500 text-[11px]">
-                  Sua matrícula ficará pendente até a aprovação do estabelecimento. Não ocupa horários da agenda de instrutores.
+                  Sua solicitação ficará pendente até a aprovação do estabelecimento, sem criar agendamentos falsos ou liberar acesso antecipado.
                 </p>
               </div>
-            ) : selectedService && (useRecurrence ? effectiveRecurrenceAnchorSlot : selectedSlot) ? (() => {
+              );
+            })() : selectedService && (useRecurrence ? effectiveRecurrenceAnchorSlot : selectedSlot) ? (() => {
               const displayAnchor = useRecurrence ? effectiveRecurrenceAnchorSlot : selectedSlot;
               const instructorNames =
                 isWeeklySchedulePlan && selectedPlanMeetings.length > 0

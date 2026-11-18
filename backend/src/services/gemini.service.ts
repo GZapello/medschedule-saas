@@ -15,14 +15,10 @@ dotenv.config();
 
 const CANDIDATE_MODELS = [
   ...(process.env.GEMINI_MODEL ? [process.env.GEMINI_MODEL.trim()] : []),
-  'gemini-3.5-flash',
-  'gemini-flash-lite-latest',
-  'gemini-flash-latest',
-  'gemini-3.7-flash',
-  'gemini-3.8-flash',
-  'gemini-3.6-flash',
   'gemini-2.5-flash',
   'gemini-2.0-flash',
+  'gemini-flash-latest',
+  'gemini-flash-lite-latest',
   'gemini-1.5-flash'
 ];
 
@@ -330,19 +326,31 @@ export class GeminiService {
     instruction: string,
     files: Array<{ mimeType: string; base64?: string; text?: string; fileName: string }>
   ): Promise<unknown> {
-    const parts: Content['parts'] = [{ text: 'Extraia o catálogo comercial dos arquivos enumerados abaixo.' }];
+    const parts: Content['parts'] = [{
+      text: `Analise em conjunto as ${files.length} fonte(s) abaixo como um catálogo unificado de um mesmo estabelecimento Academia & Studio. Relacione preços, grades, modalidades e pacotes que falem do mesmo serviço sem duplicar.`
+    }];
     files.forEach((file, index) => {
-      parts.push({ text: `Fonte ${index + 1}: ${file.fileName}` });
+      parts.push({ text: `--- FONTE ${index + 1} (${file.fileName}) ---` });
       if (file.text) parts.push({ text: file.text });
       else if (file.base64) parts.push({ inlineData: { mimeType: file.mimeType, data: file.base64 } });
     });
     const result = await generateWithCascade(
       instruction, [{ role: 'user', parts }],
-      { temperature: 0.1, topP: 0.8, maxOutputTokens: 16384, responseMimeType: 'application/json' },
-      25000, true, 45_000
+      { temperature: 0.1, topP: 0.85, maxOutputTokens: 16384, responseMimeType: 'application/json' },
+      45000, true, 90_000
     );
     if (!result) return null;
-    try { return JSON.parse(result.text); } catch { return null; }
+    const trimmed = result.text.trim();
+    try { return JSON.parse(trimmed); } catch {
+      const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+      const candidate = fenced?.[1]?.trim() || trimmed;
+      const firstBrace = candidate.indexOf('{');
+      const lastBrace = candidate.lastIndexOf('}');
+      if (firstBrace >= 0 && lastBrace > firstBrace) {
+        try { return JSON.parse(candidate.slice(firstBrace, lastBrace + 1)); } catch { return null; }
+      }
+      return null;
+    }
   }
 
   /**

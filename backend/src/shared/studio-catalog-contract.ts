@@ -19,6 +19,7 @@ interface ReviewableRecord {
   issues: string[];
   reviewed: boolean;
   existingId: string;
+  allowPublicBooking?: boolean;
 }
 
 export interface ProposedPrice extends ProposalEvidence {
@@ -31,18 +32,23 @@ export interface ProposedPrice extends ProposalEvidence {
   frequencyCount: number | null;
   installments: number | null;
   participants: number | null;
+  isMonthlyEquivalent?: boolean;
+  equivalentMonthlyCents?: number | null;
+  maxInstallments?: number | null;
+  ambiguousReason?: string;
 }
 
-interface ProposedSchedule extends ProposalEvidence {
+export interface ProposedSchedule extends ProposalEvidence {
   dayOfWeek: number | null;
   startTime: string;
   endTime: string;
   capacity: number | null;
   professionalName: string;
   professionalId: string;
+  suggestedProfessionalId?: string;
 }
 
-interface ProposedAdjustment extends ProposalEvidence {
+export interface ProposedAdjustment extends ProposalEvidence {
   label: string;
   adjustmentType: 'surcharge' | 'discount' | null;
   valueType: 'fixed' | 'percentage' | null;
@@ -63,6 +69,8 @@ export interface ProposedService extends ReviewableRecord {
   monthlyLimit: number | null;
   professionalNames: string[];
   professionalId: string;
+  suggestedProfessionalId?: string;
+  deferSchedules?: boolean;
   action: 'create' | 'link' | 'update' | 'ignore';
   apply: string[];
   prices: ProposedPrice[];
@@ -88,4 +96,81 @@ export interface ProposedPackage extends ReviewableRecord {
 export interface StudioProposal {
   services: ProposedService[];
   packages: ProposedPackage[];
+}
+
+export interface CatalogWorkShift {
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+}
+
+export interface CatalogProfessionalSummary {
+  id: string;
+  name: string;
+  professionName?: string | null;
+  publicBookingEnabled?: boolean;
+  workShifts: CatalogWorkShift[];
+  scheduleSummary: string;
+}
+
+export interface CatalogMatchCandidate {
+  id: string;
+  name: string;
+  active: boolean;
+  type?: string;
+  capacity?: number | null;
+  professionalId?: string | null;
+  score: number;
+  matchReason: string;
+}
+
+export interface ScheduleSlotCheck {
+  index: number;
+  status: 'ok' | 'incomplete' | 'missing_professional' | 'outside_shift' | 'conflict' | 'not_schedulable';
+  message: string;
+  availableRanges?: string;
+}
+
+export interface ImportAlert {
+  id: string;
+  scope: 'service' | 'package';
+  recordKey: string;
+  recordName: string;
+  section: 'general' | 'prices' | 'schedules' | 'adjustments' | 'items';
+  severity: 'blocking' | 'warning';
+  message: string;
+}
+
+export interface ImportPreviewSummary {
+  willCreateServices: number;
+  willUpdateServices: number;
+  willLinkServices: number;
+  willIgnoreServices: number;
+  willCreatePackages: number;
+  willLinkPackages: number;
+  willIgnorePackages: number;
+  totalPriceOptions: number;
+  totalSchedules: number;
+  deferredScheduleServices: number;
+}
+
+export interface ImportDiagnostics {
+  summary: {
+    servicesTotal: number;
+    servicesReady: number;
+    servicesPending: number;
+    packagesTotal: number;
+    packagesReady: number;
+    packagesPending: number;
+    priceOptionsTotal: number;
+    ambiguousPricesCount: number;
+    schedulesTotal: number;
+    incompleteSchedulesCount: number;
+    scheduleConflictsCount: number;
+    duplicatesFound: number;
+    blockingAlertsCount: number;
+  };
+  alerts: ImportAlert[];
+  scheduleChecks: Record<string, ScheduleSlotCheck[]>;
+  preview: ImportPreviewSummary;
 }

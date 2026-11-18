@@ -3,7 +3,13 @@ import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { logAudit } from '../middlewares/audit.middleware';
 import { GeminiService } from '../services/gemini.service';
-import { applyStudioCatalog, readStudioImportCatalog, similarCatalogName } from '../services/studio-catalog-confirmation';
+import {
+  applyStudioCatalog,
+  attachSuggestedProfessionals,
+  buildMatchCandidates,
+  buildProposalDiagnostics,
+  readStudioImportCatalog
+} from '../services/studio-catalog-confirmation';
 import { catalogError, hash, prepareCatalogFile, readCatalogUploads } from '../services/studio-catalog-files';
 import { CATALOG_PROMPT, normalizeProposal } from '../services/studio-catalog-proposal';
 import type { StudioProposal } from '../shared/studio-catalog-contract';
@@ -26,21 +32,26 @@ function getDraft(req: Request): Draft {
 }
 
 function responseFor(tenantId: string, draft: Draft) {
-  const proposal = JSON.parse(draft.proposal_json) as StudioProposal;
+  const rawProposal = JSON.parse(draft.proposal_json) as StudioProposal;
   const catalog = readStudioImportCatalog(tenantId);
+  const proposal = attachSuggestedProfessionals(rawProposal, catalog);
+  const matches = buildMatchCandidates(proposal, catalog);
+  const diagnostics = buildProposalDiagnostics(tenantId, proposal, catalog, matches);
+
   const services = catalog.services.map(s => ({
     id: s.id, name: s.name, active: Boolean(s.active), type: s.studio_service_type, capacity: s.default_capacity,
     professionalId: s.professional_id
   }));
   const packages = catalog.packages.map(p => ({ ...p, active: Boolean(p.active) }));
   return {
-    id: draft.id, revision: draft.revision, proposal, sources: JSON.parse(draft.sources_json),
+    id: draft.id,
+    revision: draft.revision,
+    proposal,
+    sources: JSON.parse(draft.sources_json),
     result: draft.result_json ? JSON.parse(draft.result_json) : null,
     catalog: { services, packages, professionals: catalog.professionals },
-    matches: {
-      services: Object.fromEntries(proposal.services.map(s => [s.key, services.filter(c => similarCatalogName(s.name, c.name)).slice(0, 12)])),
-      packages: Object.fromEntries(proposal.packages.map(p => [p.key, packages.filter(c => similarCatalogName(p.name, c.name)).slice(0, 12)]))
-    }
+    matches,
+    diagnostics
   };
 }
 
@@ -52,17 +63,35 @@ function respondError(res: Response, error: unknown) {
 
 export class StudioCatalogImportController {
   static list(req: Request, res: Response) {
+    const includeCompleted = req.query.includeCompleted === '1' || req.query.includeCompleted === 'true';
     const rows = db.prepare(`
-      SELECT id, sources_json, updated_at FROM studio_catalog_imports
-      WHERE tenant_id = ? AND actor_id = ? AND result_json IS NULL
+      SELECT id, sources_json, result_json, updated_at FROM studio_catalog_imports
+      WHERE tenant_id = ? AND actor_id = ? ${includeCompleted ? '' : 'AND result_json IS NULL'}
       ORDER BY updated_at DESC LIMIT 30
-    `).all(req.tenantId, req.user!.userId);
-    res.json(rows.map(row => ({ id: row.id, sources: JSON.parse(row.sources_json), updatedAt: row.updated_at })));
+    `).all(req.tenantId, req.user!.userId) as Array<{ id: string; sources_json: string; result_json: string | null; updated_at: string }>;
+    res.json(rows.map(row => ({
+      id: row.id,
+      sources: JSON.parse(row.sources_json),
+      result: row.result_json ? JSON.parse(row.result_json) : null,
+      updatedAt: row.updated_at
+    })));
   }
 
   static get(req: Request, res: Response) {
     try { res.json(responseFor(req.tenantId!, getDraft(req))); }
     catch (error) { respondError(res, error); }
+  }
+
+  static remove(req: Request, res: Response) {
+    try {
+      const current = getDraft(req);
+      if (current.result_json) {
+        throw catalogError('Importações já confirmadas permanecem no histórico de auditoria.', 409);
+      }
+      db.prepare('DELETE FROM studio_catalog_imports WHERE id = ? AND tenant_id = ? AND actor_id = ?')
+        .run(current.id, req.tenantId, req.user!.userId);
+      res.json({ deleted: true, id: current.id });
+    } catch (error) { respondError(res, error); }
   }
 
   static async analyze(req: Request, res: Response) {
