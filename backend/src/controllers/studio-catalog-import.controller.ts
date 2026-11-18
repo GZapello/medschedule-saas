@@ -5,7 +5,8 @@ import { logAudit } from '../middlewares/audit.middleware';
 import { GeminiService } from '../services/gemini.service';
 import { applyStudioCatalog, readStudioImportCatalog, similarCatalogName } from '../services/studio-catalog-confirmation';
 import { catalogError, hash, prepareCatalogFile, readCatalogUploads } from '../services/studio-catalog-files';
-import { CATALOG_PROMPT, normalizeProposal, StudioProposal } from '../services/studio-catalog-proposal';
+import { CATALOG_PROMPT, normalizeProposal } from '../services/studio-catalog-proposal';
+import type { StudioProposal } from '../shared/studio-catalog-contract';
 
 interface Draft {
   id: string;

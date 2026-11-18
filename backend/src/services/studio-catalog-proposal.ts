@@ -1,9 +1,5 @@
-export const SERVICE_TYPES = ['access_unlimited', 'access_limited', 'individual', 'duo', 'group', 'deliverable'] as const;
-export const MODALITIES = ['presential', 'online', 'home', 'both'] as const;
-export const UNITS = ['per_session', 'per_participant', 'per_month', 'per_cycle', 'contract_total'] as const;
-export const PERIODS = ['one_time', 'monthly', 'bimonthly', 'quarterly', 'semiannual', 'annual', 'installments'] as const;
-export const DURATIONS = ['1_month', '2_months', '3_months', '6_months', '12_months', '24_months'] as const;
-export const FREQUENCIES = ['weekly', 'monthly', 'unlimited', 'fixed_count'] as const;
+import { SERVICE_TYPES, MODALITIES, UNITS, PERIODS, DURATIONS, FREQUENCIES } from '../shared/studio-catalog-contract';
+import type { ProposedPrice, StudioProposal } from '../shared/studio-catalog-contract';
 
 export const CATALOG_PROMPT = `
 Extraia exclusivamente um catálogo comercial de Academia & Studio em JSON {"services":[],"packages":[]}.
@@ -43,7 +39,7 @@ function mergeEvidence<T extends { sources: number[] }>(rows: T[], key: (row: T)
   return [...merged.values()];
 }
 
-export function normalizeProposal(value: unknown, sourceCount: number, extracted: boolean) {
+export function normalizeProposal(value: unknown, sourceCount: number, extracted: boolean): StudioProposal {
   const raw = object(value);
   if (!Array.isArray(raw.services) || !Array.isArray(raw.packages)) {
     throw Object.assign(new Error('A proposta precisa conter serviços e pacotes em listas separadas.'), { status: 400 });
@@ -169,9 +165,6 @@ export function normalizeProposal(value: unknown, sourceCount: number, extracted
   };
 }
 
-export type StudioProposal = ReturnType<typeof normalizeProposal>;
-export type ProposedService = StudioProposal['services'][number];
-export type ProposedPrice = ProposedService['prices'][number];
 export function priceConditionKey(p: ProposedPrice) {
   return JSON.stringify([p.unit, p.paymentPeriod, p.duration, p.frequencyType, p.frequencyCount, p.installments, p.participants]);
 }

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Plus, Trash2 } from 'lucide-react';
-import type { ProposedPrice, ProposedService } from '../../../../backend/src/services/studio-catalog-proposal';
+import type { ProposedPrice, ProposedService } from '../../../../backend/src/shared/studio-catalog-contract';
 
 export type Option = readonly [string, string];
 const fieldClass = 'w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-normal text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500';

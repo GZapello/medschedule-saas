@@ -7,7 +7,8 @@ import { isWindowCoveredByAnyProfessional, parseClockMinutes } from '../utils/se
 import { getPaymentPeriodicityCycleMonths, normalizeCommercialPriceOptions, normalizeStudioPriceAdjustments, normalizeStudioServiceType } from '../utils/studio-access-and-commercial';
 import { PackageService } from './package.service';
 import { catalogError } from './studio-catalog-files';
-import { nameKey, priceConditionKey, ProposedPrice, ProposedService, StudioProposal } from './studio-catalog-proposal';
+import { nameKey, priceConditionKey } from './studio-catalog-proposal';
+import type { ProposedPrice, ProposedService, StudioProposal } from '../shared/studio-catalog-contract';
 
 type CatalogService = {
   id: string; name: string; price: number; professional_id: string | null; default_capacity: number | null;

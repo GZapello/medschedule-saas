@@ -49,7 +49,7 @@ async function main() {
             label: '2 aulas por semana', amountCents: 48000, unit: null, duration: '1_month',
             paymentPeriod: 'monthly', frequencyType: 'weekly', frequencyCount: 2, evidence: '2x por semana — R$ 480', sources: [1]
           }]
-        }], packages: []
+        }], packages: [{ name: 'Pacote de Pilates', sources: [1], items: [{ serviceName: 'Pilates Individual' }] }]
       }, 1, true);
       let draft;
       let confirmations = 0;
@@ -73,6 +73,8 @@ async function main() {
           assert.equal(row.prices[0].unit, 'per_month');
           assert.equal(row.professionalId, 'p-ana');
           assert.equal(row.reviewed, true);
+          const component = payload.proposal.packages[0].items[0];
+          assert.deepEqual([component.includedCredits, component.weeklyFrequency, component.monthlyLimit], [12, 2, 8]);
           confirmations++;
           response = { ...draft, result: { services: [{ name: row.name, id: 'srv-fixture', key: row.key, action: row.action }], packages: [] } };
           draft = response;
@@ -98,7 +100,8 @@ async function main() {
       await page.getByRole('button', { name: 'Analisar com IA' }).click();
       await page.getByText('Analisando os arquivos com IA…').waitFor();
       await page.getByText('Pilates Individual', { exact: true }).click();
-      assert.ok(await page.locator('summary').getByText('Precisa de confirmação', { exact: true }).isVisible());
+      const serviceSummary = page.getByRole('region', { name: 'Serviços identificados' }).locator('summary');
+      assert.ok(await serviceSummary.getByText('Precisa de confirmação', { exact: true }).isVisible());
       assert.ok(await page.getByRole('button', { name: 'Confirmar importação', exact: true }).isDisabled());
       await page.getByLabel('Ação para este serviço').selectOption('create');
       await page.getByLabel('Profissional responsável').selectOption('p-ana');
@@ -106,6 +109,10 @@ async function main() {
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
       if (width === 390) await page.screenshot({ path: path.join(output, '02-revisao-mobile.png'), fullPage: true });
       await page.getByLabel('Conferi as informações e aprovo esta ação').check();
+      await page.getByRole('heading', { name: 'Pacote de Pilates' }).click();
+      await page.getByLabel('Aulas ou unidades incluídas').fill('12');
+      await page.getByLabel('Frequência semanal do componente').fill('2');
+      await page.getByLabel('Limite mensal do componente').fill('8');
       await page.getByRole('button', { name: 'Salvar rascunho' }).click();
       await page.getByText('Rascunho salvo.', { exact: false }).waitFor();
       await page.reload();

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { AlertCircle, ChevronDown, FileText } from 'lucide-react';
-import type { ProposedService, StudioProposal } from '../../../../backend/src/services/studio-catalog-proposal';
+import type { ProposedPackage, ProposedPackageItem, ProposedService, StudioProposal } from '../../../../backend/src/shared/studio-catalog-contract';
 import {
   Checkbox, days, Editors, emptyAdjustment, emptyPrice, emptySchedule, modalities, NumberField,
   PriceFields, SelectField, TextField, types
@@ -17,7 +17,6 @@ export interface ImportDraft {
   catalog: { services: CatalogRecord[]; packages: CatalogRecord[]; professionals: { id: string; name: string }[] };
   matches: { services: Record<string, CatalogRecord[]>; packages: Record<string, CatalogRecord[]> };
 }
-type ProposedPackage = StudioProposal['packages'][number];
 const serviceActions = [
   ['ignore', 'Ignorar'], ['create', 'Criar novo serviço'], ['link', 'Vincular ao serviço existente'],
   ['update', 'Atualizar informações selecionadas']
@@ -175,7 +174,7 @@ function PackageEditor({ row, draft, onChange }: { row: ProposedPackage; draft: 
       </div>
       {row.price && <Evidence ids={row.price.sources} excerpt={row.price.evidence} files={draft.sources} />}
       <PriceFields price={row.price || emptyPrice} packagePrice onChange={patch => onChange({ price: { ...(row.price || emptyPrice), ...patch } })} />
-      <Editors title="Serviços incluídos" noun="Componente" rows={row.items} max={20}
+      <Editors<ProposedPackageItem> title="Serviços incluídos" noun="Componente" rows={row.items} max={20}
         blank={{ serviceName: '', serviceRef: '', includedCredits: null, weeklyFrequency: null, monthlyLimit: null, mandatory: true }}
         onChange={items => onChange({ items })} render={(item, change) => <>
           {item.serviceName && <p className="text-xs text-slate-600">No arquivo: {item.serviceName}</p>}

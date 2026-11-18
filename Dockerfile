@@ -18,6 +18,7 @@ COPY backend/src/utils/profession-module.ts ../backend/src/utils/profession-modu
 COPY backend/src/shared/clinical-assessments/policy.ts ../backend/src/shared/clinical-assessments/policy.ts
 COPY backend/src/shared/clinical-assessments/policy.json ../backend/src/shared/clinical-assessments/policy.json
 COPY frontend/ ./
+COPY backend/src/shared/studio-catalog-contract.ts ../backend/src/shared/studio-catalog-contract.ts
 RUN npm run build
 
 # Stage 2: Compilação do Backend TypeScript
